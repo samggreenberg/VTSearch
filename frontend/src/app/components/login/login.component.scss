@@ -5,13 +5,13 @@
   align-items: center;
   justify-content: center;
   background: var(--bg-body);
-  z-index: 9999;
+  z-index: var(--z-login);
 }
 
 .login-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   padding: 2.5rem 2rem;
   width: 340px;
   max-width: 90vw;
@@ -21,34 +21,34 @@
 .login-logo {
   width: 64px;
   height: 64px;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-lg);
 }
 
 h2 {
   color: var(--text-primary);
-  margin: 0 0 0.25rem;
+  margin: 0 0 var(--space-xs);
   font-size: 1.5rem;
 }
 
 .login-subtitle {
   color: var(--text-secondary);
-  margin: 0 0 1.5rem;
-  font-size: 0.9rem;
+  margin: 0 0 var(--space-2xl);
+  font-size: var(--font-lg);
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-lg);
 }
 
 input {
-  padding: 0.6rem 0.75rem;
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   color: var(--text-primary);
-  font-size: 1rem;
+  font-size: var(--font-xl);
   outline: none;
   transition: border-color 0.15s;
 
@@ -62,12 +62,12 @@ input {
 }
 
 button {
-  padding: 0.6rem;
+  padding: var(--space-md);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: var(--accent);
   color: var(--btn-primary-text);
-  font-size: 1rem;
+  font-size: var(--font-xl);
   cursor: pointer;
   transition: background 0.15s;
 
@@ -84,5 +84,5 @@ button {
 .login-error {
   color: var(--color-bad);
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--font-md);
 }

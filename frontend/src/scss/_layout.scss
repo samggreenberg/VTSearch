@@ -11,7 +11,7 @@
 .panel-center,
 .panel-right {
   overflow-y: auto;
-  padding: 16px;
+  padding: var(--space-xl);
   background: var(--bg-panel);
 }
 

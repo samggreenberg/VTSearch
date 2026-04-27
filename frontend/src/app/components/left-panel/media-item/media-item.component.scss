@@ -1,10 +1,10 @@
 .media-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   transition: background 0.1s;
   min-height: 28px;
 
@@ -43,19 +43,19 @@
   &.grid-mode {
     flex-direction: column;
     align-items: center;
-    padding: 4px;
-    gap: 2px;
+    padding: var(--space-xs);
+    gap: var(--space-2xs);
     min-width: 0;
     overflow: hidden;
 
     &.labeled-good {
       border: 2px solid var(--color-good);
-      padding: 2px;
+      padding: var(--space-2xs);
     }
 
     &.labeled-bad {
       border: 2px dashed var(--color-bad);
-      padding: 2px;
+      padding: var(--space-2xs);
     }
   }
 }
@@ -64,14 +64,14 @@
   width: 28px;
   height: 28px;
   object-fit: cover;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 
   .grid-mode & {
     width: 100%;
     height: auto;
     aspect-ratio: 1;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
   }
 }
 
@@ -84,7 +84,7 @@
     justify-content: center;
     width: 100%;
     aspect-ratio: 1;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: var(--bg-surface);
     color: var(--text-muted);
     font-size: 1.5rem;
@@ -94,7 +94,7 @@
 .label-indicator {
   width: 14px;
   flex-shrink: 0;
-  font-size: 0.72rem;
+  font-size: var(--font-2xs);
   text-align: center;
   line-height: 1;
 
@@ -109,7 +109,7 @@
 
 .media-name {
   flex: 1;
-  font-size: 0.78rem;
+  font-size: var(--font-sm);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -128,7 +128,7 @@
 }
 
 .media-score {
-  font-size: 0.7rem;
+  font-size: var(--font-2xs);
   color: var(--text-muted);
   flex-shrink: 0;
 }
