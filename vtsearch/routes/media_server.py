@@ -30,7 +30,20 @@ def _get_server_media_dir() -> Path:
 
 @media_server_bp.route("/api/server-media-files/upload", methods=["POST"])
 def upload_server_media_file():
-    """Upload a media file to data/example_media/ and return its filename."""
+    """Upload a media file to data/example_media/ and return its filename.
+
+    Optional form fields:
+
+    * ``media_type`` — required when ``crop_params`` is present (``"audio"``
+      or ``"image"``); identifies which bounded clipper to apply.
+    * ``crop_params`` — JSON object with the user-cropped bounds.  When set,
+      the file is cropped server-side before being saved, so the persisted
+      example is the cropped sub-region (and downstream code that reads
+      the saved file by name does not need any changes).
+    """
+    import json
+    import uuid
+
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -38,14 +51,29 @@ def upload_server_media_file():
     if not file.filename:
         return jsonify({"error": "No file selected"}), 400
 
-    import uuid
-
     suffix = Path(file.filename).suffix or ".bin"
     safe_name = f"{uuid.uuid4().hex}{suffix}"
     media_dir = _get_server_media_dir()
     media_dir.mkdir(parents=True, exist_ok=True)
     dest = media_dir / safe_name
     file.save(dest)
+
+    crop_raw = request.form.get("crop_params")
+    if crop_raw:
+        try:
+            crop_params = json.loads(crop_raw)
+        except (TypeError, ValueError):
+            crop_params = None
+        if isinstance(crop_params, dict):
+            media_type = request.form.get("media_type", "").strip()
+            try:
+                from vtsearch.media.cropping import crop_file_bytes
+
+                cropped = crop_file_bytes(dest, media_type, crop_params)
+                dest.write_bytes(cropped)
+            except (ValueError, FileNotFoundError):
+                dest.unlink(missing_ok=True)
+                return jsonify({"error": "Invalid crop_params for this media type"}), 400
 
     return jsonify({"filename": safe_name, "original_name": file.filename}), 201
 
@@ -72,7 +100,13 @@ def list_server_media_files():
 
 @media_server_bp.route("/api/example-sort-server", methods=["POST"])
 def example_sort_server():
-    """Sort medias by similarity to a server-side media file."""
+    """Sort medias by similarity to a server-side media file.
+
+    Optional ``crop_params`` body field carries a JSON-compatible dict with
+    bounds for a user-cropped sub-region (audio: ``{"start", "end"}``;
+    image: ``{"box": [...]}``).  When set, the file is cropped server-side
+    before embedding.
+    """
     data = get_json_or_400()
     if not isinstance(data, dict):
         return data
@@ -93,10 +127,27 @@ def example_sort_server():
     if not file_path.is_file():
         return jsonify({"error": f"File not found: {filename}"}), 404
 
-    try:
-        from vtsearch.routes.sorting import _example_sort_from_path
+    crop_params = data.get("crop_params") if isinstance(data.get("crop_params"), dict) else None
 
-        results, thresh = _example_sort_from_path(file_path)
+    try:
+        from vtsearch.routes.sorting import _apply_crop_or_keep, _example_sort_from_path
+
+        if crop_params:
+            # Crop into a temp file so the saved server-side example is unchanged.
+            import uuid
+
+            from vtsearch.config import DATA_DIR
+
+            DATA_DIR.mkdir(exist_ok=True)
+            tmp = DATA_DIR / f"temp_example_{uuid.uuid4().hex}{file_path.suffix or '.bin'}"
+            tmp.write_bytes(file_path.read_bytes())
+            try:
+                _apply_crop_or_keep(tmp, crop_params)
+                results, thresh = _example_sort_from_path(tmp)
+            finally:
+                tmp.unlink(missing_ok=True)
+        else:
+            results, thresh = _example_sort_from_path(file_path)
         return jsonify({"results": results, "threshold": thresh})
     except Exception:
         import logging
@@ -142,14 +193,30 @@ def example_sort_origin():
     if source is None:
         return jsonify({"error": f"No media source available for origin type: {origin.get('importer', '')}"}), 400
 
+    crop_params = data.get("crop_params") if isinstance(data.get("crop_params"), dict) else None
+
     try:
         file_path = source.fetch_item(key)
         if file_path is None:
             return jsonify({"error": f"File not found: {key}"}), 404
 
-        from vtsearch.routes.sorting import _example_sort_from_path
+        from vtsearch.routes.sorting import _apply_crop_or_keep, _example_sort_from_path
 
-        results, thresh = _example_sort_from_path(file_path)
+        if crop_params:
+            import uuid
+
+            from vtsearch.config import DATA_DIR
+
+            DATA_DIR.mkdir(exist_ok=True)
+            tmp = DATA_DIR / f"temp_example_{uuid.uuid4().hex}{file_path.suffix or '.bin'}"
+            tmp.write_bytes(file_path.read_bytes())
+            try:
+                _apply_crop_or_keep(tmp, crop_params)
+                results, thresh = _example_sort_from_path(tmp)
+            finally:
+                tmp.unlink(missing_ok=True)
+        else:
+            results, thresh = _example_sort_from_path(file_path)
         return jsonify({"results": results, "threshold": thresh})
     except Exception:
         import logging
