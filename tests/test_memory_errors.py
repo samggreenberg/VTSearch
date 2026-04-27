@@ -219,7 +219,7 @@ class TestBackgroundImportMemoryError:
         update_progress("idle", "")
 
         # Patch threading.Thread to run synchronously so we don't race
-        with mock.patch("vtsearch.routes.datasets_loading.threading") as mock_threading:
+        with mock.patch("vtsearch.datasets.load_pipeline.threading") as mock_threading:
             captured_target = {}
 
             def fake_thread(target, daemon=True):
@@ -252,7 +252,7 @@ class TestBackgroundImportMemoryError:
             "vtsearch.datasets.importers.demo.load_demo_dataset",
             side_effect=MemoryError("simulated"),
         ), mock.patch(
-            "vtsearch.routes.datasets_loading.threading.Thread",
+            "vtsearch.datasets.load_pipeline.threading.Thread",
             side_effect=sync_thread,
         ):
             resp = client.post(

@@ -498,9 +498,9 @@ class TestResetCancelSafety:
             # Start a new load — should NOT reset global cancel since a task is active
             from unittest.mock import patch
 
-            from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
-            with patch("vtsearch.routes.datasets_loading.threading.Thread"):
+            with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
                 _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},
@@ -521,9 +521,9 @@ class TestResetCancelSafety:
 
         from unittest.mock import patch
 
-        from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
-        with patch("vtsearch.routes.datasets_loading.threading.Thread"):
+        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
             task_id = _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -599,7 +599,7 @@ class TestLoadingGates:
     def test_second_load_waits_for_first(self):
         """With the default limit of 1, a second load should show 'Waiting…'
         for the download gate and only proceed after the first releases it."""
-        from vtsearch.routes.datasets_loading import (
+        from vtsearch.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
@@ -665,7 +665,7 @@ class TestLoadingGates:
     def test_cancel_while_waiting_does_not_corrupt_gate(self):
         """Cancelling a queued task must not release the gate it never
         acquired, which would let extra loads through."""
-        from vtsearch.routes.datasets_loading import (
+        from vtsearch.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
@@ -715,7 +715,7 @@ class TestLoadingGates:
         """When the importer signals the embedding phase, the download gate
         is released so a second dataset can start downloading in parallel
         even though the first hasn't finished embedding."""
-        from vtsearch.routes.datasets_loading import (
+        from vtsearch.datasets.load_pipeline import (
             _download_gate,
             _embed_gate,
             _run_origin_load_in_background,
@@ -778,7 +778,7 @@ class TestLoadingGates:
         """Bumping ``max_concurrent_dataset_downloads`` should let the second
         load start its download phase in parallel with the first."""
         from vtsearch import settings as settings_mod
-        from vtsearch.routes.datasets_loading import (
+        from vtsearch.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
@@ -832,7 +832,7 @@ class TestConcurrencyGate:
 
     def test_blocking_acquire_when_limit_changes(self):
         """A waiter blocked at limit=1 must wake up when limit grows to 2."""
-        from vtsearch.routes.datasets_loading import ConcurrencyGate
+        from vtsearch.datasets.load_pipeline import ConcurrencyGate
 
         limit = [1]
         gate = ConcurrencyGate(lambda: limit[0])
@@ -861,7 +861,7 @@ class TestConcurrencyGate:
         assert gate.active == 0
 
     def test_non_blocking_acquire_respects_limit(self):
-        from vtsearch.routes.datasets_loading import ConcurrencyGate
+        from vtsearch.datasets.load_pipeline import ConcurrencyGate
 
         gate = ConcurrencyGate(lambda: 2)
         assert gate.acquire(blocking=False)
@@ -874,7 +874,7 @@ class TestConcurrencyGate:
 
     def test_zero_limit_is_clamped_to_one(self):
         """A configured limit of 0 should still allow one acquisition."""
-        from vtsearch.routes.datasets_loading import ConcurrencyGate
+        from vtsearch.datasets.load_pipeline import ConcurrencyGate
 
         gate = ConcurrencyGate(lambda: 0)
         assert gate.acquire(blocking=False)

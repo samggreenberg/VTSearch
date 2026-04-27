@@ -101,6 +101,7 @@ VTSearch/
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
 │   │   ├── labelset.py             LabelSet / LabeledElement (labeled data with origins)
 │   │   ├── loader.py               load_dataset_from_folder/pickle/demo
+│   │   ├── load_pipeline.py        Background-task orchestration, ConcurrencyGate, clip fix-up
 │   │   ├── downloader/             HTTP download + demo dataset downloaders
 │   │   │   ├── __init__.py         Re-exports all symbols for backward compat
 │   │   │   ├── core.py             URLs, sizes, progress, archive validation/extraction
@@ -183,7 +184,6 @@ VTSearch/
 │   │   ├── detectors_scoring.py    Detector scoring and autodetect execution
 │   │   ├── detectors_training.py   Detector training from votes
 │   │   ├── datasets.py             Dataset loading, demos, dashboard
-│   │   ├── datasets_loading.py     Dataset loading and import orchestration
 │   │   ├── datasets_ui.py          Dataset UI helpers and demo listing
 │   │   ├── labels.py               Label export, import, fill-from-sort
 │   │   ├── eval.py                 Evaluation and labeling progress routes

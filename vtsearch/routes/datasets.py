@@ -54,7 +54,7 @@ from vtsearch.utils.progress import loading_tasks as _loading_tasks
 import vtsearch.utils.paths as _paths
 
 # Re-export loading helpers so existing importers keep working.
-from vtsearch.routes.datasets_loading import (  # noqa: F401
+from vtsearch.datasets.load_pipeline import (  # noqa: F401
     STAGING_DIR,
     _apply_clipper,
     _auto_register_dataset,

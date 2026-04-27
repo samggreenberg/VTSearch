@@ -111,7 +111,7 @@ class TestApplyClipperMD5:
     """Clips must get unique MD5s so collapse_duplicates doesn't merge them."""
 
     def test_audio_clips_get_recomputed_md5s(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_audio_media(1)}
         parent_md5 = clips_dict[1]["md5"]
@@ -124,7 +124,7 @@ class TestApplyClipperMD5:
             assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
 
     def test_image_clips_get_recomputed_md5s(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_image_media(1, width=300, height=100)}
         parent_md5 = clips_dict[1]["md5"]
@@ -136,7 +136,7 @@ class TestApplyClipperMD5:
             assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
 
     def test_text_clips_get_unique_md5s(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_text_media(1)}
         parent_md5 = clips_dict[1]["md5"]
@@ -149,7 +149,7 @@ class TestApplyClipperMD5:
             assert md5 != parent_md5
 
     def test_video_clips_get_unique_md5s(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_video_media(1, duration=10.0)}
         parent_md5 = clips_dict[1]["md5"]
@@ -163,7 +163,7 @@ class TestApplyClipperMD5:
 
     def test_dedup_preserves_all_clips(self):
         """collapse_duplicates should NOT merge clips from the same parent."""
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
         from vtsearch.utils import collapse_duplicates
 
         clips_dict = {1: _make_audio_media(1, duration=5.1)}
@@ -180,7 +180,7 @@ class TestApplyClipperMD5:
         After clipping, each sub-item must get its own MD5, not the
         importer's value for the parent.
         """
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         media = _make_audio_media(1, duration=5.0)
         # Simulate an importer that provides its own MD5
@@ -200,7 +200,7 @@ class TestApplyClipperMD5:
         After clipping, each sub-item must get its own embedding based
         on the clipped content, not the parent embedding.
         """
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         media = _make_audio_media(1, duration=5.0)
         # Tag the parent embedding so we can detect it later
@@ -222,7 +222,7 @@ class TestApplyClipperMD5:
     def test_importer_md5_kept_for_passthrough_clipper(self):
         """Default (pass-through) clippers should NOT replace the
         importer-provided MD5 since no clipping occurred."""
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         media = _make_audio_media(1, duration=5.0)
         media["md5"] = "importer_provided_md5"
@@ -241,7 +241,7 @@ class TestApplyClipperOriginBoundaries:
     """Clip boundaries must be stored in origin params."""
 
     def test_audio_clip_origin_has_boundaries(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_audio_media(1, duration=5.0)}
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
@@ -257,7 +257,7 @@ class TestApplyClipperOriginBoundaries:
             assert float(params["clip_end"]) > float(params["clip_start"])
 
     def test_image_clip_origin_has_clip_box(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_image_media(1, width=300, height=100)}
         _apply_clipper(clips_dict, "image_tiling")
@@ -271,7 +271,7 @@ class TestApplyClipperOriginBoundaries:
             assert len(box_parts) == 4
 
     def test_video_clip_origin_has_boundaries(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_video_media(1, duration=10.0)}
         _apply_clipper(clips_dict, "video_tiling", {"duration": 2.0})
@@ -283,7 +283,7 @@ class TestApplyClipperOriginBoundaries:
             assert "clip_end" in params
 
     def test_text_clip_origin_has_clipper_and_index(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_text_media(1)}
         _apply_clipper(clips_dict, "text_sentence")
@@ -296,7 +296,7 @@ class TestApplyClipperOriginBoundaries:
     def test_audio_clip_origin_stores_clipper_params(self):
         """Clipper parameter values (duration, min_overlap) must be stored
         in origin so cross-dataset resolution can reconstruct the clipper."""
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_audio_media(1, duration=5.0)}
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.5, "min_overlap": 0.5})
@@ -308,7 +308,7 @@ class TestApplyClipperOriginBoundaries:
 
     def test_video_scene_origin_stores_clipper_params(self):
         """Scene clipper's threshold and min_scene_duration must be stored."""
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         # VideoSceneClipper won't produce multiple clips without real video,
         # but the params should still be stored on the single passthrough.
@@ -322,7 +322,7 @@ class TestApplyClipperOriginBoundaries:
 
     def test_default_clipper_stores_no_extra_params(self):
         """Default clippers have no parameter values to store."""
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_audio_media(1, duration=5.0)}
         _apply_clipper(clips_dict, "sound_default")
@@ -349,7 +349,7 @@ class TestLabelExportWithClips:
         medias.clear()
         try:
             # Set up clipped audio media
-            from vtsearch.routes.datasets_loading import _apply_clipper
+            from vtsearch.datasets.load_pipeline import _apply_clipper
 
             clips_dict = {1: _make_audio_media(1, duration=5.0)}
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
@@ -391,7 +391,7 @@ class TestLabelImportWithClips:
     """Labels from clipped media can be resolved on the same dataset."""
 
     def test_origin_lookup_matches_clipped_media(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
         from vtsearch.utils.state_media_lookup import build_media_lookup, resolve_media_ids
 
         clips_dict = {1: _make_audio_media(1, duration=5.0)}
@@ -410,7 +410,7 @@ class TestLabelImportWithClips:
             assert clip["id"] in matches, f"clip {clip['id']} should be resolvable by origin"
 
     def test_md5_lookup_matches_clipped_media(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
         from vtsearch.utils.state_media_lookup import build_media_lookup, resolve_media_ids
 
         clips_dict = {1: _make_audio_media(1, duration=5.0)}
@@ -525,7 +525,7 @@ class TestAPIClipMetadata:
         saved = dict(medias)
         medias.clear()
         try:
-            from vtsearch.routes.datasets_loading import _apply_clipper
+            from vtsearch.datasets.load_pipeline import _apply_clipper
 
             clips_dict = {1: _make_audio_media(1, duration=5.0)}
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
@@ -549,7 +549,7 @@ class TestAPIClipMetadata:
         saved = dict(medias)
         medias.clear()
         try:
-            from vtsearch.routes.datasets_loading import _apply_clipper
+            from vtsearch.datasets.load_pipeline import _apply_clipper
 
             clips_dict = {1: _make_audio_media(1, duration=5.0)}
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
@@ -573,7 +573,7 @@ class TestAPIClipMetadata:
         saved = dict(medias)
         medias.clear()
         try:
-            from vtsearch.routes.datasets_loading import _apply_clipper
+            from vtsearch.datasets.load_pipeline import _apply_clipper
 
             clips_dict = {1: _make_image_media(1, width=300, height=100)}
             _apply_clipper(clips_dict, "image_tiling")
@@ -600,7 +600,7 @@ class TestDefaultClippersNoOp:
     """Default (pass-through) clippers should not break the workflow."""
 
     def test_audio_default_clipper_preserves_media(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         media = _make_audio_media(1, duration=5.0)
         original_md5 = media["md5"]
@@ -611,7 +611,7 @@ class TestDefaultClippersNoOp:
         assert clips_dict[1]["md5"] == original_md5
 
     def test_image_default_clipper_preserves_media(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         media = _make_image_media(1)
         original_md5 = media["md5"]
@@ -622,7 +622,7 @@ class TestDefaultClippersNoOp:
         assert clips_dict[1]["md5"] == original_md5
 
     def test_text_default_clipper_preserves_media(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         media = _make_text_media(1)
         original_md5 = media["md5"]
@@ -633,7 +633,7 @@ class TestDefaultClippersNoOp:
         assert clips_dict[1]["md5"] == original_md5
 
     def test_video_default_clipper_preserves_media(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         media = _make_video_media(1)
         original_md5 = media["md5"]
@@ -653,7 +653,7 @@ class TestMultipleMediasClipped:
     """Clipping multiple medias at once should produce correct results."""
 
     def test_multiple_audio_medias_clipped(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {
             1: _make_audio_media(1, duration=5.1),
@@ -668,7 +668,7 @@ class TestMultipleMediasClipped:
             assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
 
     def test_multiple_text_medias_clipped(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {
             1: _make_text_media(1, "Foo. Bar. Baz."),
@@ -682,7 +682,7 @@ class TestMultipleMediasClipped:
         assert len(set(md5s)) == 4
 
     def test_clip_ids_are_sequential(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {
             1: _make_audio_media(1, duration=5.1),
@@ -702,7 +702,7 @@ class TestApplyClipperProgress:
     """Verify that _apply_clipper reports progress via the on_progress callback."""
 
     def test_progress_reports_clipping_and_embedding_phases(self):
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {
             1: _make_audio_media(1, duration=5.1),
@@ -730,7 +730,7 @@ class TestApplyClipperProgress:
 
     def test_no_progress_without_callback(self):
         """Passing on_progress=None doesn't break anything."""
-        from vtsearch.routes.datasets_loading import _apply_clipper
+        from vtsearch.datasets.load_pipeline import _apply_clipper
 
         clips_dict = {1: _make_audio_media(1, duration=5.1)}
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0}, on_progress=None)
@@ -800,7 +800,7 @@ class TestClipFieldsInEnrichedExport:
         saved = dict(medias)
         medias.clear()
         try:
-            from vtsearch.routes.datasets_loading import _apply_clipper
+            from vtsearch.datasets.load_pipeline import _apply_clipper
 
             clips_dict = {1: _make_audio_media(1, duration=5.0)}
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
@@ -833,7 +833,7 @@ class TestClipFieldsInEnrichedExport:
         saved = dict(medias)
         medias.clear()
         try:
-            from vtsearch.routes.datasets_loading import _apply_clipper
+            from vtsearch.datasets.load_pipeline import _apply_clipper
 
             clips_dict = {1: _make_image_media(1, width=300, height=100)}
             _apply_clipper(clips_dict, "image_tiling")

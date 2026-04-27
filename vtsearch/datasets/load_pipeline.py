@@ -126,7 +126,15 @@ def clear_dataset():
     clear_all()
 
 
-from vtsearch.routes.helpers import get_embedder_for_medias as _get_embedder_for_medias
+def _get_embedder_for_medias(media_dict: dict):
+    """Resolve the embedder for *media_dict*.
+
+    Imported lazily to avoid a circular dependency: this module sits under
+    ``vtsearch.datasets`` but ``vtsearch.routes.helpers`` lives in the
+    routes layer, which itself imports from this module.
+    """
+    from vtsearch.routes.helpers import get_embedder_for_medias as _impl
+    return _impl(media_dict)
 
 
 def _get_embedder_for_clips():
