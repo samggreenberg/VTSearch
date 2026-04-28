@@ -7,7 +7,7 @@
     <div class="exporter-picker">
       @for (exp of exporters; track exp.name) {
         <button class="exporter-card" (click)="selectExporter(exp)">
-          <span class="exporter-name">{{ exp.label || exp.name }}</span>
+          <span class="exporter-name">@if (exp.icon) {<span class="exporter-icon"><vt-icon [icon]="exp.icon"></vt-icon></span> }{{ exp.display_name || exp.name }}</span>
           @if (exp.description) {
             <span class="exporter-desc">{{ exp.description }}</span>
           }
