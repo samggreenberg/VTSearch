@@ -1131,9 +1131,9 @@ class TestLoadProgressRaceCondition:
         assert get_progress()["error"] == "Previous load failed"
 
         # Start a new load (mock the thread so it doesn't actually run)
-        from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
-        with patch("vtsearch.routes.datasets_loading.threading.Thread"):
+        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
             _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -1165,7 +1165,7 @@ class TestLoadProgressRaceCondition:
         def _capture_update(status, message="", current=0, total=0, **kw):
             messages.append(message)
 
-        with patch("vtsearch.routes.datasets_loading.update_progress", side_effect=_capture_update):
+        with patch("vtsearch.datasets.load_pipeline.update_progress", side_effect=_capture_update):
             _load_embedder_for_clips()
 
         # Should have set "Loading embedding model…" before calling load_models
@@ -1219,7 +1219,7 @@ class TestCancelIngest:
                     dataset_progress.check_cancelled()
                     time.sleep(0.05)
 
-            from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
             _run_origin_load_in_background(
                 slow_load,
@@ -1261,9 +1261,9 @@ class TestCancelIngest:
         saved = dict(app_module.medias)
         try:
             # Start a new load — should reset the flag
-            from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
-            with patch("vtsearch.routes.datasets_loading._load_embedder_for_clips"):
+            with patch("vtsearch.datasets.load_pipeline._load_embedder_for_clips"):
                 _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},

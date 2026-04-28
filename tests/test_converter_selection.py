@@ -256,7 +256,7 @@ class TestFolderImporterConverterFields:
 
 class TestHttpArchiveImporterConverterFields:
     def test_build_cli_args_with_converters(self):
-        from vtsearch.datasets.importers.http_zip import IMPORTER
+        from vtsearch.datasets.importers.http_archive import IMPORTER
 
         args = IMPORTER.build_cli_args(
             {
@@ -268,7 +268,7 @@ class TestHttpArchiveImporterConverterFields:
         assert "--converters video2image" in args
 
     def test_build_origin_with_converters(self):
-        from vtsearch.datasets.importers.http_zip import IMPORTER
+        from vtsearch.datasets.importers.http_archive import IMPORTER
 
         origin = IMPORTER.build_origin(
             {

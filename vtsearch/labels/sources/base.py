@@ -11,9 +11,10 @@ regardless of whether a source is active.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from vtsearch.utils.registry import PluginBase, PluginField
+from vtsearch.utils.registry import PluginField
+from vtsearch.utils.sync_source import SyncSource
 
 if TYPE_CHECKING:
     from vtsearch.datasets.labelset import LabelSet
@@ -23,37 +24,15 @@ LabelsetSourceField = PluginField
 __all__ = ["LabelsetSource", "LabelsetSourceField"]
 
 
-class LabelsetSource(PluginBase):
+class LabelsetSource(SyncSource[list[dict[str, str]], "LabelSet"]):
     """Abstract base class for labelset sources.
 
-    Subclass this, set the class-level attributes, implement :meth:`load`
-    and :meth:`save`, and expose a module-level
+    Subclass this, set the class-level attributes, implement
+    :meth:`load` and :meth:`save`, and expose a module-level
     ``LABELSET_SOURCE = YourSource()`` — the registry picks it up
     automatically.
+
+    ``load(field_values)`` returns a list of label dicts
+    (``{"md5": ..., "label": "good"|"bad"}``).
+    ``save(labelset, field_values)`` persists a :class:`LabelSet`.
     """
-
-    icon: str = "\U0001f504"  # counterclockwise arrows (sync)
-    fields: list[PluginField]
-
-    def load(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
-        """Import labels from the source.
-
-        Returns:
-            A list of label dicts (``{"md5": "...", "label": "good"|"bad"}``).
-
-        Raises:
-            NotImplementedError: If the subclass has not implemented this.
-        """
-        raise NotImplementedError(f"{type(self).__name__}.load() is not implemented")
-
-    def save(self, labelset: LabelSet, field_values: dict[str, Any]) -> None:
-        """Export labels to the source.
-
-        Args:
-            labelset: The LabelSet to persist.
-            field_values: Source configuration (e.g. filepath).
-
-        Raises:
-            NotImplementedError: If the subclass has not implemented this.
-        """
-        raise NotImplementedError(f"{type(self).__name__}.save() is not implemented")

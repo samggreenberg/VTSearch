@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, request
 from vtsearch.config import EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS
 from vtsearch.datasets.loader import read_pkl_clipper, read_pkl_embedder
-from vtsearch.routes.datasets_loading import _origin_to_str
+from vtsearch.datasets.load_pipeline import _origin_to_str
 from vtsearch.routes.helpers import format_mtime, get_json_or_400
 from vtsearch.utils import (
     get_dataset_display_name,

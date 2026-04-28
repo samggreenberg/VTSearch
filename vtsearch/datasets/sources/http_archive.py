@@ -76,7 +76,7 @@ class HttpArchiveSource(MediaSource):
 
             # Download and extract to a unique temp directory.
             from vtsearch.datasets.downloader import download_file_with_progress
-            from vtsearch.datasets.importers.http_zip import _extract_archive
+            from vtsearch.datasets.importers.http_archive import _extract_archive
             from vtsearch.utils.url_validation import validate_url
 
             validate_url(self._url)

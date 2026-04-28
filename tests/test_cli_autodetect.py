@@ -446,7 +446,7 @@ class TestImporterCLIArguments:
         assert args.file == "/tmp/dataset.pkl"
 
     def test_http_archive_importer_adds_expected_args(self):
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
         parser = argparse.ArgumentParser()

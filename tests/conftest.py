@@ -48,6 +48,7 @@ _TEST_GROUPS = {
         "test_creation_info",
         "test_duplicates",
         "test_origin_labelset",
+        "test_extension_scaffolds",
         "test_thin_loading",
         "test_chunked_loading",
         "test_memory_errors",
@@ -85,6 +86,7 @@ _TEST_GROUPS = {
         "test_trainable_models",
         "test_multi_detector",
         "test_clippers",
+        "test_clipper_workflow",
         "test_eval",
         "test_eval_visualize",
         "test_eval_voting_iterations",
@@ -201,9 +203,9 @@ _state_core.set_thread_detector_context(_startup_det)
 import app as app_module
 
 # Import refactored modules and make them accessible through app_module
-from vtsearch.audio.generator import GENERATOR_SAMPLE_RATE
+from vtsearch.utils.audio_generator import GENERATOR_SAMPLE_RATE
 from vtsearch.medias import NUM_MEDIAS
-from vtsearch.audio import generate_wav
+from vtsearch.utils.audio_generator import generate_wav
 from vtsearch.models import initialize_models, train_and_score
 from vtsearch.models.progress import clear_progress_cache
 from vtsearch.utils import (

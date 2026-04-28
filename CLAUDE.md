@@ -53,9 +53,9 @@ Breaking backwards compatibility is acceptable — do not add shims, feature fla
 - `vtsearch/medias.py` — Test media generation and embedding cache management
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
 - `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_icon_size_left, grid_icon_size_right, panel_pct_left, panel_pct_right, autoload_media_embedders, autorun_processors, autorun_detector_names, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_resort_interval, autopilot_goal_diversity, saved_datasets_dir, detectors_dir, trainable_models_dir, max_concurrent_dataset_downloads, max_concurrent_dataset_embeddings, settings_source); auto-saves to `data/settings.json`. When a `settings_source` is configured, every save also syncs to the source (with a `_syncing` guard to prevent circular re-export during import). At startup, `sync_from_settings_source()` auto-imports from the active source. Also contains `_apply_settings()` for applying a settings dict via `set_*` functions
-- `vtsearch/routes/` — Flask blueprints: `auth.py`, `eval.py`, `file_browser.py`, `labels.py`, `media_server.py`, `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`), `datasets.py` (with sub-modules `datasets_loading.py`, `datasets_ui.py`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `settings_io.py`, `sync_sources.py`, `trainable_models.py`; shared utilities in `helpers.py`
+- `vtsearch/routes/` — Flask blueprints: `auth.py`, `eval.py`, `file_browser.py`, `labels.py`, `media_server.py`, `main.py`, `medias.py`, `sorting.py`, `detectors.py` (with sub-modules `detectors_crud.py`, `detectors_scoring.py`, `detectors_training.py`, `detectors_find.py`), `datasets.py` (with sub-module `datasets_ui.py`), `datasets_registry.py` (dataset registry CRUD at `/api/datasets/registry/*`), `exporters.py`, `label_importers.py`, `processor_importers.py`, `settings.py`, `settings_io.py`, `sync_sources.py`, `trainable_models.py` (on-disk labelset+query store at `/api/trainable-models/*`), `models_registry.py` (in-memory model registry at `/api/models/registry/*`); shared utilities in `helpers.py`. Note: dataset-load orchestration lives at `vtsearch/datasets/load_pipeline.py` (background-task helpers, ConcurrencyGate, clip fix-up).
 - `vtsearch/models/` — Embeddings, training, model loading, progress tracking, diversity tree, `weights_compat.py` (origin-based detector weight normalization)
-- `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting, importers (folder/pickle/http_zip/combine_datasets/demo/recaller); auto-discovered via `IMPORTER` sentinel. Note: the `http_zip` directory registers as `http_archive` (its API/CLI name). `sources/` sub-package provides the `MediaSource` abstraction for resolving media files from origins (local_folder, http_archive, pullwrest)
+- `vtsearch/datasets/` — Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting. `loader.py` is the public façade that re-exports the actual loaders from sibling modules: `loader_folder.py` (folder loaders), `loader_pickle.py` (pickle loaders + sidecars + image embed), `loader_demo.py` (demo dataset loader). Importers live in `importers/` (folder/pickle/http_archive/combine_datasets/demo/recaller; auto-discovered via `IMPORTER` sentinel). `sources/` sub-package provides the `MediaSource` abstraction for resolving media files from origins (local_folder, http_archive, pullwrest)
 - `vtsearch/eval/` — Evaluation framework: runner, metrics, visualisation, voting iterations
 - `vtsearch/exporters/` — Results exporters (server_json_file/server_csv_file/email_smtp/webhook/gui/holder); auto-discovered via `EXPORTER` sentinel
 - `vtsearch/settings_io/` — Settings import/export plugins; `importers/` (local_json_file/server_json_file; auto-discovered via `SETTINGS_IMPORTER` sentinel), `exporters/` (local_json_file/server_json_file; auto-discovered via `SETTINGS_EXPORTER` sentinel), and `sources/` (server_json_file; auto-discovered via `SETTINGS_SOURCE` sentinel) for bidirectional sync
@@ -64,7 +64,8 @@ Breaking backwards compatibility is acceptable — do not add shims, feature fla
 - `vtsearch/processors/importers/` — Processor importers (server_detector_file); auto-discovered via `PROCESSOR_IMPORTER` sentinel
 - `vtsearch/media/` — Media type plugins: audio, image, text, video, document
 - `vtsearch/converters/` — Media converters: document→image, document→text, video→audio, video→image
-- `vtsearch/utils/` — Global state (`DatasetContext`, proxy dicts for `medias`/votes, multi-dataset context store), progress utilities
+- `vtsearch/utils/` — Global state (`DatasetContext`, proxy dicts for `medias`/votes, multi-dataset context store), progress utilities, plugin registry (`registry.py`), generic `SyncSource[LoadT, SaveT]` base class (`sync_source.py`) shared by `SettingsSource` and `LabelsetSource`, synthetic WAV generator (`audio_generator.py`)
+- `vtsearch/settings_factory.py` — Accessor factories (`make_accessors`, `make_per_side_setting`, `clamp`, `one_of`) used by `vtsearch/settings.py` to generate get/set pairs from the `_SETTING_SPECS` table
 - `frontend/` — Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`. `ActiveContextService` tracks which dataset/model the user selected; `activeContextInterceptor` attaches `X-Dataset-Id`/`X-Model-Id` headers to every API request
 - `static/` — Angular build output (index.html, main.js, polyfills.js, styles.css) and assets (favicons, logo.svg, logo.png)
 - `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md + EXTENDING-plugins.md + EXTENDING-media.md + EXTENDING-processors.md, HANDOFF.md, ML.md, SETUP.md, USER_GUIDE.md, demos.md, plan-sync-sources.md, RCDatasetImporter.plan.md, design/cli-detector-converter.md)
@@ -83,7 +84,11 @@ Breaking backwards compatibility is acceptable — do not add shims, feature fla
   - `test_label_import_ingestion.py` — Label import ingestion: ingest-missing endpoint, _group_by_origin, _media_type_from_origin, _ingest_via_resolver
   - `test_inclusion.py` — Inclusion GET/POST
   - `test_detectors.py` — Detector export, detector sort, autorun detectors, auto-detect
+  - `test_detector_export.py` — Server-side detector export and labelset export
+  - `test_detector_find.py` — POST /api/find-label, demo-origin resolution, stamp-demo-origin
+  - `test_multi_detector.py` — Model registry multi-loaded support, activate/unload endpoints, MLP caching
   - `test_clippers.py` — MediaClipper ABC tests and concrete clipper implementations
+  - `test_clipper_workflow.py` — Clipper integration in dataset-loading pipeline
   - `test_new_embedders.py` — Alternative embedder class properties and registration (SigLIP, CLAP Music, BGE) without downloading model weights
   - `test_resolver.py` — Media file resolution from origin trails: ResolvedLabels and resolve_file_from_origin
   - `test_cli_autodetect.py` — CLI autodetect: run_autodetect function, --autodetect flag, --exporter flag. Subprocess tests marked `slow` (~16s each, excluded from default run)
@@ -93,6 +98,10 @@ Breaking backwards compatibility is acceptable — do not add shims, feature fla
   - `test_dashboard.py` — Dashboard API endpoint tests
   - `test_exporters.py` — Results exporter base classes, registry, built-in exporters, API routes
   - `test_importers.py` — Importer base class, HTTP archive/folder importer metadata, archive extraction
+  - `test_importer_loading.py` — Folder loader: content_vectors, skip_embedding, custom-metadata flow
+  - `test_importer_symlinks.py` — Symlinked importer discovery, rglob following symlinks
+  - `test_dataset_importer_media.py` — End-to-end folder/pickle importer paths into media types
+  - `test_file_browser.py` — File browser API endpoints for directory navigation
   - `test_extractors.py` — Image class extractor
   - `test_processors.py` — Media processor tests
   - `test_processor_importers.py` — Processor importer base class, registry, server_detector_file importer, API routes
@@ -110,6 +119,8 @@ Breaking backwards compatibility is acceptable — do not add shims, feature fla
   - `test_eval_voting_iterations.py` — Voting iterations evaluation
   - `test_safe_thresholds.py` — Safe threshold blending
   - `test_settings.py` — Settings persistence (volume, inclusion, theme, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_resort_interval, autorun processors, autorun_detector_names)
+  - `test_settings_api_routes.py` — Flask API routes: GET/PUT /api/settings, individual setting endpoints
+  - `test_settings_directories.py` — Directory-path settings (saved_datasets_dir, detectors_dir, trainable_models_dir)
   - `test_settings_io.py` — Settings import/export plugin system: SettingsImporter/SettingsExporter base classes, registries, local_json_file and server_json_file plugins, API endpoints
   - `test_sync_sources.py` — Sync sources: SettingsSource/LabelsetSource base classes, registries, server_json_file round-trips, settings sync-on-change, circular guard, template resolution, DetectorContext.labelset_source, API routes
   - `test_thin_loading.py` — Thin (lazy) dataset loading mode for CLI
@@ -128,6 +139,8 @@ Breaking backwards compatibility is acceptable — do not add shims, feature fla
   - `test_frontend.py` — Frontend serving: Angular SPA entry point, static files (main.js, polyfills.js, styles.css), favicon variants, logo, legacy /ng/ redirect, content types
   - `test_gtzan_download.py` — GTZAN dataset download and load_demo_source integration
   - `test_image_sources_download.py` — Image dataset downloads: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, and load_demo_source integration
+  - `test_video_datasets_download.py` — Video dataset downloads (UCF-101 subset) and load_demo_source integration
+  - `test_multi_media_coverage.py` — Cross-media-type smoke (text sort, learned sort, vote, label export/import) for each registered media type
   - `test_imdb_download.py` — IMDB dataset download and load_demo_source integration
   - `test_load_sort_window.py` — Load Sort window endpoints: example-sort, server-media-files, detector server-files
   - `test_media_sources.py` — MediaSource abstraction: get_source_for_origin, LocalFolderSource, HTTP archive source
@@ -151,14 +164,14 @@ Tests are auto-grouped by area. Run a focused subset instead of the full suite:
 
 | Group | Files | Description |
 |-------|-------|-------------|
-| `core` | audio, medias, votes, inclusion, settings, frontend | Basic app functionality |
-| `api` | api_contracts, error_recovery, dashboard, path_validation, multi_user_security, multi_user_dataset_access, ssrf_validation | API contracts, error handling, security |
+| `core` | audio, medias, votes, inclusion, settings, settings_api_routes, settings_directories, frontend | Basic app functionality |
+| `api` | api_contracts, error_recovery, dashboard, file_browser, path_validation, multi_user_security, multi_user_dataset_access, ssrf_validation | API contracts, error handling, security |
 | `sorting` | sorting, label_sorting, safe_thresholds, enrich_descriptions, diversity_tree* | Sort algorithms and diversity |
-| `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, thin/chunked_loading, memory_errors, pickle_safety, media_sources, multi_dataset, request_context, parallel_loading | Dataset loading and management |
-| `io` | exporters, csv_webhook_exporters, export_options, importers, label_importers, labels, processor_importers, pdf_import, corrections_export, settings_io, sync_sources | Import/export and sync |
-| `models` | detectors, extractors, processors, trainable_models, clippers, eval*, resolver, new_embedders | ML models and evaluation |
-| `downloads` | ag_news, bbc_news, gtzan, image_sources, imdb, ucsf, download_and_extract | Demo dataset downloads |
-| `integration` | integration, slow_integration, thread_safety | End-to-end workflows |
+| `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, extension_scaffolds, thin/chunked_loading, memory_errors, pickle_safety, media_sources, multi_dataset, request_context, parallel_loading | Dataset loading and management |
+| `io` | exporters, csv_webhook_exporters, export_options, importers, importer_loading, importer_symlinks, dataset_importer_media, label_importers, labels, processor_importers, pdf_import, corrections_export, settings_io, sync_sources | Import/export and sync |
+| `models` | detectors, detector_find, detector_export, extractors, processors, trainable_models, multi_detector, clippers, clipper_workflow, eval*, resolver, new_embedders | ML models and evaluation |
+| `downloads` | ag_news, bbc_news, gtzan, image_sources, imdb, ucsf, download_and_extract, video_datasets | Demo dataset downloads |
+| `integration` | integration, slow_integration, thread_safety, multi_media_coverage | End-to-end workflows |
 | `cli` | cli_autodetect, load_sort_window, preload_progress, tqdm_progress | CLI and progress |
 | `converters` | document_and_converters, converter_selection | Media converters |
 
@@ -289,7 +302,7 @@ def slow_load():
 - All mutable state protected by `_state_lock` (RLock) in `vtsearch/utils/state_core.py`
 - Votes are `dict[int, None]` (not sets) — use `votes[id] = None` syntax
 - Persistent settings live in `vtsearch/settings.py` (auto-saves to `data/settings.json`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_icon_size_left, grid_icon_size_right, panel_pct_left, panel_pct_right, autoload_media_embedders, autorun_processors, autorun_detector_names, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_resort_interval, autopilot_goal_diversity, saved_datasets_dir, detectors_dir, trainable_models_dir, max_concurrent_dataset_downloads, max_concurrent_dataset_embeddings, settings_source
-- **Concurrent dataset loading**: Dataset loads go through two independent `ConcurrencyGate`s in `vtsearch/routes/datasets_loading.py` — `_download_gate` covers the importer's download/import phase (bandwidth/disk-bound) and `_embed_gate` covers all CPU/GPU-bound embedding work (importer-side per-file embedding plus post-load clipping, dedup, diversity tree, and embedder warm-up). A task acquires the download gate first, swaps to the embed gate when the importer emits its first `"embedding"` progress status (so another dataset can start downloading while this one embeds), and post-load steps also run under the embed gate. Limits are read fresh on every acquire, so changes to `max_concurrent_dataset_downloads` / `max_concurrent_dataset_embeddings` take effect for queued and future tasks (running tasks are never preempted). Defaults are 1/1, preserving serialised behaviour out of the box.
+- **Concurrent dataset loading**: Dataset loads go through two independent `ConcurrencyGate`s in `vtsearch/datasets/load_pipeline.py` — `_download_gate` covers the importer's download/import phase (bandwidth/disk-bound) and `_embed_gate` covers all CPU/GPU-bound embedding work (importer-side per-file embedding plus post-load clipping, dedup, diversity tree, and embedder warm-up). A task acquires the download gate first, swaps to the embed gate when the importer emits its first `"embedding"` progress status (so another dataset can start downloading while this one embeds), and post-load steps also run under the embed gate. Limits are read fresh on every acquire, so changes to `max_concurrent_dataset_downloads` / `max_concurrent_dataset_embeddings` take effect for queued and future tasks (running tasks are never preempted). Defaults are 1/1, preserving serialised behaviour out of the box.
 - **Sync sources** provide bidirectional sync for settings and detector labels. A `SettingsSource` auto-exports settings to an external target (e.g. server JSON file) on every change, and can auto-import on startup. A `LabelsetSource` does the same for detector labels — auto-exporting on vote changes and auto-importing on detector load. Both use the `PluginRegistry` discovery pattern (sentinels `SETTINGS_SOURCE` and `LABELSET_SOURCE`). Standalone importers/exporters remain fully functional regardless of whether a source is active. Config: `settings_source` key in `settings.json` (excluded from defaults and source export to avoid circularity); `labelset_source` field on `DetectorContext`. Template variables: `{username}` for settings sources, `{detector_id}`/`{detector_name}` for labelset sources
 - Each media item has `origin` (dict or None), `origin_name` (str), and optionally `media_url` (str) for per-element provenance and URL-based lazy-fetch
 - `Origin` class in `vtsearch/datasets/origin.py`; `LabelSet`/`LabeledElement` in `vtsearch/datasets/labelset.py`. `LabeledElement` has an optional `metadata` dict for arbitrary per-label data that round-trips through serialisation

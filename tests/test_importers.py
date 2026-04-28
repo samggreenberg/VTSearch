@@ -244,7 +244,7 @@ class TestImporterBaseIcon:
 
 class TestHttpArchiveImporterMetadata:
     def _get_importer(self):
-        from vtsearch.datasets.importers.http_zip import IMPORTER
+        from vtsearch.datasets.importers.http_archive import IMPORTER
 
         return IMPORTER
 
@@ -354,7 +354,7 @@ class TestBuiltinImporterNames:
 
 class TestExtractArchive:
     def test_extract_zip(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
+        from vtsearch.datasets.importers.http_archive import _extract_archive
 
         wav_data = _make_wav_bytes()
         zip_path = tmp_path / "test.zip"
@@ -366,7 +366,7 @@ class TestExtractArchive:
         assert (extract_dir / "sounds" / "tone.wav").exists()
 
     def test_extract_tar_uncompressed(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
+        from vtsearch.datasets.importers.http_archive import _extract_archive
 
         wav_data = _make_wav_bytes()
         tar_path = tmp_path / "test.tar"
@@ -380,7 +380,7 @@ class TestExtractArchive:
         assert (extract_dir / "tone.wav").exists()
 
     def test_extract_tar_gz(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
+        from vtsearch.datasets.importers.http_archive import _extract_archive
 
         wav_data = _make_wav_bytes()
         tar_path = tmp_path / "test.tar.gz"
@@ -394,7 +394,7 @@ class TestExtractArchive:
         assert (extract_dir / "sounds" / "tone.wav").exists()
 
     def test_extract_tar_bz2(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
+        from vtsearch.datasets.importers.http_archive import _extract_archive
 
         wav_data = _make_wav_bytes()
         tar_path = tmp_path / "test.tar.bz2"
@@ -408,7 +408,7 @@ class TestExtractArchive:
         assert (extract_dir / "tone.wav").exists()
 
     def test_unsupported_extension_raises_value_error(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
+        from vtsearch.datasets.importers.http_archive import _extract_archive
 
         # A file that is not a zip or tar and doesn't end in .rar
         bad_archive = tmp_path / "test.7z"
@@ -423,7 +423,7 @@ class TestExtractArchive:
         import sys
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_zip import _extract_archive
+        from vtsearch.datasets.importers.http_archive import _extract_archive
 
         rar_path = tmp_path / "test.rar"
         # Write RAR v4 magic bytes so it's identified as .rar by extension
@@ -436,7 +436,7 @@ class TestExtractArchive:
                 _extract_archive(rar_path, extract_dir)
 
     def test_zip_preserves_multiple_files(self, tmp_path):
-        from vtsearch.datasets.importers.http_zip import _extract_archive
+        from vtsearch.datasets.importers.http_archive import _extract_archive
 
         zip_path = tmp_path / "multi.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
