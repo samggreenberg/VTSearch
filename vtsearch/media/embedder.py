@@ -520,6 +520,22 @@ class MediaEmbedder(ABC):
             results.append(self.embed_media(m))
         return results
 
+    def embed_medias(self, medias: dict[int, dict]) -> dict[int, Optional[np.ndarray]]:
+        """Bulk-embed an id→media dict; return id→vector (or ``None``) dict.
+
+        Convenience wrapper around :meth:`embed_media_bulk` for callers that
+        already have medias keyed by ID — typically dataset importers that
+        have built the medias dict before embedding.  IDs whose embedding
+        failed map to ``None`` in the returned dict, mirroring the position-
+        based ``None`` contract of :meth:`embed_media_bulk`.
+        """
+        if not medias:
+            return {}
+        keys = list(medias.keys())
+        values = [medias[k] for k in keys]
+        vectors = self.embed_media_bulk(values)
+        return dict(zip(keys, vectors))
+
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.
 
