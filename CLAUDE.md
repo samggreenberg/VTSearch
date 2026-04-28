@@ -159,9 +159,9 @@ Tests are auto-grouped by area. Run a focused subset instead of the full suite:
 | `core` | audio, medias, votes, inclusion, settings, settings_api_routes, settings_directories, frontend | Basic app functionality |
 | `api` | api_contracts, error_recovery, dashboard, file_browser, path_validation, multi_user_security, multi_user_dataset_access, ssrf_validation | API contracts, error handling, security |
 | `sorting` | sorting, label_sorting, safe_thresholds, enrich_descriptions, diversity_tree* | Sort algorithms and diversity |
-| `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, thin/chunked_loading, memory_errors, pickle_safety, media_sources, multi_dataset, request_context, parallel_loading | Dataset loading and management |
+| `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, extension_scaffolds, thin/chunked_loading, memory_errors, pickle_safety, media_sources, multi_dataset, request_context, parallel_loading | Dataset loading and management |
 | `io` | exporters, csv_webhook_exporters, export_options, importers, importer_loading, importer_symlinks, dataset_importer_media, label_importers, labels, processor_importers, pdf_import, corrections_export, settings_io, sync_sources | Import/export and sync |
-| `models` | detectors, detector_find, detector_export, extractors, processors, trainable_models, multi_detector, clippers, eval*, resolver, new_embedders | ML models and evaluation |
+| `models` | detectors, detector_find, detector_export, extractors, processors, trainable_models, multi_detector, clippers, clipper_workflow, eval*, resolver, new_embedders | ML models and evaluation |
 | `downloads` | ag_news, bbc_news, gtzan, image_sources, imdb, ucsf, download_and_extract, video_datasets | Demo dataset downloads |
 | `integration` | integration, slow_integration, thread_safety, multi_media_coverage | End-to-end workflows |
 | `cli` | cli_autodetect, load_sort_window, preload_progress, tqdm_progress | CLI and progress |
