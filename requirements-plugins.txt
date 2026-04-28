@@ -8,6 +8,7 @@
 -r vtsearch/datasets/importers/folder/requirements.txt
 -r vtsearch/datasets/importers/http_archive/requirements.txt
 -r vtsearch/datasets/importers/pickle/requirements.txt
+-r vtsearch/datasets/importers/synthetic/requirements.txt
 -r vtsearch/exporters/email_smtp/requirements.txt
 -r vtsearch/exporters/gui/requirements.txt
 -r vtsearch/exporters/server_csv_file/requirements.txt
