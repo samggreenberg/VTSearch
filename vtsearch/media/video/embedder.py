@@ -63,8 +63,9 @@ class VideoXClipEmbedder(MediaEmbedder):
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading X-CLIP model weights…")
         XCLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
-        with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
-            self._on_progress, "Loading X-CLIP model weights…"
+        with (
+            intercept_tqdm_progress(self._on_progress),
+            intercept_weight_loading_progress(self._on_progress, "Loading X-CLIP model weights…"),
         ):
             self._model = load_pretrained_local_first(
                 XCLIPModel.from_pretrained, XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
@@ -139,7 +140,7 @@ class VideoXClipEmbedder(MediaEmbedder):
                 outputs = self._model.get_video_features(**inputs)
                 embedding = _extract_tensor(outputs).detach().cpu().numpy()
             return embedding[0]
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
@@ -157,7 +158,7 @@ class VideoXClipEmbedder(MediaEmbedder):
             with torch.no_grad():
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for video")
             return None
 

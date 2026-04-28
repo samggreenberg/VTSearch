@@ -50,9 +50,7 @@ def normalize_detector_weights(
     media_type = detector_data.get("media_type", "") or media_type
 
     if not good_origins or not bad_origins:
-        raise ValueError(
-            "Detector file must contain 'good_origins' and 'bad_origins' fields."
-        )
+        raise ValueError("Detector file must contain 'good_origins' and 'bad_origins' fields.")
 
     from vtsearch.models.training import train_detector_from_origins
 
@@ -74,8 +72,7 @@ def normalize_detector_weights(
             threshold = fallback_threshold
         else:
             raise ValueError(
-                "Could not derive weights from origins — original media files "
-                "may not be available on disk."
+                "Could not derive weights from origins — original media files may not be available on disk."
             )
 
     return NormalizedWeights(

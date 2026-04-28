@@ -39,7 +39,7 @@ class TestPickleMemoryError:
         pkl.write_bytes(pickle.dumps({"medias": {}}))
 
         target: dict = {}
-        with mock.patch("vtsearch.datasets.loader.safe_pickle_load", side_effect=MemoryError):
+        with mock.patch("vtsearch.datasets.loader_pickle.safe_pickle_load", side_effect=MemoryError):
             with pytest.raises(MemoryError, match="too large for available RAM"):
                 load_dataset_from_pickle(pkl, target)
 
@@ -75,7 +75,7 @@ class TestPickleMemoryError:
                 raise MemoryError("simulated OOM")
             return original_np_array(*args, **kwargs)
 
-        with mock.patch("vtsearch.datasets.loader.np.array", side_effect=oom_on_third_call):
+        with mock.patch("vtsearch.datasets.loader_pickle.np.array", side_effect=oom_on_third_call):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_pickle(pkl, target)
 
@@ -99,7 +99,7 @@ class TestPickleMemoryError:
         pkl.write_bytes(pickle.dumps({"medias": medias_data}))
 
         target: dict = {}
-        with mock.patch("vtsearch.datasets.loader.gc.collect") as mock_gc:
+        with mock.patch("vtsearch.datasets.loader_pickle.gc.collect") as mock_gc:
             load_dataset_from_pickle(pkl, target)
             # gc.collect() should be called after building medias
             assert mock_gc.call_count >= 1
@@ -142,6 +142,9 @@ class TestFolderMemoryError:
             return np.zeros(10)
 
         mock_emb.embed_media.side_effect = embed_then_oom
+        # Route the bulk entrypoint through embed_media so the per-file OOM
+        # simulator still fires under the loader's bulk dispatch.
+        mock_emb.embed_media_bulk.side_effect = lambda medias: [mock_emb.embed_media(m) for m in medias]
         mock_mt.load_media_data.return_value = {"media_bytes": b"\x00", "duration": 1}
 
         with (
@@ -150,7 +153,10 @@ class TestFolderMemoryError:
         ):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_folder(
-                    tmp_path, "audio", target, on_progress=mock_progress,
+                    tmp_path,
+                    "audio",
+                    target,
+                    on_progress=mock_progress,
                 )
 
         assert len(target) == 0
@@ -219,7 +225,7 @@ class TestBackgroundImportMemoryError:
         update_progress("idle", "")
 
         # Patch threading.Thread to run synchronously so we don't race
-        with mock.patch("vtsearch.routes.datasets_loading.threading") as mock_threading:
+        with mock.patch("vtsearch.datasets.load_pipeline.threading") as mock_threading:
             captured_target = {}
 
             def fake_thread(target, daemon=True):
@@ -248,12 +254,15 @@ class TestBackgroundImportMemoryError:
             thread.start = lambda: target()
             return thread
 
-        with mock.patch(
-            "vtsearch.datasets.importers.demo.load_demo_dataset",
-            side_effect=MemoryError("simulated"),
-        ), mock.patch(
-            "vtsearch.routes.datasets_loading.threading.Thread",
-            side_effect=sync_thread,
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.demo.load_demo_dataset",
+                side_effect=MemoryError("simulated"),
+            ),
+            mock.patch(
+                "vtsearch.datasets.load_pipeline.threading.Thread",
+                side_effect=sync_thread,
+            ),
         ):
             resp = client.post(
                 "/api/dataset/load-demo",

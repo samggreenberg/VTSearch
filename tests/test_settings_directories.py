@@ -100,4 +100,3 @@ class TestDirectorySettingsAPI:
     def test_update_dir_non_string_rejected(self, client):
         res = client.put("/api/settings", json={"trainable_models_dir": 123})
         assert res.status_code == 400
-

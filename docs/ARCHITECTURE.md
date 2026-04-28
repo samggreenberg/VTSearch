@@ -25,9 +25,9 @@ VTSearch is a media-explorer web app for browsing, voting on, and
 semantically sorting collections of audio, images, text, video, or
 documents.  It combines:
 
-- **Semantic sorting** — LAION-CLAP (audio), CLIP (images), X-CLIP
+- **Semantic sorting** — LAION-CLAP (audio), SigLIP (images), X-CLIP
   (video), E5-base-v2 (text) for embedding-based similarity search,
-  with alternative embedders available (CLAP Music, SigLIP, BGE).
+  with alternative embedders available (CLAP Music, OpenAI CLIP, BGE).
 - **Learned sorting** — a small MLP trained on user votes to predict
   good/bad labels.
 - **Flask web UI** — Angular SPA frontend with a REST API.
@@ -100,7 +100,11 @@ VTSearch/
 │   ├── datasets/                   Dataset loading & downloading
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
 │   │   ├── labelset.py             LabelSet / LabeledElement (labeled data with origins)
-│   │   ├── loader.py               load_dataset_from_folder/pickle/demo
+│   │   ├── loader.py               Public façade: shared helpers, export, re-exports
+│   │   ├── loader_folder.py        load_dataset_from_folder + chunked variant
+│   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
+│   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
+│   │   ├── load_pipeline.py        Background-task orchestration, ConcurrencyGate, clip fix-up
 │   │   ├── downloader/             HTTP download + demo dataset downloaders
 │   │   │   ├── __init__.py         Re-exports all symbols for backward compat
 │   │   │   ├── core.py             URLs, sizes, progress, archive validation/extraction
@@ -125,9 +129,10 @@ VTSearch/
 │   │       ├── base.py             DatasetImporter ABC + ImporterField
 │   │       ├── folder/             Local directory importer
 │   │       ├── pickle/             .pkl file importer
-│   │       ├── http_zip/           HTTP archive importer (API name: http_archive)
+│   │       ├── http_archive/       HTTP archive importer
 │   │       ├── combine_datasets/   Merge multiple pickle datasets
-│   │       └── demo/              Demo dataset importer (pre-configured catalogues)
+│   │       ├── demo/               Demo dataset importer (pre-configured catalogues)
+│   │       └── recaller/           ReCaller importer (scaffold — hidden from picker)
 │   │
 │   ├── exporters/                  Plugin system for output destinations
 │   │   ├── base.py                 LabelsetExporter ABC + ExporterField
@@ -135,7 +140,8 @@ VTSearch/
 │   │   ├── server_csv_file/        CSV file on server
 │   │   ├── email_smtp/             SMTP email sender
 │   │   ├── webhook/                HTTP POST webhook
-│   │   └── gui/                    In-browser / console display
+│   │   ├── gui/                    In-browser / console display
+│   │   └── holder/                 Holder labelset exporter (scaffold — hidden from picker)
 │   │
 │   ├── settings_io/                Settings import/export/sync plugins
 │   │   ├── importers/              One-shot settings importers
@@ -154,7 +160,8 @@ VTSearch/
 │   │   ├── importers/              Plugin system for one-shot label import
 │   │   │   ├── base.py             LabelImporter ABC + LabelImporterField
 │   │   │   ├── server_json_file/   JSON label file on server
-│   │   │   └── server_csv_file/    CSV label file on server
+│   │   │   ├── server_csv_file/    CSV label file on server
+│   │   │   └── holder/             Holder label importer (scaffold — hidden from picker)
 │   │   ├── sources/                Bidirectional label sync sources
 │   │   │   ├── base.py             LabelsetSource ABC + LabelsetSourceField
 │   │   │   └── server_json_file/   Sync labels with server JSON file
@@ -182,9 +189,10 @@ VTSearch/
 │   │   ├── detectors_crud.py       Detector CRUD operations (create, rename, delete)
 │   │   ├── detectors_scoring.py    Detector scoring and autodetect execution
 │   │   ├── detectors_training.py   Detector training from votes
-│   │   ├── datasets.py             Dataset loading, demos, dashboard
-│   │   ├── datasets_loading.py     Dataset loading and import orchestration
+│   │   ├── detectors_find.py       Multi-dataset / multi-model Find subsystem
+│   │   ├── datasets.py             Media-type/clipper/converter listings, import, demos
 │   │   ├── datasets_ui.py          Dataset UI helpers and demo listing
+│   │   ├── datasets_registry.py    Dataset registry CRUD (/api/datasets/registry/*)
 │   │   ├── labels.py               Label export, import, fill-from-sort
 │   │   ├── eval.py                 Evaluation and labeling progress routes
 │   │   ├── media_server.py         Server media file management, example-sort by origin
@@ -195,23 +203,27 @@ VTSearch/
 │   │   ├── settings_io.py          Settings import/export plugin routes
 │   │   ├── sync_sources.py         Sync source management (settings + labelset sources)
 │   │   ├── file_browser.py         File browser API for directory navigation
-│   │   └── trainable_models.py     Persistent trainable model definitions (CRUD)
+│   │   ├── trainable_models.py     Persistent trainable model store (/api/trainable-models/*)
+│   │   └── models_registry.py      In-memory model registry (/api/models/registry/*)
 │   │
-│   ├── utils/
-│   │   ├── state.py                Re-export facade over state_*.py submodules
-│   │   ├── state_core.py           Core variables (medias, votes, inclusion) and _state_lock
-│   │   ├── state_votes.py          Vote operations, label history, learned scores
-│   │   ├── state_clicks.py         Click-time tracking for vote sequence analysis
-│   │   ├── state_processors.py     Autorun detector/extractor/localizer CRUD
-│   │   ├── state_diversity.py      Diversity tree construction and sampling
-│   │   ├── state_media_lookup.py   Media ID resolution, duplicate collapsing, origins
-│   │   ├── progress.py             Thread-safe progress tracking
-│   │   ├── registry.py             PluginBase, PluginField, PluginRegistry (shared plugin infra)
-│   │   ├── hits.py                 Helpers for building media hit dicts
-│   │   ├── paths.py                Path utilities
-│   │   └── url_validation.py       SSRF URL validation
+│   ├── settings_factory.py         Accessor factories used by settings.py
 │   │
-│   └── audio/                      WAV/tone generation utilities
+│   └── utils/
+│       ├── state.py                Re-export facade over state_*.py submodules
+│       ├── state_core.py           Core variables (medias, votes, inclusion) and _state_lock
+│       ├── state_votes.py          Vote operations, label history, learned scores
+│       ├── state_clicks.py         Click-time tracking for vote sequence analysis
+│       ├── state_processors.py     Autorun detector/extractor/localizer CRUD
+│       ├── state_diversity.py      Diversity tree construction and sampling
+│       ├── state_media_lookup.py   Media ID resolution, duplicate collapsing, origins
+│       ├── progress.py             Thread-safe progress tracking
+│       ├── registry.py             PluginBase, PluginField, PluginRegistry (shared plugin infra)
+│       ├── sync_source.py          SyncSource[LoadT, SaveT] generic base for SettingsSource/LabelsetSource
+│       ├── audio_generator.py      WAV/tone generation utility
+│       ├── ffmpeg.py               ffmpeg wrappers
+│       ├── hits.py                 Helpers for building media hit dicts
+│       ├── paths.py                Path utilities
+│       └── url_validation.py       SSRF URL validation
 │
 ├── static/                         Angular build output (HTML + CSS + JS)
 └── tests/                          Comprehensive test suite
@@ -231,7 +243,7 @@ modules on the right.
 │  app.py ──► auth, routes/* ──► utils/state, utils/progress │
 │                │                                           │
 │                ├──► models/embeddings, models/training     │
-│                ├──► datasets/loader                        │
+│                ├──► datasets/loader, datasets/load_pipeline │
 │                ├──► exporters (registry)                   │
 │                ├──► labels/importers (registry)            │
 │                ├──► processors/importers (registry)        │
@@ -266,16 +278,27 @@ modules on the right.
 │                          │  │                        │  │                          │
 └──────────────────────────┘  └────────────────────────┘  └──────────────────────────┘
 
-┌─────────────────────────────┐  ┌─────────────────────────────┐
-│ settings_io/sources/*       │  │ labels/sources/*            │
-│                             │  │ labels/sync.py              │
-│ base.py (SettingsSource ABC)│  │                             │
-│ server_json_file            │  │ base.py (LabelsetSource ABC)│
-│                             │  │ server_json_file            │
-│ (NO Flask; reads/writes     │  │                             │
-│  settings via file I/O)     │  │ (NO Flask; reads/writes     │
-│                             │  │  labelsets via file I/O)    │
-└─────────────────────────────┘  └─────────────────────────────┘
+                          ┌──────────────────────────┐
+                          │ utils/sync_source.py     │
+                          │                          │
+                          │ SyncSource[LoadT, SaveT] │
+                          │  (generic ABC,           │
+                          │   shared icon + signature│
+                          │   for load() / save())   │
+                          └────────────┬─────────────┘
+                                       │
+              ┌────────────────────────┴────────────────────────┐
+              ▼                                                 ▼
+┌─────────────────────────────┐            ┌─────────────────────────────┐
+│ settings_io/sources/*       │            │ labels/sources/*            │
+│                             │            │ labels/sync.py              │
+│ base.py (SettingsSource)    │            │                             │
+│ server_json_file            │            │ base.py (LabelsetSource)    │
+│                             │            │ server_json_file            │
+│ (NO Flask; reads/writes     │            │                             │
+│  settings via file I/O)     │            │ (NO Flask; reads/writes     │
+│                             │            │  labelsets via file I/O)    │
+└─────────────────────────────┘            └─────────────────────────────┘
 ```
 
 ### Key observations
@@ -288,9 +311,11 @@ modules on the right.
   imports `flask.g` for request-scoped context resolution.
 - **exporters, label importers, processor importers, and sync sources
   are fully standalone.**  They receive a plain dict and return a plain
-  dict/list.  Zero framework coupling.  Sync sources (`SettingsSource`,
-  `LabelsetSource`) pair an import and export behind a single abstraction
-  for bidirectional sync — but each source plugin is still pure I/O.
+  dict/list.  Zero framework coupling.  Sync sources (`SettingsSource`
+  for settings, `LabelsetSource` for detector labels) both inherit from
+  the generic `SyncSource[LoadT, SaveT]` in `utils/sync_source.py`,
+  which captures the shared `load()`/`save()` shape; each concrete
+  source plugin is still pure I/O.
 - **datasets/ functions accept an optional `on_progress` callback.**
   When `None`, they lazily resolve the app's `update_progress`; when
   provided, they use the caller's callback.
@@ -377,9 +402,11 @@ text_vec  = embedder.embed_text("birdsong")                       # same space
 Because the embedder sees the whole media dict (not just a `Path`), a
 service-based embedder can resolve content via `media["origin"]` /
 `media.get("custom_metadata")` without touching local disk — e.g. a
-remote lookup by `origin["params"]["content_id"]`.  Bulk APIs can override
-`supports_batch = True` / `batch_size` and `_embed_media_batch_impl(medias)`
-to flush whole batches through the loader.
+remote lookup by `origin["params"]["content_id"]`.  The loader always
+routes every pending file through `embed_media_bulk(medias)`; the ABC's
+default implementation loops per item (with progress).  Services that
+natively accept many items per request override `_embed_media_bulk_impl`
+and batch internally.
 
 No Flask, no global state, no progress dependency (silent no-op by
 default).  To get progress reporting, set a callback before loading:
@@ -492,8 +519,12 @@ register function.  See `EXTENDING.md` (in this directory) for full examples.
 
 ## State management
 
-Application state lives in `vtsearch/utils/state.py` as module-level
-dicts, all protected by `_state_lock` (a `threading.RLock`):
+Application state is exposed through `vtsearch/utils/state.py` (a
+re-export facade over the `state_*.py` submodules). The module-level
+names below are **proxy objects** that delegate to a per-request
+`DatasetContext` or `DetectorContext` — see
+[Multi-dataset support](#multi-dataset-support). All mutable access is
+protected by `_state_lock` (a `threading.RLock`):
 
 | Variable | Type | Purpose |
 |----------|------|---------|
@@ -510,6 +541,13 @@ dicts, all protected by `_state_lock` (a `threading.RLock`):
 | `autorun_localizers` | `dict` | Saved localizer configurations |
 | `_diversity_tree` | `DiversityTree \| None` | Hierarchical k-means tree for diverse sampling |
 | `_dataset_display_name` | `str \| None` | Custom display name for the loaded dataset |
+
+Of these, only `autorun_detectors`, `autorun_extractors`, and
+`autorun_localizers` are truly global (shared across all loaded
+datasets). The rest are per-dataset (`medias`, `_diversity_tree`,
+`_dataset_display_name`) or per-detector (votes, label history, click
+times, learned scores, inclusion, textsort suggestions) and resolve via
+the active `DatasetContext` / `DetectorContext`.
 
 Persistent settings live separately in `vtsearch/settings.py` and are
 auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
@@ -528,10 +566,12 @@ Trainable models are persisted as JSON files in `data/trainable_models/`
 via the `trainable_models_bp` route blueprint.  Each stores a name,
 text query, media type, examples list, and labelset.
 
-**Only Flask routes mutate this state.**  All ML and dataset functions
-accept state as parameters — they never import it directly.  This means
-you can use the ML code in a script or notebook by passing your own
-dicts.
+**Primarily Flask routes mutate this state.**  Most ML and dataset
+functions accept state as parameters — so you can use the ML code in a
+script or notebook by passing your own dicts. A few modules (notably
+`training_workflow.py` and `labels/sync.py`) import specific helpers
+and resolve the active context via Flask's `g` or thread-local storage,
+but these are the exceptions rather than the rule.
 
 ### State submodule organisation
 

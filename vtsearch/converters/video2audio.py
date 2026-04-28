@@ -58,10 +58,13 @@ class Video2AudioMediaConverter(MediaConverter):
                 ffmpeg = get_ffmpeg_exe()
                 subprocess.run(
                     [
-                        ffmpeg, "-y",
-                        "-i", str(src_path),
+                        ffmpeg,
+                        "-y",
+                        "-i",
+                        str(src_path),
                         "-vn",
-                        "-acodec", "pcm_s16le",
+                        "-acodec",
+                        "pcm_s16le",
                         wav_path,
                     ],
                     capture_output=True,
@@ -72,7 +75,9 @@ class Video2AudioMediaConverter(MediaConverter):
                 print("Video2AudioMediaConverter requires ffmpeg — install it or 'pip install imageio-ffmpeg'")
                 return []
             except subprocess.CalledProcessError as e:
-                stderr_text = e.stderr[:500].decode(errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or "")[:500]
+                stderr_text = (
+                    e.stderr[:500].decode(errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or "")[:500]
+                )
                 print(f"ffmpeg failed for {filename}: {stderr_text}")
                 return []
             except subprocess.TimeoutExpired:
@@ -95,11 +100,13 @@ class Video2AudioMediaConverter(MediaConverter):
             except Exception:
                 pass
 
-        return [{
-            "filename": f"{stem}.wav",
-            "media_bytes": wav_bytes,
-            "duration": duration,
-        }]
+        return [
+            {
+                "filename": f"{stem}.wav",
+                "media_bytes": wav_bytes,
+                "duration": duration,
+            }
+        ]
 
 
 CONVERTER = Video2AudioMediaConverter()

@@ -12,7 +12,6 @@ from __future__ import annotations
 import numpy as np
 from unittest.mock import patch
 
-import app as app_module
 from vtsearch.datasets.labelset import LabelSet, LabeledElement
 
 

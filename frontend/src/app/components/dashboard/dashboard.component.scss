@@ -205,10 +205,23 @@
       }
     }
 
+    // Column resize handle. Hosted by the cell AFTER the divider it controls
+    // (i.e. by N+1, resizing column N) and offset 6px to the left so the 12px
+    // grab zone straddles the divider symmetrically.
+    //
+    // Why on the *next* cell, leaking *left*? Each <th> is `position: sticky;
+    // z-index: 1` so it forms its own stacking context. Sibling stacking
+    // contexts at equal z-index paint in DOM order, so the next cell paints
+    // OVER the previous one. A handle that overflows from cell N to the right
+    // gets covered by cell N+1's background; a handle that overflows from
+    // cell N+1 to the left paints over cell N and stays clickable. Do not
+    // change to `right: -6px` (covered) or `right: 0` (off-center, sits
+    // entirely on one side of the divider) — both have shipped before and
+    // both are bugs. See tests/test_resize_handle_centering.py.
     .col-resize-handle {
       position: absolute;
       top: 0;
-      right: 0;
+      left: -6px;
       bottom: 0;
       width: 12px;
       cursor: col-resize;
@@ -219,7 +232,7 @@
         position: absolute;
         top: 20%;
         bottom: 20%;
-        right: 0;
+        left: 5px;
         width: 2px;
         background: var(--accent);
         opacity: 0.35;

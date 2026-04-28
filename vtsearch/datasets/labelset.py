@@ -177,9 +177,7 @@ class LabelSet:
                     media = medias.get(hit.get("id"))
                     if media:
                         origin = media.get("origin")
-                        origin_name = origin_name or media.get(
-                            "origin_name", media.get("filename", "")
-                        )
+                        origin_name = origin_name or media.get("origin_name", media.get("filename", ""))
                 elements.append(
                     LabeledElement(
                         md5=hit.get("md5", ""),
@@ -222,9 +220,7 @@ class LabelSet:
         return cls(elements)
 
 
-def _clip_to_elements(
-    media: dict[str, Any], label: str, *, expand_dupes: bool = True
-) -> list[LabeledElement]:
+def _clip_to_elements(media: dict[str, Any], label: str, *, expand_dupes: bool = True) -> list[LabeledElement]:
     """Convert a media dict into one or more :class:`LabeledElement` instances.
 
     When *expand_dupes* is ``True`` and the media is a dupe-set

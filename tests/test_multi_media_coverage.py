@@ -14,7 +14,6 @@ media types — not just audio.  Also covers previously-untested endpoints:
 from __future__ import annotations
 
 import io
-from pathlib import Path
 
 import numpy as np
 
@@ -22,7 +21,6 @@ from helpers import (
     make_image_media,
     make_text_media,
     make_video_media,
-    make_document_media,
     make_png_bytes,
     make_wav_bytes,
 )

@@ -665,9 +665,7 @@ class TestDemoCacheEmbedderMismatch:
 
         # Write a fake cached pickle with a 'clip' sidecar
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
-        pkl_file.write_bytes(
-            pickle.dumps({"name": demo_name, "medias": {1: {"embedding": [0.1]}}})
-        )
+        pkl_file.write_bytes(pickle.dumps({"name": demo_name, "medias": {1: {"embedding": [0.1]}}}))
         _write_embedder_sidecar(pkl_file, "clip")
 
         # Create a fake embedder whose name is 'siglip'
@@ -703,18 +701,18 @@ class TestDemoCacheEmbedderMismatch:
         from vtsearch.datasets.loader import _write_embedder_sidecar, load_demo_dataset
 
         demo_name = next(iter(DEMO_DATASETS))
-        demo_info = DEMO_DATASETS[demo_name]
-        media_type_id = demo_info.get("media_type", "audio")
 
         embeddings_dir = tmp_path / "embeddings"
         embeddings_dir.mkdir()
 
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
         pkl_file.write_bytes(
-            pickle.dumps({
-                "name": demo_name,
-                "medias": {1: {"embedding": [0.1, 0.2], "file": "/fake/file.png"}},
-            })
+            pickle.dumps(
+                {
+                    "name": demo_name,
+                    "medias": {1: {"embedding": [0.1, 0.2], "file": "/fake/file.png"}},
+                }
+            )
         )
         _write_embedder_sidecar(pkl_file, "clip")
 
@@ -751,10 +749,12 @@ class TestDemoCacheEmbedderMismatch:
 
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
         pkl_file.write_bytes(
-            pickle.dumps({
-                "name": demo_name,
-                "medias": {1: {"embedding": [0.1], "file": "/fake/file.png"}},
-            })
+            pickle.dumps(
+                {
+                    "name": demo_name,
+                    "medias": {1: {"embedding": [0.1], "file": "/fake/file.png"}},
+                }
+            )
         )
         # No sidecar written — simulates a legacy pickle
 
@@ -1131,9 +1131,9 @@ class TestLoadProgressRaceCondition:
         assert get_progress()["error"] == "Previous load failed"
 
         # Start a new load (mock the thread so it doesn't actually run)
-        from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
-        with patch("vtsearch.routes.datasets_loading.threading.Thread"):
+        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
             _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -1165,7 +1165,7 @@ class TestLoadProgressRaceCondition:
         def _capture_update(status, message="", current=0, total=0, **kw):
             messages.append(message)
 
-        with patch("vtsearch.routes.datasets_loading.update_progress", side_effect=_capture_update):
+        with patch("vtsearch.datasets.load_pipeline.update_progress", side_effect=_capture_update):
             _load_embedder_for_clips()
 
         # Should have set "Loading embedding model…" before calling load_models
@@ -1219,7 +1219,7 @@ class TestCancelIngest:
                     dataset_progress.check_cancelled()
                     time.sleep(0.05)
 
-            from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
             _run_origin_load_in_background(
                 slow_load,
@@ -1261,9 +1261,9 @@ class TestCancelIngest:
         saved = dict(app_module.medias)
         try:
             # Start a new load — should reset the flag
-            from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
-            with patch("vtsearch.routes.datasets_loading._load_embedder_for_clips"):
+            with patch("vtsearch.datasets.load_pipeline._load_embedder_for_clips"):
                 _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},

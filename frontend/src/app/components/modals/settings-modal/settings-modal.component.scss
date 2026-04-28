@@ -16,7 +16,7 @@
   flex-shrink: 0;
   width: 140px;
   border-right: 1px solid var(--border-color);
-  padding: 0.25rem 0;
+  padding: var(--space-xs) 0;
 }
 
 .settings-tab {
@@ -24,7 +24,7 @@
   border: none;
   border-left: 3px solid transparent;
   padding: 0.6rem 0.85rem;
-  font-size: 0.85rem;
+  font-size: var(--font-md);
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
@@ -48,11 +48,11 @@
 
 .settings-panel {
   flex: 1;
-  padding: 0.75rem 1.25rem;
+  padding: var(--space-lg) 1.25rem;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-md);
 
   h3 {
     margin: 0;
@@ -61,8 +61,8 @@
   }
 
   h4 {
-    margin: 0.5rem 0 0;
-    font-size: 0.85rem;
+    margin: var(--space-md) 0 0;
+    font-size: var(--font-md);
     color: var(--text-secondary);
   }
 }
@@ -70,8 +70,8 @@
 .checkbox-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
+  gap: var(--space-md);
+  font-size: var(--font-md);
   cursor: pointer;
 }
 
@@ -80,19 +80,19 @@
   gap: 0;
   margin-bottom: 0;
   background: var(--bg-secondary);
-  border-radius: 6px 6px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   border: 1px solid var(--border-color);
   border-bottom: none;
-  padding: 0.25rem 0.25rem 0;
+  padding: var(--space-xs) var(--space-xs) 0;
 }
 
 .view-tab {
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
   padding: 0.45rem 0.85rem;
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
@@ -113,22 +113,22 @@
 .view-tab-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  padding: 0.75rem;
+  gap: var(--space-xl);
+  padding: var(--space-lg);
   border: 1px solid var(--border-color);
   border-top: 1px solid var(--border-color);
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background: var(--bg-primary);
 }
 
 .view-side-section {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-md);
 
   h4 {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: var(--font-md);
     color: var(--text-secondary);
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 0.35rem;
@@ -147,7 +147,7 @@
   flex: 1;
   justify-content: center;
   padding: 0.3rem 0.6rem;
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   font-weight: 500;
   color: var(--text-secondary);
   background: var(--bg-primary);
@@ -156,11 +156,11 @@
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 
   &:first-child {
-    border-radius: 4px 0 0 4px;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
   }
 
   &:last-child {
-    border-radius: 0 4px 4px 0;
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
     border-left: none;
   }
 
@@ -191,24 +191,24 @@
 .embedder-grid-header {
   display: grid;
   grid-template-columns: 1fr 10rem;
-  gap: 0.5rem;
+  gap: var(--space-md);
   padding: 0 0 0.4rem calc(1.25rem + 0.5rem);
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
   font-weight: 600;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-color);
-  margin-bottom: 0.25rem;
+  margin-bottom: var(--space-xs);
 }
 
 .embedder-row {
   display: grid;
   grid-template-columns: auto 1fr 10rem;
-  gap: 0.5rem;
+  gap: var(--space-md);
   align-items: center;
   padding: 0.35rem 0;
-  font-size: 0.85rem;
+  font-size: var(--font-md);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   transition: background 0.1s;
 
   &:hover {
@@ -229,14 +229,14 @@
 
 .embedder-media-type {
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   display: flex;
   align-items: center;
   gap: 0.35rem;
 }
 
 .embedder-media-type-icon {
-  font-size: 1rem;
+  font-size: var(--font-xl);
 }
 
 .settings-tab-icon {
@@ -250,6 +250,6 @@
 
 .settings-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-md);
   justify-content: flex-end;
 }

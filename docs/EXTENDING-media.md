@@ -370,8 +370,27 @@ def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
     return self._client.get_embedding(content_id)
 ```
 
-For bulk APIs, also override `supports_batch` / `batch_size` and
-`_embed_media_batch_impl(medias)` to flush a whole list in one request.
+For services that natively accept many items per request, override
+`_embed_media_bulk_impl(medias)` to send one request (or do internal
+batching). The loader always calls `embed_media_bulk` with every
+pending file; the default implementation loops over `embed_media`
+per item and emits progress via `self._on_progress`, so custom
+overrides that batch internally should emit their own progress too.
+
+Importer code that has already built a `dict[int, dict]` of medias
+(keyed by media ID) can call the dict-shaped sugar wrapper directly:
+
+```python
+# medias: dict[int, dict] keyed by 1-based media ID
+vectors = emb.embed_medias(medias)  # -> dict[int, Optional[np.ndarray]]
+for media_id, vec in vectors.items():
+    if vec is not None:
+        medias[media_id]["embedding"] = vec
+```
+
+`embed_medias` delegates to `embed_media_bulk` internally — subclasses
+only need to override `_embed_media_bulk_impl` to gain a native bulk
+path; the dict wrapper picks it up automatically.
 
 ### Register the embedder
 
@@ -417,14 +436,14 @@ loaded via `spec_from_file_location` so discovery still works.
 |---------------------------------------|----------------------------------------------------|--------------------------------------|
 | `embed_text(text)`                    | `(str) -> Optional[np.ndarray]`                    | Embed a text query (default: `None`) |
 | `embed_text_enriched(text)`           | `(str) -> Optional[np.ndarray]`                    | Average over `description_wrappers`  |
-| `_embed_media_batch_impl(medias)`     | `(list[dict]) -> list[Optional[np.ndarray]]`       | Bulk embed; default loops over `_embed_media_impl`. Override with `supports_batch=True` for a remote bulk API |
+| `_embed_media_bulk_impl(medias)`      | `(list[dict]) -> list[Optional[np.ndarray]]`       | Embed a list of medias. Default loops over `embed_media` with per-item progress. Override for a native bulk path (e.g. a remote API that accepts many items per request); overrides that batch internally must emit their own progress through `self._on_progress`. |
 
-**Optional overridable properties:**
+**Convenience wrappers (don't override these):**
 
-| Property          | Returns | Description                                                                 |
-|-------------------|---------|-----------------------------------------------------------------------------|
-| `supports_batch`  | `bool`  | Set to `True` to route loader through `embed_media_batch` (default: `False`) |
-| `batch_size`      | `int`   | Max items per batch call when `supports_batch=True` (default: `32`)          |
+| Method                                | Signature                                                       | Description                          |
+|---------------------------------------|-----------------------------------------------------------------|--------------------------------------|
+| `embed_media_bulk(medias)`            | `(list[dict]) -> list[Optional[np.ndarray]]`                    | List-shaped public entrypoint. Calls `_embed_media_bulk_impl` and short-circuits empty input. |
+| `embed_medias(medias)`                | `(dict[int, dict]) -> dict[int, Optional[np.ndarray]]`          | Sugar for callers with id-keyed medias (e.g. importers). Delegates to `embed_media_bulk`, pairs vectors back to input keys. |
 
 **Optional overridable properties:**
 

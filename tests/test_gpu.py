@@ -421,9 +421,7 @@ class TestDetectorGPU:
             X_all = torch.tensor(all_embs, dtype=torch.float32, device=device)
 
             detector_results = {}
-            for det_idx, (good_ids, bad_ids) in enumerate(
-                [([1, 2, 3], [18, 19, 20]), ([5, 6, 7], [14, 15, 16])]
-            ):
+            for det_idx, (good_ids, bad_ids) in enumerate([([1, 2, 3], [18, 19, 20]), ([5, 6, 7], [14, 15, 16])]):
                 good, bad = _make_votes(good_ids, bad_ids)
                 X_list, y_list = [], []
                 for cid in good:

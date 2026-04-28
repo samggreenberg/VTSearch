@@ -89,11 +89,13 @@ def sync_settings_from_source():
     if imported is None:
         return jsonify({"ok": False, "message": "No settings source configured or source is empty."})
 
-    return jsonify({
-        "ok": True,
-        "message": f"Imported {len(imported)} setting(s) from source.",
-        "keys": list(imported.keys()),
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"Imported {len(imported)} setting(s) from source.",
+            "keys": list(imported.keys()),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +180,9 @@ def sync_detector_labelset_from_source(detector_name: str):
     if labels is None:
         return jsonify({"ok": False, "message": "No labelset source configured or source is empty."})
 
-    return jsonify({
-        "ok": True,
-        "message": f"Imported {len(labels)} label(s) from source.",
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"Imported {len(labels)} label(s) from source.",
+        }
+    )

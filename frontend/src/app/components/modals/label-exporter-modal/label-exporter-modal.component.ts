@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
+import { IconComponent } from '../../icon/icon.component';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ExporterInfo } from '../../../models/api.models';
@@ -10,7 +11,7 @@ import { ExporterInfo } from '../../../models/api.models';
 @Component({
   selector: 'vt-label-exporter-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent],
+  imports: [CommonModule, ModalComponent, IconComponent],
   templateUrl: './label-exporter-modal.component.html',
   styleUrl: './label-exporter-modal.component.scss',
 })
@@ -39,7 +40,7 @@ export class LabelExporterModalComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
       next: (list) => {
-        this.exporters = list;
+        this.exporters = list.filter((exp) => !exp.hidden_from_picker);
         this.loading = false;
       },
       error: () => {

@@ -153,7 +153,10 @@ class CombineDatasetsImporter(DatasetImporter):
         return True
 
     def run_chunked(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         """Yield one chunk per source pickle, deduplicating across chunks.
 
@@ -217,7 +220,10 @@ class CombineDatasetsImporter(DatasetImporter):
                 yield chunk_medias
 
     def run_chunked_cli(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
 

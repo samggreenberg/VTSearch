@@ -29,6 +29,7 @@ from vtsearch.utils.state_core import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_dataset(ds_id, media_ids):
     """Create and register a DatasetContext with fake media items."""
     ctx = DatasetContext(ds_id)
@@ -128,6 +129,7 @@ class TestRequestScopedModel:
         det_b.good_votes[2] = None
 
         from vtsearch.utils.state_core import get_detector_context
+
         set_thread_detector_context(get_detector_context("req_det_a"))
 
         # Without header: votes come from A
@@ -152,6 +154,7 @@ class TestRequestScopedModel:
         det = _make_detector("req_det_fb")
         det.good_votes[5] = None
         from vtsearch.utils.state_core import get_detector_context
+
         set_thread_detector_context(get_detector_context("req_det_fb"))
 
         resp = client.get("/api/votes", headers={"X-Model-Id": "nonexistent"})
@@ -166,6 +169,7 @@ class TestRequestScopedModel:
         det_a.good_votes[10] = None
         det_b.bad_votes[20] = None
         from vtsearch.utils.state_core import get_detector_context
+
         set_thread_detector_context(get_detector_context("req_det_ctx_a"))
 
         from app import app
@@ -194,13 +198,12 @@ class TestRequestScopedBoth:
 
         set_thread_dataset_context(get_context("req_both_ds"))
         from vtsearch.utils.state_core import get_detector_context
+
         set_thread_detector_context(get_detector_context("req_both_det"))
 
         from app import app
 
-        with app.test_request_context(
-            headers={"X-Dataset-Id": "req_both_ds", "X-Model-Id": "req_both_det"}
-        ):
+        with app.test_request_context(headers={"X-Dataset-Id": "req_both_ds", "X-Model-Id": "req_both_det"}):
             app.preprocess_request()
             assert get_active_context().dataset_id == "req_both_ds"
             assert get_active_detector_context().detector_id == "req_both_det"
@@ -287,6 +290,7 @@ class TestQueryParamContext:
         det_a.good_votes[10] = None
         det_b.good_votes[20] = None
         from vtsearch.utils.state_core import get_detector_context
+
         set_thread_detector_context(get_detector_context("qp_det_a"))
 
         from app import app

@@ -53,7 +53,6 @@ class TestAngularRoutes:
         assert b"<app-root>" in resp.data
 
 
-
 class TestStaticFiles:
     """Static assets should be accessible under /static/."""
 

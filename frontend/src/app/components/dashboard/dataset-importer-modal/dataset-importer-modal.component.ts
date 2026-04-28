@@ -424,11 +424,16 @@ export class DatasetImporterModalComponent implements OnInit {
 
   // --- Demo table column resize ---
 
-  startDemoResize(event: MouseEvent, col: string): void {
+  startDemoResize(event: MouseEvent): void {
     event.stopPropagation();
     event.preventDefault();
 
+    // The handle sits on the LEFT edge of its host <th> and resizes the
+    // column to its left (see dashboard.component.scss for why).
     const th = (event.target as HTMLElement).closest('th') as HTMLElement;
+    const prevTh = th.previousElementSibling as HTMLElement | null;
+    const col = prevTh?.getAttribute('data-col');
+    if (!col) return;
     const tableEl = th.closest('table') as HTMLTableElement;
 
     if (!this.demoResizeInit) {
