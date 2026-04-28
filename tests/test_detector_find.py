@@ -401,7 +401,8 @@ class TestFindLabel:
         """
         from vtsearch.datasets.labelset import LabelSet
         from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
-        from vtsearch.routes.trainable_models import _read_model, _write_model, sync_labels_to_loaded_model
+        from vtsearch.models.label_sync import sync_labels_to_loaded_model
+        from vtsearch.routes.trainable_models import _read_model, _write_model
         from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
         from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
         from vtsearch.utils.state_core import DetectorContext, register_detector_context
