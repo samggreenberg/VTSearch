@@ -43,6 +43,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 480px;
+  max-width: 100%;
 }
 
 .form-group {
@@ -140,6 +142,8 @@
 // Media picker view
 .media-picker {
   min-height: 200px;
+  width: 480px;
+  max-width: 100%;
 }
 
 .back-btn {
