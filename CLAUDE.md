@@ -13,9 +13,9 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 
 Before comparing branches (`git log a..b`, `git diff a...b`, etc.), always run `git fetch origin --prune` first. Do **not** trust `origin/<branch>` refs after a partial fetch like `git fetch origin main` — that only updates the branch you named, leaving other remote-tracking refs stale and producing misleading diffs.
 
-## Auto-PR After Successful Tests
+## Auto-PR
 
-After pushing code changes and successfully running tests, **automatically create a PR targeting `dev`**. Do not ask — just create it. This applies whenever Claude both pushes and verifies tests pass in the same session.
+When you're done with your changes, open a PR targeting `dev`. Do not ask — just create it. Always pass `base=dev` explicitly (the GitHub PR-creation URL printed by `git push` defaults to `main`).
 
 ## PR Activity Subscription (do not ask)
 
