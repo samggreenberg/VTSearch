@@ -13,7 +13,7 @@
 
     <form class="new-model-form" (ngSubmit)="submit()">
       <div class="form-group">
-        <label for="model-name" title="A short name to identify this model">Model Name <span class="required">*</span></label>
+        <label class="col-label" for="model-name" title="A short name to identify this model">Model Name <span class="required">*</span></label>
         <input
           id="model-name"
           class="form-input"
@@ -27,7 +27,7 @@
 
       @if (tab === 'blank') {
         <div class="form-group">
-          <label title="The type of media this model will process">Media Type</label>
+          <label class="col-label" title="The type of media this model will process">Media Type</label>
           <div class="custom-select" [class.open]="mediaTypeDropdownOpen" title="The type of media this model will process">
             <button type="button" class="custom-select-trigger form-input" (click)="mediaTypeDropdownOpen = !mediaTypeDropdownOpen" title="Select the media type for this model">
               <span class="select-option-content">
@@ -128,7 +128,7 @@
             @if (selectedLabelImporter.fields && selectedLabelImporter.fields.length > 0) {
               @for (field of selectedLabelImporter.fields; track field.key) {
                 <div class="form-group">
-                  <label class="form-label" [for]="'nmm-' + field.key">
+                  <label class="col-label" [for]="'nmm-' + field.key">
                     {{ field.label || field.key }}
                     @if (field.required) {
                       <span class="required">*</span>
