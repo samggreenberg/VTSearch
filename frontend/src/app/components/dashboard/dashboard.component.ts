@@ -199,11 +199,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Column resize ---
 
-  startResize(event: MouseEvent, table: 'datasets' | 'models', col: string): void {
+  startResize(event: MouseEvent, table: 'datasets' | 'models'): void {
     event.stopPropagation();
     event.preventDefault();
 
+    // The handle sits on the LEFT edge of its host <th> and resizes the
+    // column to its left (see dashboard.component.scss for why).
     const th = (event.target as HTMLElement).closest('th') as HTMLElement;
+    const prevTh = th.previousElementSibling as HTMLElement | null;
+    const col = prevTh?.getAttribute('data-col');
+    if (!col) return;
     const tableEl = th.closest('table') as HTMLTableElement;
     const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
     const initialized = table === 'datasets' ? this.datasetsResizeInit : this.modelsResizeInit;
