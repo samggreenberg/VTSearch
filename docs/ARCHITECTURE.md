@@ -100,7 +100,10 @@ VTSearch/
 │   ├── datasets/                   Dataset loading & downloading
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
 │   │   ├── labelset.py             LabelSet / LabeledElement (labeled data with origins)
-│   │   ├── loader.py               load_dataset_from_folder/pickle/demo
+│   │   ├── loader.py               Public façade: shared helpers, export, re-exports
+│   │   ├── loader_folder.py        load_dataset_from_folder + chunked variant
+│   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
+│   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
 │   │   ├── load_pipeline.py        Background-task orchestration, ConcurrencyGate, clip fix-up
 │   │   ├── downloader/             HTTP download + demo dataset downloaders
 │   │   │   ├── __init__.py         Re-exports all symbols for backward compat

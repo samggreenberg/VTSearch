@@ -39,7 +39,7 @@ class TestPickleMemoryError:
         pkl.write_bytes(pickle.dumps({"medias": {}}))
 
         target: dict = {}
-        with mock.patch("vtsearch.datasets.loader.safe_pickle_load", side_effect=MemoryError):
+        with mock.patch("vtsearch.datasets.loader_pickle.safe_pickle_load", side_effect=MemoryError):
             with pytest.raises(MemoryError, match="too large for available RAM"):
                 load_dataset_from_pickle(pkl, target)
 
@@ -75,7 +75,7 @@ class TestPickleMemoryError:
                 raise MemoryError("simulated OOM")
             return original_np_array(*args, **kwargs)
 
-        with mock.patch("vtsearch.datasets.loader.np.array", side_effect=oom_on_third_call):
+        with mock.patch("vtsearch.datasets.loader_pickle.np.array", side_effect=oom_on_third_call):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_pickle(pkl, target)
 
@@ -99,7 +99,7 @@ class TestPickleMemoryError:
         pkl.write_bytes(pickle.dumps({"medias": medias_data}))
 
         target: dict = {}
-        with mock.patch("vtsearch.datasets.loader.gc.collect") as mock_gc:
+        with mock.patch("vtsearch.datasets.loader_pickle.gc.collect") as mock_gc:
             load_dataset_from_pickle(pkl, target)
             # gc.collect() should be called after building medias
             assert mock_gc.call_count >= 1
