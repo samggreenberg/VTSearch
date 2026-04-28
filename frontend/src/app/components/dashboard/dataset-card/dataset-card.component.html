@@ -19,7 +19,7 @@
 </td>
 @if (loadingTask && !loadingTask.error) {
   <!-- Inline progress: replace remaining columns with a progress bar -->
-  <td [attr.colspan]="isDefaultLogin ? 9 : 11">
+  <td [attr.colspan]="isDefaultLogin ? 8 : 10">
     <div class="inline-loading-progress">
       <span class="progress-msg">{{ taskProgressMessage }}</span>
       <vt-progress-bar
@@ -32,7 +32,7 @@
   </td>
 } @else if (loadingTask && loadingTask.error) {
   <!-- Inline error: replace remaining columns with error message -->
-  <td [attr.colspan]="isDefaultLogin ? 9 : 11">
+  <td [attr.colspan]="isDefaultLogin ? 8 : 10">
     <div class="inline-loading-progress inline-loading-failed">
       <span class="error-msg">Failed: {{ loadingTask.error }}</span>
       <button class="btn btn--cancel btn--sm" (click)="onDismissTask($event)" title="Dismiss this error">Dismiss</button>
@@ -64,7 +64,6 @@
   <td>{{ dataset.num_items != null ? (dataset.num_items | number) : '-' }}</td>
   <td>{{ (dataset.num_dupes ?? 0) | number }}</td>
   <td>{{ formatDate(dataset.created_at) }}</td>
-  <td class="origin-cell" [title]="dataset.origin || ''">{{ dataset.origin || '-' }}</td>
   <td class="clipper-cell">{{ dataset.clipper || '-' }}</td>
   <td class="embedder-cell">{{ (dataset.embedder | titlecase) || '-' }}</td>
   @if (!isDefaultLogin) {
