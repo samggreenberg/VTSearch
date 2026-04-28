@@ -221,9 +221,8 @@ def _resolve_browse_root(source: str) -> Path | None:
         from vtsearch.settings import get_saved_datasets_dir
 
         ds_dir = get_saved_datasets_dir()
-        if ds_dir.is_dir():
-            return ds_dir.resolve()
-        return None
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        return ds_dir.resolve()
 
     return None
 
