@@ -90,9 +90,7 @@ def _draw_smiley(rng: np.random.Generator, draw, size: int) -> tuple[str, dict]:
     if emotion == "happy":
         draw.arc([mx0, my - mouth_h // 2, mx1, my + mouth_h // 2], start=0, end=180, fill=(20, 20, 20), width=3)
     elif emotion == "sad":
-        draw.arc(
-            [mx0, my - mouth_h // 4, mx1, my + mouth_h], start=180, end=360, fill=(20, 20, 20), width=3
-        )
+        draw.arc([mx0, my - mouth_h // 4, mx1, my + mouth_h], start=180, end=360, fill=(20, 20, 20), width=3)
     elif emotion == "angry":
         draw.line([mx0, my, mx1, my], fill=(20, 20, 20), width=3)
     else:

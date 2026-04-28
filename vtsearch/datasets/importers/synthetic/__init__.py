@@ -79,9 +79,7 @@ class SyntheticDatasetImporter(DatasetImporter):
     def _media_type(field_values: dict[str, Any]) -> str:
         mt = (field_values.get("media_type") or "").strip()
         if mt not in _SUPPORTED_MEDIA_TYPES:
-            raise ValueError(
-                f"Unsupported media_type {mt!r} (expected one of {_SUPPORTED_MEDIA_TYPES})"
-            )
+            raise ValueError(f"Unsupported media_type {mt!r} (expected one of {_SUPPORTED_MEDIA_TYPES})")
         return mt
 
     def _generate(self, media_type: str, size: int) -> Path:
