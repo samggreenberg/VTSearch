@@ -2,7 +2,6 @@ import io
 import json
 
 import numpy as np
-import pytest
 
 import app as app_module
 from helpers import train_detector_from_votes
@@ -226,6 +225,37 @@ class TestAutorunDetectors:
             "/api/autorun-detectors/some-det/rename",
             json={},
         )
+        assert resp.status_code == 400
+
+    # -- autodetect toggle --
+
+    def test_set_autodetect_on_existing_detector(self, client):
+        det = self._export_detector(client)
+        self._post_autorun(client, "tog-det", det)
+
+        resp = client.put("/api/autorun-detectors/tog-det/autodetect", json={"autodetect": True})
+        assert resp.status_code == 200
+        assert resp.get_json()["autodetect"] is True
+
+        detectors = client.get("/api/autorun-detectors").get_json()["detectors"]
+        d = next(d for d in detectors if d["name"] == "tog-det")
+        assert d["autodetect"] is True
+
+    def test_set_autodetect_true_on_nonexistent_detector_persists_to_settings(self, client, isolated_settings):
+        """Enabling autorun for a model-registry entry not yet in autorun_detectors must succeed."""
+        from vtsearch.settings import get_autorun_detector_names
+
+        resp = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": True})
+        assert resp.status_code == 200
+        assert resp.get_json()["autodetect"] is True
+        assert "ghost-model" in get_autorun_detector_names()
+
+    def test_set_autodetect_false_on_nonexistent_detector_returns_404(self, client):
+        resp = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": False})
+        assert resp.status_code == 404
+
+    def test_set_autodetect_missing_field_returns_400(self, client):
+        resp = client.put("/api/autorun-detectors/any/autodetect", json={})
         assert resp.status_code == 400
 
     # -- import-pkl (detector JSON file) --
@@ -527,21 +557,25 @@ class TestFindLabel:
         # Build labelset entries with origins pointing to the folder
         label_entries = []
         for i in range(3):
-            label_entries.append({
-                "md5": f"dataset_a_good_{i}",
-                "label": "good",
-                "origin": label_origin,
-                "origin_name": f"good_{i}.wav",
-                "filename": f"good_{i}.wav",
-            })
+            label_entries.append(
+                {
+                    "md5": f"dataset_a_good_{i}",
+                    "label": "good",
+                    "origin": label_origin,
+                    "origin_name": f"good_{i}.wav",
+                    "filename": f"good_{i}.wav",
+                }
+            )
         for i in range(3):
-            label_entries.append({
-                "md5": f"dataset_a_bad_{i}",
-                "label": "bad",
-                "origin": label_origin,
-                "origin_name": f"bad_{i}.wav",
-                "filename": f"bad_{i}.wav",
-            })
+            label_entries.append(
+                {
+                    "md5": f"dataset_a_bad_{i}",
+                    "label": "bad",
+                    "origin": label_origin,
+                    "origin_name": f"bad_{i}.wav",
+                    "filename": f"bad_{i}.wav",
+                }
+            )
 
         # --- Phase 2: write trainable model with these labels ---
         original_dir = get_trainable_models_dir()
@@ -549,13 +583,16 @@ class TestFindLabel:
         try:
             tm_name = "test-cross-dataset"
             tm_path = tmp_path / f"{tm_name}.json"
-            _write_model(tm_path, {
-                "name": tm_name,
-                "text_query": "",
-                "media_type": "audio",
-                "examples": [],
-                "labelset": {"labels": label_entries},
-            })
+            _write_model(
+                tm_path,
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "media_type": "audio",
+                    "examples": [],
+                    "labelset": {"labels": label_entries},
+                },
+            )
 
             entry = register_model(
                 name="Cross Dataset Test",
@@ -587,6 +624,7 @@ class TestFindLabel:
 
             def fake_embed(path, media_type):
                 from pathlib import Path
+
                 name = Path(path).name
                 if "good" in name:
                     return good_emb.copy()
@@ -596,9 +634,7 @@ class TestFindLabel:
                 with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
                     resp = client.post("/api/find-label", json={"model_id": model_id})
 
-                assert resp.status_code == 200, (
-                    f"Expected 200 but got {resp.status_code}: {resp.get_json()}"
-                )
+                assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.get_json()}"
                 data = resp.get_json()
                 assert data["ok"] is True
                 total = data["good_count"] + data["bad_count"]
@@ -624,23 +660,36 @@ class TestFindLabel:
             "params": {"path": "/nonexistent/dataset_a"},
         }
         label_entries = [
-            {"md5": "no_match_g", "label": "good", "origin": bad_origin,
-             "origin_name": "good.wav", "filename": "good.wav"},
-            {"md5": "no_match_b", "label": "bad", "origin": bad_origin,
-             "origin_name": "bad.wav", "filename": "bad.wav"},
+            {
+                "md5": "no_match_g",
+                "label": "good",
+                "origin": bad_origin,
+                "origin_name": "good.wav",
+                "filename": "good.wav",
+            },
+            {
+                "md5": "no_match_b",
+                "label": "bad",
+                "origin": bad_origin,
+                "origin_name": "bad.wav",
+                "filename": "bad.wav",
+            },
         ]
 
         original_dir = get_trainable_models_dir()
         set_trainable_models_dir(tmp_path)
         try:
             tm_name = "test-diag"
-            _write_model(tmp_path / f"{tm_name}.json", {
-                "name": tm_name,
-                "text_query": "",
-                "media_type": "audio",
-                "examples": [],
-                "labelset": {"labels": label_entries},
-            })
+            _write_model(
+                tmp_path / f"{tm_name}.json",
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "media_type": "audio",
+                    "examples": [],
+                    "labelset": {"labels": label_entries},
+                },
+            )
 
             entry = register_model(
                 name="Diag Test",
@@ -893,39 +942,47 @@ class TestFindLabelDemoOrigin:
         demo_origin = {"importer": "demo", "params": {"name": "caltech101_s"}}
         label_entries = []
         for i in range(3):
-            label_entries.append({
-                "md5": f"demo_a_good_{i}",
-                "label": "good",
-                "origin": demo_origin,
-                "origin_name": f"kangaroo/image_{i:04d}.jpg",
-                "filename": f"kangaroo/image_{i:04d}.jpg",
-            })
+            label_entries.append(
+                {
+                    "md5": f"demo_a_good_{i}",
+                    "label": "good",
+                    "origin": demo_origin,
+                    "origin_name": f"kangaroo/image_{i:04d}.jpg",
+                    "filename": f"kangaroo/image_{i:04d}.jpg",
+                }
+            )
         for i in range(3):
-            label_entries.append({
-                "md5": f"demo_a_bad_{i}",
-                "label": "bad",
-                "origin": demo_origin,
-                "origin_name": f"butterfly/image_{i:04d}.jpg",
-                "filename": f"butterfly/image_{i:04d}.jpg",
-            })
+            label_entries.append(
+                {
+                    "md5": f"demo_a_bad_{i}",
+                    "label": "bad",
+                    "origin": demo_origin,
+                    "origin_name": f"butterfly/image_{i:04d}.jpg",
+                    "filename": f"butterfly/image_{i:04d}.jpg",
+                }
+            )
 
         # --- Phase 2: write trainable model ---
         original_dir = get_trainable_models_dir()
         set_trainable_models_dir(tmp_path)
 
         import vtsearch.datasets.importers.demo as demo_mod
+
         old_source_dirs = demo_mod._SOURCE_DIRS
         demo_mod._SOURCE_DIRS = {"caltech101": img_dir}
 
         try:
             tm_name = "test-demo-cross"
-            _write_model(tmp_path / f"{tm_name}.json", {
-                "name": tm_name,
-                "text_query": "",
-                "media_type": "image",
-                "examples": [],
-                "labelset": {"labels": label_entries},
-            })
+            _write_model(
+                tmp_path / f"{tm_name}.json",
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "media_type": "image",
+                    "examples": [],
+                    "labelset": {"labels": label_entries},
+                },
+            )
 
             entry = register_model(
                 name="Demo Cross Dataset Test",
@@ -963,9 +1020,7 @@ class TestFindLabelDemoOrigin:
                 with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
                     resp = client.post("/api/find-label", json={"model_id": model_id})
 
-                assert resp.status_code == 200, (
-                    f"Expected 200 but got {resp.status_code}: {resp.get_json()}"
-                )
+                assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.get_json()}"
                 data = resp.get_json()
                 assert data["ok"] is True
                 total = data["good_count"] + data["bad_count"]
@@ -992,23 +1047,36 @@ class TestFindLabelDemoOrigin:
         # Origin with empty params (simulates old pickle bug)
         bad_origin = {"importer": "demo", "params": {}}
         label_entries = [
-            {"md5": "old_good", "label": "good", "origin": bad_origin,
-             "origin_name": "cat/img_001.jpg", "filename": "cat/img_001.jpg"},
-            {"md5": "old_bad", "label": "bad", "origin": bad_origin,
-             "origin_name": "dog/img_002.jpg", "filename": "dog/img_002.jpg"},
+            {
+                "md5": "old_good",
+                "label": "good",
+                "origin": bad_origin,
+                "origin_name": "cat/img_001.jpg",
+                "filename": "cat/img_001.jpg",
+            },
+            {
+                "md5": "old_bad",
+                "label": "bad",
+                "origin": bad_origin,
+                "origin_name": "dog/img_002.jpg",
+                "filename": "dog/img_002.jpg",
+            },
         ]
 
         original_dir = get_trainable_models_dir()
         set_trainable_models_dir(tmp_path)
         try:
             tm_name = "test-empty-demo"
-            _write_model(tmp_path / f"{tm_name}.json", {
-                "name": tm_name,
-                "text_query": "",
-                "media_type": "image",
-                "examples": [],
-                "labelset": {"labels": label_entries},
-            })
+            _write_model(
+                tmp_path / f"{tm_name}.json",
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "media_type": "image",
+                    "examples": [],
+                    "labelset": {"labels": label_entries},
+                },
+            )
 
             entry = register_model(
                 name="Empty Demo Test",
@@ -1310,5 +1378,3 @@ class TestAutoDetect:
         for result in data["results"].values():
             scores = [h["score"] for h in result["negative_hits"]]
             assert scores == sorted(scores, reverse=True)
-
-

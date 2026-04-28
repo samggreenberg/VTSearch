@@ -28,8 +28,7 @@ class ServerFileSettingsSource(SettingsSource):
             label="Server File Path",
             field_type="server_path",
             description=(
-                "Absolute or relative path to a settings JSON file on the "
-                "server.  Supports {username} template."
+                "Absolute or relative path to a settings JSON file on the server.  Supports {username} template."
             ),
             placeholder="data/{username}.settings.json",
         ),

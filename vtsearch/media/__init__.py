@@ -1,16 +1,24 @@
 """Media type, embedder, and clipper registries.
 
 Built-in media types, embedders, and clippers are **auto-discovered** at
-import time by scanning sub-packages of ``vtsearch.media`` for sentinel
-attributes:
+import time by scanning sub-packages of ``vtsearch.media``:
 
-- ``MEDIA_TYPE`` — a single :class:`MediaType` instance.
-- ``EMBEDDERS`` — a list of :class:`MediaEmbedder` instances (may be empty).
-- ``CLIPPERS``  — a list of :class:`MediaClipper` instances (may be empty).
+- Each media-type sub-package (``audio/``, ``image/``, ...) exposes a
+  ``MEDIA_TYPE`` sentinel in its ``__init__.py`` (plus a ``CLIPPERS`` list).
+- Each embedder lives under the media-type package as either a flat
+  module (e.g. ``vtsearch/media/audio/embedder_clap_music.py``) or a
+  sub-package (e.g. ``vtsearch/media/image/embedder_fancy/__init__.py``)
+  and exposes a module-level ``EMBEDDER`` sentinel — one embedder per
+  module or sub-package.  Any ``embedder*.py`` file or ``embedder*/``
+  directory with an ``__init__.py`` found inside a media-type package
+  is auto-loaded.
 
-To add a new media type (or embedder / clipper), create a sub-package under
-``vtsearch/media/`` with an ``__init__.py`` that exposes the relevant
-sentinels.  Symlinked directories are supported.
+To add a new embedder, drop an ``embedder_<name>.py`` file — or an
+``embedder_<name>/`` sub-package containing an ``__init__.py`` — into
+the appropriate media-type package with an ``EMBEDDER`` sentinel at the
+module/package top level.  Symlinked directories and symlinked embedder
+files are both supported, so custom embedders living outside the
+VTSearch tree can be wired in without editing any package ``__init__.py``.
 
 Third-party or project-specific types can still be registered manually::
 
@@ -22,6 +30,8 @@ Third-party or project-specific types can still be registered manually::
 from __future__ import annotations
 
 import importlib
+import importlib.util
+import sys
 import warnings
 from pathlib import Path
 
@@ -45,6 +55,7 @@ from vtsearch.media.processors import (
 # ------------------------------------------------------------------
 
 _registry: dict[str, "MediaType"] = {}
+
 
 def normalize_type_id(type_id: str) -> str:
     """Validate that *type_id* is a known canonical type name.
@@ -240,14 +251,77 @@ def all_embedders_dict() -> list[dict]:
 # ------------------------------------------------------------------
 
 
+def _discover_embedders_in(media_type_dir: Path, package_name: str) -> None:
+    """Scan a media-type sub-package for modules or sub-packages exposing an ``EMBEDDER``.
+
+    Any ``embedder*.py`` file **or** ``embedder*/`` sub-package (directory
+    containing an ``__init__.py``) is imported, and its module-level
+    ``EMBEDDER`` attribute is registered if present.  Symlinked files and
+    symlinked directories are both loaded via
+    :func:`importlib.util.spec_from_file_location` so that symlinks
+    pointing outside the package are handled reliably (mirrors the same
+    approach used by :class:`vtsearch.utils.registry.PluginRegistry`).
+    """
+    for entry in sorted(media_type_dir.iterdir()):
+        if entry.name.startswith((".", "_")):
+            continue
+        if not entry.name.startswith("embedder"):
+            continue
+
+        # Flat module: embedder_<name>.py
+        if entry.is_file() and entry.suffix == ".py":
+            module_stem = entry.stem
+            load_path = entry
+            is_package = False
+        # Sub-package: embedder_<name>/__init__.py.  Skip names containing
+        # dots — they aren't valid Python identifiers and would be
+        # misinterpreted as nested module paths by importlib.
+        elif entry.is_dir() and "." not in entry.name and (entry / "__init__.py").exists():
+            module_stem = entry.name
+            load_path = entry / "__init__.py"
+            is_package = True
+        else:
+            continue
+
+        full_name = f"{package_name}.{module_stem}"
+        try:
+            if entry.is_symlink():
+                resolved = load_path.resolve()
+                spec = importlib.util.spec_from_file_location(
+                    full_name,
+                    str(resolved),
+                    submodule_search_locations=[str(resolved.parent)] if is_package else None,
+                )
+                if spec is None or spec.loader is None:
+                    continue
+                mod = importlib.util.module_from_spec(spec)
+                sys.modules[full_name] = mod
+                spec.loader.exec_module(mod)
+            else:
+                mod = importlib.import_module(full_name)
+        except Exception as exc:  # pragma: no cover
+            sys.modules.pop(full_name, None)
+            warnings.warn(
+                f"Failed to load embedder module '{full_name}': {exc}",
+                stacklevel=2,
+            )
+            continue
+        emb = getattr(mod, "EMBEDDER", None)
+        if emb is not None:
+            register_embedder(emb)
+
+
 def _discover_media_plugins() -> None:
     """Scan sub-packages of ``vtsearch.media`` for sentinel attributes.
 
-    Each sub-package (directory with ``__init__.py``) may expose:
+    Each media-type sub-package (directory with ``__init__.py``) may expose:
 
     - ``MEDIA_TYPE`` — a single :class:`MediaType` instance.
-    - ``EMBEDDERS`` — a list of :class:`MediaEmbedder` instances.
     - ``CLIPPERS``  — a list of :class:`MediaClipper` instances.
+
+    Embedders are auto-discovered per module: every ``embedder*.py`` file
+    inside a media-type sub-package is scanned for an ``EMBEDDER`` sentinel
+    (see :func:`_discover_embedders_in`).
 
     Symlinked directories are followed (``entry.is_dir()`` resolves
     symlinks), so an external media-type package can be symlinked into
@@ -259,8 +333,9 @@ def _discover_media_plugins() -> None:
             continue
         if not entry.is_dir() or "." in entry.name or not (entry / "__init__.py").exists():
             continue
+        package_name = f"vtsearch.media.{entry.name}"
         try:
-            mod = importlib.import_module(f"vtsearch.media.{entry.name}")
+            mod = importlib.import_module(package_name)
         except Exception as exc:  # pragma: no cover
             warnings.warn(
                 f"Failed to load media sub-package '{entry.name}': {exc}",
@@ -271,10 +346,9 @@ def _discover_media_plugins() -> None:
         mt = getattr(mod, "MEDIA_TYPE", None)
         if mt is not None:
             register(mt)
-        for emb in getattr(mod, "EMBEDDERS", []):
-            register_embedder(emb)
         for clip in getattr(mod, "CLIPPERS", []):
             register_clipper(clip)
+        _discover_embedders_in(entry, package_name)
 
 
 _discover_media_plugins()

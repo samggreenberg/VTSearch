@@ -45,6 +45,26 @@ export class TrainableModelsApiService {
     return this.http.post('/api/models/registry', params);
   }
 
+  registerModelFromLabelset(
+    importerName: string,
+    params: Record<string, unknown>,
+    file?: File,
+    fileFieldKey?: string,
+  ): Observable<unknown> {
+    const url = `/api/models/registry/from-labelset/${importerName}`;
+    if (file && fileFieldKey) {
+      const formData = new FormData();
+      formData.append(fileFieldKey, file, file.name);
+      for (const [key, value] of Object.entries(params)) {
+        if (key !== fileFieldKey) {
+          formData.append(key, String(value ?? ''));
+        }
+      }
+      return this.http.post(url, formData);
+    }
+    return this.http.post(url, params);
+  }
+
   deleteFromRegistry(modelId: string): Observable<unknown> {
     return this.http.delete(`/api/models/registry/${modelId}`);
   }

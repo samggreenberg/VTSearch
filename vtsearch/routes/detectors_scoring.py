@@ -62,9 +62,12 @@ def detector_sort():
 
     n_total = len(snap)
     update_find_progress(
-        "running", f"Scoring {n_total} items…",
-        current=0, total=n_total,
-        step=1, total_steps=1,
+        "running",
+        f"Scoring {n_total} items…",
+        current=0,
+        total=n_total,
+        step=1,
+        total_steps=1,
     )
 
     # Score every media
@@ -81,9 +84,12 @@ def detector_sort():
             batch_logits = model(X_all[start:end])
             scores.extend(torch.sigmoid(batch_logits).squeeze(1).tolist())
             update_find_progress(
-                "running", f"Scoring {n_total} items…",
-                current=end, total=n_total,
-                step=1, total_steps=1,
+                "running",
+                f"Scoring {n_total} items…",
+                current=end,
+                total=n_total,
+                step=1,
+                total_steps=1,
             )
 
     results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
@@ -136,9 +142,12 @@ def find_label():
             g._dataset_context = ctx
 
     update_find_progress(
-        "running", "Resolving model…",
-        current=0, total=0,
-        step=1, total_steps=_FIND_LABEL_STEPS,
+        "running",
+        "Resolving model…",
+        current=0,
+        total=0,
+        step=1,
+        total_steps=_FIND_LABEL_STEPS,
     )
 
     m = reg_get_model(model_id)
@@ -196,9 +205,12 @@ def find_label():
             from vtsearch.models.detector_training import serialize_weights as _serialize_weights, train_and_threshold
 
             update_find_progress(
-                "running", "Training model from labels…",
-                current=0, total=0,
-                step=2, total_steps=_FIND_LABEL_STEPS,
+                "running",
+                "Training model from labels…",
+                current=0,
+                total=0,
+                step=2,
+                total_steps=_FIND_LABEL_STEPS,
             )
 
             media_type = m.get("media_type", "image")
@@ -224,9 +236,10 @@ def find_label():
 
             _md5_matched = len(X_list)
             _find_log.info(
-                "find-label: %d of %d labels matched by MD5 in current dataset, "
-                "%d need origin resolution",
-                _md5_matched, _md5_matched + len(unresolved), len(unresolved),
+                "find-label: %d of %d labels matched by MD5 in current dataset, %d need origin resolution",
+                _md5_matched,
+                _md5_matched + len(unresolved),
+                len(unresolved),
             )
 
             # Second pass: resolve remaining entries from their origins (files
@@ -238,20 +251,28 @@ def find_label():
 
                 _n_unresolved = len(unresolved)
                 update_find_progress(
-                    "running", f"Resolving {_n_unresolved} label origins…",
-                    current=0, total=_n_unresolved,
-                    step=2, total_steps=_FIND_LABEL_STEPS,
+                    "running",
+                    f"Resolving {_n_unresolved} label origins…",
+                    current=0,
+                    total=_n_unresolved,
+                    step=2,
+                    total_steps=_FIND_LABEL_STEPS,
                 )
 
                 def _origin_progress(current: int, total: int) -> None:
                     update_find_progress(
-                        "running", f"Resolving {_n_unresolved} label origins…",
-                        current=current, total=total,
-                        step=2, total_steps=_FIND_LABEL_STEPS,
+                        "running",
+                        f"Resolving {_n_unresolved} label origins…",
+                        current=current,
+                        total=total,
+                        step=2,
+                        total_steps=_FIND_LABEL_STEPS,
                     )
 
                 resolved = resolve_label_embeddings(
-                    unresolved, media_type, progress_callback=_origin_progress,
+                    unresolved,
+                    media_type,
+                    progress_callback=_origin_progress,
                 )
                 X_list.extend(resolved.embeddings)
                 y_list.extend(resolved.labels)
@@ -260,12 +281,17 @@ def find_label():
             has_bad = any(v == 0.0 for v in y_list)
             if has_good and has_bad:
                 update_find_progress(
-                    "running", "Cross-calibrating threshold…",
-                    current=0, total=0,
-                    step=2, total_steps=_FIND_LABEL_STEPS,
+                    "running",
+                    "Cross-calibrating threshold…",
+                    current=0,
+                    total=0,
+                    step=2,
+                    total_steps=_FIND_LABEL_STEPS,
                 )
                 trained_model, threshold = train_and_threshold(
-                    X_list, y_list, snap=snap_for_train,
+                    X_list,
+                    y_list,
+                    snap=snap_for_train,
                 )
                 weights = _serialize_weights(trained_model)
             else:
@@ -294,17 +320,24 @@ def find_label():
                         for e in samples
                     ]
                 elif not unresolved and not has_good:
-                    _resolution_diagnostic["hint"] = "All labels matched by MD5 but all are the same class (need both good and bad)"
+                    _resolution_diagnostic["hint"] = (
+                        "All labels matched by MD5 but all are the same class (need both good and bad)"
+                    )
                 elif not unresolved and not has_bad:
-                    _resolution_diagnostic["hint"] = "All labels matched by MD5 but all are the same class (need both good and bad)"
+                    _resolution_diagnostic["hint"] = (
+                        "All labels matched by MD5 but all are the same class (need both good and bad)"
+                    )
 
                 _find_log.warning(
                     "find-label: cannot train — resolved %d labels total "
                     "(%d MD5, %d origin) but need both good and bad. "
                     "has_good=%s, has_bad=%s. Diagnostic: %r",
-                    len(y_list), _md5_matched,
+                    len(y_list),
+                    _md5_matched,
                     resolved.resolved_count if resolved else 0,
-                    has_good, has_bad, _resolution_diagnostic,
+                    has_good,
+                    has_bad,
+                    _resolution_diagnostic,
                 )
 
     if weights is None:
@@ -349,9 +382,12 @@ def find_label():
 
     n_total = len(snap)
     update_find_progress(
-        "running", f"Scoring {n_total} items…",
-        current=0, total=n_total,
-        step=3, total_steps=_FIND_LABEL_STEPS,
+        "running",
+        f"Scoring {n_total} items…",
+        current=0,
+        total=n_total,
+        step=3,
+        total_steps=_FIND_LABEL_STEPS,
     )
 
     # Score all medias
@@ -369,9 +405,12 @@ def find_label():
             batch_logits = model(X_all[start:end])
             scores.extend(torch.sigmoid(batch_logits).squeeze(1).tolist())
             update_find_progress(
-                "running", f"Scoring {n_total} items…",
-                current=end, total=n_total,
-                step=3, total_steps=_FIND_LABEL_STEPS,
+                "running",
+                f"Scoring {n_total} items…",
+                current=end,
+                total=n_total,
+                step=3,
+                total_steps=_FIND_LABEL_STEPS,
             )
 
     results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
@@ -379,9 +418,12 @@ def find_label():
 
     # Apply labels to ALL elements based on threshold (bulk for performance)
     update_find_progress(
-        "running", f"Applying labels to {n_total} items…",
-        current=0, total=n_total,
-        step=4, total_steps=_FIND_LABEL_STEPS,
+        "running",
+        f"Applying labels to {n_total} items…",
+        current=0,
+        total=n_total,
+        step=4,
+        total_steps=_FIND_LABEL_STEPS,
     )
     label_pairs = []
     good_count = 0
@@ -411,19 +453,24 @@ def find_label():
     sync_to_labelset_source()
 
     update_find_progress(
-        "idle", "Done",
-        current=n_total, total=n_total,
-        step=_FIND_LABEL_STEPS, total_steps=_FIND_LABEL_STEPS,
+        "idle",
+        "Done",
+        current=n_total,
+        total=n_total,
+        step=_FIND_LABEL_STEPS,
+        total_steps=_FIND_LABEL_STEPS,
     )
 
-    return jsonify({
-        "ok": True,
-        "results": results,
-        "threshold": round(threshold, 4),
-        "good_count": good_count,
-        "bad_count": bad_count,
-        "model_name": m.get("name", ""),
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "results": results,
+            "threshold": round(threshold, 4),
+            "good_count": good_count,
+            "bad_count": bad_count,
+            "model_name": m.get("name", ""),
+        }
+    )
 
 
 @detectors_scoring_bp.route("/api/auto-detect", methods=["POST"])
@@ -549,7 +596,9 @@ def _apply_processor_to_medias(processor, snap: dict, method: str, result_key: s
     return results
 
 
-def _auto_run_processors(snap: dict, processors: dict, build_fn, type_key: str, method: str, result_key: str, name_key: str) -> dict:
+def _auto_run_processors(
+    snap: dict, processors: dict, build_fn, type_key: str, method: str, result_key: str, name_key: str
+) -> dict:
     """Run multiple processors in parallel via ThreadPoolExecutor.
 
     Args:
@@ -648,7 +697,9 @@ def auto_extract():
     if not extractors:
         return jsonify({"error": f"No autorun extractors found for media type: {media_type}"}), 400
 
-    results = _auto_run_processors(snap, extractors, _build_extractor, "extractor_type", "extract", "extractions", "extractor_name")
+    results = _auto_run_processors(
+        snap, extractors, _build_extractor, "extractor_type", "extract", "extractions", "extractor_name"
+    )
 
     return jsonify(
         {
@@ -721,7 +772,9 @@ def auto_localize():
     if not localizers:
         return jsonify({"error": f"No autorun localizers found for media type: {media_type}"}), 400
 
-    results = _auto_run_processors(snap, localizers, _build_localizer, "localizer_type", "localize", "localizations", "localizer_name")
+    results = _auto_run_processors(
+        snap, localizers, _build_localizer, "localizer_type", "localize", "localizations", "localizer_name"
+    )
 
     return jsonify(
         {

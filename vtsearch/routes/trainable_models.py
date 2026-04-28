@@ -58,15 +58,17 @@ def _list_all() -> list[dict]:
         if data is None:
             continue
         labels = data.get("labelset", {}).get("labels", [])
-        models.append({
-            "name": data["name"],
-            "text_query": data.get("text_query", ""),
-            "media_example": data.get("media_example", ""),
-            "media_type": data.get("media_type", ""),
-            "examples": data.get("examples", []),
-            "num_labels": len(labels),
-            "created_at": data.get("created_at", 0),
-        })
+        models.append(
+            {
+                "name": data["name"],
+                "text_query": data.get("text_query", ""),
+                "media_example": data.get("media_example", ""),
+                "media_type": data.get("media_type", ""),
+                "examples": data.get("examples", []),
+                "num_labels": len(labels),
+                "created_at": data.get("created_at", 0),
+            }
+        )
     return models
 
 
@@ -130,15 +132,17 @@ def create_trainable_model():
     }
     _write_model(path, model_data)
 
-    return jsonify({
-        "success": True,
-        "name": name,
-        "text_query": text_query,
-        "media_example": media_example,
-        "media_type": media_type,
-        "examples": examples or [],
-        "num_labels": 0,
-    }), 201
+    return jsonify(
+        {
+            "success": True,
+            "name": name,
+            "text_query": text_query,
+            "media_example": media_example,
+            "media_type": media_type,
+            "examples": examples or [],
+            "num_labels": 0,
+        }
+    ), 201
 
 
 # ---------------------------------------------------------------------------
@@ -280,11 +284,13 @@ def save_trainable_model_labels(name: str):
     if reg_entry:
         update_model(reg_entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
-    return jsonify({
-        "success": True,
-        "name": name,
-        "num_labels": len(labelset),
-    })
+    return jsonify(
+        {
+            "success": True,
+            "name": name,
+            "num_labels": len(labelset),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +324,13 @@ def import_labels_into_model(name: str, importer_name: str):
         return jsonify({"error": f"Trainable model '{name}' not found"}), 404
 
     from vtsearch.labels.importers import get_label_importer, list_label_importers
-    from vtsearch.routes.helpers import extract_plugin_fields, get_plugin_or_404, run_plugin_or_error, validate_filepath_field, validate_required_fields
+    from vtsearch.routes.helpers import (
+        extract_plugin_fields,
+        get_plugin_or_404,
+        run_plugin_or_error,
+        validate_filepath_field,
+        validate_required_fields,
+    )
 
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
@@ -391,7 +403,10 @@ def import_labels_into_model(name: str, importer_name: str):
         det_ctx = get_detector_context(reg_entry["id"])
         if det_ctx is not None:
             resolved, trained = _apply_and_retrain(
-                reg_entry["id"], det_ctx, new_entries, name,
+                reg_entry["id"],
+                det_ctx,
+                new_entries,
+                name,
             )
 
     msg = f"Added {applied} label(s) to model '{name}', skipped {skipped}."
@@ -399,14 +414,16 @@ def import_labels_into_model(name: str, importer_name: str):
         msg += f" Resolved {resolved} into the loaded detector."
     if trained:
         msg += " Retrained MLP."
-    return jsonify({
-        "applied": applied,
-        "skipped": skipped,
-        "resolved": resolved,
-        "trained": trained,
-        "num_labels": len(existing_ls),
-        "message": msg,
-    })
+    return jsonify(
+        {
+            "applied": applied,
+            "skipped": skipped,
+            "resolved": resolved,
+            "trained": trained,
+            "num_labels": len(existing_ls),
+            "message": msg,
+        }
+    )
 
 
 # Canonical location: vtsearch.models.training_workflow

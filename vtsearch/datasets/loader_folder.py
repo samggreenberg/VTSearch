@@ -23,6 +23,112 @@ from vtsearch.datasets.loader import (
 from vtsearch.utils.paths import rglob_follow_symlinks
 
 
+# ---------------------------------------------------------------------------
+# Bulk-embedding helpers used by the folder loaders below.
+# ---------------------------------------------------------------------------
+
+
+def _has_override(
+    rel_path: str,
+    file_name: str,
+    content_vectors: dict[str, Any] | None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+) -> bool:
+    """Return True if the file's embedding is already resolved by overrides.
+
+    An override is either a ``custom_metadata`` entry with an ``"embedding"``
+    key or a ``content_vectors`` entry.  Files with overrides do not need to
+    be sent to the embedding model.
+    """
+    if custom_metadata_map:
+        cm = custom_metadata_map.get(rel_path) or custom_metadata_map.get(file_name)
+        if cm and _get_embedding_value(cm) is not None:
+            return True
+    if content_vectors and (rel_path in content_vectors or file_name in content_vectors):
+        return True
+    return False
+
+
+def _make_embed_input(
+    file_path: Path,
+    folder_path: Path,
+    origin: dict[str, Any] | None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Build a minimal media dict suitable for :meth:`MediaEmbedder.embed_media`.
+
+    File-based embedders pull ``media["media_path"]`` from this dict;
+    service-based embedders can use ``media["origin"]``, ``media["origin_name"]``,
+    and ``media.get("custom_metadata")`` to resolve the content without
+    touching local disk.  The full media dict (with bytes, md5, duration,
+    type-specific fields) is constructed after the embedding succeeds.
+    """
+    rel_path = file_path.relative_to(folder_path).as_posix()
+    file_cm: dict[str, Any] | None = None
+    if custom_metadata_map:
+        file_cm = custom_metadata_map.get(rel_path) or custom_metadata_map.get(file_path.name)
+    return {
+        "media_path": str(file_path.resolve()),
+        "origin": origin,
+        "origin_name": rel_path,
+        "filename": rel_path,
+        "custom_metadata": file_cm,
+    }
+
+
+def _bulk_embed_files(
+    emb: Any,
+    media_files: list[Path],
+    folder_path: Path,
+    content_vectors: dict[str, Any] | None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+    on_progress: ProgressCallback,
+    media_type: str,
+    origin: dict[str, Any] | None = None,
+) -> dict[Path, Any]:
+    """Pre-compute embeddings for *media_files* via :meth:`embed_media_bulk`.
+
+    Files already resolved by ``custom_metadata`` or ``content_vectors``
+    are skipped; the rest are packaged into minimal media dicts (via
+    :func:`_make_embed_input`) and handed to the embedder in a single
+    call.  The embedder's ``_on_progress`` callback is routed through
+    *on_progress* for the duration of the call so progress updates
+    (whether from the default per-item loop or a subclass's custom
+    batching) reach the UI.
+
+    Returns a dict mapping ``Path`` → embedding vector.  Paths whose
+    bulk call returned ``None`` are omitted, matching the per-file
+    behaviour of skipping files that fail to embed.
+    """
+    pending_paths: list[Path] = []
+    pending_medias: list[dict[str, Any]] = []
+    for file_path in media_files:
+        rel_path = file_path.relative_to(folder_path).as_posix()
+        if _has_override(rel_path, file_path.name, content_vectors, custom_metadata_map):
+            continue
+        pending_paths.append(file_path)
+        pending_medias.append(_make_embed_input(file_path, folder_path, origin, custom_metadata_map))
+
+    if not pending_paths:
+        return {}
+
+    on_progress("embedding", f"Embedding {len(pending_paths)} {media_type} files...", 0, len(pending_paths))
+
+    original_cb = emb._on_progress
+    emb._on_progress = on_progress
+    try:
+        vectors = emb.embed_media_bulk(pending_medias)
+    finally:
+        emb._on_progress = original_cb
+
+    return {fp: vec for fp, vec in zip(pending_paths, vectors) if vec is not None}
+
+
+# ---------------------------------------------------------------------------
+# Public folder loaders
+# ---------------------------------------------------------------------------
+
+
 def load_dataset_from_folder(
     folder_path: Path,
     media_type: str,
@@ -149,7 +255,25 @@ def load_dataset_from_folder(
     media_id = 1
     total_files = len(media_files)
 
+    # Flush everything that still needs embedding through the embedder's
+    # bulk entrypoint up front; the per-file loop below just looks up the
+    # pre-computed vector.  Subclasses that override ``_embed_media_bulk_impl``
+    # can batch internally; the default impl loops per item and emits
+    # per-item progress so the UI stays responsive.
     try:
+        bulk_embeddings: dict[Path, Any] = {}
+        if emb is not None and not skip_embedding:
+            bulk_embeddings = _bulk_embed_files(
+                emb,
+                media_files,
+                folder_path,
+                content_vectors,
+                custom_metadata_map,
+                on_progress,
+                media_type,
+                origin=origin,
+            )
+
         for i, file_path in enumerate(media_files):
             # Preserve relative path from the import root so that files in
             # different subdirectories with the same basename stay distinct.
@@ -185,7 +309,7 @@ def load_dataset_from_folder(
             else:
                 if emb is None:
                     continue
-                embedding = emb.embed_media(file_path)
+                embedding = bulk_embeddings.get(file_path)
                 if embedding is None:
                     continue
 
@@ -399,6 +523,24 @@ def load_dataset_from_folder_chunked(
         chunk_medias: dict[int, dict[str, Any]] = {}
         media_id = 1
 
+        # Flush the whole chunk through ``embed_media_bulk`` up front, then
+        # the per-file loop below just looks up the pre-computed vector.
+        # Scoping the bulk call to a single chunk preserves chunked loading's
+        # memory story — only one chunk's worth of embeddings lives in
+        # memory at a time.
+        chunk_bulk_embeddings: dict[Path, Any] = {}
+        if emb is not None and not skip_embedding:
+            chunk_bulk_embeddings = _bulk_embed_files(
+                emb,
+                batch,
+                folder_path,
+                content_vectors,
+                custom_metadata_map,
+                on_progress,
+                media_type,
+                origin=origin,
+            )
+
         for i, file_path in enumerate(batch):
             global_idx = start + i
             rel_path = file_path.relative_to(folder_path).as_posix()
@@ -432,7 +574,7 @@ def load_dataset_from_folder_chunked(
             else:
                 if emb is None:
                     continue
-                embedding = emb.embed_media(file_path)
+                embedding = chunk_bulk_embeddings.get(file_path)
                 if embedding is None:
                     continue
 

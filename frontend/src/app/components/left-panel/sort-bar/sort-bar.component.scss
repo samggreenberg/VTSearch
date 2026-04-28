@@ -1,19 +1,19 @@
 .sort-bar {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .sort-mode-group {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  gap: var(--space-xs) var(--space-md);
 }
 
 .sort-label {
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   font-weight: 500;
 }
 
@@ -21,7 +21,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   color: var(--text-secondary);
   cursor: pointer;
 
@@ -49,25 +49,25 @@
 }
 
 .text-sort-input {
-  font-size: 0.82rem;
-  padding: 5px 8px;
+  font-size: var(--font-sm);
+  padding: 5px var(--space-md);
 }
 
 .sort-hint {
-  font-size: 0.78rem;
+  font-size: var(--font-sm);
   color: var(--text-muted);
   font-style: italic;
 }
 
 .sort-desc {
-  font-size: 0.78rem;
+  font-size: var(--font-sm);
   color: var(--text-secondary);
 }
 
 .load-sort-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-sm);
   width: 100%;
 }
 
@@ -86,10 +86,10 @@
   height: 24px;
   padding: 0;
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 1rem;
+  font-size: var(--font-xl);
   line-height: 1;
   cursor: pointer;
   display: flex;

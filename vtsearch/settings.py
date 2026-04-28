@@ -281,7 +281,9 @@ def _make_per_side_setting(
 # Generate all four per-side settings
 
 get_view_mode_left, get_view_mode_right, set_view_mode_left, set_view_mode_right = _make_per_side_setting(
-    "view_mode", _VIEW_MODE_DEFAULTS, VALID_VIEW_MODES,
+    "view_mode",
+    _VIEW_MODE_DEFAULTS,
+    VALID_VIEW_MODES,
 )
 
 get_grid_icon_size_left, get_grid_icon_size_right, set_grid_icon_size_left, set_grid_icon_size_right = (
@@ -294,11 +296,16 @@ get_grid_icon_size_left, get_grid_icon_size_right, set_grid_icon_size_left, set_
 )
 
 get_focus_mode_left, get_focus_mode_right, set_focus_mode_left, set_focus_mode_right = _make_per_side_setting(
-    "focus_mode", _FOCUS_MODE_DEFAULTS, VALID_FOCUS_MODES,
+    "focus_mode",
+    _FOCUS_MODE_DEFAULTS,
+    VALID_FOCUS_MODES,
 )
 
 get_panel_pct_left, get_panel_pct_right, set_panel_pct_left, set_panel_pct_right = _make_per_side_setting(
-    "panel_pct", _PANEL_PX_DEFAULTS, None, value_type="int",
+    "panel_pct",
+    _PANEL_PX_DEFAULTS,
+    None,
+    value_type="int",
 )
 
 

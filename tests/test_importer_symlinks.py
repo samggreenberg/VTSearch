@@ -6,13 +6,9 @@ and symlinked folder import.
 
 from __future__ import annotations
 
-import io
-import tarfile
-import zipfile
-
-import pytest
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
+
 
 class TestSymlinkedImporterDiscovery:
     """PluginRegistry should discover importers in symlinked directories."""
@@ -66,7 +62,6 @@ class TestSymlinkedImporterDiscovery:
                 if "symlink_test_pkg" in key:
                     del sys.modules[key]
 
-
     def test_dotted_symlink_name_is_skipped(self, tmp_path):
         """A symlink whose name contains a dot (e.g. 'foo.symbolic_link')
         should be silently skipped — dots in directory names break importlib
@@ -115,7 +110,6 @@ class TestSymlinkedImporterDiscovery:
             for key in list(sys.modules):
                 if "dx_uuid" in key:
                     del sys.modules[key]
-
 
     def test_symlinked_package_sets_module_attributes(self, tmp_path):
         """A symlinked package should have correct __name__, __package__,
@@ -178,12 +172,7 @@ class TestSymlinkedImporterDiscovery:
 
         # Create an external .py module with a sentinel.
         ext_module = tmp_path / "my_flat_source.py"
-        ext_module.write_text(
-            "class _Src:\n"
-            '    name = "symlinked_flat_mod"\n'
-            "\n"
-            "FAKE_SENTINEL = _Src()\n"
-        )
+        ext_module.write_text('class _Src:\n    name = "symlinked_flat_mod"\n\nFAKE_SENTINEL = _Src()\n')
 
         # We need a real package dir with __init__.py for the registry.
         pkg_dir = tmp_path / "fake_pkg"
@@ -265,6 +254,9 @@ class TestSymlinkedFolderImport:
         mt._mock_embedder.media_type_id = "audio"
         mt._mock_embedder._model = True
         mt._mock_embedder.embed_media.return_value = np.zeros(3)
+        mt._mock_embedder.embed_media_bulk.side_effect = lambda medias: [
+            mt._mock_embedder.embed_media(m) for m in medias
+        ]
         return mt
 
     def _patch_media_registry(self, mt):
@@ -313,9 +305,14 @@ class TestSymlinkedFolderImport:
 
         mt = self._make_fake_media_type()
         with self._patch_media_registry(mt):
-            chunks = list(load_dataset_from_folder_chunked(
-                root, "audio", chunk_size=10, on_progress=lambda *a: None,
-            ))
+            chunks = list(
+                load_dataset_from_folder_chunked(
+                    root,
+                    "audio",
+                    chunk_size=10,
+                    on_progress=lambda *a: None,
+                )
+            )
 
         all_medias = {}
         for chunk in chunks:
@@ -324,5 +321,3 @@ class TestSymlinkedFolderImport:
         filenames = {m["filename"] for m in all_medias.values()}
         assert "a.wav" in filenames
         assert "linked/b.wav" in filenames
-
-

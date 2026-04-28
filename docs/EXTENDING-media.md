@@ -32,15 +32,18 @@ time. The `_discover_media_plugins()` function in
 `vtsearch/media/__init__.py` scans sub-packages of `vtsearch/media/` for
 module-level sentinel attributes:
 
-| Sentinel     | Type                  | Description                          |
-|--------------|-----------------------|--------------------------------------|
-| `MEDIA_TYPE` | `MediaType`           | A single media type instance         |
-| `EMBEDDERS`  | `list[MediaEmbedder]` | Embedder instances (may be empty)    |
-| `CLIPPERS`   | `list[MediaClipper]`  | Clipper instances (may be empty)     |
+| Sentinel     | Location                         | Type                 | Description                          |
+|--------------|----------------------------------|----------------------|--------------------------------------|
+| `MEDIA_TYPE` | media-type package `__init__.py` | `MediaType`          | A single media type instance         |
+| `CLIPPERS`   | media-type package `__init__.py` | `list[MediaClipper]` | Clipper instances (may be empty)     |
+| `EMBEDDER`   | an `embedder*.py` file inside the media-type package | `MediaEmbedder` | One embedder per module              |
 
-To add a new built-in media type, create a sub-package under
-`vtsearch/media/` with an `__init__.py` that exposes the relevant
-sentinels. Symlinked directories are supported.
+Embedders use **one module per embedder**: any `embedder*.py` file inside
+a media-type package is auto-loaded and its module-level `EMBEDDER`
+sentinel is registered. Symlinked directories **and** symlinked embedder
+files are both supported, so a custom embedder can live outside the
+VTSearch tree and be wired in by symlinking a single file into the
+appropriate media-type package — no edits to any `__init__.py` required.
 
 Third-party or project-specific types can still be registered manually
 via `register()`, `register_embedder()`, and `register_clipper()`.
@@ -57,8 +60,9 @@ datasets are available, and how to load media-specific fields from files.
 
 ```
 vtsearch/media/<your_type>/
-├── __init__.py       # Must expose MEDIA_TYPE, EMBEDDERS, CLIPPERS sentinels
-└── media_type.py     # Your MediaType subclass (required)
+├── __init__.py       # Must expose MEDIA_TYPE and CLIPPERS sentinels
+├── media_type.py     # Your MediaType subclass (required)
+└── embedder*.py      # Optional — one file per embedder, each exposing EMBEDDER
 ```
 
 ### What to implement
@@ -152,11 +156,20 @@ Expose the sentinels in your sub-package's `__init__.py`:
 # vtsearch/media/code/__init__.py
 
 from vtsearch.media.code.media_type import CodeMediaType
-from vtsearch.media.code.embedder import CodeBertEmbedder
 
 MEDIA_TYPE = CodeMediaType()
-EMBEDDERS = [CodeBertEmbedder()]
 CLIPPERS = []  # No clippers yet — add when needed
+```
+
+Each embedder lives in its own `embedder*.py` file with an `EMBEDDER`
+sentinel at the bottom:
+
+```python
+# vtsearch/media/code/embedder_codebert.py
+
+# ... class definition ...
+
+EMBEDDER = CodeBertEmbedder()
 ```
 
 The auto-discovery system finds these sentinels at import time. No
@@ -198,7 +211,6 @@ changes to `vtsearch/media/__init__.py` are needed.
 |-------------------------------|------------------------------------|------------------------------------|
 | `display_metadata(media)`     | `(dict) -> dict[str, Any]`         | Metadata for the labeling UI       |
 | `load_models()`               | `() -> None`                       | Load inline embedding models (legacy) |
-| `embed_media(file_path)`      | `(Path) -> Optional[np.ndarray]`   | Inline embedding (legacy, prefer MediaEmbedder) |
 | `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
 | `load_demo_source(...)`       | See docstring                      | Download and embed a demo dataset  |
 
@@ -253,7 +265,7 @@ Each media type has one default embedder in `embedder.py`. To add an
 
 ### What to implement
 
-Subclass `MediaEmbedder` from `vtsearch.media.base`.
+Subclass `MediaEmbedder` from `vtsearch.media.embedder`.
 
 ```python
 # vtsearch/media/code/embedder.py
@@ -304,20 +316,26 @@ class CodeBertEmbedder(MediaEmbedder):
 
     # --- Embedding (required abstract method) ---
 
-    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
-        """Return a fixed-size embedding vector for the file.
+    def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
+        """Return a fixed-size embedding vector for a media item.
 
-        Override ``_embed_media_impl`` (not ``embed_media``).
-        The public ``embed_media()`` wrapper acquires a global lock
-        so that only one forward pass runs at a time.
+        *media* is a media dict.  File-based embedders read
+        ``Path(media["media_path"])``.  Service-based embedders can instead
+        use ``media["origin"]``, ``media["origin_name"]``, or
+        ``media.get("custom_metadata")`` to look up the content remotely
+        (e.g. by a ``content_id`` stashed in ``origin.params``).
 
-        Returns None if embedding fails. The vector dimensionality
-        must be consistent and must match embed_text().
+        Override ``_embed_media_impl`` (not ``embed_media``).  The public
+        ``embed_media()`` wrapper acquires a global lock so that only one
+        forward pass runs at a time.
+
+        Returns None if embedding fails.  The vector dimensionality must
+        be consistent and must match embed_text().
         """
         if self._model is None:
             self.load_models()
         try:
-            text = file_path.read_text(errors="replace")[:8000]
+            text = Path(media["media_path"]).read_text(errors="replace")[:8000]
             return self._model.encode(text, normalize_embeddings=True)
         except Exception:
             return None
@@ -337,21 +355,49 @@ class CodeBertEmbedder(MediaEmbedder):
             return None
 ```
 
-### Register the embedder
+### Service-based embedders
 
-Add the embedder to the `EMBEDDERS` sentinel list in your media type's
-`__init__.py`:
+Embedders are not required to read a local file.  Because `_embed_media_impl`
+receives the full media dict, a service-based embedder can resolve content
+remotely from whatever identifier its importer stashed in
+`origin["params"]` or `media["custom_metadata"]`:
 
 ```python
-# vtsearch/media/code/__init__.py
-
-from vtsearch.media.code.embedder import CodeBertEmbedder
-# ...
-EMBEDDERS = [CodeBertEmbedder()]
+def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
+    content_id = (media.get("origin") or {}).get("params", {}).get("content_id")
+    if not content_id:
+        return None  # no server identifier → cannot embed
+    return self._client.get_embedding(content_id)
 ```
 
-For an alternative embedder on an **existing** media type, add it to that
-type's `EMBEDDERS` list (e.g. in `vtsearch/media/image/__init__.py`).
+For services that natively accept many items per request, override
+`_embed_media_bulk_impl(medias)` to send one request (or do internal
+batching). The loader always calls `embed_media_bulk` with every
+pending file; the default implementation loops over `embed_media`
+per item and emits progress via `self._on_progress`, so custom
+overrides that batch internally should emit their own progress too.
+
+### Register the embedder
+
+Drop the embedder into an `embedder*.py` file inside the media-type
+package and expose an `EMBEDDER` sentinel at the bottom. Discovery is
+automatic — no edits to `__init__.py` are needed:
+
+```python
+# vtsearch/media/code/embedder_codebert.py
+
+class CodeBertEmbedder(MediaEmbedder):
+    ...
+
+EMBEDDER = CodeBertEmbedder()
+```
+
+For an alternative embedder on an **existing** media type, drop a new
+`embedder_<name>.py` file into that type's package (e.g.
+`vtsearch/media/image/embedder_myclip.py`) with its own `EMBEDDER`
+sentinel. To wire in a custom embedder living outside the VTSearch
+source tree, symlink the file in — symlinked embedder modules are
+loaded via `spec_from_file_location` so discovery still works.
 
 ### MediaEmbedder abstract interface reference
 
@@ -364,17 +410,18 @@ type's `EMBEDDERS` list (e.g. in `vtsearch/media/image/__init__.py`).
 
 **Required abstract methods:**
 
-| Method                      | Signature                        | Description                    |
-|-----------------------------|----------------------------------|--------------------------------|
-| `_load_models_impl()`       | `() -> None`                     | Load model; must be idempotent. Override this, not `load_models()` |
-| `embed_media(file_path)`    | `(Path) -> Optional[np.ndarray]` | Embed a media file             |
+| Method                      | Signature                              | Description                    |
+|-----------------------------|----------------------------------------|--------------------------------|
+| `_load_models_impl()`       | `() -> None`                           | Load model; must be idempotent. Override this, not `load_models()` |
+| `_embed_media_impl(media)`  | `(dict) -> Optional[np.ndarray]`       | Embed a single media item. Override this, not `embed_media()`      |
 
 **Optional overridable methods:**
 
-| Method                          | Signature                         | Description                          |
-|---------------------------------|-----------------------------------|--------------------------------------|
-| `embed_text(text)`              | `(str) -> Optional[np.ndarray]`   | Embed a text query (default: `None`) |
-| `embed_text_enriched(text)`     | `(str) -> Optional[np.ndarray]`   | Average over `description_wrappers`  |
+| Method                                | Signature                                          | Description                          |
+|---------------------------------------|----------------------------------------------------|--------------------------------------|
+| `embed_text(text)`                    | `(str) -> Optional[np.ndarray]`                    | Embed a text query (default: `None`) |
+| `embed_text_enriched(text)`           | `(str) -> Optional[np.ndarray]`                    | Average over `description_wrappers`  |
+| `_embed_media_bulk_impl(medias)`      | `(list[dict]) -> list[Optional[np.ndarray]]`       | Embed a list of medias. Default loops over `embed_media` with per-item progress. Override for a native bulk path (e.g. a remote API that accepts many items per request); overrides that batch internally must emit their own progress through `self._on_progress`. |
 
 **Optional overridable properties:**
 

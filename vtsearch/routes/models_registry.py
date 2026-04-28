@@ -57,19 +57,20 @@ def list_registered_models():
     for entry in entries:
         mid = entry["id"]
         entry["loaded"] = mid in loaded_ids
-        det_name = entry.get("detector_name", "")
+        # Trainable models created through the UI have detector_name="", but their
+        # autorun key is the display name (matches the frontend's toggleAutorun fallback).
+        det_name = entry.get("detector_name", "") or entry.get("name", "")
         det = detectors.get(det_name) if det_name else None
         if det:
             entry["autodetect"] = bool(det.get("autodetect"))
         else:
-            # Fall back to the persisted settings list
             entry["autodetect"] = det_name in autorun_names if det_name else False
         entry.setdefault("last_trained_at", None)
         # detector_loaded: True when the model has inference data in RAM.
         # Either via a DetectorContext (multi-loaded) or via autorun_detectors weights.
         if mid in loaded_ids:
             entry["detector_loaded"] = True
-        elif det_name and det:
+        elif det:
             entry["detector_loaded"] = det.get("weights") is not None
         else:
             entry["detector_loaded"] = False
@@ -139,6 +140,157 @@ def register_model_route():
     return jsonify({"ok": True, "model": entry}), 201
 
 
+@models_registry_bp.route(
+    "/api/models/registry/from-labelset/<importer_name>",
+    methods=["POST"],
+)
+def register_model_from_labelset(importer_name: str):
+    """Create a trainable model seeded with labels from a label importer.
+
+    The new model has no text_query or media_example — the imported labels
+    serve as its training data.  A ``trainable_models/<name>.json`` file is
+    written with the full labelset baked in, a registry entry is created,
+    and the frontend can then call :func:`load_model_route` with the
+    returned ``model.id`` to resolve origins and train the MLP.
+
+    Accepts ``multipart/form-data`` (when the importer has ``file`` fields)
+    or JSON.  Top-level fields read from the request:
+
+      * ``name`` — trainable model name (required).
+
+    All remaining fields are treated as importer field values.  The media
+    type is inferred from the labels' origins: every origin that carries a
+    detectable type (folder origins with ``params.media_type``, demo
+    origins via ``DEMO_DATASETS``) must agree on the same type.  Returns
+    ``400`` if no origins carry a type (e.g. legacy md5-only labelsets) or
+    if the origins disagree.
+
+    Returns ``201`` with::
+
+        {
+            "ok": true,
+            "model": {<registry entry>},
+            "applied": <int>,   # entries turned into labels
+            "skipped": <int>,   # entries rejected (unknown label value)
+            "num_labels": <int>,
+        }
+    """
+    from vtsearch.datasets.ingest import _media_type_from_origin
+    from vtsearch.datasets.labelset import LabeledElement, LabelSet
+    from vtsearch.labels.importers import get_label_importer, list_label_importers
+    from vtsearch.models.registry import register_model, update_model
+    from vtsearch.routes.helpers import (
+        extract_plugin_fields,
+        get_plugin_or_404,
+        get_request_field,
+        run_plugin_or_error,
+        validate_filepath_field,
+        validate_required_fields,
+    )
+
+    importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
+    if err:
+        return err
+
+    has_file_fields = any(f.field_type == "file" for f in importer.fields)
+    name = get_request_field("name", has_file_fields).strip()
+
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+
+    tm_path = _model_path(name)
+    if tm_path.exists():
+        return jsonify({"error": f"A trainable model named '{name}' already exists"}), 409
+
+    field_values = extract_plugin_fields(importer)
+    err = validate_required_fields(importer, field_values)
+    if err:
+        return err
+    err = validate_filepath_field(field_values)
+    if err:
+        return err
+
+    label_entries, err = run_plugin_or_error(importer, "run", field_values)
+    if err:
+        return err
+    if not isinstance(label_entries, list):
+        return jsonify({"error": "Importer did not return a list of label dicts."}), 500
+
+    elements: list[LabeledElement] = []
+    detected_types: set[str] = set()
+    applied = 0
+    skipped = 0
+    for entry in label_entries:
+        label = entry.get("label", "")
+        if label not in ("good", "bad"):
+            skipped += 1
+            continue
+        origin = entry.get("origin")
+        if isinstance(origin, dict):
+            mt = _media_type_from_origin(origin)
+            if mt:
+                detected_types.add(mt)
+        elements.append(LabeledElement.from_dict(entry))
+        applied += 1
+
+    if not detected_types:
+        return jsonify(
+            {
+                "error": (
+                    "Could not infer media type from the imported labels — none of "
+                    "the entries carry origin information with a detectable type. "
+                    "Re-export the labels with origin metadata, or use a different "
+                    "importer."
+                ),
+            }
+        ), 400
+    if len(detected_types) > 1:
+        return jsonify(
+            {
+                "error": (
+                    f"Imported labels span multiple media types: {sorted(detected_types)}. "
+                    "A model must be for a single media type."
+                ),
+            }
+        ), 400
+
+    media_type = next(iter(detected_types))
+    labelset = LabelSet(elements)
+
+    model_data = {
+        "name": name,
+        "text_query": "",
+        "media_example": "",
+        "media_type": media_type,
+        "examples": [],
+        "created_at": time.time(),
+        "labelset": labelset.to_dict(),
+    }
+    _write_model(tm_path, model_data)
+
+    entry = register_model(
+        name=name,
+        media_type=media_type,
+        trainable=True,
+        num_training=len(labelset),
+        trainable_model_name=name,
+        created_by=get_current_user(),
+    )
+    update_model(entry["id"], last_trained_at=time.time())
+    entry["num_training"] = len(labelset)
+    entry["last_trained_at"] = time.time()
+
+    return jsonify(
+        {
+            "ok": True,
+            "model": entry,
+            "applied": applied,
+            "skipped": skipped,
+            "num_labels": len(labelset),
+        }
+    ), 201
+
+
 @models_registry_bp.route("/api/models/registry/load", methods=["POST"])
 def load_model_route():
     """Load a model into memory and make it active.
@@ -190,6 +342,7 @@ def load_model_route():
         prev_id = det_ctx.detector_id if det_ctx.detector_id else None
         if prev_id:
             from vtsearch.utils import unregister_detector_context
+
             unregister_detector_context(prev_id)
             remove_loaded_model_id(prev_id)
         set_find_mode(False)
@@ -213,7 +366,9 @@ def load_model_route():
     _LOAD_STEPS = 3  # restore labels, seed examples, train MLP
     task_id = f"_modload_{model_id[:8]}"
     tracker = model_loading_tasks.create_task(
-        task_id, entry.get("name", model_id), model_id=model_id,
+        task_id,
+        entry.get("name", model_id),
+        model_id=model_id,
         media_type=entry.get("media_type", ""),
     )
     tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
@@ -222,6 +377,7 @@ def load_model_route():
     tm_name = entry.get("trainable_model_name", "")
     # Capture the dataset context so the thread can resolve medias.
     from vtsearch.utils import get_active_context
+
     _thread_ds_ctx = get_active_context()
 
     def load_task():
@@ -237,8 +393,12 @@ def load_model_route():
             if tm_name:
                 tracker.check_cancelled()
                 tracker.update(
-                    "loading", "Restoring labels…", 0, 0,
-                    step=1, total_steps=_LOAD_STEPS,
+                    "loading",
+                    "Restoring labels…",
+                    0,
+                    0,
+                    step=1,
+                    total_steps=_LOAD_STEPS,
                 )
                 tm_data = _read_model(_model_path(tm_name))
                 if tm_data:
@@ -246,12 +406,14 @@ def load_model_route():
 
                     tracker.check_cancelled()
                     tracker.update(
-                        "loading", "Seeding examples…", 0, 0,
-                        step=2, total_steps=_LOAD_STEPS,
+                        "loading",
+                        "Seeding examples…",
+                        0,
+                        0,
+                        step=2,
+                        total_steps=_LOAD_STEPS,
                     )
-                    _seed_good_votes_from_examples(
-                        tm_data.get("examples", [])
-                    )
+                    _seed_good_votes_from_examples(tm_data.get("examples", []))
 
                     # Train the MLP from restored votes so that Find can use
                     # det_ctx.model directly without re-resolving label origins.
@@ -260,8 +422,12 @@ def load_model_route():
 
                     if _gv and _bv:
                         tracker.update(
-                            "loading", "Training model…", 0, 0,
-                            step=3, total_steps=_LOAD_STEPS,
+                            "loading",
+                            "Training model…",
+                            0,
+                            0,
+                            step=3,
+                            total_steps=_LOAD_STEPS,
                         )
                         from vtsearch.models.detector_training import train_and_threshold
 
@@ -306,11 +472,13 @@ def load_model_route():
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
-    return jsonify({
-        "ok": True,
-        "message": "Loading started",
-        "task_id": str(task_id),
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "message": "Loading started",
+            "task_id": str(task_id),
+        }
+    )
 
 
 @models_registry_bp.route("/api/models/registry/<model_id>/unload", methods=["POST"])

@@ -114,7 +114,7 @@ def make_per_side_setting(
     def _get_dict(key: str) -> dict[str, Any]:
         from vtsearch.settings import _DEFAULTS, _ensure_loaded, _settings_lock
 
-        side = key[len(key_base) + 1:]  # strip "<key_base>_" prefix
+        side = key[len(key_base) + 1 :]  # strip "<key_base>_" prefix
         default_val = defaults.get(side, next(iter(defaults.values())))
         with _settings_lock:
             raw = _ensure_loaded().get(key, _DEFAULTS[key])

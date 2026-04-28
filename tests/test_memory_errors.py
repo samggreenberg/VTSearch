@@ -142,6 +142,9 @@ class TestFolderMemoryError:
             return np.zeros(10)
 
         mock_emb.embed_media.side_effect = embed_then_oom
+        # Route the bulk entrypoint through embed_media so the per-file OOM
+        # simulator still fires under the loader's bulk dispatch.
+        mock_emb.embed_media_bulk.side_effect = lambda medias: [mock_emb.embed_media(m) for m in medias]
         mock_mt.load_media_data.return_value = {"media_bytes": b"\x00", "duration": 1}
 
         with (
@@ -150,7 +153,10 @@ class TestFolderMemoryError:
         ):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_folder(
-                    tmp_path, "audio", target, on_progress=mock_progress,
+                    tmp_path,
+                    "audio",
+                    target,
+                    on_progress=mock_progress,
                 )
 
         assert len(target) == 0
@@ -248,12 +254,15 @@ class TestBackgroundImportMemoryError:
             thread.start = lambda: target()
             return thread
 
-        with mock.patch(
-            "vtsearch.datasets.importers.demo.load_demo_dataset",
-            side_effect=MemoryError("simulated"),
-        ), mock.patch(
-            "vtsearch.datasets.load_pipeline.threading.Thread",
-            side_effect=sync_thread,
+        with (
+            mock.patch(
+                "vtsearch.datasets.importers.demo.load_demo_dataset",
+                side_effect=MemoryError("simulated"),
+            ),
+            mock.patch(
+                "vtsearch.datasets.load_pipeline.threading.Thread",
+                side_effect=sync_thread,
+            ),
         ):
             resp = client.post(
                 "/api/dataset/load-demo",

@@ -827,9 +827,7 @@ class TestClipperRegistry:
             clippers = clippers_for_type(mt.type_id)
             assert len(clippers) >= 1, f"No clippers for {mt.type_id}"
             names = [c.name for c in clippers]
-            assert any("default" in n for n in names), (
-                f"No default clipper for {mt.type_id}"
-            )
+            assert any("default" in n for n in names), f"No default clipper for {mt.type_id}"
 
 
 # ---------------------------------------------------------------------------

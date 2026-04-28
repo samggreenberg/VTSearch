@@ -120,7 +120,6 @@ _STATUS_TO_STEP = {
 _TOTAL_LOAD_STEPS = 4  # download, load model, embed, finalize
 
 
-
 def clear_dataset():
     """Clear the current dataset, votes, and all related state."""
     clear_all()
@@ -447,7 +446,8 @@ def _auto_register_dataset(
 
     # Count dupes
     num_dupes = sum(
-        1 for m in media_dict.values()
+        1
+        for m in media_dict.values()
         if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
     )
 
@@ -544,7 +544,9 @@ def _run_origin_load_in_background(
 
     task_id = f"_loading_{uuid4().hex[:8]}"
     ingest_started_at = _time.time()
-    tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin), media_type=media_type, embedder=embedder)
+    tracker = loading_tasks.create_task(
+        task_id, name or _origin_to_str(origin), media_type=media_type, embedder=embedder
+    )
 
     # Set initial progress synchronously so the first poll sees it.
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
@@ -636,6 +638,7 @@ def _run_origin_load_in_background(
                     media["origin_name"] = media.get("filename", "")
 
             if clipper:
+
                 def _clipper_progress(current: int, total: int, phase: str) -> None:
                     tracker.check_cancelled()
                     if phase == "clipping":
@@ -643,9 +646,12 @@ def _run_origin_load_in_background(
                     else:
                         msg = "Embedding clips…"
                     tracker.update(
-                        "loading", msg,
-                        current=current, total=total,
-                        step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                        "loading",
+                        msg,
+                        current=current,
+                        total=total,
+                        step=_TOTAL_LOAD_STEPS,
+                        total_steps=_TOTAL_LOAD_STEPS,
                     )
 
                 _clipper_progress(0, 0, "clipping")
@@ -654,9 +660,12 @@ def _run_origin_load_in_background(
             def _dedup_progress(current: int, total: int) -> None:
                 tracker.check_cancelled()
                 tracker.update(
-                    "loading", "Removing duplicates…",
-                    current=current, total=total,
-                    step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                    "loading",
+                    "Removing duplicates…",
+                    current=current,
+                    total=total,
+                    step=_TOTAL_LOAD_STEPS,
+                    total_steps=_TOTAL_LOAD_STEPS,
                 )
 
             _dedup_progress(0, 0)
@@ -676,9 +685,7 @@ def _run_origin_load_in_background(
             _diversity_progress(0, 0)
             build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
             tracker.check_cancelled()
-            tracker.update(
-                "loading", "Saving to registry…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
-            )
+            tracker.update("loading", "Saving to registry…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
             origin_str = _origin_to_str(origin)
             entry = _auto_register_dataset(
                 ctx.medias,
@@ -725,10 +732,7 @@ def _run_origin_load_in_background(
                 "",
                 0,
                 0,
-                error=(
-                    f"Missing dependency: {e}. "
-                    "Install all required packages with: pip install -e '.[cpu,dev]'"
-                ),
+                error=(f"Missing dependency: {e}. Install all required packages with: pip install -e '.[cpu,dev]'"),
                 step=None,
                 total_steps=None,
             )

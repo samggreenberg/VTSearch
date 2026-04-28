@@ -567,7 +567,7 @@ class TestConcurrentModelLoading:
                 call_count += 1
                 self._model = "loaded"
 
-            def _embed_media_impl(self, file_path):
+            def _embed_media_impl(self, media):
                 return None
 
             def embed_text(self, text):
@@ -698,9 +698,7 @@ class TestLoadingGates:
 
         # The gate should still show exactly one holder (the first load).
         # If the cancel wrongly released, active would drop to 0.
-        assert _download_gate.active == 1, (
-            "Cancelled task that never held the gate must not release it"
-        )
+        assert _download_gate.active == 1, "Cancelled task that never held the gate must not release it"
 
         # Clean up.
         first_proceed.set()

@@ -24,7 +24,14 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
 from vtsearch.processors.importers import get_processor_importer, list_processor_importers
-from vtsearch.routes.helpers import extract_plugin_fields, get_json_safe, get_plugin_or_404, run_plugin_or_error, validate_filepath_field, validate_required_fields
+from vtsearch.routes.helpers import (
+    extract_plugin_fields,
+    get_json_safe,
+    get_plugin_or_404,
+    run_plugin_or_error,
+    validate_filepath_field,
+    validate_required_fields,
+)
 from vtsearch.utils import add_autorun_detector
 
 processor_importers_bp = Blueprint("processor_importers", __name__)
@@ -60,7 +67,9 @@ def run_processor_import(importer_name: str):
     Returns JSON with ``success``, ``name``, ``media_type``, and any extra
     keys returned by the importer.
     """
-    importer, err = get_plugin_or_404(get_processor_importer, list_processor_importers, importer_name, "processor importer")
+    importer, err = get_plugin_or_404(
+        get_processor_importer, list_processor_importers, importer_name, "processor importer"
+    )
     if err:
         return err
 

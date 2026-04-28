@@ -432,4 +432,3 @@ def read_pkl_embedder(pkl_path: Path) -> str | None:
     if sidecar.exists():
         return sidecar.read_text(encoding="utf-8").strip()
     return None
-

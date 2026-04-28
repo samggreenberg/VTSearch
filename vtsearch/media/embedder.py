@@ -8,7 +8,6 @@ import logging
 import threading
 import time
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Any, Callable, Optional
 
 import numpy as np
@@ -22,8 +21,29 @@ __all__ = [
     "intercept_tqdm_progress",
     "intercept_weight_loading_progress",
     "load_pretrained_local_first",
+    "media_from_path",
     "timed_progress",
 ]
+
+
+def media_from_path(file_path: Any, origin: dict | None = None) -> dict:
+    """Build a minimal media dict suitable for :meth:`MediaEmbedder.embed_media`.
+
+    Convenience helper for callers that only have a local file path (uploaded
+    files, converter outputs, seed data, CLI utilities).  File-based embedders
+    read ``media["media_path"]``; service-based embedders can also inspect
+    *origin* when supplied.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    p = Path(file_path)
+    return {
+        "media_path": str(p.resolve()),
+        "origin": origin,
+        "origin_name": p.name,
+        "filename": p.name,
+        "custom_metadata": None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -158,8 +178,7 @@ def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwarg
                 last_exc = exc
                 delay = _HF_RETRY_BACKOFF_BASE * (2**attempt)
                 _log.warning(
-                    "Transient HuggingFace Hub error (attempt %d/%d), "
-                    "retrying in %ds: %s",
+                    "Transient HuggingFace Hub error (attempt %d/%d), retrying in %ds: %s",
                     attempt + 1,
                     _HF_RETRY_COUNT,
                     delay,
@@ -439,24 +458,67 @@ class MediaEmbedder(ABC):
     # Embedding
     # ------------------------------------------------------------------
 
-    def embed_media(self, file_path: Path) -> Optional[np.ndarray]:
-        """Return a fixed-size embedding vector for the media file at *file_path*.
+    def embed_media(self, media: dict) -> Optional[np.ndarray]:
+        """Return a fixed-size embedding vector for *media*.
+
+        *media* is a media dict (the same shape produced by the dataset
+        loader).  File-based embedders pull ``Path(media["media_path"])``;
+        service-based embedders can use ``media["origin"]``,
+        ``media["origin_name"]``, ``media.get("custom_metadata")`` etc. to
+        look the content up remotely without touching disk.
 
         Acquires :attr:`_embed_lock` so that only one forward pass runs at a
         time across all embedder types.  Subclasses must override
         :meth:`_embed_media_impl` (not this method).
 
-        Returns ``None`` if the file cannot be embedded.
+        Returns ``None`` if the media cannot be embedded.
         """
         with self._embed_lock:
-            return self._embed_media_impl(file_path)
+            return self._embed_media_impl(media)
 
     @abstractmethod
-    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
-        """Subclass hook: embed a single media file.
+    def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
+        """Subclass hook: embed a single media item.
 
         Override this instead of :meth:`embed_media`.
         """
+
+    # ------------------------------------------------------------------
+    # Bulk embedding
+    # ------------------------------------------------------------------
+
+    def embed_media_bulk(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        """Embed every item in *medias* and return a same-length list of vectors.
+
+        Positions where an item could not be embedded contain ``None``.
+
+        The default implementation dispatches to :meth:`embed_media` per
+        item — each call acquires :attr:`_embed_lock` individually so
+        concurrent callers can interleave — and emits per-item progress
+        via :attr:`_on_progress` so long runs stay visible in the UI.
+
+        Subclasses backed by a service that natively accepts many items
+        per request should override :meth:`_embed_media_bulk_impl`.  If
+        they chunk internally (batching), they are responsible for
+        emitting their own progress updates through :attr:`_on_progress`.
+        """
+        if not medias:
+            return []
+        return self._embed_media_bulk_impl(medias)
+
+    def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        """Subclass hook: embed a list of media items.
+
+        Default: loop over :meth:`embed_media`, emitting per-item progress.
+        Override to replace the per-item loop with a single bulk request,
+        or to batch internally in chunks sized for a remote API.
+        """
+        total = len(medias)
+        results: list[Optional[np.ndarray]] = []
+        for i, m in enumerate(medias):
+            self._on_progress("embedding", f"Embedding {i + 1}/{total}...", i + 1, total)
+            results.append(self.embed_media(m))
+        return results
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.

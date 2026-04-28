@@ -50,8 +50,7 @@ def validate_url(url: str) -> str:
         ip_str = sockaddr[0]
         if _is_private_ip(ip_str):
             raise ValueError(
-                f"URL points to a private/internal network address ({ip_str}). "
-                "Only publicly routable URLs are allowed."
+                f"URL points to a private/internal network address ({ip_str}). Only publicly routable URLs are allowed."
             )
 
     return url

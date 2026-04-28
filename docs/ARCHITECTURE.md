@@ -25,9 +25,9 @@ VTSearch is a media-explorer web app for browsing, voting on, and
 semantically sorting collections of audio, images, text, video, or
 documents.  It combines:
 
-- **Semantic sorting** — LAION-CLAP (audio), CLIP (images), X-CLIP
+- **Semantic sorting** — LAION-CLAP (audio), SigLIP (images), X-CLIP
   (video), E5-base-v2 (text) for embedding-based similarity search,
-  with alternative embedders available (CLAP Music, SigLIP, BGE).
+  with alternative embedders available (CLAP Music, OpenAI CLIP, BGE).
 - **Learned sorting** — a small MLP trained on user votes to predict
   good/bad labels.
 - **Flask web UI** — Angular SPA frontend with a REST API.
@@ -131,7 +131,8 @@ VTSearch/
 │   │       ├── pickle/             .pkl file importer
 │   │       ├── http_archive/       HTTP archive importer
 │   │       ├── combine_datasets/   Merge multiple pickle datasets
-│   │       └── demo/              Demo dataset importer (pre-configured catalogues)
+│   │       ├── demo/               Demo dataset importer (pre-configured catalogues)
+│   │       └── recaller/           ReCaller importer (scaffold — hidden from picker)
 │   │
 │   ├── exporters/                  Plugin system for output destinations
 │   │   ├── base.py                 LabelsetExporter ABC + ExporterField
@@ -139,7 +140,8 @@ VTSearch/
 │   │   ├── server_csv_file/        CSV file on server
 │   │   ├── email_smtp/             SMTP email sender
 │   │   ├── webhook/                HTTP POST webhook
-│   │   └── gui/                    In-browser / console display
+│   │   ├── gui/                    In-browser / console display
+│   │   └── holder/                 Holder labelset exporter (scaffold — hidden from picker)
 │   │
 │   ├── settings_io/                Settings import/export/sync plugins
 │   │   ├── importers/              One-shot settings importers
@@ -158,7 +160,8 @@ VTSearch/
 │   │   ├── importers/              Plugin system for one-shot label import
 │   │   │   ├── base.py             LabelImporter ABC + LabelImporterField
 │   │   │   ├── server_json_file/   JSON label file on server
-│   │   │   └── server_csv_file/    CSV label file on server
+│   │   │   ├── server_csv_file/    CSV label file on server
+│   │   │   └── holder/             Holder label importer (scaffold — hidden from picker)
 │   │   ├── sources/                Bidirectional label sync sources
 │   │   │   ├── base.py             LabelsetSource ABC + LabelsetSourceField
 │   │   │   └── server_json_file/   Sync labels with server JSON file
@@ -383,16 +386,27 @@ threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
 
 Each embedder is a self-contained class (separate from the `MediaType`).
 Instantiate it, call `load_models()`, then use `embed_media()` /
-`embed_text()`:
+`embed_text()`.  `embed_media()` takes a **media dict** (the same shape the
+dataset loader builds); for ad-hoc files, use the `media_from_path` helper:
 
 ```python
 from vtsearch.media.audio.embedder import AudioClapEmbedder
+from vtsearch.media.embedder import media_from_path
 
 embedder = AudioClapEmbedder()
-embedder.load_models()                        # loads CLAP (cached)
-embedding = embedder.embed_media(Path("example.wav"))  # → numpy array
-text_vec  = embedder.embed_text("birdsong")            # same space
+embedder.load_models()                                            # loads CLAP (cached)
+embedding = embedder.embed_media(media_from_path("example.wav"))  # → numpy array
+text_vec  = embedder.embed_text("birdsong")                       # same space
 ```
+
+Because the embedder sees the whole media dict (not just a `Path`), a
+service-based embedder can resolve content via `media["origin"]` /
+`media.get("custom_metadata")` without touching local disk — e.g. a
+remote lookup by `origin["params"]["content_id"]`.  The loader always
+routes every pending file through `embed_media_bulk(medias)`; the ABC's
+default implementation loops per item (with progress).  Services that
+natively accept many items per request override `_embed_media_bulk_impl`
+and batch internally.
 
 No Flask, no global state, no progress dependency (silent no-op by
 default).  To get progress reporting, set a callback before loading:
@@ -505,8 +519,12 @@ register function.  See `EXTENDING.md` (in this directory) for full examples.
 
 ## State management
 
-Application state lives in `vtsearch/utils/state.py` as module-level
-dicts, all protected by `_state_lock` (a `threading.RLock`):
+Application state is exposed through `vtsearch/utils/state.py` (a
+re-export facade over the `state_*.py` submodules). The module-level
+names below are **proxy objects** that delegate to a per-request
+`DatasetContext` or `DetectorContext` — see
+[Multi-dataset support](#multi-dataset-support). All mutable access is
+protected by `_state_lock` (a `threading.RLock`):
 
 | Variable | Type | Purpose |
 |----------|------|---------|
@@ -523,6 +541,13 @@ dicts, all protected by `_state_lock` (a `threading.RLock`):
 | `autorun_localizers` | `dict` | Saved localizer configurations |
 | `_diversity_tree` | `DiversityTree \| None` | Hierarchical k-means tree for diverse sampling |
 | `_dataset_display_name` | `str \| None` | Custom display name for the loaded dataset |
+
+Of these, only `autorun_detectors`, `autorun_extractors`, and
+`autorun_localizers` are truly global (shared across all loaded
+datasets). The rest are per-dataset (`medias`, `_diversity_tree`,
+`_dataset_display_name`) or per-detector (votes, label history, click
+times, learned scores, inclusion, textsort suggestions) and resolve via
+the active `DatasetContext` / `DetectorContext`.
 
 Persistent settings live separately in `vtsearch/settings.py` and are
 auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
@@ -541,10 +566,12 @@ Trainable models are persisted as JSON files in `data/trainable_models/`
 via the `trainable_models_bp` route blueprint.  Each stores a name,
 text query, media type, examples list, and labelset.
 
-**Only Flask routes mutate this state.**  All ML and dataset functions
-accept state as parameters — they never import it directly.  This means
-you can use the ML code in a script or notebook by passing your own
-dicts.
+**Primarily Flask routes mutate this state.**  Most ML and dataset
+functions accept state as parameters — so you can use the ML code in a
+script or notebook by passing your own dicts. A few modules (notably
+`training_workflow.py` and `labels/sync.py`) import specific helpers
+and resolve the active context via Flask's `g` or thread-local storage,
+but these are the exceptions rather than the rule.
 
 ### State submodule organisation
 

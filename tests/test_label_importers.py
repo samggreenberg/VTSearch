@@ -449,7 +449,9 @@ class TestServerCsvLabelImporter:
 
         origin = {"importer": "demo", "params": {"name": "flowers102"}}
         origin_json = json.dumps(origin, sort_keys=True)
-        csv_text = f'label,md5,origin_name,origin\ngood,abc123,rose.jpg,"{origin_json.replace(chr(34), chr(34)+chr(34))}"\n'
+        csv_text = (
+            f'label,md5,origin_name,origin\ngood,abc123,rose.jpg,"{origin_json.replace(chr(34), chr(34) + chr(34))}"\n'
+        )
         result = _parse_csv_bytes(csv_text.encode())
         assert len(result) == 1
         assert result[0]["origin"] == origin

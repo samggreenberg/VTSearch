@@ -151,7 +151,9 @@ def import_detector_labels():
         avail = embedders_for_type(media_type)
         if not avail:
             return None
-        return avail[0].embed_media(p)
+        from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
+        return avail[0].embed_media(media_from_path(p))
 
     try:
         text = file.read().decode("utf-8")
