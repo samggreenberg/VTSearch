@@ -40,6 +40,12 @@ class TestSyntheticImporterRegistration:
         assert imp.icon  # has an icon
         assert not getattr(imp, "hidden_from_picker", False)
 
+    def test_icon_is_factory(self):
+        """Importer should send the factory emoji so the frontend renders the
+        line-drawing factory SVG (see frontend icon.component.ts)."""
+        imp = get_importer("synthetic")
+        assert imp.icon == "\U0001f3ed"  # 🏭
+
     def test_importer_fields_are_just_media_type_and_size(self):
         imp = get_importer("synthetic")
         keys = [f.key for f in imp.fields]
@@ -225,3 +231,81 @@ class TestRunEndToEnd:
             assert m["type"] == "audio"
             assert isinstance(m["filename"], str)
             assert Path(m["filename"]).suffix == ".wav"
+
+    def test_run_then_resolve_file_round_trip(self, tmp_path, monkeypatch):
+        """Origin produced by run() must resolve back to a real file via resolve_file."""
+        from vtsearch.datasets.importers import synthetic as syn  # noqa: PLC0415
+
+        monkeypatch.setattr(syn, "DATA_DIR", tmp_path)
+        imp = SyntheticDatasetImporter()
+        medias: dict[int, dict] = {}
+        imp.run({"media_type": "audio", "size": "3"}, medias)
+        media = next(iter(medias.values()))
+        resolved = imp.resolve_file(
+            media["origin"], origin_name=media["origin_name"], filename=media["filename"]
+        )
+        assert resolved is not None
+        assert resolved.is_file()
+
+
+# ---------------------------------------------------------------------------
+# Determinism / variety
+# ---------------------------------------------------------------------------
+
+
+class TestDeterminism:
+    def test_same_seed_produces_same_audio_bytes(self, tmp_path):
+        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+
+        a_dir = tmp_path / "a"
+        b_dir = tmp_path / "b"
+        a_paths = generate_audio_dataset(a_dir, 3, seed=7)
+        b_paths = generate_audio_dataset(b_dir, 3, seed=7)
+        for ap, bp in zip(a_paths, b_paths):
+            assert ap.read_bytes() == bp.read_bytes(), f"non-deterministic for {ap.name}"
+
+    def test_different_seed_produces_different_audio_bytes(self, tmp_path):
+        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+
+        a_paths = generate_audio_dataset(tmp_path / "a", 3, seed=1)
+        b_paths = generate_audio_dataset(tmp_path / "b", 3, seed=2)
+        # At least one file should differ across seeds.
+        diffs = sum(1 for ap, bp in zip(a_paths, b_paths) if ap.read_bytes() != bp.read_bytes())
+        assert diffs >= 1
+
+
+class TestPartialRegeneration:
+    """Pre-existing files in the cache dir must be respected."""
+
+    def test_generator_does_not_overwrite_existing_files(self, tmp_path):
+        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+
+        # Create the file paths the generator would produce, but with sentinel
+        # contents. The generator must not overwrite them.
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        sentinel = b"DO_NOT_OVERWRITE"
+        first = tmp_path / "tone_0000.wav"
+        first.write_bytes(sentinel)
+        generate_audio_dataset(tmp_path, 4, seed=99)
+        assert first.read_bytes() == sentinel
+        # Other files should still be generated.
+        assert (tmp_path / "chord_0001.wav").stat().st_size > 100
+
+
+# ---------------------------------------------------------------------------
+# build_cli_args / origin_display
+# ---------------------------------------------------------------------------
+
+
+class TestCliAndDisplay:
+    def test_build_cli_args(self):
+        imp = SyntheticDatasetImporter()
+        args = imp.build_cli_args({"media_type": "audio", "size": "10"})
+        assert "--importer synthetic" in args
+        assert "--media-type audio" in args
+        assert "--size 10" in args
+
+    def test_origin_display(self):
+        imp = SyntheticDatasetImporter()
+        origin = imp.build_origin({"media_type": "image", "size": "25"})
+        assert imp.origin_display(origin) == "synthetic:image_25"

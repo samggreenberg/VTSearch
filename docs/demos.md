@@ -2,6 +2,18 @@
 
 When the app is running, click the hamburger menu in the top-left corner to open the dataset panel. From there you can browse the available demo datasets and load one. Each demo is downloaded and embedded on first use, then cached for instant loading afterward.
 
+## Synthetic (offline)
+
+If you don't have an internet connection — or just want a quick test fixture — pick **Synthetic Dataset** (🏭) from the dataset importer list. Choose `image`, `audio`, or `video` and a size (e.g. 100, 1000, 10000) and the app will generate fake media on the fly:
+
+| Media type | Ideas it cycles through |
+|------------|-------------------------|
+| Image      | smiley faces (4 emotions, varied colors / sizes / backgrounds), 1–5 colored shapes (circle / square / triangle) |
+| Audio      | sine tones, chords (major / minor / dim / sus4), drums (kick / snare / hihat at varying BPMs), rain, wind, FM-swept bird chirps |
+| Video      | bouncing ball, walking smiley, rotating polygon, scrolling marquee |
+
+Files are deterministic for a given size and cached under `data/synthetic/<media_type>_<size>/`, so reloads skip regeneration. The clusters are coarse on purpose — they give CLAP / CLIP / X-CLIP something to actually distinguish when you're testing a sort.
+
 ## Audio
 
 | Demo | Description |

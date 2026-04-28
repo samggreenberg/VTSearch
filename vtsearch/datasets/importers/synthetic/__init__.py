@@ -36,7 +36,9 @@ class SyntheticDatasetImporter(DatasetImporter):
     name = "synthetic"
     display_name = "Synthetic Dataset"
     description = "Generate fake media offline — useful for demos and field testing without internet"
-    icon = "\U0001f9ea"  # 🧪
+    # 🏭 — frontend renders this as a line-drawing factory icon (see
+    # frontend/src/app/components/icon/icon.component.ts).
+    icon = "\U0001f3ed"
 
     fields = [
         ImporterField(
