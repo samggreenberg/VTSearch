@@ -124,10 +124,13 @@
       }
     }
 
+    // See dashboard.component.scss for the full rationale; the handle sits on
+    // the LEFT of the cell after the divider it controls so it isn't covered
+    // by the next sticky <th>'s stacking context.
     .col-resize-handle {
       position: absolute;
       top: 0;
-      right: 0;
+      left: -6px;
       bottom: 0;
       width: 12px;
       cursor: col-resize;
@@ -138,7 +141,7 @@
         position: absolute;
         top: 20%;
         bottom: 20%;
-        right: 0;
+        left: 5px;
         width: 2px;
         background: var(--accent);
         opacity: 0.35;
