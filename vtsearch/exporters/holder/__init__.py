@@ -44,6 +44,7 @@ from vtsearch.exporters.base import ExporterField, LabelsetExporter
 # TODO(dev): Implement the Holder client functions below.
 # ---------------------------------------------------------------------------
 
+
 def _holder_create_package() -> str:
     """Create a new Holder package and return its *holderID*."""
     raise NotImplementedError("TODO: implement Holder API client")
@@ -67,6 +68,7 @@ def _holder_write_entry(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_content_id(entry: dict[str, Any]) -> str | None:
     """Try to find a contentID in various places on a label entry."""
@@ -113,6 +115,7 @@ def _extract_entry_metadata(entry: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Exporter
 # ---------------------------------------------------------------------------
+
 
 class HolderLabelsetExporter(LabelsetExporter):
     """Export labels to a new Holder package (Good / Bad folders)."""

@@ -1169,8 +1169,7 @@ class TestDashboardToAutopilotWorkflow:
         # Get next diversity sample
         resp = client.post(
             "/api/diversity-tree/next",
-            json={"scores": {str(r["id"]): r["score"] for r in learned["results"]},
-                  "threshold": learned["threshold"]},
+            json={"scores": {str(r["id"]): r["score"] for r in learned["results"]}, "threshold": learned["threshold"]},
         )
         assert resp.status_code == 200
         div_data = resp.get_json()

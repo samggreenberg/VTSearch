@@ -178,8 +178,7 @@ def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwarg
                 last_exc = exc
                 delay = _HF_RETRY_BACKOFF_BASE * (2**attempt)
                 _log.warning(
-                    "Transient HuggingFace Hub error (attempt %d/%d), "
-                    "retrying in %ds: %s",
+                    "Transient HuggingFace Hub error (attempt %d/%d), retrying in %ds: %s",
                     attempt + 1,
                     _HF_RETRY_COUNT,
                     delay,
@@ -488,54 +487,38 @@ class MediaEmbedder(ABC):
     # Bulk embedding
     # ------------------------------------------------------------------
 
-    @property
-    def supports_batch(self) -> bool:
-        """Whether this embedder has a native bulk-embedding path.
+    def embed_media_bulk(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        """Embed every item in *medias* and return a same-length list of vectors.
 
-        Defaults to ``False``.  Subclasses backed by a remote bulk API (or
-        any backend where a single request amortises setup cost across many
-        inputs) should override this to return ``True`` **and** override
-        :meth:`_embed_media_batch_impl`.
+        Positions where an item could not be embedded contain ``None``.
 
-        When ``True``, :func:`~vtsearch.datasets.loader.load_dataset_from_folder`
-        and its chunked sibling collect medias into groups of :attr:`batch_size`
-        and flush them through :meth:`embed_media_batch` instead of calling
-        :meth:`embed_media` per item.
-        """
-        return False
+        The default implementation dispatches to :meth:`embed_media` per
+        item — each call acquires :attr:`_embed_lock` individually so
+        concurrent callers can interleave — and emits per-item progress
+        via :attr:`_on_progress` so long runs stay visible in the UI.
 
-    @property
-    def batch_size(self) -> int:
-        """Maximum number of items per call to :meth:`embed_media_batch`.
-
-        Only consulted when :attr:`supports_batch` is ``True``.  Override in
-        subclasses to match the remote API's preferred request size.
-        """
-        return 32
-
-    def embed_media_batch(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
-        """Return embeddings for a batch of media items.
-
-        Must return a list the same length as *medias*, with ``None`` at
-        positions where an item could not be embedded.
-
-        Acquires :attr:`_embed_lock` once per batch (not per item) so that
-        bulk API calls don't serialise at per-item granularity.  Subclasses
-        must override :meth:`_embed_media_batch_impl` (not this method).
+        Subclasses backed by a service that natively accepts many items
+        per request should override :meth:`_embed_media_bulk_impl`.  If
+        they chunk internally (batching), they are responsible for
+        emitting their own progress updates through :attr:`_on_progress`.
         """
         if not medias:
             return []
-        with self._embed_lock:
-            return self._embed_media_batch_impl(medias)
+        return self._embed_media_bulk_impl(medias)
 
-    def _embed_media_batch_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
-        """Subclass hook: embed a batch of media items.
+    def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        """Subclass hook: embed a list of media items.
 
-        The default implementation simply loops over :meth:`_embed_media_impl`,
-        which is correct for embedders that have no native bulk path.
-        Override this in subclasses that back onto a remote bulk API.
+        Default: loop over :meth:`embed_media`, emitting per-item progress.
+        Override to replace the per-item loop with a single bulk request,
+        or to batch internally in chunks sized for a remote API.
         """
-        return [self._embed_media_impl(m) for m in medias]
+        total = len(medias)
+        results: list[Optional[np.ndarray]] = []
+        for i, m in enumerate(medias):
+            self._on_progress("embedding", f"Embedding {i + 1}/{total}...", i + 1, total)
+            results.append(self.embed_media(m))
+        return results
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.

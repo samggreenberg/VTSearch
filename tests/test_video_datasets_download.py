@@ -1,8 +1,6 @@
 """Tests for video dataset downloaders: HMDB51, UCF-101 full, and KTH Actions."""
 
-import io
 import shutil
-import tarfile
 import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -41,9 +39,7 @@ class TestDownloadHmdb51:
                 extract_to.mkdir(parents=True, exist_ok=True)
                 cat = rar_path.stem
                 for i in range(3):
-                    (extract_to / f"{cat}_video_{i}.avi").write_bytes(
-                        b"RIFF" + b"\x00" * 20 + b"AVI "
-                    )
+                    (extract_to / f"{cat}_video_{i}.avi").write_bytes(b"RIFF" + b"\x00" * 20 + b"AVI ")
 
         with (
             patch.object(vid_module._core, "DATA_DIR", data_dir),
@@ -304,9 +300,7 @@ class TestDownloadKth:
         for action in ("walking", "jogging", "running", "boxing", "handwaving", "handclapping"):
             cat_dir = video_dir / "kth" / action
             cat_dir.mkdir(parents=True)
-            (cat_dir / f"person01_{action}_d1_uncomp.avi").write_bytes(
-                b"RIFF" + b"\x00" * 20 + b"AVI "
-            )
+            (cat_dir / f"person01_{action}_d1_uncomp.avi").write_bytes(b"RIFF" + b"\x00" * 20 + b"AVI ")
 
         download_called = []
 
@@ -335,9 +329,7 @@ class TestDownloadKth:
         # Pre-populate one action
         walking_dir = video_dir / "kth" / "walking"
         walking_dir.mkdir(parents=True)
-        (walking_dir / "person01_walking_d1_uncomp.avi").write_bytes(
-            b"RIFF" + b"\x00" * 20 + b"AVI "
-        )
+        (walking_dir / "person01_walking_d1_uncomp.avi").write_bytes(b"RIFF" + b"\x00" * 20 + b"AVI ")
 
         downloaded_urls = []
 

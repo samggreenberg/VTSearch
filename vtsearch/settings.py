@@ -326,7 +326,7 @@ def _make_per_side_setting(
     lo_hi = VALID_PANEL_PX if value_type == "int" else None
 
     def _get_dict(key: str) -> dict[str, Any]:
-        side = key[len(key_base) + 1:]  # strip "<key_base>_" prefix
+        side = key[len(key_base) + 1 :]  # strip "<key_base>_" prefix
         default_val = defaults.get(side, next(iter(defaults.values())))
         with _settings_lock:
             raw = _ensure_loaded().get(key, _DEFAULTS[key])
@@ -420,7 +420,9 @@ def _make_per_side_setting(
 # Generate all four per-side settings
 
 get_view_mode_left, get_view_mode_right, set_view_mode_left, set_view_mode_right = _make_per_side_setting(
-    "view_mode", _VIEW_MODE_DEFAULTS, VALID_VIEW_MODES,
+    "view_mode",
+    _VIEW_MODE_DEFAULTS,
+    VALID_VIEW_MODES,
 )
 
 get_grid_icon_size_left, get_grid_icon_size_right, set_grid_icon_size_left, set_grid_icon_size_right = (
@@ -433,11 +435,16 @@ get_grid_icon_size_left, get_grid_icon_size_right, set_grid_icon_size_left, set_
 )
 
 get_focus_mode_left, get_focus_mode_right, set_focus_mode_left, set_focus_mode_right = _make_per_side_setting(
-    "focus_mode", _FOCUS_MODE_DEFAULTS, VALID_FOCUS_MODES,
+    "focus_mode",
+    _FOCUS_MODE_DEFAULTS,
+    VALID_FOCUS_MODES,
 )
 
 get_panel_pct_left, get_panel_pct_right, set_panel_pct_left, set_panel_pct_right = _make_per_side_setting(
-    "panel_pct", _PANEL_PX_DEFAULTS, None, value_type="int",
+    "panel_pct",
+    _PANEL_PX_DEFAULTS,
+    None,
+    value_type="int",
 )
 
 

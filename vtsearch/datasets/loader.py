@@ -154,7 +154,7 @@ def _make_embed_input(
     }
 
 
-def _batch_embed_files(
+def _bulk_embed_files(
     emb: Any,
     media_files: list[Path],
     folder_path: Path,
@@ -164,16 +164,18 @@ def _batch_embed_files(
     media_type: str,
     origin: dict[str, Any] | None = None,
 ) -> dict[Path, Any]:
-    """Pre-compute embeddings for *media_files* via :meth:`embed_media_batch`.
+    """Pre-compute embeddings for *media_files* via :meth:`embed_media_bulk`.
 
-    Files whose embedding is already resolved by ``custom_metadata`` or
-    ``content_vectors`` are skipped (they don't need to be sent to the
-    model).  Remaining files are packaged into minimal media dicts (via
-    :func:`_make_embed_input`), grouped into batches of ``emb.batch_size``,
-    and flushed via :meth:`MediaEmbedder.embed_media_batch`.
+    Files already resolved by ``custom_metadata`` or ``content_vectors``
+    are skipped; the rest are packaged into minimal media dicts (via
+    :func:`_make_embed_input`) and handed to the embedder in a single
+    call.  The embedder's ``_on_progress`` callback is routed through
+    *on_progress* for the duration of the call so progress updates
+    (whether from the default per-item loop or a subclass's custom
+    batching) reach the UI.
 
     Returns a dict mapping ``Path`` → embedding vector.  Paths whose
-    batch call returned ``None`` are omitted, matching the per-file
+    bulk call returned ``None`` are omitted, matching the per-file
     behaviour of skipping files that fail to embed.
     """
     pending_paths: list[Path] = []
@@ -185,27 +187,19 @@ def _batch_embed_files(
         pending_paths.append(file_path)
         pending_medias.append(_make_embed_input(file_path, folder_path, origin, custom_metadata_map))
 
-    results: dict[Path, Any] = {}
     if not pending_paths:
-        return results
+        return {}
 
-    bsize = max(1, emb.batch_size)
-    total = len(pending_paths)
-    for start in range(0, total, bsize):
-        batch_paths = pending_paths[start : start + bsize]
-        batch_medias = pending_medias[start : start + bsize]
-        batch_idx = start // bsize + 1
-        on_progress(
-            "embedding",
-            f"Embedding {media_type} batch {batch_idx} ({len(batch_paths)} files)...",
-            min(start + len(batch_paths), total),
-            total,
-        )
-        vectors = emb.embed_media_batch(batch_medias)
-        for fp, vec in zip(batch_paths, vectors):
-            if vec is not None:
-                results[fp] = vec
-    return results
+    on_progress("embedding", f"Embedding {len(pending_paths)} {media_type} files...", 0, len(pending_paths))
+
+    original_cb = emb._on_progress
+    emb._on_progress = on_progress
+    try:
+        vectors = emb.embed_media_bulk(pending_medias)
+    finally:
+        emb._on_progress = original_cb
+
+    return {fp: vec for fp, vec in zip(pending_paths, vectors) if vec is not None}
 
 
 def load_dataset_from_folder(
@@ -334,21 +328,25 @@ def load_dataset_from_folder(
     media_id = 1
     total_files = len(media_files)
 
-    # Batch-capable embedders get all their files flushed through
-    # ``embed_media_batch`` up front; the per-file loop then just looks
-    # up the pre-computed vector.  Non-batch embedders fall through to
-    # the per-file ``embed_media`` call below.  ``is True`` (not truthy)
-    # is deliberate so that test mocks without an explicit override stay
-    # on the per-file path.
-    use_batch = emb is not None and not skip_embedding and getattr(emb, "supports_batch", False) is True
-    batch_embeddings: dict[Path, Any] = {}
-    if use_batch:
-        batch_embeddings = _batch_embed_files(
-            emb, media_files, folder_path, content_vectors, custom_metadata_map, on_progress, media_type,
-            origin=origin,
-        )
-
+    # Flush everything that still needs embedding through the embedder's
+    # bulk entrypoint up front; the per-file loop below just looks up the
+    # pre-computed vector.  Subclasses that override ``_embed_media_bulk_impl``
+    # can batch internally; the default impl loops per item and emits
+    # per-item progress so the UI stays responsive.
     try:
+        bulk_embeddings: dict[Path, Any] = {}
+        if emb is not None and not skip_embedding:
+            bulk_embeddings = _bulk_embed_files(
+                emb,
+                media_files,
+                folder_path,
+                content_vectors,
+                custom_metadata_map,
+                on_progress,
+                media_type,
+                origin=origin,
+            )
+
         for i, file_path in enumerate(media_files):
             # Preserve relative path from the import root so that files in
             # different subdirectories with the same basename stay distinct.
@@ -384,12 +382,7 @@ def load_dataset_from_folder(
             else:
                 if emb is None:
                     continue
-                if use_batch:
-                    embedding = batch_embeddings.get(file_path)
-                else:
-                    embedding = emb.embed_media(
-                        _make_embed_input(file_path, folder_path, origin, custom_metadata_map)
-                    )
+                embedding = bulk_embeddings.get(file_path)
                 if embedding is None:
                     continue
 
@@ -597,22 +590,27 @@ def load_dataset_from_folder_chunked(
     total_files = len(media_files)
     embedder_id = emb.name if emb else ""
 
-    use_batch = emb is not None and not skip_embedding and getattr(emb, "supports_batch", False) is True
-
     # Process in groups of chunk_size
     for start in range(0, total_files, chunk_size):
         batch = media_files[start : start + chunk_size]
         chunk_medias: dict[int, dict[str, Any]] = {}
         media_id = 1
 
-        # Batch-capable embedders embed the whole chunk up front, then the
-        # per-file loop below just looks up the pre-computed vector.  This
-        # keeps chunked loading's memory story intact — only one chunk's
-        # worth of embeddings lives in memory at a time.
-        chunk_batch_embeddings: dict[Path, Any] = {}
-        if use_batch:
-            chunk_batch_embeddings = _batch_embed_files(
-                emb, batch, folder_path, content_vectors, custom_metadata_map, on_progress, media_type,
+        # Flush the whole chunk through ``embed_media_bulk`` up front, then
+        # the per-file loop below just looks up the pre-computed vector.
+        # Scoping the bulk call to a single chunk preserves chunked loading's
+        # memory story — only one chunk's worth of embeddings lives in
+        # memory at a time.
+        chunk_bulk_embeddings: dict[Path, Any] = {}
+        if emb is not None and not skip_embedding:
+            chunk_bulk_embeddings = _bulk_embed_files(
+                emb,
+                batch,
+                folder_path,
+                content_vectors,
+                custom_metadata_map,
+                on_progress,
+                media_type,
                 origin=origin,
             )
 
@@ -649,12 +647,7 @@ def load_dataset_from_folder_chunked(
             else:
                 if emb is None:
                     continue
-                if use_batch:
-                    embedding = chunk_batch_embeddings.get(file_path)
-                else:
-                    embedding = emb.embed_media(
-                        _make_embed_input(file_path, folder_path, origin, custom_metadata_map)
-                    )
+                embedding = chunk_bulk_embeddings.get(file_path)
                 if embedding is None:
                     continue
 
@@ -1299,7 +1292,11 @@ def load_demo_dataset(
         pkl_data: dict[str, Any] = {
             "name": dataset_name,
             "medias": {
-                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items() if k not in ("media_bytes", "thumbnail_bytes")}
+                cid: {
+                    k: v.tolist() if isinstance(v, np.ndarray) else v
+                    for k, v in media.items()
+                    if k not in ("media_bytes", "thumbnail_bytes")
+                }
                 for cid, media in medias.items()
             },
             mt.dir_key: external_dir,

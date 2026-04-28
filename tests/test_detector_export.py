@@ -3,14 +3,12 @@
 Covers server-side detector export and labelset export.
 """
 
-import io
 import json
 
-import numpy as np
 import pytest
 
 import app as app_module
-from helpers import train_detector_from_votes
+
 
 class TestServerDetectorExport:
     """Tests for the ServerFileProcessorExporter endpoints."""
@@ -243,4 +241,3 @@ class TestDetectorLabelsetExport:
         assert data["applied"] == 3
         assert set(app_module.good_votes) == {1, 3}
         assert set(app_module.bad_votes) == {2}
-

@@ -319,7 +319,12 @@ class TestSaveLabels:
             "importer": "dupe_set",
             "params": {"name": original.get("filename", "a.wav")},
             "members": [
-                {"origin": {"importer": "test", "params": {}}, "origin_name": f"dup_{i}.wav", "filename": f"dup_{i}.wav", "category": "c"}
+                {
+                    "origin": {"importer": "test", "params": {}},
+                    "origin_name": f"dup_{i}.wav",
+                    "filename": f"dup_{i}.wav",
+                    "category": "c",
+                }
                 for i in range(5)
             ],
         }
@@ -853,7 +858,9 @@ class TestSeedVotesFromExamples:
         assert res.status_code == 200
         labels = res.get_json()["labels"]
         example_labels = [
-            lbl for lbl in labels if isinstance(lbl.get("origin"), dict) and lbl["origin"].get("importer") == "example_media"
+            lbl
+            for lbl in labels
+            if isinstance(lbl.get("origin"), dict) and lbl["origin"].get("importer") == "example_media"
         ]
         assert len(example_labels) == 1
         assert example_labels[0]["label"] == "good"
@@ -1108,13 +1115,16 @@ class TestLoadModelCrossDatasetResolution:
         set_trainable_models_dir(tmp_path)
         try:
             tm_name = "cross-dataset-load"
-            _write_model(tmp_path / f"{tm_name}.json", {
-                "name": tm_name,
-                "text_query": "",
-                "media_type": "audio",
-                "examples": [],
-                "labelset": {"labels": label_entries},
-            })
+            _write_model(
+                tmp_path / f"{tm_name}.json",
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "media_type": "audio",
+                    "examples": [],
+                    "labelset": {"labels": label_entries},
+                },
+            )
 
             entry = register_model(
                 name="Cross Load Test",
@@ -1183,13 +1193,16 @@ class TestLoadModelCrossDatasetResolution:
         set_trainable_models_dir(tmp_path)
         try:
             tm_name = "name-fallback"
-            _write_model(tmp_path / f"{tm_name}.json", {
-                "name": tm_name,
-                "text_query": "",
-                "media_type": "audio",
-                "examples": [],
-                "labelset": {"labels": label_entries},
-            })
+            _write_model(
+                tmp_path / f"{tm_name}.json",
+                {
+                    "name": tm_name,
+                    "text_query": "",
+                    "media_type": "audio",
+                    "examples": [],
+                    "labelset": {"labels": label_entries},
+                },
+            )
 
             entry = register_model(
                 name="Name Fallback Test",
@@ -1222,3 +1235,206 @@ class TestLoadModelCrossDatasetResolution:
         finally:
             set_trainable_models_dir(original_dir)
 
+
+class TestRegisterModelFromLabelset:
+    """Tests for POST /api/models/registry/from-labelset/<importer_name>.
+
+    This endpoint creates a trainable model seeded with labels produced by
+    a label importer in a single call: the importer runs, the trainable
+    model JSON is written with the full labelset, and a registry entry is
+    created.  The frontend then calls the load endpoint to resolve origins
+    and train the MLP.
+
+    Media type is inferred from the labels' origins — no ``media_type``
+    request field is accepted.
+    """
+
+    @staticmethod
+    def _audio_origin(path: str = "/tmp/audio_clips"):
+        return {"importer": "folder", "params": {"path": path, "media_type": "audio"}}
+
+    @staticmethod
+    def _image_origin(path: str = "/tmp/image_clips"):
+        return {"importer": "folder", "params": {"path": path, "media_type": "image"}}
+
+    def test_creates_model_with_imported_labels(self, client, tmp_path):
+        import app as app_module
+
+        md5_good = app_module.medias[1]["md5"]
+        md5_bad = app_module.medias[2]["md5"]
+        origin = self._audio_origin()
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": md5_good, "label": "good", "origin": origin, "origin_name": "a.wav"},
+                    {"md5": md5_bad, "label": "bad", "origin": origin, "origin_name": "b.wav"},
+                ]
+            }
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"name": "From LS", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 201, res.get_json()
+        data = res.get_json()
+        assert data["ok"] is True
+        assert data["applied"] == 2
+        assert data["skipped"] == 0
+        assert data["num_labels"] == 2
+        # Media type inferred from the origin metadata.
+        assert data["model"]["media_type"] == "audio"
+        assert data["model"]["trainable"] is True
+        assert data["model"]["num_training"] == 2
+
+        # Registry now has the model
+        reg_res = client.get("/api/models/registry")
+        names = [m["name"] for m in reg_res.get_json()["models"]]
+        assert "From LS" in names
+
+        # Trainable-model file has the labelset baked in
+        tm_res = client.get("/api/trainable-models/From%20LS")
+        tm_data = tm_res.get_json()
+        assert len(tm_data["labelset"]["labels"]) == 2
+        assert tm_data["text_query"] == ""
+        assert tm_data["media_example"] == ""
+        assert tm_data["examples"] == []
+
+    def test_missing_name_returns_400(self, client, tmp_path):
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text('{"labels": []}')
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"filepath": str(labels_path)},
+        )
+        assert res.status_code == 400
+        assert "name" in res.get_json()["error"]
+
+    def test_md5_only_labelset_returns_400(self, client, tmp_path):
+        """Legacy md5-only labels have no origin — media type cannot be inferred."""
+        import app as app_module
+
+        md5 = app_module.medias[1]["md5"]
+        payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]})
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"name": "NoOrigin", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 400
+        assert "media type" in res.get_json()["error"].lower()
+
+    def test_mixed_media_types_returns_400(self, client, tmp_path):
+        """Labels with conflicting origin media types are rejected."""
+        import app as app_module
+
+        md5_a = app_module.medias[1]["md5"]
+        md5_b = app_module.medias[2]["md5"]
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": md5_a, "label": "good", "origin": self._audio_origin(), "origin_name": "a.wav"},
+                    {"md5": md5_b, "label": "good", "origin": self._image_origin(), "origin_name": "b.jpg"},
+                ]
+            }
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"name": "Mixed", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 400
+        err = res.get_json()["error"]
+        assert "audio" in err and "image" in err
+
+    def test_unknown_importer_returns_404(self, client):
+        res = client.post(
+            "/api/models/registry/from-labelset/no_such_importer",
+            json={"name": "X"},
+        )
+        assert res.status_code == 404
+        assert "no_such_importer" in res.get_json()["error"]
+
+    def test_duplicate_name_returns_409(self, client, tmp_path):
+        """Name collision with an existing trainable-model file."""
+        import app as app_module
+
+        md5 = app_module.medias[1]["md5"]
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": md5, "label": "good", "origin": self._audio_origin(), "origin_name": "a.wav"},
+                ]
+            }
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+        client.post(
+            "/api/trainable-models",
+            json={"name": "Dup", "media_type": "audio", "text_query": "dup"},
+        )
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"name": "Dup", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 409
+
+    def test_skips_invalid_label_values(self, client, tmp_path):
+        import app as app_module
+
+        md5 = app_module.medias[1]["md5"]
+        origin = self._audio_origin()
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": md5, "label": "good", "origin": origin, "origin_name": "a.wav"},
+                    {"md5": md5, "label": "maybe", "origin": origin, "origin_name": "a.wav"},
+                ]
+            }
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"name": "SkipInvalid", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["applied"] == 1
+        assert data["skipped"] == 1
+        assert data["num_labels"] == 1
+        assert data["model"]["media_type"] == "audio"
+
+    def test_loading_after_creation_restores_labels(self, client, tmp_path):
+        """Loading the newly-created model resolves labels into the active dataset."""
+        import app as app_module
+        from vtsearch.utils import bad_votes, good_votes
+
+        md5_good = app_module.medias[1]["md5"]
+        md5_bad = app_module.medias[2]["md5"]
+        origin = self._audio_origin()
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": md5_good, "label": "good", "origin": origin, "origin_name": "a.wav"},
+                    {"md5": md5_bad, "label": "bad", "origin": origin, "origin_name": "b.wav"},
+                ]
+            }
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+
+        res = client.post(
+            "/api/models/registry/from-labelset/server_json_file",
+            json={"name": "Loadable", "filepath": str(labels_path)},
+        )
+        model_id = res.get_json()["model"]["id"]
+        _load_model_and_wait(client, model_id)
+
+        # Labels resolved into the loaded detector's votes (matched by md5).
+        assert 1 in good_votes
+        assert 2 in bad_votes

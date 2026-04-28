@@ -119,6 +119,7 @@ class TestFolderImporterPdf:
         emb._model = True
         emb.embed_media.return_value = np.zeros(768)
         emb.embed_pil_image.return_value = np.zeros(768)
+        emb.embed_media_bulk.side_effect = lambda medias: [emb.embed_media(m) for m in medias]
         return emb
 
     def _patch_media_registry(self, mt, emb):
@@ -367,6 +368,7 @@ class TestPdfSymlinkDiscovery:
         emb._model = True
         emb.embed_media.return_value = np.zeros(768)
         emb.embed_pil_image.return_value = np.zeros(768)
+        emb.embed_media_bulk.side_effect = lambda medias: [emb.embed_media(m) for m in medias]
         return emb
 
     def test_pdfs_in_symlinked_subdir_are_discovered(self, tmp_path):

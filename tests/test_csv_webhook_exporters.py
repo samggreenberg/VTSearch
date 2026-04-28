@@ -264,9 +264,30 @@ class TestCsvExporterExport:
 
 
 SAMPLE_LABELS = [
-    {"label": "good", "md5": "abc123", "origin_name": "dataset_a", "filename": "clip1.wav", "category": "birds", "custom_metadata": {"source": "field", "quality": "high"}},
-    {"label": "bad", "md5": "def456", "origin_name": "dataset_a", "filename": "clip2.wav", "category": "rain", "custom_metadata": {"source": "studio", "quality": "low"}},
-    {"label": "good", "md5": "ghi789", "origin_name": "dataset_b", "filename": "clip3.wav", "category": "birds", "custom_metadata": {"source": "field"}},
+    {
+        "label": "good",
+        "md5": "abc123",
+        "origin_name": "dataset_a",
+        "filename": "clip1.wav",
+        "category": "birds",
+        "custom_metadata": {"source": "field", "quality": "high"},
+    },
+    {
+        "label": "bad",
+        "md5": "def456",
+        "origin_name": "dataset_a",
+        "filename": "clip2.wav",
+        "category": "rain",
+        "custom_metadata": {"source": "studio", "quality": "low"},
+    },
+    {
+        "label": "good",
+        "md5": "ghi789",
+        "origin_name": "dataset_b",
+        "filename": "clip3.wav",
+        "category": "birds",
+        "custom_metadata": {"source": "field"},
+    },
 ]
 
 
@@ -434,7 +455,16 @@ class TestCsvExporterLabelsFormat:
 
         exp = ServerCsvLabelsetExporter()
         origin = {"importer": "demo", "params": {"name": "flowers102"}}
-        labels = [{"label": "good", "md5": "abc", "origin_name": "rose.jpg", "filename": "rose.jpg", "category": "", "origin": origin}]
+        labels = [
+            {
+                "label": "good",
+                "md5": "abc",
+                "origin_name": "rose.jpg",
+                "filename": "rose.jpg",
+                "category": "",
+                "origin": origin,
+            }
+        ]
         results = {"labels": labels}
         filepath = tmp_path / "with_origin.csv"
 
@@ -533,7 +563,7 @@ class TestCsvExporterIntegration:
 
     def test_csv_via_run_exporter(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         results = _build_results_dict(hits, str(detector_path), "audio")
@@ -664,9 +694,10 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch(
-            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
-        ) as mock_post:
+        with (
+            self._PATCH_VALIDATE,
+            mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+        ):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         mock_post.assert_called_once()
@@ -685,9 +716,10 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch(
-            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
-        ) as mock_post:
+        with (
+            self._PATCH_VALIDATE,
+            mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+        ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": "Bearer my-token"})
 
         call_kwargs = mock_post.call_args
@@ -703,9 +735,10 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch(
-            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
-        ) as mock_post:
+        with (
+            self._PATCH_VALIDATE,
+            mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+        ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": ""})
 
         call_kwargs = mock_post.call_args
@@ -727,9 +760,7 @@ class TestWebhookExporterExport:
         mock_resp = mock.MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("500 Server Error")
 
-        with self._PATCH_VALIDATE, mock.patch(
-            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
-        ):
+        with self._PATCH_VALIDATE, mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
             with pytest.raises(Exception, match="500 Server Error"):
                 exp.export(results, {"url": "https://example.com/hook"})
 
@@ -743,9 +774,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch(
-            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
-        ):
+        with self._PATCH_VALIDATE, mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert "3 hit(s)" in result["message"]
@@ -761,9 +790,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 201
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch(
-            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
-        ):
+        with self._PATCH_VALIDATE, mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert result["status_code"] == 201
@@ -775,7 +802,7 @@ class TestWebhookExporterIntegration:
 
     def test_webhook_via_run_exporter(self, client, tmp_path):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path,[1, 2, 3], [18, 19, 20])
+        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
 
         hits = run_autodetect(str(dataset_path), str(detector_path))
         results = _build_results_dict(hits, str(detector_path), "audio")
@@ -784,8 +811,9 @@ class TestWebhookExporterIntegration:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtsearch.exporters.webhook.validate_url"), mock.patch(
-            "vtsearch.exporters.webhook.requests.post", return_value=mock_resp
+        with (
+            mock.patch("vtsearch.exporters.webhook.validate_url"),
+            mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp),
         ):
             _run_exporter("webhook", {"url": "https://example.com/hook"}, results)
 

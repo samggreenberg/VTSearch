@@ -35,7 +35,14 @@ from __future__ import annotations
 from flask import Blueprint, jsonify
 
 from vtsearch.labels.importers import get_label_importer, list_label_importers
-from vtsearch.routes.helpers import extract_plugin_fields, get_json_safe, get_plugin_or_404, run_plugin_or_error, validate_filepath_field, validate_required_fields
+from vtsearch.routes.helpers import (
+    extract_plugin_fields,
+    get_json_safe,
+    get_plugin_or_404,
+    run_plugin_or_error,
+    validate_filepath_field,
+    validate_required_fields,
+)
 from vtsearch.utils import (
     apply_label,
     build_media_lookup,

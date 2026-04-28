@@ -91,10 +91,7 @@ class DisplayLabelsetExporter(LabelsetExporter):
             print(f"Predicted Good ({total_hits} items):\n")
             print("\n".join(lines))
         return {
-            "message": (
-                f"Printed {total_hits} hit(s) across "
-                f"{results.get('detectors_run', 0)} detector(s) to stdout."
-            ),
+            "message": (f"Printed {total_hits} hit(s) across {results.get('detectors_run', 0)} detector(s) to stdout."),
         }
 
 

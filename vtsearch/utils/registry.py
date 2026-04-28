@@ -55,6 +55,7 @@ __all__ = [
 # PluginField — shared field descriptor
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PluginField:
     """Describes a single configurable input for a plugin.
@@ -103,6 +104,7 @@ class PluginField:
 # ---------------------------------------------------------------------------
 # PluginBase — shared base class with CLI & serialisation helpers
 # ---------------------------------------------------------------------------
+
 
 class PluginBase:
     """Mixin providing the CLI-argument, validation, and serialisation helpers
@@ -209,8 +211,7 @@ class PluginRegistry(Generic[T]):
         a single module rather than a sub-package (e.g. converters, sources).
     """
 
-    def __init__(self, package: str, sentinel: str, label: str, *,
-                 discover_modules: bool = False) -> None:
+    def __init__(self, package: str, sentinel: str, label: str, *, discover_modules: bool = False) -> None:
         self._package = package
         self._sentinel = sentinel
         self._label = label

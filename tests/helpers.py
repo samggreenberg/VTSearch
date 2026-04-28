@@ -96,8 +96,7 @@ def make_minimal_mp4_bytes() -> bytes:
     # ftyp box: size=32, type='ftyp', major_brand='isom', minor_version=0x200,
     # compat='isom','iso2','avc1','mp41'
     return (
-        b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2avc1mp41"
-        + b"\x00\x00\x00\x08free"  # padding
+        b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2avc1mp41" + b"\x00\x00\x00\x08free"  # padding
     )
 
 

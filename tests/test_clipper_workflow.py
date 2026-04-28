@@ -12,19 +12,17 @@ Validates:
 
 import hashlib
 import io
-import json
-import wave
 
 import numpy as np
-import pytest
 
 from vtsearch.audio import generate_wav
-from vtsearch.utils import medias, good_votes, bad_votes, snapshot_medias
+from vtsearch.utils import medias, good_votes, bad_votes
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_audio_media(media_id: int, duration: float = 5.1, *, origin_path: str = "/data/audio") -> dict:
     """Create a fake audio media dict with WAV bytes and an embedding."""
@@ -455,7 +453,7 @@ class TestCrossDatasetClipEmbedding:
         # This should slice to [0, 2] seconds before embedding.
         # Won't have a real embedder in tests, so just verify it doesn't crash
         # and falls back gracefully.
-        result = _apply_clip_and_embed(wav_path, "audio", origin)
+        _apply_clip_and_embed(wav_path, "audio", origin)
         # Result may be None if no embedder is loaded, which is fine.
         # The important thing is the function handles clip params without error.
 
@@ -479,7 +477,7 @@ class TestCrossDatasetClipEmbedding:
             },
         }
 
-        result = _apply_clip_and_embed(img_path, "image", origin)
+        _apply_clip_and_embed(img_path, "image", origin)
         # May be None without a real embedder.
 
     def test_apply_clip_and_embed_text(self, tmp_path):
@@ -499,7 +497,7 @@ class TestCrossDatasetClipEmbedding:
             },
         }
 
-        result = _apply_clip_and_embed(text_path, "text", origin)
+        _apply_clip_and_embed(text_path, "text", origin)
 
     def test_apply_clip_and_embed_no_clipper_is_passthrough(self, tmp_path):
         """Without clipper params, behaves like normal embed_file."""
@@ -510,7 +508,7 @@ class TestCrossDatasetClipEmbedding:
         wav_path.write_bytes(wav)
 
         origin = {"importer": "folder", "params": {"path": str(tmp_path)}}
-        result = _apply_clip_and_embed(wav_path, "audio", origin)
+        _apply_clip_and_embed(wav_path, "audio", origin)
 
 
 # ---------------------------------------------------------------------------
@@ -698,6 +696,7 @@ class TestMultipleMediasClipped:
 # _apply_clipper — on_progress callback
 # ---------------------------------------------------------------------------
 
+
 class TestApplyClipperProgress:
     """Verify that _apply_clipper reports progress via the on_progress callback."""
 
@@ -709,8 +708,12 @@ class TestApplyClipperProgress:
             2: _make_audio_media(2, duration=4.1),
         }
         calls = []
-        _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0},
-                       on_progress=lambda cur, tot, phase: calls.append((cur, tot, phase)))
+        _apply_clipper(
+            clips_dict,
+            "sound_tiling",
+            {"duration": 2.0},
+            on_progress=lambda cur, tot, phase: calls.append((cur, tot, phase)),
+        )
 
         clipping_calls = [c for c in calls if c[2] == "clipping"]
         embedding_calls = [c for c in calls if c[2] == "embedding"]
@@ -923,10 +926,22 @@ class TestCsvExportClipColumns:
                     "detector_name": "det1",
                     "threshold": 0.5,
                     "hits": [
-                        {"filename": "a.wav", "category": "audio", "score": 0.9,
-                         "clip_start": 0.0, "clip_end": 2.0, "origin_name": "a.wav"},
-                        {"filename": "b.wav", "category": "audio", "score": 0.8,
-                         "clip_start": 2.0, "clip_end": 4.0, "origin_name": "b.wav"},
+                        {
+                            "filename": "a.wav",
+                            "category": "audio",
+                            "score": 0.9,
+                            "clip_start": 0.0,
+                            "clip_end": 2.0,
+                            "origin_name": "a.wav",
+                        },
+                        {
+                            "filename": "b.wav",
+                            "category": "audio",
+                            "score": 0.8,
+                            "clip_start": 2.0,
+                            "clip_end": 4.0,
+                            "origin_name": "b.wav",
+                        },
                     ],
                 }
             },
@@ -935,6 +950,7 @@ class TestCsvExportClipColumns:
         exporter.export(results, {"filepath": str(filepath)})
 
         import csv
+
         with open(filepath) as f:
             reader = csv.DictReader(f)
             rows = list(reader)
@@ -954,8 +970,13 @@ class TestCsvExportClipColumns:
                     "detector_name": "det1",
                     "threshold": 0.5,
                     "hits": [
-                        {"filename": "tile.png", "category": "image", "score": 0.9,
-                         "clip_box": [0, 0, 100, 100], "origin_name": "tile.png"},
+                        {
+                            "filename": "tile.png",
+                            "category": "image",
+                            "score": 0.9,
+                            "clip_box": [0, 0, 100, 100],
+                            "origin_name": "tile.png",
+                        },
                     ],
                 }
             },
@@ -964,6 +985,7 @@ class TestCsvExportClipColumns:
         exporter.export(results, {"filepath": str(filepath)})
 
         import csv
+
         with open(filepath) as f:
             reader = csv.DictReader(f)
             rows = list(reader)
@@ -981,8 +1003,7 @@ class TestCsvExportClipColumns:
                     "detector_name": "det1",
                     "threshold": 0.5,
                     "hits": [
-                        {"filename": "full.wav", "category": "audio", "score": 0.7,
-                         "origin_name": "full.wav"},
+                        {"filename": "full.wav", "category": "audio", "score": 0.7, "origin_name": "full.wav"},
                     ],
                 }
             },
@@ -991,6 +1012,7 @@ class TestCsvExportClipColumns:
         exporter.export(results, {"filepath": str(filepath)})
 
         import csv
+
         with open(filepath) as f:
             reader = csv.DictReader(f)
             rows = list(reader)

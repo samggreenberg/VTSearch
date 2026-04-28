@@ -36,9 +36,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
     )
 
     media_examples = [
-        ex
-        for ex in examples
-        if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip()
+        ex for ex in examples if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip()
     ]
     if not media_examples:
         return 0

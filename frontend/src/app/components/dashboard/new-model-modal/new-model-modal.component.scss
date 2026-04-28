@@ -1,7 +1,50 @@
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+
+  &.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
+  }
+}
+
+.importer-form-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.importer-form-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
 .new-model-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 480px;
+  max-width: 100%;
 }
 
 .form-group {
@@ -99,6 +142,8 @@
 // Media picker view
 .media-picker {
   min-height: 200px;
+  width: 480px;
+  max-width: 100%;
 }
 
 .back-btn {
@@ -288,10 +333,10 @@
   top: 100%;
   left: 0;
   right: 0;
-  z-index: 10;
+  z-index: var(--z-elevated);
   margin-top: 2px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: var(--bg-primary, var(--bg-subtle));
   box-shadow: 0 4px 12px var(--shadow-dropdown);
   overflow: hidden;
