@@ -294,9 +294,15 @@ class DatasetImporter(PluginBase):
         for f in self.fields:
             if f.field_type == "file":
                 continue
+            arg_name = f"--{f.key.replace('_', '-')}"
+            if f.field_type == "checkbox":
+                value = field_values.get(f.key, str(f.default).lower() == "true")
+                truthy = value if isinstance(value, bool) else str(value).lower() == "true"
+                no_arg = f"--no-{f.key.replace('_', '-')}"
+                parts.append(arg_name if truthy else no_arg)
+                continue
             value = field_values.get(f.key, "")
             if value:
-                arg_name = f"--{f.key.replace('_', '-')}"
                 parts.append(f"{arg_name} {value}")
         return " ".join(parts)
 
@@ -319,6 +325,11 @@ class DatasetImporter(PluginBase):
         params: dict[str, str] = {}
         for f in self.fields:
             if f.field_type == "file":
+                continue
+            if f.field_type == "checkbox":
+                val = field_values.get(f.key, str(f.default).lower() == "true")
+                truthy = val if isinstance(val, bool) else str(val).lower() == "true"
+                params[f.key] = "true" if truthy else "false"
                 continue
             val = field_values.get(f.key, "")
             if val:

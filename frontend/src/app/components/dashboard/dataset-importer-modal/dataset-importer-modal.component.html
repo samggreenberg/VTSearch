@@ -265,6 +265,19 @@
         }
       </div>
 
+      @if (lfPickerKind === 'folder') {
+        <div class="form-group">
+          <label class="form-label" for="lf-recursive" title="When enabled, files inside nested subfolders are also uploaded. When disabled, only files directly inside the picked folder are uploaded.">
+            <input
+              id="lf-recursive"
+              type="checkbox"
+              [(ngModel)]="lfRecursive"
+            />
+            Include subfolders
+          </label>
+        </div>
+      }
+
       @if (lfEmbedders.length > 1) {
         <div class="form-group">
           <label class="form-label" for="lf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
@@ -365,6 +378,17 @@
           <span class="form-label">Path:</span>
           <code class="sf-path-display">{{ sfAbsolutePath }}</code>
         </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="sf-recursive" title="When enabled, subdirectories of the chosen folder are scanned recursively. When disabled, only files directly inside the chosen folder are imported.">
+          <input
+            id="sf-recursive"
+            type="checkbox"
+            [(ngModel)]="sfRecursive"
+          />
+          Include subfolders
+        </label>
       </div>
 
       @if (sfEmbedders.length > 1) {

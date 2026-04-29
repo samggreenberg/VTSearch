@@ -533,6 +533,8 @@ def import_local_folder():
     embedder = (request.form.get("embedder") or "").strip()
     clipper = (request.form.get("clipper") or "").strip()
     converters = (request.form.get("converters") or "").strip()
+    recursive_raw = (request.form.get("recursive") or "true").strip().lower()
+    recursive = recursive_raw not in ("false", "0", "no", "off")
     clipper_params_raw = request.form.get("clipper_params") or ""
     clipper_params: dict | None = None
     if clipper_params_raw:
@@ -567,6 +569,7 @@ def import_local_folder():
     field_values: dict = {
         "path": str(upload_dir),
         "media_type": media_type,
+        "recursive": recursive,
     }
     if embedder:
         field_values["embedder"] = embedder

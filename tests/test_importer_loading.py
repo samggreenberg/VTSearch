@@ -865,5 +865,113 @@ class TestImporterResolveFileContract:
 
 
 # ---------------------------------------------------------------------------
+# Recursive vs. top-level folder scanning
+# ---------------------------------------------------------------------------
+
+
+class TestLoadDatasetRecursive:
+    """``load_dataset_from_folder`` honours the ``recursive`` flag."""
+
+    def _write_wav(self, path):
+        path.write_bytes(_make_wav_bytes())
+
+    def _make_fake_media_type(self):
+        import unittest.mock as mock
+
+        import numpy as np
+
+        mt = mock.MagicMock()
+        mt.type_id = "audio"
+        mt.file_extensions = ["*.wav"]
+        mt.load_media_data.return_value = {"duration": 1.0}
+        embedder = mock.MagicMock()
+        embedder.name = "clap"
+        embedder.media_type_id = "audio"
+        embedder._model = True
+        embedder.embed_media.return_value = np.zeros(3)
+        embedder.embed_media_bulk.side_effect = lambda medias: [np.zeros(3) for _ in medias]
+        mt._mock_embedder = embedder
+        return mt
+
+    def _patch_media_registry(self, mt):
+        import unittest.mock as mock
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
+        stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[mt._mock_embedder]))
+        return stack
+
+    def _seed_layout(self, tmp_path):
+        """Create ``tmp_path/top.wav`` and ``tmp_path/sub/nested.wav``."""
+        self._write_wav(tmp_path / "top.wav")
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        self._write_wav(sub / "nested.wav")
+
+    def test_recursive_default_includes_subfolders(self, tmp_path):
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        self._seed_layout(tmp_path)
+        medias: dict = {}
+        with self._patch_media_registry(self._make_fake_media_type()):
+            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
+
+        names = sorted(m["filename"] for m in medias.values())
+        assert names == ["sub/nested.wav", "top.wav"]
+
+    def test_recursive_false_only_top_level(self, tmp_path):
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        self._seed_layout(tmp_path)
+        medias: dict = {}
+        with self._patch_media_registry(self._make_fake_media_type()):
+            load_dataset_from_folder(
+                tmp_path, "audio", medias, on_progress=lambda *a: None, recursive=False
+            )
+
+        names = sorted(m["filename"] for m in medias.values())
+        assert names == ["top.wav"]
+
+    def test_chunked_recursive_false_only_top_level(self, tmp_path):
+        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+
+        self._seed_layout(tmp_path)
+        with self._patch_media_registry(self._make_fake_media_type()):
+            chunks = list(
+                load_dataset_from_folder_chunked(
+                    tmp_path,
+                    "audio",
+                    chunk_size=10,
+                    on_progress=lambda *a: None,
+                    recursive=False,
+                )
+            )
+
+        names = sorted(m["filename"] for chunk in chunks for m in chunk.values())
+        assert names == ["top.wav"]
+
+
+class TestServerFolderImporterRecursive:
+    """The ``server_folder`` importer exposes a ``recursive`` checkbox field."""
+
+    def test_field_present_default_true(self):
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        recursive = next((f for f in IMPORTER.fields if f.key == "recursive"), None)
+        assert recursive is not None
+        assert recursive.field_type == "checkbox"
+        assert str(recursive.default).lower() == "true"
+
+    def test_build_origin_records_recursive(self):
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        origin = IMPORTER.build_origin(
+            {"path": "/tmp/x", "media_type": "audio", "recursive": False}
+        )
+        assert origin["params"]["recursive"] == "false"
+
+
+# ---------------------------------------------------------------------------
 # Symlinked importer discovery
 # ---------------------------------------------------------------------------

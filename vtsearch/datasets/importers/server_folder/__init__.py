@@ -24,7 +24,15 @@ from typing import Any, Iterator
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
-from vtsearch.utils.paths import rglob_follow_symlinks
+from vtsearch.utils.paths import glob_top_level, rglob_follow_symlinks
+
+
+def _coerce_recursive(field_values: dict[str, Any]) -> bool:
+    """Parse the ``recursive`` field value as a bool; default ``True``."""
+    val = field_values.get("recursive", True)
+    if isinstance(val, bool):
+        return val
+    return str(val).lower() != "false"
 
 
 def _load_pdf_images(
@@ -32,6 +40,7 @@ def _load_pdf_images(
     medias: dict[int, dict[str, Any]],
     thin: bool = False,
     embedder_name: str = "",
+    recursive: bool = True,
 ) -> None:
     """Expand all PDFs in *folder* into per-page image medias.
 
@@ -40,7 +49,7 @@ def _load_pdf_images(
     maximum.  The ``origin`` is set to ``{"importer": "pdf", "params":
     {"path": ...}}`` so the provenance points back to the source document.
     """
-    pdf_files = sorted(rglob_follow_symlinks(folder, "*.pdf"))
+    pdf_files = sorted(rglob_follow_symlinks(folder, "*.pdf") if recursive else glob_top_level(folder, "*.pdf"))
     if not pdf_files:
         return
 
@@ -141,6 +150,7 @@ def _run_selected_converters(
         medias=medias,
         thin=thin,
         base_origin=base_origin,
+        recursive=_coerce_recursive(field_values),
     )
 
 
@@ -189,6 +199,17 @@ class ServerFolderDatasetImporter(DatasetImporter):
             field_type="folder",
             description="Absolute path to the directory containing media files.",
         ),
+        ImporterField(
+            key="recursive",
+            label="Include subfolders",
+            field_type="checkbox",
+            description=(
+                "When enabled, scan subdirectories recursively.  When disabled, "
+                "only files directly inside the chosen folder are imported."
+            ),
+            default="true",
+            required=False,
+        ),
     ]
 
     def __init__(self) -> None:
@@ -222,6 +243,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
         media_type = field_values.get("media_type", "audio")
         emb_name = field_values.get("embedder", "")
         skip_emb = bool(field_values.get("skip_embedding"))
+        recursive = _coerce_recursive(field_values)
         has_regular = True
         try:
             load_dataset_from_folder(
@@ -234,6 +256,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
                 skip_embedding=skip_emb,
+                recursive=recursive,
             )
         except ValueError:
             # No regular image files found — PDFs or converters may still produce output.
@@ -241,7 +264,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 raise
             has_regular = False
         if media_type == "image":
-            _load_pdf_images(folder, medias, thin=thin, embedder_name=emb_name)
+            _load_pdf_images(folder, medias, thin=thin, embedder_name=emb_name, recursive=recursive)
 
         # Run any user-selected converters.
         _run_selected_converters(folder, media_type, field_values, medias, thin=thin)
@@ -271,6 +294,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
         media_type = field_values.get("media_type", "audio")
         emb_name = field_values.get("embedder", "")
         skip_emb = bool(field_values.get("skip_embedding"))
+        recursive = _coerce_recursive(field_values)
         try:
             yield from load_dataset_from_folder_chunked(
                 folder,
@@ -282,13 +306,14 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
                 skip_embedding=skip_emb,
+                recursive=recursive,
             )
         except ValueError:
             if media_type != "image" and not field_values.get("converters"):
                 raise
         if media_type == "image":
             chunk: dict[int, dict[str, Any]] = {}
-            _load_pdf_images(folder, chunk, thin=thin)
+            _load_pdf_images(folder, chunk, thin=thin, recursive=recursive)
             if chunk:
                 yield chunk
         # Run converters and yield as a single chunk.
