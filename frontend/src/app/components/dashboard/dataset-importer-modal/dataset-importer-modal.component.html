@@ -1,9 +1,13 @@
-<vt-modal [title]="view === 'picker' ? 'Add Dataset' : view === 'demo' ? 'Load Demo Dataset' : view === 'server_folder' ? 'Import from Server Folder' : selectedImporter?.display_name || selectedImporter?.name || 'Import'" [open]="true" (closed)="close()">
+<vt-modal [title]="view === 'picker' ? 'Add Dataset' : view === 'demo' ? 'Load Demo Dataset' : view === 'server_folder' ? 'Import from Server Folder' : view === 'local_folder' ? 'Import from Local Folder' : selectedImporter?.display_name || selectedImporter?.name || 'Import'" [open]="true" (closed)="close()">
   @if (view === 'picker') {
     <div class="importer-picker">
       @if (importers.length === 0) {
         <p class="empty-state">Loading importers...</p>
       }
+      <button class="importer-card" (click)="openLocalFolderUploader()">
+        <span class="importer-name"><span class="importer-icon"><vt-icon type="folder"></vt-icon></span> Import from Local Folder</span>
+        <span class="importer-desc">Upload a folder of media files from this computer (your browser machine) to the server</span>
+      </button>
       <button class="importer-card" (click)="openServerFolderBrowser()">
         <span class="importer-name"><span class="importer-icon"><vt-icon type="server"></vt-icon></span> Import from Server Folder</span>
         <span class="importer-desc">Browse directories on the server and import media files</span>
@@ -210,6 +214,88 @@
           Importing...
         } @else {
           Import
+        }
+      </button>
+    </div>
+  }
+
+  @if (view === 'local_folder') {
+    <div class="local-folder-uploader">
+      <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to importer list">&larr; Back</button>
+
+      <p class="info-text">Pick a folder on <strong>this computer</strong> (the machine your browser is running on). Its contents will be uploaded to the server and embedded into a new dataset.</p>
+
+      <div class="form-group">
+        <label class="form-label" for="lf-media-type" title="The type of media files in the folder (audio, image, text, video, or document)">Media Type</label>
+        <select
+          id="lf-media-type"
+          class="form-select"
+          [ngModel]="lfMediaType"
+          (ngModelChange)="lfOnMediaTypeChange($event)"
+        >
+          @for (opt of lfMediaTypeOptions; track opt) {
+            <option [value]="opt">{{ getMediaTypeOptionLabel(opt) }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="lf-folder-input" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder</label>
+        <input
+          id="lf-folder-input"
+          type="file"
+          class="form-input"
+          webkitdirectory
+          directory
+          multiple
+          (change)="lfOnFolderSelected($event)"
+        />
+        @if (lfFiles.length > 0) {
+          <p class="info-text">
+            Selected <strong>{{ lfFiles.length }}</strong> file{{ lfFiles.length === 1 ? '' : 's' }}
+            @if (lfFolderName) { from <code>{{ lfFolderName }}</code> }
+          </p>
+        }
+      </div>
+
+      @if (lfEmbedders.length > 1) {
+        <div class="form-group">
+          <label class="form-label" for="lf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
+          <select
+            id="lf-embedder"
+            class="form-select"
+            [(ngModel)]="lfSelectedEmbedder"
+          >
+            @for (embedder of lfEmbedders; track embedder.name) {
+              <option [value]="embedder.name">{{ embedder.name }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      @if (lfClippers.length > 1) {
+        <div class="form-group">
+          <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+          <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('lf')" title="Choose a MediaClipper to segment or trim media before embedding">
+            Use MediaClipper: {{ clipperDisplayName('lf') }}
+          </button>
+        </div>
+      }
+
+      @if (lfError) {
+        <p class="error-text">{{ lfError }}</p>
+      }
+    </div>
+  }
+
+  @if (view === 'local_folder') {
+    <div class="form-actions" modal-footer>
+      <button class="btn btn--secondary" (click)="close()">Cancel</button>
+      <button class="btn btn--primary" (click)="lfSubmit()" [disabled]="lfSubmitting || lfFiles.length === 0">
+        @if (lfSubmitting) {
+          Uploading...
+        } @else {
+          Upload &amp; Import
         }
       </button>
     </div>

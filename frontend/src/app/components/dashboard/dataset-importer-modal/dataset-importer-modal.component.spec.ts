@@ -121,15 +121,54 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.view).toBe('picker');
   });
 
-  it('should render importer cards plus demo card', () => {
+  it('should render hardcoded local/server folder buttons plus importer cards plus demo card', () => {
     flushImporters();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     const cards = el.querySelectorAll('.importer-card');
-    // 2 importers + 1 demo card
-    expect(cards.length).toBe(3);
-    expect(cards[0].textContent).toContain('Load from Folder');
+    // 2 hardcoded buttons (Local Folder, Server Folder) + 1 demo card
+    // + 2 mock importers (folder, pickle)
+    expect(cards.length).toBe(5);
+    // Hardcoded Local Folder button always comes first so users see the
+    // browser-side option before the server-side one.
+    expect(cards[0].textContent).toContain('Import from Local Folder');
+    expect(cards[1].textContent).toContain('Import from Server Folder');
     expect(cards[2].textContent).toContain('Load Demo Dataset');
+  });
+
+  it('should switch to local_folder view when Import from Local Folder is clicked', () => {
+    flushImporters();
+    component.openLocalFolderUploader();
+    expect(component.view).toBe('local_folder');
+    // The first available media type from the (mock) folder importer is used
+    // as the default; for our mock that's whatever the field's default key is.
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+  });
+
+  it('should POST uploaded folder via importLocalFolder', () => {
+    flushImporters();
+    spyOn(component.importStarted, 'emit');
+
+    component.openLocalFolderUploader();
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+
+    const file = new File(['contents'], 'a.wav');
+    Object.defineProperty(file, 'webkitRelativePath', { value: 'mydir/a.wav' });
+    component.lfFiles = [file];
+    component.lfMediaType = 'audio';
+    component.lfSubmit();
+
+    const req = httpMock.expectOne('/api/dataset/import-local-folder');
+    expect(req.request.method).toBe('POST');
+    const body = req.request.body as FormData;
+    expect(body.get('media_type')).toBe('audio');
+    expect(body.getAll('files').length).toBe(1);
+    req.flush({ ok: true });
+
+    expect(component.lfSubmitting).toBeFalse();
+    expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
   it('should switch to form view on importer selection', () => {
