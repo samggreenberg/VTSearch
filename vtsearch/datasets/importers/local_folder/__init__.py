@@ -2,13 +2,14 @@
 
 The actual upload flow does **not** invoke this importer's ``run()``.
 Browsers POST a multipart body to ``/api/dataset/import-local-folder``,
-which streams the files to a server-side temp directory and then delegates
-to the regular :mod:`folder` importer for scanning and embedding.
+which streams the files to a server-side temp directory and then
+delegates to the regular :mod:`server_folder` importer for scanning
+and embedding.
 
 This importer exists so that the dataset-importer modal can be fully
 data-driven — the picker reads :attr:`display_name`, :attr:`description`,
 :attr:`icon`, and :attr:`picker_view` from the registry instead of
-hard-coding "Import from Local Folder" markup in HTML.
+hard-coding "Local Folder" markup in HTML.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ class LocalFolderDatasetImporter(DatasetImporter):
     """
 
     name = "local_folder"
-    display_name = "Import from Local Folder"
+    display_name = "Local Folder"
     description = "Upload a folder of media files from this computer (your browser machine) to the server"
     icon = "\U0001f4c1"  # 📁 — frontend renders as a folder icon
     ui_mode = "custom"
@@ -40,7 +41,7 @@ class LocalFolderDatasetImporter(DatasetImporter):
         raise NotImplementedError(
             "LocalFolderDatasetImporter is browser-only. "
             "POST to /api/dataset/import-local-folder for the upload flow, "
-            "or use the regular `folder` importer for server-side directories."
+            "or use the regular `server_folder` importer for server-side directories."
         )
 
 

@@ -123,7 +123,7 @@ def run_autodetect_with_importer(
     This is the importer-aware counterpart of :func:`run_autodetect`.
 
     Args:
-        importer_name: Registered name of the importer (e.g. ``"folder"``).
+        importer_name: Registered name of the importer (e.g. ``"server_folder"``).
         field_values: Mapping of importer field keys to their CLI values.
         detector_path: Path to a JSON file containing detector weights and threshold.
 

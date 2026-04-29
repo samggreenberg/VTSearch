@@ -413,7 +413,7 @@ class TestImporterCustomMetadataMD5:
 
     def test_folder_importer_custom_metadata_md5_passthrough(self, tmp_path):
         """The folder importer should pass custom_metadata_map through, including its MD5."""
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         cm_md5 = "folder_cm_" + "9" * 22
         _write_wav(tmp_path / "cm.wav")
@@ -686,7 +686,7 @@ class TestFolderImporterPassthrough:
     """Verify the folder importer wires content_vectors/content_md5s to load_dataset_from_folder."""
 
     def test_folder_importer_passes_content_vectors(self, tmp_path):
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         rng = np.random.default_rng(11)
         pre_vec = rng.standard_normal(8).astype(np.float32)
@@ -708,7 +708,7 @@ class TestFolderImporterPassthrough:
             IMPORTER.content_md5s = {}
 
     def test_folder_importer_passes_content_md5s(self, tmp_path):
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         pre_md5 = "e" * 32
         _write_wav(tmp_path / "g.wav")

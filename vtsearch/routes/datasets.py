@@ -522,9 +522,9 @@ def import_local_folder():
     if not files:
         return jsonify({"error": "No files uploaded"}), 400
 
-    importer = get_importer("folder")
+    importer = get_importer("server_folder")
     if importer is None:
-        return jsonify({"error": "folder importer not available"}), 500
+        return jsonify({"error": "server_folder importer not available"}), 500
 
     media_type = (request.form.get("media_type") or "").strip()
     if not media_type:
@@ -581,7 +581,7 @@ def import_local_folder():
     # are about to delete, so storing it on each media would be misleading
     # and ``can_reload_from_origin`` would (correctly) refuse to reload.
     origin = {
-        "importer": "folder",
+        "importer": "server_folder",
         "params": {"path": "<browser_upload>", "media_type": media_type},
     }
 
@@ -716,7 +716,7 @@ def load_dataset_folder():
     if not folder.exists() or not folder.is_dir():
         return jsonify({"error": "Invalid folder path"}), 400
 
-    importer = get_importer("folder")
+    importer = get_importer("server_folder")
     task_id = _run_importer_in_background(importer, {"path": str(folder), "media_type": media_type})
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 

@@ -220,7 +220,7 @@ class TestFindLabel:
             (label_folder / f"bad_{i}.wav").write_bytes(f"bad_audio_{i}".encode())
 
         label_origin = {
-            "importer": "folder",
+            "importer": "server_folder",
             "params": {"path": str(label_folder), "media_type": "audio"},
         }
 
@@ -284,7 +284,7 @@ class TestFindLabel:
                     "embedding": rng.standard_normal(512).astype(np.float32),
                     "md5": f"dataset_b_md5_{i}",
                     "filename": f"dataset_b_{i}.wav",
-                    "origin": {"importer": "folder", "params": {"path": "/other"}},
+                    "origin": {"importer": "server_folder", "params": {"path": "/other"}},
                     "origin_name": f"dataset_b_{i}.wav",
                 }
 
@@ -326,7 +326,7 @@ class TestFindLabel:
 
         # Labels point to a nonexistent folder — resolution will fail
         bad_origin = {
-            "importer": "folder",
+            "importer": "server_folder",
             "params": {"path": "/nonexistent/dataset_a"},
         }
         label_entries = [
@@ -401,7 +401,7 @@ class TestFindLabel:
                 assert diag["failed_resolution"] == 2
                 assert "sample_failures" in diag
                 assert len(diag["sample_failures"]) > 0
-                assert diag["sample_failures"][0]["origin"]["importer"] == "folder"
+                assert diag["sample_failures"][0]["origin"]["importer"] == "server_folder"
             finally:
                 medias.clear()
                 medias.update(saved)

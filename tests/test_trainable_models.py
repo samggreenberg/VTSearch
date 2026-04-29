@@ -1087,7 +1087,7 @@ class TestLoadModelCrossDatasetResolution:
         bad_md5 = hashlib.md5(b"shared_bad_content").hexdigest()
 
         label_origin = {
-            "importer": "folder",
+            "importer": "server_folder",
             "params": {"path": str(label_folder), "media_type": "audio"},
         }
 
@@ -1144,7 +1144,7 @@ class TestLoadModelCrossDatasetResolution:
                 "embedding": rng.standard_normal(512).astype(np.float32),
                 "md5": good_md5,  # same content as good_0.wav
                 "filename": "completely_different_name.wav",
-                "origin": {"importer": "folder", "params": {"path": "/other/place"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/other/place"}},
                 "origin_name": "completely_different_name.wav",
             }
             medias[2] = {
@@ -1153,7 +1153,7 @@ class TestLoadModelCrossDatasetResolution:
                 "embedding": rng.standard_normal(512).astype(np.float32),
                 "md5": bad_md5,  # same content as bad_0.wav
                 "filename": "another_file.wav",
-                "origin": {"importer": "folder", "params": {"path": "/other/place"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/other/place"}},
                 "origin_name": "another_file.wav",
             }
 
@@ -1183,7 +1183,7 @@ class TestLoadModelCrossDatasetResolution:
             {
                 "md5": "nonexistent_hash",
                 "label": "good",
-                "origin": {"importer": "folder", "params": {"path": "/gone"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/gone"}},
                 "origin_name": "shared_name.wav",
                 "filename": "shared_name.wav",
             },
@@ -1221,7 +1221,7 @@ class TestLoadModelCrossDatasetResolution:
                 "embedding": rng.standard_normal(512).astype(np.float32),
                 "md5": "totally_different_md5",
                 "filename": "shared_name.wav",
-                "origin": {"importer": "folder", "params": {"path": "/different"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/different"}},
                 "origin_name": "shared_name.wav",
             }
 
@@ -1251,11 +1251,11 @@ class TestRegisterModelFromLabelset:
 
     @staticmethod
     def _audio_origin(path: str = "/tmp/audio_clips"):
-        return {"importer": "folder", "params": {"path": path, "media_type": "audio"}}
+        return {"importer": "server_folder", "params": {"path": path, "media_type": "audio"}}
 
     @staticmethod
     def _image_origin(path: str = "/tmp/image_clips"):
-        return {"importer": "folder", "params": {"path": path, "media_type": "image"}}
+        return {"importer": "server_folder", "params": {"path": path, "media_type": "image"}}
 
     def test_creates_model_with_imported_labels(self, client, tmp_path):
         import app as app_module

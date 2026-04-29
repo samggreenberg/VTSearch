@@ -1,9 +1,10 @@
-"""Local-folder importer – scans a directory of media files and embeds them.
+"""Server-folder importer – scans a directory of media files and embeds them.
 
 When the media type is ``"image"``, PDF files (``*.pdf``) in the folder are
 also included: each page is rendered as a separate image and embedded with
-CLIP.  The origin for PDF-derived images is ``"pdf"`` (not ``"folder"``) so
-that provenance tracks back to the original document.
+CLIP.  The origin for PDF-derived images is ``"pdf"`` (not
+``"server_folder"``) so that provenance tracks back to the original
+document.
 
 Converter support
 -----------------
@@ -132,7 +133,7 @@ def _run_selected_converters(
 
     from vtsearch.converters.runner import run_converters_on_folder  # noqa: PLC0415
 
-    base_origin = {"importer": "folder", "params": {"path": str(folder), "media_type": media_type}}
+    base_origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": media_type}}
     run_converters_on_folder(
         folder_path=folder,
         converter_names=converter_names,
@@ -143,7 +144,7 @@ def _run_selected_converters(
     )
 
 
-class FolderDatasetImporter(DatasetImporter):
+class ServerFolderDatasetImporter(DatasetImporter):
     """Embed all media files found in a directory on the server's filesystem.
 
     The user supplies an absolute filesystem path (on the **server**) and
@@ -159,7 +160,7 @@ class FolderDatasetImporter(DatasetImporter):
 
     .. note::
        This importer reads files from the server's filesystem.  In the web
-       UI it powers the dedicated "Import from Server Folder" flow via
+       UI it powers the dedicated "Server Folder" flow via
        :attr:`picker_view` ``= "server_folder"``, which opens a server-side
        directory browser instead of the generic form.  For importing files
        from the **browser machine** (which may be different from the
@@ -169,8 +170,8 @@ class FolderDatasetImporter(DatasetImporter):
        this importer to do the actual scanning and embedding.
     """
 
-    name = "folder"
-    display_name = "Import from Server Folder"
+    name = "server_folder"
+    display_name = "Server Folder"
     description = "Browse the server's filesystem and import media files from a directory"
     icon = "\U0001f5a5"  # 🖥 — frontend renders as a server icon
     picker_view = "server_folder"
@@ -327,7 +328,7 @@ class FolderDatasetImporter(DatasetImporter):
 
     def origin_display(self, origin: dict[str, Any]) -> str:
         params = origin.get("params", {})
-        return f"folder:{params.get('path', '')}"
+        return f"server_folder:{params.get('path', '')}"
 
     def can_reload_from_origin(self, origin: dict[str, Any]) -> bool:
         params = origin.get("params", {})
@@ -349,4 +350,4 @@ class FolderDatasetImporter(DatasetImporter):
         return source.resolve_path(origin_name, filename)
 
 
-IMPORTER = FolderDatasetImporter()
+IMPORTER = ServerFolderDatasetImporter()

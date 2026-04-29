@@ -29,7 +29,7 @@ class DemoDatasetImporter(DatasetImporter):
     """
 
     name = "demo"
-    display_name = "Load Demo Dataset"
+    display_name = "Downloaded Demo Media"
     description = "Choose from a selection of pre-configured demo datasets"
     icon = "\U0001f5c4"  # 🗄 — frontend renders as a database icon
     ui_mode = "custom"

@@ -185,7 +185,7 @@ export class NewModelModalComponent implements OnInit {
         this.mediaSources = (res.importers || []).filter(
           (imp) =>
             imp.name === 'demo' ||
-            imp.name === 'folder' ||
+            imp.name === 'server_folder' ||
             (!imp['hidden_from_picker'] && imp.name !== 'combine_datasets'),
         );
       },
@@ -209,7 +209,7 @@ export class NewModelModalComponent implements OnInit {
         },
         error: () => { this.browseLoading = false; },
       });
-    } else if (source.name === 'folder') {
+    } else if (source.name === 'server_folder') {
       this.browseLoading = false;
       this.startFileBrowsing('folder', 'Saved Datasets');
     } else {

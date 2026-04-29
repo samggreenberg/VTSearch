@@ -84,6 +84,9 @@ export class DatasetImporterModalComponent implements OnInit {
   lfClipperParamValues: Record<string, number | string> = {};
   lfSubmitting = false;
   lfError = '';
+  /** ``"folder"`` opens a directory picker (Local Folder card),
+   *  ``"files"`` opens a multi-file picker (Local Files card). */
+  lfPickerKind: 'folder' | 'files' = 'folder';
 
   // Server folder browser state
   sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
@@ -133,7 +136,9 @@ export class DatasetImporterModalComponent implements OnInit {
    *  after these in registry order. */
   private static readonly PICKER_ORDER = [
     'local_folder',
-    'folder',
+    'local_files',
+    'server_folder',
+    'server_files',
     'demo',
     'combine_datasets',
   ];
@@ -162,7 +167,7 @@ export class DatasetImporterModalComponent implements OnInit {
   selectImporter(importer: ImporterInfo): void {
     // Dispatch to the dedicated view for importers that aren't a generic form.
     const pickerView = importer.picker_view || 'form';
-    if (pickerView === 'local_folder') {
+    if (pickerView === 'local_folder' || pickerView === 'local_files') {
       this.openLocalFolderUploader(importer);
       return;
     }
@@ -646,14 +651,18 @@ export class DatasetImporterModalComponent implements OnInit {
   // --- Local folder upload (files come from the browser machine) ---
 
   openLocalFolderUploader(importer?: ImporterInfo): void {
-    this.selectedImporter = importer || this.importers.find((i) => i.name === 'local_folder') || null;
+    const resolved = importer
+      || this.importers.find((i) => i.name === 'local_folder')
+      || null;
+    this.selectedImporter = resolved;
+    this.lfPickerKind = resolved?.name === 'local_files' ? 'files' : 'folder';
     this.view = 'local_folder';
     this.lfFiles = [];
     this.lfError = '';
     this.lfSubmitting = false;
 
-    // Reuse the folder importer's media_type options for consistency.
-    const folderImporter = this.importers.find((imp) => imp.name === 'folder');
+    // Reuse the server_folder importer's media_type options for consistency.
+    const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
     const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
     this.lfMediaTypeOptions = mtField?.options || [];
 
@@ -780,7 +789,7 @@ export class DatasetImporterModalComponent implements OnInit {
   // --- Server folder browser ---
 
   openServerFolderBrowser(importer?: ImporterInfo): void {
-    this.selectedImporter = importer || this.importers.find((i) => i.name === 'folder') || null;
+    this.selectedImporter = importer || this.importers.find((i) => i.name === 'server_folder') || null;
     this.view = 'server_folder';
     this.sfBrowsePath = '';
     this.sfBrowseRootPath = '';
@@ -789,7 +798,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfSubmitting = false;
 
     // Load media type options from the folder importer's fields
-    const folderImporter = this.importers.find((imp) => imp.name === 'folder');
+    const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
     const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
     this.sfMediaTypeOptions = mtField?.options || [];
 
@@ -1002,7 +1011,7 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
 
-    this.datasetsApi.runImporter('folder', params).subscribe({
+    this.datasetsApi.runImporter('server_folder', params).subscribe({
       next: () => {
         this.sfSubmitting = false;
         this.importStarted.emit();

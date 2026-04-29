@@ -117,7 +117,7 @@ def example_sort_origin():
     Example request::
 
         {
-            "origin": {"importer": "folder", "params": {"path": "/data/sounds"}},
+            "origin": {"importer": "server_folder", "params": {"path": "/data/sounds"}},
             "key": "subdir/audio123.wav"
         }
     """

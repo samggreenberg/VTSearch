@@ -143,7 +143,7 @@ class TestImportLocalFolderEndpoint:
         # Origin params should NOT leak the tempdir path; instead they mark
         # the dataset as a browser upload so reload-from-origin is naturally
         # disabled.
-        assert captured["origin"]["importer"] == "folder"
+        assert captured["origin"]["importer"] == "server_folder"
         assert captured["origin"]["params"]["path"] == "<browser_upload>"
         assert captured["origin"]["params"]["media_type"] == "audio"
 
@@ -198,19 +198,19 @@ class TestImportLocalFolderEndpoint:
 
 
 class TestFolderImporterPickerVisibility:
-    """The legacy ``folder`` importer now powers the dedicated
-    "Import from Server Folder" picker card via ``picker_view``.
+    """The renamed ``server_folder`` importer powers the dedicated
+    "Server Folder" picker card via ``picker_view``.
 
     The browser-side upload flow has its own ``local_folder`` importer
     that delegates to ``/api/dataset/import-local-folder`` (and from there
-    re-enters this importer on a server-side temp directory)."""
+    re-enters the ``server_folder`` importer on a server-side temp directory)."""
 
-    def test_folder_importer_uses_server_folder_picker_view(self, client):
+    def test_server_folder_importer_uses_server_folder_picker_view(self, client):
         resp = client.get("/api/dataset/all-importers")
         importers = {imp["name"]: imp for imp in resp.get_json()["importers"]}
-        assert importers["folder"]["picker_view"] == "server_folder"
-        # The folder card is part of the picker now (no longer hidden).
-        assert importers["folder"]["hidden_from_picker"] is False
+        assert importers["server_folder"]["picker_view"] == "server_folder"
+        # The Server Folder card is part of the picker (not hidden).
+        assert importers["server_folder"]["hidden_from_picker"] is False
 
     def test_local_folder_importer_card_exists(self, client):
         """The Local Folder card is registered as its own importer so the
@@ -224,10 +224,32 @@ class TestFolderImporterPickerVisibility:
         assert local["hidden_from_picker"] is False
         assert "browser" in local["description"].lower()
 
-    def test_folder_importer_description_mentions_server(self, client):
+    def test_local_files_importer_card_exists(self, client):
+        """The Local Files card mirrors Local Folder with a multi-file picker."""
+        resp = client.get("/api/dataset/all-importers")
+        importers = {imp["name"]: imp for imp in resp.get_json()["importers"]}
+        assert "local_files" in importers
+        local = importers["local_files"]
+        assert local["picker_view"] == "local_files"
+        assert local["hidden_from_picker"] is False
+        assert "browser" in local["description"].lower()
+
+    def test_server_files_importer_card_exists(self, client):
+        """The Server Files importer takes a paths file on the server."""
+        resp = client.get("/api/dataset/all-importers")
+        importers = {imp["name"]: imp for imp in resp.get_json()["importers"]}
+        assert "server_files" in importers
+        server = importers["server_files"]
+        assert server["picker_view"] == "form"
+        assert server["hidden_from_picker"] is False
+        keys = {f["key"] for f in server["fields"]}
+        assert "paths_file" in keys
+        assert "media_type" in keys
+
+    def test_server_folder_importer_description_mentions_server(self, client):
         resp = client.get("/api/dataset/importers")
         folder_imp = next(
-            i for i in resp.get_json()["importers"] if i["name"] == "folder"
+            i for i in resp.get_json()["importers"] if i["name"] == "server_folder"
         )
         # The user reading the picker should not be misled into thinking
         # this scans their browser machine.

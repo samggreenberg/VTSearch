@@ -11,15 +11,23 @@ describe('DatasetImporterModalComponent', () => {
   const mockImporters = [
     {
       name: 'local_folder',
-      display_name: 'Import from Local Folder',
+      display_name: 'Local Folder',
       description: 'Upload from this computer',
       icon: '📁',
       picker_view: 'local_folder',
       fields: [],
     },
     {
-      name: 'folder',
-      display_name: 'Import from Server Folder',
+      name: 'local_files',
+      display_name: 'Local Files',
+      description: 'Upload one or more individual files from this computer',
+      icon: '📄',
+      picker_view: 'local_files',
+      fields: [],
+    },
+    {
+      name: 'server_folder',
+      display_name: 'Server Folder',
       description: 'Browse the server filesystem',
       icon: '🖥',
       picker_view: 'server_folder',
@@ -29,8 +37,19 @@ describe('DatasetImporterModalComponent', () => {
       ],
     },
     {
+      name: 'server_files',
+      display_name: 'Server Files',
+      description: 'Read a text file of paths from the server',
+      icon: '🗂',
+      picker_view: 'form',
+      fields: [
+        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'images'] },
+        { key: 'paths_file', field_type: 'server_path', label: 'Paths File', required: true },
+      ],
+    },
+    {
       name: 'demo',
-      display_name: 'Load Demo Dataset',
+      display_name: 'Downloaded Demo Media',
       description: 'Pre-configured demo datasets',
       icon: '🗄',
       picker_view: 'demo',
@@ -148,7 +167,7 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should fetch importers on init', () => {
     flushImporters();
-    expect(component.importers.length).toBe(5);
+    expect(component.importers.length).toBe(7);
   });
 
   it('should start in picker view', () => {
@@ -161,14 +180,16 @@ describe('DatasetImporterModalComponent', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     const cards = el.querySelectorAll('.importer-card');
-    // 5 mock importers (local_folder, folder, demo, pickle, generic_form);
-    // none are marked hidden_from_picker.
-    expect(cards.length).toBe(5);
-    // Local Folder appears first (PICKER_ORDER), so users see the
-    // browser-side option before the server-side one.
-    expect(cards[0].textContent).toContain('Import from Local Folder');
-    expect(cards[1].textContent).toContain('Import from Server Folder');
-    expect(cards[2].textContent).toContain('Load Demo Dataset');
+    // 7 mock importers (local_folder, local_files, server_folder,
+    // server_files, demo, pickle, generic_form); none hidden.
+    expect(cards.length).toBe(7);
+    // PICKER_ORDER: local_folder, local_files, server_folder, server_files,
+    // demo, combine_datasets — so the local cards appear first.
+    expect(cards[0].textContent).toContain('Local Folder');
+    expect(cards[1].textContent).toContain('Local Files');
+    expect(cards[2].textContent).toContain('Server Folder');
+    expect(cards[3].textContent).toContain('Server Files');
+    expect(cards[4].textContent).toContain('Downloaded Demo Media');
   });
 
   it('should hide importers marked hidden_from_picker', () => {
@@ -193,13 +214,24 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should switch to server_folder view when the Server Folder card is clicked', () => {
     flushImporters();
-    const folder = component.importers.find((i) => i.name === 'folder')!;
+    const folder = component.importers.find((i) => i.name === 'server_folder')!;
     component.selectImporter(folder);
     expect(component.view).toBe('server_folder');
-    expect(component.selectedImporter?.name).toBe('folder');
+    expect(component.selectedImporter?.name).toBe('server_folder');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
     httpMock.expectOne(req => req.url === '/api/browse-media-files').flush({ directories: [], files: [], root_path: '' });
+  });
+
+  it('should switch to local_files view (multi-file picker) when the Local Files card is clicked', () => {
+    flushImporters();
+    const localFiles = component.importers.find((i) => i.name === 'local_files')!;
+    component.selectImporter(localFiles);
+    expect(component.view).toBe('local_folder'); // shared view
+    expect(component.lfPickerKind).toBe('files');
+    expect(component.selectedImporter?.name).toBe('local_files');
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
   });
 
   it('should switch to demo view when the Demo card is clicked', () => {

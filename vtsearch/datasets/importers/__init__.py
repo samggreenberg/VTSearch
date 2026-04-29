@@ -8,7 +8,7 @@ Usage::
 
     from vtsearch.datasets.importers import get_importer, list_importers
 
-    importer = get_importer("folder")
+    importer = get_importer("server_folder")
     for imp in list_importers():
         print(imp.name, imp.display_name)
 """
