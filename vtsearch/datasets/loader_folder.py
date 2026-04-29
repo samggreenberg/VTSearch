@@ -20,7 +20,14 @@ from vtsearch.datasets.loader import (
     _pop_md5_key,
     _streaming_md5,
 )
-from vtsearch.utils.paths import rglob_follow_symlinks
+from vtsearch.utils.paths import glob_top_level, rglob_follow_symlinks
+
+
+def _scan_files(folder: Path, pattern: str, recursive: bool) -> list[Path]:
+    """Find files in *folder* matching *pattern*, optionally recursing."""
+    if recursive:
+        return rglob_follow_symlinks(folder, pattern)
+    return glob_top_level(folder, pattern)
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +148,7 @@ def load_dataset_from_folder(
     embedder_name: str = "",
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
     skip_embedding: bool = False,
+    recursive: bool = True,
 ) -> None:
     """Generate a dataset in-place from a flat folder of media files.
 
@@ -242,11 +250,12 @@ def load_dataset_from_folder(
             finally:
                 emb._on_progress = original_cb
 
-    # Find all files of the specified media type (recursive so that
-    # subdirectory structures are preserved).
+    # Find all files of the specified media type.  Recursion descends into
+    # subdirectories (default); when disabled, only files directly inside
+    # ``folder_path`` are included.
     media_files = []
     for ext in mt.file_extensions:
-        media_files.extend(rglob_follow_symlinks(folder_path, ext))
+        media_files.extend(_scan_files(folder_path, ext, recursive))
 
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")
@@ -435,6 +444,7 @@ def load_dataset_from_folder_chunked(
     embedder_name: str = "",
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
     skip_embedding: bool = False,
+    recursive: bool = True,
 ) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield chunks of medias from a folder of media files.
 
@@ -505,11 +515,12 @@ def load_dataset_from_folder_chunked(
             finally:
                 emb._on_progress = original_cb
 
-    # Find all files of the specified media type (recursive so that
-    # subdirectory structures are preserved).
+    # Find all files of the specified media type.  Recursion descends into
+    # subdirectories (default); when disabled, only files directly inside
+    # ``folder_path`` are included.
     media_files: list[Path] = []
     for ext in mt.file_extensions:
-        media_files.extend(rglob_follow_symlinks(folder_path, ext))
+        media_files.extend(_scan_files(folder_path, ext, recursive))
 
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")

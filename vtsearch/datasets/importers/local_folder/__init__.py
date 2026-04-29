@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtsearch.datasets.importers.base import DatasetImporter
+from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 
 
 class LocalFolderDatasetImporter(DatasetImporter):
@@ -35,7 +35,20 @@ class LocalFolderDatasetImporter(DatasetImporter):
     icon = "\U0001f4c1"  # 📁 — frontend renders as a folder icon
     ui_mode = "custom"
     picker_view = "local_folder"
-    fields = []
+    fields = [
+        ImporterField(
+            key="recursive",
+            label="Include subfolders",
+            field_type="checkbox",
+            description=(
+                "When enabled, subfolders inside the chosen folder are also "
+                "uploaded and imported.  When disabled, only files directly "
+                "inside the chosen folder are imported."
+            ),
+            default="true",
+            required=False,
+        ),
+    ]
 
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         raise NotImplementedError(

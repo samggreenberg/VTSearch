@@ -87,6 +87,8 @@ export class DatasetImporterModalComponent implements OnInit {
   /** ``"folder"`` opens a directory picker (Local Folder card),
    *  ``"files"`` opens a multi-file picker (Local Files card). */
   lfPickerKind: 'folder' | 'files' = 'folder';
+  /** Whether subfolders inside the picked local folder are included. */
+  lfRecursive = true;
 
   // Server folder browser state
   sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
@@ -103,6 +105,8 @@ export class DatasetImporterModalComponent implements OnInit {
   sfClipperParams: ClipperParameter[] = [];
   sfClipperParamValues: Record<string, number | string> = {};
   sfSubmitting = false;
+  /** Whether subdirectories of the picked server folder are scanned. */
+  sfRecursive = true;
 
   // Clipper chooser modal state
   clipperChooserOpen = false;
@@ -648,6 +652,14 @@ export class DatasetImporterModalComponent implements OnInit {
     this.error = '';
   }
 
+  /** Read the ``recursive`` field's declared default ("true"/"false") from
+   *  the importer metadata; defaults to ``true`` when the field is absent. */
+  private readRecursiveDefault(importer: ImporterInfo | null): boolean {
+    const field = importer?.fields?.find((f) => f.key === 'recursive');
+    if (!field) return true;
+    return String(field.default ?? 'true').toLowerCase() !== 'false';
+  }
+
   // --- Local folder upload (files come from the browser machine) ---
 
   openLocalFolderUploader(importer?: ImporterInfo): void {
@@ -660,6 +672,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.lfFiles = [];
     this.lfError = '';
     this.lfSubmitting = false;
+    this.lfRecursive = this.readRecursiveDefault(resolved);
 
     // Reuse the server_folder importer's media_type options for consistency.
     const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
@@ -753,11 +766,29 @@ export class DatasetImporterModalComponent implements OnInit {
       this.lfError = 'Please select a folder to upload.';
       return;
     }
+
+    // When recursion is disabled in folder mode, drop any files that live
+    // inside subdirectories of the picked folder.  ``webkitRelativePath``
+    // looks like ``"top/file.wav"`` for top-level entries and
+    // ``"top/sub/file.wav"`` for files inside a subdirectory.
+    let filesToUpload = this.lfFiles;
+    if (this.lfPickerKind === 'folder' && !this.lfRecursive) {
+      filesToUpload = this.lfFiles.filter((file) => {
+        const rel = ((file as any).webkitRelativePath as string | undefined) || '';
+        return rel.split('/').length <= 2;
+      });
+      if (filesToUpload.length === 0) {
+        this.lfError = 'No files at the top level of the selected folder. Enable "Include subfolders" to import nested files.';
+        return;
+      }
+    }
+
     this.lfSubmitting = true;
     this.lfError = '';
 
     const formData = new FormData();
     formData.append('media_type', this.lfMediaType);
+    formData.append('recursive', this.lfRecursive ? 'true' : 'false');
     if (this.lfSelectedEmbedder) {
       formData.append('embedder', this.lfSelectedEmbedder);
     }
@@ -767,7 +798,7 @@ export class DatasetImporterModalComponent implements OnInit {
         formData.append('clipper_params', JSON.stringify(this.lfClipperParamValues));
       }
     }
-    for (const file of this.lfFiles) {
+    for (const file of filesToUpload) {
       const rel = (file as any).webkitRelativePath as string | undefined;
       // Browsers only populate webkitRelativePath when the input has the
       // `webkitdirectory` attribute; fall back to the file's own name.
@@ -796,6 +827,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfBrowseDirs = [];
     this.sfBrowseError = '';
     this.sfSubmitting = false;
+    this.sfRecursive = this.readRecursiveDefault(this.selectedImporter);
 
     // Load media type options from the folder importer's fields
     const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
@@ -1000,6 +1032,7 @@ export class DatasetImporterModalComponent implements OnInit {
     const params: Record<string, unknown> = {
       path: this.sfAbsolutePath,
       media_type: this.sfMediaType,
+      recursive: this.sfRecursive,
     };
     if (this.sfSelectedEmbedder) {
       params['embedder'] = this.sfSelectedEmbedder;
