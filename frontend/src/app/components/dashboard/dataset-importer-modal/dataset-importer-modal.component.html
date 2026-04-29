@@ -1,31 +1,23 @@
-<vt-modal [title]="view === 'picker' ? 'Add Dataset' : view === 'demo' ? 'Load Demo Dataset' : view === 'server_folder' ? 'Import from Server Folder' : view === 'local_folder' ? 'Import from Local Folder' : selectedImporter?.display_name || selectedImporter?.name || 'Import'" [open]="true" (closed)="close()">
+<vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
   @if (view === 'picker') {
     <div class="importer-picker">
-      @if (importers.length === 0) {
+      @if (orderedImporters.length === 0) {
         <p class="empty-state">Loading importers...</p>
       }
-      <button class="importer-card" (click)="openLocalFolderUploader()">
-        <span class="importer-name"><span class="importer-icon"><vt-icon type="folder"></vt-icon></span> Import from Local Folder</span>
-        <span class="importer-desc">Upload a folder of media files from this computer (your browser machine) to the server</span>
-      </button>
-      <button class="importer-card" (click)="openServerFolderBrowser()">
-        <span class="importer-name"><span class="importer-icon"><vt-icon type="server"></vt-icon></span> Import from Server Folder</span>
-        <span class="importer-desc">Browse directories on the server and import media files</span>
-      </button>
       @for (imp of orderedImporters; track imp.name) {
-        @if (imp.name === '_demo') {
-          <button class="importer-card demo-card" (click)="openDemoPicker()">
-            <span class="importer-name"><span class="importer-icon"><vt-icon type="database"></vt-icon></span> Load Demo Dataset</span>
-            <span class="importer-desc">Choose from a selection of pre-configured demo datasets</span>
-          </button>
-        } @else {
-          <button class="importer-card" [class.disabled]="imp['enabled'] === false" [disabled]="imp['enabled'] === false" (click)="selectImporter(imp)" [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : ''">
-            <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
-            @if (imp.description) {
-              <span class="importer-desc">{{ imp.description }}</span>
-            }
-          </button>
-        }
+        <button
+          class="importer-card"
+          [class.demo-card]="imp.picker_view === 'demo'"
+          [class.disabled]="imp['enabled'] === false"
+          [disabled]="imp['enabled'] === false"
+          (click)="selectImporter(imp)"
+          [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : ''"
+        >
+          <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
+          @if (imp.description) {
+            <span class="importer-desc">{{ imp.description }}</span>
+          }
+        </button>
       }
     </div>
   }

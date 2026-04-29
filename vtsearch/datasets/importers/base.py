@@ -60,6 +60,9 @@ ImporterField = PluginField
 __all__ = ["DatasetImporter", "ImporterField"]
 
 
+PickerView = str  # one of: "form", "demo", "server_folder", "local_folder"
+
+
 class DatasetImporter(PluginBase):
     """Abstract base class for dataset importers.
 
@@ -121,6 +124,20 @@ class DatasetImporter(PluginBase):
     icon: str = "\U0001f50c"
     #: Ordered list of fields the user must fill before importing.
     fields: list[PluginField]
+
+    #: Which view the dataset-importer modal opens when this card is clicked.
+    #: ``"form"`` (default) builds a generic form from :attr:`fields`.  The
+    #: other values trigger dedicated UI sections in the modal:
+    #:
+    #: - ``"local_folder"`` — browser-side folder upload widget.
+    #: - ``"server_folder"`` — server filesystem browser.
+    #: - ``"demo"`` — demo-dataset table.
+    picker_view: str = "form"
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["picker_view"] = self.picker_view
+        return d
 
     def __init__(self) -> None:
         #: Mapping of filename to pre-computed embedding vector.  Importers

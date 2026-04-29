@@ -159,20 +159,21 @@ class FolderDatasetImporter(DatasetImporter):
 
     .. note::
        This importer reads files from the server's filesystem.  In the web
-       UI it powers the dedicated "Import from Server Folder" flow.  For
-       importing files from the **browser machine** (which may be different
-       from the server), the frontend uses a separate upload endpoint that
-       streams files to a temporary directory and then delegates to this
-       importer — see ``/api/dataset/import-local-folder``.  The picker
-       therefore hides this importer's generic form so the two flows are
-       not confused.
+       UI it powers the dedicated "Import from Server Folder" flow via
+       :attr:`picker_view` ``= "server_folder"``, which opens a server-side
+       directory browser instead of the generic form.  For importing files
+       from the **browser machine** (which may be different from the
+       server), there is a separate :class:`LocalFolderDatasetImporter`
+       whose card delegates to ``/api/dataset/import-local-folder``; that
+       endpoint streams the upload to a temp directory and then re-enters
+       this importer to do the actual scanning and embedding.
     """
 
     name = "folder"
     display_name = "Import from Server Folder"
-    description = "Scan a directory on the server's filesystem for media files and embed them into a new dataset"
-    icon = "\U0001f4c2"
-    hidden_from_picker = True
+    description = "Browse the server's filesystem and import media files from a directory"
+    icon = "\U0001f5a5"  # 🖥 — frontend renders as a server icon
+    picker_view = "server_folder"
     fields = [
         ImporterField(
             key="media_type",

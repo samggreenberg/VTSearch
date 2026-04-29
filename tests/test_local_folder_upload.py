@@ -198,13 +198,31 @@ class TestImportLocalFolderEndpoint:
 
 
 class TestFolderImporterPickerVisibility:
-    """The legacy ``folder`` importer powers both new dedicated UI flows;
-    it must no longer surface as its own card in the picker."""
+    """The legacy ``folder`` importer now powers the dedicated
+    "Import from Server Folder" picker card via ``picker_view``.
 
-    def test_folder_importer_hidden_from_picker(self, client):
+    The browser-side upload flow has its own ``local_folder`` importer
+    that delegates to ``/api/dataset/import-local-folder`` (and from there
+    re-enters this importer on a server-side temp directory)."""
+
+    def test_folder_importer_uses_server_folder_picker_view(self, client):
         resp = client.get("/api/dataset/all-importers")
         importers = {imp["name"]: imp for imp in resp.get_json()["importers"]}
-        assert importers["folder"]["hidden_from_picker"] is True
+        assert importers["folder"]["picker_view"] == "server_folder"
+        # The folder card is part of the picker now (no longer hidden).
+        assert importers["folder"]["hidden_from_picker"] is False
+
+    def test_local_folder_importer_card_exists(self, client):
+        """The Local Folder card is registered as its own importer so the
+        picker can render it from the importer registry without hard-coded
+        markup."""
+        resp = client.get("/api/dataset/all-importers")
+        importers = {imp["name"]: imp for imp in resp.get_json()["importers"]}
+        assert "local_folder" in importers
+        local = importers["local_folder"]
+        assert local["picker_view"] == "local_folder"
+        assert local["hidden_from_picker"] is False
+        assert "browser" in local["description"].lower()
 
     def test_folder_importer_description_mentions_server(self, client):
         resp = client.get("/api/dataset/importers")

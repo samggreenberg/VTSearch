@@ -581,7 +581,8 @@ class TestImporterMetadata:
         data = resp.get_json()
         folder_imp = next((i for i in data["importers"] if i["name"] == "folder"), None)
         assert folder_imp is not None
-        assert folder_imp["icon"] == "\U0001f4c2"
+        # 🖥 — frontend renders this as a "server" icon (see icon.component.ts).
+        assert folder_imp["icon"] == "\U0001f5a5"
 
     def test_folder_importer_description(self, client):
         resp = client.get("/api/dataset/importers")

@@ -831,7 +831,10 @@ class TestImporterResolveFileContract:
     # Importers whose media origins always delegate resolution elsewhere:
     # - pickle: browser-uploaded files with no guaranteed server path
     # - combine_datasets: each element retains its source dataset's origin
-    _DELEGATE_IMPORTERS = {"pickle", "combine_datasets"}
+    # - local_folder: a UI-only placeholder; uploads are streamed to a temp
+    #   directory and re-imported through the regular `folder` importer,
+    #   so resolution for those medias goes through `folder.resolve_file`.
+    _DELEGATE_IMPORTERS = {"pickle", "combine_datasets", "local_folder"}
 
     def test_all_disk_importers_override_resolve_file(self):
         """Every registered importer that stores files must override resolve_file."""

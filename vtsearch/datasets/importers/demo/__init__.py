@@ -29,11 +29,11 @@ class DemoDatasetImporter(DatasetImporter):
     """
 
     name = "demo"
-    display_name = "Demo Dataset"
-    description = "Load a built-in demo dataset for exploring VTSearch"
-    icon = "\U0001f3ac"  # 🎬
+    display_name = "Load Demo Dataset"
+    description = "Choose from a selection of pre-configured demo datasets"
+    icon = "\U0001f5c4"  # 🗄 — frontend renders as a database icon
     ui_mode = "custom"
-    hidden_from_picker = True
+    picker_view = "demo"
 
     fields = [
         ImporterField(
