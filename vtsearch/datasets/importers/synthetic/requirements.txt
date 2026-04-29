@@ -1,0 +1,3 @@
+# Synthetic importer dependencies.
+# Pillow (image generation) and imageio-ffmpeg (video encoding) are already
+# pulled in by the image and video media types respectively.
