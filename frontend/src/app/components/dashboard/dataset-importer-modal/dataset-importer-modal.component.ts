@@ -116,25 +116,31 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
-  /** Desired picker order: folder, demo placeholder, then remaining importers. */
-  private static readonly PICKER_ORDER = ['folder', '_demo', 'combine_datasets'];
+  /**
+   * Desired picker order after any discovered extensions:
+   * Server Folder, Local Folder, Download Demo, Combine Existing.
+   * Placeholders (`_server_folder`, `_demo`) render hardcoded buttons.
+   */
+  private static readonly PICKER_ORDER = ['_server_folder', 'folder', '_demo', 'combine_datasets'];
+  private static readonly PICKER_PLACEHOLDERS = new Set(['_server_folder', '_demo']);
 
   get orderedImporters(): ImporterInfo[] {
-    const demoPlaceholder = { name: '_demo' } as ImporterInfo;
     const order = DatasetImporterModalComponent.PICKER_ORDER;
+    const placeholders = DatasetImporterModalComponent.PICKER_PLACEHOLDERS;
     const result: ImporterInfo[] = [];
-    for (const name of order) {
-      if (name === '_demo') {
-        result.push(demoPlaceholder);
-      } else {
-        const imp = this.importers.find((i) => i.name === name);
-        if (imp) result.push(imp);
-      }
-    }
-    // Append any importers not in the explicit order
+    // Discovered extensions (importers not in the explicit order) come first
     for (const imp of this.importers) {
       if (!order.includes(imp.name)) {
         result.push(imp);
+      }
+    }
+    // Then the standard picker entries in the prescribed order
+    for (const name of order) {
+      if (placeholders.has(name)) {
+        result.push({ name } as ImporterInfo);
+      } else {
+        const imp = this.importers.find((i) => i.name === name);
+        if (imp) result.push(imp);
       }
     }
     return result;

@@ -129,7 +129,7 @@ describe('DatasetImporterModalComponent', () => {
     // 2 importers + 1 demo card
     expect(cards.length).toBe(3);
     expect(cards[0].textContent).toContain('Load from Folder');
-    expect(cards[2].textContent).toContain('Load Demo Dataset');
+    expect(cards[2].textContent).toContain('Download Demo Data');
   });
 
   it('should switch to form view on importer selection', () => {
