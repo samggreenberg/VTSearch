@@ -13,7 +13,7 @@ const KNOWN_TYPES = new Set([
   'check', 'warning', 'x-circle', 'info', 'file', 'lightbulb',
   'list', 'grid', 'cursor-click', 'cursor-hover',
   'palette', 'sort-descending', 'steering-wheel', 'cloud-upload',
-  'thumbs-up', 'thumbs-down',
+  'thumbs-up', 'thumbs-down', 'factory',
 ]);
 
 function emojiToType(icon: string): string {
@@ -34,6 +34,8 @@ function emojiToType(icon: string): string {
     '\uD83D\uDCE4': 'upload',      // 📤
     // Actions & misc
     '\uD83C\uDF93': 'graduation',  // 🎓
+    '\uD83C\uDFED': 'factory',     // 🏭
+    '\uD83E\uDDEA': 'factory',     // 🧪 — alias for synthetic-data factory
     '\uD83D\uDDC4': 'database',     // 🗄
     '\u2B06': 'arrow-up',          // ⬆
     '\uD83D\uDD00': 'shuffle',     // 🔀
@@ -160,6 +162,9 @@ function emojiToType(icon: string): string {
       }
       @case ('thumbs-down') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+      }
+      @case ('factory') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>
       }
     } }
   `,

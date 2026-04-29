@@ -50,6 +50,7 @@ _TEST_GROUPS = {
         "test_duplicates",
         "test_origin_labelset",
         "test_extension_scaffolds",
+        "test_synthetic_importer",
         "test_thin_loading",
         "test_chunked_loading",
         "test_memory_errors",
