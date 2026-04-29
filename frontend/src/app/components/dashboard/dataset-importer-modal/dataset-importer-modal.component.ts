@@ -8,7 +8,7 @@ import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/cl
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
 
-type ModalView = 'picker' | 'form' | 'demo' | 'server_folder';
+type ModalView = 'picker' | 'form' | 'demo' | 'server_folder' | 'local_folder';
 
 @Component({
   selector: 'vt-dataset-importer-modal',
@@ -72,6 +72,19 @@ export class DatasetImporterModalComponent implements OnInit {
     tableEl: HTMLTableElement;
   } | null = null;
 
+  // Local folder upload state — files come from the browser machine
+  lfFiles: File[] = [];
+  lfMediaType = '';
+  lfMediaTypeOptions: string[] = [];
+  lfEmbedders: EmbedderInfo[] = [];
+  lfSelectedEmbedder = '';
+  lfClippers: ClipperInfo[] = [];
+  lfSelectedClipper = '';
+  lfClipperParams: ClipperParameter[] = [];
+  lfClipperParamValues: Record<string, number | string> = {};
+  lfSubmitting = false;
+  lfError = '';
+
   // Server folder browser state
   sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
   sfBrowsePath = '';
@@ -90,8 +103,8 @@ export class DatasetImporterModalComponent implements OnInit {
 
   // Clipper chooser modal state
   clipperChooserOpen = false;
-  /** Which context opened the chooser: 'form' | 'demo' | 'sf' */
-  clipperChooserContext: 'form' | 'demo' | 'sf' = 'form';
+  /** Which context opened the chooser: 'form' | 'demo' | 'sf' | 'lf' */
+  clipperChooserContext: 'form' | 'demo' | 'sf' | 'lf' = 'form';
   clipperChooserClippers: ClipperInfo[] = [];
 
   constructor(private datasetsApi: DatasetsApiService) {}
@@ -116,8 +129,8 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
-  /** Desired picker order: folder, demo placeholder, then remaining importers. */
-  private static readonly PICKER_ORDER = ['folder', '_demo', 'combine_datasets'];
+  /** Desired picker order: demo placeholder, then remaining importers. */
+  private static readonly PICKER_ORDER = ['_demo', 'combine_datasets'];
 
   get orderedImporters(): ImporterInfo[] {
     const demoPlaceholder = { name: '_demo' } as ImporterInfo;
@@ -608,6 +621,139 @@ export class DatasetImporterModalComponent implements OnInit {
     this.error = '';
   }
 
+  // --- Local folder upload (files come from the browser machine) ---
+
+  openLocalFolderUploader(): void {
+    this.view = 'local_folder';
+    this.lfFiles = [];
+    this.lfError = '';
+    this.lfSubmitting = false;
+
+    // Reuse the folder importer's media_type options for consistency.
+    const folderImporter = this.importers.find((imp) => imp.name === 'folder');
+    const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
+    this.lfMediaTypeOptions = mtField?.options || [];
+
+    const guessedFolder = this.toFolderName(this.guessedMediaType);
+    if (guessedFolder && this.lfMediaTypeOptions.includes(guessedFolder)) {
+      this.lfMediaType = guessedFolder;
+    } else {
+      this.lfMediaType = mtField?.default || this.lfMediaTypeOptions[0] || 'audio';
+    }
+
+    this.lfLoadEmbedders(this.lfMediaType);
+    this.lfLoadClippers(this.lfMediaType);
+  }
+
+  lfOnFolderSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files) {
+      this.lfFiles = [];
+      return;
+    }
+    this.lfFiles = Array.from(input.files);
+    this.lfError = '';
+  }
+
+  lfOnMediaTypeChange(mediaType: string): void {
+    this.lfMediaType = mediaType;
+    this.lfLoadEmbedders(mediaType);
+    this.lfLoadClippers(mediaType);
+  }
+
+  private lfLoadEmbedders(mediaType: string): void {
+    if (!mediaType) {
+      this.lfEmbedders = [];
+      this.lfSelectedEmbedder = '';
+      return;
+    }
+    this.datasetsApi.getEmbedders(mediaType).subscribe({
+      next: (embedders) => {
+        this.lfEmbedders = embedders;
+        const guessedMatch = this.guessedMediaEmbedder
+          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
+          : null;
+        this.lfSelectedEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
+      },
+    });
+  }
+
+  private lfLoadClippers(mediaType: string): void {
+    if (!mediaType) {
+      this.lfClippers = [];
+      this.lfSelectedClipper = '';
+      return;
+    }
+    this.datasetsApi.getClippers(mediaType).subscribe({
+      next: (clippers) => {
+        this.lfClippers = clippers;
+        this.lfSelectedClipper = clippers.length > 0 ? clippers[0].name : '';
+        this.lfResetClipperParams();
+      },
+    });
+  }
+
+  lfOnClipperChange(clipperName: string): void {
+    this.lfSelectedClipper = clipperName;
+    this.lfResetClipperParams();
+  }
+
+  private lfResetClipperParams(): void {
+    const clipper = this.lfClippers.find((c) => c.name === this.lfSelectedClipper);
+    this.lfClipperParams = clipper?.parameters || [];
+    this.lfClipperParamValues = {};
+    for (const param of this.lfClipperParams) {
+      this.lfClipperParamValues[param.key] = param.default;
+    }
+  }
+
+  /** First selected file's webkitRelativePath top-level segment, for display. */
+  get lfFolderName(): string {
+    if (this.lfFiles.length === 0) return '';
+    const rel = (this.lfFiles[0] as any).webkitRelativePath as string | undefined;
+    if (!rel) return '';
+    const idx = rel.indexOf('/');
+    return idx >= 0 ? rel.slice(0, idx) : rel;
+  }
+
+  lfSubmit(): void {
+    if (this.lfFiles.length === 0) {
+      this.lfError = 'Please select a folder to upload.';
+      return;
+    }
+    this.lfSubmitting = true;
+    this.lfError = '';
+
+    const formData = new FormData();
+    formData.append('media_type', this.lfMediaType);
+    if (this.lfSelectedEmbedder) {
+      formData.append('embedder', this.lfSelectedEmbedder);
+    }
+    if (this.lfSelectedClipper) {
+      formData.append('clipper', this.lfSelectedClipper);
+      if (this.lfClipperParams.length > 0 && Object.keys(this.lfClipperParamValues).length > 0) {
+        formData.append('clipper_params', JSON.stringify(this.lfClipperParamValues));
+      }
+    }
+    for (const file of this.lfFiles) {
+      const rel = (file as any).webkitRelativePath as string | undefined;
+      // Browsers only populate webkitRelativePath when the input has the
+      // `webkitdirectory` attribute; fall back to the file's own name.
+      formData.append('files', file, rel && rel.length > 0 ? rel : file.name);
+    }
+
+    this.datasetsApi.importLocalFolder(formData).subscribe({
+      next: () => {
+        this.lfSubmitting = false;
+        this.importStarted.emit();
+      },
+      error: (err) => {
+        this.lfSubmitting = false;
+        this.lfError = err.error?.error || 'Upload failed';
+      },
+    });
+  }
+
   // --- Server folder browser ---
 
   openServerFolderBrowser(): void {
@@ -735,14 +881,16 @@ export class DatasetImporterModalComponent implements OnInit {
 
   // --- Clipper chooser ---
 
-  openClipperChooser(context: 'form' | 'demo' | 'sf'): void {
+  openClipperChooser(context: 'form' | 'demo' | 'sf' | 'lf'): void {
     this.clipperChooserContext = context;
     if (context === 'form') {
       this.clipperChooserClippers = this.availableClippers;
     } else if (context === 'demo') {
       this.clipperChooserClippers = this.demoClippers;
-    } else {
+    } else if (context === 'sf') {
       this.clipperChooserClippers = this.sfClippers;
+    } else {
+      this.clipperChooserClippers = this.lfClippers;
     }
     this.clipperChooserOpen = true;
   }
@@ -757,9 +905,12 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedDemoClipper = selection.name;
       this.updateDemoStatuses();
       this.refetchDemoStatuses(this.selectedDemoEmbedder, this.selectedDemoClipper);
-    } else {
+    } else if (ctx === 'sf') {
       this.sfSelectedClipper = selection.name;
       this.sfClipperParamValues = { ...selection.params };
+    } else {
+      this.lfSelectedClipper = selection.name;
+      this.lfClipperParamValues = { ...selection.params };
     }
   }
 
@@ -777,14 +928,17 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedDemoClipper = defaultName;
       this.updateDemoStatuses();
       this.refetchDemoStatuses(this.selectedDemoEmbedder, this.selectedDemoClipper);
-    } else {
+    } else if (ctx === 'sf') {
       this.sfSelectedClipper = defaultName;
       this.sfResetClipperParams();
+    } else {
+      this.lfSelectedClipper = defaultName;
+      this.lfResetClipperParams();
     }
   }
 
   /** Display name for the currently selected clipper in a given context. */
-  clipperDisplayName(context: 'form' | 'demo' | 'sf'): string {
+  clipperDisplayName(context: 'form' | 'demo' | 'sf' | 'lf'): string {
     let clippers: ClipperInfo[];
     let selected: string;
     if (context === 'form') {
@@ -793,9 +947,12 @@ export class DatasetImporterModalComponent implements OnInit {
     } else if (context === 'demo') {
       clippers = this.demoClippers;
       selected = this.selectedDemoClipper;
-    } else {
+    } else if (context === 'sf') {
       clippers = this.sfClippers;
       selected = this.sfSelectedClipper;
+    } else {
+      clippers = this.lfClippers;
+      selected = this.lfSelectedClipper;
     }
     const clipper = clippers.find((c) => c.name === selected);
     if (!clipper) return 'None';

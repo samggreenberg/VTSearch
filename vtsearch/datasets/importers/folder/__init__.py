@@ -144,10 +144,11 @@ def _run_selected_converters(
 
 
 class FolderDatasetImporter(DatasetImporter):
-    """Embed all media files found in a local directory into a dataset.
+    """Embed all media files found in a directory on the server's filesystem.
 
-    The user supplies an absolute filesystem path and selects the media type
-    so that the correct file extensions are matched during the scan.
+    The user supplies an absolute filesystem path (on the **server**) and
+    selects the media type so that the correct file extensions are matched
+    during the scan.
 
     When the media type is ``"image"``, any ``*.pdf`` files in the folder
     are also processed: each page is rendered as a separate image.
@@ -155,12 +156,23 @@ class FolderDatasetImporter(DatasetImporter):
     When converters are selected (via the ``converters`` field value), files
     matching each converter's source type are also scanned, converted, and
     added to the dataset.
+
+    .. note::
+       This importer reads files from the server's filesystem.  In the web
+       UI it powers the dedicated "Import from Server Folder" flow.  For
+       importing files from the **browser machine** (which may be different
+       from the server), the frontend uses a separate upload endpoint that
+       streams files to a temporary directory and then delegates to this
+       importer — see ``/api/dataset/import-local-folder``.  The picker
+       therefore hides this importer's generic form so the two flows are
+       not confused.
     """
 
     name = "folder"
-    display_name = "Import from Local Folder"
-    description = "Scan a directory on this machine for media files and embed them into a new dataset"
+    display_name = "Import from Server Folder"
+    description = "Scan a directory on the server's filesystem for media files and embed them into a new dataset"
     icon = "\U0001f4c2"
+    hidden_from_picker = True
     fields = [
         ImporterField(
             key="media_type",
