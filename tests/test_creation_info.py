@@ -64,9 +64,9 @@ class TestBuildCliArgs:
 
 class TestRealImporterCliArgs:
     def test_folder_importer_cli_args(self):
-        imp = get_importer("folder")
+        imp = get_importer("server_folder")
         args = imp.build_cli_args({"media_type": "audio", "path": "/my/folder"})
-        assert args == "--importer folder --media-type audio --path /my/folder"
+        assert args == "--importer server_folder --media-type audio --path /my/folder"
 
     def test_http_archive_importer_cli_args(self):
         imp = get_importer("http_archive")

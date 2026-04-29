@@ -99,7 +99,7 @@ class TestCollapseDuplicates:
 
     def test_members_list_contains_all_duplicates(self):
         media_dict = {
-            1: _make_media(1, md5="same", filename="a.wav", origin_importer="folder"),
+            1: _make_media(1, md5="same", filename="a.wav", origin_importer="server_folder"),
             2: _make_media(2, md5="same", filename="b.wav", origin_importer="http_archive"),
             3: _make_media(3, md5="same", filename="c.wav", origin_importer="demo"),
         }
@@ -110,7 +110,7 @@ class TestCollapseDuplicates:
         assert members[1]["filename"] == "b.wav"
         assert members[2]["filename"] == "c.wav"
         # Each member retains its original origin
-        assert members[0]["origin"]["importer"] == "folder"
+        assert members[0]["origin"]["importer"] == "server_folder"
         assert members[1]["origin"]["importer"] == "http_archive"
         assert members[2]["origin"]["importer"] == "demo"
 
@@ -220,13 +220,13 @@ class TestLabelExportExpandsDupes:
             "params": {"name": "a.wav"},
             "members": [
                 {
-                    "origin": {"importer": "folder", "params": {"path": "/data"}},
+                    "origin": {"importer": "server_folder", "params": {"path": "/data"}},
                     "origin_name": "a.wav",
                     "filename": "a.wav",
                     "category": "cat1",
                 },
                 {
-                    "origin": {"importer": "folder", "params": {"path": "/data"}},
+                    "origin": {"importer": "server_folder", "params": {"path": "/data"}},
                     "origin_name": "b.wav",
                     "filename": "b.wav",
                     "category": "cat2",

@@ -441,16 +441,16 @@ class TestBaseImporterChunkedDefault:
 
 class TestFolderImporterChunked:
     def test_supports_chunked(self):
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
 
-        assert FolderDatasetImporter().supports_chunked is True
+        assert ServerFolderDatasetImporter().supports_chunked is True
 
     def test_run_chunked(self, tmp_path):
         for i in range(4):
             _make_wav_file(tmp_path, f"s_{i}.wav", frequency=440.0 + i * 10)
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
 
-        imp = FolderDatasetImporter()
+        imp = ServerFolderDatasetImporter()
         chunks = list(imp.run_chunked({"path": str(tmp_path), "media_type": "audio"}, chunk_size=2, thin=True))
         assert len(chunks) == 2
         for chunk in chunks:
@@ -458,17 +458,17 @@ class TestFolderImporterChunked:
 
     def test_run_chunked_cli(self, tmp_path):
         _make_wav_file(tmp_path, "test.wav")
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
 
-        imp = FolderDatasetImporter()
+        imp = ServerFolderDatasetImporter()
         chunks = list(imp.run_chunked_cli({"path": str(tmp_path), "media_type": "audio"}, chunk_size=10, thin=True))
         assert len(chunks) == 1
         assert len(chunks[0]) == 1
 
     def test_run_chunked_cli_missing_folder(self, tmp_path):
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
 
-        imp = FolderDatasetImporter()
+        imp = ServerFolderDatasetImporter()
         try:
             list(imp.run_chunked_cli({"path": "/nonexistent/path", "media_type": "audio"}, chunk_size=10))
             assert False, "Expected FileNotFoundError"

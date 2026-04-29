@@ -266,9 +266,9 @@ class TestThinImporters:
 
     def test_folder_importer_thin(self, tmp_path):
         _make_wav_file(tmp_path, "test.wav")
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
 
-        importer = FolderDatasetImporter()
+        importer = ServerFolderDatasetImporter()
         medias: dict[int, dict[str, Any]] = {}
         importer.run({"path": str(tmp_path), "media_type": "audio"}, medias, thin=True)
         assert len(medias) > 0
@@ -277,9 +277,9 @@ class TestThinImporters:
 
     def test_folder_importer_run_cli_thin(self, tmp_path):
         _make_wav_file(tmp_path, "test.wav")
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
 
-        importer = FolderDatasetImporter()
+        importer = ServerFolderDatasetImporter()
         medias: dict[int, dict[str, Any]] = {}
         importer.run_cli({"path": str(tmp_path), "media_type": "audio"}, medias, thin=True)
         assert len(medias) > 0

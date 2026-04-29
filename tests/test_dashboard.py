@@ -60,10 +60,10 @@ class TestDashboardDatasetInfo:
         first_key = next(iter(medias))
         saved_origin = medias[first_key].get("origin")
         try:
-            medias[first_key]["origin"] = {"importer": "folder", "params": {"path": "/data/sounds"}}
+            medias[first_key]["origin"] = {"importer": "server_folder", "params": {"path": "/data/sounds"}}
             resp = client.get("/api/dashboard/dataset-info")
             data = resp.get_json()
-            assert data["origin"] == "folder:/data/sounds"
+            assert data["origin"] == "server_folder:/data/sounds"
         finally:
             if saved_origin is not None:
                 medias[first_key]["origin"] = saved_origin
@@ -306,7 +306,7 @@ class TestDashboardDatasetRegistryColumns:
 
     def test_dataset_registry_includes_source(self, client):
         """Registered datasets include a source dict for the Details column."""
-        src = {"importer": "folder", "params": {"path": "/data/images"}}
+        src = {"importer": "server_folder", "params": {"path": "/data/images"}}
         register_dataset(
             name="src-ds",
             media_type="image",

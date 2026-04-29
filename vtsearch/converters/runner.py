@@ -63,8 +63,8 @@ def run_converters_on_folder(
             bytes directly.
         on_progress: Optional progress callback.
         base_origin: The origin dict of the parent import (e.g.
-            ``{"importer": "folder", "params": {"path": "..."}}``) used
-            to record provenance.
+            ``{"importer": "server_folder", "params": {"path": "..."}}``)
+            used to record provenance.
     """
     if not converter_names:
         return

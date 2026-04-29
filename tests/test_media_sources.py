@@ -248,7 +248,7 @@ class TestGetSourceForOrigin:
     def test_folder_origin(self, tmp_path):
         folder = tmp_path / "data"
         folder.mkdir()
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         source = get_source_for_origin(origin)
         assert source is not None
         assert isinstance(source, LocalFolderSource)
@@ -275,7 +275,7 @@ class TestGetSourceForOrigin:
         assert get_source_for_origin(None) is None
 
     def test_empty_path_returns_none(self):
-        origin = {"importer": "folder", "params": {"path": ""}}
+        origin = {"importer": "server_folder", "params": {"path": ""}}
         assert get_source_for_origin(origin) is None
 
     def test_empty_url_returns_none(self):
@@ -292,9 +292,9 @@ class TestFolderImporterDelegatesToSource:
         folder.mkdir()
         (folder / "clip.wav").write_bytes(b"audio")
 
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = IMPORTER.resolve_file(origin, origin_name="clip.wav")
         assert result == folder / "clip.wav"
 
@@ -304,9 +304,9 @@ class TestFolderImporterDelegatesToSource:
         sub.mkdir(parents=True)
         (sub / "item.wav").write_bytes(b"data")
 
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = IMPORTER.resolve_file(origin, origin_name="cat/item.wav")
         assert result == sub / "item.wav"
 
@@ -323,7 +323,7 @@ class TestResolverUsesSource:
 
         from vtsearch.models.resolver import resolve_file_from_origin
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = resolve_file_from_origin(origin, origin_name="clip.wav")
         assert result == folder / "clip.wav"
 
@@ -346,7 +346,7 @@ class TestIngestViaSource:
 
         from vtsearch.datasets.ingest import _ingest_via_source
 
-        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "audio"}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": "audio"}}
         entries = [
             {"origin": origin, "origin_name": "good.wav", "md5": "", "label": "good", "filename": "good.wav"},
             {"origin": origin, "origin_name": "bad.wav", "md5": "", "label": "bad", "filename": "bad.wav"},
@@ -379,7 +379,7 @@ class TestIngestViaSource:
 
         from vtsearch.datasets.ingest import _ingest_via_source
 
-        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "audio"}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": "audio"}}
         entries = [
             {"origin": origin, "origin_name": "clip.wav", "md5": "", "label": "good", "filename": "clip.wav"},
         ]
@@ -416,7 +416,7 @@ class TestExampleSortOriginEndpoint:
     def test_missing_key(self, client):
         resp = client.post(
             "/api/example-sort-origin",
-            json={"origin": {"importer": "folder", "params": {"path": "/tmp"}}},
+            json={"origin": {"importer": "server_folder", "params": {"path": "/tmp"}}},
         )
         assert resp.status_code == 400
         assert "key" in resp.get_json()["error"].lower()
@@ -438,7 +438,7 @@ class TestExampleSortOriginEndpoint:
         resp = client.post(
             "/api/example-sort-origin",
             json={
-                "origin": {"importer": "folder", "params": {"path": str(folder)}},
+                "origin": {"importer": "server_folder", "params": {"path": str(folder)}},
                 "key": "nonexistent.wav",
             },
         )
@@ -459,7 +459,7 @@ class TestExampleSortOriginEndpoint:
         resp = client.post(
             "/api/example-sort-origin",
             json={
-                "origin": {"importer": "folder", "params": {"path": str(folder)}},
+                "origin": {"importer": "server_folder", "params": {"path": str(folder)}},
                 "key": "example.wav",
             },
         )
