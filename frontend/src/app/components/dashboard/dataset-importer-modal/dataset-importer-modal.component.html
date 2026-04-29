@@ -5,15 +5,17 @@
         <p class="empty-state">Loading importers...</p>
       }
       @for (imp of orderedImporters; track imp.name) {
-        @if (imp.name === '_server_folder') {
-          <button class="importer-card" (click)="openServerFolderBrowser()">
-            <span class="importer-name"><span class="importer-icon"><vt-icon type="server"></vt-icon></span> Import from Server Folder</span>
-            <span class="importer-desc">Browse directories on the server and import media files</span>
-          </button>
-        } @else if (imp.name === '_demo') {
+        @if (imp.name === '_demo') {
           <button class="importer-card demo-card" (click)="openDemoPicker()">
             <span class="importer-name"><span class="importer-icon"><vt-icon type="globe"></vt-icon></span> Download Demo Data</span>
             <span class="importer-desc">Choose from a selection of pre-configured demo datasets</span>
+          </button>
+        } @else if (imp.name === 'server_folder') {
+          <button class="importer-card" (click)="openServerFolderBrowser(imp)">
+            <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
+            @if (imp.description) {
+              <span class="importer-desc">{{ imp.description }}</span>
+            }
           </button>
         } @else {
           <button class="importer-card" [class.disabled]="imp['enabled'] === false" [disabled]="imp['enabled'] === false" (click)="selectImporter(imp)" [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : ''">

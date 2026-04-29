@@ -119,14 +119,13 @@ export class DatasetImporterModalComponent implements OnInit {
   /**
    * Desired picker order after any discovered extensions:
    * Server Folder, Local Folder, Download Demo, Combine Existing.
-   * Placeholders (`_server_folder`, `_demo`) render hardcoded buttons.
+   * The `_demo` entry is a synthetic card that opens the demo picker rather
+   * than routing through a single backend importer.
    */
-  private static readonly PICKER_ORDER = ['_server_folder', 'folder', '_demo', 'combine_datasets'];
-  private static readonly PICKER_PLACEHOLDERS = new Set(['_server_folder', '_demo']);
+  private static readonly PICKER_ORDER = ['server_folder', 'folder', '_demo', 'combine_datasets'];
 
   get orderedImporters(): ImporterInfo[] {
     const order = DatasetImporterModalComponent.PICKER_ORDER;
-    const placeholders = DatasetImporterModalComponent.PICKER_PLACEHOLDERS;
     const result: ImporterInfo[] = [];
     // Discovered extensions (importers not in the explicit order) come first
     for (const imp of this.importers) {
@@ -136,7 +135,7 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     // Then the standard picker entries in the prescribed order
     for (const name of order) {
-      if (placeholders.has(name)) {
+      if (name === '_demo') {
         result.push({ name } as ImporterInfo);
       } else {
         const imp = this.importers.find((i) => i.name === name);
@@ -616,7 +615,9 @@ export class DatasetImporterModalComponent implements OnInit {
 
   // --- Server folder browser ---
 
-  openServerFolderBrowser(): void {
+  openServerFolderBrowser(importer?: ImporterInfo): void {
+    this.selectedImporter =
+      importer || this.importers.find((imp) => imp.name === 'server_folder') || null;
     this.view = 'server_folder';
     this.sfBrowsePath = '';
     this.sfBrowseRootPath = '';
@@ -624,9 +625,11 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfBrowseError = '';
     this.sfSubmitting = false;
 
-    // Load media type options from the folder importer's fields
-    const folderImporter = this.importers.find((imp) => imp.name === 'folder');
-    const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
+    // Load media type options from the server_folder importer's fields
+    // (falling back to the local-folder importer for older backends).
+    const serverImporter =
+      this.selectedImporter || this.importers.find((imp) => imp.name === 'folder');
+    const mtField = serverImporter?.fields?.find((f) => f.key === 'media_type');
     this.sfMediaTypeOptions = mtField?.options || [];
 
     // Prefer guessed media type when available
@@ -827,7 +830,8 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
 
-    this.datasetsApi.runImporter('folder', params).subscribe({
+    const importerName = this.selectedImporter?.name || 'server_folder';
+    this.datasetsApi.runImporter(importerName, params).subscribe({
       next: () => {
         this.sfSubmitting = false;
         this.importStarted.emit();
