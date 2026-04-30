@@ -34,6 +34,7 @@ class DemoDatasetImporter(DatasetImporter):
     icon = "\U0001f5c4"  # 🗄 — frontend renders as a database icon
     ui_mode = "custom"
     picker_view = "demo"
+    category = "demo"
 
     fields = [
         ImporterField(

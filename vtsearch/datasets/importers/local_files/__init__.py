@@ -33,11 +33,12 @@ class LocalFilesDatasetImporter(DatasetImporter):
     """
 
     name = "local_files"
-    display_name = "Local Files"
+    display_name = "Files"
     description = "Upload one or more individual media files from this computer (your browser machine) to the server"
     icon = "\U0001f4c4"  # 📄 — falls back to a generic file icon
     ui_mode = "custom"
     picker_view = "local_files"
+    category = "local"
     fields = []
 
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
