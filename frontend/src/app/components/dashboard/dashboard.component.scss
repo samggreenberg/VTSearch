@@ -186,12 +186,61 @@
     letter-spacing: 0.03em;
     user-select: none;
 
+    // Headers (other than name) are draggable for reordering. The text itself
+    // is the drag handle; resize-handle children stop their own mousedown so
+    // dragging does not start when grabbing a divider.
+    &[draggable='true'] {
+      cursor: grab;
+    }
+
+    &[draggable='true']:active {
+      cursor: grabbing;
+    }
+
     &.sortable {
       cursor: pointer;
 
       &:hover {
         color: var(--text-primary);
       }
+    }
+
+    // Combine: a sortable header that is also draggable should still show
+    // grab on hover (drag is the dominant interaction; sort fires on click).
+    &[draggable='true'].sortable {
+      cursor: grab;
+
+      &:active {
+        cursor: grabbing;
+      }
+    }
+
+    // Visual drop indicator: a vertical accent line on the side of the cell
+    // where the dragged column will land.
+    &.col-drop-left::before,
+    &.col-drop-right::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--accent);
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    &.col-drop-left::before {
+      left: 0;
+    }
+
+    &.col-drop-right::after {
+      right: 0;
+    }
+
+    // Dim the cell currently being dragged so the user can tell which column
+    // they grabbed (the browser-rendered ghost is drawn separately).
+    &.col-dragging {
+      opacity: 0.4;
     }
 
     .sort-indicator {

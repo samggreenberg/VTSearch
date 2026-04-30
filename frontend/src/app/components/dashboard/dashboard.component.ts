@@ -99,6 +99,80 @@ export class DashboardComponent implements OnInit, OnDestroy {
     tableEl: HTMLTableElement;
   } | null = null;
 
+  // Column order. The "name" column is fixed in position 0 (so the loading-task
+  // colspan that replaces "all columns after name" keeps working); these arrays
+  // hold the columns that follow name and are user-reorderable.
+  static readonly DATASET_COLUMNS_DEFAULT = [
+    'media_type', 'num_items', 'num_dupes', 'created_at', 'clipper', 'embedder',
+    'created_by', 'readers', 'loaded', 'actions',
+  ];
+  static readonly MODEL_COLUMNS_DEFAULT = [
+    'media_type', 'num_training', 'trainable', 'autodetect', 'last_trained_at',
+    'created_at', 'detector_loaded', 'actions',
+  ];
+  private static readonly DATASET_COL_ORDER_KEY = 'vtsearch.dashboard.datasetColumnOrder';
+  private static readonly MODEL_COL_ORDER_KEY = 'vtsearch.dashboard.modelColumnOrder';
+  datasetColumnOrder: string[] = [...DashboardComponent.DATASET_COLUMNS_DEFAULT];
+  modelColumnOrder: string[] = [...DashboardComponent.MODEL_COLUMNS_DEFAULT];
+
+  // Drag-reorder state
+  dragCol: { table: 'datasets' | 'models'; col: string } | null = null;
+  dropTargetCol: { table: 'datasets' | 'models'; col: string; side: 'left' | 'right' } | null = null;
+
+  // Per-column display metadata. Keyed by `data-col` value; used both by the
+  // header template and by card components when rendering body cells in order.
+  static readonly DATASET_COL_META: Record<string, { label: string; title: string; sortable: boolean }> = {
+    name: { label: 'Name', title: 'Dataset display name (click to sort)', sortable: true },
+    media_type: { label: 'Type', title: 'Media type: audio, image, text, video, or document (click to sort)', sortable: true },
+    num_items: { label: '# Items', title: 'Number of media items in the dataset (click to sort)', sortable: true },
+    num_dupes: { label: '# Dupes', title: 'Number of duplicate items collapsed (click to sort)', sortable: true },
+    created_at: { label: 'Created', title: 'When the dataset was first imported (click to sort)', sortable: true },
+    clipper: { label: 'Clipper', title: 'MediaClipper used at creation (click to sort)', sortable: true },
+    embedder: { label: 'Embedder', title: 'MediaEmbedder used for embedding (click to sort)', sortable: true },
+    created_by: { label: 'Creator', title: 'User who created this dataset (click to sort)', sortable: true },
+    readers: { label: 'Readers', title: 'Users with access to this dataset (click to sort)', sortable: true },
+    loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },
+    actions: { label: 'Actions', title: 'Available operations for this dataset', sortable: false },
+  };
+  static readonly MODEL_COL_META: Record<string, { label: string; title: string; sortable: boolean }> = {
+    name: { label: 'Name', title: 'Model display name (click to sort)', sortable: true },
+    media_type: { label: 'Type', title: 'Media type this model operates on (click to sort)', sortable: true },
+    num_training: { label: '# Training', title: 'Number of labeled training examples (click to sort)', sortable: true },
+    trainable: { label: 'Trainable?', title: 'Is this Model one we can load into Train Mode and improve?', sortable: false },
+    autodetect: { label: 'Autorun?', title: 'Include this model in CLI autorun (click to sort)', sortable: true },
+    last_trained_at: { label: 'Last Trained', title: 'When the model was last trained (click to sort)', sortable: true },
+    created_at: { label: 'Created', title: 'When the model was created (click to sort)', sortable: true },
+    detector_loaded: { label: 'Loaded?', title: "Whether the model's inference data is cached in memory", sortable: false },
+    actions: { label: 'Actions', title: 'Available operations for this model', sortable: false },
+  };
+
+  get visibleDatasetColumns(): string[] {
+    if (this.isDefaultLogin) {
+      return this.datasetColumnOrder.filter((c) => c !== 'created_by' && c !== 'readers');
+    }
+    return this.datasetColumnOrder;
+  }
+
+  get visibleModelColumns(): string[] {
+    return this.modelColumnOrder;
+  }
+
+  datasetColMeta(col: string): { label: string; title: string; sortable: boolean } {
+    return DashboardComponent.DATASET_COL_META[col] ?? { label: col, title: '', sortable: false };
+  }
+
+  modelColMeta(col: string): { label: string; title: string; sortable: boolean } {
+    return DashboardComponent.MODEL_COL_META[col] ?? { label: col, title: '', sortable: false };
+  }
+
+  onDatasetHeaderClick(col: string): void {
+    if (this.datasetColMeta(col).sortable) this.sortDatasets(col);
+  }
+
+  onModelHeaderClick(col: string): void {
+    if (this.modelColMeta(col).sortable) this.sortModels(col);
+  }
+
   private destroy$ = new Subject<void>();
   private polling$ = new Subject<void>();
   private modelPolling$ = new Subject<void>();
@@ -179,6 +253,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.knownModelIds = currentIds;
         this.pushTopBarLabels();
       });
+    this.loadColumnOrders();
     this.refresh();
     this.resumeActivePolling();
   }
@@ -362,6 +437,142 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (wasFixed) {
       tableEl.classList.add('table-fixed');
     }
+  }
+
+  // --- Column reorder (drag and drop) ---
+
+  private loadColumnOrders(): void {
+    this.datasetColumnOrder = this.normalizeColumnOrder(
+      DashboardComponent.DATASET_COL_ORDER_KEY,
+      DashboardComponent.DATASET_COLUMNS_DEFAULT,
+    );
+    this.modelColumnOrder = this.normalizeColumnOrder(
+      DashboardComponent.MODEL_COL_ORDER_KEY,
+      DashboardComponent.MODEL_COLUMNS_DEFAULT,
+    );
+  }
+
+  private normalizeColumnOrder(storageKey: string, defaults: readonly string[]): string[] {
+    let stored: unknown = null;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      stored = raw ? JSON.parse(raw) : null;
+    } catch {
+      stored = null;
+    }
+    const known = new Set(defaults);
+    const result: string[] = [];
+    if (Array.isArray(stored)) {
+      for (const c of stored) {
+        if (typeof c === 'string' && known.has(c) && !result.includes(c)) {
+          result.push(c);
+        }
+      }
+    }
+    // Append any defaults missing from the stored order (e.g. new columns
+    // added after the user's order was saved).
+    for (const c of defaults) {
+      if (!result.includes(c)) result.push(c);
+    }
+    return result;
+  }
+
+  private persistColumnOrder(table: 'datasets' | 'models'): void {
+    const key = table === 'datasets'
+      ? DashboardComponent.DATASET_COL_ORDER_KEY
+      : DashboardComponent.MODEL_COL_ORDER_KEY;
+    const order = table === 'datasets' ? this.datasetColumnOrder : this.modelColumnOrder;
+    try {
+      localStorage.setItem(key, JSON.stringify(order));
+    } catch {
+      // Ignore quota / private-mode failures.
+    }
+  }
+
+  onColDragStart(event: DragEvent, table: 'datasets' | 'models', col: string): void {
+    // Don't start a drag if a column resize is in progress.
+    if (this.resizeState) {
+      event.preventDefault();
+      return;
+    }
+    this.dragCol = { table, col };
+    this.dropTargetCol = null;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      // Some browsers refuse to start the drag without setData.
+      event.dataTransfer.setData('text/plain', col);
+    }
+  }
+
+  onColDragOver(event: DragEvent, table: 'datasets' | 'models', col: string): void {
+    if (!this.dragCol || this.dragCol.table !== table || this.dragCol.col === col) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    const th = event.currentTarget as HTMLElement;
+    const rect = th.getBoundingClientRect();
+    const side: 'left' | 'right' = (event.clientX - rect.left) < rect.width / 2 ? 'left' : 'right';
+    if (
+      !this.dropTargetCol
+      || this.dropTargetCol.col !== col
+      || this.dropTargetCol.side !== side
+      || this.dropTargetCol.table !== table
+    ) {
+      this.dropTargetCol = { table, col, side };
+    }
+  }
+
+  onColDragLeave(_event: DragEvent, table: 'datasets' | 'models', col: string): void {
+    if (this.dropTargetCol && this.dropTargetCol.table === table && this.dropTargetCol.col === col) {
+      this.dropTargetCol = null;
+    }
+  }
+
+  onColDrop(event: DragEvent, table: 'datasets' | 'models', targetCol: string): void {
+    if (!this.dragCol || this.dragCol.table !== table) {
+      this.dragCol = null;
+      this.dropTargetCol = null;
+      return;
+    }
+    event.preventDefault();
+    const sourceCol = this.dragCol.col;
+    const drop = this.dropTargetCol;
+    this.dragCol = null;
+    this.dropTargetCol = null;
+    if (sourceCol === targetCol) return;
+
+    const order = table === 'datasets' ? this.datasetColumnOrder : this.modelColumnOrder;
+    const fromIdx = order.indexOf(sourceCol);
+    const toIdx = order.indexOf(targetCol);
+    if (fromIdx < 0 || toIdx < 0) return;
+
+    const next = [...order];
+    next.splice(fromIdx, 1);
+    let insertIdx = next.indexOf(targetCol);
+    if (drop?.side === 'right') insertIdx += 1;
+    next.splice(insertIdx, 0, sourceCol);
+
+    if (table === 'datasets') {
+      this.datasetColumnOrder = next;
+    } else {
+      this.modelColumnOrder = next;
+    }
+    this.persistColumnOrder(table);
+  }
+
+  onColDragEnd(_event: DragEvent): void {
+    this.dragCol = null;
+    this.dropTargetCol = null;
+  }
+
+  isDropTarget(table: 'datasets' | 'models', col: string, side: 'left' | 'right'): boolean {
+    return !!this.dropTargetCol
+      && this.dropTargetCol.table === table
+      && this.dropTargetCol.col === col
+      && this.dropTargetCol.side === side;
+  }
+
+  isDragging(table: 'datasets' | 'models', col: string): boolean {
+    return !!this.dragCol && this.dragCol.table === table && this.dragCol.col === col;
   }
 
   ngOnDestroy(): void {
