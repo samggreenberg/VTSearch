@@ -48,8 +48,7 @@
 .side-action-btn {
   background: none;
   border: none;
-  // Dimmer than --text-primary so the enabled buttons recede against the
-  // dashboard's outer background; hover snaps back to full brightness.
+  // Dimmer than --text-primary; hover snaps back to full brightness.
   color: var(--text-secondary);
   cursor: pointer;
   padding: 6px;
@@ -58,10 +57,6 @@
   align-items: center;
   justify-content: center;
   transition: color 0.15s, background 0.15s;
-
-  svg {
-    transition: transform 0.15s;
-  }
 
   &:hover:not(:disabled) {
     color: var(--text-primary);
@@ -76,43 +71,23 @@
   &.side-action-delete:hover:not(:disabled) {
     color: var(--color-bad);
   }
-
-  // Click-triggered 90° spin for the symmetric select-all / select-none
-  // squares.  The icons are rotationally symmetric so we don't bother
-  // animating back; the class is removed in the template's animationend
-  // handler and the SVG snaps back to 0 (un-animated).
-  .side-action-spin {
-    animation: side-action-rotate-90 0.3s ease-in-out;
-  }
-
-  // The delete button rotates to 90° while the confirm dialog is showing,
-  // then back to 0° once it closes.  Same open/close pattern used by the
-  // row-level trash icon in dataset-card / model-card.
-  .side-action-delete-active {
-    animation: side-action-rotate-open 0.3s ease-in-out forwards;
-  }
-
-  .side-action-delete-inactive {
-    animation: side-action-rotate-close 0.3s ease-in-out forwards;
-  }
 }
 
-@keyframes side-action-rotate-90 {
-  0%   { transform: rotate(0deg); }
-  50%  { transform: rotate(45deg); }
-  100% { transform: rotate(90deg); }
+// Select-all/none spins once on click (animationend handler clears class so
+// icon snaps back to 0). Delete spins to 90° while confirm dialog is up,
+// then reverses back. Hoisted out of `.side-action-btn` to keep specificity
+// flat and reduce compiled CSS size.
+.side-action-spin,
+.side-action-delete-active {
+  animation: side-action-rotate 0.3s ease-in-out forwards;
 }
 
-@keyframes side-action-rotate-open {
-  0%   { transform: rotate(0deg); }
-  50%  { transform: rotate(45deg); }
-  100% { transform: rotate(90deg); }
+.side-action-delete-inactive {
+  animation: side-action-rotate 0.3s ease-in-out reverse forwards;
 }
 
-@keyframes side-action-rotate-close {
-  0%   { transform: rotate(90deg); }
-  50%  { transform: rotate(45deg); }
-  100% { transform: rotate(0deg); }
+@keyframes side-action-rotate {
+  to { transform: rotate(90deg); }
 }
 
 .dashboard-section-header {
@@ -472,12 +447,9 @@
   max-width: 100%;
 }
 
-// Waggle animation for Train/Find button icons while loading.
-// 2s cycle: rotate to 90deg (0.3s), hold (0.7s), rotate back (0.3s), hold (0.7s).
+// Waggle for Train/Find icons while loading: rotate to 90° (0.3s), hold,
+// rotate back (0.3s), hold. 2s cycle.
 @keyframes icon-waggle {
-  0%   { transform: rotate(0deg); }
-  15%  { transform: rotate(90deg); }
-  50%  { transform: rotate(90deg); }
-  65%  { transform: rotate(0deg); }
-  100% { transform: rotate(0deg); }
+  0%, 65%, 100% { transform: rotate(0deg); }
+  15%, 50% { transform: rotate(90deg); }
 }
