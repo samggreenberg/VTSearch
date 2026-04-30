@@ -97,6 +97,7 @@ class ReCallerDatasetImporter(DatasetImporter):
     description = "Import media from a ReCaller browsing session."
     icon = "\U0001f50d"  # magnifying glass
     hidden_from_picker = True  # flip to False once API clients are implemented
+    category = "services"
     fields = [
         ImporterField(
             key="query_id",

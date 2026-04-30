@@ -30,11 +30,12 @@ class LocalFolderDatasetImporter(DatasetImporter):
     """
 
     name = "local_folder"
-    display_name = "Local Folder"
+    display_name = "Folder"
     description = "Upload a folder of media files from this computer (your browser machine) to the server"
     icon = "\U0001f4c1"  # 📁 — frontend renders as a folder icon
     ui_mode = "custom"
     picker_view = "local_folder"
+    category = "local"
     fields = [
         ImporterField(
             key="recursive",

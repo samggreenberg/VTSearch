@@ -129,6 +129,10 @@ export class DatasetImporterModalComponent implements OnInit {
         this.importers = (res.importers || []).filter(
           (imp) => !imp['hidden_from_picker']
         );
+        const visible = this.visibleImporterTabs;
+        if (!visible.some((t) => t.id === this.activeImporterTab)) {
+          this.activeImporterTab = visible[0]?.id || 'local';
+        }
       },
     });
     this.datasetsApi.getEmbedders().subscribe({
@@ -143,16 +147,27 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
-  /** Front-of-list order for the picker.  Importers not listed here come
-   *  after these in registry order. */
+  /** Front-of-list order for the picker within each tab.  Importers not
+   *  listed here come after these in registry order. */
   private static readonly PICKER_ORDER = [
     'local_folder',
     'local_files',
     'server_folder',
     'server_files',
     'demo',
-    'combine_datasets',
+    'synthetic',
   ];
+
+  /** Tabs shown above the picker, in display order. */
+  private static readonly CATEGORY_TABS: { id: string; label: string }[] = [
+    { id: 'services', label: 'Services' },
+    { id: 'server', label: 'Server' },
+    { id: 'local', label: 'Local' },
+    { id: 'demo', label: 'Demo' },
+  ];
+
+  /** Currently selected picker tab. */
+  activeImporterTab = 'local';
 
   get orderedImporters(): ImporterInfo[] {
     const order = DatasetImporterModalComponent.PICKER_ORDER;
@@ -167,6 +182,25 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
     return result;
+  }
+
+  /** Tabs that have at least one visible importer.  An empty Services tab
+   *  is hidden so the user isn't shown an empty section. */
+  get visibleImporterTabs(): { id: string; label: string }[] {
+    return DatasetImporterModalComponent.CATEGORY_TABS.filter((tab) =>
+      this.orderedImporters.some((imp) => (imp.category || '') === tab.id),
+    );
+  }
+
+  /** Importers belonging to the active tab. */
+  get importersForActiveTab(): ImporterInfo[] {
+    return this.orderedImporters.filter(
+      (imp) => (imp.category || '') === this.activeImporterTab,
+    );
+  }
+
+  selectImporterTab(tabId: string): void {
+    this.activeImporterTab = tabId;
   }
 
   /** Title shown at the top of the modal. */

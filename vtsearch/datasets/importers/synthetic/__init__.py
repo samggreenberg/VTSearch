@@ -39,6 +39,7 @@ class SyntheticDatasetImporter(DatasetImporter):
     # 🏭 — frontend renders this as a line-drawing factory icon (see
     # frontend/src/app/components/icon/icon.component.ts).
     icon = "\U0001f3ed"
+    category = "demo"
 
     fields = [
         ImporterField(

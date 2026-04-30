@@ -11,6 +11,41 @@
   flex-direction: column;
 }
 
+.importer-tab-bar {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 12px;
+}
+
+.importer-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-secondary, var(--text-muted));
+  font-size: .85rem;
+  cursor: pointer;
+  transition: all .15s;
+  margin-bottom: -2px;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-subtle);
+  }
+
+  &.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+}
+
 .clipper-params {
   padding-left: 16px;
   border-left: 2px solid var(--border);

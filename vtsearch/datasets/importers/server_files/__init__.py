@@ -82,12 +82,13 @@ class ServerFilesDatasetImporter(DatasetImporter):
     """
 
     name = "server_files"
-    display_name = "Server Files"
+    display_name = "Files"
     description = (
         "Read a text file on the server containing media-file paths (one per line) and embed every listed file"
     )
     icon = "\U0001f5c2"  # 🗂 — falls back to a generic file icon
     picker_view = "form"
+    category = "server"
     fields = [
         ImporterField(
             key="media_type",

@@ -45,6 +45,7 @@ class CombineDatasetsImporter(DatasetImporter):
     description = "Merge multiple saved datasets into one, automatically removing duplicates"
     icon = "\U0001f500"  # twisted rightwards arrows
     ui_mode = "custom"
+    hidden_from_picker = True
     fields = [
         ImporterField(
             key="datasets",

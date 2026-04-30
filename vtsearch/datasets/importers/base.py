@@ -134,9 +134,16 @@ class DatasetImporter(PluginBase):
     #: - ``"demo"`` — demo-dataset table.
     picker_view: str = "form"
 
+    #: Picker tab this importer belongs to.  One of ``"services"``,
+    #: ``"server"``, ``"local"``, ``"demo"``, or ``""`` (uncategorised).
+    #: Database/API-style importers (extensions that fetch from a remote
+    #: service) should use ``"services"``.
+    category: str = ""
+
     def to_dict(self) -> dict[str, Any]:
         d = super().to_dict()
         d["picker_view"] = self.picker_view
+        d["category"] = self.category
         return d
 
     def __init__(self) -> None:

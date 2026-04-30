@@ -3,21 +3,32 @@
     <div class="importer-picker">
       @if (orderedImporters.length === 0) {
         <p class="empty-state">Loading importers...</p>
-      }
-      @for (imp of orderedImporters; track imp.name) {
-        <button
-          class="importer-card"
-          [class.demo-card]="imp.picker_view === 'demo'"
-          [class.disabled]="imp['enabled'] === false"
-          [disabled]="imp['enabled'] === false"
-          (click)="selectImporter(imp)"
-          [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : ''"
-        >
-          <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
-          @if (imp.description) {
-            <span class="importer-desc">{{ imp.description }}</span>
+      } @else {
+        <div class="importer-tab-bar">
+          @for (tab of visibleImporterTabs; track tab.id) {
+            <button
+              class="importer-tab"
+              [class.active]="activeImporterTab === tab.id"
+              (click)="selectImporterTab(tab.id)"
+              [title]="'Show ' + tab.label + ' dataset importers'"
+            >{{ tab.label }}</button>
           }
-        </button>
+        </div>
+        @for (imp of importersForActiveTab; track imp.name) {
+          <button
+            class="importer-card"
+            [class.demo-card]="imp.picker_view === 'demo'"
+            [class.disabled]="imp['enabled'] === false"
+            [disabled]="imp['enabled'] === false"
+            (click)="selectImporter(imp)"
+            [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : ''"
+          >
+            <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
+            @if (imp.description) {
+              <span class="importer-desc">{{ imp.description }}</span>
+            }
+          </button>
+        }
       }
     </div>
   }

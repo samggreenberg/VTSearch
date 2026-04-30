@@ -188,6 +188,9 @@ export interface ImporterInfo {
    *  ``"form"`` (default), ``"demo"``, ``"server_folder"``, ``"local_folder"``. */
   picker_view?: string;
   hidden_from_picker?: boolean;
+  /** Picker tab this importer belongs to.  One of ``"services"``,
+   *  ``"server"``, ``"local"``, ``"demo"``, or ``""`` (uncategorised). */
+  category?: string;
   [key: string]: unknown;
 }
 

@@ -11,26 +11,29 @@ describe('DatasetImporterModalComponent', () => {
   const mockImporters = [
     {
       name: 'local_folder',
-      display_name: 'Local Folder',
+      display_name: 'Folder',
       description: 'Upload from this computer',
       icon: '📁',
       picker_view: 'local_folder',
+      category: 'local',
       fields: [],
     },
     {
       name: 'local_files',
-      display_name: 'Local Files',
+      display_name: 'Files',
       description: 'Upload one or more individual files from this computer',
       icon: '📄',
       picker_view: 'local_files',
+      category: 'local',
       fields: [],
     },
     {
       name: 'server_folder',
-      display_name: 'Server Folder',
+      display_name: 'Folder',
       description: 'Browse the server filesystem',
       icon: '🖥',
       picker_view: 'server_folder',
+      category: 'server',
       fields: [
         { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'images'] },
         { key: 'path', field_type: 'text', label: 'Folder Path', required: true },
@@ -38,10 +41,11 @@ describe('DatasetImporterModalComponent', () => {
     },
     {
       name: 'server_files',
-      display_name: 'Server Files',
+      display_name: 'Files',
       description: 'Read a text file of paths from the server',
       icon: '🗂',
       picker_view: 'form',
+      category: 'server',
       fields: [
         { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'images'] },
         { key: 'paths_file', field_type: 'server_path', label: 'Paths File', required: true },
@@ -54,6 +58,7 @@ describe('DatasetImporterModalComponent', () => {
       icon: '🗄',
       picker_view: 'demo',
       ui_mode: 'custom',
+      category: 'demo',
       fields: [],
     },
     {
@@ -175,21 +180,24 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.view).toBe('picker');
   });
 
-  it('should render one card per registered importer using display_name', () => {
+  it('should render the cards for the active tab using display_name', () => {
     flushImporters();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
+    // Default active tab is "local" (the first tab populated by the mocks
+    // that has importers).  Two local importers: local_folder, local_files.
     const cards = el.querySelectorAll('.importer-card');
-    // 7 mock importers (local_folder, local_files, server_folder,
-    // server_files, demo, pickle, generic_form); none hidden.
-    expect(cards.length).toBe(7);
-    // PICKER_ORDER: local_folder, local_files, server_folder, server_files,
-    // demo, combine_datasets — so the local cards appear first.
-    expect(cards[0].textContent).toContain('Local Folder');
-    expect(cards[1].textContent).toContain('Local Files');
-    expect(cards[2].textContent).toContain('Server Folder');
-    expect(cards[3].textContent).toContain('Server Files');
-    expect(cards[4].textContent).toContain('Downloaded Demo Media');
+    expect(cards.length).toBe(2);
+    expect(cards[0].textContent).toContain('Folder');
+    expect(cards[1].textContent).toContain('Files');
+
+    // Switching to the Server tab swaps in the server importers.
+    component.selectImporterTab('server');
+    fixture.detectChanges();
+    const serverCards = el.querySelectorAll('.importer-card');
+    expect(serverCards.length).toBe(2);
+    expect(serverCards[0].textContent).toContain('Folder');
+    expect(serverCards[1].textContent).toContain('Files');
   });
 
   it('should hide importers marked hidden_from_picker', () => {
