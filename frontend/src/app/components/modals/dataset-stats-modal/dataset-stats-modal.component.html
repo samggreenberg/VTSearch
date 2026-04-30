@@ -29,6 +29,32 @@
       </tbody>
     </table>
 
+    <h3 class="section-title">Creation</h3>
+    <table class="stats-table">
+      <tbody>
+        @if (importerName) {
+          <tr>
+            <td class="stat-label" title="The importer plugin used to create this dataset">Importer</td>
+            <td class="stat-value">{{ importerName }}</td>
+          </tr>
+        }
+        @for (p of originParams; track p.key) {
+          <tr>
+            <td class="stat-label" [title]="'Importer field: ' + p.key">{{ p.key }}</td>
+            <td class="stat-value">{{ p.value }}</td>
+          </tr>
+        }
+        <tr>
+          <td class="stat-label" title="MediaClipper used to slice items at creation">Clipper</td>
+          <td class="stat-value">{{ stats.clipper || '-' }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="MediaEmbedder used to compute embeddings">Embedder</td>
+          <td class="stat-value">{{ (stats.embedder | titlecase) || '-' }}</td>
+        </tr>
+      </tbody>
+    </table>
+
     @if (fileTypes.length > 0) {
       <h3 class="section-title">File Types</h3>
       <table class="stats-table">

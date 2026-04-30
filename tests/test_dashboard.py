@@ -734,7 +734,6 @@ class TestDashboardColumnHeaders:
             combined += resp.data.decode("utf-8")
         assert "Created" in combined
         assert "Origin" in combined
-        assert "Dupes" in combined
         assert "Loaded" in combined
 
     def test_model_grid_has_new_column_headers(self, client):

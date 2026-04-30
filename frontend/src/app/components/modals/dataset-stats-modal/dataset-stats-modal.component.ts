@@ -46,6 +46,20 @@ export class DatasetStatsModalComponent implements OnInit {
       .map(([ext, count]) => ({ ext, count }));
   }
 
+  get importerName(): string {
+    const src = this.stats?.source as { importer?: string } | undefined;
+    return src?.importer || '';
+  }
+
+  get originParams(): { key: string; value: string }[] {
+    const src = this.stats?.source as { params?: Record<string, unknown> } | undefined;
+    const params = src?.params;
+    if (!params) return [];
+    return Object.entries(params)
+      .filter(([, v]) => v !== '' && v != null)
+      .map(([key, value]) => ({ key, value: String(value) }));
+  }
+
   formatTimestamp(ts: number | null): string {
     if (!ts) return '-';
     const d = new Date(ts * 1000);
