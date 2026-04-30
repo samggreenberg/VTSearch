@@ -266,6 +266,10 @@ export interface DatasetStatsResponse {
   file_type_counts: Record<string, number>;
   ingest_started_at: number | null;
   ingest_finished_at: number | null;
+  origin: string;
+  source: { importer?: string; params?: Record<string, string> } | Record<string, unknown>;
+  clipper: string;
+  embedder: string;
 }
 
 export interface DatasetRegistryResponse {
