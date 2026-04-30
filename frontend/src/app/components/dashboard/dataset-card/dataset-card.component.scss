@@ -214,6 +214,24 @@ td {
   }
 }
 
+.select-checkbox {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+  }
+}
+
 // Inline loading progress (replaces data columns while loading)
 .inline-loading-progress {
   display: flex;
