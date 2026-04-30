@@ -30,8 +30,7 @@
               @for (col of visibleDatasetColumns; track col) {
                 <th
                   [class.sortable]="datasetColMeta(col).sortable"
-                  [class.col-drop-left]="isDropTarget('datasets', col, 'left')"
-                  [class.col-drop-right]="isDropTarget('datasets', col, 'right')"
+                  [class.col-drop-target]="isDropTarget('datasets', col)"
                   [class.col-dragging]="isDragging('datasets', col)"
                   [attr.data-col]="col"
                   [title]="datasetColMeta(col).title"
@@ -125,8 +124,7 @@
               @for (col of visibleModelColumns; track col) {
                 <th
                   [class.sortable]="modelColMeta(col).sortable"
-                  [class.col-drop-left]="isDropTarget('models', col, 'left')"
-                  [class.col-drop-right]="isDropTarget('models', col, 'right')"
+                  [class.col-drop-target]="isDropTarget('models', col)"
                   [class.col-dragging]="isDragging('models', col)"
                   [attr.data-col]="col"
                   [title]="modelColMeta(col).title"
