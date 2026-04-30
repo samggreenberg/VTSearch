@@ -48,7 +48,9 @@
 .side-action-btn {
   background: none;
   border: none;
-  color: var(--text-primary);
+  // Dimmer than --text-primary so the enabled buttons recede against the
+  // dashboard's outer background; hover snaps back to full brightness.
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 6px;
   border-radius: 4px;
@@ -57,7 +59,12 @@
   justify-content: center;
   transition: color 0.15s, background 0.15s;
 
+  svg {
+    transition: transform 0.15s;
+  }
+
   &:hover:not(:disabled) {
+    color: var(--text-primary);
     background: var(--btn-icon-hover-bg);
   }
 
@@ -69,6 +76,43 @@
   &.side-action-delete:hover:not(:disabled) {
     color: var(--color-bad);
   }
+
+  // Click-triggered 90° spin for the symmetric select-all / select-none
+  // squares.  The icons are rotationally symmetric so we don't bother
+  // animating back; the class is removed in the template's animationend
+  // handler and the SVG snaps back to 0 (un-animated).
+  .side-action-spin {
+    animation: side-action-rotate-90 0.3s ease-in-out;
+  }
+
+  // The delete button rotates to 90° while the confirm dialog is showing,
+  // then back to 0° once it closes.  Same open/close pattern used by the
+  // row-level trash icon in dataset-card / model-card.
+  .side-action-delete-active {
+    animation: side-action-rotate-open 0.3s ease-in-out forwards;
+  }
+
+  .side-action-delete-inactive {
+    animation: side-action-rotate-close 0.3s ease-in-out forwards;
+  }
+}
+
+@keyframes side-action-rotate-90 {
+  0%   { transform: rotate(0deg); }
+  50%  { transform: rotate(45deg); }
+  100% { transform: rotate(90deg); }
+}
+
+@keyframes side-action-rotate-open {
+  0%   { transform: rotate(0deg); }
+  50%  { transform: rotate(45deg); }
+  100% { transform: rotate(90deg); }
+}
+
+@keyframes side-action-rotate-close {
+  0%   { transform: rotate(90deg); }
+  50%  { transform: rotate(45deg); }
+  100% { transform: rotate(0deg); }
 }
 
 .dashboard-section-header {
