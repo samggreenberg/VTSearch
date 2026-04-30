@@ -6,7 +6,7 @@ import { FileBrowserComponent } from '../../file-browser/file-browser.component'
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
+import { ImporterInfo, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
 
 type ModalView = 'picker' | 'form' | 'demo' | 'server_folder' | 'local_folder';
 
@@ -129,6 +129,7 @@ export class DatasetImporterModalComponent implements OnInit {
         this.importers = (res.importers || []).filter(
           (imp) => !imp['hidden_from_picker']
         );
+        this.declaredTabs = res.tabs || [];
         const visible = this.visibleImporterTabs;
         if (!visible.some((t) => t.id === this.activeImporterTab)) {
           this.activeImporterTab = visible[0]?.id || 'local';
@@ -158,13 +159,8 @@ export class DatasetImporterModalComponent implements OnInit {
     'synthetic',
   ];
 
-  /** Tabs shown above the picker, in display order. */
-  private static readonly CATEGORY_TABS: { id: string; label: string }[] = [
-    { id: 'services', label: 'Services' },
-    { id: 'server', label: 'Server' },
-    { id: 'local', label: 'Local' },
-    { id: 'demo', label: 'Demo' },
-  ];
+  /** Tab declarations supplied by the backend (``/api/dataset/all-importers``). */
+  declaredTabs: ImporterPickerTab[] = [];
 
   /** Currently selected picker tab. */
   activeImporterTab = 'local';
@@ -184,12 +180,42 @@ export class DatasetImporterModalComponent implements OnInit {
     return result;
   }
 
-  /** Tabs that have at least one visible importer.  An empty Services tab
-   *  is hidden so the user isn't shown an empty section. */
-  get visibleImporterTabs(): { id: string; label: string }[] {
-    return DatasetImporterModalComponent.CATEGORY_TABS.filter((tab) =>
-      this.orderedImporters.some((imp) => (imp.category || '') === tab.id),
+  /** Title-case an importer category id when no backend declaration exists.
+   *  ``"my_cloud"`` → ``"My Cloud"``. */
+  private fallbackTabLabel(id: string): string {
+    return id
+      .split(/[\s_-]+/)
+      .filter(Boolean)
+      .map((part) => part[0].toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  /** Tabs that have at least one visible importer.  Tabs declared by the
+   *  backend render in their declared order; categories used by importers
+   *  but never declared get appended at the end with a title-cased label
+   *  and no icon.  An empty tab (no importers) is hidden so the user
+   *  isn't shown an empty section. */
+  get visibleImporterTabs(): ImporterPickerTab[] {
+    const usedCategories = new Set(
+      this.orderedImporters.map((imp) => imp.category || '').filter(Boolean),
     );
+    const visible: ImporterPickerTab[] = [];
+    const seen = new Set<string>();
+    const declared = [...this.declaredTabs].sort(
+      (a, b) => (a.order ?? 100) - (b.order ?? 100),
+    );
+    for (const tab of declared) {
+      if (usedCategories.has(tab.id)) {
+        visible.push(tab);
+        seen.add(tab.id);
+      }
+    }
+    for (const id of usedCategories) {
+      if (!seen.has(id)) {
+        visible.push({ id, label: this.fallbackTabLabel(id) });
+      }
+    }
+    return visible;
   }
 
   /** Importers belonging to the active tab. */

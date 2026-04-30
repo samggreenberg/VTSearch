@@ -253,6 +253,8 @@ def dataset_importers():
 @datasets_bp.route("/api/dataset/all-importers")
 def dataset_all_importers():
     """List all registered importers (including built-in ones)."""
+    from vtsearch.datasets.importers.tabs import list_picker_tabs
+
     all_importers = [imp.to_dict() for imp in list_importers()]
 
     # Annotate combine_datasets with an enabled flag: requires 2+ saved
@@ -266,7 +268,7 @@ def dataset_all_importers():
             imp_dict["enabled"] = can_combine
             break
 
-    return jsonify({"importers": all_importers})
+    return jsonify({"importers": all_importers, "tabs": list_picker_tabs()})
 
 
 # ---------------------------------------------------------------------------
