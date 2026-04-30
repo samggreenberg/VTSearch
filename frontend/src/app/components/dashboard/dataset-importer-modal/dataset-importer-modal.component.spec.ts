@@ -141,9 +141,16 @@ describe('DatasetImporterModalComponent', () => {
     httpMock.verify();
   });
 
+  const mockTabs = [
+    { id: 'services', label: 'Services', icon: 'lightning', order: 10 },
+    { id: 'server', label: 'Server', icon: 'server', order: 20 },
+    { id: 'local', label: 'Local', icon: 'house', order: 30 },
+    { id: 'demo', label: 'Demo', icon: 'flask', order: 40 },
+  ];
+
   function flushImporters(): void {
     fixture.detectChanges();
-    httpMock.expectOne('/api/dataset/all-importers').flush({ importers: mockImporters });
+    httpMock.expectOne('/api/dataset/all-importers').flush({ importers: mockImporters, tabs: mockTabs });
   }
 
   /** Open the demo picker and flush all resulting HTTP requests. */
@@ -206,7 +213,7 @@ describe('DatasetImporterModalComponent', () => {
       ...mockImporters,
       { name: 'recaller', display_name: 'ReCaller', hidden_from_picker: true, fields: [] },
     ];
-    httpMock.expectOne('/api/dataset/all-importers').flush({ importers: importersWithHidden });
+    httpMock.expectOne('/api/dataset/all-importers').flush({ importers: importersWithHidden, tabs: mockTabs });
     expect(component.importers.find((i) => i.name === 'recaller')).toBeUndefined();
   });
 
