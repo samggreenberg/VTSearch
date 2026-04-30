@@ -13,6 +13,7 @@ import json
 import shutil
 import tempfile
 from pathlib import Path, PurePosixPath
+from typing import Any
 from uuid import uuid4
 
 from flask import Blueprint, jsonify, request, send_file
@@ -469,7 +470,9 @@ def import_dataset(importer_name: str):
         if val:
             field_values[key] = val
 
-    task_id = _run_importer_in_background(importer, field_values)
+    chunk_size = _parse_chunk_size(get_request_field("chunk_size", bool(file_keys)))
+
+    task_id = _run_importer_in_background(importer, field_values, chunk_size=chunk_size)
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
@@ -478,6 +481,21 @@ def import_dataset(importer_name: str):
 # ---------------------------------------------------------------------------
 
 LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
+
+
+def _parse_chunk_size(value: Any) -> int:
+    """Parse an optional ``chunk_size`` form/JSON value into a non-negative int.
+
+    Returns ``0`` when the value is missing, blank, or non-numeric — which
+    means "no chunking, load everything in one pass".
+    """
+    if value is None or value == "":
+        return 0
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, n)
 
 
 def _safe_relative_upload_path(filename: str) -> PurePosixPath | None:
@@ -535,6 +553,7 @@ def import_local_folder():
     converters = (request.form.get("converters") or "").strip()
     recursive_raw = (request.form.get("recursive") or "true").strip().lower()
     recursive = recursive_raw not in ("false", "0", "no", "off")
+    chunk_size = _parse_chunk_size(request.form.get("chunk_size"))
     clipper_params_raw = request.form.get("clipper_params") or ""
     clipper_params: dict | None = None
     if clipper_params_raw:
@@ -594,14 +613,19 @@ def import_local_folder():
     if clipper_name and not clipper_name.endswith("_default"):
         field_values["skip_embedding"] = True
 
+    from vtsearch.auth import get_current_user
+    from vtsearch.datasets.load_pipeline import _normalize_media_type, consume_chunks_into
+
+    use_chunked = chunk_size > 0 and getattr(importer, "supports_chunked", False)
+
     def _load(target_medias):
         try:
-            importer.run(field_values, target_medias)
+            if use_chunked:
+                consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size))
+            else:
+                importer.run(field_values, target_medias)
         finally:
             shutil.rmtree(upload_dir, ignore_errors=True)
-
-    from vtsearch.auth import get_current_user
-    from vtsearch.datasets.load_pipeline import _normalize_media_type
 
     task_id = _run_origin_load_in_background(
         _load,
