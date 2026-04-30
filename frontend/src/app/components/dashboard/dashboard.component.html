@@ -27,15 +27,24 @@
           <thead>
             <tr>
               <th (click)="sortDatasets('name')" class="sortable" title="Dataset display name (click to sort)" data-col="name" [style.width.px]="datasetsTableFixed ? datasetColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span></th>
-              <th (click)="sortDatasets('media_type')" class="sortable" title="Media type: audio, image, text, video, or document (click to sort)" data-col="media_type" [style.width.px]="datasetsTableFixed ? datasetColWidths['media_type'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()"></div>Type<span class="sort-indicator" [class.active]="isDatasetSortActive('media_type')">{{ datasetSortIndicator('media_type') }}</span></th>
-              <th (click)="sortDatasets('num_items')" class="sortable" title="Number of media items in the dataset (click to sort)" data-col="num_items" [style.width.px]="datasetsTableFixed ? datasetColWidths['num_items'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()"></div># Items<span class="sort-indicator" [class.active]="isDatasetSortActive('num_items')">{{ datasetSortIndicator('num_items') }}</span></th>
-              <th (click)="sortDatasets('created_at')" class="sortable" title="When the dataset was first imported (click to sort)" data-col="created_at" [style.width.px]="datasetsTableFixed ? datasetColWidths['created_at'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()"></div>Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span></th>
-              @if (!isDefaultLogin) {
-                <th (click)="sortDatasets('created_by')" class="sortable" title="User who created this dataset (click to sort)" data-col="created_by" [style.width.px]="datasetsTableFixed ? datasetColWidths['created_by'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()"></div>Creator<span class="sort-indicator" [class.active]="isDatasetSortActive('created_by')">{{ datasetSortIndicator('created_by') }}</span></th>
-                <th (click)="sortDatasets('readers')" class="sortable" title="Users with access to this dataset (click to sort)" data-col="readers" [style.width.px]="datasetsTableFixed ? datasetColWidths['readers'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()"></div>Readers<span class="sort-indicator" [class.active]="isDatasetSortActive('readers')">{{ datasetSortIndicator('readers') }}</span></th>
+              @for (col of visibleDatasetColumns; track col) {
+                <th
+                  [class.sortable]="datasetColMeta(col).sortable"
+                  [class.col-drop-left]="isDropTarget('datasets', col, 'left')"
+                  [class.col-drop-right]="isDropTarget('datasets', col, 'right')"
+                  [class.col-dragging]="isDragging('datasets', col)"
+                  [attr.data-col]="col"
+                  [title]="datasetColMeta(col).title"
+                  [style.width.px]="datasetsTableFixed ? datasetColWidths[col] : null"
+                  draggable="true"
+                  (click)="onDatasetHeaderClick(col)"
+                  (dragstart)="onColDragStart($event, 'datasets', col)"
+                  (dragover)="onColDragOver($event, 'datasets', col)"
+                  (dragleave)="onColDragLeave($event, 'datasets', col)"
+                  (drop)="onColDrop($event, 'datasets', col)"
+                  (dragend)="onColDragEnd($event)"
+                ><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetColMeta(col).label }}@if (datasetColMeta(col).sortable) {<span class="sort-indicator" [class.active]="isDatasetSortActive(col)">{{ datasetSortIndicator(col) }}</span>}</th>
               }
-              <th title="Whether the dataset is currently loaded in memory" data-col="loaded" [style.width.px]="datasetsTableFixed ? datasetColWidths['loaded'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()"></div>Loaded?</th>
-              <th title="Available operations for this dataset" data-col="actions" [style.width.px]="datasetsTableFixed ? datasetColWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()"></div>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -44,7 +53,7 @@
                 <td>
                   <span class="loading-task-name">{{ task.name || 'Loading...' }}</span>
                 </td>
-                <td [attr.colspan]="isDefaultLogin ? 5 : 7">
+                <td [attr.colspan]="visibleDatasetColumns.length">
                   @if (task.error) {
                     <div class="loading-task-progress loading-task-failed">
                       <span class="error-msg">Failed: {{ task.error }}</span>
@@ -69,6 +78,7 @@
                 [dataset]="dataset"
                 [currentUser]="currentUser"
                 [isDefaultLogin]="isDefaultLogin"
+                [columnOrder]="visibleDatasetColumns"
                 [selected]="isDatasetSelected(dataset.id)"
                 [dimmed]="isLoading && !isDatasetSelected(dataset.id)"
                 [loadingTask]="getInlineTask(dataset.id)"
@@ -112,20 +122,31 @@
           <thead>
             <tr>
               <th (click)="sortModels('name')" class="sortable" title="Model display name (click to sort)" data-col="name" [style.width.px]="modelsTableFixed ? modelColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
-              <th (click)="sortModels('media_type')" class="sortable" title="Media type this model operates on (click to sort)" data-col="media_type" [style.width.px]="modelsTableFixed ? modelColWidths['media_type'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()"></div>Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span></th>
-              <th (click)="sortModels('num_training')" class="sortable" title="Number of labeled training examples (click to sort)" data-col="num_training" [style.width.px]="modelsTableFixed ? modelColWidths['num_training'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()"></div># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span></th>
-              <th title="Is this Model one we can load into Train Mode and improve?" data-col="trainable" [style.width.px]="modelsTableFixed ? modelColWidths['trainable'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()"></div>Trainable?</th>
-              <th (click)="sortModels('autodetect')" class="sortable" title="Include this model in CLI autorun (click to sort)" data-col="autodetect" [style.width.px]="modelsTableFixed ? modelColWidths['autodetect'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()"></div>Autorun?<span class="sort-indicator" [class.active]="isModelSortActive('autodetect')">{{ modelSortIndicator('autodetect') }}</span></th>
-              <th (click)="sortModels('last_trained_at')" class="sortable" title="When the model was last trained (click to sort)" data-col="last_trained_at" [style.width.px]="modelsTableFixed ? modelColWidths['last_trained_at'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()"></div>Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span></th>
-              <th (click)="sortModels('created_at')" class="sortable" title="When the model was created (click to sort)" data-col="created_at" [style.width.px]="modelsTableFixed ? modelColWidths['created_at'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()"></div>Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span></th>
-              <th title="Whether the model's inference data is cached in memory" data-col="detector_loaded" [style.width.px]="modelsTableFixed ? modelColWidths['detector_loaded'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()"></div>Loaded?</th>
-              <th title="Available operations for this model" data-col="actions" [style.width.px]="modelsTableFixed ? modelColWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()"></div>Actions</th>
+              @for (col of visibleModelColumns; track col) {
+                <th
+                  [class.sortable]="modelColMeta(col).sortable"
+                  [class.col-drop-left]="isDropTarget('models', col, 'left')"
+                  [class.col-drop-right]="isDropTarget('models', col, 'right')"
+                  [class.col-dragging]="isDragging('models', col)"
+                  [attr.data-col]="col"
+                  [title]="modelColMeta(col).title"
+                  [style.width.px]="modelsTableFixed ? modelColWidths[col] : null"
+                  draggable="true"
+                  (click)="onModelHeaderClick(col)"
+                  (dragstart)="onColDragStart($event, 'models', col)"
+                  (dragover)="onColDragOver($event, 'models', col)"
+                  (dragleave)="onColDragLeave($event, 'models', col)"
+                  (drop)="onColDrop($event, 'models', col)"
+                  (dragend)="onColDragEnd($event)"
+                ><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelColMeta(col).label }}@if (modelColMeta(col).sortable) {<span class="sort-indicator" [class.active]="isModelSortActive(col)">{{ modelSortIndicator(col) }}</span>}</th>
+              }
             </tr>
           </thead>
           <tbody>
             @for (model of sortedModels; track model.id) {
               <vt-model-card
                 [model]="model"
+                [columnOrder]="visibleModelColumns"
                 [selected]="isModelSelected(model.id)"
                 [dimmed]="isLoading && !isModelSelected(model.id)"
                 [loadingTask]="getInlineModelTask(model.id)"

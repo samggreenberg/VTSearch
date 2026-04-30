@@ -16,6 +16,7 @@ export class DatasetCardComponent implements OnChanges {
   @Input() dataset: any;
   @Input() currentUser = '';
   @Input() isDefaultLogin = true;
+  @Input() columnOrder: string[] = [];
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
   @Input() loadingTask?: LoadingTask;
