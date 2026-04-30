@@ -206,3 +206,21 @@ td {
     animation: icon-rotate-close 0.3s ease-in-out forwards;
   }
 }
+
+.select-checkbox {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+  }
+}

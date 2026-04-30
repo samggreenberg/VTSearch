@@ -666,6 +666,49 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.selectedDatasetIds.has(id);
   }
 
+  toggleDatasetCheckbox(id: string): void {
+    if (this.selectedDatasetIds.has(id)) {
+      this.selectedDatasetIds.delete(id);
+    } else {
+      this.selectedDatasetIds.add(id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectAllDatasets(): void {
+    for (const d of this.datasets) {
+      this.selectedDatasetIds.add(d.id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectNoneDatasets(): void {
+    this.selectedDatasetIds.clear();
+    this.pushTopBarLabels();
+  }
+
+  async deleteSelectedDatasets(): Promise<void> {
+    const ids = [...this.selectedDatasetIds];
+    if (ids.length === 0) return;
+    const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    if (targets.length === 0) return;
+    const names = targets.map((d) => `"${d.name}"`).join(', ');
+    const ok = await this.dialog.confirm(
+      targets.length === 1
+        ? `Delete dataset ${names}?`
+        : `Delete ${targets.length} datasets: ${names}?`,
+    );
+    if (!ok) return;
+    for (const dataset of targets) {
+      this.datasetsApi.deleteRegistered(dataset.id).subscribe({
+        next: () => {
+          this.selectedDatasetIds.delete(dataset.id);
+          this.datasetState.refresh();
+        },
+      });
+    }
+  }
+
   // --- Model selection ---
 
   toggleModelSelection(id: string, event: MouseEvent): void {
@@ -688,6 +731,52 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   isModelSelected(id: string): boolean {
     return this.selectedModelIds.has(id);
+  }
+
+  toggleModelCheckbox(id: string): void {
+    if (this.selectedModelIds.has(id)) {
+      this.selectedModelIds.delete(id);
+    } else {
+      this.selectedModelIds.add(id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectAllModels(): void {
+    for (const m of this.models) {
+      this.selectedModelIds.add(m.id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectNoneModels(): void {
+    this.selectedModelIds.clear();
+    this.pushTopBarLabels();
+  }
+
+  async deleteSelectedModels(): Promise<void> {
+    const ids = [...this.selectedModelIds];
+    if (ids.length === 0) return;
+    const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    if (targets.length === 0) return;
+    const names = targets.map((m) => `"${m.name}"`).join(', ');
+    const ok = await this.dialog.confirm(
+      targets.length === 1
+        ? `Delete model ${names}?`
+        : `Delete ${targets.length} models: ${names}?`,
+    );
+    if (!ok) return;
+    for (const model of targets) {
+      this.modelsApi.deleteFromRegistry(model.id).subscribe({
+        next: () => {
+          this.selectedModelIds.delete(model.id);
+          this.datasetState.refresh();
+        },
+        error: () => {
+          this.dialog.alert(`Failed to delete model "${model.name}".`, 'error');
+        },
+      });
+    }
   }
 
   // --- Dataset actions ---
