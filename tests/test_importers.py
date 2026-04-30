@@ -301,10 +301,11 @@ class TestFolderImporterMetadata:
     def test_name_is_folder(self):
         assert self._get_importer().name == "server_folder"
 
-    def test_icon_is_server_emoji(self):
-        # 🖥 — frontend renders this as a "server" icon, distinguishing
-        # the server-side card from the browser-side Local Folder card.
-        assert self._get_importer().icon == "🖥"
+    def test_icon_is_folder_emoji(self):
+        # 📁 — frontend renders this as a "folder" icon, matching the
+        # browser-side Local Folder card.  The Server tab makes the
+        # server-vs-local distinction.
+        assert self._get_importer().icon == "📁"
 
     def test_description_says_media_files_from_a_folder(self):
         desc = self._get_importer().description.lower()
@@ -325,7 +326,7 @@ class TestFolderImporterMetadata:
 
     def test_to_dict_includes_icon(self):
         d = self._get_importer().to_dict()
-        assert d["icon"] == "🖥"
+        assert d["icon"] == "📁"
 
 
 # ---------------------------------------------------------------------------
