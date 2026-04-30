@@ -116,7 +116,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Drag-reorder state
   dragCol: { table: 'datasets' | 'models'; col: string } | null = null;
-  dropTargetCol: { table: 'datasets' | 'models'; col: string; side: 'left' | 'right' } | null = null;
+  dropTargetCol: { table: 'datasets' | 'models'; col: string } | null = null;
 
   // Per-column display metadata. Keyed by `data-col` value; used both by the
   // header template and by card components when rendering body cells in order.
@@ -504,16 +504,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!this.dragCol || this.dragCol.table !== table || this.dragCol.col === col) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-    const th = event.currentTarget as HTMLElement;
-    const rect = th.getBoundingClientRect();
-    const side: 'left' | 'right' = (event.clientX - rect.left) < rect.width / 2 ? 'left' : 'right';
     if (
       !this.dropTargetCol
       || this.dropTargetCol.col !== col
-      || this.dropTargetCol.side !== side
       || this.dropTargetCol.table !== table
     ) {
-      this.dropTargetCol = { table, col, side };
+      this.dropTargetCol = { table, col };
     }
   }
 
@@ -531,7 +527,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     event.preventDefault();
     const sourceCol = this.dragCol.col;
-    const drop = this.dropTargetCol;
     this.dragCol = null;
     this.dropTargetCol = null;
     if (sourceCol === targetCol) return;
@@ -541,11 +536,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const toIdx = order.indexOf(targetCol);
     if (fromIdx < 0 || toIdx < 0) return;
 
+    // Shift semantics: source lands at target's slot; intermediate columns shift
+    // by one toward source's old slot. Splicing in at the target's *original*
+    // index achieves this for both directions: when fromIdx < toIdx, removing
+    // source first shifts target down by one, so inserting at the original
+    // toIdx places source just past target; when fromIdx > toIdx, target's
+    // index is unchanged, so inserting at toIdx places source just before it.
     const next = [...order];
     next.splice(fromIdx, 1);
-    let insertIdx = next.indexOf(targetCol);
-    if (drop?.side === 'right') insertIdx += 1;
-    next.splice(insertIdx, 0, sourceCol);
+    next.splice(toIdx, 0, sourceCol);
 
     if (table === 'datasets') {
       this.datasetColumnOrder = next;
@@ -560,11 +559,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.dropTargetCol = null;
   }
 
-  isDropTarget(table: 'datasets' | 'models', col: string, side: 'left' | 'right'): boolean {
+  isDropTarget(table: 'datasets' | 'models', col: string): boolean {
     return !!this.dropTargetCol
       && this.dropTargetCol.table === table
-      && this.dropTargetCol.col === col
-      && this.dropTargetCol.side === side;
+      && this.dropTargetCol.col === col;
   }
 
   isDragging(table: 'datasets' | 'models', col: string): boolean {
