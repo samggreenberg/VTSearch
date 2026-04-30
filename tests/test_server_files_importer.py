@@ -31,11 +31,7 @@ class TestReadPathsFile:
     def test_skips_blank_lines_and_comments(self, tmp_path):
         f = tmp_path / "paths.txt"
         f.write_text(
-            "# this is a comment\n"
-            "/a.wav\n"
-            "\n"
-            "  # indented comment\n"
-            "/b.wav\n",
+            "# this is a comment\n/a.wav\n\n  # indented comment\n/b.wav\n",
         )
         # The "  # indented comment" line is *not* skipped because it
         # has leading whitespace before the ``#``; the importer only
@@ -177,3 +173,81 @@ class TestRunEndToEnd:
             assert media["origin_name"] in {str(src_a), str(src_b)}
             assert Path(media["origin_name"]).is_file()
             assert isinstance(media["embedding"], np.ndarray)
+
+
+class TestRunChunked:
+    """Verify run_chunked yields chunks of the requested size and
+    rewrites each chunk's origins back to the source paths."""
+
+    def test_supports_chunked(self):
+        assert ServerFilesDatasetImporter().supports_chunked is True
+
+    def test_run_chunked_yields_in_chunk_size(self, tmp_path):
+        from helpers import make_raw_wav_bytes
+
+        # Four structurally-distinct WAVs so dedup doesn't collapse them.
+        srcs = []
+        for i in range(4):
+            p = tmp_path / f"s_{i}.wav"
+            p.write_bytes(make_raw_wav_bytes() + bytes([i]) * (i + 1))
+            srcs.append(p)
+        listing = tmp_path / "list.txt"
+        listing.write_text("\n".join(str(p) for p in srcs) + "\n")
+
+        imp = ServerFilesDatasetImporter()
+        chunks = list(
+            imp.run_chunked(
+                {"paths_file": str(listing), "media_type": "audio"},
+                chunk_size=2,
+                thin=True,
+            )
+        )
+
+        # Two chunks of two medias each.
+        assert len(chunks) == 2
+        for chunk in chunks:
+            assert len(chunk) == 2
+            for media in chunk.values():
+                assert media["origin"]["importer"] == "server_files"
+                assert media["origin"]["params"]["paths_file"] == str(listing)
+                # origin_name is the real source path, not the staging symlink.
+                assert Path(media["origin_name"]).is_file()
+                assert media["origin_name"] in {str(p) for p in srcs}
+
+    def test_run_chunked_cli_validates_paths_file(self):
+        import pytest
+
+        imp = ServerFilesDatasetImporter()
+        with pytest.raises(FileNotFoundError):
+            list(
+                imp.run_chunked_cli(
+                    {"paths_file": "/nonexistent.txt", "media_type": "audio"},
+                    chunk_size=10,
+                )
+            )
+
+    def test_run_chunked_cleans_up_staging_dir(self, tmp_path):
+        from helpers import make_raw_wav_bytes
+
+        src = tmp_path / "only.wav"
+        src.write_bytes(make_raw_wav_bytes())
+        listing = tmp_path / "list.txt"
+        listing.write_text(f"{src}\n")
+
+        # Snapshot existing tmp prefixes so we can detect a leak.
+        import tempfile as _tempfile
+
+        tmp_root = Path(_tempfile.gettempdir())
+        before = {p.name for p in tmp_root.iterdir() if p.name.startswith("server_files_")}
+
+        imp = ServerFilesDatasetImporter()
+        list(
+            imp.run_chunked(
+                {"paths_file": str(listing), "media_type": "audio"},
+                chunk_size=10,
+                thin=True,
+            )
+        )
+
+        after = {p.name for p in tmp_root.iterdir() if p.name.startswith("server_files_")}
+        assert after == before, f"server_files_ staging dirs leaked: {after - before}"
