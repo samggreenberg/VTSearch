@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore", message=".*unauthenticated requests.*")
 warnings.filterwarnings("ignore", message=".*HF_TOKEN.*")
 
 # Visual feedback for startup
-print("⏳ Initializing VTSearch...", flush=True)
+print(f"⏳ Initializing VTSearch... (PID {os.getpid()})", flush=True)
 
 from flask import Flask, g
 
