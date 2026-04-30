@@ -8,8 +8,6 @@ import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/cl
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { ImporterInfo, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
 
-type ModalView = 'picker' | 'form' | 'demo' | 'server_folder' | 'local_folder';
-
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
@@ -27,7 +25,6 @@ export class DatasetImporterModalComponent implements OnInit {
   @Output() importStarted = new EventEmitter<void>();
   @Output() demoSelected = new EventEmitter<DemoDataset>();
 
-  view: ModalView = 'picker';
   importers: ImporterInfo[] = [];
   selectedImporter: ImporterInfo | null = null;
   formValues: Record<string, any> = {};
@@ -130,10 +127,6 @@ export class DatasetImporterModalComponent implements OnInit {
           (imp) => !imp['hidden_from_picker']
         );
         this.declaredTabs = res.tabs || [];
-        const visible = this.visibleImporterTabs;
-        if (!visible.some((t) => t.id === this.activeImporterTab)) {
-          this.activeImporterTab = visible[0]?.id || 'local';
-        }
       },
     });
     this.datasetsApi.getEmbedders().subscribe({
@@ -162,8 +155,9 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Tab declarations supplied by the backend (``/api/dataset/all-importers``). */
   declaredTabs: ImporterPickerTab[] = [];
 
-  /** Currently selected picker tab. */
-  activeImporterTab = 'local';
+  /** Currently selected picker tab.  Empty string means no tab is selected
+   *  yet, so the content area below the tab bars stays blank. */
+  activeImporterTab = '';
 
   get orderedImporters(): ImporterInfo[] {
     const order = DatasetImporterModalComponent.PICKER_ORDER;
@@ -190,26 +184,25 @@ export class DatasetImporterModalComponent implements OnInit {
       .join(' ');
   }
 
-  /** Tabs that have at least one visible importer.  Tabs declared by the
-   *  backend render in their declared order; categories used by importers
-   *  but never declared get appended at the end with a title-cased label
-   *  and no icon.  An empty tab (no importers) is hidden so the user
-   *  isn't shown an empty section. */
+  /** Picker tabs to display.  All tabs declared by the backend render in
+   *  their declared order, regardless of whether any importers populate
+   *  them — so categories like "Services" remain visible even when no
+   *  extension importers are installed.  Categories used by importers but
+   *  never declared get appended at the end with a title-cased label and
+   *  no icon. */
   get visibleImporterTabs(): ImporterPickerTab[] {
-    const usedCategories = new Set(
-      this.orderedImporters.map((imp) => imp.category || '').filter(Boolean),
-    );
     const visible: ImporterPickerTab[] = [];
     const seen = new Set<string>();
     const declared = [...this.declaredTabs].sort(
       (a, b) => (a.order ?? 100) - (b.order ?? 100),
     );
     for (const tab of declared) {
-      if (usedCategories.has(tab.id)) {
-        visible.push(tab);
-        seen.add(tab.id);
-      }
+      visible.push(tab);
+      seen.add(tab.id);
     }
+    const usedCategories = new Set(
+      this.orderedImporters.map((imp) => imp.category || '').filter(Boolean),
+    );
     for (const id of usedCategories) {
       if (!seen.has(id)) {
         visible.push({ id, label: this.fallbackTabLabel(id) });
@@ -227,16 +220,28 @@ export class DatasetImporterModalComponent implements OnInit {
 
   selectImporterTab(tabId: string): void {
     this.activeImporterTab = tabId;
+    // Clearing the selected importer keeps the inner sub-tab row blank
+    // until the user explicitly clicks one — matching the "no auto-select"
+    // policy that applies at every tab level.
+    this.selectedImporter = null;
   }
 
   /** Title shown at the top of the modal. */
   get modalTitle(): string {
-    if (this.view === 'picker') return 'Add Dataset';
-    return this.selectedImporter?.display_name || this.selectedImporter?.name || 'Import';
+    return 'Add Dataset';
+  }
+
+  /** ``picker_view`` of the currently selected importer, or empty when
+   *  nothing is selected.  Drives which inline widget set is rendered
+   *  below the inner tab row. */
+  get activePickerView(): string {
+    return this.selectedImporter?.picker_view || '';
   }
 
   selectImporter(importer: ImporterInfo): void {
-    // Dispatch to the dedicated view for importers that aren't a generic form.
+    // Dispatch to the importer-specific setup logic.  Each helper
+    // populates its own state slice but no longer changes a global
+    // ``view`` because the modal renders all tab levels together.
     const pickerView = importer.picker_view || 'form';
     if (pickerView === 'local_folder' || pickerView === 'local_files') {
       this.openLocalFolderUploader(importer);
@@ -284,8 +289,6 @@ export class DatasetImporterModalComponent implements OnInit {
       this.loadClippers(defaultType);
       this.loadEmbedders(defaultType);
     }
-
-    this.view = 'form';
   }
 
   onMediaTypeChange(mediaType: string): void {
@@ -347,7 +350,6 @@ export class DatasetImporterModalComponent implements OnInit {
 
   openDemoPicker(importer?: ImporterInfo): void {
     this.selectedImporter = importer || this.importers.find((i) => i.name === 'demo') || null;
-    this.view = 'demo';
     this.demoLoading = true;
     this.demos = [];
     this.demoTabs = [];
@@ -388,15 +390,9 @@ export class DatasetImporterModalComponent implements OnInit {
         this.demoTabs.push(mt);
       }
     }
-    if (this.demoTabs.length > 0 && !this.activeTab) {
-      // Prefer guessed media type if it has demos
-      if (this.guessedMediaType && this.demoTabs.includes(this.guessedMediaType)) {
-        this.activeTab = this.guessedMediaType;
-      } else {
-        this.activeTab = this.demoTabs[0];
-      }
-      this.loadDemoEmbedders(this.activeTab);
-    }
+    // Intentionally leave ``activeTab`` blank — no media-type tab is
+    // auto-selected.  The demo table stays empty until the user clicks
+    // one of the inner tabs.
   }
 
   private loadDemoEmbedders(mediaType: string): void {
@@ -713,12 +709,6 @@ export class DatasetImporterModalComponent implements OnInit {
     // Clipper is reset by loadDemoEmbedders (called from selectDemoTab)
   }
 
-  back(): void {
-    this.view = 'picker';
-    this.selectedImporter = null;
-    this.error = '';
-  }
-
   /** Read the ``recursive`` field's declared default ("true"/"false") from
    *  the importer metadata; defaults to ``true`` when the field is absent. */
   private readRecursiveDefault(importer: ImporterInfo | null): boolean {
@@ -735,7 +725,6 @@ export class DatasetImporterModalComponent implements OnInit {
       || null;
     this.selectedImporter = resolved;
     this.lfPickerKind = resolved?.name === 'local_files' ? 'files' : 'folder';
-    this.view = 'local_folder';
     this.lfFiles = [];
     this.lfError = '';
     this.lfSubmitting = false;
@@ -891,7 +880,6 @@ export class DatasetImporterModalComponent implements OnInit {
 
   openServerFolderBrowser(importer?: ImporterInfo): void {
     this.selectedImporter = importer || this.importers.find((i) => i.name === 'server_folder') || null;
-    this.view = 'server_folder';
     this.sfBrowsePath = '';
     this.sfBrowseRootPath = '';
     this.sfBrowseDirs = [];

@@ -1,42 +1,37 @@
 <vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
-  @if (view === 'picker') {
-    <div class="importer-picker">
-      @if (orderedImporters.length === 0) {
-        <p class="empty-state">Loading importers...</p>
-      } @else {
-        <div class="importer-tab-bar">
-          @for (tab of visibleImporterTabs; track tab.id) {
-            <button
-              class="importer-tab"
-              [class.active]="activeImporterTab === tab.id"
-              (click)="selectImporterTab(tab.id)"
-              [title]="'Show ' + tab.label + ' dataset importers'"
-            >@if (tab.icon) {<vt-icon [type]="tab.icon" [size]="14"></vt-icon>}{{ tab.label }}</button>
-          }
-        </div>
+  <div class="importer-picker">
+    <div class="importer-tab-bar">
+      @for (tab of visibleImporterTabs; track tab.id) {
+        <button
+          class="importer-tab"
+          [class.active]="activeImporterTab === tab.id"
+          (click)="selectImporterTab(tab.id)"
+          [title]="'Show ' + tab.label + ' dataset importers'"
+        >@if (tab.icon) {<vt-icon [type]="tab.icon" [size]="14"></vt-icon>}{{ tab.label }}</button>
+      }
+    </div>
+
+    @if (activeImporterTab) {
+      <div class="importer-subtab-bar">
+        @if (importersForActiveTab.length === 0) {
+          <span class="empty-state empty-state--inline">No importers in this category.</span>
+        }
         @for (imp of importersForActiveTab; track imp.name) {
           <button
-            class="importer-card"
-            [class.demo-card]="imp.picker_view === 'demo'"
+            class="importer-subtab"
+            [class.active]="selectedImporter?.name === imp.name"
             [class.disabled]="imp['enabled'] === false"
             [disabled]="imp['enabled'] === false"
             (click)="selectImporter(imp)"
-            [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : ''"
-          >
-            <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
-            @if (imp.description) {
-              <span class="importer-desc">{{ imp.description }}</span>
-            }
-          </button>
+            [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : (imp.description || '')"
+          >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
         }
-      }
-    </div>
-  }
+      </div>
+    }
+  </div>
 
-  @if (view === 'demo') {
+  @if (activePickerView === 'demo' && selectedImporter) {
     <div class="demo-picker">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to importer list">&larr; Back</button>
-
       @if (demoLoading) {
         <p class="empty-state">Loading demo datasets...</p>
       } @else if (demos.length === 0) {
@@ -53,7 +48,7 @@
           }
         </div>
 
-        @if (demoEmbedders.length > 1 || demoClippers.length > 1) {
+        @if (activeTab && (demoEmbedders.length > 1 || demoClippers.length > 1)) {
           <div class="demo-embedder-row">
             @if (demoEmbedders.length > 1) {
               <label class="form-label" for="demo-embedder" title="Embedding model used to compute vector representations of each media item">Embedder:</label>
@@ -76,47 +71,47 @@
           </div>
         }
 
-        <div class="demo-content-area">
-          <table class="demo-table" [class.demo-table-fixed]="demoTableFixed" [style.width]="demoTableFixed ? (demoTableWidth + 'px') : '100%'">
-            <thead>
-              <tr>
-                <th (click)="sortDemoBy('label')" class="sortable" title="Demo dataset name (click to sort)" data-col="label" [style.width.px]="demoTableFixed ? demoColWidths['label'] : null">Name<span class="sort-indicator" [class.active]="demoSortKey === 'label'">{{ demoSortIndicator('label') }}</span></th>
-                <th (click)="sortDemoBy('num_files')" class="sortable col-num" title="Number of media files in the demo dataset (click to sort)" data-col="num_files" [style.width.px]="demoTableFixed ? demoColWidths['num_files'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div># Media<span class="sort-indicator" [class.active]="demoSortKey === 'num_files'">{{ demoSortIndicator('num_files') }}</span></th>
-                <th (click)="sortDemoBy('num_categories')" class="sortable col-num" title="Number of distinct categories or classes in the dataset (click to sort)" data-col="num_categories" [style.width.px]="demoTableFixed ? demoColWidths['num_categories'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div># Cat.<span class="sort-indicator" [class.active]="demoSortKey === 'num_categories'">{{ demoSortIndicator('num_categories') }}</span></th>
-                <th (click)="sortDemoBy('description')" class="sortable" title="Short description of the demo dataset contents (click to sort)" data-col="description" [style.width.px]="demoTableFixed ? demoColWidths['description'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div>Description<span class="sort-indicator" [class.active]="demoSortKey === 'description'">{{ demoSortIndicator('description') }}</span></th>
-                <th (click)="sortDemoBy('status')" class="sortable" title="Whether the dataset is pre-downloaded and ready to load immediately, or needs to be fetched first (click to sort)" data-col="status" [style.width.px]="demoTableFixed ? demoColWidths['status'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div>Readiness<span class="sort-indicator" [class.active]="demoSortKey === 'status'">{{ demoSortIndicator('status') }}</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (demo of filteredDemos; track demo.name) {
-                <tr
-                  class="demo-row"
-                  [class.ready]="demo.status === 'ready'"
-                  role="button"
-                  tabindex="0"
-                  [attr.aria-label]="demo.label + ': ' + demo.description"
-                  (click)="selectDemo(demo)"
-                  (keydown.enter)="selectDemo(demo)"
-                  (keydown.space)="$event.preventDefault(); selectDemo(demo)"
-                >
-                  <td class="col-name">{{ demo.label }}</td>
-                  <td class="col-num">{{ demo.num_files | number }}</td>
-                  <td class="col-num">{{ demo.num_categories | number }}</td>
-                  <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>
-                  <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
+        @if (activeTab) {
+          <div class="demo-content-area">
+            <table class="demo-table" [class.demo-table-fixed]="demoTableFixed" [style.width]="demoTableFixed ? (demoTableWidth + 'px') : '100%'">
+              <thead>
+                <tr>
+                  <th (click)="sortDemoBy('label')" class="sortable" title="Demo dataset name (click to sort)" data-col="label" [style.width.px]="demoTableFixed ? demoColWidths['label'] : null">Name<span class="sort-indicator" [class.active]="demoSortKey === 'label'">{{ demoSortIndicator('label') }}</span></th>
+                  <th (click)="sortDemoBy('num_files')" class="sortable col-num" title="Number of media files in the demo dataset (click to sort)" data-col="num_files" [style.width.px]="demoTableFixed ? demoColWidths['num_files'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div># Media<span class="sort-indicator" [class.active]="demoSortKey === 'num_files'">{{ demoSortIndicator('num_files') }}</span></th>
+                  <th (click)="sortDemoBy('num_categories')" class="sortable col-num" title="Number of distinct categories or classes in the dataset (click to sort)" data-col="num_categories" [style.width.px]="demoTableFixed ? demoColWidths['num_categories'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div># Cat.<span class="sort-indicator" [class.active]="demoSortKey === 'num_categories'">{{ demoSortIndicator('num_categories') }}</span></th>
+                  <th (click)="sortDemoBy('description')" class="sortable" title="Short description of the demo dataset contents (click to sort)" data-col="description" [style.width.px]="demoTableFixed ? demoColWidths['description'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div>Description<span class="sort-indicator" [class.active]="demoSortKey === 'description'">{{ demoSortIndicator('description') }}</span></th>
+                  <th (click)="sortDemoBy('status')" class="sortable" title="Whether the dataset is pre-downloaded and ready to load immediately, or needs to be fetched first (click to sort)" data-col="status" [style.width.px]="demoTableFixed ? demoColWidths['status'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div>Readiness<span class="sort-indicator" [class.active]="demoSortKey === 'status'">{{ demoSortIndicator('status') }}</span></th>
                 </tr>
-              }
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                @for (demo of filteredDemos; track demo.name) {
+                  <tr
+                    class="demo-row"
+                    [class.ready]="demo.status === 'ready'"
+                    role="button"
+                    tabindex="0"
+                    [attr.aria-label]="demo.label + ': ' + demo.description"
+                    (click)="selectDemo(demo)"
+                    (keydown.enter)="selectDemo(demo)"
+                    (keydown.space)="$event.preventDefault(); selectDemo(demo)"
+                  >
+                    <td class="col-name">{{ demo.label }}</td>
+                    <td class="col-num">{{ demo.num_files | number }}</td>
+                    <td class="col-num">{{ demo.num_categories | number }}</td>
+                    <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>
+                    <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
       }
     </div>
   }
 
-  @if (view === 'form' && selectedImporter) {
+  @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter) {
     <div class="importer-form">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to importer list">&larr; Back</button>
-
       @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
         @for (field of selectedImporter.fields; track field.key) {
           <div class="form-group">
@@ -221,9 +216,7 @@
         <p class="error-text">{{ error }}</p>
       }
     </div>
-  }
 
-  @if (view === 'form' && selectedImporter) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="submit()" [disabled]="submitting">
@@ -236,10 +229,8 @@
     </div>
   }
 
-  @if (view === 'local_folder') {
+  @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
     <div class="local-folder-uploader">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to importer list">&larr; Back</button>
-
       @if (lfPickerKind === 'folder') {
         <p class="info-text">Pick a folder on <strong>this computer</strong> (the machine your browser is running on). Its contents will be uploaded to the server and embedded into a new dataset.</p>
       } @else {
@@ -345,9 +336,7 @@
         <p class="error-text">{{ lfError }}</p>
       }
     </div>
-  }
 
-  @if (view === 'local_folder') {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="lfSubmit()" [disabled]="lfSubmitting || lfFiles.length === 0">
@@ -360,10 +349,8 @@
     </div>
   }
 
-  @if (view === 'server_folder') {
+  @if (activePickerView === 'server_folder' && selectedImporter) {
     <div class="server-folder-browser">
-      <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to importer list">&larr; Back</button>
-
       <div class="form-group">
         <label class="form-label" for="sf-media-type" title="The type of media files in the folder (audio, image, text, video, or document)">Media Type</label>
         <select
@@ -472,9 +459,7 @@
         <p class="error-text">{{ sfBrowseError }}</p>
       }
     </div>
-  }
 
-  @if (view === 'server_folder') {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="sfSubmit()" [disabled]="sfSubmitting || !sfAbsolutePath">

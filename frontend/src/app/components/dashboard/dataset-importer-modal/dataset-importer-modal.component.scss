@@ -1,22 +1,29 @@
-.importer-card { padding: 12px 16px; }
-.importer-card.disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+// Pin the Add Dataset modal to a single large width so flipping between
+// tabs (Services / Server / Local / Demo) and inner widgets doesn't reflow
+// the dialog.  680px (matching the Settings modal) was too narrow for the
+// demo table; 900px gives the table room without overflowing typical
+// laptop displays.
+:host {
+  ::ng-deep .modal-content {
+    width: 900px;
+  }
 }
+
 .btn--sm { padding: 2px 10px; font-size: .85rem; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 
-.importer-picker, .clipper-params, .demo-picker, .server-folder-browser, .sf-browse-section {
+.importer-picker, .clipper-params, .demo-picker, .server-folder-browser, .sf-browse-section, .importer-form, .local-folder-uploader {
   display: flex;
   flex-direction: column;
 }
+
+.importer-picker { gap: 0; margin-bottom: 12px; }
 
 .importer-tab-bar {
   display: flex;
   gap: 4px;
   width: 100%;
   border-bottom: 2px solid var(--border);
-  margin-bottom: 12px;
 }
 
 .importer-tab {
@@ -44,6 +51,67 @@
     border-bottom-color: var(--accent);
     font-weight: 600;
   }
+}
+
+// Inner row of importer "tabs" within the active category.  Renders
+// underneath the top tab bar; selecting one swaps in that importer's
+// widgets in the area below.
+.importer-subtab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+  padding: 6px 4px 0;
+  background: var(--bg-subtle);
+  margin-bottom: 12px;
+}
+
+.importer-subtab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: none;
+  color: var(--text-secondary, var(--text-muted));
+  font-size: .82rem;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+  margin-bottom: -1px;
+
+  &:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--bg-surface);
+  }
+
+  &.active {
+    color: var(--text-primary);
+    background: var(--bg-surface);
+    border-color: var(--border-subtle, var(--border));
+    border-bottom-color: var(--bg-surface);
+    font-weight: 600;
+  }
+
+  &.disabled, &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.importer-subtab-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.empty-state--inline {
+  padding: 6px 10px;
+  font-size: .8rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .clipper-params {
