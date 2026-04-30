@@ -66,7 +66,18 @@ class TestRealImporterCliArgs:
     def test_folder_importer_cli_args(self):
         imp = get_importer("server_folder")
         args = imp.build_cli_args({"media_type": "audio", "path": "/my/folder"})
-        assert args == "--importer server_folder --media-type audio --path /my/folder"
+        assert "--importer server_folder" in args
+        assert "--media-type audio" in args
+        assert "--path /my/folder" in args
+        # `recursive` defaults to true, so the flag is emitted.
+        assert "--recursive" in args
+        assert "--no-recursive" not in args
+
+    def test_folder_importer_cli_args_no_recursive(self):
+        imp = get_importer("server_folder")
+        args = imp.build_cli_args({"media_type": "audio", "path": "/my/folder", "recursive": False})
+        assert "--no-recursive" in args
+        assert " --recursive" not in args
 
     def test_http_archive_importer_cli_args(self):
         imp = get_importer("http_archive")
