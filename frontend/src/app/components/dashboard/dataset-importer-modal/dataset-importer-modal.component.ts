@@ -218,6 +218,12 @@ export class DatasetImporterModalComponent implements OnInit {
     );
   }
 
+  /** Display label of the currently selected category tab, or empty when none. */
+  get activeImporterTabLabel(): string {
+    const tab = this.visibleImporterTabs.find((t) => t.id === this.activeImporterTab);
+    return tab?.label || '';
+  }
+
   selectImporterTab(tabId: string): void {
     this.activeImporterTab = tabId;
     // Clearing the selected importer keeps the inner sub-tab row blank

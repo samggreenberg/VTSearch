@@ -2,10 +2,12 @@
 // tabs (Services / Server / Local / Demo) and inner widgets doesn't reflow
 // the dialog.  680px (matching the Settings modal) was too narrow for the
 // demo table; 900px gives the table room without overflowing typical
-// laptop displays.
+// laptop displays.  min-height keeps the dialog from collapsing to a thin
+// strip in the no-selection state and then jumping to fit the demo table.
 :host {
   ::ng-deep .modal-content {
     width: 900px;
+    min-height: 480px;
   }
 }
 
@@ -19,8 +21,18 @@
 
 .importer-picker { gap: 0; margin-bottom: 12px; }
 
+// Indent the Importer's content area inward from the tabs above so the
+// hierarchy reads top-down: category tabs → importer tabs → controls.
+.importer-form,
+.demo-picker,
+.local-folder-uploader,
+.server-folder-browser {
+  padding-left: 20px;
+}
+
 .importer-tab-bar {
   display: flex;
+  align-items: center;
   gap: 4px;
   width: 100%;
   border-bottom: 2px solid var(--border);
@@ -53,53 +65,30 @@
   }
 }
 
-// Inner row of importer "tabs" within the active category.  Renders
-// underneath the top tab bar; selecting one swaps in that importer's
-// widgets in the area below.
+// Inner row of importer "tabs" within the active category.  Uses the same
+// underline-tab styling as the top-level category tabs so all three tab
+// levels (category, importer, demo media-type) feel like one consistent
+// system.
 .importer-subtab-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  width: 100%;
-  border-bottom: 1px solid var(--border-subtle, var(--border));
-  padding: 6px 4px 0;
-  background: var(--bg-subtle);
-  margin-bottom: 12px;
+  @extend .importer-tab-bar;
 }
 
 .importer-subtab {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 14px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
-  background: none;
-  color: var(--text-secondary, var(--text-muted));
-  font-size: .82rem;
-  cursor: pointer;
-  transition: all .15s;
-  white-space: nowrap;
-  margin-bottom: -1px;
-
-  &:hover:not(:disabled) {
-    color: var(--text-primary);
-    background: var(--bg-surface);
-  }
-
-  &.active {
-    color: var(--text-primary);
-    background: var(--bg-surface);
-    border-color: var(--border-subtle, var(--border));
-    border-bottom-color: var(--bg-surface);
-    font-weight: 600;
-  }
+  @extend .importer-tab;
 
   &.disabled, &:disabled {
     opacity: 0.45;
     cursor: not-allowed;
   }
+}
+
+.tab-bar-hint {
+  margin-left: auto;
+  padding: 0 12px;
+  color: var(--text-muted);
+  font-size: .8rem;
+  font-style: italic;
+  white-space: nowrap;
 }
 
 .importer-subtab-icon {
@@ -120,7 +109,7 @@
   gap: 8px;
 }
 
-.demo-picker { gap: 8px; }
+.demo-picker { gap: 12px; }
 
 // .demo-tab-bar / .demo-tab share the visual styling of the top
 // .importer-tab-bar / .importer-tab.  Define the chrome once via @extend
@@ -132,8 +121,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
-  padding-left: 10px;
 
   .form-label { margin: 0; font-size: .85rem; white-space: nowrap; }
   .form-select--inline { width: auto; min-width: 140px; }

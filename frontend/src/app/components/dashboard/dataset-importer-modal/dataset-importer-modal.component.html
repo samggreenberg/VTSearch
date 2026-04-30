@@ -9,6 +9,9 @@
           [title]="'Show ' + tab.label + ' dataset importers'"
         >@if (tab.icon) {<vt-icon [type]="tab.icon" [size]="14"></vt-icon>}{{ tab.label }}</button>
       }
+      @if (!activeImporterTab) {
+        <span class="tab-bar-hint">Select what type of dataset to add.</span>
+      }
     </div>
 
     @if (activeImporterTab) {
@@ -25,6 +28,9 @@
             (click)="selectImporter(imp)"
             [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : (imp.description || '')"
           >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
+        }
+        @if (!selectedImporter && importersForActiveTab.length > 0) {
+          <span class="tab-bar-hint">Select how to add a {{ activeImporterTabLabel }} dataset.</span>
         }
       </div>
     }
