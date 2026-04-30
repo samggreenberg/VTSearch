@@ -206,8 +206,19 @@ export interface ImporterField {
   placeholder?: string;
 }
 
+export interface ImporterPickerTab {
+  id: string;
+  label: string;
+  icon?: string;
+  order?: number;
+}
+
 export interface ImportersResponse {
   importers: ImporterInfo[];
+  /** Picker tab declarations.  When present, the frontend renders one tab
+   *  per entry; when absent (older backends) the frontend falls back to
+   *  inferring tabs from importer ``category`` values. */
+  tabs?: ImporterPickerTab[];
 }
 
 export interface DemoDataset {

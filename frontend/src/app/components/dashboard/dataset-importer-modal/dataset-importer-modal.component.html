@@ -11,7 +11,7 @@
               [class.active]="activeImporterTab === tab.id"
               (click)="selectImporterTab(tab.id)"
               [title]="'Show ' + tab.label + ' dataset importers'"
-            >{{ tab.label }}</button>
+            >@if (tab.icon) {<vt-icon [type]="tab.icon" [size]="14"></vt-icon>}{{ tab.label }}</button>
           }
         </div>
         @for (imp of importersForActiveTab; track imp.name) {
