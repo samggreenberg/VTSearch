@@ -216,7 +216,9 @@
         <p class="error-text">{{ error }}</p>
       }
     </div>
+  }
 
+  @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="submit()" [disabled]="submitting">
@@ -336,7 +338,9 @@
         <p class="error-text">{{ lfError }}</p>
       }
     </div>
+  }
 
+  @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="lfSubmit()" [disabled]="lfSubmitting || lfFiles.length === 0">
@@ -459,7 +463,9 @@
         <p class="error-text">{{ sfBrowseError }}</p>
       }
     </div>
+  }
 
+  @if (activePickerView === 'server_folder' && selectedImporter) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="sfSubmit()" [disabled]="sfSubmitting || !sfAbsolutePath">

@@ -122,40 +122,11 @@
 
 .demo-picker { gap: 8px; }
 
-.demo-tab-bar {
-  display: flex;
-  gap: 4px;
-  width: 100%;
-  border-bottom: 2px solid var(--border);
-  margin-bottom: 12px;
-}
-
-.demo-tab {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 8px 16px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-secondary, var(--text-muted));
-  font-size: .85rem;
-  cursor: pointer;
-  transition: all .15s;
-  margin-bottom: -2px;
-  white-space: nowrap;
-
-  &:hover {
-    color: var(--text-primary);
-    background: var(--bg-subtle);
-  }
-
-  &.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
-    font-weight: 600;
-  }
-}
+// .demo-tab-bar / .demo-tab share the visual styling of the top
+// .importer-tab-bar / .importer-tab.  Define the chrome once via @extend
+// so the compiled output stays under the per-component CSS budget.
+.demo-tab-bar { @extend .importer-tab-bar; }
+.demo-tab { @extend .importer-tab; }
 
 .demo-embedder-row {
   display: flex;
