@@ -302,9 +302,21 @@ def update_dataset_readers(dataset_id: str):
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/stats")
 def get_dataset_stats(dataset_id: str):
     """Return ingest statistics for a registered dataset."""
+    from vtsearch.media import get_clipper
+
     entry = _reg_get(dataset_id)
     if entry is None:
         return jsonify({"error": "Dataset not found"}), 404
+
+    raw_clipper = entry.get("clipper", "") or ""
+    if not raw_clipper or raw_clipper.endswith("_default"):
+        clipper_display = ""
+    else:
+        try:
+            clipper_display = get_clipper(raw_clipper).display_name
+        except KeyError:
+            clipper_display = raw_clipper
+
     return jsonify(
         {
             "num_items": entry.get("num_items", 0),
@@ -312,5 +324,9 @@ def get_dataset_stats(dataset_id: str):
             "file_type_counts": entry.get("file_type_counts", {}),
             "ingest_started_at": entry.get("ingest_started_at"),
             "ingest_finished_at": entry.get("ingest_finished_at"),
+            "origin": entry.get("origin", ""),
+            "source": entry.get("source") or {},
+            "clipper": clipper_display,
+            "embedder": entry.get("embedder", ""),
         }
     )

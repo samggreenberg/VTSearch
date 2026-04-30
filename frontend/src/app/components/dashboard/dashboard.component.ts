@@ -103,8 +103,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // colspan that replaces "all columns after name" keeps working); these arrays
   // hold the columns that follow name and are user-reorderable.
   static readonly DATASET_COLUMNS_DEFAULT = [
-    'media_type', 'num_items', 'num_dupes', 'created_at', 'clipper', 'embedder',
-    'created_by', 'readers', 'loaded', 'actions',
+    'media_type', 'num_items', 'created_at', 'created_by', 'readers', 'loaded', 'actions',
   ];
   static readonly MODEL_COLUMNS_DEFAULT = [
     'media_type', 'num_training', 'trainable', 'autodetect', 'last_trained_at',
@@ -125,10 +124,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     name: { label: 'Name', title: 'Dataset display name (click to sort)', sortable: true },
     media_type: { label: 'Type', title: 'Media type: audio, image, text, video, or document (click to sort)', sortable: true },
     num_items: { label: '# Items', title: 'Number of media items in the dataset (click to sort)', sortable: true },
-    num_dupes: { label: '# Dupes', title: 'Number of duplicate items collapsed (click to sort)', sortable: true },
     created_at: { label: 'Created', title: 'When the dataset was first imported (click to sort)', sortable: true },
-    clipper: { label: 'Clipper', title: 'MediaClipper used at creation (click to sort)', sortable: true },
-    embedder: { label: 'Embedder', title: 'MediaEmbedder used for embedding (click to sort)', sortable: true },
     created_by: { label: 'Creator', title: 'User who created this dataset (click to sort)', sortable: true },
     readers: { label: 'Readers', title: 'Users with access to this dataset (click to sort)', sortable: true },
     loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },

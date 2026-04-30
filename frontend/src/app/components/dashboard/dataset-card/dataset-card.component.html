@@ -68,17 +68,8 @@
       @case ('num_items') {
         <td>{{ dataset.num_items != null ? (dataset.num_items | number) : '-' }}</td>
       }
-      @case ('num_dupes') {
-        <td>{{ (dataset.num_dupes ?? 0) | number }}</td>
-      }
       @case ('created_at') {
         <td>{{ formatDate(dataset.created_at) }}</td>
-      }
-      @case ('clipper') {
-        <td class="clipper-cell">{{ dataset.clipper || '-' }}</td>
-      }
-      @case ('embedder') {
-        <td class="embedder-cell">{{ (dataset.embedder | titlecase) || '-' }}</td>
       }
       @case ('created_by') {
         <td>{{ dataset.created_by || '-' }}</td>
