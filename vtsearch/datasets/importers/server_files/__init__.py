@@ -3,7 +3,9 @@
 The user supplies the absolute path of a UTF-8 text file on the server.
 Each non-empty, non-comment line of that file is treated as the
 absolute path (or path relative to the text file's directory) of a
-media file to embed.  The importer symlinks each listed file into a
+media file or directory to embed.  Symlinks (to either files or
+directories) are followed, and directory entries are walked recursively
+for media files.  The importer symlinks every resulting file into a
 temporary directory and then delegates to :mod:`server_folder` for the
 actual scanning/embedding.  After the import each media's origin is
 rewritten to point at this importer so that
@@ -14,6 +16,7 @@ Lines beginning with ``#`` are treated as comments and skipped.
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from collections.abc import Iterator
@@ -42,11 +45,36 @@ def _read_paths_file(paths_file: Path) -> list[Path]:
     return paths
 
 
+def _expand_paths(paths: list[Path]) -> list[Path]:
+    """Expand any directory entries in *paths* into the files they contain.
+
+    Both ``Path.is_file`` and ``Path.is_dir`` follow symlinks by default, so
+    a list entry that's a symlink to a file or to a directory is treated
+    just like the underlying target.  Directory entries are walked
+    recursively with ``followlinks=True`` so symlinked sub-directories are
+    also descended.
+    """
+    expanded: list[Path] = []
+    for src in paths:
+        if src.is_file():
+            expanded.append(src)
+        elif src.is_dir():
+            for dirpath, _dirnames, filenames in os.walk(src, followlinks=True):
+                for name in filenames:
+                    expanded.append(Path(dirpath) / name)
+    return expanded
+
+
 def _symlink_paths(paths: list[Path], target_dir: Path) -> dict[str, Path]:
-    """Symlink each *paths* entry into *target_dir*; return name→source map."""
+    """Symlink each *paths* entry into *target_dir*; return name→source map.
+
+    Entries that are directories (or symlinks to directories) are walked
+    recursively for files; every regular file found inside is symlinked
+    into the staging directory with a disambiguated basename.
+    """
     target_dir.mkdir(parents=True, exist_ok=True)
     name_to_source: dict[str, Path] = {}
-    for src in paths:
+    for src in _expand_paths(paths):
         if not src.is_file():
             continue
         # Disambiguate identical basenames by appending an index.
@@ -101,7 +129,11 @@ class ServerFilesDatasetImporter(DatasetImporter):
             key="paths_file",
             label="Paths File",
             field_type="server_path",
-            description="Absolute server path to a text file containing one media-file path per line.",
+            description=(
+                "Absolute server path to a text file containing one media-file or "
+                "directory path per line.  Symlinks are followed; directory entries "
+                "are scanned recursively for media files."
+            ),
             accept=".txt,.list",
         ),
     ]

@@ -233,6 +233,46 @@ class TestRglobFollowSymlinks:
         assert rglob_follow_symlinks(root, "*.wav") == []
 
 
+class TestGlobTopLevelSymlinks:
+    """glob_top_level should pick up symlinked files at the top level."""
+
+    def test_finds_symlinked_file_at_top_level(self, tmp_path):
+        from vtsearch.utils.paths import glob_top_level
+
+        external = tmp_path / "external"
+        external.mkdir()
+        real = external / "real.wav"
+        real.write_bytes(b"r")
+
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "linked.wav").symlink_to(real)
+
+        results = glob_top_level(root, "*.wav")
+        names = {p.name for p in results}
+        assert "linked.wav" in names
+
+    def test_skips_symlinked_dir_at_top_level_when_non_recursive(self, tmp_path):
+        """Non-recursive scans deliberately do not descend into folders.
+
+        A symlink that points at a directory therefore stays out of the
+        result set — only top-level *files* (real or symlinked) are
+        returned.
+        """
+        from vtsearch.utils.paths import glob_top_level
+
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "deep.wav").write_bytes(b"d")
+
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "linked").symlink_to(external)
+
+        results = glob_top_level(root, "*.wav")
+        assert results == []
+
+
 class TestSymlinkedFolderImport:
     """load_dataset_from_folder must discover files inside symlinked subdirs."""
 

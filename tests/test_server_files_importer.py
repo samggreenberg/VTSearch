@@ -17,6 +17,7 @@ import numpy as np
 from vtsearch.datasets.importers import get_importer
 from vtsearch.datasets.importers.server_files import (
     ServerFilesDatasetImporter,
+    _expand_paths,
     _read_paths_file,
     _symlink_paths,
 )
@@ -74,6 +75,59 @@ class TestSymlinkPaths:
         src_a.write_bytes(b"A")
         mapping = _symlink_paths([src_a, tmp_path / "missing.wav"], tmp_path / "stage")
         assert list(mapping.keys()) == ["a.wav"]
+
+    def test_follows_symlinked_file_entries(self, tmp_path):
+        real = tmp_path / "real.wav"
+        real.write_bytes(b"R")
+        link = tmp_path / "link.wav"
+        link.symlink_to(real)
+
+        mapping = _symlink_paths([link], tmp_path / "stage")
+        assert "link.wav" in mapping
+        # The staged symlink resolves back to the real source file.
+        assert (tmp_path / "stage" / "link.wav").resolve() == real.resolve()
+
+    def test_expands_directory_entry(self, tmp_path):
+        d = tmp_path / "media"
+        d.mkdir()
+        (d / "a.wav").write_bytes(b"A")
+        (d / "b.wav").write_bytes(b"B")
+        sub = d / "sub"
+        sub.mkdir()
+        (sub / "c.wav").write_bytes(b"C")
+
+        mapping = _symlink_paths([d], tmp_path / "stage")
+        # All three files (including the one in the subdirectory) are
+        # symlinked into the flat staging dir.
+        assert {"a.wav", "b.wav", "c.wav"} <= set(mapping.keys())
+
+    def test_expands_symlinked_directory_entry(self, tmp_path):
+        real = tmp_path / "real_dir"
+        real.mkdir()
+        (real / "x.wav").write_bytes(b"X")
+        sub = real / "nested"
+        sub.mkdir()
+        (sub / "y.wav").write_bytes(b"Y")
+
+        link = tmp_path / "link_dir"
+        link.symlink_to(real)
+
+        mapping = _symlink_paths([link], tmp_path / "stage")
+        assert {"x.wav", "y.wav"} <= set(mapping.keys())
+
+    def test_expand_paths_follows_symlinked_subdirs(self, tmp_path):
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "top.wav").write_bytes(b"T")
+        external = tmp_path / "external"
+        external.mkdir()
+        (external / "ext.wav").write_bytes(b"E")
+        (root / "linked").symlink_to(external)
+
+        files = _expand_paths([root])
+        names = {p.name for p in files}
+        assert "top.wav" in names
+        assert "ext.wav" in names
 
     def test_disambiguates_duplicate_basenames(self, tmp_path):
         d1 = tmp_path / "d1"
@@ -173,6 +227,57 @@ class TestRunEndToEnd:
             assert media["origin_name"] in {str(src_a), str(src_b)}
             assert Path(media["origin_name"]).is_file()
             assert isinstance(media["embedding"], np.ndarray)
+
+
+class TestRunWithSymlinkEntries:
+    """End-to-end: list entries that are symlinks (file or folder) work."""
+
+    def test_run_imports_through_symlinked_directory_entry(self, tmp_path):
+        from helpers import make_raw_wav_bytes
+
+        real_dir = tmp_path / "real_dir"
+        real_dir.mkdir()
+        a = real_dir / "a.wav"
+        b = real_dir / "b.wav"
+        a.write_bytes(make_raw_wav_bytes())
+        # Make b structurally distinct so dedup doesn't collapse it.
+        b.write_bytes(make_raw_wav_bytes() + b"\x00\x00")
+
+        link_dir = tmp_path / "link_dir"
+        link_dir.symlink_to(real_dir)
+
+        listing = tmp_path / "list.txt"
+        listing.write_text(f"{link_dir}\n")
+
+        imp = ServerFilesDatasetImporter()
+        medias: dict = {}
+        imp.run({"paths_file": str(listing), "media_type": "audio"}, medias)
+
+        assert len(medias) == 2
+        origin_names = {m["origin_name"] for m in medias.values()}
+        # origin_name is the resolved absolute path of the real source file,
+        # so resolve_file works regardless of whether the symlinked dir
+        # later disappears.
+        assert origin_names == {str(a.resolve()), str(b.resolve())}
+
+    def test_run_imports_through_symlinked_file_entry(self, tmp_path):
+        from helpers import make_raw_wav_bytes
+
+        real = tmp_path / "real.wav"
+        real.write_bytes(make_raw_wav_bytes())
+        link = tmp_path / "link.wav"
+        link.symlink_to(real)
+
+        listing = tmp_path / "list.txt"
+        listing.write_text(f"{link}\n")
+
+        imp = ServerFilesDatasetImporter()
+        medias: dict = {}
+        imp.run({"paths_file": str(listing), "media_type": "audio"}, medias)
+
+        assert len(medias) == 1
+        media = next(iter(medias.values()))
+        assert media["origin_name"] == str(real.resolve())
 
 
 class TestRunChunked:
