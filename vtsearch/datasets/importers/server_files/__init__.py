@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.datasets.loader import load_dataset_from_folder
+from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 
 
 def _read_paths_file(paths_file: Path) -> list[Path]:
@@ -83,8 +84,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
     name = "server_files"
     display_name = "Server Files"
     description = (
-        "Read a text file on the server containing media-file paths "
-        "(one per line) and embed every listed file"
+        "Read a text file on the server containing media-file paths (one per line) and embed every listed file"
     )
     icon = "\U0001f5c2"  # 🗂 — falls back to a generic file icon
     picker_view = "form"
@@ -114,24 +114,46 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 f.options = all_folder_names()
                 break
 
-    def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
-        paths_file = Path(field_values["paths_file"])
-        media_type = field_values.get("media_type", "audio")
-        embedder = field_values.get("embedder", "")
-        skip_emb = bool(field_values.get("skip_embedding"))
+    def _stage_paths(self, field_values: dict[str, Any]) -> tuple[Path, dict[str, Path]]:
+        """Read the paths file and symlink each entry into a fresh temp dir.
 
+        Returns the staging directory and a name→source-path mapping.  The
+        caller is responsible for ``rmtree``-ing the staging directory.
+        """
+        paths_file = Path(field_values["paths_file"])
         paths = _read_paths_file(paths_file)
         if not paths:
             raise ValueError(f"No paths found in {paths_file}")
 
         staging = Path(tempfile.mkdtemp(prefix="server_files_"))
-        try:
-            name_to_source = _symlink_paths(paths, staging)
-            if not name_to_source:
-                raise ValueError(
-                    f"None of the paths in {paths_file} resolved to existing files"
-                )
+        name_to_source = _symlink_paths(paths, staging)
+        if not name_to_source:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise ValueError(f"None of the paths in {paths_file} resolved to existing files")
+        return staging, name_to_source
 
+    def _rewrite_origins(
+        self,
+        medias: dict[int, dict[str, Any]],
+        name_to_source: dict[str, Path],
+        origin: dict[str, Any],
+    ) -> None:
+        """Point each media at its real source path instead of the symlink."""
+        for media in medias.values():
+            src = name_to_source.get(media.get("origin_name", "")) or name_to_source.get(media.get("filename", ""))
+            if src is None:
+                continue
+            media["origin"] = origin
+            media["origin_name"] = str(src)
+            media["media_path"] = str(src)
+
+    def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
+        media_type = field_values.get("media_type", "audio")
+        embedder = field_values.get("embedder", "")
+        skip_emb = bool(field_values.get("skip_embedding"))
+
+        staging, name_to_source = self._stage_paths(field_values)
+        try:
             load_dataset_from_folder(
                 staging,
                 media_type,
@@ -144,16 +166,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 skip_embedding=skip_emb,
             )
 
-            origin = self.build_origin(field_values)
-            for media in medias.values():
-                src = name_to_source.get(media.get("origin_name", "")) or name_to_source.get(
-                    media.get("filename", "")
-                )
-                if src is None:
-                    continue
-                media["origin"] = origin
-                media["origin_name"] = str(src)
-                media["media_path"] = str(src)
+            self._rewrite_origins(medias, name_to_source, self.build_origin(field_values))
         finally:
             shutil.rmtree(staging, ignore_errors=True)
 
@@ -164,6 +177,52 @@ class ServerFilesDatasetImporter(DatasetImporter):
         if not paths_file.is_file():
             raise IsADirectoryError(f"Paths file must be a file: {paths_file}")
         self.run(field_values, medias, thin=thin)
+
+    @property
+    def supports_chunked(self) -> bool:
+        return True
+
+    def run_chunked(
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        media_type = field_values.get("media_type", "audio")
+        embedder = field_values.get("embedder", "")
+        skip_emb = bool(field_values.get("skip_embedding"))
+
+        staging, name_to_source = self._stage_paths(field_values)
+        origin = self.build_origin(field_values)
+        try:
+            for chunk in load_dataset_from_folder_chunked(
+                staging,
+                media_type,
+                chunk_size,
+                thin=thin,
+                embedder_name=embedder,
+                content_vectors=self.content_vectors or None,
+                content_md5s=self.content_md5s or None,
+                custom_metadata_map=self.custom_metadata_map or None,
+                skip_embedding=skip_emb,
+            ):
+                self._rewrite_origins(chunk, name_to_source, origin)
+                yield chunk
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+
+    def run_chunked_cli(
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        paths_file = Path(field_values["paths_file"])
+        if not paths_file.exists():
+            raise FileNotFoundError(f"Paths file not found: {paths_file}")
+        if not paths_file.is_file():
+            raise IsADirectoryError(f"Paths file must be a file: {paths_file}")
+        yield from self.run_chunked(field_values, chunk_size, thin=thin)
 
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         params: dict[str, str] = {}
