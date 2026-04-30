@@ -89,6 +89,8 @@ export class DatasetImporterModalComponent implements OnInit {
   lfPickerKind: 'folder' | 'files' = 'folder';
   /** Whether subfolders inside the picked local folder are included. */
   lfRecursive = true;
+  /** Maximum medias per chunk during embedding; 0 means "no chunking". */
+  lfChunkSize = 0;
 
   // Server folder browser state
   sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
@@ -107,6 +109,11 @@ export class DatasetImporterModalComponent implements OnInit {
   sfSubmitting = false;
   /** Whether subdirectories of the picked server folder are scanned. */
   sfRecursive = true;
+  /** Maximum medias per chunk during embedding; 0 means "no chunking". */
+  sfChunkSize = 0;
+
+  /** Maximum medias per chunk during embedding for the generic form view; 0 means "no chunking". */
+  chunkSize = 0;
 
   // Clipper chooser modal state
   clipperChooserOpen = false;
@@ -789,6 +796,9 @@ export class DatasetImporterModalComponent implements OnInit {
     const formData = new FormData();
     formData.append('media_type', this.lfMediaType);
     formData.append('recursive', this.lfRecursive ? 'true' : 'false');
+    if (this.lfChunkSize && this.lfChunkSize > 0) {
+      formData.append('chunk_size', String(Math.floor(this.lfChunkSize)));
+    }
     if (this.lfSelectedEmbedder) {
       formData.append('embedder', this.lfSelectedEmbedder);
     }
@@ -1034,6 +1044,9 @@ export class DatasetImporterModalComponent implements OnInit {
       media_type: this.sfMediaType,
       recursive: this.sfRecursive,
     };
+    if (this.sfChunkSize && this.sfChunkSize > 0) {
+      params['chunk_size'] = Math.floor(this.sfChunkSize);
+    }
     if (this.sfSelectedEmbedder) {
       params['embedder'] = this.sfSelectedEmbedder;
     }
@@ -1079,6 +1092,9 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.selectedEmbedder) {
       submitValues['embedder'] = this.selectedEmbedder;
+    }
+    if (this.chunkSize && this.chunkSize > 0) {
+      submitValues['chunk_size'] = Math.floor(this.chunkSize);
     }
 
     // If there's a file field, use loadFile; otherwise runImporter
