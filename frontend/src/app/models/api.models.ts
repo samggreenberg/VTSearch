@@ -184,6 +184,13 @@ export interface ImporterInfo {
   icon?: string;
   fields?: ImporterField[];
   ui_mode?: string;
+  /** Which view the dataset-importer modal opens for this card.
+   *  ``"form"`` (default), ``"demo"``, ``"server_folder"``, ``"local_folder"``. */
+  picker_view?: string;
+  hidden_from_picker?: boolean;
+  /** Picker tab this importer belongs to.  One of ``"services"``,
+   *  ``"server"``, ``"local"``, ``"demo"``, or ``""`` (uncategorised). */
+  category?: string;
   [key: string]: unknown;
 }
 
@@ -199,8 +206,19 @@ export interface ImporterField {
   placeholder?: string;
 }
 
+export interface ImporterPickerTab {
+  id: string;
+  label: string;
+  icon?: string;
+  order?: number;
+}
+
 export interface ImportersResponse {
   importers: ImporterInfo[];
+  /** Picker tab declarations.  When present, the frontend renders one tab
+   *  per entry; when absent (older backends) the frontend falls back to
+   *  inferring tabs from importer ``category`` values. */
+  tabs?: ImporterPickerTab[];
 }
 
 export interface DemoDataset {

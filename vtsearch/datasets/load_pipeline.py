@@ -6,8 +6,9 @@ import gc
 import time
 import traceback
 import threading
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 from uuid import uuid4
 
 from vtsearch.settings import (
@@ -787,8 +788,32 @@ def _migrate_context_id(old_id: str, new_id: str) -> None:
             _contexts.pop(old_id, None)
 
 
-def _run_importer_in_background(importer, field_values: dict) -> str:
+def consume_chunks_into(
+    target: dict[int, dict[str, Any]],
+    chunks: Iterable[dict[int, dict[str, Any]]],
+) -> None:
+    """Drain *chunks* into *target* with sequential IDs.
+
+    Each chunk yielded by an importer's ``run_chunked()`` re-uses IDs
+    starting at 1, so naive ``target.update(chunk)`` would overwrite
+    earlier chunks.  Renumber every media to a unique ID continuing from
+    whatever IDs are already present in *target*.
+    """
+    next_id = max(target.keys(), default=0) + 1
+    for chunk in chunks:
+        for media in chunk.values():
+            media["id"] = next_id
+            target[next_id] = media
+            next_id += 1
+
+
+def _run_importer_in_background(importer, field_values: dict, *, chunk_size: int = 0) -> str:
     """Start *importer*.run() in a daemon thread.
+
+    When *chunk_size* is positive and the importer reports
+    ``supports_chunked``, ``run_chunked`` is used instead and the yielded
+    chunks are merged into the target medias dict.  This bounds peak
+    memory during the import/embedding phase for large datasets.
 
     Returns the task_id for progress tracking.
     """
@@ -813,8 +838,13 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # to the frontend (used for guessing the type in subsequent add dialogs).
     media_type_hint = _normalize_media_type(field_values.get("media_type", ""))
 
+    use_chunked = chunk_size > 0 and getattr(importer, "supports_chunked", False)
+
     def _load(target_medias):
-        importer.run(field_values, target_medias)
+        if use_chunked:
+            consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size))
+        else:
+            importer.run(field_values, target_medias)
 
     return _run_origin_load_in_background(
         _load,

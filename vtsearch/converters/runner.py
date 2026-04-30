@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from vtsearch.converters import get_converter
-from vtsearch.utils.paths import rglob_follow_symlinks
+from vtsearch.utils.paths import glob_top_level, rglob_follow_symlinks
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -39,6 +39,7 @@ def run_converters_on_folder(
     thin: bool = False,
     on_progress: Optional[ProgressCallback] = None,
     base_origin: dict[str, Any] | None = None,
+    recursive: bool = True,
 ) -> None:
     """Scan *folder_path* for source files, convert them, and add to *medias*.
 
@@ -63,8 +64,8 @@ def run_converters_on_folder(
             bytes directly.
         on_progress: Optional progress callback.
         base_origin: The origin dict of the parent import (e.g.
-            ``{"importer": "folder", "params": {"path": "..."}}``) used
-            to record provenance.
+            ``{"importer": "server_folder", "params": {"path": "..."}}``)
+            used to record provenance.
     """
     if not converter_names:
         return
@@ -107,10 +108,14 @@ def run_converters_on_folder(
         except KeyError:
             continue
 
-        # Scan folder for source files.
+        # Scan folder for source files.  When ``recursive=False`` only the
+        # top-level entries are considered.
         source_files: list[Path] = []
         for ext in source_mt.file_extensions:
-            source_files.extend(rglob_follow_symlinks(folder_path, ext))
+            if recursive:
+                source_files.extend(rglob_follow_symlinks(folder_path, ext))
+            else:
+                source_files.extend(glob_top_level(folder_path, ext))
         source_files.sort()
 
         if not source_files:

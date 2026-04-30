@@ -10,8 +10,8 @@ dataset carries its own ``Origin`` so that:
 
 Examples::
 
-    >>> Origin("folder", {"path": "/data/audio", "media_type": "audio"})
-    Origin(importer='folder', params={'path': '/data/audio', 'media_type': 'audio'})
+    >>> Origin("server_folder", {"path": "/data/audio", "media_type": "audio"})
+    Origin(importer='server_folder', params={'path': '/data/audio', 'media_type': 'audio'})
 
     >>> Origin("http_archive", {"url": "https://example.com/data.zip"}).display()
     'http_archive(https://example.com/data.zip)'
@@ -29,7 +29,7 @@ class Origin:
 
     Attributes:
         importer: The name of the importer that produced the elements, e.g.
-            ``"folder"``, ``"http_archive"``, ``"demo"``.
+            ``"server_folder"``, ``"http_archive"``, ``"demo"``.
         params: A dict of the identifying parameters for the import, e.g.
             ``{"path": "/data/audio", "media_type": "audio"}``.  File-upload
             parameters are excluded (they cannot be reconstructed from a

@@ -80,9 +80,12 @@ class LocalFolderSource(MediaSource):
 
 
 class _LocalFolderSourceFactory:
-    """Factory for auto-discovery by :class:`~vtsearch.utils.registry.PluginRegistry`."""
+    """Factory for auto-discovery by :class:`~vtsearch.utils.registry.PluginRegistry`.
 
-    name = "folder"
+    Resolves origins emitted by the :mod:`server_folder` dataset importer.
+    """
+
+    name = "server_folder"
 
     def create_from_origin(self, origin: dict) -> LocalFolderSource | None:
         params = origin.get("params", {})

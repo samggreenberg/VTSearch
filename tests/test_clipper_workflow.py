@@ -38,7 +38,7 @@ def _make_audio_media(media_id: int, duration: float = 5.1, *, origin_path: str 
         "duration": duration,
         "md5": hashlib.md5(wav).hexdigest(),
         "embedding": rng.standard_normal(512).astype(np.float32),
-        "origin": {"importer": "folder", "params": {"path": origin_path, "media_type": "audio"}},
+        "origin": {"importer": "server_folder", "params": {"path": origin_path, "media_type": "audio"}},
         "origin_name": f"clip_{media_id}.wav",
     }
 
@@ -61,7 +61,7 @@ def _make_image_media(media_id: int, width: int = 300, height: int = 100) -> dic
         "height": height,
         "md5": hashlib.md5(img_bytes).hexdigest(),
         "embedding": rng.standard_normal(512).astype(np.float32),
-        "origin": {"importer": "folder", "params": {"path": "/data/images", "media_type": "image"}},
+        "origin": {"importer": "server_folder", "params": {"path": "/data/images", "media_type": "image"}},
         "origin_name": f"img_{media_id}.png",
     }
 
@@ -78,7 +78,7 @@ def _make_text_media(media_id: int, text: str = "First sentence. Second sentence
         "media_bytes": text_bytes,
         "md5": hashlib.md5(text_bytes).hexdigest(),
         "embedding": rng.standard_normal(512).astype(np.float32),
-        "origin": {"importer": "folder", "params": {"path": "/data/texts", "media_type": "text"}},
+        "origin": {"importer": "server_folder", "params": {"path": "/data/texts", "media_type": "text"}},
         "origin_name": f"text_{media_id}.txt",
     }
 
@@ -95,7 +95,7 @@ def _make_video_media(media_id: int, duration: float = 10.0) -> dict:
         "duration": duration,
         "md5": hashlib.md5(fake_bytes).hexdigest(),
         "embedding": rng.standard_normal(512).astype(np.float32),
-        "origin": {"importer": "folder", "params": {"path": "/data/videos", "media_type": "video"}},
+        "origin": {"importer": "server_folder", "params": {"path": "/data/videos", "media_type": "video"}},
         "origin_name": f"video_{media_id}.mp4",
     }
 
@@ -440,7 +440,7 @@ class TestCrossDatasetClipEmbedding:
         wav_path.write_bytes(wav)
 
         origin = {
-            "importer": "folder",
+            "importer": "server_folder",
             "params": {
                 "path": str(tmp_path),
                 "clipper": "sound_tiling",
@@ -468,7 +468,7 @@ class TestCrossDatasetClipEmbedding:
         img.save(img_path, format="PNG")
 
         origin = {
-            "importer": "folder",
+            "importer": "server_folder",
             "params": {
                 "path": str(tmp_path),
                 "clipper": "image_tiling",
@@ -489,7 +489,7 @@ class TestCrossDatasetClipEmbedding:
         text_path.write_text(text, encoding="utf-8")
 
         origin = {
-            "importer": "folder",
+            "importer": "server_folder",
             "params": {
                 "path": str(tmp_path),
                 "clipper": "text_sentence",
@@ -507,7 +507,7 @@ class TestCrossDatasetClipEmbedding:
         wav_path = tmp_path / "test.wav"
         wav_path.write_bytes(wav)
 
-        origin = {"importer": "folder", "params": {"path": str(tmp_path)}}
+        origin = {"importer": "server_folder", "params": {"path": str(tmp_path)}}
         _apply_clip_and_embed(wav_path, "audio", origin)
 
 

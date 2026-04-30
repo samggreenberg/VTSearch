@@ -10,21 +10,80 @@ describe('DatasetImporterModalComponent', () => {
 
   const mockImporters = [
     {
-      name: 'folder',
-      label: 'Load from Folder',
-      description: 'Import media files from a folder',
+      name: 'local_folder',
+      display_name: 'Folder',
+      description: 'Upload from this computer',
+      icon: '📁',
+      picker_view: 'local_folder',
+      category: 'local',
+      fields: [],
+    },
+    {
+      name: 'local_files',
+      display_name: 'Files',
+      description: 'Upload one or more individual files from this computer',
+      icon: '📄',
+      picker_view: 'local_files',
+      category: 'local',
+      fields: [],
+    },
+    {
+      name: 'server_folder',
+      display_name: 'Folder',
+      description: 'Browse the server filesystem',
+      icon: '🖥',
+      picker_view: 'server_folder',
+      category: 'server',
       fields: [
+        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'images'] },
         { key: 'path', field_type: 'text', label: 'Folder Path', required: true },
-        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio' },
       ],
     },
     {
+      name: 'server_files',
+      display_name: 'Files',
+      description: 'Read a text file of paths from the server',
+      icon: '🗂',
+      picker_view: 'form',
+      category: 'server',
+      fields: [
+        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'images'] },
+        { key: 'paths_file', field_type: 'server_path', label: 'Paths File', required: true },
+      ],
+    },
+    {
+      name: 'demo',
+      display_name: 'Downloaded Demo Media',
+      description: 'Pre-configured demo datasets',
+      icon: '🗄',
+      picker_view: 'demo',
+      ui_mode: 'custom',
+      category: 'demo',
+      fields: [],
+    },
+    {
       name: 'pickle',
-      label: 'Load from File',
+      display_name: 'Upload Saved Dataset',
       description: 'Load a .pkl dataset file',
+      picker_view: 'form',
       fields: [{ key: 'file', field_type: 'file', label: 'Dataset File', required: true }],
     },
+    {
+      name: 'generic_form',
+      display_name: 'Generic Form Importer',
+      description: 'A test importer that renders the generic form',
+      picker_view: 'form',
+      fields: [
+        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'images'] },
+        { key: 'path', field_type: 'text', label: 'Path', required: true },
+      ],
+    },
   ];
+
+  /** Convenience accessor for the generic-form mock importer (used by
+   *  tests that exercise the default form code path). */
+  const genericForm = () => mockImporters.find((i) => i.name === 'generic_form')!;
+  const pickleImp = () => mockImporters.find((i) => i.name === 'pickle')!;
 
   const mockDemos = [
     {
@@ -82,9 +141,16 @@ describe('DatasetImporterModalComponent', () => {
     httpMock.verify();
   });
 
+  const mockTabs = [
+    { id: 'services', label: 'Services', icon: 'lightning', order: 10 },
+    { id: 'server', label: 'Server', icon: 'server', order: 20 },
+    { id: 'local', label: 'Local', icon: 'house', order: 30 },
+    { id: 'demo', label: 'Demo', icon: 'flask', order: 40 },
+  ];
+
   function flushImporters(): void {
     fixture.detectChanges();
-    httpMock.expectOne('/api/dataset/all-importers').flush({ importers: mockImporters });
+    httpMock.expectOne('/api/dataset/all-importers').flush({ importers: mockImporters, tabs: mockTabs });
   }
 
   /** Open the demo picker and flush all resulting HTTP requests. */
@@ -113,7 +179,7 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should fetch importers on init', () => {
     flushImporters();
-    expect(component.importers.length).toBe(2);
+    expect(component.importers.length).toBe(7);
   });
 
   it('should start in picker view', () => {
@@ -121,33 +187,133 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.view).toBe('picker');
   });
 
-  it('should render importer cards plus demo card', () => {
+  it('should render the cards for the active tab using display_name', () => {
     flushImporters();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
+    // Default active tab is "local" (the first tab populated by the mocks
+    // that has importers).  Two local importers: local_folder, local_files.
     const cards = el.querySelectorAll('.importer-card');
-    // 2 importers + 1 demo card
-    expect(cards.length).toBe(3);
-    expect(cards[0].textContent).toContain('Load from Folder');
-    expect(cards[2].textContent).toContain('Load Demo Dataset');
+    expect(cards.length).toBe(2);
+    expect(cards[0].textContent).toContain('Folder');
+    expect(cards[1].textContent).toContain('Files');
+
+    // Switching to the Server tab swaps in the server importers.
+    component.selectImporterTab('server');
+    fixture.detectChanges();
+    const serverCards = el.querySelectorAll('.importer-card');
+    expect(serverCards.length).toBe(2);
+    expect(serverCards[0].textContent).toContain('Folder');
+    expect(serverCards[1].textContent).toContain('Files');
+  });
+
+  it('should hide importers marked hidden_from_picker', () => {
+    fixture.detectChanges();
+    const importersWithHidden = [
+      ...mockImporters,
+      { name: 'recaller', display_name: 'ReCaller', hidden_from_picker: true, fields: [] },
+    ];
+    httpMock.expectOne('/api/dataset/all-importers').flush({ importers: importersWithHidden, tabs: mockTabs });
+    expect(component.importers.find((i) => i.name === 'recaller')).toBeUndefined();
+  });
+
+  it('should switch to local_folder view when the Local Folder card is clicked', () => {
+    flushImporters();
+    const localFolder = component.importers.find((i) => i.name === 'local_folder')!;
+    component.selectImporter(localFolder);
+    expect(component.view).toBe('local_folder');
+    expect(component.selectedImporter?.name).toBe('local_folder');
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+  });
+
+  it('should switch to server_folder view when the Server Folder card is clicked', () => {
+    flushImporters();
+    const folder = component.importers.find((i) => i.name === 'server_folder')!;
+    component.selectImporter(folder);
+    expect(component.view).toBe('server_folder');
+    expect(component.selectedImporter?.name).toBe('server_folder');
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req => req.url === '/api/browse-media-files').flush({ directories: [], files: [], root_path: '' });
+  });
+
+  it('should switch to local_files view (multi-file picker) when the Local Files card is clicked', () => {
+    flushImporters();
+    const localFiles = component.importers.find((i) => i.name === 'local_files')!;
+    component.selectImporter(localFiles);
+    expect(component.view).toBe('local_folder'); // shared view
+    expect(component.lfPickerKind).toBe('files');
+    expect(component.selectedImporter?.name).toBe('local_files');
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+  });
+
+  it('should switch to demo view when the Demo card is clicked', () => {
+    flushImporters();
+    const demo = component.importers.find((i) => i.name === 'demo')!;
+    component.selectImporter(demo);
+    expect(component.view).toBe('demo');
+    expect(component.selectedImporter?.name).toBe('demo');
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+    httpMock.expectOne(req =>
+      req.url === '/api/embedders' && req.params.get('media_type') === 'audio',
+    ).flush({ embedders: mockEmbedders });
+    httpMock.expectOne(req =>
+      req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'clap',
+    ).flush({ datasets: mockDemos });
+  });
+
+  it('should POST uploaded folder via importLocalFolder', () => {
+    flushImporters();
+    spyOn(component.importStarted, 'emit');
+
+    const localFolder = component.importers.find((i) => i.name === 'local_folder')!;
+    component.selectImporter(localFolder);
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+
+    const file = new File(['contents'], 'a.wav');
+    Object.defineProperty(file, 'webkitRelativePath', { value: 'mydir/a.wav' });
+    component.lfFiles = [file];
+    component.lfMediaType = 'audio';
+    component.lfSubmit();
+
+    const req = httpMock.expectOne('/api/dataset/import-local-folder');
+    expect(req.request.method).toBe('POST');
+    const body = req.request.body as FormData;
+    expect(body.get('media_type')).toBe('audio');
+    expect(body.getAll('files').length).toBe(1);
+    req.flush({ ok: true });
+
+    expect(component.lfSubmitting).toBeFalse();
+    expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
   it('should switch to form view on importer selection', () => {
     flushImporters();
-    component.selectImporter(mockImporters[0]);
+    const imp = genericForm();
+    component.selectImporter(imp);
     expect(component.view).toBe('form');
-    expect(component.selectedImporter).toBe(mockImporters[0]);
+    expect(component.selectedImporter).toBe(imp);
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
   });
 
   it('should pre-populate default values', () => {
     flushImporters();
-    component.selectImporter(mockImporters[0]);
+    component.selectImporter(genericForm());
     expect(component.formValues['media_type']).toBe('audio');
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
   });
 
   it('should go back to picker view', () => {
     flushImporters();
-    component.selectImporter(mockImporters[0]);
+    component.selectImporter(genericForm());
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
     component.back();
     expect(component.view).toBe('picker');
     expect(component.selectedImporter).toBeNull();
@@ -157,11 +323,13 @@ describe('DatasetImporterModalComponent', () => {
     flushImporters();
     spyOn(component.importStarted, 'emit');
 
-    component.selectImporter(mockImporters[0]);
+    component.selectImporter(genericForm());
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
     component.formValues['path'] = '/data/sounds';
     component.submit();
 
-    const req = httpMock.expectOne('/api/dataset/import/folder');
+    const req = httpMock.expectOne('/api/dataset/import/generic_form');
     expect(req.request.method).toBe('POST');
     expect(req.request.body['path']).toBe('/data/sounds');
     req.flush({});
@@ -172,10 +340,12 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should show error on import failure', () => {
     flushImporters();
-    component.selectImporter(mockImporters[0]);
+    component.selectImporter(genericForm());
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
     component.submit();
 
-    httpMock.expectOne('/api/dataset/import/folder').flush(
+    httpMock.expectOne('/api/dataset/import/generic_form').flush(
       { error: 'Not found' },
       { status: 404, statusText: 'Not Found' },
     );
@@ -195,7 +365,7 @@ describe('DatasetImporterModalComponent', () => {
     flushImporters();
     spyOn(component.importStarted, 'emit');
 
-    component.selectImporter(mockImporters[1]);
+    component.selectImporter(pickleImp());
     const mockFile = new File(['data'], 'test.pkl');
     component.selectedFile = mockFile;
     component.submit();

@@ -57,7 +57,7 @@ def _make_pickle_dataset(
     *,
     name: str = "dataset.pkl",
     with_origin: bool = False,
-    origin_importer: str = "folder",
+    origin_importer: str = "server_folder",
     origin_path: str = "/data/audio",
 ) -> Path:
     """Create a pickle dataset with *num_medias* distinct audio items."""
@@ -298,7 +298,7 @@ class TestCombinedDatasetChunkedAutodetect:
             base_freq=200.0,
             name="source_a.pkl",
             with_origin=True,
-            origin_importer="folder",
+            origin_importer="server_folder",
             origin_path="/recordings/field",
         )
         pkl2 = _make_pickle_dataset(
@@ -307,7 +307,7 @@ class TestCombinedDatasetChunkedAutodetect:
             base_freq=800.0,
             name="source_b.pkl",
             with_origin=True,
-            origin_importer="folder",
+            origin_importer="server_folder",
             origin_path="/recordings/studio",
         )
 

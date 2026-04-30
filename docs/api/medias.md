@@ -180,7 +180,7 @@ GET /api/server-media-files
 POST /api/example-sort-origin
 ```
 
-**Body:** `{"origin": {"importer": "folder", "params": {"path": "/data/sounds"}}, "key": "subdir/audio123.wav"}`
+**Body:** `{"origin": {"importer": "server_folder", "params": {"path": "/data/sounds"}}, "key": "subdir/audio123.wav"}`
 
 Sorts by similarity to a file resolved from an origin dict.
 

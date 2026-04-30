@@ -217,13 +217,13 @@ class TestConvertersAPI:
 
 class TestFolderImporterConverterFields:
     def test_build_cli_args_without_converters(self):
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         args = IMPORTER.build_cli_args({"media_type": "image", "path": "/data"})
         assert "--converters" not in args
 
     def test_build_cli_args_with_converters(self):
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         args = IMPORTER.build_cli_args(
             {
@@ -235,14 +235,14 @@ class TestFolderImporterConverterFields:
         assert "--converters video2image,document2image" in args
 
     def test_build_origin_without_converters(self):
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         origin = IMPORTER.build_origin({"media_type": "image", "path": "/data"})
-        assert origin["importer"] == "folder"
+        assert origin["importer"] == "server_folder"
         assert "converters" not in origin["params"]
 
     def test_build_origin_with_converters(self):
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         origin = IMPORTER.build_origin(
             {
@@ -393,7 +393,7 @@ class TestRunConvertersOnFolder:
                 target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
-                base_origin={"importer": "folder", "params": {"path": str(tmp_path), "media_type": "image"}},
+                base_origin={"importer": "server_folder", "params": {"path": str(tmp_path), "media_type": "image"}},
             )
 
         assert len(medias) == 1
@@ -403,7 +403,7 @@ class TestRunConvertersOnFolder:
         assert media["origin"]["importer"] == "converter"
         assert media["origin"]["params"]["converter"] == "video2image"
         assert media["origin"]["params"]["source_file"] == "clip.mp4"
-        assert media["origin"]["params"]["parent_importer"] == "folder"
+        assert media["origin"]["params"]["parent_importer"] == "server_folder"
         assert media["origin"]["params"]["parent_path"] == str(tmp_path)
 
         # Check origin_name contains arrow
@@ -578,7 +578,7 @@ class TestRunConvertersOnFolder:
                 target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
-                base_origin={"importer": "folder", "params": {"path": str(root), "media_type": "image"}},
+                base_origin={"importer": "server_folder", "params": {"path": str(root), "media_type": "image"}},
             )
 
         assert len(medias) == 1
@@ -655,14 +655,14 @@ class TestEmbedAndMd5Helpers:
 class TestFolderImporterWithConverters:
     def test_run_passes_converters_to_runner(self, tmp_path):
         """Folder importer calls run_converters_on_folder when converters set."""
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         # Create a folder with an image file so the normal load succeeds.
         (tmp_path / "photo.png").write_bytes(_make_png_bytes())
 
         with (
-            patch("vtsearch.datasets.importers.folder.load_dataset_from_folder") as mock_load,
-            patch("vtsearch.datasets.importers.folder._run_selected_converters") as mock_conv,
+            patch("vtsearch.datasets.importers.server_folder.load_dataset_from_folder") as mock_load,
+            patch("vtsearch.datasets.importers.server_folder._run_selected_converters") as mock_conv,
         ):
             medias: dict = {}
             IMPORTER.run(
@@ -678,13 +678,13 @@ class TestFolderImporterWithConverters:
 
     def test_run_without_converters_does_not_call_runner(self, tmp_path):
         """Without converters field, runner is not called."""
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         (tmp_path / "photo.png").write_bytes(_make_png_bytes())
 
         with (
-            patch("vtsearch.datasets.importers.folder.load_dataset_from_folder"),
-            patch("vtsearch.datasets.importers.folder._run_selected_converters") as mock_conv,
+            patch("vtsearch.datasets.importers.server_folder.load_dataset_from_folder"),
+            patch("vtsearch.datasets.importers.server_folder._run_selected_converters") as mock_conv,
         ):
             medias: dict = {}
             IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
@@ -693,7 +693,7 @@ class TestFolderImporterWithConverters:
 
     def test_folder_only_converters_no_regular_files(self, tmp_path):
         """When only converter source files exist and no regular target files."""
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         # Create only a video file — no image files.
         (tmp_path / "clip.mp4").write_bytes(b"fake-video")
@@ -706,10 +706,10 @@ class TestFolderImporterWithConverters:
 
         with (
             patch(
-                "vtsearch.datasets.importers.folder.load_dataset_from_folder",
+                "vtsearch.datasets.importers.server_folder.load_dataset_from_folder",
                 side_effect=ValueError("No images files found"),
             ),
-            patch("vtsearch.datasets.importers.folder._run_selected_converters", side_effect=_fake_run_converters),
+            patch("vtsearch.datasets.importers.server_folder._run_selected_converters", side_effect=_fake_run_converters),
         ):
             medias: dict = {}
             IMPORTER.run(
@@ -727,10 +727,10 @@ class TestFolderImporterWithConverters:
 
 class TestImportAPIConverters:
     def test_import_endpoint_passes_converters(self, client):
-        """POST /api/dataset/import/folder passes converters to the importer."""
+        """POST /api/dataset/import/server_folder passes converters to the importer."""
         with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
             resp = client.post(
-                "/api/dataset/import/folder",
+                "/api/dataset/import/server_folder",
                 json={
                     "path": "/tmp/test",
                     "media_type": "image",
@@ -747,7 +747,7 @@ class TestImportAPIConverters:
         """Without converters, the field is not added."""
         with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
             resp = client.post(
-                "/api/dataset/import/folder",
+                "/api/dataset/import/server_folder",
                 json={"path": "/tmp/test", "media_type": "image"},
             )
             assert resp.status_code == 200

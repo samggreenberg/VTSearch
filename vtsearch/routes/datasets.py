@@ -9,12 +9,16 @@ staging, demo dataset loading, and origin reload.  Closely related blueprints:
 """
 
 import io
-from pathlib import Path
+import json
+import shutil
+import tempfile
+from pathlib import Path, PurePosixPath
+from typing import Any
 from uuid import uuid4
 
 from flask import Blueprint, jsonify, request, send_file
 
-from vtsearch.config import EMBEDDINGS_DIR
+from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
 from vtsearch.routes.helpers import get_json_or_400, get_json_safe, get_plugin_or_404, get_request_field
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtsearch.datasets.loader import safe_pickle_load
@@ -249,6 +253,8 @@ def dataset_importers():
 @datasets_bp.route("/api/dataset/all-importers")
 def dataset_all_importers():
     """List all registered importers (including built-in ones)."""
+    from vtsearch.datasets.importers.tabs import list_picker_tabs
+
     all_importers = [imp.to_dict() for imp in list_importers()]
 
     # Annotate combine_datasets with an enabled flag: requires 2+ saved
@@ -262,7 +268,7 @@ def dataset_all_importers():
             imp_dict["enabled"] = can_combine
             break
 
-    return jsonify({"importers": all_importers})
+    return jsonify({"importers": all_importers, "tabs": list_picker_tabs()})
 
 
 # ---------------------------------------------------------------------------
@@ -466,7 +472,173 @@ def import_dataset(importer_name: str):
         if val:
             field_values[key] = val
 
-    task_id = _run_importer_in_background(importer, field_values)
+    chunk_size = _parse_chunk_size(get_request_field("chunk_size", bool(file_keys)))
+
+    task_id = _run_importer_in_background(importer, field_values, chunk_size=chunk_size)
+    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
+
+
+# ---------------------------------------------------------------------------
+# Local-folder upload — files come from the user's browser machine
+# ---------------------------------------------------------------------------
+
+LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
+
+
+def _parse_chunk_size(value: Any) -> int:
+    """Parse an optional ``chunk_size`` form/JSON value into a non-negative int.
+
+    Returns ``0`` when the value is missing, blank, or non-numeric — which
+    means "no chunking, load everything in one pass".
+    """
+    if value is None or value == "":
+        return 0
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, n)
+
+
+def _safe_relative_upload_path(filename: str) -> PurePosixPath | None:
+    """Return *filename* as a sanitised relative POSIX path, or ``None`` if unsafe.
+
+    Browsers send each file's ``webkitRelativePath`` (or basename) as the
+    multipart filename.  Reject anything absolute or that would escape the
+    upload root via ``..`` segments.  Empty path components and "." are
+    skipped.
+    """
+    if not filename:
+        return None
+    raw = filename.replace("\\", "/")
+    if raw.startswith("/"):
+        return None
+    parts: list[str] = []
+    for segment in raw.split("/"):
+        if not segment or segment == ".":
+            continue
+        if segment == ".." or "\x00" in segment:
+            return None
+        parts.append(segment)
+    if not parts:
+        return None
+    return PurePosixPath(*parts)
+
+
+@datasets_bp.route("/api/dataset/import-local-folder", methods=["POST"])
+def import_local_folder():
+    """Import a folder uploaded from the user's *browser* machine.
+
+    The browser uses ``<input type="file" webkitdirectory>`` to let the
+    user pick a directory; each selected ``File`` is appended to the
+    multipart body under the key ``"files"`` with its ``webkitRelativePath``
+    as the multipart filename.  We stream each file to a temporary
+    directory on the server (preserving sub-directory structure) and then
+    delegate to the regular folder importer to do the actual scanning,
+    embedding, and dataset registration.  The temp directory is removed
+    once the importer finishes (success or failure).
+    """
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify({"error": "No files uploaded"}), 400
+
+    importer = get_importer("server_folder")
+    if importer is None:
+        return jsonify({"error": "server_folder importer not available"}), 500
+
+    media_type = (request.form.get("media_type") or "").strip()
+    if not media_type:
+        return jsonify({"error": "Missing required field: 'media_type'"}), 400
+
+    embedder = (request.form.get("embedder") or "").strip()
+    clipper = (request.form.get("clipper") or "").strip()
+    converters = (request.form.get("converters") or "").strip()
+    recursive_raw = (request.form.get("recursive") or "true").strip().lower()
+    recursive = recursive_raw not in ("false", "0", "no", "off")
+    chunk_size = _parse_chunk_size(request.form.get("chunk_size"))
+    clipper_params_raw = request.form.get("clipper_params") or ""
+    clipper_params: dict | None = None
+    if clipper_params_raw:
+        try:
+            clipper_params = json.loads(clipper_params_raw)
+            if not isinstance(clipper_params, dict):
+                raise ValueError("clipper_params must be a JSON object")
+        except (ValueError, TypeError) as exc:
+            return jsonify({"error": f"Invalid clipper_params: {exc}"}), 400
+
+    LOCAL_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    upload_dir = Path(tempfile.mkdtemp(prefix="local_folder_", dir=LOCAL_UPLOADS_DIR))
+
+    saved = 0
+    try:
+        for f in files:
+            rel = _safe_relative_upload_path(f.filename or "")
+            if rel is None:
+                continue
+            dest = upload_dir / Path(*rel.parts)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            f.save(dest)
+            saved += 1
+    except Exception:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        raise
+
+    if saved == 0:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        return jsonify({"error": "No valid files in upload"}), 400
+
+    field_values: dict = {
+        "path": str(upload_dir),
+        "media_type": media_type,
+        "recursive": recursive,
+    }
+    if embedder:
+        field_values["embedder"] = embedder
+    if clipper:
+        field_values["clipper"] = clipper
+        if clipper_params is not None:
+            field_values["clipper_params"] = clipper_params
+    if converters:
+        field_values["converters"] = converters
+
+    # Origin is intentionally synthetic — the on-disk path is a temp dir we
+    # are about to delete, so storing it on each media would be misleading
+    # and ``can_reload_from_origin`` would (correctly) refuse to reload.
+    origin = {
+        "importer": "server_folder",
+        "params": {"path": "<browser_upload>", "media_type": media_type},
+    }
+
+    clipper_name = field_values.pop("clipper", "") or ""
+    inner_clipper_params = field_values.pop("clipper_params", None)
+    field_values["clipper"] = clipper_name
+    if clipper_name and not clipper_name.endswith("_default"):
+        field_values["skip_embedding"] = True
+
+    from vtsearch.auth import get_current_user
+    from vtsearch.datasets.load_pipeline import _normalize_media_type, consume_chunks_into
+
+    use_chunked = chunk_size > 0 and getattr(importer, "supports_chunked", False)
+
+    def _load(target_medias):
+        try:
+            if use_chunked:
+                consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size))
+            else:
+                importer.run(field_values, target_medias)
+        finally:
+            shutil.rmtree(upload_dir, ignore_errors=True)
+
+    task_id = _run_origin_load_in_background(
+        _load,
+        origin,
+        name="Local folder upload",
+        clipper=clipper_name,
+        clipper_params=inner_clipper_params,
+        embedder=embedder,
+        created_by=get_current_user(),
+        media_type=_normalize_media_type(media_type),
+    )
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
@@ -573,7 +745,7 @@ def load_dataset_folder():
     if not folder.exists() or not folder.is_dir():
         return jsonify({"error": "Invalid folder path"}), 400
 
-    importer = get_importer("folder")
+    importer = get_importer("server_folder")
     task_id = _run_importer_in_background(importer, {"path": str(folder), "media_type": media_type})
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 

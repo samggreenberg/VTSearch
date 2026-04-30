@@ -60,6 +60,9 @@ ImporterField = PluginField
 __all__ = ["DatasetImporter", "ImporterField"]
 
 
+PickerView = str  # one of: "form", "demo", "server_folder", "local_folder"
+
+
 class DatasetImporter(PluginBase):
     """Abstract base class for dataset importers.
 
@@ -121,6 +124,27 @@ class DatasetImporter(PluginBase):
     icon: str = "\U0001f50c"
     #: Ordered list of fields the user must fill before importing.
     fields: list[PluginField]
+
+    #: Which view the dataset-importer modal opens when this card is clicked.
+    #: ``"form"`` (default) builds a generic form from :attr:`fields`.  The
+    #: other values trigger dedicated UI sections in the modal:
+    #:
+    #: - ``"local_folder"`` — browser-side folder upload widget.
+    #: - ``"server_folder"`` — server filesystem browser.
+    #: - ``"demo"`` — demo-dataset table.
+    picker_view: str = "form"
+
+    #: Picker tab this importer belongs to.  One of ``"services"``,
+    #: ``"server"``, ``"local"``, ``"demo"``, or ``""`` (uncategorised).
+    #: Database/API-style importers (extensions that fetch from a remote
+    #: service) should use ``"services"``.
+    category: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["picker_view"] = self.picker_view
+        d["category"] = self.category
+        return d
 
     def __init__(self) -> None:
         #: Mapping of filename to pre-computed embedding vector.  Importers
@@ -277,9 +301,15 @@ class DatasetImporter(PluginBase):
         for f in self.fields:
             if f.field_type == "file":
                 continue
+            arg_name = f"--{f.key.replace('_', '-')}"
+            if f.field_type == "checkbox":
+                value = field_values.get(f.key, str(f.default).lower() == "true")
+                truthy = value if isinstance(value, bool) else str(value).lower() == "true"
+                no_arg = f"--no-{f.key.replace('_', '-')}"
+                parts.append(arg_name if truthy else no_arg)
+                continue
             value = field_values.get(f.key, "")
             if value:
-                arg_name = f"--{f.key.replace('_', '-')}"
                 parts.append(f"{arg_name} {value}")
         return " ".join(parts)
 
@@ -302,6 +332,11 @@ class DatasetImporter(PluginBase):
         params: dict[str, str] = {}
         for f in self.fields:
             if f.field_type == "file":
+                continue
+            if f.field_type == "checkbox":
+                val = field_values.get(f.key, str(f.default).lower() == "true")
+                truthy = val if isinstance(val, bool) else str(val).lower() == "true"
+                params[f.key] = "true" if truthy else "false"
                 continue
             val = field_values.get(f.key, "")
             if val:

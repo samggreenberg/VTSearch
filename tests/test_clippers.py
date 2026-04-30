@@ -928,7 +928,7 @@ class TestApplyClipper:
             "media_string": "First sentence. Second sentence.",
             "word_count": 4,
             "character_count": 32,
-            "origin": {"importer": "folder", "params": {"path": "/data"}},
+            "origin": {"importer": "server_folder", "params": {"path": "/data"}},
         }
         clips = {1: media}
         _apply_clipper(clips, "text_sentence")

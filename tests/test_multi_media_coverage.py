@@ -328,7 +328,7 @@ class TestExampleSortOrigin:
     def test_missing_key_returns_400(self, client):
         resp = client.post(
             "/api/example-sort-origin",
-            json={"origin": {"importer": "folder", "params": {"path": "/tmp"}}},
+            json={"origin": {"importer": "server_folder", "params": {"path": "/tmp"}}},
         )
         assert resp.status_code == 400
         assert "key" in resp.get_json()["error"].lower()
@@ -349,7 +349,7 @@ class TestExampleSortOrigin:
         resp = client.post(
             "/api/example-sort-origin",
             json={
-                "origin": {"importer": "folder", "params": {"path": str(tmp_path)}},
+                "origin": {"importer": "server_folder", "params": {"path": str(tmp_path)}},
                 "key": "test.wav",
             },
         )

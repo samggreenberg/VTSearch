@@ -687,7 +687,7 @@ Each clip dict includes two provenance fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `origin` | `dict \| None` | Serialised `Origin` (e.g. `{"importer": "folder", "params": {"path": "/data"}}`) |
+| `origin` | `dict \| None` | Serialised `Origin` (e.g. `{"importer": "server_folder", "params": {"path": "/data"}}`) |
 | `origin_name` | `str` | Unique name within the origin (typically the filename) |
 | `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent |
 
@@ -696,9 +696,9 @@ Each clip dict includes two provenance fields:
 ```python
 from vtsearch.datasets.origin import Origin
 
-o = Origin("folder", {"path": "/data/audio", "media_type": "audio"})
-o.display()   # "folder(/data/audio)"
-o.to_dict()   # {"importer": "folder", "params": {"path": "/data/audio", ...}}
+o = Origin("server_folder", {"path": "/data/audio", "media_type": "audio"})
+o.display()   # "server_folder(/data/audio)"
+o.to_dict()   # {"importer": "server_folder", "params": {"path": "/data/audio", ...}}
 ```
 
 Origins are set automatically when data is loaded:
