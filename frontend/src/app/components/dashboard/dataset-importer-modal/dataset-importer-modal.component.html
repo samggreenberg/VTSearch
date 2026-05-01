@@ -313,7 +313,7 @@
         }
         @if (lfFiles.length > 0) {
           <p class="info-text">
-            Selected <strong>{{ lfFiles.length }}</strong> file{{ lfFiles.length === 1 ? '' : 's' }}
+            Selected <strong>{{ lfFiles.length | number }}</strong> file{{ lfFiles.length === 1 ? '' : 's' }}
             @if (lfFolderName && lfPickerKind === 'folder') { from <code>{{ lfFolderName }}</code> }
           </p>
         }

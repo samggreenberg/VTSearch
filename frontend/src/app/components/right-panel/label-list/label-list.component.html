@@ -1,6 +1,6 @@
 <div class="vote-section">
   <h3 [class]="label" [title]="label === 'good' ? 'Items you have marked as positive examples (' + ids.length + ')' : 'Items you have marked as negative examples (' + ids.length + ')'">
-    {{ label === 'good' ? 'Goods' : 'Bads' }} ({{ ids.length }})
+    {{ label === 'good' ? 'Goods' : 'Bads' }} ({{ ids.length | number }})
   </h3>
   <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth + 'px'" #voteListContainer>
     @for (entry of sortedEntries; track trackById($index, entry)) {
