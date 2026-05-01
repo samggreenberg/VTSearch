@@ -9,10 +9,10 @@
           [title]="'Show ' + tab.label + ' dataset importers'"
         >@if (tab.icon) {<vt-icon [type]="tab.icon" [size]="14"></vt-icon>}{{ tab.label }}</button>
       }
-      @if (!activeImporterTab) {
-        <span class="tab-bar-hint">Select what type of dataset to add.</span>
-      }
     </div>
+    @if (!activeImporterTab) {
+      <p class="tab-bar-hint">Select what type of dataset to add.</p>
+    }
 
     @if (activeImporterTab) {
       <div class="importer-subtab-bar">
@@ -29,10 +29,10 @@
             [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : (imp.description || '')"
           >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
         }
-        @if (!selectedImporter && importersForActiveTab.length > 0) {
-          <span class="tab-bar-hint">Select how to add a {{ activeImporterTabLabel }} dataset.</span>
-        }
       </div>
+      @if (!selectedImporter && importersForActiveTab.length > 0) {
+        <p class="tab-bar-hint">Select how to add a {{ activeImporterTabLabel }} dataset.</p>
+      }
     }
   </div>
 
@@ -53,6 +53,9 @@
             >@if (getTabIcon(tab)) {<vt-icon [icon]="getTabIcon(tab)" [size]="14"></vt-icon>}{{ getTabText(tab) }}</button>
           }
         </div>
+        @if (!activeTab) {
+          <p class="tab-bar-hint">Select the media type to demonstrate.</p>
+        }
 
         @if (activeTab && (demoEmbedders.length > 1 || demoClippers.length > 1)) {
           <div class="demo-embedder-row">
@@ -79,14 +82,27 @@
 
         @if (activeTab) {
           <div class="demo-content-area">
-            <table class="demo-table" [class.demo-table-fixed]="demoTableFixed" [style.width]="demoTableFixed ? (demoTableWidth + 'px') : '100%'">
+            <table class="demo-table" [class.table-fixed]="demoCols.tableFixed">
               <thead>
                 <tr>
-                  <th (click)="sortDemoBy('label')" class="sortable" title="Demo dataset name (click to sort)" data-col="label" [style.width.px]="demoTableFixed ? demoColWidths['label'] : null">Name<span class="sort-indicator" [class.active]="demoSortKey === 'label'">{{ demoSortIndicator('label') }}</span></th>
-                  <th (click)="sortDemoBy('num_files')" class="sortable col-num" title="Number of media files in the demo dataset (click to sort)" data-col="num_files" [style.width.px]="demoTableFixed ? demoColWidths['num_files'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div># Media<span class="sort-indicator" [class.active]="demoSortKey === 'num_files'">{{ demoSortIndicator('num_files') }}</span></th>
-                  <th (click)="sortDemoBy('num_categories')" class="sortable col-num" title="Number of distinct categories or classes in the dataset (click to sort)" data-col="num_categories" [style.width.px]="demoTableFixed ? demoColWidths['num_categories'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div># Cat.<span class="sort-indicator" [class.active]="demoSortKey === 'num_categories'">{{ demoSortIndicator('num_categories') }}</span></th>
-                  <th (click)="sortDemoBy('description')" class="sortable" title="Short description of the demo dataset contents (click to sort)" data-col="description" [style.width.px]="demoTableFixed ? demoColWidths['description'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div>Description<span class="sort-indicator" [class.active]="demoSortKey === 'description'">{{ demoSortIndicator('description') }}</span></th>
-                  <th (click)="sortDemoBy('status')" class="sortable" title="Whether the dataset is pre-downloaded and ready to load immediately, or needs to be fetched first (click to sort)" data-col="status" [style.width.px]="demoTableFixed ? demoColWidths['status'] : null"><div class="col-resize-handle" (mousedown)="startDemoResize($event)" (click)="$event.stopPropagation()"></div>Readiness<span class="sort-indicator" [class.active]="demoSortKey === 'status'">{{ demoSortIndicator('status') }}</span></th>
+                  @for (col of demoCols.columnOrder; track col; let first = $first) {
+                    <th
+                      [class.sortable]="demoCols.meta(col).sortable"
+                      [class.col-drop-target]="demoCols.isDropTarget(col)"
+                      [class.col-dragging]="demoCols.isDragging(col)"
+                      [class.col-num]="col === 'num_files' || col === 'num_categories'"
+                      [attr.data-col]="col"
+                      [title]="demoCols.meta(col).title"
+                      [style.width.%]="demoCols.tableFixed ? demoCols.colWidths[col] : null"
+                      draggable="true"
+                      (click)="onDemoHeaderClick(col)"
+                      (dragstart)="demoCols.onColDragStart($event, col)"
+                      (dragover)="demoCols.onColDragOver($event, col)"
+                      (dragleave)="demoCols.onColDragLeave($event, col)"
+                      (drop)="demoCols.onColDrop($event, col)"
+                      (dragend)="demoCols.onColDragEnd($event)"
+                    >@if (!first) {<div class="col-resize-handle" (mousedown)="demoCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>}{{ demoCols.meta(col).label }}@if (demoCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="demoCols.isSortActive(col)">{{ demoCols.sortIndicator(col) }}</span>}</th>
+                  }
                 </tr>
               </thead>
               <tbody>
@@ -101,11 +117,25 @@
                     (keydown.enter)="selectDemo(demo)"
                     (keydown.space)="$event.preventDefault(); selectDemo(demo)"
                   >
-                    <td class="col-name">{{ demo.label }}</td>
-                    <td class="col-num">{{ demo.num_files | number }}</td>
-                    <td class="col-num">{{ demo.num_categories | number }}</td>
-                    <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>
-                    <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
+                    @for (col of demoCols.columnOrder; track col) {
+                      @switch (col) {
+                        @case ('label') {
+                          <td class="col-name">{{ demo.label }}</td>
+                        }
+                        @case ('num_files') {
+                          <td class="col-num">{{ demo.num_files | number }}</td>
+                        }
+                        @case ('num_categories') {
+                          <td class="col-num">{{ demo.num_categories | number }}</td>
+                        }
+                        @case ('description') {
+                          <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>
+                        }
+                        @case ('status') {
+                          <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
+                        }
+                      }
+                    }
                   </tr>
                 }
               </tbody>
@@ -123,7 +153,7 @@
           <div class="form-group">
             <label class="form-label" [for]="'field-' + field.key">
               {{ field.label || field.key }}
-              @if (field.required) {
+              @if (field.required && !(field.field_type === 'select' && field.key === 'media_type')) {
                 <span class="required">*</span>
               }
             </label>
@@ -259,9 +289,9 @@
         </select>
       </div>
 
-      <div class="form-group">
+      <div class="form-group form-group--section">
         @if (lfPickerKind === 'folder') {
-          <label class="form-label" for="lf-folder-input" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder</label>
+          <label class="form-label" for="lf-folder-input" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder<span class="required">*</span></label>
           <input
             id="lf-folder-input"
             type="file"
@@ -272,7 +302,7 @@
             (change)="lfOnFolderSelected($event)"
           />
         } @else {
-          <label class="form-label" for="lf-files-input" title="Choose one or more files on your local machine. Each selected file will be uploaded.">Files</label>
+          <label class="form-label" for="lf-files-input" title="Choose one or more files on your local machine. Each selected file will be uploaded.">Files<span class="required">*</span></label>
           <input
             id="lf-files-input"
             type="file"
@@ -302,7 +332,7 @@
         </div>
       }
 
-      <div class="form-group">
+      <div class="form-group form-group--section">
         <label class="form-label" for="lf-chunk-size" title="Embed at most this many medias at once to bound peak memory. 0 means load everything in one pass.">
           Chunk size (advanced — 0 = no chunking)
         </label>
@@ -317,7 +347,7 @@
       </div>
 
       @if (lfEmbedders.length > 1) {
-        <div class="form-group">
+        <div class="form-group form-group--section">
           <label class="form-label" for="lf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
           <select
             id="lf-embedder"
@@ -332,7 +362,7 @@
       }
 
       @if (lfClippers.length > 1) {
-        <div class="form-group">
+        <div class="form-group form-group--section">
           <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
           <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('lf')" title="Choose a MediaClipper to segment or trim media before embedding">
             Use MediaClipper: {{ clipperDisplayName('lf') }}
