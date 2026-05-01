@@ -403,12 +403,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     if (colIndex < 0) return;
 
-    // Temporarily release fixed layout for this column so we can measure
-    // its natural width from the body cells.
-    const wasFixed = tableEl.classList.contains('table-fixed');
+    // Collapse the host column to 0px under table-layout: fixed so body cells
+    // (which have overflow: hidden) overflow with their content. scrollWidth
+    // then reports the content's natural width rather than the cell's current
+    // client width — without this, repeated auto-fits drift right by the +2px
+    // padding on every click because scrollWidth == clientWidth when the cell
+    // has slack.
     const prevColWidth = ths[colIndex].style.width;
-    tableEl.classList.remove('table-fixed');
-    ths[colIndex].style.width = '';
+    ths[colIndex].style.width = '0px';
 
     let maxPx = 0;
     const rows = tableEl.querySelectorAll('tbody tr');
@@ -417,11 +419,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (!cell || cell.hasAttribute('colspan')) return;
       maxPx = Math.max(maxPx, cell.scrollWidth);
     });
+
+    ths[colIndex].style.width = prevColWidth;
     if (maxPx === 0) maxPx = ths[colIndex].offsetWidth;
     maxPx = Math.max(30, maxPx + 2);
-
-    if (wasFixed) tableEl.classList.add('table-fixed');
-    ths[colIndex].style.width = prevColWidth;
 
     const tableWidth = tableEl.offsetWidth || 1;
     const min = DashboardComponent.MIN_COL_PCT;
