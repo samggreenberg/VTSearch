@@ -79,6 +79,16 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     this.applyTransform();
   }
 
+  zoomIn(): void {
+    this.zoom = this.clampZoom(this.zoom + 0.15 * this.zoom);
+    this.applyTransform();
+  }
+
+  zoomOut(): void {
+    this.zoom = this.clampZoom(this.zoom - 0.15 * this.zoom);
+    this.applyTransform();
+  }
+
   resetView(): void {
     this.zoom = 1;
     this.rotation = 0;
