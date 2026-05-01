@@ -7,7 +7,7 @@
     <div class="tab-panel-manual" role="region" aria-label="Find results">
       <div class="images-header">
         <h3 class="images-header-title">
-          {{ mediaTypeName }}s ({{ medias.length }})
+          {{ mediaTypeName }}s ({{ medias.length | number }})
         </h3>
         <div class="view-btn-wrapper">
           <button class="view-btn" (click)="showLeftViewSettings = true" title="Change display layout: list vs. grid, focus mode, and icon size">View</button>
@@ -115,7 +115,7 @@
 
         <div class="images-header">
           <h3 class="images-header-title">
-            {{ mediaTypeName }}s ({{ medias.length }})
+            {{ mediaTypeName }}s ({{ medias.length | number }})
           </h3>
           <div class="view-btn-wrapper">
             <button class="view-btn" (click)="showLeftViewSettings = true" title="Change display layout: list vs. grid, focus mode, and icon size">View</button>

@@ -8,11 +8,11 @@
       <tbody>
         <tr>
           <td class="stat-label" title="Total number of unique media items in this dataset">Media items</td>
-          <td class="stat-value">{{ stats.num_items }}</td>
+          <td class="stat-value">{{ stats.num_items | number }}</td>
         </tr>
         <tr>
           <td class="stat-label" title="Number of duplicate items that were detected and collapsed">Duplicate groups</td>
-          <td class="stat-value">{{ stats.num_dupes }}</td>
+          <td class="stat-value">{{ stats.num_dupes | number }}</td>
         </tr>
         <tr>
           <td class="stat-label" title="Timestamp when the dataset import process began">Ingest started</td>
@@ -68,7 +68,7 @@
           @for (ft of fileTypes; track ft.ext) {
             <tr>
               <td>.{{ ft.ext }}</td>
-              <td>{{ ft.count }}</td>
+              <td>{{ ft.count | number }}</td>
             </tr>
           }
         </tbody>

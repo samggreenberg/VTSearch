@@ -40,7 +40,7 @@
     <h3>
       Preview
       @if (labelsLoaded) {
-        <span class="preview-count">({{ filteredLabels.length }} rows)</span>
+        <span class="preview-count">({{ filteredLabels.length | number }} rows)</span>
       }
     </h3>
     @if (!labelsLoaded) {
@@ -71,7 +71,7 @@
             @if (filteredLabels.length > 50) {
               <tr class="truncated-row">
                 <td [attr.colspan]="enabledColumns.length">
-                  ... {{ filteredLabels.length - 50 }} more rows
+                  ... {{ filteredLabels.length - 50 | number }} more rows
                 </td>
               </tr>
             }

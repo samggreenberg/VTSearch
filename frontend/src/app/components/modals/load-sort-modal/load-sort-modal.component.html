@@ -111,7 +111,7 @@
               <button class="file-item" (click)="loadRegistryModel(model)" [title]="'Load model: ' + model.name">
                 {{ model.name }}
                 @if (model.num_training) {
-                  <span class="item-meta">{{ model.num_training }} labels</span>
+                  <span class="item-meta">{{ model.num_training | number }} labels</span>
                 }
               </button>
             }
