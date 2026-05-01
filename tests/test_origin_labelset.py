@@ -25,9 +25,9 @@ from vtsearch.utils import build_media_lookup, resolve_media_ids
 
 class TestOrigin:
     def test_to_dict(self):
-        o = Origin("folder", {"path": "/data", "media_type": "audio"})
+        o = Origin("server_folder", {"path": "/data", "media_type": "audio"})
         d = o.to_dict()
-        assert d == {"importer": "folder", "params": {"path": "/data", "media_type": "audio"}}
+        assert d == {"importer": "server_folder", "params": {"path": "/data", "media_type": "audio"}}
 
     def test_from_dict(self):
         d = {"importer": "http_archive", "params": {"url": "https://example.com/data.zip"}}
@@ -41,26 +41,26 @@ class TestOrigin:
         assert o.params == {}
 
     def test_display_with_params(self):
-        o = Origin("folder", {"path": "/data/audio"})
-        assert o.display() == "folder(/data/audio)"
+        o = Origin("server_folder", {"path": "/data/audio"})
+        assert o.display() == "server_folder(/data/audio)"
 
     def test_display_without_params(self):
         o = Origin("unknown", {})
         assert o.display() == "unknown"
 
     def test_equality(self):
-        a = Origin("folder", {"path": "/data"})
-        b = Origin("folder", {"path": "/data"})
+        a = Origin("server_folder", {"path": "/data"})
+        b = Origin("server_folder", {"path": "/data"})
         assert a == b
 
     def test_inequality(self):
-        a = Origin("folder", {"path": "/data"})
-        b = Origin("folder", {"path": "/other"})
+        a = Origin("server_folder", {"path": "/data"})
+        b = Origin("server_folder", {"path": "/other"})
         assert a != b
 
     def test_hash_consistency(self):
-        a = Origin("folder", {"path": "/data"})
-        b = Origin("folder", {"path": "/data"})
+        a = Origin("server_folder", {"path": "/data"})
+        b = Origin("server_folder", {"path": "/data"})
         assert hash(a) == hash(b)
 
     def test_roundtrip(self):
@@ -90,7 +90,7 @@ class TestLabeledElement:
         assert "category" not in d
 
     def test_to_dict_full(self):
-        origin = {"importer": "folder", "params": {"path": "/data"}}
+        origin = {"importer": "server_folder", "params": {"path": "/data"}}
         e = LabeledElement(
             md5="abc",
             label="bad",
@@ -190,7 +190,7 @@ class TestLabelSet:
         assert len(ls) == 1
 
     def test_roundtrip(self):
-        origin = {"importer": "folder", "params": {"path": "/data"}}
+        origin = {"importer": "server_folder", "params": {"path": "/data"}}
         elements = [
             LabeledElement(
                 md5="abc",
@@ -214,14 +214,14 @@ class TestLabelSet:
                 "md5": "hash1",
                 "filename": "a.wav",
                 "category": "dogs",
-                "origin": {"importer": "folder", "params": {"path": "/data"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/data"}},
                 "origin_name": "a.wav",
             },
             2: {
                 "md5": "hash2",
                 "filename": "b.wav",
                 "category": "cats",
-                "origin": {"importer": "folder", "params": {"path": "/data"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/data"}},
                 "origin_name": "b.wav",
             },
             3: {"md5": "hash3", "filename": "c.wav", "category": "birds"},
@@ -232,7 +232,7 @@ class TestLabelSet:
         ls = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes)
         assert len(ls) == 3
         assert ls.elements[0].label == "good"
-        assert ls.elements[0].origin == {"importer": "folder", "params": {"path": "/data"}}
+        assert ls.elements[0].origin == {"importer": "server_folder", "params": {"path": "/data"}}
         assert ls.elements[1].label == "bad"
         # Clip 3 has no origin set
         assert ls.elements[2].origin is None
@@ -262,7 +262,7 @@ class TestLabelSet:
                             "category": "dogs",
                             "score": 0.9,
                             "md5": "hash1",
-                            "origin": {"importer": "folder", "params": {"path": "/data"}},
+                            "origin": {"importer": "server_folder", "params": {"path": "/data"}},
                             "origin_name": "a.wav",
                         },
                         {
@@ -290,14 +290,14 @@ class TestLabelSet:
             1: {
                 "md5": "h1",
                 "filename": "a.wav",
-                "origin": {"importer": "folder", "params": {"path": "/tmp"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/tmp"}},
                 "origin_name": "a.wav",
             }
         }
         ls = LabelSet.from_results(results, medias=medias)
         assert len(ls) == 1
         assert ls.elements[0].origin is not None
-        assert ls.elements[0].origin["importer"] == "folder"
+        assert ls.elements[0].origin["importer"] == "server_folder"
 
 
 # ---------------------------------------------------------------------------
@@ -439,13 +439,13 @@ class TestBuildClipLookup:
             1: {
                 "id": 1,
                 "md5": "h1",
-                "origin": {"importer": "folder", "params": {"path": "/a"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/a"}},
                 "origin_name": "a.wav",
             },
             2: {
                 "id": 2,
                 "md5": "h2",
-                "origin": {"importer": "folder", "params": {"path": "/a"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/a"}},
                 "origin_name": "b.wav",
             },
         }
@@ -456,8 +456,8 @@ class TestBuildClipLookup:
     def test_md5_lookup_groups_duplicates(self):
         """Two medias with the same MD5 should both appear in the md5_lookup."""
         medias = {
-            1: {"id": 1, "md5": "same_hash", "origin": {"importer": "folder", "params": {}}, "origin_name": "a.wav"},
-            2: {"id": 2, "md5": "same_hash", "origin": {"importer": "folder", "params": {}}, "origin_name": "b.wav"},
+            1: {"id": 1, "md5": "same_hash", "origin": {"importer": "server_folder", "params": {}}, "origin_name": "a.wav"},
+            2: {"id": 2, "md5": "same_hash", "origin": {"importer": "server_folder", "params": {}}, "origin_name": "b.wav"},
         }
         _, md5_lookup, _ = build_media_lookup(medias)
         assert sorted(md5_lookup["same_hash"]) == [1, 2]
@@ -477,19 +477,19 @@ class TestResolveClipIds:
             1: {
                 "id": 1,
                 "md5": "h1",
-                "origin": {"importer": "folder", "params": {"path": "/a"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/a"}},
                 "origin_name": "a.wav",
             },
             2: {
                 "id": 2,
                 "md5": "h2",
-                "origin": {"importer": "folder", "params": {"path": "/a"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/a"}},
                 "origin_name": "b.wav",
             },
             3: {
                 "id": 3,
                 "md5": "h1",
-                "origin": {"importer": "folder", "params": {"path": "/b"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/b"}},
                 "origin_name": "a.wav",
             },
         }
@@ -497,7 +497,7 @@ class TestResolveClipIds:
 
     def test_match_by_origin(self):
         origin_lookup, md5_lookup, _ = self._make_lookups()
-        entry = {"md5": "wrong", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"}
+        entry = {"md5": "wrong", "origin": {"importer": "server_folder", "params": {"path": "/a"}}, "origin_name": "a.wav"}
         ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert ids == [1]
 
@@ -524,6 +524,6 @@ class TestResolveClipIds:
         """Origin and MD5 matches are unioned: all matching medias are returned."""
         origin_lookup, md5_lookup, _ = self._make_lookups()
         # Origin matches media 1, md5 "h1" matches medias 1 and 3 → union is [1, 3]
-        entry = {"md5": "h1", "origin": {"importer": "folder", "params": {"path": "/a"}}, "origin_name": "a.wav"}
+        entry = {"md5": "h1", "origin": {"importer": "server_folder", "params": {"path": "/a"}}, "origin_name": "a.wav"}
         ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert sorted(ids) == [1, 3]

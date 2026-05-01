@@ -505,9 +505,9 @@ class TestConvertersPackage:
 
 class TestFolderImporterDocumentsOption:
     def test_documents_in_media_type_options(self):
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
 
-        importer = FolderDatasetImporter()
+        importer = ServerFolderDatasetImporter()
         media_type_field = next(f for f in importer.fields if f.key == "media_type")
         assert "document" in media_type_field.options
 
@@ -630,9 +630,9 @@ class TestDemoListConverters:
 
 class TestImporterConverterMetadata:
     def test_folder_importer_to_dict_has_converters(self):
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
 
-        importer = FolderDatasetImporter()
+        importer = ServerFolderDatasetImporter()
         d = importer.to_dict()
         assert "available_converters_by_media_type" in d
         by_mt = d["available_converters_by_media_type"]
@@ -659,7 +659,7 @@ class TestImporterConverterMetadata:
         resp = client.get("/api/dataset/importers")
         assert resp.status_code == 200
         importers = resp.get_json()["importers"]
-        folder_imp = next((i for i in importers if i["name"] == "folder"), None)
+        folder_imp = next((i for i in importers if i["name"] == "server_folder"), None)
         if folder_imp:
             assert "available_converters_by_media_type" in folder_imp
 

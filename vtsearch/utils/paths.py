@@ -89,3 +89,18 @@ def rglob_follow_symlinks(root: Path, pattern: str) -> list[Path]:
             if fnmatch.fnmatch(filename, pattern):
                 results.append(Path(dirpath) / filename)
     return results
+
+
+def glob_top_level(root: Path, pattern: str) -> list[Path]:
+    """Match *pattern* against files directly in *root* (no recursion).
+
+    Mirrors :func:`rglob_follow_symlinks` but limited to the immediate
+    children of *root*.  Subdirectories are not descended into.
+    """
+    results: list[Path] = []
+    if not root.is_dir():
+        return results
+    for entry in os.scandir(root):
+        if entry.is_file(follow_symlinks=True) and fnmatch.fnmatch(entry.name, pattern):
+            results.append(Path(entry.path))
+    return results

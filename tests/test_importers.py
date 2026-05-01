@@ -294,15 +294,18 @@ class TestHttpArchiveImporterMetadata:
 
 class TestFolderImporterMetadata:
     def _get_importer(self):
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
         return IMPORTER
 
     def test_name_is_folder(self):
-        assert self._get_importer().name == "folder"
+        assert self._get_importer().name == "server_folder"
 
     def test_icon_is_folder_emoji(self):
-        assert self._get_importer().icon == "📂"
+        # 📁 — frontend renders this as a "folder" icon, matching the
+        # browser-side Local Folder card.  The Server tab makes the
+        # server-vs-local distinction.
+        assert self._get_importer().icon == "📁"
 
     def test_description_says_media_files_from_a_folder(self):
         desc = self._get_importer().description.lower()
@@ -323,7 +326,7 @@ class TestFolderImporterMetadata:
 
     def test_to_dict_includes_icon(self):
         d = self._get_importer().to_dict()
-        assert d["icon"] == "📂"
+        assert d["icon"] == "📁"
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +338,7 @@ class TestBuiltinImporterNames:
     def test_folder_has_form_ui_mode(self):
         from vtsearch.datasets.importers import get_importer
 
-        imp = get_importer("folder")
+        imp = get_importer("server_folder")
         assert imp is not None
         assert imp.ui_mode == "form"
 

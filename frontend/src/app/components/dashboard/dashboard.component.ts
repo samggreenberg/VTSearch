@@ -15,6 +15,7 @@ import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
 import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, ModelRegistryEntry } from '../../models/api.models';
 import { formatProgressFraction } from '../../utils/format-progress';
+import { ColMeta, ManagedColumns } from '../../utils/managed-columns';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
@@ -49,6 +50,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
   selectedDatasetIds: Set<string> = new Set();
   selectedModelIds: Set<string> = new Set();
 
+  // Animation flags for the right-side bulk-action column.
+  // Spin flags fire a one-shot 90° rotation on the symmetric select-all/none
+  // squares; the animationend handler clears them so the icon snaps back.
+  spinSelectAllDatasets = false;
+  spinSelectNoneDatasets = false;
+  spinSelectAllModels = false;
+  spinSelectNoneModels = false;
+  // Confirm flags hold the trash icon at 90° while the confirm dialog is up,
+  // and play a reverse animation back to 0° once the dialog resolves.
+  deletingSelectedDatasetsConfirm = false;
+  wasDeletingSelectedDatasetsConfirm = false;
+  deletingSelectedModelsConfirm = false;
+  wasDeletingSelectedModelsConfirm = false;
+
   progressValue = 0;
   progressTotal = 0;
   progressIndeterminate = false;
@@ -58,6 +73,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   importerModalOpen = false;
   importerClosing = false;
+  /** Importer name to auto-select when the modal opens (for "Combine Selected"). */
+  importerInitialName = '';
+  /** Pre-filled form values for the auto-selected importer. */
+  importerInitialFormValues: Record<string, unknown> = {};
   newModelModalOpen = false;
   newModelClosing = false;
   exportModalOpen = false;
@@ -76,28 +95,71 @@ export class DashboardComponent implements OnInit, OnDestroy {
   findLoading = false;
   trainAfterModelCreation = false;
 
-  datasetSortColumn = 'name';
-  datasetSortAsc = true;
-  modelSortColumn = 'name';
-  modelSortAsc = true;
+  // Column order. "name" is pinned at position 0 and "actions" is pinned at
+  // the far right; these arrays hold only the user-reorderable middle columns.
+  static readonly DATASET_COLUMNS_DEFAULT = [
+    'media_type', 'num_items', 'created_at', 'created_by', 'readers', 'loaded',
+  ];
+  static readonly MODEL_COLUMNS_DEFAULT = [
+    'media_type', 'num_training', 'trainable', 'autodetect', 'last_trained_at',
+    'created_at', 'detector_loaded',
+  ];
+  private static readonly DATASET_COL_ORDER_KEY = 'vtsearch.dashboard.datasetColumnOrder';
+  private static readonly MODEL_COL_ORDER_KEY = 'vtsearch.dashboard.modelColumnOrder';
 
-  // Column resize state
-  datasetColWidths: Record<string, number> = {};
-  modelColWidths: Record<string, number> = {};
-  datasetsTableFixed = false;
-  modelsTableFixed = false;
-  datasetsTableWidth = 0;
-  modelsTableWidth = 0;
-  private datasetsResizeInit = false;
-  private modelsResizeInit = false;
-  private resizeState: {
-    startX: number;
-    startWidth: number;
-    table: 'datasets' | 'models';
-    col: string;
-    dragged: boolean;
-    tableEl: HTMLTableElement;
-  } | null = null;
+  // Per-column display metadata. Keyed by `data-col` value; used both by the
+  // header template and by card components when rendering body cells in order.
+  static readonly DATASET_COL_META: Record<string, ColMeta> = {
+    name: { label: 'Name', title: 'Dataset display name (click to sort)', sortable: true },
+    media_type: { label: 'Type', title: 'Media type: audio, image, text, video, or document (click to sort)', sortable: true },
+    num_items: { label: '# Items', title: 'Number of media items in the dataset (click to sort)', sortable: true },
+    created_at: { label: 'Created', title: 'When the dataset was first imported (click to sort)', sortable: true },
+    created_by: { label: 'Creator', title: 'User who created this dataset (click to sort)', sortable: true },
+    readers: { label: 'Readers', title: 'Users with access to this dataset (click to sort)', sortable: true },
+    loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },
+    actions: { label: 'Actions', title: 'Available operations for this dataset', sortable: false },
+  };
+  static readonly MODEL_COL_META: Record<string, ColMeta> = {
+    name: { label: 'Name', title: 'Model display name (click to sort)', sortable: true },
+    media_type: { label: 'Type', title: 'Media type this model operates on (click to sort)', sortable: true },
+    num_training: { label: '# Training', title: 'Number of labeled training examples (click to sort)', sortable: true },
+    trainable: { label: 'Trainable?', title: 'Is this Model one we can load into Train Mode and improve?', sortable: false },
+    autodetect: { label: 'Autorun?', title: 'Include this model in CLI autorun (click to sort)', sortable: true },
+    last_trained_at: { label: 'Last Trained', title: 'When the model was last trained (click to sort)', sortable: true },
+    created_at: { label: 'Created', title: 'When the model was created (click to sort)', sortable: true },
+    detector_loaded: { label: 'Loaded?', title: "Whether the model's inference data is cached in memory", sortable: false },
+    actions: { label: 'Actions', title: 'Available operations for this model', sortable: false },
+  };
+
+  datasetCols = new ManagedColumns(
+    DashboardComponent.DATASET_COLUMNS_DEFAULT,
+    DashboardComponent.DATASET_COL_META,
+    { initialSort: 'name', storageKey: DashboardComponent.DATASET_COL_ORDER_KEY },
+  );
+  modelCols = new ManagedColumns(
+    DashboardComponent.MODEL_COLUMNS_DEFAULT,
+    DashboardComponent.MODEL_COL_META,
+    { initialSort: 'name', storageKey: DashboardComponent.MODEL_COL_ORDER_KEY },
+  );
+
+  get visibleDatasetColumns(): string[] {
+    if (this.isDefaultLogin) {
+      return this.datasetCols.columnOrder.filter((c) => c !== 'created_by' && c !== 'readers');
+    }
+    return this.datasetCols.columnOrder;
+  }
+
+  get visibleModelColumns(): string[] {
+    return this.modelCols.columnOrder;
+  }
+
+  onDatasetHeaderClick(col: string): void {
+    if (this.datasetCols.meta(col).sortable) this.datasetCols.sortBy(col);
+  }
+
+  onModelHeaderClick(col: string): void {
+    if (this.modelCols.meta(col).sortable) this.modelCols.sortBy(col);
+  }
 
   private destroy$ = new Subject<void>();
   private polling$ = new Subject<void>();
@@ -197,171 +259,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  // --- Column resize ---
-
-  startResize(event: MouseEvent, table: 'datasets' | 'models'): void {
-    event.stopPropagation();
-    event.preventDefault();
-
-    // The handle sits on the LEFT edge of its host <th> and resizes the
-    // column to its left (see dashboard.component.scss for why).
-    const th = (event.target as HTMLElement).closest('th') as HTMLElement;
-    const prevTh = th.previousElementSibling as HTMLElement | null;
-    const col = prevTh?.getAttribute('data-col');
-    if (!col) return;
-    const tableEl = th.closest('table') as HTMLTableElement;
-    const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
-    const initialized = table === 'datasets' ? this.datasetsResizeInit : this.modelsResizeInit;
-
-    if (!initialized) {
-      const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
-      let totalWidth = 0;
-      ths.forEach((t) => {
-        const colKey = t.getAttribute('data-col');
-        const w = t.offsetWidth;
-        if (colKey) colWidths[colKey] = w;
-        totalWidth += w;
-      });
-      if (table === 'datasets') {
-        this.datasetsTableWidth = totalWidth;
-        this.datasetsResizeInit = true;
-        this.datasetsTableFixed = true;
-      } else {
-        this.modelsTableWidth = totalWidth;
-        this.modelsResizeInit = true;
-        this.modelsTableFixed = true;
-      }
-    }
-
-    this.resizeState = {
-      startX: event.clientX,
-      startWidth: colWidths[col] ?? 100,
-      table,
-      col,
-      dragged: false,
-      tableEl,
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }
+  // --- Column resize / drag-reorder ---
+  //
+  // The actual logic lives in `ManagedColumns`. We just forward document-level
+  // mouse events to both managers so resize tracking works regardless of which
+  // table the user grabbed. Drag-reorder uses native HTML5 drag events and is
+  // dispatched directly from the template.
 
   @HostListener('document:mousemove', ['$event'])
   onColResizeMove(event: MouseEvent): void {
-    if (!this.resizeState) return;
-    const delta = event.clientX - this.resizeState.startX;
-    if (Math.abs(delta) > 3) this.resizeState.dragged = true;
-    if (!this.resizeState.dragged) return;
-    const colWidths = this.resizeState.table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
-    const newWidth = Math.max(30, this.resizeState.startWidth + delta);
-    const prevWidth = colWidths[this.resizeState.col] ?? this.resizeState.startWidth;
-    colWidths[this.resizeState.col] = newWidth;
-    const widthChange = newWidth - prevWidth;
-    if (this.resizeState.table === 'datasets') {
-      this.datasetsTableWidth = Math.max(100, this.datasetsTableWidth + widthChange);
-    } else {
-      this.modelsTableWidth = Math.max(100, this.modelsTableWidth + widthChange);
-    }
+    this.datasetCols.onResizeMove(event);
+    this.modelCols.onResizeMove(event);
   }
 
   @HostListener('document:mouseup')
   onColResizeEnd(): void {
-    if (!this.resizeState) return;
-    const state = this.resizeState;
-    this.resizeState = null;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-
-    if (!state.dragged) {
-      this.autoSizeColumn(state.tableEl, state.table, state.col);
-    }
-  }
-
-  private autoSizeColumn(tableEl: HTMLTableElement, table: 'datasets' | 'models', col: string): void {
-    const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
-
-    // Find the column index from the header
-    const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
-    let colIndex = -1;
-    for (let i = 0; i < ths.length; i++) {
-      if (ths[i].getAttribute('data-col') === col) {
-        colIndex = i;
-        break;
-      }
-    }
-    if (colIndex < 0) return;
-
-    // Temporarily switch to auto layout so content determines width
-    const wasFixed = tableEl.classList.contains('table-fixed');
-    const prevTableWidth = tableEl.style.width;
-    const prevColWidth = ths[colIndex].style.width;
-
-    tableEl.classList.remove('table-fixed');
-    // Force width:auto so the table shrinks to content instead of stretching
-    // to 100% (the CSS class default).  Without this, the browser distributes
-    // extra container space across columns, inflating every measurement.
-    tableEl.style.width = 'auto';
-    ths[colIndex].style.width = '';
-
-    // Measure the natural width of the column from body cells.
-    let maxWidth = 0;
-    const rows = tableEl.querySelectorAll('tbody tr');
-    rows.forEach((row) => {
-      const cell = row.children[colIndex] as HTMLElement | undefined;
-      if (cell) {
-        // For cells with colspan, skip (loading task rows)
-        if (cell.hasAttribute('colspan')) return;
-        maxWidth = Math.max(maxWidth, cell.scrollWidth);
-      }
-    });
-    // Fall back to header width only when the table has no body rows
-    if (maxWidth === 0) {
-      maxWidth = ths[colIndex].offsetWidth;
-    }
-
-    // Add a small buffer for padding
-    maxWidth = Math.max(30, maxWidth + 2);
-
-    // Apply the measured width and restore fixed layout
-    const prevWidth = colWidths[col] ?? 0;
-    colWidths[col] = maxWidth;
-
-    if (table === 'datasets') {
-      this.datasetsTableFixed = true;
-      this.datasetsResizeInit = true;
-      // Recalculate total table width
-      let total = 0;
-      ths.forEach((t) => {
-        const key = t.getAttribute('data-col');
-        if (key && key !== col) {
-          if (!colWidths[key]) colWidths[key] = t.offsetWidth;
-          total += colWidths[key];
-        } else if (key === col) {
-          total += maxWidth;
-        }
-      });
-      this.datasetsTableWidth = total;
-    } else {
-      this.modelsTableFixed = true;
-      this.modelsResizeInit = true;
-      let total = 0;
-      ths.forEach((t) => {
-        const key = t.getAttribute('data-col');
-        if (key && key !== col) {
-          if (!colWidths[key]) colWidths[key] = t.offsetWidth;
-          total += colWidths[key];
-        } else if (key === col) {
-          total += maxWidth;
-        }
-      });
-      this.modelsTableWidth = total;
-    }
-
-    // Restore layout (Angular binding will apply on next change detection).
-    // Clear the temporary 'auto' override so Angular bindings take over.
-    tableEl.style.width = prevTableWidth;
-    if (wasFixed) {
-      tableEl.classList.add('table-fixed');
-    }
+    this.datasetCols.onResizeEnd();
+    this.modelCols.onResizeEnd();
   }
 
   ngOnDestroy(): void {
@@ -461,6 +375,116 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.selectedDatasetIds.has(id);
   }
 
+  toggleDatasetCheckbox(id: string): void {
+    if (this.selectedDatasetIds.has(id)) {
+      this.selectedDatasetIds.delete(id);
+    } else {
+      this.selectedDatasetIds.add(id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectAllDatasets(): void {
+    this.spinSelectAllDatasets = true;
+    for (const d of this.datasets) {
+      this.selectedDatasetIds.add(d.id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectNoneDatasets(): void {
+    this.spinSelectNoneDatasets = true;
+    this.selectedDatasetIds.clear();
+    this.pushTopBarLabels();
+  }
+
+  /**
+   * Combine the currently-selected datasets into a new one.  Opens the
+   * regular Add Dataset modal, jumped to the (otherwise hidden)
+   * combine_datasets importer with the selected pkl paths pre-filled.
+   * The button is only visible/enabled when ≥2 datasets of the same media
+   * type are selected, so we don't re-validate that here.
+   */
+  combineSelectedDatasets(): void {
+    const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    const paths = targets
+      .map((d) => (d['pkl_path'] as string) || '')
+      .filter((p) => !!p);
+    if (paths.length < 2) return;
+    this.importerInitialName = 'combine_datasets';
+    this.importerInitialFormValues = { datasets: paths.join(',') };
+    this.openImporterModal();
+  }
+
+  /**
+   * True when the "Combine Selected Datasets" button should be enabled:
+   * at least two datasets selected AND all of them share a media type.
+   */
+  get combineSelectedDatasetsEnabled(): boolean {
+    if (this.selectedDatasetIds.size < 2) return false;
+    const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    if (targets.length < 2) return false;
+    const types = new Set(targets.map((d) => d.media_type));
+    return types.size === 1;
+  }
+
+  /**
+   * Hint shown in the Combine button's tooltip explaining why it's
+   * disabled (or describing the action when enabled).
+   */
+  get combineSelectedDatasetsHint(): string {
+    if (this.selectedDatasetIds.size < 2) {
+      return 'Select two or more datasets to combine';
+    }
+    if (!this.combineSelectedDatasetsEnabled) {
+      return 'All selected datasets must be of the same media type';
+    }
+    return 'Combine selected datasets into a new one';
+  }
+
+  async deleteSelectedDatasets(): Promise<void> {
+    const ids = [...this.selectedDatasetIds];
+    if (ids.length === 0) return;
+    const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    if (targets.length === 0) return;
+    const names = targets.map((d) => `"${d.name}"`).join(', ');
+    this.deletingSelectedDatasetsConfirm = true;
+    let ok = false;
+    try {
+      ok = await this.dialog.confirm(
+        targets.length === 1
+          ? `Delete dataset ${names}?`
+          : `Delete ${targets.length} datasets: ${names}?`,
+      );
+    } finally {
+      this.deletingSelectedDatasetsConfirm = false;
+      this.wasDeletingSelectedDatasetsConfirm = true;
+    }
+    if (!ok) return;
+    for (const dataset of targets) {
+      this.datasetsApi.deleteRegistered(dataset.id).subscribe({
+        next: () => {
+          this.selectedDatasetIds.delete(dataset.id);
+          this.datasetState.refresh();
+        },
+      });
+    }
+  }
+
+  onSpinSelectAllDatasetsEnd(): void {
+    this.spinSelectAllDatasets = false;
+  }
+
+  onSpinSelectNoneDatasetsEnd(): void {
+    this.spinSelectNoneDatasets = false;
+  }
+
+  onDeleteSelectedDatasetsAnimationEnd(): void {
+    if (!this.deletingSelectedDatasetsConfirm) {
+      this.wasDeletingSelectedDatasetsConfirm = false;
+    }
+  }
+
   // --- Model selection ---
 
   toggleModelSelection(id: string, event: MouseEvent): void {
@@ -483,6 +507,75 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   isModelSelected(id: string): boolean {
     return this.selectedModelIds.has(id);
+  }
+
+  toggleModelCheckbox(id: string): void {
+    if (this.selectedModelIds.has(id)) {
+      this.selectedModelIds.delete(id);
+    } else {
+      this.selectedModelIds.add(id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectAllModels(): void {
+    this.spinSelectAllModels = true;
+    for (const m of this.models) {
+      this.selectedModelIds.add(m.id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectNoneModels(): void {
+    this.spinSelectNoneModels = true;
+    this.selectedModelIds.clear();
+    this.pushTopBarLabels();
+  }
+
+  async deleteSelectedModels(): Promise<void> {
+    const ids = [...this.selectedModelIds];
+    if (ids.length === 0) return;
+    const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    if (targets.length === 0) return;
+    const names = targets.map((m) => `"${m.name}"`).join(', ');
+    this.deletingSelectedModelsConfirm = true;
+    let ok = false;
+    try {
+      ok = await this.dialog.confirm(
+        targets.length === 1
+          ? `Delete model ${names}?`
+          : `Delete ${targets.length} models: ${names}?`,
+      );
+    } finally {
+      this.deletingSelectedModelsConfirm = false;
+      this.wasDeletingSelectedModelsConfirm = true;
+    }
+    if (!ok) return;
+    for (const model of targets) {
+      this.modelsApi.deleteFromRegistry(model.id).subscribe({
+        next: () => {
+          this.selectedModelIds.delete(model.id);
+          this.datasetState.refresh();
+        },
+        error: () => {
+          this.dialog.alert(`Failed to delete model "${model.name}".`, 'error');
+        },
+      });
+    }
+  }
+
+  onSpinSelectAllModelsEnd(): void {
+    this.spinSelectAllModels = false;
+  }
+
+  onSpinSelectNoneModelsEnd(): void {
+    this.spinSelectNoneModels = false;
+  }
+
+  onDeleteSelectedModelsAnimationEnd(): void {
+    if (!this.deletingSelectedModelsConfirm) {
+      this.wasDeletingSelectedModelsConfirm = false;
+    }
   }
 
   // --- Dataset actions ---
@@ -655,6 +748,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeImporterModal(): void {
     this.importerModalOpen = false;
     this.importerClosing = true;
+    this.importerInitialName = '';
+    this.importerInitialFormValues = {};
   }
 
   onImporterAnimationEnd(): void {
@@ -664,6 +759,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onImportComplete(): void {
     this.importerModalOpen = false;
     this.importerClosing = true;
+    this.importerInitialName = '';
+    this.importerInitialFormValues = {};
     this.startProgressPolling();
   }
 
@@ -884,18 +981,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Sorting ---
 
-  sortDatasets(column: string): void {
-    if (this.datasetSortColumn === column) {
-      this.datasetSortAsc = !this.datasetSortAsc;
-    } else {
-      this.datasetSortColumn = column;
-      this.datasetSortAsc = true;
-    }
-  }
-
   get sortedDatasets(): DatasetRegistryEntry[] {
-    const col = this.datasetSortColumn;
-    const asc = this.datasetSortAsc ? 1 : -1;
+    const col = this.datasetCols.sortColumn;
+    const asc = this.datasetCols.sortAsc ? 1 : -1;
     return [...this.datasets].sort((a, b) => {
       const va = a[col] ?? '';
       const vb = b[col] ?? '';
@@ -904,42 +992,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  sortModels(column: string): void {
-    if (this.modelSortColumn === column) {
-      this.modelSortAsc = !this.modelSortAsc;
-    } else {
-      this.modelSortColumn = column;
-      this.modelSortAsc = true;
-    }
-  }
-
   get sortedModels(): ModelRegistryEntry[] {
-    const col = this.modelSortColumn;
-    const asc = this.modelSortAsc ? 1 : -1;
+    const col = this.modelCols.sortColumn;
+    const asc = this.modelCols.sortAsc ? 1 : -1;
     return [...this.models].sort((a, b) => {
       const va = a[col] ?? '';
       const vb = b[col] ?? '';
       if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * asc;
       return String(va).localeCompare(String(vb)) * asc;
     });
-  }
-
-  datasetSortIndicator(column: string): string {
-    if (this.datasetSortColumn !== column) return '\u25B2';
-    return this.datasetSortAsc ? '\u25B2' : '\u25BC';
-  }
-
-  isDatasetSortActive(column: string): boolean {
-    return this.datasetSortColumn === column;
-  }
-
-  modelSortIndicator(column: string): string {
-    if (this.modelSortColumn !== column) return '\u25B2';
-    return this.modelSortAsc ? '\u25B2' : '\u25BC';
-  }
-
-  isModelSortActive(column: string): boolean {
-    return this.modelSortColumn === column;
   }
 
   // --- Button state ---

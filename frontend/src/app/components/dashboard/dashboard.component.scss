@@ -11,8 +11,18 @@
   overflow: hidden;
 }
 
+.dashboard-section-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: stretch;
+}
+
 .dashboard-section {
   flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -20,6 +30,64 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px;
+}
+
+.dashboard-side-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.side-action-gap {
+  height: 12px;
+}
+
+.side-action-btn {
+  background: none;
+  border: none;
+  // Dimmer than --text-primary; hover snaps back to full brightness.
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--btn-icon-hover-bg);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  &.side-action-delete:hover:not(:disabled) {
+    color: var(--color-bad);
+  }
+}
+
+// Select-all/none spins once on click (animationend handler clears class so
+// icon snaps back to 0). Delete spins to 90° while confirm dialog is up,
+// then reverses back. Hoisted out of `.side-action-btn` to keep specificity
+// flat and reduce compiled CSS size.
+.side-action-spin,
+.side-action-delete-active {
+  animation: side-action-rotate 0.3s ease-in-out forwards;
+}
+
+.side-action-delete-inactive {
+  animation: side-action-rotate 0.3s ease-in-out reverse forwards;
+}
+
+@keyframes side-action-rotate {
+  to { transform: rotate(90deg); }
 }
 
 .dashboard-section-header {
@@ -123,13 +191,14 @@
 
   .plus-icon {
     display: inline-block;
+    line-height: 1;
 
     &.plus-open {
       animation: plus-spin-open 0.3s ease-in-out forwards;
     }
 
     &.plus-close {
-      animation: plus-spin-close 0.3s ease-in-out forwards;
+      animation: plus-spin-open 0.3s ease-in-out reverse forwards;
     }
   }
 }
@@ -140,16 +209,14 @@
   100% { transform: rotate(45deg); }
 }
 
-@keyframes plus-spin-close {
-  0% { transform: rotate(45deg); }
-  50% { transform: rotate(22.5deg); }
-  100% { transform: rotate(0deg); }
-}
-
 .dashboard-grid {
   flex: 1 1 0;
   min-height: 0;
-  overflow: auto;
+  // Vertical scroll only — Name is pinned left, Actions is pinned right, and
+  // the middle columns share the remaining width so the table always fills
+  // the container without horizontal overflow.
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .table-fixed {
@@ -169,8 +236,19 @@
     white-space: nowrap;
   }
 
+  // Body cells truncate with ellipsis when the column is narrower than
+  // their content. Header cells must NOT clip — they host the resize
+  // handle which pokes 6px to the left of the cell's edge.
   td {
     padding: 6px 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // Pinned columns: Name on the left, Actions on the right.
+  th.actions-col,
+  td.actions-col {
+    text-align: right;
   }
 
   th {
@@ -186,12 +264,46 @@
     letter-spacing: 0.03em;
     user-select: none;
 
+    // Headers (other than name) are draggable for reordering. The text itself
+    // is the drag handle; resize-handle children stop their own mousedown so
+    // dragging does not start when grabbing a divider.
+    &[draggable='true'] {
+      cursor: grab;
+    }
+
+    &[draggable='true']:active {
+      cursor: grabbing;
+    }
+
     &.sortable {
       cursor: pointer;
 
       &:hover {
         color: var(--text-primary);
       }
+    }
+
+    // Combine: a sortable header that is also draggable should still show
+    // grab on hover (drag is the dominant interaction; sort fires on click).
+    &[draggable='true'].sortable {
+      cursor: grab;
+
+      &:active {
+        cursor: grabbing;
+      }
+    }
+
+    // Visual drop indicator: highlight the target cell — the dragged column
+    // will land in this slot, displacing the target toward the dragged
+    // column's original position.
+    &.col-drop-target {
+      box-shadow: inset 0 0 0 2px var(--accent);
+    }
+
+    // Dim the cell currently being dragged so the user can tell which column
+    // they grabbed (the browser-rendered ghost is drawn separately).
+    &.col-dragging {
+      opacity: 0.4;
     }
 
     .sort-indicator {
@@ -355,12 +467,9 @@
   max-width: 100%;
 }
 
-// Waggle animation for Train/Find button icons while loading.
-// 2s cycle: rotate to 90deg (0.3s), hold (0.7s), rotate back (0.3s), hold (0.7s).
+// Waggle for Train/Find icons while loading: rotate to 90° (0.3s), hold,
+// rotate back (0.3s), hold. 2s cycle.
 @keyframes icon-waggle {
-  0%   { transform: rotate(0deg); }
-  15%  { transform: rotate(90deg); }
-  50%  { transform: rotate(90deg); }
-  65%  { transform: rotate(0deg); }
-  100% { transform: rotate(0deg); }
+  0%, 65%, 100% { transform: rotate(0deg); }
+  15%, 50% { transform: rotate(90deg); }
 }

@@ -1,33 +1,45 @@
-.importer-card { padding: 12px 16px; }
-.importer-card.disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+// Pin the Add Dataset modal to a single large width so flipping between
+// tabs (Services / Server / Local / Demo) and inner widgets doesn't reflow
+// the dialog.  680px (matching the Settings modal) was too narrow for the
+// demo table; 900px gives the table room without overflowing typical
+// laptop displays.  min-height keeps the dialog from collapsing to a thin
+// strip in the no-selection state and then jumping to fit the demo table.
+:host {
+  ::ng-deep .modal-content {
+    width: 900px;
+    min-height: 480px;
+  }
 }
+
 .btn--sm { padding: 2px 10px; font-size: .85rem; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 
-.importer-picker, .clipper-params, .demo-picker, .server-folder-browser, .sf-browse-section {
+.importer-picker, .clipper-params, .demo-picker, .server-folder-browser, .sf-browse-section, .importer-form, .local-folder-uploader {
   display: flex;
   flex-direction: column;
 }
 
-.clipper-params {
-  padding-left: 16px;
-  border-left: 2px solid var(--border);
-  gap: 8px;
+.importer-picker { gap: 0; margin-bottom: 12px; }
+
+// Indent the Importer's content area inward from the tabs above so the
+// hierarchy reads top-down: category tabs → importer tabs → controls.
+// .demo-picker is intentionally NOT indented — its inner tab bar must
+// line up with the category and importer tabs above it.
+.importer-form,
+.local-folder-uploader,
+.server-folder-browser {
+  padding-left: 20px;
 }
 
-.demo-picker { gap: 8px; }
-
-.demo-tab-bar {
+.importer-tab-bar {
   display: flex;
+  align-items: center;
   gap: 4px;
   width: 100%;
   border-bottom: 2px solid var(--border);
-  margin-bottom: 12px;
 }
 
-.demo-tab {
+.importer-tab {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -54,12 +66,71 @@
   }
 }
 
+// Inner row of importer "tabs" within the active category.  Uses the same
+// underline-tab styling as the top-level category tabs so all three tab
+// levels (category, importer, demo media-type) feel like one consistent
+// system.
+.importer-subtab-bar {
+  @extend .importer-tab-bar;
+}
+
+.importer-subtab {
+  @extend .importer-tab;
+
+  &.disabled, &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+// Hint shown directly below the tab row when no tab/importer/media-type is
+// selected yet — placed where the next-step content will appear so the user's
+// eye lands on it naturally.
+.tab-bar-hint {
+  margin: 8px 0 0 0;
+  color: var(--text-muted);
+  font-size: .85rem;
+  font-style: italic;
+}
+
+// Extra vertical breathing room above grouped sections inside the Local /
+// Folder uploader (Folder picker, Chunk size, Embedder, Clipper). The
+// Recursive checkbox intentionally does NOT get this class — it is a
+// sub-option of the Folder picker above it.
+.form-group--section {
+  margin-top: 16px;
+}
+
+.importer-subtab-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.empty-state--inline {
+  padding: 6px 10px;
+  font-size: .8rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.clipper-params {
+  padding-left: 16px;
+  border-left: 2px solid var(--border);
+  gap: 8px;
+}
+
+.demo-picker { gap: 12px; }
+
+// .demo-tab-bar / .demo-tab share the visual styling of the top
+// .importer-tab-bar / .importer-tab.  Define the chrome once via @extend
+// so the compiled output stays under the per-component CSS budget.
+.demo-tab-bar { @extend .importer-tab-bar; }
+.demo-tab { @extend .importer-tab; }
+
 .demo-embedder-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
-  padding-left: 10px;
 
   .form-label { margin: 0; font-size: .85rem; white-space: nowrap; }
   .form-select--inline { width: auto; min-width: 140px; }
@@ -69,10 +140,11 @@
 .demo-content-area {
   min-height: 200px;
   max-height: 50vh;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.demo-table-fixed {
+.table-fixed {
   table-layout: fixed;
 }
 
@@ -88,8 +160,13 @@
     white-space: nowrap;
   }
 
+  // Body cells truncate with ellipsis when the column is narrower than
+  // their content. Header cells must NOT clip — they host the resize handle
+  // which pokes 6px to the left of the cell's edge.
   td {
     padding: 6px 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   th {
@@ -105,12 +182,37 @@
     letter-spacing: 0.03em;
     user-select: none;
 
+    // Headers are draggable for reordering (matches the Dashboard tables).
+    &[draggable='true'] {
+      cursor: grab;
+
+      &:active {
+        cursor: grabbing;
+      }
+    }
+
     &.sortable {
       cursor: pointer;
 
       &:hover {
         color: var(--text-primary);
       }
+    }
+
+    &[draggable='true'].sortable {
+      cursor: grab;
+
+      &:active {
+        cursor: grabbing;
+      }
+    }
+
+    &.col-drop-target {
+      box-shadow: inset 0 0 0 2px var(--accent);
+    }
+
+    &.col-dragging {
+      opacity: 0.4;
     }
 
     .sort-indicator {

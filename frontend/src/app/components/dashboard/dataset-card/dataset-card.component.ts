@@ -16,6 +16,7 @@ export class DatasetCardComponent implements OnChanges {
   @Input() dataset: any;
   @Input() currentUser = '';
   @Input() isDefaultLogin = true;
+  @Input() columnOrder: string[] = [];
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
   @Input() loadingTask?: LoadingTask;
@@ -37,6 +38,7 @@ export class DatasetCardComponent implements OnChanges {
   @Output() security = new EventEmitter<void>();
   @Output() cancelTask = new EventEmitter<string>();
   @Output() dismissTask = new EventEmitter<string>();
+  @Output() checkboxToggle = new EventEmitter<void>();
 
   get isOwner(): boolean {
     return this.dataset?.created_by === this.currentUser;
@@ -126,6 +128,11 @@ export class DatasetCardComponent implements OnChanges {
   onDelete(event: MouseEvent): void {
     event.stopPropagation();
     this.delete.emit();
+  }
+
+  onCheckboxClick(event: MouseEvent): void {
+    event.stopPropagation();
+    this.checkboxToggle.emit();
   }
 
   formatDate(timestamp: number | null): string {

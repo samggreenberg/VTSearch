@@ -297,7 +297,7 @@ class AudioMediaType(MediaType):
 
         cats = self._DEMO_CATEGORIES
         folder = DATA_DIR / "ESC-50-master" / "audio"
-        esc_desc = "Real-world environmental recordings — animals, nature, cities, homes, and people."
+        esc_desc = "Environmental recordings of animals, nature, cities, and homes."
         sc_desc = "One-second keyword utterances from crowd-sourced speakers."
         us_desc = "Real urban field recordings, pre-segmented into labeled sounds."
         return [

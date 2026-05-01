@@ -569,24 +569,25 @@ class TestImporterMetadata:
         assert "tar" in desc
         assert "rar" in desc
 
-    def test_folder_importer_in_extended_list(self, client):
-        """Folder importer must appear in /api/dataset/importers (not a builtin)."""
+    def test_server_folder_importer_in_extended_list(self, client):
+        """server_folder importer must appear in /api/dataset/importers (not a builtin)."""
         resp = client.get("/api/dataset/importers")
         data = resp.get_json()
         names = [imp["name"] for imp in data["importers"]]
-        assert "folder" in names
+        assert "server_folder" in names
 
     def test_folder_importer_icon(self, client):
         resp = client.get("/api/dataset/importers")
         data = resp.get_json()
-        folder_imp = next((i for i in data["importers"] if i["name"] == "folder"), None)
+        folder_imp = next((i for i in data["importers"] if i["name"] == "server_folder"), None)
         assert folder_imp is not None
-        assert folder_imp["icon"] == "\U0001f4c2"
+        # 📁 — frontend renders this as a "folder" icon (see icon.component.ts).
+        assert folder_imp["icon"] == "\U0001f4c1"
 
     def test_folder_importer_description(self, client):
         resp = client.get("/api/dataset/importers")
         data = resp.get_json()
-        folder_imp = next((i for i in data["importers"] if i["name"] == "folder"), None)
+        folder_imp = next((i for i in data["importers"] if i["name"] == "server_folder"), None)
         assert folder_imp is not None
         # Description must not mention specific media-type names
         desc = folder_imp["description"]
@@ -610,7 +611,7 @@ class TestImporterMetadata:
         """Media-type dropdown should come before the path field."""
         resp = client.get("/api/dataset/importers")
         data = resp.get_json()
-        folder_imp = next((i for i in data["importers"] if i["name"] == "folder"), None)
+        folder_imp = next((i for i in data["importers"] if i["name"] == "server_folder"), None)
         assert folder_imp is not None
         keys = [f["key"] for f in folder_imp["fields"]]
         assert keys.index("media_type") < keys.index("path")

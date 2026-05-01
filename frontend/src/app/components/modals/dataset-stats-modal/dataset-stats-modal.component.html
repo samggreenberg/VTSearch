@@ -8,11 +8,11 @@
       <tbody>
         <tr>
           <td class="stat-label" title="Total number of unique media items in this dataset">Media items</td>
-          <td class="stat-value">{{ stats.num_items }}</td>
+          <td class="stat-value">{{ stats.num_items | number }}</td>
         </tr>
         <tr>
           <td class="stat-label" title="Number of duplicate items that were detected and collapsed">Duplicate groups</td>
-          <td class="stat-value">{{ stats.num_dupes }}</td>
+          <td class="stat-value">{{ stats.num_dupes | number }}</td>
         </tr>
         <tr>
           <td class="stat-label" title="Timestamp when the dataset import process began">Ingest started</td>
@@ -25,6 +25,32 @@
         <tr>
           <td class="stat-label" title="Total time taken to import the dataset">Duration</td>
           <td class="stat-value">{{ duration }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="section-title">Creation</h3>
+    <table class="stats-table">
+      <tbody>
+        @if (importerName) {
+          <tr>
+            <td class="stat-label" title="The importer plugin used to create this dataset">Importer</td>
+            <td class="stat-value">{{ importerName }}</td>
+          </tr>
+        }
+        @for (p of originParams; track p.key) {
+          <tr>
+            <td class="stat-label" [title]="'Importer field: ' + p.key">{{ p.key }}</td>
+            <td class="stat-value">{{ p.value }}</td>
+          </tr>
+        }
+        <tr>
+          <td class="stat-label" title="MediaClipper used to slice items at creation">Clipper</td>
+          <td class="stat-value">{{ stats.clipper || '-' }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="MediaEmbedder used to compute embeddings">Embedder</td>
+          <td class="stat-value">{{ (stats.embedder | titlecase) || '-' }}</td>
         </tr>
       </tbody>
     </table>
@@ -42,7 +68,7 @@
           @for (ft of fileTypes; track ft.ext) {
             <tr>
               <td>.{{ ft.ext }}</td>
-              <td>{{ ft.count }}</td>
+              <td>{{ ft.count | number }}</td>
             </tr>
           }
         </tbody>
