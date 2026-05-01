@@ -7,6 +7,7 @@ import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { ImporterInfo, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
+import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 @Component({
   selector: 'vt-dataset-importer-modal',
@@ -51,8 +52,6 @@ export class DatasetImporterModalComponent implements OnInit {
   mediaTypes: MediaTypeInfo[] = [];
   demoTabs: string[] = [];
   activeTab = '';
-  demoSortKey = 'num_files';
-  demoSortAsc = true;
   demoLoading = false;
   demoEmbedders: EmbedderInfo[] = [];
   selectedDemoEmbedder = '';
@@ -60,18 +59,24 @@ export class DatasetImporterModalComponent implements OnInit {
   demoClippers: ClipperInfo[] = [];
   selectedDemoClipper = '';
 
-  // Demo table column resize state
-  demoColWidths: Record<string, number> = {};
-  demoTableFixed = false;
-  demoTableWidth = 0;
-  private demoResizeInit = false;
-  private demoResizeState: {
-    startX: number;
-    startWidth: number;
-    col: string;
-    dragged: boolean;
-    tableEl: HTMLTableElement;
-  } | null = null;
+  // Demo table column metadata + controller. Mirrors the Dashboard datagrid:
+  // percentage widths summing to 100, draggable column reorder, click-to-sort
+  // headers, and column-resize handles between cells.
+  static readonly DEMO_COL_META: Record<string, ColMeta> = {
+    label: { label: 'Name', title: 'Demo dataset name (click to sort)', sortable: true },
+    num_files: { label: '# Media', title: 'Number of media files in the demo dataset (click to sort)', sortable: true },
+    num_categories: { label: '# Cat.', title: 'Number of distinct categories or classes in the dataset (click to sort)', sortable: true },
+    description: { label: 'Description', title: 'Short description of the demo dataset contents (click to sort)', sortable: true },
+    status: { label: 'Readiness', title: 'Whether the dataset is pre-downloaded and ready to load immediately, or needs to be fetched first (click to sort)', sortable: true },
+  };
+  static readonly DEMO_COLUMNS_DEFAULT = ['label', 'num_files', 'num_categories', 'description', 'status'];
+  private static readonly DEMO_COL_ORDER_KEY = 'vtsearch.dashboard.demoColumnOrder';
+
+  demoCols = new ManagedColumns(
+    DatasetImporterModalComponent.DEMO_COLUMNS_DEFAULT,
+    DatasetImporterModalComponent.DEMO_COL_META,
+    { initialSort: 'num_files', storageKey: DatasetImporterModalComponent.DEMO_COL_ORDER_KEY },
+  );
 
   // Local folder upload state — files come from the browser machine
   lfFiles: File[] = [];
@@ -514,8 +519,10 @@ export class DatasetImporterModalComponent implements OnInit {
   get filteredDemos(): DemoDataset[] {
     const items = this.demos.filter((d) => d.media_type === this.activeTab);
     const statusOrder: Record<string, number> = { ready: 0, needs_embedding: 1, needs_download: 2 };
+    const sortKey = this.demoCols.sortColumn;
+    const asc = this.demoCols.sortAsc;
     return items.sort((a, b) => {
-      const key = this.demoSortKey as keyof DemoDataset;
+      const key = sortKey as keyof DemoDataset;
       let va: any = a[key];
       let vb: any = b[key];
       if (key === 'status') {
@@ -523,11 +530,11 @@ export class DatasetImporterModalComponent implements OnInit {
         vb = statusOrder[vb as string] ?? 3;
       }
       if (typeof va === 'number' && typeof vb === 'number') {
-        return this.demoSortAsc ? va - vb : vb - va;
+        return asc ? va - vb : vb - va;
       }
       va = String(va || '').toLowerCase();
       vb = String(vb || '').toLowerCase();
-      return this.demoSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+      return asc ? va.localeCompare(vb) : vb.localeCompare(va);
     });
   }
 
@@ -536,132 +543,20 @@ export class DatasetImporterModalComponent implements OnInit {
     this.loadDemoEmbedders(tab);
   }
 
-  sortDemoBy(key: string): void {
-    if (this.demoSortKey === key) {
-      this.demoSortAsc = !this.demoSortAsc;
-    } else {
-      this.demoSortKey = key;
-      this.demoSortAsc = true;
-    }
+  onDemoHeaderClick(col: string): void {
+    if (this.demoCols.meta(col).sortable) this.demoCols.sortBy(col);
   }
 
-  demoSortIndicator(key: string): string {
-    if (this.demoSortKey !== key) return '';
-    return this.demoSortAsc ? ' \u25B2' : ' \u25BC';
-  }
-
-  // --- Demo table column resize ---
-
-  startDemoResize(event: MouseEvent): void {
-    event.stopPropagation();
-    event.preventDefault();
-
-    // The handle sits on the LEFT edge of its host <th> and resizes the
-    // column to its left (see dashboard.component.scss for why).
-    const th = (event.target as HTMLElement).closest('th') as HTMLElement;
-    const prevTh = th.previousElementSibling as HTMLElement | null;
-    const col = prevTh?.getAttribute('data-col');
-    if (!col) return;
-    const tableEl = th.closest('table') as HTMLTableElement;
-
-    if (!this.demoResizeInit) {
-      const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
-      let totalWidth = 0;
-      ths.forEach((t) => {
-        const colKey = t.getAttribute('data-col');
-        const w = t.offsetWidth;
-        if (colKey) this.demoColWidths[colKey] = w;
-        totalWidth += w;
-      });
-      this.demoTableWidth = totalWidth;
-      this.demoResizeInit = true;
-      this.demoTableFixed = true;
-    }
-
-    this.demoResizeState = {
-      startX: event.clientX,
-      startWidth: this.demoColWidths[col] ?? 100,
-      col,
-      dragged: false,
-      tableEl,
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }
+  // --- Document-level resize tracking ---
 
   @HostListener('document:mousemove', ['$event'])
-  onDemoResizeMove(event: MouseEvent): void {
-    if (!this.demoResizeState) return;
-    const delta = event.clientX - this.demoResizeState.startX;
-    if (Math.abs(delta) > 3) this.demoResizeState.dragged = true;
-    if (!this.demoResizeState.dragged) return;
-    const newWidth = Math.max(30, this.demoResizeState.startWidth + delta);
-    const prevWidth = this.demoColWidths[this.demoResizeState.col] ?? this.demoResizeState.startWidth;
-    this.demoColWidths[this.demoResizeState.col] = newWidth;
-    this.demoTableWidth = Math.max(100, this.demoTableWidth + (newWidth - prevWidth));
+  onDocResizeMove(event: MouseEvent): void {
+    this.demoCols.onResizeMove(event);
   }
 
   @HostListener('document:mouseup')
-  onDemoResizeEnd(): void {
-    if (!this.demoResizeState) return;
-    const state = this.demoResizeState;
-    this.demoResizeState = null;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-
-    if (!state.dragged) {
-      this.autoSizeDemoColumn(state.tableEl, state.col);
-    }
-  }
-
-  private autoSizeDemoColumn(tableEl: HTMLTableElement, col: string): void {
-    const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
-    let colIndex = -1;
-    for (let i = 0; i < ths.length; i++) {
-      if (ths[i].getAttribute('data-col') === col) {
-        colIndex = i;
-        break;
-      }
-    }
-    if (colIndex < 0) return;
-
-    const prevTableWidth = tableEl.style.width;
-    tableEl.classList.remove('demo-table-fixed');
-    tableEl.style.width = 'auto';
-    ths[colIndex].style.width = '';
-
-    let maxWidth = 0;
-    const rows = tableEl.querySelectorAll('tbody tr');
-    rows.forEach((row) => {
-      const cell = row.children[colIndex] as HTMLElement | undefined;
-      if (cell) {
-        if (cell.hasAttribute('colspan')) return;
-        maxWidth = Math.max(maxWidth, cell.scrollWidth);
-      }
-    });
-    if (maxWidth === 0) {
-      maxWidth = ths[colIndex].offsetWidth;
-    }
-    maxWidth = Math.max(30, maxWidth + 2);
-
-    this.demoColWidths[col] = maxWidth;
-    this.demoTableFixed = true;
-    this.demoResizeInit = true;
-
-    let total = 0;
-    ths.forEach((t) => {
-      const key = t.getAttribute('data-col');
-      if (key && key !== col) {
-        if (!this.demoColWidths[key]) this.demoColWidths[key] = t.offsetWidth;
-        total += this.demoColWidths[key];
-      } else if (key === col) {
-        total += maxWidth;
-      }
-    });
-    this.demoTableWidth = total;
-
-    tableEl.style.width = prevTableWidth;
-    tableEl.classList.add('demo-table-fixed');
+  onDocResizeEnd(): void {
+    this.demoCols.onResizeEnd();
   }
 
   /** Convert a type_id (e.g. "image") to the corresponding folder_import_name (e.g. "images"). */

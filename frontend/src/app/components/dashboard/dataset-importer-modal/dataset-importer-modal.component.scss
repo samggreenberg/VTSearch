@@ -23,8 +23,9 @@
 
 // Indent the Importer's content area inward from the tabs above so the
 // hierarchy reads top-down: category tabs → importer tabs → controls.
+// .demo-picker is intentionally NOT indented — its inner tab bar must
+// line up with the category and importer tabs above it.
 .importer-form,
-.demo-picker,
 .local-folder-uploader,
 .server-folder-browser {
   padding-left: 20px;
@@ -82,13 +83,22 @@
   }
 }
 
+// Hint shown directly below the tab row when no tab/importer/media-type is
+// selected yet — placed where the next-step content will appear so the user's
+// eye lands on it naturally.
 .tab-bar-hint {
-  margin-left: auto;
-  padding: 0 12px;
+  margin: 8px 0 0 0;
   color: var(--text-muted);
-  font-size: .8rem;
+  font-size: .85rem;
   font-style: italic;
-  white-space: nowrap;
+}
+
+// Extra vertical breathing room above grouped sections inside the Local /
+// Folder uploader (Folder picker, Chunk size, Embedder, Clipper). The
+// Recursive checkbox intentionally does NOT get this class — it is a
+// sub-option of the Folder picker above it.
+.form-group--section {
+  margin-top: 16px;
 }
 
 .importer-subtab-icon {
@@ -130,10 +140,11 @@
 .demo-content-area {
   min-height: 200px;
   max-height: 50vh;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.demo-table-fixed {
+.table-fixed {
   table-layout: fixed;
 }
 
@@ -149,8 +160,13 @@
     white-space: nowrap;
   }
 
+  // Body cells truncate with ellipsis when the column is narrower than
+  // their content. Header cells must NOT clip — they host the resize handle
+  // which pokes 6px to the left of the cell's edge.
   td {
     padding: 6px 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   th {
@@ -166,12 +182,37 @@
     letter-spacing: 0.03em;
     user-select: none;
 
+    // Headers are draggable for reordering (matches the Dashboard tables).
+    &[draggable='true'] {
+      cursor: grab;
+
+      &:active {
+        cursor: grabbing;
+      }
+    }
+
     &.sortable {
       cursor: pointer;
 
       &:hover {
         color: var(--text-primary);
       }
+    }
+
+    &[draggable='true'].sortable {
+      cursor: grab;
+
+      &:active {
+        cursor: grabbing;
+      }
+    }
+
+    &.col-drop-target {
+      box-shadow: inset 0 0 0 2px var(--accent);
+    }
+
+    &.col-dragging {
+      opacity: 0.4;
     }
 
     .sort-indicator {

@@ -15,6 +15,7 @@ import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
 import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, ModelRegistryEntry } from '../../models/api.models';
 import { formatProgressFraction } from '../../utils/format-progress';
+import { ColMeta, ManagedColumns } from '../../utils/managed-columns';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
@@ -94,33 +95,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   findLoading = false;
   trainAfterModelCreation = false;
 
-  datasetSortColumn = 'name';
-  datasetSortAsc = true;
-  modelSortColumn = 'name';
-  modelSortAsc = true;
-
-  // Column resize state. Widths are stored as percentages summing to ~100;
-  // the table is always 100% wide so columns fit the container without
-  // horizontal scrolling. Resizing one column shifts width to/from its
-  // right-hand neighbour (the cell that hosts the resize handle).
-  datasetColWidths: Record<string, number> = {};
-  modelColWidths: Record<string, number> = {};
-  datasetsTableFixed = false;
-  modelsTableFixed = false;
-  private datasetsResizeInit = false;
-  private modelsResizeInit = false;
-  private resizeState: {
-    startX: number;
-    startGrowPct: number;
-    startShrinkPct: number;
-    growCol: string;
-    shrinkCol: string;
-    table: 'datasets' | 'models';
-    dragged: boolean;
-    tableEl: HTMLTableElement;
-  } | null = null;
-  private static readonly MIN_COL_PCT = 3;
-
   // Column order. "name" is pinned at position 0 and "actions" is pinned at
   // the far right; these arrays hold only the user-reorderable middle columns.
   static readonly DATASET_COLUMNS_DEFAULT = [
@@ -132,16 +106,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ];
   private static readonly DATASET_COL_ORDER_KEY = 'vtsearch.dashboard.datasetColumnOrder';
   private static readonly MODEL_COL_ORDER_KEY = 'vtsearch.dashboard.modelColumnOrder';
-  datasetColumnOrder: string[] = [...DashboardComponent.DATASET_COLUMNS_DEFAULT];
-  modelColumnOrder: string[] = [...DashboardComponent.MODEL_COLUMNS_DEFAULT];
-
-  // Drag-reorder state
-  dragCol: { table: 'datasets' | 'models'; col: string } | null = null;
-  dropTargetCol: { table: 'datasets' | 'models'; col: string } | null = null;
 
   // Per-column display metadata. Keyed by `data-col` value; used both by the
   // header template and by card components when rendering body cells in order.
-  static readonly DATASET_COL_META: Record<string, { label: string; title: string; sortable: boolean }> = {
+  static readonly DATASET_COL_META: Record<string, ColMeta> = {
     name: { label: 'Name', title: 'Dataset display name (click to sort)', sortable: true },
     media_type: { label: 'Type', title: 'Media type: audio, image, text, video, or document (click to sort)', sortable: true },
     num_items: { label: '# Items', title: 'Number of media items in the dataset (click to sort)', sortable: true },
@@ -151,7 +119,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },
     actions: { label: 'Actions', title: 'Available operations for this dataset', sortable: false },
   };
-  static readonly MODEL_COL_META: Record<string, { label: string; title: string; sortable: boolean }> = {
+  static readonly MODEL_COL_META: Record<string, ColMeta> = {
     name: { label: 'Name', title: 'Model display name (click to sort)', sortable: true },
     media_type: { label: 'Type', title: 'Media type this model operates on (click to sort)', sortable: true },
     num_training: { label: '# Training', title: 'Number of labeled training examples (click to sort)', sortable: true },
@@ -163,31 +131,34 @@ export class DashboardComponent implements OnInit, OnDestroy {
     actions: { label: 'Actions', title: 'Available operations for this model', sortable: false },
   };
 
+  datasetCols = new ManagedColumns(
+    DashboardComponent.DATASET_COLUMNS_DEFAULT,
+    DashboardComponent.DATASET_COL_META,
+    { initialSort: 'name', storageKey: DashboardComponent.DATASET_COL_ORDER_KEY },
+  );
+  modelCols = new ManagedColumns(
+    DashboardComponent.MODEL_COLUMNS_DEFAULT,
+    DashboardComponent.MODEL_COL_META,
+    { initialSort: 'name', storageKey: DashboardComponent.MODEL_COL_ORDER_KEY },
+  );
+
   get visibleDatasetColumns(): string[] {
     if (this.isDefaultLogin) {
-      return this.datasetColumnOrder.filter((c) => c !== 'created_by' && c !== 'readers');
+      return this.datasetCols.columnOrder.filter((c) => c !== 'created_by' && c !== 'readers');
     }
-    return this.datasetColumnOrder;
+    return this.datasetCols.columnOrder;
   }
 
   get visibleModelColumns(): string[] {
-    return this.modelColumnOrder;
-  }
-
-  datasetColMeta(col: string): { label: string; title: string; sortable: boolean } {
-    return DashboardComponent.DATASET_COL_META[col] ?? { label: col, title: '', sortable: false };
-  }
-
-  modelColMeta(col: string): { label: string; title: string; sortable: boolean } {
-    return DashboardComponent.MODEL_COL_META[col] ?? { label: col, title: '', sortable: false };
+    return this.modelCols.columnOrder;
   }
 
   onDatasetHeaderClick(col: string): void {
-    if (this.datasetColMeta(col).sortable) this.sortDatasets(col);
+    if (this.datasetCols.meta(col).sortable) this.datasetCols.sortBy(col);
   }
 
   onModelHeaderClick(col: string): void {
-    if (this.modelColMeta(col).sortable) this.sortModels(col);
+    if (this.modelCols.meta(col).sortable) this.modelCols.sortBy(col);
   }
 
   private destroy$ = new Subject<void>();
@@ -270,7 +241,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.knownModelIds = currentIds;
         this.pushTopBarLabels();
       });
-    this.loadColumnOrders();
     this.refresh();
     this.resumeActivePolling();
   }
@@ -289,290 +259,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  // --- Column resize ---
+  // --- Column resize / drag-reorder ---
   //
-  // The handle sits on the LEFT edge of its host <th> and represents the
-  // boundary between the previous column ("grow" target) and the host column
-  // ("shrink" target). Dragging the handle right grows the previous column
-  // and shrinks the host by the same amount, keeping the table at 100%.
-
-  private captureColumnPercentages(tableEl: HTMLTableElement, colWidths: Record<string, number>): void {
-    const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
-    const tableWidth = tableEl.offsetWidth || 1;
-    ths.forEach((t) => {
-      const colKey = t.getAttribute('data-col');
-      if (colKey) colWidths[colKey] = (t.offsetWidth / tableWidth) * 100;
-    });
-  }
-
-  startResize(event: MouseEvent, table: 'datasets' | 'models'): void {
-    event.stopPropagation();
-    event.preventDefault();
-
-    const th = (event.target as HTMLElement).closest('th') as HTMLElement;
-    const prevTh = th.previousElementSibling as HTMLElement | null;
-    const growCol = prevTh?.getAttribute('data-col');
-    const shrinkCol = th.getAttribute('data-col');
-    if (!growCol || !shrinkCol) return;
-    const tableEl = th.closest('table') as HTMLTableElement;
-    const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
-    const initialized = table === 'datasets' ? this.datasetsResizeInit : this.modelsResizeInit;
-
-    if (!initialized) {
-      this.captureColumnPercentages(tableEl, colWidths);
-      if (table === 'datasets') {
-        this.datasetsResizeInit = true;
-        this.datasetsTableFixed = true;
-      } else {
-        this.modelsResizeInit = true;
-        this.modelsTableFixed = true;
-      }
-    }
-
-    this.resizeState = {
-      startX: event.clientX,
-      startGrowPct: colWidths[growCol] ?? 10,
-      startShrinkPct: colWidths[shrinkCol] ?? 10,
-      growCol,
-      shrinkCol,
-      table,
-      dragged: false,
-      tableEl,
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }
+  // The actual logic lives in `ManagedColumns`. We just forward document-level
+  // mouse events to both managers so resize tracking works regardless of which
+  // table the user grabbed. Drag-reorder uses native HTML5 drag events and is
+  // dispatched directly from the template.
 
   @HostListener('document:mousemove', ['$event'])
   onColResizeMove(event: MouseEvent): void {
-    if (!this.resizeState) return;
-    const dx = event.clientX - this.resizeState.startX;
-    if (Math.abs(dx) > 3) this.resizeState.dragged = true;
-    if (!this.resizeState.dragged) return;
-
-    const tableWidth = this.resizeState.tableEl.offsetWidth || 1;
-    const dPct = (dx / tableWidth) * 100;
-    const min = DashboardComponent.MIN_COL_PCT;
-    const sum = this.resizeState.startGrowPct + this.resizeState.startShrinkPct;
-
-    let newGrow = this.resizeState.startGrowPct + dPct;
-    let newShrink = this.resizeState.startShrinkPct - dPct;
-    if (newShrink < min) {
-      newShrink = min;
-      newGrow = sum - min;
-    } else if (newGrow < min) {
-      newGrow = min;
-      newShrink = sum - min;
-    }
-
-    const colWidths = this.resizeState.table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
-    colWidths[this.resizeState.growCol] = newGrow;
-    colWidths[this.resizeState.shrinkCol] = newShrink;
+    this.datasetCols.onResizeMove(event);
+    this.modelCols.onResizeMove(event);
   }
 
   @HostListener('document:mouseup')
   onColResizeEnd(): void {
-    if (!this.resizeState) return;
-    const state = this.resizeState;
-    this.resizeState = null;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-
-    if (!state.dragged) {
-      this.autoSizeColumn(state.tableEl, state.table, state.growCol, state.shrinkCol);
-    }
-  }
-
-  /** Auto-fit the grow column to its natural content width; take/return the
-   *  delta from the shrink column so total stays at 100%. */
-  private autoSizeColumn(
-    tableEl: HTMLTableElement,
-    table: 'datasets' | 'models',
-    growCol: string,
-    shrinkCol: string,
-  ): void {
-    const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
-
-    const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
-    let colIndex = -1;
-    for (let i = 0; i < ths.length; i++) {
-      if (ths[i].getAttribute('data-col') === growCol) {
-        colIndex = i;
-        break;
-      }
-    }
-    if (colIndex < 0) return;
-
-    // Temporarily release fixed layout for this column so we can measure
-    // its natural width from the body cells.
-    const wasFixed = tableEl.classList.contains('table-fixed');
-    const prevColWidth = ths[colIndex].style.width;
-    tableEl.classList.remove('table-fixed');
-    ths[colIndex].style.width = '';
-
-    let maxPx = 0;
-    const rows = tableEl.querySelectorAll('tbody tr');
-    rows.forEach((row) => {
-      const cell = row.children[colIndex] as HTMLElement | undefined;
-      if (!cell || cell.hasAttribute('colspan')) return;
-      maxPx = Math.max(maxPx, cell.scrollWidth);
-    });
-    if (maxPx === 0) maxPx = ths[colIndex].offsetWidth;
-    maxPx = Math.max(30, maxPx + 2);
-
-    if (wasFixed) tableEl.classList.add('table-fixed');
-    ths[colIndex].style.width = prevColWidth;
-
-    const tableWidth = tableEl.offsetWidth || 1;
-    const min = DashboardComponent.MIN_COL_PCT;
-    const sum = (colWidths[growCol] ?? 0) + (colWidths[shrinkCol] ?? 0);
-    let targetGrow = (maxPx / tableWidth) * 100;
-    if (targetGrow > sum - min) targetGrow = sum - min;
-    if (targetGrow < min) targetGrow = min;
-    colWidths[growCol] = targetGrow;
-    colWidths[shrinkCol] = sum - targetGrow;
-
-    if (table === 'datasets') {
-      this.datasetsTableFixed = true;
-      this.datasetsResizeInit = true;
-    } else {
-      this.modelsTableFixed = true;
-      this.modelsResizeInit = true;
-    }
-  }
-
-  // --- Column reorder (drag and drop) ---
-
-  private loadColumnOrders(): void {
-    this.datasetColumnOrder = this.normalizeColumnOrder(
-      DashboardComponent.DATASET_COL_ORDER_KEY,
-      DashboardComponent.DATASET_COLUMNS_DEFAULT,
-    );
-    this.modelColumnOrder = this.normalizeColumnOrder(
-      DashboardComponent.MODEL_COL_ORDER_KEY,
-      DashboardComponent.MODEL_COLUMNS_DEFAULT,
-    );
-  }
-
-  private normalizeColumnOrder(storageKey: string, defaults: readonly string[]): string[] {
-    let stored: unknown = null;
-    try {
-      const raw = localStorage.getItem(storageKey);
-      stored = raw ? JSON.parse(raw) : null;
-    } catch {
-      stored = null;
-    }
-    const known = new Set(defaults);
-    const result: string[] = [];
-    if (Array.isArray(stored)) {
-      for (const c of stored) {
-        if (typeof c === 'string' && known.has(c) && !result.includes(c)) {
-          result.push(c);
-        }
-      }
-    }
-    // Append any defaults missing from the stored order (e.g. new columns
-    // added after the user's order was saved).
-    for (const c of defaults) {
-      if (!result.includes(c)) result.push(c);
-    }
-    return result;
-  }
-
-  private persistColumnOrder(table: 'datasets' | 'models'): void {
-    const key = table === 'datasets'
-      ? DashboardComponent.DATASET_COL_ORDER_KEY
-      : DashboardComponent.MODEL_COL_ORDER_KEY;
-    const order = table === 'datasets' ? this.datasetColumnOrder : this.modelColumnOrder;
-    try {
-      localStorage.setItem(key, JSON.stringify(order));
-    } catch {
-      // Ignore quota / private-mode failures.
-    }
-  }
-
-  onColDragStart(event: DragEvent, table: 'datasets' | 'models', col: string): void {
-    // Don't start a drag if a column resize is in progress.
-    if (this.resizeState) {
-      event.preventDefault();
-      return;
-    }
-    this.dragCol = { table, col };
-    this.dropTargetCol = null;
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-      // Some browsers refuse to start the drag without setData.
-      event.dataTransfer.setData('text/plain', col);
-    }
-  }
-
-  onColDragOver(event: DragEvent, table: 'datasets' | 'models', col: string): void {
-    if (!this.dragCol || this.dragCol.table !== table || this.dragCol.col === col) return;
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-    if (
-      !this.dropTargetCol
-      || this.dropTargetCol.col !== col
-      || this.dropTargetCol.table !== table
-    ) {
-      this.dropTargetCol = { table, col };
-    }
-  }
-
-  onColDragLeave(_event: DragEvent, table: 'datasets' | 'models', col: string): void {
-    if (this.dropTargetCol && this.dropTargetCol.table === table && this.dropTargetCol.col === col) {
-      this.dropTargetCol = null;
-    }
-  }
-
-  onColDrop(event: DragEvent, table: 'datasets' | 'models', targetCol: string): void {
-    if (!this.dragCol || this.dragCol.table !== table) {
-      this.dragCol = null;
-      this.dropTargetCol = null;
-      return;
-    }
-    event.preventDefault();
-    const sourceCol = this.dragCol.col;
-    this.dragCol = null;
-    this.dropTargetCol = null;
-    if (sourceCol === targetCol) return;
-
-    const order = table === 'datasets' ? this.datasetColumnOrder : this.modelColumnOrder;
-    const fromIdx = order.indexOf(sourceCol);
-    const toIdx = order.indexOf(targetCol);
-    if (fromIdx < 0 || toIdx < 0) return;
-
-    // Shift semantics: source lands at target's slot; intermediate columns shift
-    // by one toward source's old slot. Splicing in at the target's *original*
-    // index achieves this for both directions: when fromIdx < toIdx, removing
-    // source first shifts target down by one, so inserting at the original
-    // toIdx places source just past target; when fromIdx > toIdx, target's
-    // index is unchanged, so inserting at toIdx places source just before it.
-    const next = [...order];
-    next.splice(fromIdx, 1);
-    next.splice(toIdx, 0, sourceCol);
-
-    if (table === 'datasets') {
-      this.datasetColumnOrder = next;
-    } else {
-      this.modelColumnOrder = next;
-    }
-    this.persistColumnOrder(table);
-  }
-
-  onColDragEnd(_event: DragEvent): void {
-    this.dragCol = null;
-    this.dropTargetCol = null;
-  }
-
-  isDropTarget(table: 'datasets' | 'models', col: string): boolean {
-    return !!this.dropTargetCol
-      && this.dropTargetCol.table === table
-      && this.dropTargetCol.col === col;
-  }
-
-  isDragging(table: 'datasets' | 'models', col: string): boolean {
-    return !!this.dragCol && this.dragCol.table === table && this.dragCol.col === col;
+    this.datasetCols.onResizeEnd();
+    this.modelCols.onResizeEnd();
   }
 
   ngOnDestroy(): void {
@@ -1278,18 +981,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Sorting ---
 
-  sortDatasets(column: string): void {
-    if (this.datasetSortColumn === column) {
-      this.datasetSortAsc = !this.datasetSortAsc;
-    } else {
-      this.datasetSortColumn = column;
-      this.datasetSortAsc = true;
-    }
-  }
-
   get sortedDatasets(): DatasetRegistryEntry[] {
-    const col = this.datasetSortColumn;
-    const asc = this.datasetSortAsc ? 1 : -1;
+    const col = this.datasetCols.sortColumn;
+    const asc = this.datasetCols.sortAsc ? 1 : -1;
     return [...this.datasets].sort((a, b) => {
       const va = a[col] ?? '';
       const vb = b[col] ?? '';
@@ -1298,42 +992,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  sortModels(column: string): void {
-    if (this.modelSortColumn === column) {
-      this.modelSortAsc = !this.modelSortAsc;
-    } else {
-      this.modelSortColumn = column;
-      this.modelSortAsc = true;
-    }
-  }
-
   get sortedModels(): ModelRegistryEntry[] {
-    const col = this.modelSortColumn;
-    const asc = this.modelSortAsc ? 1 : -1;
+    const col = this.modelCols.sortColumn;
+    const asc = this.modelCols.sortAsc ? 1 : -1;
     return [...this.models].sort((a, b) => {
       const va = a[col] ?? '';
       const vb = b[col] ?? '';
       if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * asc;
       return String(va).localeCompare(String(vb)) * asc;
     });
-  }
-
-  datasetSortIndicator(column: string): string {
-    if (this.datasetSortColumn !== column) return '\u25B2';
-    return this.datasetSortAsc ? '\u25B2' : '\u25BC';
-  }
-
-  isDatasetSortActive(column: string): boolean {
-    return this.datasetSortColumn === column;
-  }
-
-  modelSortIndicator(column: string): string {
-    if (this.modelSortColumn !== column) return '\u25B2';
-    return this.modelSortAsc ? '\u25B2' : '\u25BC';
-  }
-
-  isModelSortActive(column: string): boolean {
-    return this.modelSortColumn === column;
   }
 
   // --- Button state ---
