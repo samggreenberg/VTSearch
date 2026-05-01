@@ -130,6 +130,36 @@ class TestFindLabel:
         total = data["good_count"] + data["bad_count"]
         assert total == app_module.NUM_MEDIAS
 
+    def test_find_label_drops_stale_votes_outside_dataset(self, client):
+        """Stale votes from a previously loaded dataset must not bleed into Find.
+
+        Reproduces the user-reported bug: the user trained "Mammal" on a demo
+        image dataset (filling DetectorContext.good_votes with that dataset's
+        IDs), then switched to a different (synthetic) dataset and ran Find.
+        Training-time IDs that don't exist in the new dataset showed up in the
+        right-scroll Goods as "Clip #803" with broken thumbnails because the
+        new dataset's medias dict didn't contain those IDs.
+        """
+        model_id = self._create_model_with_detector(client)
+
+        # Stale Dataset-A IDs that are NOT in the current dataset's range.
+        loaded_ids = set(app_module.medias.keys())
+        stale_good = {9001, 9002, 9003}
+        stale_bad = {9101, 9102}
+        assert not (stale_good & loaded_ids)
+        assert not (stale_bad & loaded_ids)
+        app_module.good_votes.update({k: None for k in stale_good})
+        app_module.bad_votes.update({k: None for k in stale_bad})
+
+        resp = client.post("/api/find-label", json={"model_id": model_id})
+        assert resp.status_code == 200
+
+        # After find-label, only the current dataset's IDs should be labeled.
+        all_voted = set(app_module.good_votes) | set(app_module.bad_votes)
+        assert stale_good.isdisjoint(all_voted), "stale good votes leaked into find results"
+        assert stale_bad.isdisjoint(all_voted), "stale bad votes leaked into find results"
+        assert all_voted == loaded_ids
+
     def test_find_label_trainable_model_with_labelset(self, client, tmp_path):
         """find-label should train on-the-fly from a trainable model's labelset.
 

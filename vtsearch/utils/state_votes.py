@@ -222,17 +222,33 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
         diversity_tree_label(media_id)
 
 
-def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]]) -> None:
+def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all: bool = False) -> None:
     """Apply many labels in a single lock acquisition (for find-label scoring).
 
     Each entry is ``(media_id, label)`` where *label* is ``"good"`` or
     ``"bad"``.  All labels are applied atomically with click-time ordinals
     assigned in order.
+
+    When *replace_all* is True, any pre-existing votes/click-times for IDs
+    outside *labels* are cleared first.  This is what ``/api/find-label``
+    wants: a detector trained on Dataset A holds Dataset A's media IDs in
+    its DetectorContext, and switching to Dataset B must not leak those
+    stale IDs into Dataset B's right-scroll Goods/Bads.
     """
     import time as _time
 
     with _state_lock:
         tree = _get_diversity_tree()
+        if replace_all:
+            ctx = get_active_detector_context()
+            kept = {mid for mid, _ in labels}
+            for cid in [c for c in good_votes if c not in kept]:
+                good_votes.pop(cid, None)
+            for cid in [c for c in bad_votes if c not in kept]:
+                bad_votes.pop(cid, None)
+            for cid in [c for c in vote_click_times if c not in kept]:
+                vote_click_times.pop(cid, None)
+            ctx.find_initial_labels.clear()
         for media_id, label in labels:
             if label == "good":
                 bad_votes.pop(media_id, None)

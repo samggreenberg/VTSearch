@@ -435,7 +435,7 @@ def find_label():
         else:
             label_pairs.append((entry["id"], "bad"))
             bad_count += 1
-    apply_labels_bulk_with_click_time(label_pairs)
+    apply_labels_bulk_with_click_time(label_pairs, replace_all=True)
 
     # Snapshot the detector-assigned labels so that corrections
     # (user-changed labels) can be identified later during export.
