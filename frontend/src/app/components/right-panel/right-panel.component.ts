@@ -13,7 +13,7 @@ import { LabelListComponent } from './label-list/label-list.component';
 import { DetectorContextBarComponent } from './detector-context-bar/detector-context-bar.component';
 import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
-import { ViewSettingsModalComponent } from '../modals/view-settings-modal/view-settings-modal.component';
+import { ViewControlsComponent } from '../view-controls/view-controls.component';
 
 export interface TrainModeContext {
   model: { name: string; registry_id?: string };
@@ -29,7 +29,7 @@ export interface TrainModeContext {
     DetectorContextBarComponent,
     ExportModalComponent,
     LabelImporterModalComponent,
-    ViewSettingsModalComponent,
+    ViewControlsComponent,
   ],
   templateUrl: './right-panel.component.html',
   styleUrl: './right-panel.component.scss',
@@ -54,7 +54,6 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   gridGoalWidth: number = 80;
   showLabelImport = false;
   showExport = false;
-  showViewSettings = false;
 
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
   private gridIconSizeRightDict: Record<string, string> = {};
@@ -109,10 +108,6 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   onExport(): void {
     this.showExport = true;
-  }
-
-  onViewSettings(): void {
-    this.showViewSettings = true;
   }
 
   onDetectorRenamed(newName: string): void {
