@@ -27,8 +27,10 @@
 
     @if (mediaType === 'image' && imageViewer) {
       <div class="image-view-controls">
-        <button class="ivc-btn" (click)="imageViewer.rotateLeft()" title="Rotate left" aria-label="Rotate image left">&#x21BA;</button>
-        <button class="ivc-btn" (click)="imageViewer.rotateRight()" title="Rotate right" aria-label="Rotate image right">&#x21BB;</button>
+        <button class="ivc-btn" (click)="imageViewer.rotateLeft()" title="Rotate left ([)" aria-label="Rotate image left">&#x21BA;</button>
+        <button class="ivc-btn" (click)="imageViewer.rotateRight()" title="Rotate right (])" aria-label="Rotate image right">&#x21BB;</button>
+        <button class="ivc-btn" (click)="imageViewer.zoomOut()" title="Zoom out (-)" aria-label="Zoom out">&minus;</button>
+        <button class="ivc-btn" (click)="imageViewer.zoomIn()" title="Zoom in (+)" aria-label="Zoom in">+</button>
         <label for="ivc-zoom" class="sr-only">Zoom</label>
         <input
           type="range"

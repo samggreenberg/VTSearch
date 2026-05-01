@@ -2,11 +2,15 @@ import { Injectable, NgZone, OnDestroy } from '@angular/core';
 import { Subject } from 'rxjs';
 
 export type VoteDirection = 'good' | 'bad';
+export type ZoomDirection = 'in' | 'out';
+export type RotateDirection = 'left' | 'right';
 
 export interface KeyboardAction {
-  type: 'vote' | 'volume' | 'playback';
+  type: 'vote' | 'volume' | 'playback' | 'zoom' | 'rotate';
   direction?: VoteDirection;
   volumeDelta?: number;
+  zoomDirection?: ZoomDirection;
+  rotateDirection?: RotateDirection;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -74,6 +78,28 @@ export class KeyboardService implements OnDestroy {
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
         this.zone.run(() => this.action$.next({ type: 'playback' }));
+        break;
+      case '+':
+      case '=':
+        e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
+        this.zone.run(() => this.action$.next({ type: 'zoom', zoomDirection: 'in' }));
+        break;
+      case '-':
+      case '_':
+        e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
+        this.zone.run(() => this.action$.next({ type: 'zoom', zoomDirection: 'out' }));
+        break;
+      case '[':
+        e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
+        this.zone.run(() => this.action$.next({ type: 'rotate', rotateDirection: 'left' }));
+        break;
+      case ']':
+        e.preventDefault();
+        (document.activeElement as HTMLElement)?.blur();
+        this.zone.run(() => this.action$.next({ type: 'rotate', rotateDirection: 'right' }));
         break;
     }
   }

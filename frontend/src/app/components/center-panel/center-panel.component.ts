@@ -107,6 +107,18 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
           case 'playback':
             this.togglePlayback();
             break;
+          case 'zoom':
+            if (this.imageViewer && action.zoomDirection) {
+              if (action.zoomDirection === 'in') this.imageViewer.zoomIn();
+              else this.imageViewer.zoomOut();
+            }
+            break;
+          case 'rotate':
+            if (this.imageViewer && action.rotateDirection) {
+              if (action.rotateDirection === 'left') this.imageViewer.rotateLeft();
+              else this.imageViewer.rotateRight();
+            }
+            break;
         }
       }),
     );
