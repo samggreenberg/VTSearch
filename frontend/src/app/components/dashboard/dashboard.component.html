@@ -24,28 +24,28 @@
       <p class="empty-state">No datasets yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="datasetsTableFixed">
+        <table class="dash-table" [class.table-fixed]="datasetCols.tableFixed">
           <thead>
             <tr>
-              <th (click)="sortDatasets('name')" class="sortable name-col" title="Dataset display name (click to sort)" data-col="name" [style.width.%]="datasetsTableFixed ? datasetColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span></th>
+              <th (click)="datasetCols.sortBy('name')" class="sortable name-col" title="Dataset display name (click to sort)" data-col="name" [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths['name'] : null">Name<span class="sort-indicator" [class.active]="datasetCols.isSortActive('name')">{{ datasetCols.sortIndicator('name') }}</span></th>
               @for (col of visibleDatasetColumns; track col) {
                 <th
-                  [class.sortable]="datasetColMeta(col).sortable"
-                  [class.col-drop-target]="isDropTarget('datasets', col)"
-                  [class.col-dragging]="isDragging('datasets', col)"
+                  [class.sortable]="datasetCols.meta(col).sortable"
+                  [class.col-drop-target]="datasetCols.isDropTarget(col)"
+                  [class.col-dragging]="datasetCols.isDragging(col)"
                   [attr.data-col]="col"
-                  [title]="datasetColMeta(col).title"
-                  [style.width.%]="datasetsTableFixed ? datasetColWidths[col] : null"
+                  [title]="datasetCols.meta(col).title"
+                  [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths[col] : null"
                   draggable="true"
                   (click)="onDatasetHeaderClick(col)"
-                  (dragstart)="onColDragStart($event, 'datasets', col)"
-                  (dragover)="onColDragOver($event, 'datasets', col)"
-                  (dragleave)="onColDragLeave($event, 'datasets', col)"
-                  (drop)="onColDrop($event, 'datasets', col)"
-                  (dragend)="onColDragEnd($event)"
-                ><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetColMeta(col).label }}@if (datasetColMeta(col).sortable) {<span class="sort-indicator" [class.active]="isDatasetSortActive(col)">{{ datasetSortIndicator(col) }}</span>}</th>
+                  (dragstart)="datasetCols.onColDragStart($event, col)"
+                  (dragover)="datasetCols.onColDragOver($event, col)"
+                  (dragleave)="datasetCols.onColDragLeave($event, col)"
+                  (drop)="datasetCols.onColDrop($event, col)"
+                  (dragend)="datasetCols.onColDragEnd($event)"
+                ><div class="col-resize-handle" (mousedown)="datasetCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetCols.meta(col).label }}@if (datasetCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="datasetCols.isSortActive(col)">{{ datasetCols.sortIndicator(col) }}</span>}</th>
               }
-              <th class="actions-col" data-col="actions" [title]="datasetColMeta('actions').title" [style.width.%]="datasetsTableFixed ? datasetColWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetColMeta('actions').label }}</th>
+              <th class="actions-col" data-col="actions" [title]="datasetCols.meta('actions').title" [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="datasetCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetCols.meta('actions').label }}</th>
             </tr>
           </thead>
           <tbody>
@@ -152,28 +152,28 @@
       <p class="empty-state">No models yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="modelsTableFixed">
+        <table class="dash-table" [class.table-fixed]="modelCols.tableFixed">
           <thead>
             <tr>
-              <th (click)="sortModels('name')" class="sortable name-col" title="Model display name (click to sort)" data-col="name" [style.width.%]="modelsTableFixed ? modelColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
+              <th (click)="modelCols.sortBy('name')" class="sortable name-col" title="Model display name (click to sort)" data-col="name" [style.width.%]="modelCols.tableFixed ? modelCols.colWidths['name'] : null">Name<span class="sort-indicator" [class.active]="modelCols.isSortActive('name')">{{ modelCols.sortIndicator('name') }}</span></th>
               @for (col of visibleModelColumns; track col) {
                 <th
-                  [class.sortable]="modelColMeta(col).sortable"
-                  [class.col-drop-target]="isDropTarget('models', col)"
-                  [class.col-dragging]="isDragging('models', col)"
+                  [class.sortable]="modelCols.meta(col).sortable"
+                  [class.col-drop-target]="modelCols.isDropTarget(col)"
+                  [class.col-dragging]="modelCols.isDragging(col)"
                   [attr.data-col]="col"
-                  [title]="modelColMeta(col).title"
-                  [style.width.%]="modelsTableFixed ? modelColWidths[col] : null"
+                  [title]="modelCols.meta(col).title"
+                  [style.width.%]="modelCols.tableFixed ? modelCols.colWidths[col] : null"
                   draggable="true"
                   (click)="onModelHeaderClick(col)"
-                  (dragstart)="onColDragStart($event, 'models', col)"
-                  (dragover)="onColDragOver($event, 'models', col)"
-                  (dragleave)="onColDragLeave($event, 'models', col)"
-                  (drop)="onColDrop($event, 'models', col)"
-                  (dragend)="onColDragEnd($event)"
-                ><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelColMeta(col).label }}@if (modelColMeta(col).sortable) {<span class="sort-indicator" [class.active]="isModelSortActive(col)">{{ modelSortIndicator(col) }}</span>}</th>
+                  (dragstart)="modelCols.onColDragStart($event, col)"
+                  (dragover)="modelCols.onColDragOver($event, col)"
+                  (dragleave)="modelCols.onColDragLeave($event, col)"
+                  (drop)="modelCols.onColDrop($event, col)"
+                  (dragend)="modelCols.onColDragEnd($event)"
+                ><div class="col-resize-handle" (mousedown)="modelCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelCols.meta(col).label }}@if (modelCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="modelCols.isSortActive(col)">{{ modelCols.sortIndicator(col) }}</span>}</th>
               }
-              <th class="actions-col" data-col="actions" [title]="modelColMeta('actions').title" [style.width.%]="modelsTableFixed ? modelColWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelColMeta('actions').label }}</th>
+              <th class="actions-col" data-col="actions" [title]="modelCols.meta('actions').title" [style.width.%]="modelCols.tableFixed ? modelCols.colWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="modelCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelCols.meta('actions').label }}</th>
             </tr>
           </thead>
           <tbody>
