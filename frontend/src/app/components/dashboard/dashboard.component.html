@@ -114,11 +114,10 @@
     </button>
     <div class="side-action-gap"></div>
     <button class="side-action-btn" (click)="combineSelectedDatasets()" [disabled]="isLoading || !combineSelectedDatasetsEnabled" [title]="combineSelectedDatasetsHint" aria-label="Combine selected datasets">
-      <!-- Two horizontal arrows on the left, merging into a single arrow on the right. -->
-      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 7 L11 7 Q15 7 15 12"/>
-        <path d="M3 17 L11 17 Q15 17 15 12"/>
-        <line x1="15" y1="12" x2="21" y2="12"/>
+      <!-- Two horizontal arrows on the left, merging smoothly into a single arrow on the right. -->
+      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7 C 10 7, 10 12, 17 12 L 21 12"/>
+        <path d="M3 17 C 10 17, 10 12, 17 12"/>
         <polyline points="18 9 21 12 18 15"/>
       </svg>
     </button>
