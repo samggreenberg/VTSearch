@@ -527,13 +527,13 @@ class ImageMediaType(MediaType):
 
         cats101 = self._DEMO_CATEGORIES_CALTECH101
         cats256 = self._DEMO_CATEGORIES_CALTECH256
-        ct101_desc = "Centered, well-lit object photos — a classic vision benchmark."
+        ct101_desc = "Centered object photos — a classic vision benchmark."
         ct101_folder = DATA_DIR / "caltech-101" / "101_ObjectCategories"
-        food_desc = "Crowd-sourced food photos, some mislabeled — a deliberately noisy benchmark."
+        food_desc = "Crowd-sourced food photos — a deliberately noisy benchmark."
         food_folder = DATA_DIR / "food-101" / "images"
         euro_desc = "Sentinel-2 satellite imagery classified by land use type."
         euro_folder = DATA_DIR / "EuroSAT_RGB"
-        dogs_desc = "Fine-grained dog breed photos — many visually similar breeds."
+        dogs_desc = "Fine-grained dog breeds with many visually similar classes."
         dogs_folder = DATA_DIR / "stanford_dogs" / "Images"
         return [
             DemoDataset(
@@ -587,7 +587,7 @@ class ImageMediaType(MediaType):
             DemoDataset(
                 id="caltech256_a",
                 label="Caltech-256 (A)",
-                description="Harder object photos with more varied, cluttered backgrounds than Caltech-101.",
+                description="Harder object photos with cluttered backgrounds than Caltech-101.",
                 categories=cats256,
                 source="caltech256",
                 required_folder=DATA_DIR / "caltech-256" / "256_ObjectCategories",
@@ -755,7 +755,7 @@ class ImageMediaType(MediaType):
             DemoDataset(
                 id="ucsf_documents_a",
                 label="UCSF Documents (A)",
-                description="Scanned industry document pages from the UCSF Industry Documents Library.",
+                description="Scanned pages from the UCSF Industry Documents Library.",
                 categories=self._UCSF_DOCUMENTS_CATEGORIES,
                 source="ucsf_documents",
                 required_folder=DATA_DIR / "ucsf_documents",
