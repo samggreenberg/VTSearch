@@ -4,6 +4,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 
 ## Branch Policy (CRITICAL)
 
+- **Always base work on `dev`.** At the start of every session, before making any changes, run `git fetch origin --prune && git rebase origin/dev`. The harness cuts the working branch off `main` (the GitHub default), so this rebase is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch — `dev` is Claude's starting point, not the public default.
 - **All pull requests MUST target `dev`**, never `main`.
 - **Claude must NEVER open a PR that merges into `main`.** The `main` branch is protected and only updated by human maintainers.
 - When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
