@@ -99,33 +99,36 @@ export class DashboardComponent implements OnInit, OnDestroy {
   modelSortColumn = 'name';
   modelSortAsc = true;
 
-  // Column resize state
+  // Column resize state. Widths are stored as percentages summing to ~100;
+  // the table is always 100% wide so columns fit the container without
+  // horizontal scrolling. Resizing one column shifts width to/from its
+  // right-hand neighbour (the cell that hosts the resize handle).
   datasetColWidths: Record<string, number> = {};
   modelColWidths: Record<string, number> = {};
   datasetsTableFixed = false;
   modelsTableFixed = false;
-  datasetsTableWidth = 0;
-  modelsTableWidth = 0;
   private datasetsResizeInit = false;
   private modelsResizeInit = false;
   private resizeState: {
     startX: number;
-    startWidth: number;
+    startGrowPct: number;
+    startShrinkPct: number;
+    growCol: string;
+    shrinkCol: string;
     table: 'datasets' | 'models';
-    col: string;
     dragged: boolean;
     tableEl: HTMLTableElement;
   } | null = null;
+  private static readonly MIN_COL_PCT = 3;
 
-  // Column order. The "name" column is fixed in position 0 (so the loading-task
-  // colspan that replaces "all columns after name" keeps working); these arrays
-  // hold the columns that follow name and are user-reorderable.
+  // Column order. "name" is pinned at position 0 and "actions" is pinned at
+  // the far right; these arrays hold only the user-reorderable middle columns.
   static readonly DATASET_COLUMNS_DEFAULT = [
-    'media_type', 'num_items', 'created_at', 'created_by', 'readers', 'loaded', 'actions',
+    'media_type', 'num_items', 'created_at', 'created_by', 'readers', 'loaded',
   ];
   static readonly MODEL_COLUMNS_DEFAULT = [
     'media_type', 'num_training', 'trainable', 'autodetect', 'last_trained_at',
-    'created_at', 'detector_loaded', 'actions',
+    'created_at', 'detector_loaded',
   ];
   private static readonly DATASET_COL_ORDER_KEY = 'vtsearch.dashboard.datasetColumnOrder';
   private static readonly MODEL_COL_ORDER_KEY = 'vtsearch.dashboard.modelColumnOrder';
@@ -287,36 +290,40 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   // --- Column resize ---
+  //
+  // The handle sits on the LEFT edge of its host <th> and represents the
+  // boundary between the previous column ("grow" target) and the host column
+  // ("shrink" target). Dragging the handle right grows the previous column
+  // and shrinks the host by the same amount, keeping the table at 100%.
+
+  private captureColumnPercentages(tableEl: HTMLTableElement, colWidths: Record<string, number>): void {
+    const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
+    const tableWidth = tableEl.offsetWidth || 1;
+    ths.forEach((t) => {
+      const colKey = t.getAttribute('data-col');
+      if (colKey) colWidths[colKey] = (t.offsetWidth / tableWidth) * 100;
+    });
+  }
 
   startResize(event: MouseEvent, table: 'datasets' | 'models'): void {
     event.stopPropagation();
     event.preventDefault();
 
-    // The handle sits on the LEFT edge of its host <th> and resizes the
-    // column to its left (see dashboard.component.scss for why).
     const th = (event.target as HTMLElement).closest('th') as HTMLElement;
     const prevTh = th.previousElementSibling as HTMLElement | null;
-    const col = prevTh?.getAttribute('data-col');
-    if (!col) return;
+    const growCol = prevTh?.getAttribute('data-col');
+    const shrinkCol = th.getAttribute('data-col');
+    if (!growCol || !shrinkCol) return;
     const tableEl = th.closest('table') as HTMLTableElement;
     const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
     const initialized = table === 'datasets' ? this.datasetsResizeInit : this.modelsResizeInit;
 
     if (!initialized) {
-      const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
-      let totalWidth = 0;
-      ths.forEach((t) => {
-        const colKey = t.getAttribute('data-col');
-        const w = t.offsetWidth;
-        if (colKey) colWidths[colKey] = w;
-        totalWidth += w;
-      });
+      this.captureColumnPercentages(tableEl, colWidths);
       if (table === 'datasets') {
-        this.datasetsTableWidth = totalWidth;
         this.datasetsResizeInit = true;
         this.datasetsTableFixed = true;
       } else {
-        this.modelsTableWidth = totalWidth;
         this.modelsResizeInit = true;
         this.modelsTableFixed = true;
       }
@@ -324,9 +331,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     this.resizeState = {
       startX: event.clientX,
-      startWidth: colWidths[col] ?? 100,
+      startGrowPct: colWidths[growCol] ?? 10,
+      startShrinkPct: colWidths[shrinkCol] ?? 10,
+      growCol,
+      shrinkCol,
       table,
-      col,
       dragged: false,
       tableEl,
     };
@@ -337,19 +346,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
   @HostListener('document:mousemove', ['$event'])
   onColResizeMove(event: MouseEvent): void {
     if (!this.resizeState) return;
-    const delta = event.clientX - this.resizeState.startX;
-    if (Math.abs(delta) > 3) this.resizeState.dragged = true;
+    const dx = event.clientX - this.resizeState.startX;
+    if (Math.abs(dx) > 3) this.resizeState.dragged = true;
     if (!this.resizeState.dragged) return;
-    const colWidths = this.resizeState.table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
-    const newWidth = Math.max(30, this.resizeState.startWidth + delta);
-    const prevWidth = colWidths[this.resizeState.col] ?? this.resizeState.startWidth;
-    colWidths[this.resizeState.col] = newWidth;
-    const widthChange = newWidth - prevWidth;
-    if (this.resizeState.table === 'datasets') {
-      this.datasetsTableWidth = Math.max(100, this.datasetsTableWidth + widthChange);
-    } else {
-      this.modelsTableWidth = Math.max(100, this.modelsTableWidth + widthChange);
+
+    const tableWidth = this.resizeState.tableEl.offsetWidth || 1;
+    const dPct = (dx / tableWidth) * 100;
+    const min = DashboardComponent.MIN_COL_PCT;
+    const sum = this.resizeState.startGrowPct + this.resizeState.startShrinkPct;
+
+    let newGrow = this.resizeState.startGrowPct + dPct;
+    let newShrink = this.resizeState.startShrinkPct - dPct;
+    if (newShrink < min) {
+      newShrink = min;
+      newGrow = sum - min;
+    } else if (newGrow < min) {
+      newGrow = min;
+      newShrink = sum - min;
     }
+
+    const colWidths = this.resizeState.table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
+    colWidths[this.resizeState.growCol] = newGrow;
+    colWidths[this.resizeState.shrinkCol] = newShrink;
   }
 
   @HostListener('document:mouseup')
@@ -361,95 +379,65 @@ export class DashboardComponent implements OnInit, OnDestroy {
     document.body.style.userSelect = '';
 
     if (!state.dragged) {
-      this.autoSizeColumn(state.tableEl, state.table, state.col);
+      this.autoSizeColumn(state.tableEl, state.table, state.growCol, state.shrinkCol);
     }
   }
 
-  private autoSizeColumn(tableEl: HTMLTableElement, table: 'datasets' | 'models', col: string): void {
+  /** Auto-fit the grow column to its natural content width; take/return the
+   *  delta from the shrink column so total stays at 100%. */
+  private autoSizeColumn(
+    tableEl: HTMLTableElement,
+    table: 'datasets' | 'models',
+    growCol: string,
+    shrinkCol: string,
+  ): void {
     const colWidths = table === 'datasets' ? this.datasetColWidths : this.modelColWidths;
 
-    // Find the column index from the header
     const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
     let colIndex = -1;
     for (let i = 0; i < ths.length; i++) {
-      if (ths[i].getAttribute('data-col') === col) {
+      if (ths[i].getAttribute('data-col') === growCol) {
         colIndex = i;
         break;
       }
     }
     if (colIndex < 0) return;
 
-    // Temporarily switch to auto layout so content determines width
+    // Temporarily release fixed layout for this column so we can measure
+    // its natural width from the body cells.
     const wasFixed = tableEl.classList.contains('table-fixed');
-    const prevTableWidth = tableEl.style.width;
     const prevColWidth = ths[colIndex].style.width;
-
     tableEl.classList.remove('table-fixed');
-    // Force width:auto so the table shrinks to content instead of stretching
-    // to 100% (the CSS class default).  Without this, the browser distributes
-    // extra container space across columns, inflating every measurement.
-    tableEl.style.width = 'auto';
     ths[colIndex].style.width = '';
 
-    // Measure the natural width of the column from body cells.
-    let maxWidth = 0;
+    let maxPx = 0;
     const rows = tableEl.querySelectorAll('tbody tr');
     rows.forEach((row) => {
       const cell = row.children[colIndex] as HTMLElement | undefined;
-      if (cell) {
-        // For cells with colspan, skip (loading task rows)
-        if (cell.hasAttribute('colspan')) return;
-        maxWidth = Math.max(maxWidth, cell.scrollWidth);
-      }
+      if (!cell || cell.hasAttribute('colspan')) return;
+      maxPx = Math.max(maxPx, cell.scrollWidth);
     });
-    // Fall back to header width only when the table has no body rows
-    if (maxWidth === 0) {
-      maxWidth = ths[colIndex].offsetWidth;
-    }
+    if (maxPx === 0) maxPx = ths[colIndex].offsetWidth;
+    maxPx = Math.max(30, maxPx + 2);
 
-    // Add a small buffer for padding
-    maxWidth = Math.max(30, maxWidth + 2);
+    if (wasFixed) tableEl.classList.add('table-fixed');
+    ths[colIndex].style.width = prevColWidth;
 
-    // Apply the measured width and restore fixed layout
-    const prevWidth = colWidths[col] ?? 0;
-    colWidths[col] = maxWidth;
+    const tableWidth = tableEl.offsetWidth || 1;
+    const min = DashboardComponent.MIN_COL_PCT;
+    const sum = (colWidths[growCol] ?? 0) + (colWidths[shrinkCol] ?? 0);
+    let targetGrow = (maxPx / tableWidth) * 100;
+    if (targetGrow > sum - min) targetGrow = sum - min;
+    if (targetGrow < min) targetGrow = min;
+    colWidths[growCol] = targetGrow;
+    colWidths[shrinkCol] = sum - targetGrow;
 
     if (table === 'datasets') {
       this.datasetsTableFixed = true;
       this.datasetsResizeInit = true;
-      // Recalculate total table width
-      let total = 0;
-      ths.forEach((t) => {
-        const key = t.getAttribute('data-col');
-        if (key && key !== col) {
-          if (!colWidths[key]) colWidths[key] = t.offsetWidth;
-          total += colWidths[key];
-        } else if (key === col) {
-          total += maxWidth;
-        }
-      });
-      this.datasetsTableWidth = total;
     } else {
       this.modelsTableFixed = true;
       this.modelsResizeInit = true;
-      let total = 0;
-      ths.forEach((t) => {
-        const key = t.getAttribute('data-col');
-        if (key && key !== col) {
-          if (!colWidths[key]) colWidths[key] = t.offsetWidth;
-          total += colWidths[key];
-        } else if (key === col) {
-          total += maxWidth;
-        }
-      });
-      this.modelsTableWidth = total;
-    }
-
-    // Restore layout (Angular binding will apply on next change detection).
-    // Clear the temporary 'auto' override so Angular bindings take over.
-    tableEl.style.width = prevTableWidth;
-    if (wasFixed) {
-      tableEl.classList.add('table-fixed');
     }
   }
 

@@ -31,6 +31,13 @@ td {
   white-space: nowrap;
   vertical-align: middle;
   border-bottom: 1px solid var(--border-subtle);
+  // Truncate with ellipsis if the column is narrower than the content.
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+td.actions-col {
+  text-align: right;
 }
 
 .name-cell {
@@ -42,6 +49,7 @@ td {
 .actions-cell {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-xs);
 }
 

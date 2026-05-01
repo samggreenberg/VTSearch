@@ -211,7 +211,11 @@
 .dashboard-grid {
   flex: 1 1 0;
   min-height: 0;
-  overflow: auto;
+  // Vertical scroll only — Name is pinned left, Actions is pinned right, and
+  // the middle columns share the remaining width so the table always fills
+  // the container without horizontal overflow.
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .table-fixed {
@@ -229,6 +233,21 @@
     vertical-align: middle;
     border-bottom: 1px solid var(--border-subtle);
     white-space: nowrap;
+  }
+
+  // Body cells truncate with ellipsis when the column is narrower than
+  // their content. Header cells must NOT clip — they host the resize
+  // handle which pokes 6px to the left of the cell's edge.
+  td {
+    padding: 6px 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // Pinned columns: Name on the left, Actions on the right.
+  th.actions-col,
+  td.actions-col {
+    text-align: right;
   }
 
   th {

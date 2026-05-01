@@ -24,10 +24,10 @@
       <p class="empty-state">No datasets yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="datasetsTableFixed" [style.width]="datasetsTableFixed ? (datasetsTableWidth + 'px') : '100%'">
+        <table class="dash-table" [class.table-fixed]="datasetsTableFixed">
           <thead>
             <tr>
-              <th (click)="sortDatasets('name')" class="sortable" title="Dataset display name (click to sort)" data-col="name" [style.width.px]="datasetsTableFixed ? datasetColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span></th>
+              <th (click)="sortDatasets('name')" class="sortable name-col" title="Dataset display name (click to sort)" data-col="name" [style.width.%]="datasetsTableFixed ? datasetColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span></th>
               @for (col of visibleDatasetColumns; track col) {
                 <th
                   [class.sortable]="datasetColMeta(col).sortable"
@@ -35,7 +35,7 @@
                   [class.col-dragging]="isDragging('datasets', col)"
                   [attr.data-col]="col"
                   [title]="datasetColMeta(col).title"
-                  [style.width.px]="datasetsTableFixed ? datasetColWidths[col] : null"
+                  [style.width.%]="datasetsTableFixed ? datasetColWidths[col] : null"
                   draggable="true"
                   (click)="onDatasetHeaderClick(col)"
                   (dragstart)="onColDragStart($event, 'datasets', col)"
@@ -45,6 +45,7 @@
                   (dragend)="onColDragEnd($event)"
                 ><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetColMeta(col).label }}@if (datasetColMeta(col).sortable) {<span class="sort-indicator" [class.active]="isDatasetSortActive(col)">{{ datasetSortIndicator(col) }}</span>}</th>
               }
+              <th class="actions-col" data-col="actions" [title]="datasetColMeta('actions').title" [style.width.%]="datasetsTableFixed ? datasetColWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets')" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetColMeta('actions').label }}</th>
             </tr>
           </thead>
           <tbody>
@@ -53,7 +54,7 @@
                 <td>
                   <span class="loading-task-name">{{ task.name || 'Loading...' }}</span>
                 </td>
-                <td [attr.colspan]="visibleDatasetColumns.length">
+                <td [attr.colspan]="visibleDatasetColumns.length + 1">
                   @if (task.error) {
                     <div class="loading-task-progress loading-task-failed">
                       <span class="error-msg">Failed: {{ task.error }}</span>
@@ -152,10 +153,10 @@
       <p class="empty-state">No models yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="modelsTableFixed" [style.width]="modelsTableFixed ? (modelsTableWidth + 'px') : '100%'">
+        <table class="dash-table" [class.table-fixed]="modelsTableFixed">
           <thead>
             <tr>
-              <th (click)="sortModels('name')" class="sortable" title="Model display name (click to sort)" data-col="name" [style.width.px]="modelsTableFixed ? modelColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
+              <th (click)="sortModels('name')" class="sortable name-col" title="Model display name (click to sort)" data-col="name" [style.width.%]="modelsTableFixed ? modelColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span></th>
               @for (col of visibleModelColumns; track col) {
                 <th
                   [class.sortable]="modelColMeta(col).sortable"
@@ -163,7 +164,7 @@
                   [class.col-dragging]="isDragging('models', col)"
                   [attr.data-col]="col"
                   [title]="modelColMeta(col).title"
-                  [style.width.px]="modelsTableFixed ? modelColWidths[col] : null"
+                  [style.width.%]="modelsTableFixed ? modelColWidths[col] : null"
                   draggable="true"
                   (click)="onModelHeaderClick(col)"
                   (dragstart)="onColDragStart($event, 'models', col)"
@@ -173,6 +174,7 @@
                   (dragend)="onColDragEnd($event)"
                 ><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelColMeta(col).label }}@if (modelColMeta(col).sortable) {<span class="sort-indicator" [class.active]="isModelSortActive(col)">{{ modelSortIndicator(col) }}</span>}</th>
               }
+              <th class="actions-col" data-col="actions" [title]="modelColMeta('actions').title" [style.width.%]="modelsTableFixed ? modelColWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="startResize($event, 'models')" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelColMeta('actions').label }}</th>
             </tr>
           </thead>
           <tbody>
