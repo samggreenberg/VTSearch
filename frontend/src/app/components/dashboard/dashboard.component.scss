@@ -191,6 +191,7 @@
 
   .plus-icon {
     display: inline-block;
+    line-height: 1;
 
     &.plus-open {
       animation: plus-spin-open 0.3s ease-in-out forwards;
