@@ -135,10 +135,12 @@ class DatasetImporter(PluginBase):
     picker_view: str = "form"
 
     #: Picker tab this importer belongs to.  One of ``"services"``,
-    #: ``"server"``, ``"local"``, ``"demo"``, or ``""`` (uncategorised).
-    #: Database/API-style importers (extensions that fetch from a remote
-    #: service) should use ``"services"``.
-    category: str = ""
+    #: ``"server"``, ``"local"``, ``"demo"``, or ``""`` (uncategorised —
+    #: hidden from the tabbed picker entirely).  Database/API-style
+    #: importers (extensions that fetch from a remote service) belong on
+    #: the ``"services"`` tab, which is the default for any custom importer
+    #: that doesn't override this attribute.
+    category: str = "services"
 
     def to_dict(self) -> dict[str, Any]:
         d = super().to_dict()
