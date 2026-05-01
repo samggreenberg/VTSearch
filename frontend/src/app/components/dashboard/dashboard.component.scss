@@ -48,7 +48,8 @@
 .side-action-btn {
   background: none;
   border: none;
-  color: var(--text-primary);
+  // Dimmer than --text-primary; hover snaps back to full brightness.
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 6px;
   border-radius: 4px;
@@ -58,6 +59,7 @@
   transition: color 0.15s, background 0.15s;
 
   &:hover:not(:disabled) {
+    color: var(--text-primary);
     background: var(--btn-icon-hover-bg);
   }
 
@@ -69,6 +71,23 @@
   &.side-action-delete:hover:not(:disabled) {
     color: var(--color-bad);
   }
+}
+
+// Select-all/none spins once on click (animationend handler clears class so
+// icon snaps back to 0). Delete spins to 90° while confirm dialog is up,
+// then reverses back. Hoisted out of `.side-action-btn` to keep specificity
+// flat and reduce compiled CSS size.
+.side-action-spin,
+.side-action-delete-active {
+  animation: side-action-rotate 0.3s ease-in-out forwards;
+}
+
+.side-action-delete-inactive {
+  animation: side-action-rotate 0.3s ease-in-out reverse forwards;
+}
+
+@keyframes side-action-rotate {
+  to { transform: rotate(90deg); }
 }
 
 .dashboard-section-header {
@@ -428,12 +447,9 @@
   max-width: 100%;
 }
 
-// Waggle animation for Train/Find button icons while loading.
-// 2s cycle: rotate to 90deg (0.3s), hold (0.7s), rotate back (0.3s), hold (0.7s).
+// Waggle for Train/Find icons while loading: rotate to 90° (0.3s), hold,
+// rotate back (0.3s), hold. 2s cycle.
 @keyframes icon-waggle {
-  0%   { transform: rotate(0deg); }
-  15%  { transform: rotate(90deg); }
-  50%  { transform: rotate(90deg); }
-  65%  { transform: rotate(0deg); }
-  100% { transform: rotate(0deg); }
+  0%, 65%, 100% { transform: rotate(0deg); }
+  15%, 50% { transform: rotate(90deg); }
 }

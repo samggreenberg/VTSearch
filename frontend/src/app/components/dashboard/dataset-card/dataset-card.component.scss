@@ -215,7 +215,9 @@ td {
 }
 
 .select-checkbox {
-  margin-left: auto;
+  // Sit ~one action-button-width away from the row's other action icons
+  // (an icon button is ~22px: 14px svg + 4px padding both sides).
+  margin-left: 1.375rem;
   background: none;
   border: none;
   color: var(--text-primary);
