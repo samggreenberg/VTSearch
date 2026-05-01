@@ -39,6 +39,7 @@ export class ModelCardComponent implements OnChanges {
   @Output() cancelTask = new EventEmitter<string>();
   @Output() dismissTask = new EventEmitter<string>();
   @Output() autorunToggle = new EventEmitter<boolean>();
+  @Output() checkboxToggle = new EventEmitter<void>();
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
@@ -129,6 +130,11 @@ export class ModelCardComponent implements OnChanges {
   onAutorunToggle(event: MouseEvent): void {
     event.stopPropagation();
     this.autorunToggle.emit(!this.model.autodetect);
+  }
+
+  onCheckboxClick(event: MouseEvent): void {
+    event.stopPropagation();
+    this.checkboxToggle.emit();
   }
 
   formatDate(timestamp: number | null): string {

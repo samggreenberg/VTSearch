@@ -49,6 +49,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
   selectedDatasetIds: Set<string> = new Set();
   selectedModelIds: Set<string> = new Set();
 
+  // Animation flags for the right-side bulk-action column.
+  // Spin flags fire a one-shot 90° rotation on the symmetric select-all/none
+  // squares; the animationend handler clears them so the icon snaps back.
+  spinSelectAllDatasets = false;
+  spinSelectNoneDatasets = false;
+  spinSelectAllModels = false;
+  spinSelectNoneModels = false;
+  // Confirm flags hold the trash icon at 90° while the confirm dialog is up,
+  // and play a reverse animation back to 0° once the dialog resolves.
+  deletingSelectedDatasetsConfirm = false;
+  wasDeletingSelectedDatasetsConfirm = false;
+  deletingSelectedModelsConfirm = false;
+  wasDeletingSelectedModelsConfirm = false;
+
   progressValue = 0;
   progressTotal = 0;
   progressIndeterminate = false;
@@ -58,6 +72,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   importerModalOpen = false;
   importerClosing = false;
+  /** Importer name to auto-select when the modal opens (for "Combine Selected"). */
+  importerInitialName = '';
+  /** Pre-filled form values for the auto-selected importer. */
+  importerInitialFormValues: Record<string, unknown> = {};
   newModelModalOpen = false;
   newModelClosing = false;
   exportModalOpen = false;
@@ -654,6 +672,116 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.selectedDatasetIds.has(id);
   }
 
+  toggleDatasetCheckbox(id: string): void {
+    if (this.selectedDatasetIds.has(id)) {
+      this.selectedDatasetIds.delete(id);
+    } else {
+      this.selectedDatasetIds.add(id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectAllDatasets(): void {
+    this.spinSelectAllDatasets = true;
+    for (const d of this.datasets) {
+      this.selectedDatasetIds.add(d.id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectNoneDatasets(): void {
+    this.spinSelectNoneDatasets = true;
+    this.selectedDatasetIds.clear();
+    this.pushTopBarLabels();
+  }
+
+  /**
+   * Combine the currently-selected datasets into a new one.  Opens the
+   * regular Add Dataset modal, jumped to the (otherwise hidden)
+   * combine_datasets importer with the selected pkl paths pre-filled.
+   * The button is only visible/enabled when ≥2 datasets of the same media
+   * type are selected, so we don't re-validate that here.
+   */
+  combineSelectedDatasets(): void {
+    const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    const paths = targets
+      .map((d) => (d['pkl_path'] as string) || '')
+      .filter((p) => !!p);
+    if (paths.length < 2) return;
+    this.importerInitialName = 'combine_datasets';
+    this.importerInitialFormValues = { datasets: paths.join(',') };
+    this.openImporterModal();
+  }
+
+  /**
+   * True when the "Combine Selected Datasets" button should be enabled:
+   * at least two datasets selected AND all of them share a media type.
+   */
+  get combineSelectedDatasetsEnabled(): boolean {
+    if (this.selectedDatasetIds.size < 2) return false;
+    const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    if (targets.length < 2) return false;
+    const types = new Set(targets.map((d) => d.media_type));
+    return types.size === 1;
+  }
+
+  /**
+   * Hint shown in the Combine button's tooltip explaining why it's
+   * disabled (or describing the action when enabled).
+   */
+  get combineSelectedDatasetsHint(): string {
+    if (this.selectedDatasetIds.size < 2) {
+      return 'Select two or more datasets to combine';
+    }
+    if (!this.combineSelectedDatasetsEnabled) {
+      return 'All selected datasets must be of the same media type';
+    }
+    return 'Combine selected datasets into a new one';
+  }
+
+  async deleteSelectedDatasets(): Promise<void> {
+    const ids = [...this.selectedDatasetIds];
+    if (ids.length === 0) return;
+    const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
+    if (targets.length === 0) return;
+    const names = targets.map((d) => `"${d.name}"`).join(', ');
+    this.deletingSelectedDatasetsConfirm = true;
+    let ok = false;
+    try {
+      ok = await this.dialog.confirm(
+        targets.length === 1
+          ? `Delete dataset ${names}?`
+          : `Delete ${targets.length} datasets: ${names}?`,
+      );
+    } finally {
+      this.deletingSelectedDatasetsConfirm = false;
+      this.wasDeletingSelectedDatasetsConfirm = true;
+    }
+    if (!ok) return;
+    for (const dataset of targets) {
+      this.datasetsApi.deleteRegistered(dataset.id).subscribe({
+        next: () => {
+          this.selectedDatasetIds.delete(dataset.id);
+          this.datasetState.refresh();
+        },
+      });
+    }
+  }
+
+  onSpinSelectAllDatasetsEnd(): void {
+    this.spinSelectAllDatasets = false;
+  }
+
+  onSpinSelectNoneDatasetsEnd(): void {
+    this.spinSelectNoneDatasets = false;
+  }
+
+  onDeleteSelectedDatasetsAnimationEnd(): void {
+    if (!this.deletingSelectedDatasetsConfirm) {
+      this.wasDeletingSelectedDatasetsConfirm = false;
+    }
+  }
+
   // --- Model selection ---
 
   toggleModelSelection(id: string, event: MouseEvent): void {
@@ -676,6 +804,75 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   isModelSelected(id: string): boolean {
     return this.selectedModelIds.has(id);
+  }
+
+  toggleModelCheckbox(id: string): void {
+    if (this.selectedModelIds.has(id)) {
+      this.selectedModelIds.delete(id);
+    } else {
+      this.selectedModelIds.add(id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectAllModels(): void {
+    this.spinSelectAllModels = true;
+    for (const m of this.models) {
+      this.selectedModelIds.add(m.id);
+    }
+    this.pushTopBarLabels();
+  }
+
+  selectNoneModels(): void {
+    this.spinSelectNoneModels = true;
+    this.selectedModelIds.clear();
+    this.pushTopBarLabels();
+  }
+
+  async deleteSelectedModels(): Promise<void> {
+    const ids = [...this.selectedModelIds];
+    if (ids.length === 0) return;
+    const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    if (targets.length === 0) return;
+    const names = targets.map((m) => `"${m.name}"`).join(', ');
+    this.deletingSelectedModelsConfirm = true;
+    let ok = false;
+    try {
+      ok = await this.dialog.confirm(
+        targets.length === 1
+          ? `Delete model ${names}?`
+          : `Delete ${targets.length} models: ${names}?`,
+      );
+    } finally {
+      this.deletingSelectedModelsConfirm = false;
+      this.wasDeletingSelectedModelsConfirm = true;
+    }
+    if (!ok) return;
+    for (const model of targets) {
+      this.modelsApi.deleteFromRegistry(model.id).subscribe({
+        next: () => {
+          this.selectedModelIds.delete(model.id);
+          this.datasetState.refresh();
+        },
+        error: () => {
+          this.dialog.alert(`Failed to delete model "${model.name}".`, 'error');
+        },
+      });
+    }
+  }
+
+  onSpinSelectAllModelsEnd(): void {
+    this.spinSelectAllModels = false;
+  }
+
+  onSpinSelectNoneModelsEnd(): void {
+    this.spinSelectNoneModels = false;
+  }
+
+  onDeleteSelectedModelsAnimationEnd(): void {
+    if (!this.deletingSelectedModelsConfirm) {
+      this.wasDeletingSelectedModelsConfirm = false;
+    }
   }
 
   // --- Dataset actions ---
@@ -848,6 +1045,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeImporterModal(): void {
     this.importerModalOpen = false;
     this.importerClosing = true;
+    this.importerInitialName = '';
+    this.importerInitialFormValues = {};
   }
 
   onImporterAnimationEnd(): void {
@@ -857,6 +1056,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onImportComplete(): void {
     this.importerModalOpen = false;
     this.importerClosing = true;
+    this.importerInitialName = '';
+    this.importerInitialFormValues = {};
     this.startProgressPolling();
   }
 
