@@ -36,25 +36,8 @@
   }
 }
 
-.view-btn-wrapper {
-  position: relative;
+.view-controls-slot {
   margin-right: 12px;
-}
-
-.view-btn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 1px 8px;
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  cursor: pointer;
-  line-height: 1.4;
-
-  &:hover {
-    color: var(--text-primary);
-    border-color: var(--text-primary);
-  }
 }
 
 .label-divider {
