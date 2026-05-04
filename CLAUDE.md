@@ -4,6 +4,7 @@ Media explorer web app for browsing/voting on audio, images, text, video, or doc
 
 ## Branch Policy (CRITICAL)
 
+- **Always base work on `dev`.** At the start of every session, before making any changes, run `git fetch origin --prune && git rebase origin/dev`. The harness cuts the working branch off `main` (the GitHub default), so this rebase is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch — `dev` is Claude's starting point, not the public default.
 - **All pull requests MUST target `dev`**, never `main`.
 - **Claude must NEVER open a PR that merges into `main`.** The `main` branch is protected and only updated by human maintainers.
 - When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
@@ -68,7 +69,7 @@ Breaking backwards compatibility is acceptable — do not add shims, feature fla
 - `vtsearch/settings_factory.py` — Accessor factories (`make_accessors`, `make_per_side_setting`, `clamp`, `one_of`) used by `vtsearch/settings.py` to generate get/set pairs from the `_SETTING_SPECS` table
 - `frontend/` — Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`. `ActiveContextService` tracks which dataset/model the user selected; `activeContextInterceptor` attaches `X-Dataset-Id`/`X-Model-Id` headers to every API request
 - `static/` — Angular build output (index.html, main.js, polyfills.js, styles.css) and assets (favicons, logo.svg, logo.png)
-- `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md + EXTENDING-plugins.md + EXTENDING-media.md + EXTENDING-processors.md, HANDOFF.md, ML.md, SETUP.md, USER_GUIDE.md, demos.md, plan-sync-sources.md, RCDatasetImporter.plan.md, design/cli-detector-converter.md)
+- `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md + EXTENDING-plugins.md + EXTENDING-media.md + EXTENDING-processors.md, HANDOFF.md, ML.md, SETUP.md, USER_GUIDE.md, demos.md, design/cli-detector-converter.md, plans/sync-sources.md, plans/structural-detectors.md, plans/combine-models-ui.md, plans/extract-library.md, plans/RCDatasetImporter.md)
 - `tests/` — Test suite split by module:
   - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client)
   - `test_api_contracts.py` — API response shape verification: status codes, content types, required keys, error format consistency
@@ -309,7 +310,7 @@ def slow_load():
 - Each media item has `origin` (dict or None), `origin_name` (str), and optionally `media_url` (str) for per-element provenance and URL-based lazy-fetch
 - `Origin` class in `vtsearch/datasets/origin.py`; `LabelSet`/`LabeledElement` in `vtsearch/datasets/labelset.py`. `LabeledElement` has an optional `metadata` dict for arbitrary per-label data that round-trips through serialisation
 - Label export (`/api/labels/export`) returns a `LabelSet` with per-element origin info (superset of legacy format). With `enrich=true`, `origin.params` are flattened into `custom_metadata` and `available_columns`
-- **Extension scaffolds** (hidden_from_picker=True until API clients implemented): `vtsearch/datasets/importers/recaller/` (ReCaller dataset importer), `vtsearch/exporters/holder/` (Holder labelset exporter), `vtsearch/labels/importers/holder/` (Holder label importer), `vtsearch/datasets/sources/pullwrest.py` (PullWrest media source). See `docs/RCDatasetImporter.plan.md` for dev instructions
+- **Extension scaffolds** (hidden_from_picker=True until API clients implemented): `vtsearch/datasets/importers/recaller/` (ReCaller dataset importer), `vtsearch/exporters/holder/` (Holder labelset exporter), `vtsearch/labels/importers/holder/` (Holder label importer), `vtsearch/datasets/sources/pullwrest.py` (PullWrest media source). See `docs/plans/RCDatasetImporter.md` for dev instructions
 - `data/` dir created at runtime for embeddings, model cache, media files
 - OMP_NUM_THREADS and MKL_NUM_THREADS set to 1 for memory optimization
 - Linter/formatter: ruff (E402 ignored, line-length 120, target-version py310, see pyproject.toml)

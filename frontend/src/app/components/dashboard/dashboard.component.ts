@@ -21,7 +21,9 @@ import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-mo
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
+import { CombineDatasetsModalComponent } from './combine-datasets-modal/combine-datasets-modal.component';
 import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
+import { CombineModelsModalComponent } from './combine-models-modal/combine-models-modal.component';
 import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
@@ -37,7 +39,9 @@ import { IconComponent } from '../icon/icon.component';
     DatasetCardComponent,
     ModelCardComponent,
     DatasetImporterModalComponent,
+    CombineDatasetsModalComponent,
     NewModelModalComponent,
+    CombineModelsModalComponent,
     LabelExporterModalComponent,
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
@@ -73,12 +77,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   importerModalOpen = false;
   importerClosing = false;
-  /** Importer name to auto-select when the modal opens (for "Combine Selected"). */
-  importerInitialName = '';
-  /** Pre-filled form values for the auto-selected importer. */
-  importerInitialFormValues: Record<string, unknown> = {};
+  combineModalOpen = false;
+  /** Datasets passed into the Combine modal when it opens. */
+  combineModalDatasets: DatasetRegistryEntry[] = [];
   newModelModalOpen = false;
   newModelClosing = false;
+  combineModelsModalOpen = false;
   exportModalOpen = false;
   exportModelName = '';
   addLabelsModalOpen = false;
@@ -399,21 +403,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Combine the currently-selected datasets into a new one.  Opens the
-   * regular Add Dataset modal, jumped to the (otherwise hidden)
-   * combine_datasets importer with the selected pkl paths pre-filled.
-   * The button is only visible/enabled when ≥2 datasets of the same media
-   * type are selected, so we don't re-validate that here.
+   * Open the dedicated Combine Datasets modal pre-loaded with the
+   * currently-selected datasets. The modal handles its own validation,
+   * row removal, and submission.
    */
   combineSelectedDatasets(): void {
     const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
-    const paths = targets
-      .map((d) => (d['pkl_path'] as string) || '')
-      .filter((p) => !!p);
-    if (paths.length < 2) return;
-    this.importerInitialName = 'combine_datasets';
-    this.importerInitialFormValues = { datasets: paths.join(',') };
-    this.openImporterModal();
+    if (targets.length < 2) return;
+    this.combineModalDatasets = targets;
+    this.combineModalOpen = true;
+  }
+
+  closeCombineModal(): void {
+    this.combineModalOpen = false;
+    this.combineModalDatasets = [];
+  }
+
+  onCombineStarted(): void {
+    this.closeCombineModal();
+    this.startProgressPolling();
   }
 
   /**
@@ -562,6 +570,59 @@ export class DashboardComponent implements OnInit, OnDestroy {
         },
       });
     }
+  }
+
+  /**
+   * True when the "Combine Selected Models" button should be enabled:
+   * at least two trainable models selected AND all of them share a media type.
+   */
+  get combineSelectedModelsEnabled(): boolean {
+    if (this.selectedModelIds.size < 2) return false;
+    const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    if (targets.length < 2) return false;
+    if (!targets.every((m) => m.trainable)) return false;
+    const types = new Set(targets.map((m) => m.media_type));
+    return types.size === 1;
+  }
+
+  get combineSelectedModelsHint(): string {
+    if (this.selectedModelIds.size < 2) {
+      return 'Select two or more trainable models to combine';
+    }
+    const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    if (!targets.every((m) => m.trainable)) {
+      return 'Only trainable models can be combined';
+    }
+    const types = new Set(targets.map((m) => m.media_type));
+    if (types.size !== 1) {
+      return 'All selected models must be of the same media type';
+    }
+    return 'Combine selected models into a new one';
+  }
+
+  get combineSelectedModelSources(): ModelRegistryEntry[] {
+    return this.models.filter((m) => this.selectedModelIds.has(m.id));
+  }
+
+  get allModelNames(): string[] {
+    return this.models.map((m) => m.name);
+  }
+
+  openCombineModelsModal(): void {
+    if (!this.combineSelectedModelsEnabled) return;
+    this.combineModelsModalOpen = true;
+  }
+
+  closeCombineModelsModal(): void {
+    this.combineModelsModalOpen = false;
+  }
+
+  onModelsCombined(newName: string): void {
+    this.combineModelsModalOpen = false;
+    // The new model will appear via the datasets$/models$ subscription's
+    // new-id auto-select logic; nothing more to do besides refreshing.
+    this.datasetState.refresh();
+    void newName;
   }
 
   onSpinSelectAllModelsEnd(): void {
@@ -748,8 +809,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeImporterModal(): void {
     this.importerModalOpen = false;
     this.importerClosing = true;
-    this.importerInitialName = '';
-    this.importerInitialFormValues = {};
   }
 
   onImporterAnimationEnd(): void {
@@ -759,8 +818,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onImportComplete(): void {
     this.importerModalOpen = false;
     this.importerClosing = true;
-    this.importerInitialName = '';
-    this.importerInitialFormValues = {};
     this.startProgressPolling();
   }
 

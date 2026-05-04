@@ -353,9 +353,55 @@ def _example_sort_from_path(file_path: Path) -> tuple:
     return _cosine_sort(example_embedding)
 
 
+def _parse_crop_params(raw: str | None) -> dict | None:
+    """Parse a JSON string of crop bounds, or return None if absent.
+
+    Returns ``None`` when *raw* is empty/missing.  Returns a dict otherwise
+    (caller validates the contents against the target media type).
+    """
+    if not raw:
+        return None
+    try:
+        params = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(params, dict):
+        return None
+    return params
+
+
+def _apply_crop_or_keep(temp_path: Path, crop_params: dict | None) -> Path:
+    """Apply *crop_params* to *temp_path* in-place when set; otherwise keep file.
+
+    Resolves the target media type from the loaded dataset's first media
+    item (the embedder is the same one we're about to use).  Writes the
+    cropped bytes back to *temp_path*.
+    """
+    if not crop_params:
+        return temp_path
+
+    snap = snapshot_medias()
+    if not snap:
+        return temp_path
+    first_media = next(iter(snap.values()))
+    media_type = first_media.get("type", "")
+
+    from vtsearch.media.cropping import crop_file_bytes
+
+    cropped = crop_file_bytes(temp_path, media_type, crop_params)
+    temp_path.write_bytes(cropped)
+    return temp_path
+
+
 @sorting_bp.route("/api/example-sort", methods=["POST"])
 def example_sort():
-    """Sort medias by similarity to an uploaded example media file."""
+    """Sort medias by similarity to an uploaded example media file.
+
+    Optional ``crop_params`` form field carries a JSON object with the
+    bounds for a user-cropped sub-region (e.g. ``{"start": 1.5, "end": 3}``
+    for audio or ``{"box": [x1, y1, x2, y2]}`` for images).  When present
+    the file is cropped server-side before embedding.
+    """
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -376,6 +422,8 @@ def example_sort():
         file.save(temp_path)
 
         try:
+            crop_params = _parse_crop_params(request.form.get("crop_params"))
+            _apply_crop_or_keep(temp_path, crop_params)
             results, thresh = _example_sort_from_path(temp_path)
         finally:
             # Clean up temp file even if sorting raises

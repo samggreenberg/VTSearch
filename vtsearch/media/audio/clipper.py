@@ -175,3 +175,101 @@ class SoundTilingClipper(MediaClipper):
         d["duration"] = self._duration
         d["min_overlap"] = self._min_overlap
         return d
+
+
+class SoundClipClipper(MediaClipper):
+    """Extract a single user-specified ``[start, end)`` slice from an audio media.
+
+    Unlike :class:`SoundTilingClipper`, which auto-tiles a clip into many
+    equally-spaced segments, ``SoundClipClipper`` returns exactly one tile
+    bounded by the start and end times the caller provides.  The intended
+    use is user-driven cropping — e.g. picking a sub-region of an example
+    sound to drive a similarity search or a training example.
+
+    The returned media dict carries the same ``clip_start`` / ``clip_end``
+    fields as a tiling clip, so downstream code (embedding, learning, label
+    export) treats the cropped result as a first-class clip.
+    """
+
+    def __init__(self, start: float, end: float) -> None:
+        if start < 0:
+            raise ValueError("start must be non-negative")
+        if end <= start:
+            raise ValueError("end must be greater than start")
+        self._start = start
+        self._end = end
+
+    @property
+    def name(self) -> str:
+        return "sound_clip"
+
+    @property
+    def media_type(self) -> str:
+        return "audio"
+
+    @property
+    def description(self) -> str:
+        return "Extract a single user-specified [start, end) range from the audio."
+
+    @property
+    def start(self) -> float:
+        return self._start
+
+    @property
+    def end(self) -> float:
+        return self._end
+
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        wav_bytes = media.get("media_bytes")
+        if wav_bytes is None:
+            return [media]
+
+        total = _wav_duration(wav_bytes)
+        t0 = max(0.0, min(self._start, total))
+        t1 = max(t0, min(self._end, total))
+        if t1 <= t0:
+            return [media]
+
+        sliced = _wav_slice(wav_bytes, t0, t1)
+        clip = dict(media)
+        clip["media_bytes"] = sliced
+        clip["duration"] = round(t1 - t0, 6)
+        clip["file_size"] = len(sliced)
+        clip["clip_index"] = 0
+        clip["clip_start"] = round(t0, 6)
+        clip["clip_end"] = round(t1, 6)
+        return [clip]
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": "start",
+                "label": "Start (seconds)",
+                "description": "Start time of the clip in seconds.",
+                "type": "number",
+                "default": self._start,
+                "min": 0,
+                "step": 0.01,
+            },
+            {
+                "key": "end",
+                "label": "End (seconds)",
+                "description": "End time of the clip in seconds.",
+                "type": "number",
+                "default": self._end,
+                "min": 0,
+                "step": 0.01,
+            },
+        ]
+
+    def with_params(self, params: dict[str, Any]) -> "SoundClipClipper":
+        start = float(params.get("start", self._start))
+        end = float(params.get("end", self._end))
+        return SoundClipClipper(start, end)
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["start"] = self._start
+        d["end"] = self._end
+        return d

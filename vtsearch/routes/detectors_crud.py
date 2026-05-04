@@ -228,8 +228,8 @@ def set_autorun_detector_autodetect_route(name):
     if autodetect:
         add_autorun_detector_name(name)
     else:
-        remove_autorun_detector_name(name)
-        if not found_in_memory:
+        removed_from_settings = remove_autorun_detector_name(name)
+        if not found_in_memory and not removed_from_settings:
             return jsonify({"error": "Detector not found"}), 404
     return jsonify({"success": True, "autodetect": bool(autodetect)})
 

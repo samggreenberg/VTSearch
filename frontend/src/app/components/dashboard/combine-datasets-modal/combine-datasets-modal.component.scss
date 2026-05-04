@@ -1,0 +1,153 @@
+:host {
+  ::ng-deep .modal-content {
+    width: 640px;
+    max-width: 95vw;
+  }
+}
+
+.combine-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.combine-intro {
+  margin: 0;
+  color: var(--text-secondary, var(--text-muted));
+  font-size: .9rem;
+  line-height: 1.4;
+}
+
+.name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: .9rem;
+}
+
+.name-label {
+  color: var(--text-secondary, var(--text-muted));
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 600;
+}
+
+.name-input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg, transparent);
+  color: var(--text, inherit);
+  font-size: .95rem;
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent, #4a8edb);
+  }
+}
+
+.combine-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9rem;
+
+  th, td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  thead th {
+    font-weight: 600;
+    color: var(--text-secondary, var(--text-muted));
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  tfoot td {
+    font-weight: 600;
+    border-top: 2px solid var(--border);
+    border-bottom: none;
+    background: var(--bg-subtle);
+  }
+
+  .col-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .col-type {
+    white-space: nowrap;
+
+    vt-icon {
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+  }
+
+  .col-actions {
+    width: 32px;
+    text-align: right;
+  }
+
+  .dataset-name {
+    font-weight: 500;
+  }
+
+  tbody tr.row-mismatch {
+    background: rgba(255, 180, 0, .12);
+
+    .col-type {
+      color: var(--warn, #c47a00);
+      font-weight: 600;
+    }
+  }
+}
+
+.row-remove-btn {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--text-secondary, var(--text-muted));
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+
+  &:hover {
+    color: var(--danger, #c43a3a);
+    background: var(--bg-subtle);
+  }
+}
+
+.mismatch-warning {
+  color: var(--warn, #c47a00);
+  font-style: italic;
+}
+
+.info-text {
+  margin: 0;
+  color: var(--text-secondary, var(--text-muted));
+  font-size: .85rem;
+}
+
+.warn-text {
+  margin: 0;
+  color: var(--warn, #c47a00);
+  font-size: .85rem;
+}
+
+.error-text {
+  margin: 0;
+  color: var(--danger, #c43a3a);
+  font-size: .85rem;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

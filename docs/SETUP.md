@@ -278,6 +278,28 @@ docker build -f Dockerfile.gpu -t vtsearch:gpu .
 docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
 ```
 
+### SigLIP-only (image search)
+
+For the most common deployment — browsing/voting on images with the SigLIP
+embedder — use the streamlined `Dockerfile.siglip` variant. It skips audio,
+video, document, text, and extractor plugin dependencies, and **bakes the
+SigLIP model weights into the image at build time** so the container is
+ready to serve immediately on first run (no Hugging Face download).
+
+```bash
+docker compose -f docker-compose.siglip.yml up
+```
+
+Or with plain Docker:
+
+```bash
+docker build -f Dockerfile.siglip -t vtsearch:siglip .
+docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:siglip
+```
+
+The model cache lives in `/opt/vtsearch/models` (set via `VTSEARCH_MODELS_DIR`)
+so the baked weights are not masked when `/app/data` is mounted as a volume.
+
 ### Data persistence
 
 The `data/` directory inside the container (models, embeddings, settings, media files) is declared as a Docker volume. The commands above mount it as a named volume called `vtsearch-data` so everything persists across container restarts. To use a host directory instead:
@@ -293,6 +315,7 @@ After pulling new code, rebuild the image:
 ```bash
 docker compose build           # CPU
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml build  # GPU
+docker compose -f docker-compose.siglip.yml build                      # SigLIP-only
 ```
 
 Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
