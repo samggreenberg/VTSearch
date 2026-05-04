@@ -34,6 +34,7 @@ h3 {
 
 .vote-list {
   overflow-y: auto;
+  scrollbar-gutter: stable;
   flex: 1;
   min-height: 0;
 
