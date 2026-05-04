@@ -21,10 +21,6 @@ export class DatasetImporterModalComponent implements OnInit {
   @Input() guessedMediaType = '';
   /** Embedder name guessed from existing datasets/in-progress loads (e.g. "siglip"). */
   @Input() guessedMediaEmbedder = '';
-  /** When set, jump straight to this importer (even hidden ones) on open. */
-  @Input() initialImporter = '';
-  /** Form values to pre-fill after auto-selecting the initial importer. */
-  @Input() initialFormValues: Record<string, unknown> = {};
 
   @Output() closed = new EventEmitter<void>();
   @Output() importStarted = new EventEmitter<void>();
@@ -132,21 +128,8 @@ export class DatasetImporterModalComponent implements OnInit {
   ngOnInit(): void {
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
-        // Keep ALL importers (including hidden_from_picker ones) so callers
-        // can land on a hidden importer via `initialImporter`.  The picker
-        // UI filters hidden importers in `orderedImporters` instead.
-        this.importers = res.importers || [];
+        this.importers = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
         this.declaredTabs = res.tabs || [];
-        if (this.initialImporter) {
-          const target = this.importers.find((i) => i.name === this.initialImporter);
-          if (target) {
-            this.selectImporter(target);
-            // Apply pre-fill values after selectImporter resets formValues
-            for (const [k, v] of Object.entries(this.initialFormValues)) {
-              this.formValues[k] = v;
-            }
-          }
-        }
       },
     });
     this.datasetsApi.getEmbedders().subscribe({

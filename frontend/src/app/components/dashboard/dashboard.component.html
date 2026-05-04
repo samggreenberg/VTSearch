@@ -274,11 +274,17 @@
   <vt-dataset-importer-modal
     [guessedMediaType]="guessedMediaType"
     [guessedMediaEmbedder]="guessedMediaEmbedder"
-    [initialImporter]="importerInitialName"
-    [initialFormValues]="importerInitialFormValues"
     (closed)="closeImporterModal()"
     (importStarted)="onImportComplete()"
     (demoSelected)="onDemoSelected($event)"
+  />
+}
+
+@if (combineModalOpen) {
+  <vt-combine-datasets-modal
+    [datasets]="combineModalDatasets"
+    (closed)="closeCombineModal()"
+    (combineStarted)="onCombineStarted()"
   />
 }
 
