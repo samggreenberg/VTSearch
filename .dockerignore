@@ -34,6 +34,7 @@ frontend/
 # Docker files (no need to copy into the image)
 Dockerfile
 Dockerfile.gpu
+Dockerfile.siglip
 docker-compose*.yml
 
 # Docs (not needed at runtime)
