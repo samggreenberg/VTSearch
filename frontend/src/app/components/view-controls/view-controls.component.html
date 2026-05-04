@@ -3,7 +3,7 @@
     <button
       type="button"
       class="vc-btn vc-btn--size"
-      [disabled]="atMinSize || !currentMediaType"
+      [disabled]="atMinSize || !currentMediaType || viewMode === 'list'"
       (click)="bumpSize(-1)"
       title="Smaller thumbnails"
       aria-label="Smaller thumbnails">
@@ -12,7 +12,7 @@
     <button
       type="button"
       class="vc-btn vc-btn--size"
-      [disabled]="atMaxSize || !currentMediaType"
+      [disabled]="atMaxSize || !currentMediaType || viewMode === 'list'"
       (click)="bumpSize(1)"
       title="Bigger thumbnails"
       aria-label="Bigger thumbnails">
