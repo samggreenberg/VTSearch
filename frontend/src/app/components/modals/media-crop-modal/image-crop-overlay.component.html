@@ -1,0 +1,53 @@
+<div class="hint">
+  Drag the edges or corners to crop. The cropped sub-region is what will be embedded.
+</div>
+
+<div
+  class="image-wrap"
+  (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp($event)"
+  (pointercancel)="onPointerUp($event)">
+  <img #img [src]="imageUrl" (load)="onImageLoaded()" alt="Crop target" />
+  <div
+    class="crop-mask top"
+    [style.height.px]="cropY">
+  </div>
+  <div
+    class="crop-mask bottom"
+    [style.top.px]="cropY + cropH">
+  </div>
+  <div
+    class="crop-mask left"
+    [style.top.px]="cropY"
+    [style.height.px]="cropH"
+    [style.width.px]="cropX">
+  </div>
+  <div
+    class="crop-mask right"
+    [style.top.px]="cropY"
+    [style.height.px]="cropH"
+    [style.left.px]="cropX + cropW">
+  </div>
+
+  <div
+    class="crop-box"
+    [style.left.px]="cropX"
+    [style.top.px]="cropY"
+    [style.width.px]="cropW"
+    [style.height.px]="cropH">
+    <div class="handle tl"></div>
+    <div class="handle tr"></div>
+    <div class="handle bl"></div>
+    <div class="handle br"></div>
+    <div class="handle t"></div>
+    <div class="handle b"></div>
+    <div class="handle l"></div>
+    <div class="handle r"></div>
+  </div>
+</div>
+
+<div class="actions">
+  <button type="button" class="primary" (click)="apply()">Apply crop</button>
+  <button type="button" class="cancel" (click)="cancel()">Back</button>
+</div>

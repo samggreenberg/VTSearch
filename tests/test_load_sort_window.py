@@ -78,6 +78,37 @@ class TestExampleSort:
         ids = {r["id"] for r in data["results"]}
         assert ids == set(medias.keys())
 
+    def test_with_audio_crop_params_sorts_using_clip(self, client):
+        # 1s WAV cropped to a 0.05s sub-region — request still succeeds and
+        # returns a fully ranked result list.  Server-side cropping is the
+        # only path that keeps the sub-region distinguishable from the full
+        # clip when both have the same content hash.
+        wav_buf = self._make_wav_bytes(duration=1.0)
+        resp = client.post(
+            "/api/example-sort",
+            data={
+                "file": (wav_buf, "test.wav"),
+                "crop_params": json.dumps({"start": 0.1, "end": 0.15}),
+            },
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data["results"]) == app_module.NUM_MEDIAS
+
+    def test_with_invalid_crop_params_falls_back_to_full(self, client):
+        wav_buf = self._make_wav_bytes()
+        resp = client.post(
+            "/api/example-sort",
+            data={
+                "file": (wav_buf, "test.wav"),
+                "crop_params": "not-json",
+            },
+            content_type="multipart/form-data",
+        )
+        # Invalid JSON is silently ignored — request still succeeds.
+        assert resp.status_code == 200
+
 
 class TestServerMediaFiles:
     """Tests for /api/server-media-files (listing)."""
@@ -173,6 +204,58 @@ class TestExampleSortServer:
     def test_path_traversal_rejected(self, client):
         resp = client.post("/api/example-sort-server", json={"filename": "../../../etc/passwd"})
         assert resp.status_code in (400, 404)
+
+    def test_sort_with_audio_crop_params(self, client):
+        # 1s WAV — request a sub-region.  The server crops into a temp
+        # file and returns ranked results.
+        sample_rate = 16000
+        num_samples = sample_rate
+        samples = [int(32767 * np.sin(2 * np.pi * 440 * i / sample_rate)) for i in range(num_samples)]
+        path = self._media_dir / "longer.wav"
+        with wave.open(str(path), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(struct.pack(f"<{num_samples}h", *samples))
+
+        resp = client.post(
+            "/api/example-sort-server",
+            json={"filename": "longer.wav", "crop_params": {"start": 0.1, "end": 0.5}},
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert len(data["results"]) == app_module.NUM_MEDIAS
+
+    def test_upload_with_crop_params_persists_cropped_bytes(self, client):
+        # Upload a 1s WAV with crop_params — the saved file should be the
+        # cropped sub-region (so seeding/sorting/etc. read the crop directly).
+        sample_rate = 16000
+        num_samples = sample_rate
+        samples = [int(32767 * np.sin(2 * np.pi * 440 * i / sample_rate)) for i in range(num_samples)]
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(struct.pack(f"<{num_samples}h", *samples))
+        buf.seek(0)
+
+        resp = client.post(
+            "/api/server-media-files/upload",
+            data={
+                "file": (buf, "src.wav"),
+                "media_type": "audio",
+                "crop_params": json.dumps({"start": 0.1, "end": 0.4}),
+            },
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 201
+        saved_name = resp.get_json()["filename"]
+
+        # Verify the saved file is the cropped sub-region (~0.3s).
+        with wave.open(str(self._media_dir / saved_name), "rb") as wf:
+            saved_duration = wf.getnframes() / wf.getframerate()
+        assert saved_duration == pytest.approx(0.3, abs=0.01)
 
 
 class TestServerDetectorFileGet:

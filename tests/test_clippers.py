@@ -221,6 +221,93 @@ class TestSoundTilingClipper:
 
 
 # ---------------------------------------------------------------------------
+# SoundClipClipper
+# ---------------------------------------------------------------------------
+
+
+class TestSoundClipClipper:
+    def test_identity(self):
+        from vtsearch.media.audio.clipper import SoundClipClipper
+
+        c = SoundClipClipper(0.5, 1.5)
+        assert c.name == "sound_clip"
+        assert c.media_type == "audio"
+        assert c.start == 0.5
+        assert c.end == 1.5
+        assert isinstance(c, MediaClipper)
+
+    def test_rejects_negative_start(self):
+        from vtsearch.media.audio.clipper import SoundClipClipper
+
+        with pytest.raises(ValueError):
+            SoundClipClipper(-0.1, 1.0)
+
+    def test_rejects_end_le_start(self):
+        from vtsearch.media.audio.clipper import SoundClipClipper
+
+        with pytest.raises(ValueError):
+            SoundClipClipper(1.0, 1.0)
+        with pytest.raises(ValueError):
+            SoundClipClipper(2.0, 1.0)
+
+    def test_extracts_requested_range(self):
+        from vtsearch.media.audio.clipper import SoundClipClipper
+
+        wav = generate_wav(440, 5.0)
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 5.0}
+        result = SoundClipClipper(1.0, 3.5).clip(media)
+        assert len(result) == 1
+        clip = result[0]
+        assert clip["clip_start"] == pytest.approx(1.0)
+        assert clip["clip_end"] == pytest.approx(3.5)
+        assert clip["duration"] == pytest.approx(2.5, abs=0.01)
+        assert clip["clip_index"] == 0
+        # Result is valid WAV
+        with wave.open(io.BytesIO(clip["media_bytes"]), "rb") as wf:
+            assert wf.getframerate() == 48000
+
+    def test_clamps_to_audio_duration(self):
+        from vtsearch.media.audio.clipper import SoundClipClipper
+
+        wav = generate_wav(440, 2.0)
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.0}
+        # Request a window that runs past the end — clamps.
+        result = SoundClipClipper(1.0, 10.0).clip(media)
+        assert len(result) == 1
+        assert result[0]["clip_start"] == pytest.approx(1.0)
+        assert result[0]["clip_end"] == pytest.approx(2.0, abs=0.01)
+
+    def test_no_media_bytes_returns_unchanged(self):
+        from vtsearch.media.audio.clipper import SoundClipClipper
+
+        media = {"id": 1, "type": "audio", "duration": 3.0}
+        result = SoundClipClipper(0.0, 1.0).clip(media)
+        assert result == [media]
+
+    def test_with_params(self):
+        from vtsearch.media.audio.clipper import SoundClipClipper
+
+        c = SoundClipClipper(0.0, 1.0)
+        c2 = c.with_params({"start": 2.0, "end": 4.5})
+        assert isinstance(c2, SoundClipClipper)
+        assert c2.start == 2.0
+        assert c2.end == 4.5
+        # original unchanged
+        assert c.start == 0.0
+        assert c.end == 1.0
+
+    def test_to_dict(self):
+        from vtsearch.media.audio.clipper import SoundClipClipper
+
+        c = SoundClipClipper(1.5, 3.0)
+        d = c.to_dict()
+        assert d["name"] == "sound_clip"
+        assert d["media_type"] == "audio"
+        assert d["start"] == 1.5
+        assert d["end"] == 3.0
+
+
+# ---------------------------------------------------------------------------
 # VideoDefaultClipper
 # ---------------------------------------------------------------------------
 
@@ -470,6 +557,90 @@ class TestImageTilingClipper:
         media = {"id": 1, "type": "image", "media_bytes": b"fake"}
         result = ImageTilingClipper().clip(media)
         assert result == [media]
+
+
+# ---------------------------------------------------------------------------
+# ImageBboxClipper
+# ---------------------------------------------------------------------------
+
+
+class TestImageBboxClipper:
+    def test_identity(self):
+        from vtsearch.media.image.clipper import ImageBboxClipper
+
+        c = ImageBboxClipper([10, 20, 50, 80])
+        assert c.name == "image_bbox"
+        assert c.media_type == "image"
+        assert c.box == (10, 20, 50, 80)
+        assert isinstance(c, MediaClipper)
+
+    def test_rejects_invalid_box(self):
+        from vtsearch.media.image.clipper import ImageBboxClipper
+
+        with pytest.raises(ValueError):
+            ImageBboxClipper([0, 0, 0, 0])  # zero size
+        with pytest.raises(ValueError):
+            ImageBboxClipper([10, 10, 5, 5])  # x2 < x1
+        with pytest.raises(ValueError):
+            ImageBboxClipper([-1, 0, 5, 5])  # negative coord
+        with pytest.raises(ValueError):
+            ImageBboxClipper([0, 0, 5])  # wrong arity
+
+    def test_crops_to_box(self):
+        from PIL import Image
+
+        from vtsearch.media.image.clipper import ImageBboxClipper
+
+        img_bytes = _make_image_bytes(200, 100)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 100}
+        result = ImageBboxClipper([20, 10, 120, 90]).clip(media)
+        assert len(result) == 1
+        clip = result[0]
+        assert clip["width"] == 100
+        assert clip["height"] == 80
+        assert clip["clip_box"] == [20, 10, 120, 90]
+        assert clip["clip_index"] == 0
+        img = Image.open(io.BytesIO(clip["media_bytes"]))
+        assert img.size == (100, 80)
+
+    def test_clamps_box_to_image_bounds(self):
+        from vtsearch.media.image.clipper import ImageBboxClipper
+
+        img_bytes = _make_image_bytes(50, 50)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 50, "height": 50}
+        # Request a box wider than the image — clamps to (0,0,50,50).
+        result = ImageBboxClipper([0, 0, 200, 200]).clip(media)
+        assert len(result) == 1
+        clip = result[0]
+        assert clip["clip_box"] == [0, 0, 50, 50]
+        assert clip["width"] == 50
+        assert clip["height"] == 50
+
+    def test_no_media_bytes_returns_unchanged(self):
+        from vtsearch.media.image.clipper import ImageBboxClipper
+
+        media = {"id": 1, "type": "image", "width": 100, "height": 100}
+        result = ImageBboxClipper([0, 0, 50, 50]).clip(media)
+        assert result == [media]
+
+    def test_with_params(self):
+        from vtsearch.media.image.clipper import ImageBboxClipper
+
+        c = ImageBboxClipper([0, 0, 10, 10])
+        c2 = c.with_params({"box": [5, 5, 25, 25]})
+        assert isinstance(c2, ImageBboxClipper)
+        assert c2.box == (5, 5, 25, 25)
+        # original unchanged
+        assert c.box == (0, 0, 10, 10)
+
+    def test_to_dict(self):
+        from vtsearch.media.image.clipper import ImageBboxClipper
+
+        c = ImageBboxClipper([1, 2, 3, 4])
+        d = c.to_dict()
+        assert d["name"] == "image_bbox"
+        assert d["media_type"] == "image"
+        assert d["box"] == [1, 2, 3, 4]
 
 
 # ---------------------------------------------------------------------------
@@ -888,6 +1059,59 @@ class TestClippersApiEndpoint:
         # Default clipper should not have creation_questions
         default = next(c for c in clippers if c["name"] == "sound_default")
         assert "creation_questions" not in default
+
+
+# ---------------------------------------------------------------------------
+# crop_file_bytes helper
+# ---------------------------------------------------------------------------
+
+
+class TestCropFileBytes:
+    """The helper used by routes to crop user-supplied example files."""
+
+    def test_crop_audio_file(self, tmp_path):
+        from vtsearch.media.cropping import crop_file_bytes
+
+        wav_path = tmp_path / "ex.wav"
+        wav_path.write_bytes(generate_wav(440, 5.0))
+        out = crop_file_bytes(wav_path, "audio", {"start": 1.0, "end": 3.0})
+        # Result is a valid WAV of the requested length (~2s).
+        with wave.open(io.BytesIO(out), "rb") as wf:
+            duration = wf.getnframes() / wf.getframerate()
+        assert duration == pytest.approx(2.0, abs=0.01)
+
+    def test_crop_image_file(self, tmp_path):
+        from PIL import Image
+
+        from vtsearch.media.cropping import crop_file_bytes
+
+        img_path = tmp_path / "ex.png"
+        img_path.write_bytes(_make_image_bytes(100, 100))
+        out = crop_file_bytes(img_path, "image", {"box": [10, 20, 60, 80]})
+        img = Image.open(io.BytesIO(out))
+        assert img.size == (50, 60)
+
+    def test_missing_file_raises(self, tmp_path):
+        from vtsearch.media.cropping import crop_file_bytes
+
+        with pytest.raises(FileNotFoundError):
+            crop_file_bytes(tmp_path / "nope.wav", "audio", {"start": 0.0, "end": 1.0})
+
+    def test_unknown_media_type_raises(self, tmp_path):
+        from vtsearch.media.cropping import crop_file_bytes
+
+        wav_path = tmp_path / "ex.wav"
+        wav_path.write_bytes(generate_wav(440, 1.0))
+        with pytest.raises(ValueError):
+            crop_file_bytes(wav_path, "video", {"start": 0.0, "end": 0.5})
+
+    def test_image_missing_box_raises(self, tmp_path):
+        from vtsearch.media.cropping import crop_file_bytes
+
+        img_path = tmp_path / "ex.png"
+        img_path.write_bytes(_make_image_bytes(100, 100))
+        with pytest.raises(ValueError):
+            crop_file_bytes(img_path, "image", {})
 
 
 # ---------------------------------------------------------------------------

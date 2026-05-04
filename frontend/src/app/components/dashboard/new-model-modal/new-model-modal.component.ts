@@ -9,6 +9,10 @@ import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { ImporterField, ImporterInfo, MediaTypeInfo } from '../../../models/api.models';
+import {
+  MediaCropModalComponent,
+  MediaCropResult,
+} from '../../modals/media-crop-modal/media-crop-modal.component';
 
 interface BrowseItem {
   key: string;
@@ -39,7 +43,7 @@ type TrainedSubView = 'picker' | 'form';
 @Component({
   selector: 'vt-new-model-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent, MediaCropModalComponent],
   templateUrl: './new-model-modal.component.html',
   styleUrl: './new-model-modal.component.scss',
 })
@@ -78,6 +82,10 @@ export class NewModelModalComponent implements OnInit {
   browseEntries: BrowseEntry[] = [];
   fileBrowsing = false;
   fileLoading = false;
+
+  // Pending crop confirmation state.
+  pendingFile: File | null = null;
+  pendingFileMediaType = '';
 
   // "Trained" tab state
   trainedView: TrainedSubView = 'picker';
@@ -317,18 +325,41 @@ export class NewModelModalComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
     const file = input.files[0];
-    this.sortingApi.uploadServerMediaFile(file).subscribe({
-      next: (res) => {
-        this.exampleType = 'media';
-        this.exampleValue = res.filename;
-        this.exampleDisplay = res.original_name || res.filename;
-        this.pendingText = '';
-      },
-      error: () => {
-        this.error = 'Failed to upload file';
-      },
-    });
     input.value = '';
+    this.pendingFile = file;
+    this.pendingFileMediaType = this.mediaType || this.mediaTypeFromFile(file);
+  }
+
+  onCropConfirmed(result: MediaCropResult): void {
+    const file = result.file;
+    const cropParams = result.cropParams;
+    const mediaType = this.pendingFileMediaType;
+    this.pendingFile = null;
+    this.sortingApi
+      .uploadServerMediaFile(file, cropParams ? { mediaType, cropParams } : undefined)
+      .subscribe({
+        next: (res) => {
+          this.exampleType = 'media';
+          this.exampleValue = res.filename;
+          this.exampleDisplay = res.original_name || res.filename;
+          this.pendingText = '';
+        },
+        error: () => {
+          this.error = 'Failed to upload file';
+        },
+      });
+  }
+
+  onCropCancelled(): void {
+    this.pendingFile = null;
+  }
+
+  private mediaTypeFromFile(file: File): string {
+    const m = (file.type || '').toLowerCase();
+    if (m.startsWith('image/')) return 'image';
+    if (m.startsWith('audio/')) return 'audio';
+    if (m.startsWith('video/')) return 'video';
+    return '';
   }
 
   backToMain(): void {

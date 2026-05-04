@@ -1,0 +1,37 @@
+<div class="hint">
+  Drag the blue handles to set the start and end of the clip. Drag inside the selection to move it.
+</div>
+
+<div class="errorMsg" *ngIf="errorMsg">{{ errorMsg }}</div>
+<div class="loading" *ngIf="loading">Decoding audio…</div>
+
+<audio
+  *ngIf="audioUrl"
+  [src]="audioUrl"
+  controls
+  (loadedmetadata)="onAudioLoadedMetadata($event)">
+</audio>
+
+<canvas
+  #canvas
+  width="600"
+  height="120"
+  (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp($event)"
+  (pointercancel)="onPointerUp($event)">
+</canvas>
+
+<div class="time-readout">
+  <span>{{ formatTime(start) }}</span>
+  <span class="separator">→</span>
+  <span>{{ formatTime(end) }}</span>
+  <span class="dur">({{ formatTime(end - start) }})</span>
+</div>
+
+<div class="actions">
+  <button type="button" class="primary" [disabled]="duration <= 0 || end <= start" (click)="apply()">
+    Apply crop
+  </button>
+  <button type="button" class="cancel" (click)="cancel()">Back</button>
+</div>

@@ -7,6 +7,10 @@ import { SortingApiService } from '../../../services/sorting-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
 import { ServerFileEntry, ModelRegistryEntry, ImporterInfo } from '../../../models/api.models';
+import {
+  MediaCropModalComponent,
+  MediaCropResult,
+} from '../media-crop-modal/media-crop-modal.component';
 
 interface BrowseItem {
   key: string;
@@ -26,7 +30,7 @@ type MediaPickerView = 'sources' | 'browse-items' | 'file-browser';
 @Component({
   selector: 'vt-load-sort-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent, IconComponent],
+  imports: [CommonModule, ModalComponent, IconComponent, MediaCropModalComponent],
   templateUrl: './load-sort-modal.component.html',
   styleUrl: './load-sort-modal.component.scss',
 })
@@ -55,6 +59,12 @@ export class LoadSortModalComponent implements OnInit {
   browsePath: string[] = [];
   browseEntries: BrowseEntry[] = [];
   fileLoading = false;
+
+  // Pending crop confirmation state.
+  pendingFile: File | null = null;
+  pendingFileMediaType = '';
+  pendingServerFilename = '';
+  pendingOrigin: { origin: Record<string, unknown>; key: string } | null = null;
 
   constructor(
     private detectorsApi: DetectorsApiService,
@@ -131,8 +141,15 @@ export class LoadSortModalComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
     const file = input.files[0];
+    input.value = '';
+    this.pendingFile = file;
+    this.pendingFileMediaType = this.mediaTypeFromFile(file);
+  }
+
+  onCropConfirmed(result: MediaCropResult): void {
+    this.pendingFile = null;
     this.status = 'Scoring with example media...';
-    this.sortingApi.exampleSort(file).subscribe({
+    this.sortingApi.exampleSort(result.file, result.cropParams).subscribe({
       next: (data) => {
         this.status = '';
         this.exampleSortStarted.emit(data);
@@ -143,6 +160,20 @@ export class LoadSortModalComponent implements OnInit {
         this.error = 'Example sort failed';
       },
     });
+  }
+
+  onCropCancelled(): void {
+    this.pendingFile = null;
+  }
+
+  private mediaTypeFromFile(file: File): string {
+    // Map MIME type back to a vtsearch media_type so the crop modal knows
+    // which overlay to render.  Falls back to "" (no cropping offered).
+    const m = (file.type || '').toLowerCase();
+    if (m.startsWith('image/')) return 'image';
+    if (m.startsWith('audio/')) return 'audio';
+    if (m.startsWith('video/')) return 'video';
+    return '';
   }
 
   loadServerMedia(filename: string): void {

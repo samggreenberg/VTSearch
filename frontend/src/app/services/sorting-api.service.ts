@@ -85,9 +85,12 @@ export class SortingApiService {
     );
   }
 
-  exampleSort(file: File): Observable<SortResponse> {
+  exampleSort(file: File, cropParams?: Record<string, unknown>): Observable<SortResponse> {
     const formData = new FormData();
     formData.append('file', file);
+    if (cropParams) {
+      formData.append('crop_params', JSON.stringify(cropParams));
+    }
     return this.http.post<SortResponse>('/api/example-sort', formData);
   }
 
@@ -95,17 +98,28 @@ export class SortingApiService {
     return this.http.get<ServerMediaFilesResponse>('/api/server-media-files');
   }
 
-  exampleSortServer(params: { filename: string }): Observable<SortResponse> {
+  exampleSortServer(params: { filename: string; crop_params?: Record<string, unknown> }): Observable<SortResponse> {
     return this.http.post<SortResponse>('/api/example-sort-server', params);
   }
 
-  exampleSortOrigin(params: { origin: Record<string, unknown>; key: string }): Observable<SortResponse> {
+  exampleSortOrigin(
+    params: { origin: Record<string, unknown>; key: string; crop_params?: Record<string, unknown> },
+  ): Observable<SortResponse> {
     return this.http.post<SortResponse>('/api/example-sort-origin', params);
   }
 
-  uploadServerMediaFile(file: File): Observable<{ filename: string; original_name: string }> {
+  uploadServerMediaFile(
+    file: File,
+    options?: { mediaType?: string; cropParams?: Record<string, unknown> },
+  ): Observable<{ filename: string; original_name: string }> {
     const formData = new FormData();
     formData.append('file', file);
+    if (options?.cropParams) {
+      formData.append('crop_params', JSON.stringify(options.cropParams));
+      if (options.mediaType) {
+        formData.append('media_type', options.mediaType);
+      }
+    }
     return this.http.post<{ filename: string; original_name: string }>('/api/server-media-files/upload', formData);
   }
 
