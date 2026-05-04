@@ -23,6 +23,7 @@ import { ModelCardComponent } from './model-card/model-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { CombineDatasetsModalComponent } from './combine-datasets-modal/combine-datasets-modal.component';
 import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
+import { CombineModelsModalComponent } from './combine-models-modal/combine-models-modal.component';
 import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
@@ -40,6 +41,7 @@ import { IconComponent } from '../icon/icon.component';
     DatasetImporterModalComponent,
     CombineDatasetsModalComponent,
     NewModelModalComponent,
+    CombineModelsModalComponent,
     LabelExporterModalComponent,
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
@@ -80,6 +82,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   combineModalDatasets: DatasetRegistryEntry[] = [];
   newModelModalOpen = false;
   newModelClosing = false;
+  combineModelsModalOpen = false;
   exportModalOpen = false;
   exportModelName = '';
   addLabelsModalOpen = false;
@@ -567,6 +570,59 @@ export class DashboardComponent implements OnInit, OnDestroy {
         },
       });
     }
+  }
+
+  /**
+   * True when the "Combine Selected Models" button should be enabled:
+   * at least two trainable models selected AND all of them share a media type.
+   */
+  get combineSelectedModelsEnabled(): boolean {
+    if (this.selectedModelIds.size < 2) return false;
+    const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    if (targets.length < 2) return false;
+    if (!targets.every((m) => m.trainable)) return false;
+    const types = new Set(targets.map((m) => m.media_type));
+    return types.size === 1;
+  }
+
+  get combineSelectedModelsHint(): string {
+    if (this.selectedModelIds.size < 2) {
+      return 'Select two or more trainable models to combine';
+    }
+    const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    if (!targets.every((m) => m.trainable)) {
+      return 'Only trainable models can be combined';
+    }
+    const types = new Set(targets.map((m) => m.media_type));
+    if (types.size !== 1) {
+      return 'All selected models must be of the same media type';
+    }
+    return 'Combine selected models into a new one';
+  }
+
+  get combineSelectedModelSources(): ModelRegistryEntry[] {
+    return this.models.filter((m) => this.selectedModelIds.has(m.id));
+  }
+
+  get allModelNames(): string[] {
+    return this.models.map((m) => m.name);
+  }
+
+  openCombineModelsModal(): void {
+    if (!this.combineSelectedModelsEnabled) return;
+    this.combineModelsModalOpen = true;
+  }
+
+  closeCombineModelsModal(): void {
+    this.combineModelsModalOpen = false;
+  }
+
+  onModelsCombined(newName: string): void {
+    this.combineModelsModalOpen = false;
+    // The new model will appear via the datasets$/models$ subscription's
+    // new-id auto-select logic; nothing more to do besides refreshing.
+    this.datasetState.refresh();
+    void newName;
   }
 
   onSpinSelectAllModelsEnd(): void {

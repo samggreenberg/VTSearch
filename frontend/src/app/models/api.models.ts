@@ -392,6 +392,16 @@ export interface ModelsRegistryResponse {
   models: ModelRegistryEntry[];
 }
 
+export interface CombineModelsResult {
+  success: boolean;
+  name: string;
+  media_type: string;
+  num_labels: number;
+  combined_from: string[];
+  source_label_counts: number[];
+  examples: { type: string; value: string }[];
+}
+
 // --- Label Importers ---
 
 export interface LabelImporterInfo {

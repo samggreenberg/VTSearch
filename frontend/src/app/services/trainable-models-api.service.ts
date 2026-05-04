@@ -1,7 +1,12 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { LoadingTasksResponse, TrainableModelsResponse, ModelsRegistryResponse } from '../models/api.models';
+import {
+  CombineModelsResult,
+  LoadingTasksResponse,
+  TrainableModelsResponse,
+  ModelsRegistryResponse,
+} from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
 export class TrainableModelsApiService {
@@ -33,6 +38,18 @@ export class TrainableModelsApiService {
 
   saveLabels(name: string): Observable<unknown> {
     return this.http.post(`/api/trainable-models/${name}/labels`, {});
+  }
+
+  combine(
+    names: string[],
+    newName: string,
+    conflictPolicy: 'drop' = 'drop',
+  ): Observable<CombineModelsResult> {
+    return this.http.post<CombineModelsResult>('/api/trainable-models/combine', {
+      names,
+      new_name: newName,
+      conflict_policy: conflictPolicy,
+    });
   }
 
   // --- Models Registry ---
