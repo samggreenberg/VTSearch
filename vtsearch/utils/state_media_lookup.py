@@ -68,17 +68,23 @@ def resolve_media_ids(
     the entry, regardless of whether it was matched by provenance or by
     content hash.  Duplicate IDs are removed.
 
-    When *name_lookup* is provided and neither origin+name nor MD5 produced a
-    match, ``origin_name`` (or ``filename``) is used as a last-resort
-    fallback.  This enables cross-dataset label transfer from CSV files that
-    lack the full origin dict.
+    When *name_lookup* is provided AND the entry has no usable provenance
+    (no ``origin`` + ``origin_name`` pair and no ``md5``), ``origin_name``
+    (or ``filename``) is used as a last-resort fallback.  This enables
+    cross-dataset label transfer from CSV files that lack the full origin
+    dict.  The fallback is intentionally NOT triggered when the entry has
+    provenance fields that simply don't match anything in the current
+    dataset — in that case the entry refers to content that isn't here, and
+    matching by basename alone would silently mislabel any colliding
+    filename (a real bug when re-using a detector across datasets).
     """
     matched: dict[int, None] = {}
 
     origin = entry.get("origin")
     origin_name = entry.get("origin_name", "")
 
-    if origin is not None and origin_name:
+    has_origin_key = origin is not None and bool(origin_name)
+    if has_origin_key:
         key = _origin_key(origin, origin_name)
         for cid in origin_lookup.get(key, []):
             matched[cid] = None
@@ -88,9 +94,12 @@ def resolve_media_ids(
         for cid in md5_lookup.get(md5, []):
             matched[cid] = None
 
-    # Fallback: match by origin_name alone (or filename) when the full origin
-    # dict is not available, e.g. CSV label imports across datasets.
-    if not matched and name_lookup is not None:
+    # Fallback: match by origin_name alone (or filename) only when the entry
+    # has no provenance to begin with — i.e. neither an origin+name pair nor
+    # an md5.  Entries with provenance that failed to match represent content
+    # not present in the current dataset; falling back to basename would
+    # produce false positives on filename collisions.
+    if not matched and name_lookup is not None and not has_origin_key and not md5:
         name = origin_name or entry.get("filename", "")
         if name:
             for cid in name_lookup.get(name, []):

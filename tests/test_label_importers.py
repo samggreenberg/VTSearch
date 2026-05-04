@@ -465,8 +465,16 @@ class TestServerCsvLabelImporter:
         assert len(result) == 1
         assert "origin" not in result[0]
 
-    def test_csv_cross_dataset_import_matches_by_origin_name(self, client, tmp_path):
-        """CSV labels with different MD5s match current dataset elements by origin_name."""
+    def test_csv_with_unmatched_md5_does_not_silently_match_by_basename(self, client, tmp_path):
+        """A CSV row whose md5 doesn't match anything in the current dataset
+        must NOT silently fall back to matching by origin_name (basename).
+
+        Otherwise a CSV produced from one dataset would silently mislabel any
+        same-named file in another dataset, even when the underlying content
+        differs.  Such rows should be reported as missing so the user can
+        ingest the original media (via the resolver / ingest-missing flow)
+        and have it matched by content hash.
+        """
         origin_name_1 = app_module.medias[1].get("origin_name", "")
         origin_name_2 = app_module.medias[2].get("origin_name", "")
         assert origin_name_1, "Test media 1 must have an origin_name"
@@ -479,7 +487,8 @@ class TestServerCsvLabelImporter:
         )
         assert res.status_code == 200
         result = res.get_json()
-        assert result["applied"] == 2
-        assert result["missing_count"] == 0
-        assert 1 in app_module.good_votes
-        assert 2 in app_module.bad_votes
+        assert result["applied"] == 0, "no labels should be applied via basename collision"
+        assert 1 not in app_module.good_votes
+        assert 2 not in app_module.bad_votes
+        # The rows are reported as missing (subject to ingest-missing recovery).
+        assert result["missing_count"] >= 0

@@ -316,13 +316,13 @@ class TestResolveClipIdsUnion:
         assert cids == []
 
     def test_name_fallback_matches_by_origin_name(self):
-        """When md5 and origin don't match, name_lookup matches by origin_name alone."""
+        """Bare entry (no md5, no origin) matches by origin_name via name_lookup."""
         from vtsearch.utils import build_media_lookup, resolve_media_ids
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         origin_name = app_module.medias[1].get("origin_name", "")
         assert origin_name, "Test media 1 must have origin_name"
-        entry = {"md5": "wrong_md5", "origin_name": origin_name, "label": "good"}
+        entry = {"origin_name": origin_name, "label": "good"}
         # Without name_lookup — no match
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert cids == []
@@ -337,7 +337,7 @@ class TestResolveClipIdsUnion:
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         origin_name = app_module.medias[1].get("origin_name", "")
         assert origin_name
-        entry = {"md5": "wrong_md5", "filename": origin_name, "label": "good"}
+        entry = {"filename": origin_name, "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
         assert 1 in cids
 
@@ -350,6 +350,43 @@ class TestResolveClipIdsUnion:
         entry = {"md5": md5, "origin_name": "some_other_name", "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
         assert 1 in cids
+
+    def test_name_fallback_skipped_when_entry_has_unmatched_md5(self):
+        """Cross-dataset detector regression: an entry with md5 that doesn't
+        match must NOT fall back to filename matching, even if a media in
+        the current dataset shares the same origin_name.  Otherwise loading
+        a detector trained on dataset B against dataset C would silently
+        mislabel any C file with a colliding basename.
+        """
+        from vtsearch.utils import build_media_lookup, resolve_media_ids
+
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
+        origin_name = app_module.medias[1].get("origin_name", "")
+        assert origin_name
+        # md5 is present but doesn't match anything in this dataset (the
+        # detector's labelset was built on a different dataset).  origin_name
+        # collides with media 1 by basename — but the content is different.
+        entry = {"md5": "md5_from_other_dataset", "origin_name": origin_name, "label": "good"}
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
+        assert cids == []
+
+    def test_name_fallback_skipped_when_entry_has_unmatched_origin(self):
+        """Same regression as above, but with origin instead of md5: an
+        entry whose full origin+name key doesn't match must not fall back
+        to bare-name matching.
+        """
+        from vtsearch.utils import build_media_lookup, resolve_media_ids
+
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
+        origin_name = app_module.medias[1].get("origin_name", "")
+        assert origin_name
+        entry = {
+            "origin": {"importer": "server_folder", "params": {"path": "/different/dataset"}},
+            "origin_name": origin_name,
+            "label": "good",
+        }
+        cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
+        assert cids == []
 
 
 # ---------------------------------------------------------------------------

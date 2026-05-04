@@ -1168,8 +1168,17 @@ class TestLoadModelCrossDatasetResolution:
         finally:
             set_trainable_models_dir(original_dir)
 
-    def test_load_model_name_fallback(self, client, tmp_path):
-        """Labels with matching origin_name should resolve even without origin/MD5 match."""
+    def test_load_model_does_not_silently_match_on_basename_collision(self, client, tmp_path):
+        """Loading a detector trained on dataset B against dataset C must NOT
+        silently apply labels to C's media when only the basename matches.
+
+        Concretely: a labelset entry with origin+md5 that don't exist in the
+        current dataset must NOT be applied to a media just because they
+        share an ``origin_name``.  Different datasets routinely contain
+        files with identical basenames (e.g. ``track1.wav``) but different
+        underlying content; matching by basename alone produces silent
+        mislabels.
+        """
         import numpy as np
 
         from vtsearch.models.registry import register_model, reset_for_tests
@@ -1228,7 +1237,10 @@ class TestLoadModelCrossDatasetResolution:
             try:
                 res = _load_model_and_wait(client, model_id)
                 assert res.status_code == 200
-                assert 1 in good_votes, "origin_name fallback should have matched the label"
+                assert 1 not in good_votes, (
+                    "label must NOT be applied: only the basename matches; the md5 "
+                    "and origin disagree, so the underlying content is different"
+                )
             finally:
                 medias.clear()
                 medias.update(saved)
