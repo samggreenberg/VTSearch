@@ -52,6 +52,9 @@ h3 {
   cursor: pointer;
   color: var(--text-vote);
   line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 
   &:hover {
     color: var(--text-primary);
@@ -78,24 +81,40 @@ h3 {
 }
 
 .vote-thumbnail {
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: contain;
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
   border-radius: 3px;
   background: var(--bg-surface);
+  flex-shrink: 0;
+
+  .vote-entry-grid & {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    object-fit: contain;
+  }
 }
 
 .vote-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  aspect-ratio: 1;
+  width: 28px;
+  height: 28px;
   border-radius: 3px;
   background: var(--bg-surface);
   color: var(--text-muted);
-  font-size: 1.5rem;
+  font-size: 1rem;
   overflow: hidden;
+  flex-shrink: 0;
+
+  .vote-entry-grid & {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    font-size: 1.5rem;
+  }
 }
 
 .vote-name {
