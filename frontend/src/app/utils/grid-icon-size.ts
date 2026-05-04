@@ -57,5 +57,8 @@ export function snapPanelWidthToGridColumns(panelEl: HTMLElement, currentPanelWi
   // Preserve any structural offset between the panel edge and the grid element edge
   const offset = currentPanelWidth - boundingWidth;
 
-  return Math.round(minBoundingWidth + offset);
+  // Round up and add a 1px safety margin so sub-pixel layout rounding can't drop
+  // the snapped panel width below the threshold for `cols` columns (which would
+  // leave the user with cols-1 icons and an empty gap).
+  return Math.ceil(minBoundingWidth + offset) + 1;
 }
