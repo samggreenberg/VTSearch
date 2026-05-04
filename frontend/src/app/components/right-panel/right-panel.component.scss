@@ -23,21 +23,25 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
 
   vt-label-sort {
     flex: 1;
     min-width: 0;
   }
 
-  // Remove the sort component's own border since the row provides it
+  // Remove the sort component's own border so the view-row below provides it
   ::ng-deep .label-sort-bar {
     border-bottom: none;
   }
 }
 
-.view-controls-slot {
-  margin-right: 12px;
+.view-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
 }
 
 .label-divider {
