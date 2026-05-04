@@ -12,6 +12,17 @@
         datasets on the dashboard.
       </p>
     } @else {
+      <label class="name-field">
+        <span class="name-label">Name</span>
+        <input
+          type="text"
+          class="name-input"
+          [(ngModel)]="name"
+          placeholder="Combined dataset name"
+          [disabled]="submitting"
+        />
+      </label>
+
       <table class="combine-table">
         <thead>
           <tr>

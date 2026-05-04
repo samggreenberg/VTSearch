@@ -297,6 +297,7 @@ def combine_datasets_route():
     """Combine multiple pickle datasets in a background thread."""
     body = request.get_json(force=True) or {}
     dataset_paths = body.get("datasets", [])
+    name = str(body.get("name", "") or "").strip()
 
     if not isinstance(dataset_paths, list) or len(dataset_paths) < 2:
         return jsonify({"error": "Provide at least two dataset file paths."}), 400
@@ -314,7 +315,7 @@ def combine_datasets_route():
     if importer is None:
         return jsonify({"error": "combine_datasets importer not available"}), 500
 
-    task_id = _run_importer_in_background(importer, {"datasets": dataset_paths})
+    task_id = _run_importer_in_background(importer, {"datasets": dataset_paths, "name": name})
     return jsonify({"ok": True, "message": "Combining datasets...", "task_id": str(task_id) if task_id else ""})
 
 
