@@ -1,0 +1,32 @@
+# VTSearch — slim dependencies (image search with SigLIP only)
+#
+# Pared-down requirements for the most common deployment: browsing/voting
+# on an image dataset with the SigLIP embedder. Skips audio, video,
+# document, text, and extractor deps to keep the image small.
+#
+# Used by Dockerfile.slim.
+
+# ── Core framework ───────────────────────────────────────────────────
+flask
+gunicorn
+numpy
+requests
+tqdm
+scikit-learn
+transformers
+pandas
+
+# ── Eval / visualization ────────────────────────────────────────────
+matplotlib
+scipy
+
+# ── PyTorch (CPU) ────────────────────────────────────────────────────
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
+
+# ── Image media type ─────────────────────────────────────────────────
+Pillow
+
+# ── SigLIP embedder ──────────────────────────────────────────────────
+sentencepiece
+protobuf

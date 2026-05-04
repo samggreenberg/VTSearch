@@ -1,0 +1,60 @@
+# -----------------------------------------------------------------
+# VTSearch — slim CPU image (image search with SigLIP only)
+#
+# Streamlined for the most common use case: browsing/voting on an
+# image dataset using the SigLIP embedder. Skips audio, video,
+# document, text, and extractor plugins, and bakes the SigLIP model
+# weights into the image at build time so the container is ready to
+# serve immediately on first run (no Hugging Face download needed).
+#
+# Build:  docker build -f Dockerfile.slim -t vtsearch:slim .
+# Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:slim
+# -----------------------------------------------------------------
+
+FROM python:3.10-slim AS base
+
+WORKDIR /app
+
+# ---------- dependency layer (cached unless requirements*.txt change) ------
+COPY requirements-slim.txt ./
+COPY pyproject.toml ./
+COPY vtsearch/__init__.py vtsearch/__init__.py
+
+# Copy package source so `pip install -e .` finds it.
+COPY vtsearch/ vtsearch/
+
+RUN pip install --no-cache-dir --upgrade pip setuptools && \
+    pip install --no-cache-dir \
+        --prefer-binary \
+        -r requirements-slim.txt && \
+    pip install --no-cache-dir --no-deps -e .
+
+# ---------- pre-download SigLIP weights into the image ----------
+# Bake weights into a non-volume path so they survive volume mounts on
+# /app/data. The app reads MODELS_CACHE_DIR from VTSEARCH_MODELS_DIR.
+ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models
+RUN mkdir -p "$VTSEARCH_MODELS_DIR" && \
+    python -c "import os; \
+from vtsearch.config import SIGLIP_MODEL_ID; \
+from transformers import SiglipModel, SiglipImageProcessor, SiglipTokenizer; \
+cache=os.environ['VTSEARCH_MODELS_DIR']; \
+SiglipModel.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache); \
+SiglipImageProcessor.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache); \
+SiglipTokenizer.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache)"
+
+# ---------- application layer ----------
+COPY . .
+
+# Runtime data directory (settings, embeddings, datasets, media files).
+# Mount a volume here to persist user data across container restarts.
+# Note: model weights live under /opt/vtsearch/models, NOT this volume.
+VOLUME /app/data
+
+EXPOSE 5000
+
+ENV OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    PYTHONUNBUFFERED=1 \
+    VTSEARCH_SERVER_INIT=1
+
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
