@@ -156,15 +156,10 @@ describe('LabelListComponent', () => {
       expect(component.hasThumbnailUrl(1)).toBeTrue();
     });
 
-    it('should identify video type', () => {
-      expect(component.isVideo(3)).toBeTrue();
-      expect(component.isVideo(2)).toBeFalse();
-    });
-
     it('should generate correct thumbnail URLs', () => {
       expect(component.thumbnailUrl(1)).toBe('/api/medias/1/image');
       expect(component.thumbnailUrl(2)).toBe('/api/medias/2/image');
-      expect(component.thumbnailUrl(3)).toBe('/api/medias/3/video');
+      expect(component.thumbnailUrl(3)).toBe('/api/medias/3/image');
     });
 
     it('should be in grid mode when viewMode is grid', () => {

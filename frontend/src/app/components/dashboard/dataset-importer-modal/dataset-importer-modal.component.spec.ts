@@ -454,17 +454,17 @@ describe('DatasetImporterModalComponent', () => {
     openAndFlushDemoPicker();
 
     // Default sort is num_files ascending
-    expect(component.demoSortKey).toBe('num_files');
-    expect(component.demoSortAsc).toBeTrue();
+    expect(component.demoCols.sortColumn).toBe('num_files');
+    expect(component.demoCols.sortAsc).toBeTrue();
 
     // Click same column to toggle direction
-    component.sortDemoBy('num_files');
-    expect(component.demoSortAsc).toBeFalse();
+    component.demoCols.sortBy('num_files');
+    expect(component.demoCols.sortAsc).toBeFalse();
 
     // Click different column to switch
-    component.sortDemoBy('label');
-    expect(component.demoSortKey).toBe('label');
-    expect(component.demoSortAsc).toBeTrue();
+    component.demoCols.sortBy('label');
+    expect(component.demoCols.sortColumn).toBe('label');
+    expect(component.demoCols.sortAsc).toBeTrue();
   });
 
   it('should emit demoSelected and close on demo selection', () => {
