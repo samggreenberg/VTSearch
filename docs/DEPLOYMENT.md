@@ -67,8 +67,8 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 
 `python app.py` runs Flask's built-in dev server and is intended for
 development only. The Docker images already use gunicorn via the CMD in
-`Dockerfile` and `Dockerfile.gpu`, so this only applies if you are
-running outside Docker.
+`Dockerfile`, `Dockerfile.gpu`, and `Dockerfile.siglip`, so this only
+applies if you are running outside Docker.
 
 ### Why `VTSEARCH_SERVER_INIT=1`?
 
@@ -395,6 +395,26 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 Uses `Dockerfile.gpu` (base: `nvidia/cuda:12.1.1-runtime-ubuntu22.04`).
 Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
 on the host.
+
+### SigLIP-only deployment (image search)
+
+```bash
+docker compose -f docker-compose.siglip.yml up -d
+```
+
+Uses `Dockerfile.siglip` (base: `python:3.10-slim`) and
+`requirements-siglip.txt` — a pared-down dependency set that skips audio,
+video, document, text, and extractor plugins. The SigLIP model weights
+(`google/siglip-base-patch16-224`) are pre-downloaded **at build time**,
+so the container is ready to serve immediately on first run with no
+Hugging Face round-trip.
+
+The model cache is baked into `/opt/vtsearch/models` (set via
+`VTSEARCH_MODELS_DIR` in the Dockerfile) so the weights survive volume
+mounts on `/app/data`. No system packages beyond the Python slim base
+are required (no `ffmpeg`, `libsndfile1`, `libgl1`, ...).
+
+This is the recommended variant when you only need image search.
 
 ### Data persistence
 

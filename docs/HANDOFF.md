@@ -72,9 +72,11 @@ For production, run under gunicorn instead:
 ### Docker (recommended for deployment)
 
 ```bash
-docker compose up -d         # CPU
+docker compose up -d         # CPU (full feature set)
 # or
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d  # GPU
+# or
+docker compose -f docker-compose.siglip.yml up -d  # SigLIP-only image search (smallest, weights baked in)
 ```
 
 Open `http://localhost:5000`, then use the hamburger menu to load a demo
