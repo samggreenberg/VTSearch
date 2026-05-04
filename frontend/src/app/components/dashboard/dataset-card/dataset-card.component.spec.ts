@@ -12,7 +12,6 @@ describe('DatasetCardComponent', () => {
     num_items: 100,
     num_dupes: 5,
     created_at: 1700000000,
-    origin: 'folder:/data/audio',
     loaded: true,
   };
 

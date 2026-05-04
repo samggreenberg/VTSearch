@@ -1,6 +1,6 @@
 # Machine Learning Details
 
-VTSearch uses a small MLP (multi-layer perceptron) neural network to learn a binary classifier from user votes ("good" vs "bad"). The model operates on embeddings produced by pretrained feature extractors and outputs a score in [0, 1] for each item in the dataset.
+VTSearch uses a small MLP (multi-layer perceptron) neural network to learn a binary classifier from user votes ("good" vs "bad"). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
 
 ## Architecture
 
@@ -82,7 +82,7 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 | Text (`text`) | `bge` | BGE (`BAAI/bge-base-en-v1.5`) | 768 |
 | Document (`document`) | — | None (no embedder) | N/A |
 
-Audio, image, and text media types each have an **alternative embedder** in addition to the default. The first entry in each media type's `EMBEDDERS` list in `vtsearch/media/<type>/__init__.py` is the default; subsequent entries are alternatives.
+Audio, image, and text media types each have an **alternative embedder** in addition to the default. Each embedder lives in its own `embedder*.py` file inside the media-type package and exposes a module-level `EMBEDDER` sentinel; the default for a given media type is the one whose file sorts first (plain `embedder.py` ahead of `embedder_<variant>.py`).
 
 The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtsearch/converters/` before embedding.
 

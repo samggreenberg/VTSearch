@@ -57,7 +57,9 @@ class TestTrainAndScore:
     def test_returns_list_of_scored_clips(self):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold, _model = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        results, threshold, _model = app_module.train_and_score(
+            app_module.medias, app_module.good_votes, app_module.bad_votes
+        )
         assert len(results) == app_module.NUM_MEDIAS
         assert isinstance(threshold, float)
         for entry in results:
@@ -67,21 +69,27 @@ class TestTrainAndScore:
     def test_scores_between_zero_and_one(self):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold, _model = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        results, threshold, _model = app_module.train_and_score(
+            app_module.medias, app_module.good_votes, app_module.bad_votes
+        )
         for entry in results:
             assert 0.0 <= entry["score"] <= 1.0
 
     def test_results_sorted_descending(self):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold, _model = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        results, threshold, _model = app_module.train_and_score(
+            app_module.medias, app_module.good_votes, app_module.bad_votes
+        )
         scores = [e["score"] for e in results]
         assert scores == sorted(scores, reverse=True)
 
     def test_good_clips_scored_higher_than_bad(self):
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        results, threshold, _model = app_module.train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        results, threshold, _model = app_module.train_and_score(
+            app_module.medias, app_module.good_votes, app_module.bad_votes
+        )
         score_map = {e["id"]: e["score"] for e in results}
         avg_good = np.mean([score_map[i] for i in app_module.good_votes])
         avg_bad = np.mean([score_map[i] for i in app_module.bad_votes])
@@ -103,9 +111,7 @@ class TestTrainAndScore:
         )
         order_after = [e["id"] for e in results_after]
 
-        assert order_before != order_after, (
-            "Sort order did not change after adding a new vote"
-        )
+        assert order_before != order_after, "Sort order did not change after adding a new vote"
 
 
 class TestBuildModel:
@@ -133,9 +139,7 @@ class TestBuildModel:
             logit = model(X).item()
         # Raw logit is unbounded — with extreme input it should land outside [0, 1]
         assert isinstance(logit, float)
-        assert logit < 0.0 or logit > 1.0, (
-            f"Expected unbounded logit outside [0,1] with extreme input, got {logit}"
-        )
+        assert logit < 0.0 or logit > 1.0, f"Expected unbounded logit outside [0,1] with extreme input, got {logit}"
 
     def test_build_model_has_no_sigmoid_layer(self):
         from vtsearch.models.training import build_model
@@ -443,9 +447,7 @@ class TestLoadEmbedderConcurrentCallback:
         mock_emb._on_progress = original_cb
         mock_emb.load_models.side_effect = RuntimeError("boom")
 
-        with unittest.mock.patch(
-            "vtsearch.routes.sorting._get_embedder_for_loaded_data", return_value=mock_emb
-        ):
+        with unittest.mock.patch("vtsearch.routes.sorting._get_embedder_for_loaded_data", return_value=mock_emb):
             with pytest.raises(RuntimeError):
                 _load_embedder_with_progress("audio", 5)
 

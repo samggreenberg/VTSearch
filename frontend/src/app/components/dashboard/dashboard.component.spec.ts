@@ -139,10 +139,10 @@ describe('DashboardComponent', () => {
     ];
     flushInitialRequests(datasets);
 
-    component.sortDatasets('name');
+    component.datasetCols.sortBy('name');
     expect(component.sortedDatasets[0].name).toBe('Alpha');
 
-    component.sortDatasets('name');
+    component.datasetCols.sortBy('name');
     expect(component.sortedDatasets[0].name).toBe('Bravo');
   });
 
@@ -153,18 +153,18 @@ describe('DashboardComponent', () => {
     ];
     flushInitialRequests([], models);
 
-    component.sortModels('name');
+    component.modelCols.sortBy('name');
     expect(component.sortedModels[0].name).toBe('Alpha');
   });
 
   it('should show sort indicators', () => {
     flushInitialRequests();
-    component.sortDatasets('name');
-    expect(component.datasetSortIndicator('name')).toContain('\u25B2');
-    expect(component.isDatasetSortActive('name')).toBeTrue();
-    component.sortDatasets('name');
-    expect(component.datasetSortIndicator('name')).toContain('\u25BC');
-    expect(component.isDatasetSortActive('other')).toBeFalse();
+    component.datasetCols.sortBy('name');
+    expect(component.datasetCols.sortIndicator('name')).toContain('\u25B2');
+    expect(component.datasetCols.isSortActive('name')).toBeTrue();
+    component.datasetCols.sortBy('name');
+    expect(component.datasetCols.sortIndicator('name')).toContain('\u25BC');
+    expect(component.datasetCols.isSortActive('other')).toBeFalse();
   });
 
   describe('button state', () => {

@@ -1,9 +1,10 @@
-"""Local-folder importer – scans a directory of media files and embeds them.
+"""Server-folder importer – scans a directory of media files and embeds them.
 
 When the media type is ``"image"``, PDF files (``*.pdf``) in the folder are
 also included: each page is rendered as a separate image and embedded with
-CLIP.  The origin for PDF-derived images is ``"pdf"`` (not ``"folder"``) so
-that provenance tracks back to the original document.
+CLIP.  The origin for PDF-derived images is ``"pdf"`` (not
+``"server_folder"``) so that provenance tracks back to the original
+document.
 
 Converter support
 -----------------
@@ -23,7 +24,15 @@ from typing import Any, Iterator
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
-from vtsearch.utils.paths import rglob_follow_symlinks
+from vtsearch.utils.paths import glob_top_level, rglob_follow_symlinks
+
+
+def _coerce_recursive(field_values: dict[str, Any]) -> bool:
+    """Parse the ``recursive`` field value as a bool; default ``True``."""
+    val = field_values.get("recursive", True)
+    if isinstance(val, bool):
+        return val
+    return str(val).lower() != "false"
 
 
 def _load_pdf_images(
@@ -31,6 +40,7 @@ def _load_pdf_images(
     medias: dict[int, dict[str, Any]],
     thin: bool = False,
     embedder_name: str = "",
+    recursive: bool = True,
 ) -> None:
     """Expand all PDFs in *folder* into per-page image medias.
 
@@ -39,7 +49,7 @@ def _load_pdf_images(
     maximum.  The ``origin`` is set to ``{"importer": "pdf", "params":
     {"path": ...}}`` so the provenance points back to the source document.
     """
-    pdf_files = sorted(rglob_follow_symlinks(folder, "*.pdf"))
+    pdf_files = sorted(rglob_follow_symlinks(folder, "*.pdf") if recursive else glob_top_level(folder, "*.pdf"))
     if not pdf_files:
         return
 
@@ -132,7 +142,7 @@ def _run_selected_converters(
 
     from vtsearch.converters.runner import run_converters_on_folder  # noqa: PLC0415
 
-    base_origin = {"importer": "folder", "params": {"path": str(folder), "media_type": media_type}}
+    base_origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": media_type}}
     run_converters_on_folder(
         folder_path=folder,
         converter_names=converter_names,
@@ -140,14 +150,16 @@ def _run_selected_converters(
         medias=medias,
         thin=thin,
         base_origin=base_origin,
+        recursive=_coerce_recursive(field_values),
     )
 
 
-class FolderDatasetImporter(DatasetImporter):
-    """Embed all media files found in a local directory into a dataset.
+class ServerFolderDatasetImporter(DatasetImporter):
+    """Embed all media files found in a directory on the server's filesystem.
 
-    The user supplies an absolute filesystem path and selects the media type
-    so that the correct file extensions are matched during the scan.
+    The user supplies an absolute filesystem path (on the **server**) and
+    selects the media type so that the correct file extensions are matched
+    during the scan.
 
     When the media type is ``"image"``, any ``*.pdf`` files in the folder
     are also processed: each page is rendered as a separate image.
@@ -155,12 +167,25 @@ class FolderDatasetImporter(DatasetImporter):
     When converters are selected (via the ``converters`` field value), files
     matching each converter's source type are also scanned, converted, and
     added to the dataset.
+
+    .. note::
+       This importer reads files from the server's filesystem.  In the web
+       UI it powers the dedicated "Server Folder" flow via
+       :attr:`picker_view` ``= "server_folder"``, which opens a server-side
+       directory browser instead of the generic form.  For importing files
+       from the **browser machine** (which may be different from the
+       server), there is a separate :class:`LocalFolderDatasetImporter`
+       whose card delegates to ``/api/dataset/import-local-folder``; that
+       endpoint streams the upload to a temp directory and then re-enters
+       this importer to do the actual scanning and embedding.
     """
 
-    name = "folder"
-    display_name = "Import from Local Folder"
-    description = "Scan a directory on this machine for media files and embed them into a new dataset"
-    icon = "\U0001f4c2"
+    name = "server_folder"
+    display_name = "Folder"
+    description = "Browse the server's filesystem and import media files from a directory"
+    icon = "\U0001f4c1"  # 📁 — frontend renders as a folder icon
+    picker_view = "server_folder"
+    category = "server"
     fields = [
         ImporterField(
             key="media_type",
@@ -174,6 +199,17 @@ class FolderDatasetImporter(DatasetImporter):
             label="Folder",
             field_type="folder",
             description="Absolute path to the directory containing media files.",
+        ),
+        ImporterField(
+            key="recursive",
+            label="Include subfolders",
+            field_type="checkbox",
+            description=(
+                "When enabled, scan subdirectories recursively.  When disabled, "
+                "only files directly inside the chosen folder are imported."
+            ),
+            default="true",
+            required=False,
         ),
     ]
 
@@ -208,14 +244,20 @@ class FolderDatasetImporter(DatasetImporter):
         media_type = field_values.get("media_type", "audio")
         emb_name = field_values.get("embedder", "")
         skip_emb = bool(field_values.get("skip_embedding"))
+        recursive = _coerce_recursive(field_values)
         has_regular = True
         try:
             load_dataset_from_folder(
-                folder, media_type, medias, thin=thin, embedder_name=emb_name,
+                folder,
+                media_type,
+                medias,
+                thin=thin,
+                embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
                 skip_embedding=skip_emb,
+                recursive=recursive,
             )
         except ValueError:
             # No regular image files found — PDFs or converters may still produce output.
@@ -223,7 +265,7 @@ class FolderDatasetImporter(DatasetImporter):
                 raise
             has_regular = False
         if media_type == "image":
-            _load_pdf_images(folder, medias, thin=thin, embedder_name=emb_name)
+            _load_pdf_images(folder, medias, thin=thin, embedder_name=emb_name, recursive=recursive)
 
         # Run any user-selected converters.
         _run_selected_converters(folder, media_type, field_values, medias, thin=thin)
@@ -244,26 +286,35 @@ class FolderDatasetImporter(DatasetImporter):
         return True
 
     def run_chunked(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         folder = Path(field_values["path"])
         media_type = field_values.get("media_type", "audio")
         emb_name = field_values.get("embedder", "")
         skip_emb = bool(field_values.get("skip_embedding"))
+        recursive = _coerce_recursive(field_values)
         try:
             yield from load_dataset_from_folder_chunked(
-                folder, media_type, chunk_size, thin=thin, embedder_name=emb_name,
+                folder,
+                media_type,
+                chunk_size,
+                thin=thin,
+                embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
                 skip_embedding=skip_emb,
+                recursive=recursive,
             )
         except ValueError:
             if media_type != "image" and not field_values.get("converters"):
                 raise
         if media_type == "image":
             chunk: dict[int, dict[str, Any]] = {}
-            _load_pdf_images(folder, chunk, thin=thin)
+            _load_pdf_images(folder, chunk, thin=thin, recursive=recursive)
             if chunk:
                 yield chunk
         # Run converters and yield as a single chunk.
@@ -275,7 +326,10 @@ class FolderDatasetImporter(DatasetImporter):
                 yield converter_chunk
 
     def run_chunked_cli(
-        self, field_values: dict[str, Any], chunk_size: int, thin: bool = False,
+        self,
+        field_values: dict[str, Any],
+        chunk_size: int,
+        thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         folder = Path(field_values["path"])
         if not folder.exists():
@@ -300,7 +354,7 @@ class FolderDatasetImporter(DatasetImporter):
 
     def origin_display(self, origin: dict[str, Any]) -> str:
         params = origin.get("params", {})
-        return f"folder:{params.get('path', '')}"
+        return f"server_folder:{params.get('path', '')}"
 
     def can_reload_from_origin(self, origin: dict[str, Any]) -> bool:
         params = origin.get("params", {})
@@ -322,4 +376,4 @@ class FolderDatasetImporter(DatasetImporter):
         return source.resolve_path(origin_name, filename)
 
 
-IMPORTER = FolderDatasetImporter()
+IMPORTER = ServerFolderDatasetImporter()

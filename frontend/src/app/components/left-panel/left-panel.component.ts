@@ -7,7 +7,7 @@ import { ProgressIndicatorsComponent } from './progress-indicators/progress-indi
 import { MediaListComponent } from './media-list/media-list.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
-import { LeftViewSettingsModalComponent } from '../modals/left-view-settings-modal/left-view-settings-modal.component';
+import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { MediaItem, LabelingStatusResponse, MediaTypeInfo } from '../../models/api.models';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
@@ -26,7 +26,7 @@ export type { SortMode, SelectMode, SortedItem };
     MediaListComponent,
     StripeOverviewComponent,
     AutopilotPanelComponent,
-    LeftViewSettingsModalComponent,
+    ViewControlsComponent,
   ],
   templateUrl: './left-panel.component.html',
   styleUrl: './left-panel.component.scss',
@@ -80,7 +80,6 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @ViewChild(MediaListComponent) mediaListComponent!: MediaListComponent;
 
   activeTab: 'manual' | 'autopilot' = 'autopilot';
-  showLeftViewSettings = false;
   mediaTypeName = 'Media';
   private mediaTypeInfos: MediaTypeInfo[] = [];
   private currentTypeId = '';

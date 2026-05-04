@@ -193,12 +193,15 @@ class TestLabelImportEndpoint:
 
         model_dir = Path(get_trainable_models_dir())
         model_dir.mkdir(parents=True, exist_ok=True)
-        _write_model(model_dir / f"{tm_name}.json", {
-            "name": tm_name,
-            "media_type": "audio",
-            "examples": [],
-            "labelset": {"labels": []},
-        })
+        _write_model(
+            model_dir / f"{tm_name}.json",
+            {
+                "name": tm_name,
+                "media_type": "audio",
+                "examples": [],
+                "labelset": {"labels": []},
+            },
+        )
 
         entry = register_model(
             name="Import Sync Test",
@@ -420,7 +423,7 @@ class TestLabelImportMissingElements:
                     {
                         "md5": "unknown_abc123",
                         "label": "bad",
-                        "origin": {"importer": "folder", "params": {"path": "/data"}},
+                        "origin": {"importer": "server_folder", "params": {"path": "/data"}},
                         "origin_name": "mystery.wav",
                     },
                 ]
@@ -437,7 +440,7 @@ class TestLabelImportMissingElements:
         assert result["applied"] == 1
         assert result["missing_count"] == 1
         assert result["missing"][0]["md5"] == "unknown_abc123"
-        assert result["missing"][0]["origin"]["importer"] == "folder"
+        assert result["missing"][0]["origin"]["importer"] == "server_folder"
 
     def test_no_missing_when_all_match(self, client, tmp_path):
         md5 = app_module.medias[1]["md5"]
@@ -466,7 +469,7 @@ class TestLabelImportMissingElements:
             (text_dir / "hello.txt").write_text(content)
             md5 = hashlib.md5(content.encode()).hexdigest()
 
-            origin = {"importer": "folder", "params": {"path": str(text_dir), "media_type": "text"}}
+            origin = {"importer": "server_folder", "params": {"path": str(text_dir), "media_type": "text"}}
 
             known_md5 = app_module.medias[1]["md5"]
             payload = json.dumps(
@@ -514,7 +517,7 @@ class TestLabelImportMissingElements:
                     {
                         "md5": "totally_unknown_md5",
                         "label": "bad",
-                        "origin": {"importer": "folder", "params": {"path": "/nonexistent/path"}},
+                        "origin": {"importer": "server_folder", "params": {"path": "/nonexistent/path"}},
                         "origin_name": "ghost.wav",
                     },
                 ]

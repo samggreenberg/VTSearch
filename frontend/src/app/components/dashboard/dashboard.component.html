@@ -1,8 +1,9 @@
 <div class="dashboard-view">
   <!-- Dataset Section -->
+  <div class="dashboard-section-wrap">
   <div class="dashboard-section">
     <div class="dashboard-section-header">
-      <span class="dashboard-section-title" title="Imported datasets available for labeling and searching"><vt-icon type="database" [size]="18"></vt-icon> Datasets</span>
+      <span class="dashboard-section-title" title="Imported datasets available for labeling and searching"><vt-icon type="cubes" [size]="18"></vt-icon> Datasets</span>
       @if (errorMessage) {
         <div class="dashboard-error">
           <span class="error-msg">{{ errorMessage }}</span>
@@ -23,23 +24,28 @@
       <p class="empty-state">No datasets yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="datasetsTableFixed" [style.width]="datasetsTableFixed ? (datasetsTableWidth + 'px') : '100%'">
+        <table class="dash-table" [class.table-fixed]="datasetCols.tableFixed">
           <thead>
             <tr>
-              <th (click)="sortDatasets('name')" class="sortable" title="Dataset display name (click to sort)" data-col="name" [style.width.px]="datasetsTableFixed ? datasetColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isDatasetSortActive('name')">{{ datasetSortIndicator('name') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'name')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortDatasets('media_type')" class="sortable" title="Media type: audio, image, text, video, or document (click to sort)" data-col="media_type" [style.width.px]="datasetsTableFixed ? datasetColWidths['media_type'] : null">Type<span class="sort-indicator" [class.active]="isDatasetSortActive('media_type')">{{ datasetSortIndicator('media_type') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'media_type')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortDatasets('num_items')" class="sortable" title="Number of media items in the dataset (click to sort)" data-col="num_items" [style.width.px]="datasetsTableFixed ? datasetColWidths['num_items'] : null"># Items<span class="sort-indicator" [class.active]="isDatasetSortActive('num_items')">{{ datasetSortIndicator('num_items') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'num_items')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortDatasets('num_dupes')" class="sortable" title="Number of duplicate items collapsed (click to sort)" data-col="num_dupes" [style.width.px]="datasetsTableFixed ? datasetColWidths['num_dupes'] : null"># Dupes<span class="sort-indicator" [class.active]="isDatasetSortActive('num_dupes')">{{ datasetSortIndicator('num_dupes') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'num_dupes')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortDatasets('created_at')" class="sortable" title="When the dataset was first imported (click to sort)" data-col="created_at" [style.width.px]="datasetsTableFixed ? datasetColWidths['created_at'] : null">Created<span class="sort-indicator" [class.active]="isDatasetSortActive('created_at')">{{ datasetSortIndicator('created_at') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'created_at')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortDatasets('origin')" class="sortable" title="Source or provenance of the dataset (click to sort)" data-col="origin" [style.width.px]="datasetsTableFixed ? datasetColWidths['origin'] : null">Origin<span class="sort-indicator" [class.active]="isDatasetSortActive('origin')">{{ datasetSortIndicator('origin') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'origin')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortDatasets('clipper')" class="sortable" title="MediaClipper used at creation (click to sort)" data-col="clipper" [style.width.px]="datasetsTableFixed ? datasetColWidths['clipper'] : null">Clipper<span class="sort-indicator" [class.active]="isDatasetSortActive('clipper')">{{ datasetSortIndicator('clipper') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'clipper')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortDatasets('embedder')" class="sortable" title="MediaEmbedder used for embedding (click to sort)" data-col="embedder" [style.width.px]="datasetsTableFixed ? datasetColWidths['embedder'] : null">Embedder<span class="sort-indicator" [class.active]="isDatasetSortActive('embedder')">{{ datasetSortIndicator('embedder') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'embedder')" (click)="$event.stopPropagation()"></div></th>
-              @if (!isDefaultLogin) {
-                <th (click)="sortDatasets('created_by')" class="sortable" title="User who created this dataset (click to sort)" data-col="created_by" [style.width.px]="datasetsTableFixed ? datasetColWidths['created_by'] : null">Creator<span class="sort-indicator" [class.active]="isDatasetSortActive('created_by')">{{ datasetSortIndicator('created_by') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'created_by')" (click)="$event.stopPropagation()"></div></th>
-                <th (click)="sortDatasets('readers')" class="sortable" title="Users with access to this dataset (click to sort)" data-col="readers" [style.width.px]="datasetsTableFixed ? datasetColWidths['readers'] : null">Readers<span class="sort-indicator" [class.active]="isDatasetSortActive('readers')">{{ datasetSortIndicator('readers') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'readers')" (click)="$event.stopPropagation()"></div></th>
+              <th (click)="datasetCols.sortBy('name')" class="sortable name-col" title="Dataset display name (click to sort)" data-col="name" [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths['name'] : null">Name<span class="sort-indicator" [class.active]="datasetCols.isSortActive('name')">{{ datasetCols.sortIndicator('name') }}</span></th>
+              @for (col of visibleDatasetColumns; track col) {
+                <th
+                  [class.sortable]="datasetCols.meta(col).sortable"
+                  [class.col-drop-target]="datasetCols.isDropTarget(col)"
+                  [class.col-dragging]="datasetCols.isDragging(col)"
+                  [attr.data-col]="col"
+                  [title]="datasetCols.meta(col).title"
+                  [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths[col] : null"
+                  draggable="true"
+                  (click)="onDatasetHeaderClick(col)"
+                  (dragstart)="datasetCols.onColDragStart($event, col)"
+                  (dragover)="datasetCols.onColDragOver($event, col)"
+                  (dragleave)="datasetCols.onColDragLeave($event, col)"
+                  (drop)="datasetCols.onColDrop($event, col)"
+                  (dragend)="datasetCols.onColDragEnd($event)"
+                ><div class="col-resize-handle" (mousedown)="datasetCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetCols.meta(col).label }}@if (datasetCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="datasetCols.isSortActive(col)">{{ datasetCols.sortIndicator(col) }}</span>}</th>
               }
-              <th title="Whether the dataset is currently loaded in memory" data-col="loaded" [style.width.px]="datasetsTableFixed ? datasetColWidths['loaded'] : null">Loaded?<div class="col-resize-handle" (mousedown)="startResize($event, 'datasets', 'loaded')" (click)="$event.stopPropagation()"></div></th>
-              <th title="Available operations for this dataset" data-col="actions" [style.width.px]="datasetsTableFixed ? datasetColWidths['actions'] : null">Actions</th>
+              <th class="actions-col" data-col="actions" [title]="datasetCols.meta('actions').title" [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="datasetCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ datasetCols.meta('actions').label }}</th>
             </tr>
           </thead>
           <tbody>
@@ -48,7 +54,7 @@
                 <td>
                   <span class="loading-task-name">{{ task.name || 'Loading...' }}</span>
                 </td>
-                <td [attr.colspan]="isDefaultLogin ? 9 : 11">
+                <td [attr.colspan]="visibleDatasetColumns.length + 1">
                   @if (task.error) {
                     <div class="loading-task-progress loading-task-failed">
                       <span class="error-msg">Failed: {{ task.error }}</span>
@@ -73,12 +79,14 @@
                 [dataset]="dataset"
                 [currentUser]="currentUser"
                 [isDefaultLogin]="isDefaultLogin"
+                [columnOrder]="visibleDatasetColumns"
                 [selected]="isDatasetSelected(dataset.id)"
                 [dimmed]="isLoading && !isDatasetSelected(dataset.id)"
                 [loadingTask]="getInlineTask(dataset.id)"
                 [statsOpen]="statsModalOpen && statsDatasetId === dataset.id"
                 [deleteConfirmOpen]="deletingDatasetId === dataset.id"
                 (rowClick)="!isLoading && toggleDatasetSelection(dataset.id, $event)"
+                (checkboxToggle)="!isLoading && toggleDatasetCheckbox(dataset.id)"
                 (rename)="renameDataset(dataset, $event)"
                 (stats)="showDatasetStats(dataset)"
                 (delete)="deleteDataset(dataset)"
@@ -93,8 +101,40 @@
       </div>
     }
   </div>
+  <div class="dashboard-side-actions">
+    <button class="side-action-btn" (click)="selectAllDatasets()" [disabled]="isLoading || datasets.length === 0" title="Select all datasets" aria-label="Select all">
+      <svg aria-hidden="true" [class.side-action-spin]="spinSelectAllDatasets" (animationend)="onSpinSelectAllDatasetsEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" fill="currentColor" stroke-dasharray="2 2.2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+      </svg>
+    </button>
+    <button class="side-action-btn" (click)="selectNoneDatasets()" [disabled]="isLoading || selectedDatasetIds.size === 0" title="Select none" aria-label="Select none">
+      <svg aria-hidden="true" [class.side-action-spin]="spinSelectNoneDatasets" (animationend)="onSpinSelectNoneDatasetsEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 2.2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+      </svg>
+    </button>
+    <div class="side-action-gap"></div>
+    <button class="side-action-btn" (click)="combineSelectedDatasets()" [disabled]="isLoading || !combineSelectedDatasetsEnabled" [title]="combineSelectedDatasetsHint" aria-label="Combine selected datasets">
+      <!-- Two horizontal arrows on the left, merging smoothly into a single arrow on the right. -->
+      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7 C 10 7, 10 12, 17 12 L 21 12"/>
+        <path d="M3 17 C 10 17, 10 12, 17 12"/>
+        <polyline points="18 9 21 12 18 15"/>
+      </svg>
+    </button>
+    <button class="side-action-btn side-action-delete" (click)="deleteSelectedDatasets()" [disabled]="isLoading || selectedDatasetIds.size === 0" [title]="selectedDatasetIds.size === 0 ? 'No datasets selected' : 'Delete selected datasets'" aria-label="Delete selected">
+      <svg aria-hidden="true" [class.side-action-delete-active]="deletingSelectedDatasetsConfirm" [class.side-action-delete-inactive]="!deletingSelectedDatasetsConfirm && wasDeletingSelectedDatasetsConfirm" (animationend)="onDeleteSelectedDatasetsAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+        <path d="M10 11v6"></path>
+        <path d="M14 11v6"></path>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+      </svg>
+    </button>
+  </div>
+  </div>
 
   <!-- Model Section -->
+  <div class="dashboard-section-wrap">
   <div class="dashboard-section">
     <div class="dashboard-section-header">
       <span class="dashboard-section-title" title="Trained models for scoring and finding media"><vt-icon type="lightbulb" [size]="18"></vt-icon> Models</span>
@@ -112,30 +152,42 @@
       <p class="empty-state">No models yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="modelsTableFixed" [style.width]="modelsTableFixed ? (modelsTableWidth + 'px') : '100%'">
+        <table class="dash-table" [class.table-fixed]="modelCols.tableFixed">
           <thead>
             <tr>
-              <th (click)="sortModels('name')" class="sortable" title="Model display name (click to sort)" data-col="name" [style.width.px]="modelsTableFixed ? modelColWidths['name'] : null">Name<span class="sort-indicator" [class.active]="isModelSortActive('name')">{{ modelSortIndicator('name') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'name')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortModels('media_type')" class="sortable" title="Media type this model operates on (click to sort)" data-col="media_type" [style.width.px]="modelsTableFixed ? modelColWidths['media_type'] : null">Type<span class="sort-indicator" [class.active]="isModelSortActive('media_type')">{{ modelSortIndicator('media_type') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'media_type')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortModels('num_training')" class="sortable" title="Number of labeled training examples (click to sort)" data-col="num_training" [style.width.px]="modelsTableFixed ? modelColWidths['num_training'] : null"># Training<span class="sort-indicator" [class.active]="isModelSortActive('num_training')">{{ modelSortIndicator('num_training') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'num_training')" (click)="$event.stopPropagation()"></div></th>
-              <th title="Is this Model one we can load into Train Mode and improve?" data-col="trainable" [style.width.px]="modelsTableFixed ? modelColWidths['trainable'] : null">Trainable?<div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'trainable')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortModels('autodetect')" class="sortable" title="Include this model in CLI autorun (click to sort)" data-col="autodetect" [style.width.px]="modelsTableFixed ? modelColWidths['autodetect'] : null">Autorun?<span class="sort-indicator" [class.active]="isModelSortActive('autodetect')">{{ modelSortIndicator('autodetect') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'autodetect')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortModels('last_trained_at')" class="sortable" title="When the model was last trained (click to sort)" data-col="last_trained_at" [style.width.px]="modelsTableFixed ? modelColWidths['last_trained_at'] : null">Last Trained<span class="sort-indicator" [class.active]="isModelSortActive('last_trained_at')">{{ modelSortIndicator('last_trained_at') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'last_trained_at')" (click)="$event.stopPropagation()"></div></th>
-              <th (click)="sortModels('created_at')" class="sortable" title="When the model was created (click to sort)" data-col="created_at" [style.width.px]="modelsTableFixed ? modelColWidths['created_at'] : null">Created<span class="sort-indicator" [class.active]="isModelSortActive('created_at')">{{ modelSortIndicator('created_at') }}</span><div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'created_at')" (click)="$event.stopPropagation()"></div></th>
-              <th title="Whether the model's inference data is cached in memory" data-col="detector_loaded" [style.width.px]="modelsTableFixed ? modelColWidths['detector_loaded'] : null">Loaded?<div class="col-resize-handle" (mousedown)="startResize($event, 'models', 'detector_loaded')" (click)="$event.stopPropagation()"></div></th>
-              <th title="Available operations for this model" data-col="actions" [style.width.px]="modelsTableFixed ? modelColWidths['actions'] : null">Actions</th>
+              <th (click)="modelCols.sortBy('name')" class="sortable name-col" title="Model display name (click to sort)" data-col="name" [style.width.%]="modelCols.tableFixed ? modelCols.colWidths['name'] : null">Name<span class="sort-indicator" [class.active]="modelCols.isSortActive('name')">{{ modelCols.sortIndicator('name') }}</span></th>
+              @for (col of visibleModelColumns; track col) {
+                <th
+                  [class.sortable]="modelCols.meta(col).sortable"
+                  [class.col-drop-target]="modelCols.isDropTarget(col)"
+                  [class.col-dragging]="modelCols.isDragging(col)"
+                  [attr.data-col]="col"
+                  [title]="modelCols.meta(col).title"
+                  [style.width.%]="modelCols.tableFixed ? modelCols.colWidths[col] : null"
+                  draggable="true"
+                  (click)="onModelHeaderClick(col)"
+                  (dragstart)="modelCols.onColDragStart($event, col)"
+                  (dragover)="modelCols.onColDragOver($event, col)"
+                  (dragleave)="modelCols.onColDragLeave($event, col)"
+                  (drop)="modelCols.onColDrop($event, col)"
+                  (dragend)="modelCols.onColDragEnd($event)"
+                ><div class="col-resize-handle" (mousedown)="modelCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelCols.meta(col).label }}@if (modelCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="modelCols.isSortActive(col)">{{ modelCols.sortIndicator(col) }}</span>}</th>
+              }
+              <th class="actions-col" data-col="actions" [title]="modelCols.meta('actions').title" [style.width.%]="modelCols.tableFixed ? modelCols.colWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="modelCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelCols.meta('actions').label }}</th>
             </tr>
           </thead>
           <tbody>
             @for (model of sortedModels; track model.id) {
               <vt-model-card
                 [model]="model"
+                [columnOrder]="visibleModelColumns"
                 [selected]="isModelSelected(model.id)"
                 [dimmed]="isLoading && !isModelSelected(model.id)"
                 [loadingTask]="getInlineModelTask(model.id)"
                 [deleteConfirmOpen]="deletingModelId === model.id"
                 [addLabelsOpen]="addLabelsModalOpen && addLabelsModelId === model.id"
                 (rowClick)="!isLoading && toggleModelSelection(model.id, $event)"
+                (checkboxToggle)="!isLoading && toggleModelCheckbox(model.id)"
                 (rename)="renameModel(model, $event)"
                 (delete)="deleteModel(model)"
                 (load)="loadModel(model)"
@@ -151,6 +203,29 @@
         </table>
       </div>
     }
+  </div>
+  <div class="dashboard-side-actions">
+    <button class="side-action-btn" (click)="selectAllModels()" [disabled]="isLoading || models.length === 0" title="Select all models" aria-label="Select all">
+      <svg aria-hidden="true" [class.side-action-spin]="spinSelectAllModels" (animationend)="onSpinSelectAllModelsEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" fill="currentColor" stroke-dasharray="2 2.2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+      </svg>
+    </button>
+    <button class="side-action-btn" (click)="selectNoneModels()" [disabled]="isLoading || selectedModelIds.size === 0" title="Select none" aria-label="Select none">
+      <svg aria-hidden="true" [class.side-action-spin]="spinSelectNoneModels" (animationend)="onSpinSelectNoneModelsEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 2.2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+      </svg>
+    </button>
+    <div class="side-action-gap"></div>
+    <button class="side-action-btn side-action-delete" (click)="deleteSelectedModels()" [disabled]="isLoading || selectedModelIds.size === 0" [title]="selectedModelIds.size === 0 ? 'No models selected' : 'Delete selected models'" aria-label="Delete selected">
+      <svg aria-hidden="true" [class.side-action-delete-active]="deletingSelectedModelsConfirm" [class.side-action-delete-inactive]="!deletingSelectedModelsConfirm && wasDeletingSelectedModelsConfirm" (animationend)="onDeleteSelectedModelsAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+        <path d="M10 11v6"></path>
+        <path d="M14 11v6"></path>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+      </svg>
+    </button>
+  </div>
   </div>
 
   <!-- Action Buttons — STABLE POSITIONING (read before changing!)
@@ -202,6 +277,14 @@
     (closed)="closeImporterModal()"
     (importStarted)="onImportComplete()"
     (demoSelected)="onDemoSelected($event)"
+  />
+}
+
+@if (combineModalOpen) {
+  <vt-combine-datasets-modal
+    [datasets]="combineModalDatasets"
+    (closed)="closeCombineModal()"
+    (combineStarted)="onCombineStarted()"
   />
 }
 

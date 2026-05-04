@@ -1,0 +1,96 @@
+<vt-modal title="Combine Datasets" [open]="true" (closed)="close()">
+  <div class="combine-modal-body">
+    <p class="combine-intro">
+      Merge the selected datasets into a single new dataset. Entries that
+      appear in more than one source (matched by content hash) are kept only
+      once.
+    </p>
+
+    @if (rows.length === 0) {
+      <p class="empty-state">
+        No datasets to combine. Close this dialog and pick at least two
+        datasets on the dashboard.
+      </p>
+    } @else {
+      <table class="combine-table">
+        <thead>
+          <tr>
+            <th class="col-name">Dataset</th>
+            <th class="col-type">Type</th>
+            <th class="col-num">#&nbsp;Items</th>
+            <th class="col-actions" aria-label="Remove from combine"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows; track row.id) {
+            <tr [class.row-mismatch]="distinctMediaTypes.length > 1 && row.media_type !== rows[0].media_type">
+              <td class="col-name">
+                <span class="dataset-name" [title]="row.pkl_path">{{ row.name }}</span>
+              </td>
+              <td class="col-type">
+                @if (mediaTypeIcon(row.media_type)) {
+                  <vt-icon [icon]="mediaTypeIcon(row.media_type)" [size]="14"></vt-icon>
+                }
+                {{ mediaTypeLabel(row.media_type) }}
+              </td>
+              <td class="col-num">{{ row.num_items | number }}</td>
+              <td class="col-actions">
+                <button
+                  class="row-remove-btn"
+                  type="button"
+                  (click)="removeRow(row.id)"
+                  [title]="'Remove ' + row.name + ' from this combine'"
+                  aria-label="Remove from combine"
+                >&times;</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+        <tfoot>
+          <tr>
+            <td class="col-name">{{ rows.length }} datasets</td>
+            <td class="col-type">
+              @if (sharedMediaType) {
+                {{ mediaTypeLabel(sharedMediaType) }}
+              } @else {
+                <span class="mismatch-warning">mismatched</span>
+              }
+            </td>
+            <td class="col-num">{{ totalItems | number }}</td>
+            <td class="col-actions"></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      @if (disabledReason) {
+        <p class="warn-text">{{ disabledReason }}</p>
+      } @else {
+        <p class="info-text">
+          The combined dataset will contain up to {{ totalItems | number }}
+          {{ mediaTypeLabel(sharedMediaType) || sharedMediaType }} items
+          (duplicates removed automatically).
+        </p>
+      }
+
+      @if (error) {
+        <p class="error-text">{{ error }}</p>
+      }
+    }
+  </div>
+
+  <div class="form-actions" modal-footer>
+    <button class="btn btn--secondary" (click)="close()" [disabled]="submitting">Cancel</button>
+    <button
+      class="btn btn--primary"
+      (click)="submit()"
+      [disabled]="submitting || !canCombine"
+      [title]="disabledReason || 'Combine these datasets into a new one'"
+    >
+      @if (submitting) {
+        Combining...
+      } @else {
+        Combine
+      }
+    </button>
+  </div>
+</vt-modal>

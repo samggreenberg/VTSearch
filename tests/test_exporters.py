@@ -234,7 +234,7 @@ class TestDisplayLabelsetExporter:
                             "id": 1,
                             "filename": "bark1.wav",
                             "origin_name": "bark1.wav",
-                            "origin": {"importer": "folder", "params": {"path": "/data"}},
+                            "origin": {"importer": "server_folder", "params": {"path": "/data"}},
                             "score": 0.9,
                             "category": "dog",
                         },

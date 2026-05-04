@@ -14,7 +14,6 @@ media types — not just audio.  Also covers previously-untested endpoints:
 from __future__ import annotations
 
 import io
-from pathlib import Path
 
 import numpy as np
 
@@ -22,7 +21,6 @@ from helpers import (
     make_image_media,
     make_text_media,
     make_video_media,
-    make_document_media,
     make_png_bytes,
     make_wav_bytes,
 )
@@ -330,7 +328,7 @@ class TestExampleSortOrigin:
     def test_missing_key_returns_400(self, client):
         resp = client.post(
             "/api/example-sort-origin",
-            json={"origin": {"importer": "folder", "params": {"path": "/tmp"}}},
+            json={"origin": {"importer": "server_folder", "params": {"path": "/tmp"}}},
         )
         assert resp.status_code == 400
         assert "key" in resp.get_json()["error"].lower()
@@ -351,7 +349,7 @@ class TestExampleSortOrigin:
         resp = client.post(
             "/api/example-sort-origin",
             json={
-                "origin": {"importer": "folder", "params": {"path": str(tmp_path)}},
+                "origin": {"importer": "server_folder", "params": {"path": str(tmp_path)}},
                 "key": "test.wav",
             },
         )

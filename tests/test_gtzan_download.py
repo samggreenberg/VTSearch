@@ -159,8 +159,7 @@ class TestDownloadUrbansound8k:
         meta_dir = tree_root / "metadata"
         meta_dir.mkdir(parents=True)
         (meta_dir / "UrbanSound8K.csv").write_text(
-            "slice_file_name,fsID,start,end,salience,fold,classID,class\n"
-            "100032-3-0-0.wav,100032,0,1,1,1,3,dog_bark\n"
+            "slice_file_name,fsID,start,end,salience,fold,classID,class\n100032-3-0-0.wav,100032,0,1,1,1,3,dog_bark\n"
         )
 
         with tarfile.open(tar_path, "w:gz") as tf:

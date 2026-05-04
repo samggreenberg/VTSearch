@@ -1,6 +1,6 @@
 <div class="vote-section">
   <h3 [class]="label" [title]="label === 'good' ? 'Items you have marked as positive examples (' + ids.length + ')' : 'Items you have marked as negative examples (' + ids.length + ')'">
-    {{ label === 'good' ? 'Goods' : 'Bads' }} ({{ ids.length }})
+    {{ label === 'good' ? 'Goods' : 'Bads' }} ({{ ids.length | number }})
   </h3>
   <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth + 'px'" #voteListContainer>
     @for (entry of sortedEntries; track trackById($index, entry)) {
@@ -15,12 +15,12 @@
         (mouseenter)="onEntryMouseEnter(entry.id)"
         (keydown)="onEntryKeydown($event, entry.id)"
       >
+        @if (hasThumbnailUrl(entry.id)) {
+          <img class="vote-thumbnail" [src]="thumbnailUrl(entry.id)" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(entry.id)" />
+        } @else if (placeholderIcon(entry.id)) {
+          <span class="vote-placeholder">{{ placeholderIcon(entry.id) }}</span>
+        }
         @if (isGrid) {
-          @if (hasThumbnailUrl(entry.id)) {
-            <img class="vote-thumbnail" [src]="thumbnailUrl(entry.id)" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(entry.id)" />
-          } @else if (placeholderIcon(entry.id)) {
-            <span class="vote-placeholder">{{ placeholderIcon(entry.id) }}</span>
-          }
           <span class="vote-name-grid">{{ entry.name }}</span>
         } @else {
           <span class="vote-name">{{ entry.name }}</span>

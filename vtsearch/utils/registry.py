@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Generic, Literal, TypeVar
 
-FieldType = Literal["file", "folder", "url", "text", "password", "email", "select", "server_path"]
+FieldType = Literal["file", "folder", "url", "text", "password", "email", "select", "server_path", "checkbox"]
 
 __all__ = [
     "FieldType",
@@ -54,6 +54,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # PluginField — shared field descriptor
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PluginField:
@@ -70,6 +71,9 @@ class PluginField:
     - ``"email"``    – Text input pre-validated as an e-mail address.
     - ``"select"``   – Drop-down; ``options`` must be populated.
     - ``"server_path"`` – File-browser picker for server filesystem paths.
+    - ``"checkbox"`` – Boolean tick-box.  ``default`` should be ``"true"`` or
+      ``"false"``; values arrive at :meth:`run` as plain strings (or already
+      coerced bools) and should be parsed via ``str(value).lower() == "true"``.
     """
 
     key: str
@@ -103,6 +107,7 @@ class PluginField:
 # ---------------------------------------------------------------------------
 # PluginBase — shared base class with CLI & serialisation helpers
 # ---------------------------------------------------------------------------
+
 
 class PluginBase:
     """Mixin providing the CLI-argument, validation, and serialisation helpers
@@ -155,6 +160,12 @@ class PluginBase:
                 "dest": f.key,
                 "help": f.description or f.label,
             }
+            if f.field_type == "checkbox":
+                # ``--<key>`` / ``--no-<key>`` boolean flag.
+                kwargs["action"] = argparse.BooleanOptionalAction
+                kwargs["default"] = str(f.default).lower() == "true"
+                parser.add_argument(arg_name, **kwargs)
+                continue
             if f.default:
                 kwargs["default"] = f.default
             if f.field_type == "select" and f.options:
@@ -164,6 +175,9 @@ class PluginBase:
     def validate_cli_field_values(self, field_values: dict[str, Any]) -> None:
         """Raise ``ValueError`` if any required field is missing or empty."""
         for f in self.fields:
+            # Booleans are always populated by argparse (default included).
+            if f.field_type == "checkbox":
+                continue
             if f.required and not field_values.get(f.key):
                 cli_flag = f"--{f.key.replace('_', '-')}"
                 raise ValueError(f"Missing required argument: {cli_flag}")
@@ -209,8 +223,7 @@ class PluginRegistry(Generic[T]):
         a single module rather than a sub-package (e.g. converters, sources).
     """
 
-    def __init__(self, package: str, sentinel: str, label: str, *,
-                 discover_modules: bool = False) -> None:
+    def __init__(self, package: str, sentinel: str, label: str, *, discover_modules: bool = False) -> None:
         self._package = package
         self._sentinel = sentinel
         self._label = label

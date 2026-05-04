@@ -137,7 +137,6 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
   }
 
   placeholderIcon(id: number): string | null {
-    if (!this.isGrid) return null;
     if (this.hasThumbnailUrl(id)) return null;
     const media = this.mediaMap.get(id);
     if (!media) return null;

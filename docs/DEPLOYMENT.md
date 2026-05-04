@@ -7,27 +7,115 @@ installation and getting started, see [SETUP.md](SETUP.md).
 ## Table of Contents
 
 1. [Environment variables](#environment-variables)
-2. [Network dependencies](#network-dependencies)
-3. [Offline deployment](#offline-deployment)
-4. [Data directory layout](#data-directory-layout)
-5. [Docker production notes](#docker-production-notes)
-6. [Requirements file structure](#requirements-file-structure)
-7. [Troubleshooting](#troubleshooting)
+2. [Running under gunicorn](#running-under-gunicorn)
+3. [Network dependencies](#network-dependencies)
+4. [Offline deployment](#offline-deployment)
+5. [Data directory layout](#data-directory-layout)
+6. [Docker production notes](#docker-production-notes)
+7. [Requirements file structure](#requirements-file-structure)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Environment variables
 
+### Application
+
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key — **set this to a random value in production** |
+| `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
+
+### Gunicorn / WSGI (production)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn — triggers model init / autoload / settings-source sync at import time (the Flask `__main__` block is skipped under WSGI). Set automatically in the Dockerfiles. |
+| `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
+| `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |
+| `VTSEARCH_TIMEOUT` | `120` | Worker request timeout in seconds; `0` disables |
+
+### HuggingFace / PyTorch
+
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `HF_HUB_OFFLINE` | unset | Set to `1` to prevent any HuggingFace Hub downloads |
 | `HF_HUB_DISABLE_IMPLICIT_TOKEN` | `1` (set by app) | Disables HuggingFace auth tokens (all models are public) |
+| `TRANSFORMERS_NO_ADVISORY_WARNINGS` | `1` (set by app) | Suppresses advisory warnings from `transformers` |
 | `OMP_NUM_THREADS` | `1` (set by app) | OpenMP thread count; kept at 1 for memory optimization |
 | `MKL_NUM_THREADS` | `1` (set by app) | Intel MKL thread count; kept at 1 for memory optimization |
+
+### Docker / GPU
+
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `PYTHONUNBUFFERED` | `1` (set in Dockerfiles) | Disables Python output buffering for real-time logs |
 | `NVIDIA_VISIBLE_DEVICES` | `all` (GPU Dockerfile) | GPU visibility for NVIDIA Container Toolkit |
 | `NVIDIA_DRIVER_CAPABILITIES` | `compute,utility` (GPU Dockerfile) | GPU driver capabilities |
+
+---
+
+## Running under gunicorn
+
+For production, run the app under [gunicorn](https://gunicorn.org/) using
+the bundled config:
+
+```bash
+VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
+```
+
+`python app.py` runs Flask's built-in dev server and is intended for
+development only. The Docker images already use gunicorn via the CMD in
+`Dockerfile`, `Dockerfile.gpu`, and `Dockerfile.siglip`, so this only
+applies if you are running outside Docker.
+
+### Why `VTSEARCH_SERVER_INIT=1`?
+
+`app.py` runs its startup sequence (model init, embedder preload,
+settings-source sync) from its `if __name__ == "__main__":` block.
+Gunicorn **imports** `app.py` rather than executing it, so that block
+never runs. Setting `VTSEARCH_SERVER_INIT=1` tells `app.py` to also run
+`initialize_server()` at import time. The Dockerfiles set this env var
+automatically.
+
+### `gunicorn.conf.py`
+
+The bundled config pins a single worker with 8 gthread threads:
+
+```python
+workers = 1
+worker_class = "gthread"
+threads = 8
+timeout = 120
+```
+
+**Why one worker?** VTSearch keeps all dataset/model state in-process
+(multi-dataset context, global registries, RLock-protected mutable
+state). Multiple worker processes would each hold their own independent
+copy — which wastes memory and breaks cross-request state continuity.
+Concurrency comes from threads within the single worker, matching the
+Flask dev server's `threaded=True` behaviour.
+
+### Tuning
+
+Override the relevant config via environment variables:
+
+| Env var | Default | Notes |
+|---------|---------|-------|
+| `VTSEARCH_BIND` | `0.0.0.0:5000` | `host:port` |
+| `VTSEARCH_THREADS` | `8` | Threads per worker — raise for more concurrent requests |
+| `VTSEARCH_TIMEOUT` | `120` | Worker timeout in seconds; `0` disables |
+| `VTSEARCH_LOG_LEVEL` | `warning` | Gunicorn log level |
+
+For larger tuning changes, edit `gunicorn.conf.py` directly.
+
+### Reverse proxy
+
+For public deployments, put nginx / Caddy / Traefik in front of gunicorn
+to handle TLS, gzip, and static-asset caching. Flask serves the Angular
+build from `static/` directly, but a dedicated reverse proxy is much
+more efficient for that traffic.
 
 ---
 
@@ -187,9 +275,9 @@ It is created automatically on first startup.
 
 ```
 data/
-├── models/                           # HuggingFace model cache (~3.1 GB total)
+├── models/                           # HuggingFace model cache (~3.2 GB total)
 │   ├── models--laion--clap-htsat-unfused/
-│   ├── models--openai--clip-vit-base-patch32/
+│   ├── models--google--siglip-base-patch16-224/
 │   ├── models--microsoft--xclip-base-patch32/
 │   └── models--intfloat--e5-base-v2/
 ├── embeddings/                       # Cached dataset embeddings (.pkl files)
@@ -206,7 +294,7 @@ data/
 
 | Path | Preserve? | Why |
 |------|-----------|-----|
-| `data/models/` | **Yes** | Re-downloading is slow (~3.1 GB) |
+| `data/models/` | **Yes** | Re-downloading is slow (~3.2 GB) |
 | `data/embeddings/` | **Yes** | Contains cached embeddings; losing them means recomputing |
 | `data/settings.json` | **Yes** | User preferences, trained detectors, autorun processors |
 | `data/trainable_models/` | **Yes** | Persistent trainable model definitions with labelsets |
@@ -250,7 +338,9 @@ and auto-saved on every change. Schema:
   "autorun_detector_names": [],
   "saved_datasets_dir": "data/saved_datasets",
   "detectors_dir": "data/detectors",
-  "trainable_models_dir": "data/trainable_models"
+  "trainable_models_dir": "data/trainable_models",
+  "max_concurrent_dataset_downloads": 1,
+  "max_concurrent_dataset_embeddings": 1
 }
 ```
 
@@ -263,6 +353,16 @@ Notable fields:
   importer name, processor name, and field values
 - `saved_datasets_dir`, `detectors_dir`, `trainable_models_dir` —
   infrastructure directories (overridable for custom data layouts)
+- `max_concurrent_dataset_downloads` /
+  `max_concurrent_dataset_embeddings` — concurrency gates for dataset
+  loading. The download gate covers the bandwidth/disk-bound import
+  phase; the embed gate covers CPU/GPU-bound embedding plus post-load
+  clipping, dedup, and diversity-tree construction. Changes take
+  effect on queued and future loads (running tasks are never
+  preempted). Defaults are `1/1` (serialised).
+- `settings_source` (not shown above; excluded from defaults) — opt-in
+  bidirectional sync. Set to a plugin name + field values to auto-export
+  every settings change and auto-import at startup. See `settings_io/sources/`.
 - `theme` — `"dark"`, `"light"`, or `"highviz"`
 - `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*` —
   per-media-type UI layout preferences (keyed by media type ID)
@@ -271,6 +371,11 @@ Notable fields:
 ---
 
 ## Docker production notes
+
+Both images run the app under gunicorn with the bundled `gunicorn.conf.py`
+(single worker + gthread threads) — not Flask's dev server — and set
+`VTSEARCH_SERVER_INIT=1` so the startup sequence runs at WSGI import
+time. See [Running under gunicorn](#running-under-gunicorn) for tuning.
 
 ### CPU deployment
 
@@ -291,6 +396,26 @@ Uses `Dockerfile.gpu` (base: `nvidia/cuda:12.1.1-runtime-ubuntu22.04`).
 Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
 on the host.
 
+### SigLIP-only deployment (image search)
+
+```bash
+docker compose -f docker-compose.siglip.yml up -d
+```
+
+Uses `Dockerfile.siglip` (base: `python:3.10-slim`) and
+`requirements-siglip.txt` — a pared-down dependency set that skips audio,
+video, document, text, and extractor plugins. The SigLIP model weights
+(`google/siglip-base-patch16-224`) are pre-downloaded **at build time**,
+so the container is ready to serve immediately on first run with no
+Hugging Face round-trip.
+
+The model cache is baked into `/opt/vtsearch/models` (set via
+`VTSEARCH_MODELS_DIR` in the Dockerfile) so the weights survive volume
+mounts on `/app/data`. No system packages beyond the Python slim base
+are required (no `ffmpeg`, `libsndfile1`, `libgl1`, ...).
+
+This is the recommended variant when you only need image search.
+
 ### Data persistence
 
 The Docker volume `vtsearch-data` is mounted at `/app/data`. This persists
@@ -308,7 +433,7 @@ docker run -p 5000:5000 -v /path/on/host:/app/data vtsearch
   With all four loaded simultaneously, expect ~4–6 GB total application
   memory. Models are loaded lazily — only the media types actually used are
   loaded.
-- **Disk**: The `data/models/` directory uses ~3.1 GB. Dataset embeddings
+- **Disk**: The `data/models/` directory uses ~3.2 GB. Dataset embeddings
   and media files vary by dataset size.
 - **CPU**: `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1` are set to reduce
   per-operation memory. This trades single-operation throughput for lower

@@ -36,6 +36,7 @@ __all__ = ["PullWrestSource"]
 # TODO(dev): Implement the PullWrest client function below.
 # ---------------------------------------------------------------------------
 
+
 def _pw_fetch_media(media_url: str) -> bytes:
     """Call PullWrest to download the raw media bytes for *media_url*.
 
@@ -48,6 +49,7 @@ def _pw_fetch_media(media_url: str) -> bytes:
 # ---------------------------------------------------------------------------
 # Source
 # ---------------------------------------------------------------------------
+
 
 class PullWrestSource(MediaSource):
     """A media source that fetches files on demand via PullWrest.
@@ -124,6 +126,7 @@ class PullWrestSource(MediaSource):
 # ---------------------------------------------------------------------------
 # Factory for auto-discovery
 # ---------------------------------------------------------------------------
+
 
 class _PullWrestSourceFactory:
     """Factory discovered by :class:`~vtsearch.utils.registry.PluginRegistry`."""

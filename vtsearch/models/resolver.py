@@ -108,7 +108,9 @@ def _auto_wire_resolvers() -> None:
             from vtsearch.datasets.sources import get_source_for_origin
 
             def _default_source_resolver(
-                origin: dict[str, Any], origin_name: str, filename: str,
+                origin: dict[str, Any],
+                origin_name: str,
+                filename: str,
             ) -> Path | None:
                 source = get_source_for_origin(origin)
                 if source is not None:
@@ -125,7 +127,9 @@ def _auto_wire_resolvers() -> None:
             from vtsearch.datasets.importers import get_importer
 
             def _default_importer_resolver(
-                origin: dict[str, Any], origin_name: str, filename: str,
+                origin: dict[str, Any],
+                origin_name: str,
+                filename: str,
             ) -> Path | None:
                 importer_name = origin.get("importer", "")
                 importer = get_importer(importer_name)
@@ -182,7 +186,10 @@ def resolve_file_from_origin(
 
     log.debug(
         "resolve_file: importer=%r, origin_name=%r, filename=%r, params=%r",
-        importer_name, origin_name, filename, params,
+        importer_name,
+        origin_name,
+        filename,
+        params,
     )
 
     # -- Synthetic origins that delegate to real importers --
@@ -199,7 +206,8 @@ def resolve_file_from_origin(
         if result is None:
             log.debug(
                 "resolve_file: converter origin failed — source_file=%r, parent_importer=%r",
-                params.get("source_file", ""), params.get("parent_importer", ""),
+                params.get("source_file", ""),
+                params.get("parent_importer", ""),
             )
         return result
 
@@ -214,7 +222,8 @@ def resolve_file_from_origin(
             return result
         log.debug(
             "resolve_file: source resolver returned None for origin_name=%r, filename=%r",
-            origin_name, filename,
+            origin_name,
+            filename,
         )
 
     # -- Registry-based dispatch (fallback for importers without a source) --
@@ -225,9 +234,11 @@ def resolve_file_from_origin(
             log.debug("resolve_file: importer dispatch (%s) succeeded → %s", importer_name, result)
             return result
         log.debug(
-            "resolve_file: importer resolver returned None "
-            "(importer=%r, origin_name=%r, filename=%r, params=%r)",
-            importer_name, origin_name, filename, params,
+            "resolve_file: importer resolver returned None (importer=%r, origin_name=%r, filename=%r, params=%r)",
+            importer_name,
+            origin_name,
+            filename,
+            params,
         )
     else:
         log.debug("resolve_file: no importer resolver registered")
@@ -243,9 +254,10 @@ def resolve_file_from_origin(
         log.debug("resolve_file: generic path fallback — %r is not a file", path)
 
     log.debug(
-        "resolve_file: ALL dispatch methods failed for importer=%r, "
-        "origin_name=%r, filename=%r",
-        importer_name, origin_name, filename,
+        "resolve_file: ALL dispatch methods failed for importer=%r, origin_name=%r, filename=%r",
+        importer_name,
+        origin_name,
+        filename,
     )
     return None
 
@@ -281,37 +293,62 @@ def _resolve_converter(params: dict[str, str]) -> Path | None:
     return resolve_file_from_origin(parent_origin, origin_name=source_file)
 
 
-def embed_file(file_path: Path, media_type: str) -> np.ndarray | None:
-    """Embed a media file using the appropriate embedder for the media type."""
-    from vtsearch.media import embedders_for_type
+def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.ndarray | None:
+    """Embed a media file using the appropriate embedder for the media type.
 
-    avail = embedders_for_type(media_type)
-    if not avail:
-        log.warning(
-            "embed_file: no embedders registered for media_type=%r — "
-            "cannot embed %s",
-            media_type, file_path,
-        )
-        return None
-    embedder = avail[0]
+    If *embedder_name* is given, that specific embedder is used (matching by
+    name); if it is not found or not given, the first registered embedder for
+    the media type is used as a fallback.
+    """
+    from vtsearch.media import embedders_for_type, get_embedder
+
+    if embedder_name:
+        try:
+            embedder = get_embedder(embedder_name)
+        except (KeyError, ValueError):
+            log.warning(
+                "embed_file: embedder %r not found, falling back to default for media_type=%r",
+                embedder_name,
+                media_type,
+            )
+            embedder = None
+    else:
+        embedder = None
+
+    if embedder is None:
+        avail = embedders_for_type(media_type)
+        if not avail:
+            log.warning(
+                "embed_file: no embedders registered for media_type=%r — cannot embed %s",
+                media_type,
+                file_path,
+            )
+            return None
+        embedder = avail[0]
+    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
     try:
-        result = embedder.embed_media(file_path)
+        result = embedder.embed_media(media_from_path(file_path))
     except Exception:
         log.warning(
             "embed_file: %s.embed_media(%s) raised an exception",
-            type(embedder).__name__, file_path,
+            type(embedder).__name__,
+            file_path,
             exc_info=True,
         )
         return None
     if result is None:
         log.warning(
             "embed_file: %s.embed_media(%s) returned None",
-            type(embedder).__name__, file_path,
+            type(embedder).__name__,
+            file_path,
         )
     else:
         log.debug(
             "embed_file: embedded %s with %s → shape %s",
-            file_path.name, type(embedder).__name__, result.shape,
+            file_path.name,
+            type(embedder).__name__,
+            result.shape,
         )
     return result
 
@@ -320,6 +357,7 @@ def _apply_clip_and_embed(
     file_path: Path,
     media_type: str,
     origin: dict[str, Any],
+    embedder_name: str = "",
 ) -> np.ndarray | None:
     """Apply clip params from *origin* to a resolved file and embed the result.
 
@@ -335,7 +373,7 @@ def _apply_clip_and_embed(
     clipper_name = params.get("clipper", "")
 
     if not clipper_name:
-        return embed_file(file_path, media_type)
+        return embed_file(file_path, media_type, embedder_name)
 
     clip_start = params.get("clip_start")
     clip_end = params.get("clip_end")
@@ -352,7 +390,7 @@ def _apply_clip_and_embed(
             try:
                 os.write(fd, sliced)
                 os.close(fd)
-                return embed_file(Path(tmp), media_type)
+                return embed_file(Path(tmp), media_type, embedder_name)
             finally:
                 try:
                     os.unlink(tmp)
@@ -360,7 +398,7 @@ def _apply_clip_and_embed(
                     pass
         except Exception:
             log.debug("_apply_clip_and_embed: audio clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type)
+            return embed_file(file_path, media_type, embedder_name)
 
     # --- Image clips: crop to clip_box ---
     if clip_box is not None and media_type == "image":
@@ -379,7 +417,7 @@ def _apply_clip_and_embed(
             try:
                 os.write(fd, crop_bytes)
                 os.close(fd)
-                return embed_file(Path(tmp), media_type)
+                return embed_file(Path(tmp), media_type, embedder_name)
             finally:
                 try:
                     os.unlink(tmp)
@@ -387,7 +425,7 @@ def _apply_clip_and_embed(
                     pass
         except Exception:
             log.debug("_apply_clip_and_embed: image clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type)
+            return embed_file(file_path, media_type, embedder_name)
 
     # --- Text clips: extract the sentence by clip_index ---
     if media_type == "text":
@@ -405,7 +443,7 @@ def _apply_clip_and_embed(
                     try:
                         os.write(fd, sentences[idx].encode("utf-8"))
                         os.close(fd)
-                        return embed_file(Path(tmp), media_type)
+                        return embed_file(Path(tmp), media_type, embedder_name)
                     finally:
                         try:
                             os.unlink(tmp)
@@ -413,10 +451,10 @@ def _apply_clip_and_embed(
                             pass
         except Exception:
             log.debug("_apply_clip_and_embed: text clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type)
+            return embed_file(file_path, media_type, embedder_name)
 
     # Video clips and unrecognised clippers: embed the full file.
-    return embed_file(file_path, media_type)
+    return embed_file(file_path, media_type, embedder_name)
 
 
 def resolve_label_embeddings(
@@ -446,9 +484,9 @@ def resolve_label_embeddings(
     _embed_failed = 0
 
     log.info(
-        "resolve_label_embeddings: starting resolution of %d label entries "
-        "for media_type=%r",
-        len(labels), media_type,
+        "resolve_label_embeddings: starting resolution of %d label entries for media_type=%r",
+        len(labels),
+        media_type,
     )
 
     _total_entries = len(labels)
@@ -475,14 +513,19 @@ def resolve_label_embeddings(
                     "  label[%d] FAILED (no origin): md5=%s, origin_name=%r, "
                     "filename=%r — this label has no origin trail and cannot "
                     "be resolved to a file",
-                    i, entry.get("md5", "?")[:12], origin_name, filename,
+                    i,
+                    entry.get("md5", "?")[:12],
+                    origin_name,
+                    filename,
                 )
             else:
                 _file_not_found += 1
                 log.info(
-                    "  label[%d] FAILED (file not found): importer=%r, "
-                    "origin_name=%r, filename=%r, params=%r",
-                    i, origin.get("importer", "?"), origin_name, filename,
+                    "  label[%d] FAILED (file not found): importer=%r, origin_name=%r, filename=%r, params=%r",
+                    i,
+                    origin.get("importer", "?"),
+                    origin_name,
+                    filename,
                     origin.get("params", {}),
                 )
             if progress_callback is not None:
@@ -500,9 +543,10 @@ def resolve_label_embeddings(
             result.missing_entries.append(entry)
             _embed_failed += 1
             log.info(
-                "  label[%d] FAILED (embed): file resolved to %s but "
-                "embedding returned None for media_type=%r",
-                i, file_path, media_type,
+                "  label[%d] FAILED (embed): file resolved to %s but embedding returned None for media_type=%r",
+                i,
+                file_path,
+                media_type,
             )
             if progress_callback is not None:
                 progress_callback(current=i + 1, total=_total_entries)
@@ -513,7 +557,10 @@ def resolve_label_embeddings(
         result.resolved_count += 1
         log.debug(
             "  label[%d] OK: %s → %s (label=%s)",
-            i, origin_name or filename, file_path.name, label_val,
+            i,
+            origin_name or filename,
+            file_path.name,
+            label_val,
         )
         if progress_callback is not None:
             progress_callback(current=i + 1, total=_total_entries)

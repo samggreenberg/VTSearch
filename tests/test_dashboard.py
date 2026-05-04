@@ -60,10 +60,10 @@ class TestDashboardDatasetInfo:
         first_key = next(iter(medias))
         saved_origin = medias[first_key].get("origin")
         try:
-            medias[first_key]["origin"] = {"importer": "folder", "params": {"path": "/data/sounds"}}
+            medias[first_key]["origin"] = {"importer": "server_folder", "params": {"path": "/data/sounds"}}
             resp = client.get("/api/dashboard/dataset-info")
             data = resp.get_json()
-            assert data["origin"] == "folder:/data/sounds"
+            assert data["origin"] == "server_folder:/data/sounds"
         finally:
             if saved_origin is not None:
                 medias[first_key]["origin"] = saved_origin
@@ -144,8 +144,11 @@ class TestGuessMediaEmbedder:
     def test_single_dataset_embedder_in_registry(self, client):
         """When the registry has one dataset with an embedder, the field is available."""
         register_dataset(
-            name="test-siglip", media_type="image", num_items=10,
-            pkl_path="/tmp/siglip.pkl", embedder="siglip",
+            name="test-siglip",
+            media_type="image",
+            num_items=10,
+            pkl_path="/tmp/siglip.pkl",
+            embedder="siglip",
         )
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
@@ -303,7 +306,7 @@ class TestDashboardDatasetRegistryColumns:
 
     def test_dataset_registry_includes_source(self, client):
         """Registered datasets include a source dict for the Details column."""
-        src = {"importer": "folder", "params": {"path": "/data/images"}}
+        src = {"importer": "server_folder", "params": {"path": "/data/images"}}
         register_dataset(
             name="src-ds",
             media_type="image",
@@ -357,9 +360,7 @@ class TestDashboardDatasetDupesColumn:
 
     def test_dataset_registry_stores_explicit_num_dupes(self, client):
         """Datasets registered with explicit num_dupes retain the value."""
-        register_dataset(
-            name="with-dupes", media_type="audio", num_items=20, pkl_path="/tmp/wdupes.pkl", num_dupes=3
-        )
+        register_dataset(name="with-dupes", media_type="audio", num_items=20, pkl_path="/tmp/wdupes.pkl", num_dupes=3)
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
         ds = data["datasets"][0]
@@ -372,8 +373,11 @@ class TestDashboardDatasetEmbedderColumn:
     def test_dataset_registry_includes_embedder(self, client):
         """Registered datasets include an embedder string."""
         register_dataset(
-            name="emb-ds", media_type="audio", num_items=10,
-            pkl_path="/tmp/emb.pkl", embedder="clap",
+            name="emb-ds",
+            media_type="audio",
+            num_items=10,
+            pkl_path="/tmp/emb.pkl",
+            embedder="clap",
         )
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
@@ -392,8 +396,11 @@ class TestDashboardDatasetEmbedderColumn:
     def test_dataset_registry_stores_explicit_embedder(self, client):
         """Datasets registered with explicit embedder retain the value."""
         register_dataset(
-            name="clip-ds", media_type="image", num_items=20,
-            pkl_path="/tmp/clipemb.pkl", embedder="clip",
+            name="clip-ds",
+            media_type="image",
+            num_items=20,
+            pkl_path="/tmp/clipemb.pkl",
+            embedder="clip",
         )
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
@@ -688,6 +695,25 @@ class TestAutorunCheckboxPersistence:
         m = resp.get_json()["models"][0]
         assert m["autodetect"] is False
 
+    def test_autodetect_toggle_reflects_in_registry_for_trainable_model(self, client):
+        """Trainable models created via the UI have detector_name="".
+
+        Toggling autorun uses the display name, and the registry response must
+        reflect the toggle state by falling back to the name when detector_name
+        is empty — otherwise the Autorun button in the Models grid appears dead.
+        """
+        register_model(name="Dog Barks", media_type="audio", trainable=True)
+
+        resp = client.put(
+            "/api/autorun-detectors/Dog Barks/autodetect",
+            json={"autodetect": True},
+        )
+        assert resp.status_code == 200
+
+        resp = client.get("/api/models/registry")
+        m = next(m for m in resp.get_json()["models"] if m["name"] == "Dog Barks")
+        assert m["autodetect"] is True
+
     def test_autorun_not_in_settings_window(self, client):
         """autorun_detector_names should not appear in the defaults endpoint."""
         resp = client.get("/api/settings/defaults")
@@ -708,7 +734,6 @@ class TestDashboardColumnHeaders:
             combined += resp.data.decode("utf-8")
         assert "Created" in combined
         assert "Origin" in combined
-        assert "Dupes" in combined
         assert "Loaded" in combined
 
     def test_model_grid_has_new_column_headers(self, client):

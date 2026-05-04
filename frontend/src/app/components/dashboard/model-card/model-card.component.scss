@@ -27,6 +27,13 @@ td {
   white-space: nowrap;
   vertical-align: middle;
   border-bottom: 1px solid var(--border-subtle);
+  // Truncate with ellipsis if the column is narrower than the content.
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+td.actions-col {
+  text-align: right;
 }
 
 .name-cell {
@@ -38,6 +45,7 @@ td {
 .actions-cell {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
 }
 
@@ -204,5 +212,25 @@ td {
 
   .trash-inactive {
     animation: icon-rotate-close 0.3s ease-in-out forwards;
+  }
+}
+
+.select-checkbox {
+  // Sit ~one action-button-width away from the row's other action icons
+  // (an icon button is ~22px: 14px svg + 4px padding both sides).
+  margin-left: 1.375rem;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
   }
 }

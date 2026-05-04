@@ -6,8 +6,9 @@ import gc
 import time
 import traceback
 import threading
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 from uuid import uuid4
 
 from vtsearch.settings import (
@@ -120,13 +121,20 @@ _STATUS_TO_STEP = {
 _TOTAL_LOAD_STEPS = 4  # download, load model, embed, finalize
 
 
-
 def clear_dataset():
     """Clear the current dataset, votes, and all related state."""
     clear_all()
 
 
-from vtsearch.routes.helpers import get_embedder_for_medias as _get_embedder_for_medias
+def _get_embedder_for_medias(media_dict: dict):
+    """Resolve the embedder for *media_dict*.
+
+    Imported lazily to avoid a circular dependency: this module sits under
+    ``vtsearch.datasets`` but ``vtsearch.routes.helpers`` lives in the
+    routes layer, which itself imports from this module.
+    """
+    from vtsearch.routes.helpers import get_embedder_for_medias as _impl
+    return _impl(media_dict)
 
 
 def _get_embedder_for_clips():
@@ -439,7 +447,8 @@ def _auto_register_dataset(
 
     # Count dupes
     num_dupes = sum(
-        1 for m in media_dict.values()
+        1
+        for m in media_dict.values()
         if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
     )
 
@@ -536,7 +545,9 @@ def _run_origin_load_in_background(
 
     task_id = f"_loading_{uuid4().hex[:8]}"
     ingest_started_at = _time.time()
-    tracker = loading_tasks.create_task(task_id, name or _origin_to_str(origin), media_type=media_type, embedder=embedder)
+    tracker = loading_tasks.create_task(
+        task_id, name or _origin_to_str(origin), media_type=media_type, embedder=embedder
+    )
 
     # Set initial progress synchronously so the first poll sees it.
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
@@ -628,6 +639,7 @@ def _run_origin_load_in_background(
                     media["origin_name"] = media.get("filename", "")
 
             if clipper:
+
                 def _clipper_progress(current: int, total: int, phase: str) -> None:
                     tracker.check_cancelled()
                     if phase == "clipping":
@@ -635,9 +647,12 @@ def _run_origin_load_in_background(
                     else:
                         msg = "Embedding clips…"
                     tracker.update(
-                        "loading", msg,
-                        current=current, total=total,
-                        step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                        "loading",
+                        msg,
+                        current=current,
+                        total=total,
+                        step=_TOTAL_LOAD_STEPS,
+                        total_steps=_TOTAL_LOAD_STEPS,
                     )
 
                 _clipper_progress(0, 0, "clipping")
@@ -646,9 +661,12 @@ def _run_origin_load_in_background(
             def _dedup_progress(current: int, total: int) -> None:
                 tracker.check_cancelled()
                 tracker.update(
-                    "loading", "Removing duplicates…",
-                    current=current, total=total,
-                    step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS,
+                    "loading",
+                    "Removing duplicates…",
+                    current=current,
+                    total=total,
+                    step=_TOTAL_LOAD_STEPS,
+                    total_steps=_TOTAL_LOAD_STEPS,
                 )
 
             _dedup_progress(0, 0)
@@ -668,9 +686,7 @@ def _run_origin_load_in_background(
             _diversity_progress(0, 0)
             build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
             tracker.check_cancelled()
-            tracker.update(
-                "loading", "Saving to registry…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
-            )
+            tracker.update("loading", "Saving to registry…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
             origin_str = _origin_to_str(origin)
             entry = _auto_register_dataset(
                 ctx.medias,
@@ -717,10 +733,7 @@ def _run_origin_load_in_background(
                 "",
                 0,
                 0,
-                error=(
-                    f"Missing dependency: {e}. "
-                    "Install all required packages with: pip install -e '.[cpu,dev]'"
-                ),
+                error=(f"Missing dependency: {e}. Install all required packages with: pip install -e '.[cpu,dev]'"),
                 step=None,
                 total_steps=None,
             )
@@ -775,8 +788,32 @@ def _migrate_context_id(old_id: str, new_id: str) -> None:
             _contexts.pop(old_id, None)
 
 
-def _run_importer_in_background(importer, field_values: dict) -> str:
+def consume_chunks_into(
+    target: dict[int, dict[str, Any]],
+    chunks: Iterable[dict[int, dict[str, Any]]],
+) -> None:
+    """Drain *chunks* into *target* with sequential IDs.
+
+    Each chunk yielded by an importer's ``run_chunked()`` re-uses IDs
+    starting at 1, so naive ``target.update(chunk)`` would overwrite
+    earlier chunks.  Renumber every media to a unique ID continuing from
+    whatever IDs are already present in *target*.
+    """
+    next_id = max(target.keys(), default=0) + 1
+    for chunk in chunks:
+        for media in chunk.values():
+            media["id"] = next_id
+            target[next_id] = media
+            next_id += 1
+
+
+def _run_importer_in_background(importer, field_values: dict, *, chunk_size: int = 0) -> str:
     """Start *importer*.run() in a daemon thread.
+
+    When *chunk_size* is positive and the importer reports
+    ``supports_chunked``, ``run_chunked`` is used instead and the yielded
+    chunks are merged into the target medias dict.  This bounds peak
+    memory during the import/embedding phase for large datasets.
 
     Returns the task_id for progress tracking.
     """
@@ -801,8 +838,13 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # to the frontend (used for guessing the type in subsequent add dialogs).
     media_type_hint = _normalize_media_type(field_values.get("media_type", ""))
 
+    use_chunked = chunk_size > 0 and getattr(importer, "supports_chunked", False)
+
     def _load(target_medias):
-        importer.run(field_values, target_medias)
+        if use_chunked:
+            consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size))
+        else:
+            importer.run(field_values, target_medias)
 
     return _run_origin_load_in_background(
         _load,

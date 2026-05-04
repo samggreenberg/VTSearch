@@ -63,10 +63,7 @@ class WebhookLabelsetExporter(LabelsetExporter):
             total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
             detail = f"Posted {total_hits} hit(s) across {results.get('detectors_run', 0)} detector(s)"
         return {
-            "message": (
-                f"{detail} "
-                f"to {url} (HTTP {resp.status_code})."
-            ),
+            "message": (f"{detail} to {url} (HTTP {resp.status_code})."),
             "status_code": resp.status_code,
             "url": url,
         }

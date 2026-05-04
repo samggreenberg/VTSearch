@@ -99,9 +99,21 @@ class TextMediaType(MediaType):
     # ------------------------------------------------------------------
 
     _DEMO_CATEGORIES = [
-        "sports", "science", "cars", "hockey", "electronics",
-        "religion", "world", "business", "technology", "medicine",
-        "crypto", "atheism", "motorcycles", "mideast", "guns",
+        "sports",
+        "science",
+        "cars",
+        "hockey",
+        "electronics",
+        "religion",
+        "world",
+        "business",
+        "technology",
+        "medicine",
+        "crypto",
+        "atheism",
+        "motorcycles",
+        "mideast",
+        "guns",
     ]
 
     _AG_NEWS_CATEGORIES = ["World", "Sports", "Business", "Sci/Tech"]
@@ -113,88 +125,152 @@ class TextMediaType(MediaType):
     @property
     def demo_datasets(self) -> list:
         cats = self._DEMO_CATEGORIES
-        ng_desc = "Usenet posts from the early 1990s across technical, recreational, and political topics."
-        ag_desc = "Short news summaries, well-balanced across world, sports, business, and tech."
-        imdb_desc = "Long-form user-written movie reviews with binary positive/negative sentiment labels."
+        ng_desc = "Early-1990s Usenet posts across technical and political topics."
+        ag_desc = "Short news summaries across world, sports, business, tech."
+        imdb_desc = "Long-form movie reviews with positive/negative sentiment labels."
         return [
             DemoDataset(
-                id="20newsgroups_s", label="20 Newsgroups (S)",
-                description=ng_desc, categories=cats, source="20newsgroups",
-                slice_frac_start=0.0, slice_frac_end=1 / 7,
-                items_per_category=950, download_size_mb=15,
+                id="20newsgroups_s",
+                label="20 Newsgroups (S)",
+                description=ng_desc,
+                categories=cats,
+                source="20newsgroups",
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 7,
+                items_per_category=950,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="20newsgroups_m", label="20 Newsgroups (M)",
-                description=ng_desc, categories=cats, source="20newsgroups",
-                slice_frac_start=1 / 7, slice_frac_end=3 / 7,
-                items_per_category=950, download_size_mb=15,
+                id="20newsgroups_m",
+                label="20 Newsgroups (M)",
+                description=ng_desc,
+                categories=cats,
+                source="20newsgroups",
+                slice_frac_start=1 / 7,
+                slice_frac_end=3 / 7,
+                items_per_category=950,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="20newsgroups_l", label="20 Newsgroups (L)",
-                description=ng_desc, categories=cats, source="20newsgroups",
-                slice_frac_start=3 / 7, slice_frac_end=None,
-                items_per_category=950, download_size_mb=15,
+                id="20newsgroups_l",
+                label="20 Newsgroups (L)",
+                description=ng_desc,
+                categories=cats,
+                source="20newsgroups",
+                slice_frac_start=3 / 7,
+                slice_frac_end=None,
+                items_per_category=950,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="20newsgroups_a", label="20 Newsgroups (A)",
-                description=ng_desc, categories=cats, source="20newsgroups",
-                slice_frac_start=0.0, slice_frac_end=None,
-                items_per_category=950, download_size_mb=15,
+                id="20newsgroups_a",
+                label="20 Newsgroups (A)",
+                description=ng_desc,
+                categories=cats,
+                source="20newsgroups",
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=950,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="ag_news_s", label="AG News (S)",
-                description=ag_desc, categories=self._AG_NEWS_CATEGORIES, source="ag_news",
-                slice_frac_start=0.0, slice_frac_end=1 / 7,
-                items_per_category=30000, download_size_mb=15,
+                id="ag_news_s",
+                label="AG News (S)",
+                description=ag_desc,
+                categories=self._AG_NEWS_CATEGORIES,
+                source="ag_news",
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 7,
+                items_per_category=30000,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="ag_news_m", label="AG News (M)",
-                description=ag_desc, categories=self._AG_NEWS_CATEGORIES, source="ag_news",
-                slice_frac_start=1 / 7, slice_frac_end=3 / 7,
-                items_per_category=30000, download_size_mb=15,
+                id="ag_news_m",
+                label="AG News (M)",
+                description=ag_desc,
+                categories=self._AG_NEWS_CATEGORIES,
+                source="ag_news",
+                slice_frac_start=1 / 7,
+                slice_frac_end=3 / 7,
+                items_per_category=30000,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="ag_news_l", label="AG News (L)",
-                description=ag_desc, categories=self._AG_NEWS_CATEGORIES, source="ag_news",
-                slice_frac_start=3 / 7, slice_frac_end=None,
-                items_per_category=30000, download_size_mb=15,
+                id="ag_news_l",
+                label="AG News (L)",
+                description=ag_desc,
+                categories=self._AG_NEWS_CATEGORIES,
+                source="ag_news",
+                slice_frac_start=3 / 7,
+                slice_frac_end=None,
+                items_per_category=30000,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="ag_news_a", label="AG News (A)",
-                description=ag_desc, categories=self._AG_NEWS_CATEGORIES, source="ag_news",
-                slice_frac_start=0.0, slice_frac_end=None,
-                items_per_category=30000, download_size_mb=15,
+                id="ag_news_a",
+                label="AG News (A)",
+                description=ag_desc,
+                categories=self._AG_NEWS_CATEGORIES,
+                source="ag_news",
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=30000,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="bbc_news_a", label="BBC News (A)",
-                description="Full BBC news articles — professionally written and cleanly labeled.",
-                categories=self._BBC_NEWS_CATEGORIES, source="bbc_news",
-                slice_frac_start=0.0, slice_frac_end=None,
-                items_per_category=445, download_size_mb=15,
+                id="bbc_news_a",
+                label="BBC News (A)",
+                description="BBC news articles — professionally written and cleanly labeled.",
+                categories=self._BBC_NEWS_CATEGORIES,
+                source="bbc_news",
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=445,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="imdb_s", label="IMDB Movie Reviews (S)",
-                description=imdb_desc, categories=self._IMDB_CATEGORIES, source="imdb",
-                slice_frac_start=0.0, slice_frac_end=1 / 7,
-                items_per_category=25000, download_size_mb=15,
+                id="imdb_s",
+                label="IMDB Movie Reviews (S)",
+                description=imdb_desc,
+                categories=self._IMDB_CATEGORIES,
+                source="imdb",
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 7,
+                items_per_category=25000,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="imdb_m", label="IMDB Movie Reviews (M)",
-                description=imdb_desc, categories=self._IMDB_CATEGORIES, source="imdb",
-                slice_frac_start=1 / 7, slice_frac_end=3 / 7,
-                items_per_category=25000, download_size_mb=15,
+                id="imdb_m",
+                label="IMDB Movie Reviews (M)",
+                description=imdb_desc,
+                categories=self._IMDB_CATEGORIES,
+                source="imdb",
+                slice_frac_start=1 / 7,
+                slice_frac_end=3 / 7,
+                items_per_category=25000,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="imdb_l", label="IMDB Movie Reviews (L)",
-                description=imdb_desc, categories=self._IMDB_CATEGORIES, source="imdb",
-                slice_frac_start=3 / 7, slice_frac_end=None,
-                items_per_category=25000, download_size_mb=15,
+                id="imdb_l",
+                label="IMDB Movie Reviews (L)",
+                description=imdb_desc,
+                categories=self._IMDB_CATEGORIES,
+                source="imdb",
+                slice_frac_start=3 / 7,
+                slice_frac_end=None,
+                items_per_category=25000,
+                download_size_mb=15,
             ),
             DemoDataset(
-                id="imdb_a", label="IMDB Movie Reviews (A)",
-                description=imdb_desc, categories=self._IMDB_CATEGORIES, source="imdb",
-                slice_frac_start=0.0, slice_frac_end=None,
-                items_per_category=25000, download_size_mb=15,
+                id="imdb_a",
+                label="IMDB Movie Reviews (A)",
+                description=imdb_desc,
+                categories=self._IMDB_CATEGORIES,
+                source="imdb",
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=25000,
+                download_size_mb=15,
             ),
         ]
 
@@ -203,8 +279,17 @@ class TextMediaType(MediaType):
     # ------------------------------------------------------------------
 
     def load_demo_source(
-        self, source, categories, slice_start, slice_end, clips,
-        on_progress=None, embedder=None, slice_frac_start=None, slice_frac_end=None, **kwargs,
+        self,
+        source,
+        categories,
+        slice_start,
+        slice_end,
+        clips,
+        on_progress=None,
+        embedder=None,
+        slice_frac_start=None,
+        slice_frac_end=None,
+        **kwargs,
     ):
         import hashlib  # noqa: PLC0415
 
@@ -234,8 +319,11 @@ class TextMediaType(MediaType):
                     cat_idx = category_names.index(cat_name)
                     cat_texts = [texts[i] for i, lbl in enumerate(labels) if lbl == cat_idx]
                     for text in demo_slice(
-                        cat_texts, slice_start, slice_end or len(cat_texts),
-                        slice_frac_start, slice_frac_end,
+                        cat_texts,
+                        slice_start,
+                        slice_end or len(cat_texts),
+                        slice_frac_start,
+                        slice_frac_end,
                     ):
                         selected_texts.append(text)
                         selected_categories.append(cat_name)
@@ -248,8 +336,11 @@ class TextMediaType(MediaType):
             for cat_name in categories:
                 articles = categories_articles.get(cat_name, [])
                 for article in demo_slice(
-                    articles, slice_start, slice_end or len(articles),
-                    slice_frac_start, slice_frac_end,
+                    articles,
+                    slice_start,
+                    slice_end or len(articles),
+                    slice_frac_start,
+                    slice_frac_end,
                 ):
                     selected_texts.append(article)
                     selected_categories.append(cat_name)
@@ -262,8 +353,11 @@ class TextMediaType(MediaType):
             for cat_name in categories:
                 articles = categories_articles.get(cat_name, [])
                 for article in demo_slice(
-                    articles, slice_start, slice_end or len(articles),
-                    slice_frac_start, slice_frac_end,
+                    articles,
+                    slice_start,
+                    slice_end or len(articles),
+                    slice_frac_start,
+                    slice_frac_end,
                 ):
                     selected_texts.append(article)
                     selected_categories.append(cat_name)
@@ -276,8 +370,11 @@ class TextMediaType(MediaType):
             for cat_name in categories:
                 reviews = categories_reviews.get(cat_name, [])
                 for review in demo_slice(
-                    reviews, slice_start, slice_end or len(reviews),
-                    slice_frac_start, slice_frac_end,
+                    reviews,
+                    slice_start,
+                    slice_end or len(reviews),
+                    slice_frac_start,
+                    slice_frac_end,
                 ):
                     selected_texts.append(review)
                     selected_categories.append(cat_name)
@@ -306,7 +403,7 @@ class TextMediaType(MediaType):
                 continue
             try:
                 embedding = embedder.embed_text_passage(text_content)
-            except Exception as e:
+            except Exception:
                 logging.getLogger(__name__).exception("Error embedding paragraph")
                 continue
             if embedding is None:

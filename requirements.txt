@@ -7,6 +7,7 @@
 
 # ── Core framework ───────────────────────────────────────────────────
 flask
+gunicorn
 numpy
 requests
 tqdm

@@ -123,6 +123,19 @@ export class DatasetsApiService {
     return this.http.post(`/api/dataset/import/${importerName}`, params);
   }
 
+  /**
+   * Upload a folder selected from the user's *browser* machine.
+   *
+   * The caller is responsible for building the FormData with the files
+   * (each appended under the key ``"files"`` with their
+   * ``webkitRelativePath`` as the multipart filename) plus ``media_type``
+   * and the optional ``embedder`` / ``clipper`` / ``clipper_params``
+   * fields.
+   */
+  importLocalFolder(formData: FormData): Observable<unknown> {
+    return this.http.post('/api/dataset/import-local-folder', formData);
+  }
+
   loadDemo(name: string, params?: Record<string, string>): Observable<unknown> {
     return this.http.post('/api/dataset/load-demo', { name, ...params });
   }

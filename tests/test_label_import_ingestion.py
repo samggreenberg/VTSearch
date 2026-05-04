@@ -8,8 +8,6 @@ Covers:
 from __future__ import annotations
 
 
-
-
 # ---------------------------------------------------------------------------
 # API – POST /api/label-importers/ingest-missing
 # ---------------------------------------------------------------------------
@@ -91,7 +89,7 @@ class TestIngestMissingClips:
         """Folder origins resolve media type from params."""
         from vtsearch.datasets.ingest import _media_type_from_origin
 
-        origin = {"importer": "folder", "params": {"path": "/tmp/x", "media_type": "text"}}
+        origin = {"importer": "server_folder", "params": {"path": "/tmp/x", "media_type": "text"}}
         assert _media_type_from_origin(origin) == "text"
 
     def test_media_type_from_origin_demo(self):
@@ -197,7 +195,7 @@ class TestIngestMissingClips:
         (text_dir / "hello.txt").write_text("Hello world, this is a test paragraph for embedding.")
         (text_dir / "goodbye.txt").write_text("Goodbye world, this is another test paragraph.")
 
-        origin = {"importer": "folder", "params": {"path": str(text_dir), "media_type": "text"}}
+        origin = {"importer": "server_folder", "params": {"path": str(text_dir), "media_type": "text"}}
 
         # Start with an existing medias dict
         existing_clips: dict = {

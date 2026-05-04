@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from vtsearch.converters import get_converter
-from vtsearch.utils.paths import rglob_follow_symlinks
+from vtsearch.utils.paths import glob_top_level, rglob_follow_symlinks
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -39,6 +39,7 @@ def run_converters_on_folder(
     thin: bool = False,
     on_progress: Optional[ProgressCallback] = None,
     base_origin: dict[str, Any] | None = None,
+    recursive: bool = True,
 ) -> None:
     """Scan *folder_path* for source files, convert them, and add to *medias*.
 
@@ -63,8 +64,8 @@ def run_converters_on_folder(
             bytes directly.
         on_progress: Optional progress callback.
         base_origin: The origin dict of the parent import (e.g.
-            ``{"importer": "folder", "params": {"path": "..."}}``) used
-            to record provenance.
+            ``{"importer": "server_folder", "params": {"path": "..."}}``)
+            used to record provenance.
     """
     if not converter_names:
         return
@@ -101,17 +102,20 @@ def run_converters_on_folder(
     media_id = max(medias.keys(), default=0) + 1
 
     for converter in valid_converters:
-
         # Get the source media type to know which file extensions to scan.
         try:
             source_mt = media_get(converter.source_type)
         except KeyError:
             continue
 
-        # Scan folder for source files.
+        # Scan folder for source files.  When ``recursive=False`` only the
+        # top-level entries are considered.
         source_files: list[Path] = []
         for ext in source_mt.file_extensions:
-            source_files.extend(rglob_follow_symlinks(folder_path, ext))
+            if recursive:
+                source_files.extend(rglob_follow_symlinks(folder_path, ext))
+            else:
+                source_files.extend(glob_top_level(folder_path, ext))
         source_files.sort()
 
         if not source_files:
@@ -232,6 +236,8 @@ def _embed_converted_output(target_emb, output: dict[str, Any]):
     media_bytes = output.get("media_bytes")
     media_string = output.get("media_string")
 
+    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
     if media_bytes:
         # Binary media (image, audio, video) — write to temp file.
         suffix = Path(output.get("filename", "output")).suffix or ".bin"
@@ -239,7 +245,7 @@ def _embed_converted_output(target_emb, output: dict[str, Any]):
             tmp.write(media_bytes)
             tmp_path = Path(tmp.name)
         try:
-            embedding = target_emb.embed_media(tmp_path)
+            embedding = target_emb.embed_media(media_from_path(tmp_path))
         finally:
             tmp_path.unlink(missing_ok=True)
         return embedding
@@ -250,7 +256,7 @@ def _embed_converted_output(target_emb, output: dict[str, Any]):
             tmp.write(media_string)
             tmp_path = Path(tmp.name)
         try:
-            embedding = target_emb.embed_media(tmp_path)
+            embedding = target_emb.embed_media(media_from_path(tmp_path))
         finally:
             tmp_path.unlink(missing_ok=True)
         return embedding

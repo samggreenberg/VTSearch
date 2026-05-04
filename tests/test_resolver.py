@@ -40,7 +40,7 @@ class TestResolveFolderOrigin:
         folder.mkdir()
         (folder / "clip.wav").write_bytes(b"fake_audio")
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = resolve_file_from_origin(origin, origin_name="clip.wav")
         assert result == folder / "clip.wav"
 
@@ -49,7 +49,7 @@ class TestResolveFolderOrigin:
         folder.mkdir()
         (folder / "clip.wav").write_bytes(b"fake_audio")
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = resolve_file_from_origin(origin, filename="clip.wav")
         assert result == folder / "clip.wav"
 
@@ -59,7 +59,7 @@ class TestResolveFolderOrigin:
         subfolder.mkdir(parents=True)
         (subfolder / "item.wav").write_bytes(b"data")
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = resolve_file_from_origin(origin, origin_name="category/item.wav")
         assert result == subfolder / "item.wav"
 
@@ -67,17 +67,17 @@ class TestResolveFolderOrigin:
         folder = tmp_path / "empty"
         folder.mkdir()
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = resolve_file_from_origin(origin, origin_name="nonexistent.wav")
         assert result is None
 
     def test_returns_none_for_missing_folder(self):
-        origin = {"importer": "folder", "params": {"path": "/nonexistent/path"}}
+        origin = {"importer": "server_folder", "params": {"path": "/nonexistent/path"}}
         result = resolve_file_from_origin(origin, origin_name="clip.wav")
         assert result is None
 
     def test_returns_none_for_empty_path(self):
-        origin = {"importer": "folder", "params": {"path": ""}}
+        origin = {"importer": "server_folder", "params": {"path": ""}}
         result = resolve_file_from_origin(origin, origin_name="clip.wav")
         assert result is None
 
@@ -108,12 +108,12 @@ class TestResolveDupeSetOrigin:
             "params": {"name": "a.wav"},
             "members": [
                 {
-                    "origin": {"importer": "folder", "params": {"path": "/gone"}},
+                    "origin": {"importer": "server_folder", "params": {"path": "/gone"}},
                     "origin_name": "a.wav",
                     "filename": "a.wav",
                 },
                 {
-                    "origin": {"importer": "folder", "params": {"path": str(folder)}},
+                    "origin": {"importer": "server_folder", "params": {"path": str(folder)}},
                     "origin_name": "b.wav",
                     "filename": "b.wav",
                 },
@@ -128,7 +128,7 @@ class TestResolveDupeSetOrigin:
             "params": {"name": "x.wav"},
             "members": [
                 {
-                    "origin": {"importer": "folder", "params": {"path": "/gone"}},
+                    "origin": {"importer": "server_folder", "params": {"path": "/gone"}},
                     "origin_name": "x.wav",
                 },
             ],
@@ -148,7 +148,7 @@ class TestResolveConverterOrigin:
             "params": {
                 "converter": "video2image",
                 "source_file": "clip.mp4",
-                "parent_importer": "folder",
+                "parent_importer": "server_folder",
                 "parent_path": str(folder),
             },
         }
@@ -390,7 +390,7 @@ class TestResolveLabelEmbeddings:
         (folder / "good1.wav").write_bytes(b"good_audio")
         (folder / "bad1.wav").write_bytes(b"bad_audio")
 
-        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "audio"}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": "audio"}}
         labels = [
             {"label": "good", "origin": origin, "origin_name": "good1.wav", "md5": "aaa", "filename": "good1.wav"},
             {"label": "bad", "origin": origin, "origin_name": "bad1.wav", "md5": "bbb", "filename": "bad1.wav"},
@@ -412,7 +412,7 @@ class TestResolveLabelEmbeddings:
         folder.mkdir()
         (folder / "good1.wav").write_bytes(b"good_audio")
 
-        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "audio"}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": "audio"}}
         labels = [
             {"label": "good", "origin": origin, "origin_name": "good1.wav", "md5": "aaa", "filename": "good1.wav"},
             {"label": "bad", "origin": origin, "origin_name": "missing.wav", "md5": "bbb", "filename": "missing.wav"},
@@ -440,7 +440,7 @@ class TestResolveLabelEmbeddings:
         folder.mkdir()
         (folder / "clip.wav").write_bytes(b"audio")
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         labels = [
             {"label": "good", "origin": origin, "origin_name": "clip.wav", "md5": "aaa", "filename": "clip.wav"},
         ]
@@ -483,7 +483,7 @@ class TestMultiFindCrossDatasetFallback:
                 "md5": f"target_md5_{i}",
                 "filename": f"target_{i}.wav",
                 "origin_name": f"target_{i}.wav",
-                "origin": {"importer": "folder", "params": {"path": "/other/folder"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/other/folder"}},
             }
 
         pkl_path = tmp_path / "target.pkl"
@@ -499,7 +499,7 @@ class TestMultiFindCrossDatasetFallback:
         )
 
         # Create a trainable model with labels from label_folder
-        label_origin = {"importer": "folder", "params": {"path": str(label_folder), "media_type": "audio"}}
+        label_origin = {"importer": "server_folder", "params": {"path": str(label_folder), "media_type": "audio"}}
         from vtsearch.models.trainable_model_store import _model_path, _write_model
 
         tm_name = "test_cross_detector"
@@ -593,7 +593,7 @@ class TestMultiFindCrossDatasetFallback:
                 "md5": f"mt_md5_{i}",
                 "filename": f"mt_{i}.wav",
                 "origin_name": f"mt_{i}.wav",
-                "origin": {"importer": "folder", "params": {"path": "/mt/folder"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/mt/folder"}},
             }
 
         pkl_path = tmp_path / "mt_target.pkl"
@@ -608,7 +608,7 @@ class TestMultiFindCrossDatasetFallback:
         (label_folder / "good.wav").write_bytes(b"good_content")
         (label_folder / "bad.wav").write_bytes(b"bad_content")
 
-        label_origin = {"importer": "folder", "params": {"path": str(label_folder)}}
+        label_origin = {"importer": "server_folder", "params": {"path": str(label_folder)}}
         from vtsearch.models.trainable_model_store import _model_path, _write_model
 
         tm_name = "test_mt_detector"
@@ -620,8 +620,20 @@ class TestMultiFindCrossDatasetFallback:
             "created_at": time.time(),
             "labelset": {
                 "labels": [
-                    {"md5": "g_md5", "label": "good", "origin": label_origin, "origin_name": "good.wav", "filename": "good.wav"},
-                    {"md5": "b_md5", "label": "bad", "origin": label_origin, "origin_name": "bad.wav", "filename": "bad.wav"},
+                    {
+                        "md5": "g_md5",
+                        "label": "good",
+                        "origin": label_origin,
+                        "origin_name": "good.wav",
+                        "filename": "good.wav",
+                    },
+                    {
+                        "md5": "b_md5",
+                        "label": "bad",
+                        "origin": label_origin,
+                        "origin_name": "bad.wav",
+                        "filename": "bad.wav",
+                    },
                 ]
             },
         }
@@ -672,7 +684,7 @@ class TestMultiFindCrossDatasetFallback:
                 "md5": f"nr_md5_{i}",
                 "filename": f"nr_{i}.jpg",
                 "origin_name": f"nr_{i}.jpg",
-                "origin": {"importer": "folder", "params": {"path": "/nr/folder"}},
+                "origin": {"importer": "server_folder", "params": {"path": "/nr/folder"}},
             }
 
         pkl_path = tmp_path / "nr_target.pkl"
@@ -687,7 +699,7 @@ class TestMultiFindCrossDatasetFallback:
         (label_folder / "good.jpg").write_bytes(b"good_content")
         (label_folder / "bad.jpg").write_bytes(b"bad_content")
 
-        label_origin = {"importer": "folder", "params": {"path": str(label_folder)}}
+        label_origin = {"importer": "server_folder", "params": {"path": str(label_folder)}}
         from vtsearch.models.trainable_model_store import _model_path, _write_model
 
         tm_name = "test_nr_detector"
@@ -699,8 +711,20 @@ class TestMultiFindCrossDatasetFallback:
             "created_at": time.time(),
             "labelset": {
                 "labels": [
-                    {"md5": "g_md5", "label": "good", "origin": label_origin, "origin_name": "good.jpg", "filename": "good.jpg"},
-                    {"md5": "b_md5", "label": "bad", "origin": label_origin, "origin_name": "bad.jpg", "filename": "bad.jpg"},
+                    {
+                        "md5": "g_md5",
+                        "label": "good",
+                        "origin": label_origin,
+                        "origin_name": "good.jpg",
+                        "filename": "good.jpg",
+                    },
+                    {
+                        "md5": "b_md5",
+                        "label": "bad",
+                        "origin": label_origin,
+                        "origin_name": "bad.jpg",
+                        "filename": "bad.jpg",
+                    },
                 ]
             },
         }
@@ -844,7 +868,7 @@ class TestFindCheckLabels:
         ds = register_dataset(name="cl_diff_ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
 
         # Trainable model with labels from a nonexistent folder
-        label_origin = {"importer": "folder", "params": {"path": "/nonexistent/folder"}}
+        label_origin = {"importer": "server_folder", "params": {"path": "/nonexistent/folder"}}
         tm_name = "test_cl_diff"
         tm_data = {
             "name": "Diff Model",
@@ -854,9 +878,27 @@ class TestFindCheckLabels:
             "created_at": time.time(),
             "labelset": {
                 "labels": [
-                    {"md5": "no_match_g", "label": "good", "origin": label_origin, "origin_name": "good.wav", "filename": "good.wav"},
-                    {"md5": "no_match_b1", "label": "bad", "origin": label_origin, "origin_name": "bad1.wav", "filename": "bad1.wav"},
-                    {"md5": "no_match_b2", "label": "bad", "origin": label_origin, "origin_name": "bad2.wav", "filename": "bad2.wav"},
+                    {
+                        "md5": "no_match_g",
+                        "label": "good",
+                        "origin": label_origin,
+                        "origin_name": "good.wav",
+                        "filename": "good.wav",
+                    },
+                    {
+                        "md5": "no_match_b1",
+                        "label": "bad",
+                        "origin": label_origin,
+                        "origin_name": "bad1.wav",
+                        "filename": "bad1.wav",
+                    },
+                    {
+                        "md5": "no_match_b2",
+                        "label": "bad",
+                        "origin": label_origin,
+                        "origin_name": "bad2.wav",
+                        "filename": "bad2.wav",
+                    },
                 ]
             },
         }
@@ -919,7 +961,7 @@ class TestFindCheckLabels:
         (label_folder / "good.wav").write_bytes(b"good_audio")
         # bad.wav does NOT exist
 
-        label_origin = {"importer": "folder", "params": {"path": str(label_folder), "media_type": "audio"}}
+        label_origin = {"importer": "server_folder", "params": {"path": str(label_folder), "media_type": "audio"}}
         tm_name = "test_cl_part"
         tm_data = {
             "name": "Part Model",
@@ -929,8 +971,20 @@ class TestFindCheckLabels:
             "created_at": time.time(),
             "labelset": {
                 "labels": [
-                    {"md5": "no_match_g", "label": "good", "origin": label_origin, "origin_name": "good.wav", "filename": "good.wav"},
-                    {"md5": "no_match_b", "label": "bad", "origin": label_origin, "origin_name": "bad.wav", "filename": "bad.wav"},
+                    {
+                        "md5": "no_match_g",
+                        "label": "good",
+                        "origin": label_origin,
+                        "origin_name": "good.wav",
+                        "filename": "good.wav",
+                    },
+                    {
+                        "md5": "no_match_b",
+                        "label": "bad",
+                        "origin": label_origin,
+                        "origin_name": "bad.wav",
+                        "filename": "bad.wav",
+                    },
                 ]
             },
         }
@@ -980,10 +1034,18 @@ class TestResolutionWarningLogs:
         import logging
 
         labels = [
-            {"label": "good", "origin": {"importer": "nonexistent", "params": {}}, "origin_name": "a.wav",
-             "filename": "a.wav"},
-            {"label": "bad", "origin": {"importer": "nonexistent", "params": {}}, "origin_name": "b.wav",
-             "filename": "b.wav"},
+            {
+                "label": "good",
+                "origin": {"importer": "nonexistent", "params": {}},
+                "origin_name": "a.wav",
+                "filename": "a.wav",
+            },
+            {
+                "label": "bad",
+                "origin": {"importer": "nonexistent", "params": {}},
+                "origin_name": "b.wav",
+                "filename": "b.wav",
+            },
         ]
         with caplog.at_level(logging.WARNING, logger="vtsearch.models.resolver"):
             result = resolve_label_embeddings(labels, "audio")
@@ -1002,8 +1064,12 @@ class TestResolutionWarningLogs:
 
         labels = [
             {"label": "good", "origin": None, "origin_name": "", "filename": ""},
-            {"label": "bad", "origin": {"importer": "folder", "params": {"path": str(tmp_path)}},
-             "origin_name": "found.wav", "filename": "found.wav"},
+            {
+                "label": "bad",
+                "origin": {"importer": "server_folder", "params": {"path": str(tmp_path)}},
+                "origin_name": "found.wav",
+                "filename": "found.wav",
+            },
         ]
 
         dummy_emb = np.zeros(10)

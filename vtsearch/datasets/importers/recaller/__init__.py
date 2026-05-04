@@ -48,6 +48,7 @@ from vtsearch.media import all_folder_names
 # Each should be a thin wrapper around an HTTP call (requests, httpx, etc.).
 # ---------------------------------------------------------------------------
 
+
 def _rc_fetch_results(query_id: str) -> list[dict[str, Any]]:
     """Call ReCaller and return the result list for *query_id*.
 
@@ -87,6 +88,7 @@ def _pw_fetch_media(media_url: str) -> bytes:
 # Importer
 # ---------------------------------------------------------------------------
 
+
 class ReCallerDatasetImporter(DatasetImporter):
     """Import a dataset from a ReCaller query."""
 
@@ -95,6 +97,7 @@ class ReCallerDatasetImporter(DatasetImporter):
     description = "Import media from a ReCaller browsing session."
     icon = "\U0001f50d"  # magnifying glass
     hidden_from_picker = True  # flip to False once API clients are implemented
+    category = "services"
     fields = [
         ImporterField(
             key="query_id",
@@ -128,9 +131,7 @@ class ReCallerDatasetImporter(DatasetImporter):
         all_results = _rc_fetch_results(query_id)
         results = [r for r in all_results if r.get("media_type") == media_type]
         if not results:
-            raise ValueError(
-                f"No results of type '{media_type}' found for query '{query_id}'."
-            )
+            raise ValueError(f"No results of type '{media_type}' found for query '{query_id}'.")
 
         # 2. Build media dicts
         for i, rc in enumerate(results, start=1):

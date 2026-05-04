@@ -27,22 +27,30 @@
 }
 
 td {
-  padding: 6px 10px;
+  padding: var(--space-sm) 0.625rem;  // 6px 10px — off-scale horizontal kept exact
   white-space: nowrap;
   vertical-align: middle;
   border-bottom: 1px solid var(--border-subtle);
+  // Truncate with ellipsis if the column is narrower than the content.
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+td.actions-col {
+  text-align: right;
 }
 
 .name-cell {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .actions-cell {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: flex-end;
+  gap: var(--space-xs);
 }
 
 .edit-btn {
@@ -50,8 +58,8 @@ td {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -96,8 +104,8 @@ td {
 
 .inline-edit {
   width: 140px;
-  padding: 2px 6px;
-  font-size: 0.83rem;
+  padding: 2px var(--space-sm);
+  font-size: var(--font-md);
 }
 
 .type-cell {
@@ -111,18 +119,12 @@ td {
   opacity: 0.7;
 }
 
-.origin-cell {
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .status-loaded {
   color: inherit;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  padding: var(--space-xs);
 }
 
 .load-action {
@@ -130,8 +132,8 @@ td {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -143,8 +145,8 @@ td {
 }
 
 .btn--xs {
-  padding: 1px 6px;
-  font-size: 0.75rem;
+  padding: 1px var(--space-sm);
+  font-size: var(--font-xs);
 }
 
 .security-btn {
@@ -152,8 +154,8 @@ td {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -174,8 +176,8 @@ td {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -199,8 +201,8 @@ td {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -220,14 +222,34 @@ td {
   }
 }
 
+.select-checkbox {
+  // Sit ~one action-button-width away from the row's other action icons
+  // (an icon button is ~22px: 14px svg + 4px padding both sides).
+  margin-left: 1.375rem;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+  }
+}
+
 // Inline loading progress (replaces data columns while loading)
 .inline-loading-progress {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-md);
 
   .progress-msg {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     white-space: nowrap;
     flex-shrink: 0;
@@ -243,9 +265,9 @@ td {
   .btn--cancel {
     flex-shrink: 0;
     cursor: pointer;
-    font-size: 0.75rem;
-    padding: 2px 8px;
-    border-radius: 4px;
+    font-size: var(--font-xs);
+    padding: 2px var(--space-md);
+    border-radius: var(--radius-md);
     background: var(--bg-surface);
     color: var(--text-secondary);
     border: 1px solid var(--border);
@@ -259,7 +281,7 @@ td {
   &.inline-loading-failed {
     .error-msg {
       flex: 1;
-      font-size: 0.8rem;
+      font-size: var(--font-sm);
       color: var(--error-text);
     }
 

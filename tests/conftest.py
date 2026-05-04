@@ -22,6 +22,7 @@ _TEST_GROUPS = {
         "test_settings_api_routes",
         "test_settings_directories",
         "test_frontend",
+        "test_resize_handle_centering",
     ],
     "api": [
         "test_api_contracts",
@@ -48,6 +49,8 @@ _TEST_GROUPS = {
         "test_creation_info",
         "test_duplicates",
         "test_origin_labelset",
+        "test_extension_scaffolds",
+        "test_synthetic_importer",
         "test_thin_loading",
         "test_chunked_loading",
         "test_memory_errors",
@@ -74,6 +77,7 @@ _TEST_GROUPS = {
         "test_corrections_export",
         "test_settings_io",
         "test_sync_sources",
+        "test_bulk_embedding",
     ],
     "models": [
         "test_detectors",
@@ -84,6 +88,7 @@ _TEST_GROUPS = {
         "test_trainable_models",
         "test_multi_detector",
         "test_clippers",
+        "test_clipper_workflow",
         "test_eval",
         "test_eval_visualize",
         "test_eval_voting_iterations",
@@ -152,14 +157,17 @@ config.TRAIN_EPOCHS = 30
 _EMBEDDING_DIM = 512
 
 
-def _fake_embed_audio(path):
+def _fake_embed_audio(arg):
     """Deterministic fake audio embedding derived from the file contents.
 
-    Uses the first 1000 bytes of the file as a seed so that different audio
-    files (even when written to the same temp path) produce distinct vectors.
+    Accepts either a path (from the legacy ``embed_audio_file`` wrapper) or a
+    media dict (from ``MediaEmbedder.embed_media``).  Uses the first 1000
+    bytes of the resolved file as a seed so that different audio files
+    (even when written to the same temp path) produce distinct vectors.
     """
     import hashlib
 
+    path = arg["media_path"] if isinstance(arg, dict) else arg
     try:
         with open(path, "rb") as f:
             data = f.read(1000)
@@ -186,6 +194,7 @@ _patch_embed_audio.start()
 # Create a default dataset context so init_medias() has somewhere to write,
 # and a default detector context so vote proxies have somewhere to delegate.
 import vtsearch.utils.state_core as _state_core
+
 _startup_ctx = _state_core.DatasetContext("_startup")
 _state_core.register_context(_startup_ctx)
 _state_core.set_thread_dataset_context(_startup_ctx)
@@ -196,9 +205,9 @@ _state_core.set_thread_detector_context(_startup_det)
 import app as app_module
 
 # Import refactored modules and make them accessible through app_module
-from vtsearch.audio.generator import GENERATOR_SAMPLE_RATE
+from vtsearch.utils.audio_generator import GENERATOR_SAMPLE_RATE
 from vtsearch.medias import NUM_MEDIAS
-from vtsearch.audio import generate_wav
+from vtsearch.utils.audio_generator import generate_wav
 from vtsearch.models import initialize_models, train_and_score
 from vtsearch.models.progress import clear_progress_cache
 from vtsearch.utils import (
@@ -231,7 +240,12 @@ _patch_embed_audio.stop()
 # Grab the audio media-type singleton and the audio embedder so the per-test
 # fixture can patch embed_text/embed_media/load_models on both, preventing
 # CLAP from loading during /api/sort and similar calls.
-from vtsearch.media import all_embedders as _all_embedders, all_types as _all_types, get as _media_get, embedders_for_type as _embedders_for_type
+from vtsearch.media import (
+    all_embedders as _all_embedders,
+    all_types as _all_types,
+    get as _media_get,
+    embedders_for_type as _embedders_for_type,
+)
 
 _audio_mt = _media_get("audio")
 _audio_emb = _embedders_for_type("audio")[0]
@@ -289,7 +303,6 @@ def _stub_embedding_models():
     stack.enter_context(patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio))
     for mt in _ALL_MEDIA_TYPES:
         stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_embed_text))
-        stack.enter_context(patch.object(mt, "embed_media", side_effect=_fake_embed_audio))
         stack.enter_context(patch.object(mt, "load_models"))
     for emb in _ALL_EMBEDDERS:
         stack.enter_context(patch.object(emb, "embed_media", side_effect=_fake_embed_audio))
@@ -300,7 +313,14 @@ def _stub_embedding_models():
 
 
 import vtsearch.utils.state_core as _core
-from vtsearch.utils.progress import dataset_progress as _dataset_progress, eval_progress as _eval_progress, find_progress as _find_progress, loading_tasks as _loading_tasks, model_loading_tasks as _model_loading_tasks, sort_progress as _sort_progress
+from vtsearch.utils.progress import (
+    dataset_progress as _dataset_progress,
+    eval_progress as _eval_progress,
+    find_progress as _find_progress,
+    loading_tasks as _loading_tasks,
+    model_loading_tasks as _model_loading_tasks,
+    sort_progress as _sort_progress,
+)
 from vtsearch.auth import DefaultLoginProvider as _DefaultLoginProvider, set_login_provider as _set_login_provider
 from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg
 from vtsearch.models.registry import reset_for_tests as _reset_model_reg

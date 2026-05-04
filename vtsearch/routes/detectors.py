@@ -19,6 +19,7 @@ from vtsearch.routes.detectors_crud import (  # noqa: F401
     _ensure_localizer_factories,
     detectors_crud_bp,
 )
+from vtsearch.routes.detectors_find import detectors_find_bp  # noqa: F401
 from vtsearch.routes.detectors_scoring import detectors_scoring_bp  # noqa: F401
 from vtsearch.routes.detectors_training import detectors_training_bp  # noqa: F401
 
@@ -27,4 +28,5 @@ detectors_bp = Blueprint("detectors", __name__)
 # Register sub-blueprints so all routes appear under the single detectors_bp.
 detectors_bp.register_blueprint(detectors_crud_bp)
 detectors_bp.register_blueprint(detectors_training_bp)
+detectors_bp.register_blueprint(detectors_find_bp)
 detectors_bp.register_blueprint(detectors_scoring_bp)

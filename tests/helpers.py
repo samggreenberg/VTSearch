@@ -20,7 +20,7 @@ def make_wav_bytes(frequency: float = 440.0, duration: float = 0.1) -> bytes:
     Supports variable ``frequency`` and ``duration`` — useful when tests
     need multiple distinct WAV files (e.g. different frequencies per media).
     """
-    from vtsearch.audio import generate_wav  # noqa: PLC0415
+    from vtsearch.utils.audio_generator import generate_wav  # noqa: PLC0415
 
     return generate_wav(frequency, duration)
 
@@ -29,7 +29,7 @@ def make_raw_wav_bytes() -> bytes:
     """Create a minimal valid WAV file (100 zero-samples) in memory.
 
     Lighter weight than :func:`make_wav_bytes` — does not depend on the
-    ``vtsearch.audio`` module.
+    ``vtsearch.utils.audio_generator`` module.
     """
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -96,8 +96,7 @@ def make_minimal_mp4_bytes() -> bytes:
     # ftyp box: size=32, type='ftyp', major_brand='isom', minor_version=0x200,
     # compat='isom','iso2','avc1','mp41'
     return (
-        b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2avc1mp41"
-        + b"\x00\x00\x00\x08free"  # padding
+        b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2avc1mp41" + b"\x00\x00\x00\x08free"  # padding
     )
 
 

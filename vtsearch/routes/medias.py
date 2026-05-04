@@ -51,13 +51,20 @@ def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:
             ffmpeg = get_ffmpeg_exe()
             subprocess.run(
                 [
-                    ffmpeg, "-y",
-                    "-i", str(src_path),
-                    "-c:v", "libx264",
-                    "-preset", "ultrafast",
-                    "-crf", "23",
-                    "-c:a", "aac",
-                    "-movflags", "+faststart",
+                    ffmpeg,
+                    "-y",
+                    "-i",
+                    str(src_path),
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "ultrafast",
+                    "-crf",
+                    "23",
+                    "-c:a",
+                    "aac",
+                    "-movflags",
+                    "+faststart",
                     str(dst_path),
                 ],
                 capture_output=True,
@@ -367,7 +374,9 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
             c["_transcoded_mp4"] = transcoded
             return _send_video_bytes(transcoded, "video/mp4", f"media_{media_id}.mp4")
         # ffmpeg and OpenCV both unavailable — cannot transcode
-        return jsonify({"error": f"Cannot play {ext} videos: install ffmpeg or opencv-python-headless to enable transcoding"}), 415
+        return jsonify(
+            {"error": f"Cannot play {ext} videos: install ffmpeg or opencv-python-headless to enable transcoding"}
+        ), 415
 
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
@@ -635,8 +644,10 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
         tmp.write(file_bytes)
         tmp_path = Path(tmp.name)
 
+    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
     try:
-        embedding = embedder.embed_media(tmp_path)
+        embedding = embedder.embed_media(media_from_path(tmp_path))
     finally:
         tmp_path.unlink(missing_ok=True)
 

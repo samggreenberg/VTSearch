@@ -13,7 +13,8 @@ const KNOWN_TYPES = new Set([
   'check', 'warning', 'x-circle', 'info', 'file', 'lightbulb',
   'list', 'grid', 'cursor-click', 'cursor-hover',
   'palette', 'sort-descending', 'steering-wheel', 'cloud-upload',
-  'thumbs-up', 'thumbs-down',
+  'thumbs-up', 'thumbs-down', 'factory',
+  'house', 'lightning', 'flask', 'cubes',
 ]);
 
 function emojiToType(icon: string): string {
@@ -34,6 +35,8 @@ function emojiToType(icon: string): string {
     '\uD83D\uDCE4': 'upload',      // 📤
     // Actions & misc
     '\uD83C\uDF93': 'graduation',  // 🎓
+    '\uD83C\uDFED': 'factory',     // 🏭
+    '\uD83E\uDDEA': 'factory',     // 🧪 — alias for synthetic-data factory
     '\uD83D\uDDC4': 'database',     // 🗄
     '\u2B06': 'arrow-up',          // ⬆
     '\uD83D\uDD00': 'shuffle',     // 🔀
@@ -160,6 +163,21 @@ function emojiToType(icon: string): string {
       }
       @case ('thumbs-down') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+      }
+      @case ('factory') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>
+      }
+      @case ('house') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      }
+      @case ('lightning') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      }
+      @case ('flask') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v7.5a2 2 0 0 1-.3 1L4 20a1.5 1.5 0 0 0 1.3 2.2h13.4A1.5 1.5 0 0 0 20 20l-4.7-9.5a2 2 0 0 1-.3-1V2"/><line x1="8" y1="2" x2="16" y2="2"/><line x1="7" y1="15" x2="17" y2="15"/></svg>
+      }
+      @case ('cubes') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h18v18H2z"/><path d="M2 4l2-2h18v18l-2 2"/><path d="M20 4l2-2"/><path d="M11 4v18M2 13h18"/><path d="M11 4l2-2"/><path d="M20 13l2-2"/></svg>
       }
     } }
   `,

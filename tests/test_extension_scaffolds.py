@@ -12,7 +12,6 @@ from __future__ import annotations
 import numpy as np
 from unittest.mock import patch
 
-import app as app_module
 from vtsearch.datasets.labelset import LabelSet, LabeledElement
 
 
@@ -315,7 +314,7 @@ class TestHolderExporterHelpers:
         from vtsearch.exporters.holder import _extract_content_id
 
         assert _extract_content_id({}) is None
-        assert _extract_content_id({"origin": {"importer": "folder", "params": {}}}) is None
+        assert _extract_content_id({"origin": {"importer": "server_folder", "params": {}}}) is None
 
     def test_extract_entry_metadata(self):
         from vtsearch.exporters.holder import _extract_entry_metadata

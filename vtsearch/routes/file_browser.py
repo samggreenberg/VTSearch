@@ -112,8 +112,10 @@ def browse():
 
     current_path = str(target.relative_to(root)) if target != root else ""
 
-    return jsonify({
-        "directories": directories,
-        "files": files,
-        "current_path": current_path,
-    })
+    return jsonify(
+        {
+            "directories": directories,
+            "files": files,
+            "current_path": current_path,
+        }
+    )

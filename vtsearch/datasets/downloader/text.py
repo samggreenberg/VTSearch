@@ -166,9 +166,7 @@ def download_bbc_news(
                 # Find the directory that contains the category subfolders.
                 _bbc_root = _find_bbc_root(raw_dir)
                 if _bbc_root is None:
-                    raise RuntimeError(
-                        f"Could not locate BBC News category directories inside {raw_dir}"
-                    )
+                    raise RuntimeError(f"Could not locate BBC News category directories inside {raw_dir}")
 
                 if not extract_dir.exists():
                     try:

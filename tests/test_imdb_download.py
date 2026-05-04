@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_imdb_tar(tmp_path: Path) -> Path:
     """Create a minimal IMDB tar.gz fixture with 3 reviews per sentiment per split."""
     tar_path = tmp_path / "aclImdb_v1.tar.gz"
@@ -20,9 +21,7 @@ def _make_imdb_tar(tmp_path: Path) -> Path:
             d = tree_root / split / sentiment
             d.mkdir(parents=True)
             for i in range(3):
-                (d / f"{i}_{7 + i}.txt").write_text(
-                    f"IMDB {sentiment} review {i} from {split}. This is sample text."
-                )
+                (d / f"{i}_{7 + i}.txt").write_text(f"IMDB {sentiment} review {i} from {split}. This is sample text.")
 
     with tarfile.open(tar_path, "w:gz") as tf:
         tf.add(tree_root, arcname="aclImdb")
@@ -33,6 +32,7 @@ def _make_imdb_tar(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 # download_imdb
 # ---------------------------------------------------------------------------
+
 
 class TestDownloadImdb:
     def test_returns_reviews_by_category(self, tmp_path):
@@ -48,7 +48,9 @@ class TestDownloadImdb:
 
         with (
             patch.object(dl_module.core, "DATA_DIR", tmp_path),
-            patch.object(dl_module.core, "download_file_with_progress", lambda url, dest, size, cb: tar_path.rename(dest)),
+            patch.object(
+                dl_module.core, "download_file_with_progress", lambda url, dest, size, cb: tar_path.rename(dest)
+            ),
         ):
             result = dl_module.download_imdb(on_progress=fake_progress)
 
@@ -87,6 +89,7 @@ class TestDownloadImdb:
 # ---------------------------------------------------------------------------
 # load_demo_source — imdb branch
 # ---------------------------------------------------------------------------
+
 
 class TestLoadDemoSourceImdb:
     """TextMediaType.load_demo_source with source='imdb'."""

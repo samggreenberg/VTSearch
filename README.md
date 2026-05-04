@@ -8,6 +8,8 @@ See [docs/SETUP.md](docs/SETUP.md) for prerequisites, getting the code, virtual 
 
 ## Running the app
 
+For development, start the Flask dev server:
+
 ```bash
 python app.py
 ```
@@ -15,12 +17,20 @@ python app.py
 You should see output like:
 
 ```
- * Running on http://127.0.0.1:5000
+ * Running on http://0.0.0.0:5000
 ```
 
-Open that URL in your browser. The app starts with no clips loaded — use the menu to load a demo dataset (see below).
+Open `http://localhost:5000` in your browser. The app starts with no clips loaded — use the menu to load a demo dataset (see below).
 
 Press **Ctrl+C** in the terminal to stop the server.
+
+For production, run under gunicorn (the Docker images do this automatically):
+
+```bash
+VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
+```
+
+See [docs/SETUP.md](docs/SETUP.md#running-the-app) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
 
 > **New to VTSearch?** Read **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** — a walkthrough of loading a dataset, using Autopilot to label, and exporting results. Most users never need anything else.
 
@@ -40,6 +50,7 @@ You can also load your own data from pickle files or folders via the same menu.
 
 ```
 ├── app.py                          # Flask entry point, registers blueprints, CLI arg parsing
+├── gunicorn.conf.py                # Gunicorn WSGI config (single worker + threads)
 ├── vtsearch/                       # Main application package
 │   ├── config.py                   # Constants (CLAP_SAMPLE_RATE, paths, model IDs)
 │   ├── medias.py                   # Test media generation & embedding cache
@@ -57,7 +68,7 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── processors/importers/       # Processor importer plugins
 │   ├── settings_io/                # Settings importers, exporters & sync sources
 │   ├── audio/                      # Audio generation utility
-│   └── utils/                      # Global state (medias, votes) & progress helpers
+│   └── utils/                      # State proxies (per-dataset/per-detector contexts) & progress helpers
 ├── static/                         # Angular build output (HTML, JS, CSS, assets)
 ├── tests/                          # Test suite (pytest)
 ├── docs/                           # Extended documentation

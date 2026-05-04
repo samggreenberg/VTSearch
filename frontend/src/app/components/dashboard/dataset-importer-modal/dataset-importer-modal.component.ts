@@ -6,9 +6,8 @@ import { FileBrowserComponent } from '../../file-browser/file-browser.component'
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
-
-type ModalView = 'picker' | 'form' | 'demo' | 'server_folder';
+import { ImporterInfo, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
+import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 @Component({
   selector: 'vt-dataset-importer-modal',
@@ -27,7 +26,6 @@ export class DatasetImporterModalComponent implements OnInit {
   @Output() importStarted = new EventEmitter<void>();
   @Output() demoSelected = new EventEmitter<DemoDataset>();
 
-  view: ModalView = 'picker';
   importers: ImporterInfo[] = [];
   selectedImporter: ImporterInfo | null = null;
   formValues: Record<string, any> = {};
@@ -50,8 +48,6 @@ export class DatasetImporterModalComponent implements OnInit {
   mediaTypes: MediaTypeInfo[] = [];
   demoTabs: string[] = [];
   activeTab = '';
-  demoSortKey = 'num_files';
-  demoSortAsc = true;
   demoLoading = false;
   demoEmbedders: EmbedderInfo[] = [];
   selectedDemoEmbedder = '';
@@ -59,18 +55,44 @@ export class DatasetImporterModalComponent implements OnInit {
   demoClippers: ClipperInfo[] = [];
   selectedDemoClipper = '';
 
-  // Demo table column resize state
-  demoColWidths: Record<string, number> = {};
-  demoTableFixed = false;
-  demoTableWidth = 0;
-  private demoResizeInit = false;
-  private demoResizeState: {
-    startX: number;
-    startWidth: number;
-    col: string;
-    dragged: boolean;
-    tableEl: HTMLTableElement;
-  } | null = null;
+  // Demo table column metadata + controller. Mirrors the Dashboard datagrid:
+  // percentage widths summing to 100, draggable column reorder, click-to-sort
+  // headers, and column-resize handles between cells.
+  static readonly DEMO_COL_META: Record<string, ColMeta> = {
+    label: { label: 'Name', title: 'Demo dataset name (click to sort)', sortable: true },
+    num_files: { label: '# Media', title: 'Number of media files in the demo dataset (click to sort)', sortable: true },
+    num_categories: { label: '# Cat.', title: 'Number of distinct categories or classes in the dataset (click to sort)', sortable: true },
+    description: { label: 'Description', title: 'Short description of the demo dataset contents (click to sort)', sortable: true },
+    status: { label: 'Readiness', title: 'Whether the dataset is pre-downloaded and ready to load immediately, or needs to be fetched first (click to sort)', sortable: true },
+  };
+  static readonly DEMO_COLUMNS_DEFAULT = ['label', 'num_files', 'num_categories', 'description', 'status'];
+  private static readonly DEMO_COL_ORDER_KEY = 'vtsearch.dashboard.demoColumnOrder';
+
+  demoCols = new ManagedColumns(
+    DatasetImporterModalComponent.DEMO_COLUMNS_DEFAULT,
+    DatasetImporterModalComponent.DEMO_COL_META,
+    { initialSort: 'num_files', storageKey: DatasetImporterModalComponent.DEMO_COL_ORDER_KEY },
+  );
+
+  // Local folder upload state — files come from the browser machine
+  lfFiles: File[] = [];
+  lfMediaType = '';
+  lfMediaTypeOptions: string[] = [];
+  lfEmbedders: EmbedderInfo[] = [];
+  lfSelectedEmbedder = '';
+  lfClippers: ClipperInfo[] = [];
+  lfSelectedClipper = '';
+  lfClipperParams: ClipperParameter[] = [];
+  lfClipperParamValues: Record<string, number | string> = {};
+  lfSubmitting = false;
+  lfError = '';
+  /** ``"folder"`` opens a directory picker (Local Folder card),
+   *  ``"files"`` opens a multi-file picker (Local Files card). */
+  lfPickerKind: 'folder' | 'files' = 'folder';
+  /** Whether subfolders inside the picked local folder are included. */
+  lfRecursive = true;
+  /** Maximum medias per chunk during embedding; 0 means "no chunking". */
+  lfChunkSize = 0;
 
   // Server folder browser state
   sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
@@ -87,11 +109,18 @@ export class DatasetImporterModalComponent implements OnInit {
   sfClipperParams: ClipperParameter[] = [];
   sfClipperParamValues: Record<string, number | string> = {};
   sfSubmitting = false;
+  /** Whether subdirectories of the picked server folder are scanned. */
+  sfRecursive = true;
+  /** Maximum medias per chunk during embedding; 0 means "no chunking". */
+  sfChunkSize = 0;
+
+  /** Maximum medias per chunk during embedding for the generic form view; 0 means "no chunking". */
+  chunkSize = 0;
 
   // Clipper chooser modal state
   clipperChooserOpen = false;
-  /** Which context opened the chooser: 'form' | 'demo' | 'sf' */
-  clipperChooserContext: 'form' | 'demo' | 'sf' = 'form';
+  /** Which context opened the chooser: 'form' | 'demo' | 'sf' | 'lf' */
+  clipperChooserContext: 'form' | 'demo' | 'sf' | 'lf' = 'form';
   clipperChooserClippers: ClipperInfo[] = [];
 
   constructor(private datasetsApi: DatasetsApiService) {}
@@ -99,9 +128,8 @@ export class DatasetImporterModalComponent implements OnInit {
   ngOnInit(): void {
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
-        this.importers = (res.importers || []).filter(
-          (imp) => !imp['hidden_from_picker']
-        );
+        this.importers = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
+        this.declaredTabs = res.tabs || [];
       },
     });
     this.datasetsApi.getEmbedders().subscribe({
@@ -116,31 +144,127 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
-  /** Desired picker order: folder, demo placeholder, then remaining importers. */
-  private static readonly PICKER_ORDER = ['folder', '_demo', 'combine_datasets'];
+  /** Front-of-list order for the picker within each tab.  Importers not
+   *  listed here come after these in registry order. */
+  private static readonly PICKER_ORDER = [
+    'local_folder',
+    'local_files',
+    'server_folder',
+    'server_files',
+    'demo',
+    'synthetic',
+  ];
+
+  /** Tab declarations supplied by the backend (``/api/dataset/all-importers``). */
+  declaredTabs: ImporterPickerTab[] = [];
+
+  /** Currently selected picker tab.  Empty string means no tab is selected
+   *  yet, so the content area below the tab bars stays blank. */
+  activeImporterTab = '';
 
   get orderedImporters(): ImporterInfo[] {
-    const demoPlaceholder = { name: '_demo' } as ImporterInfo;
     const order = DatasetImporterModalComponent.PICKER_ORDER;
     const result: ImporterInfo[] = [];
     for (const name of order) {
-      if (name === '_demo') {
-        result.push(demoPlaceholder);
-      } else {
-        const imp = this.importers.find((i) => i.name === name);
-        if (imp) result.push(imp);
-      }
+      const imp = this.importers.find((i) => i.name === name);
+      if (imp && !imp['hidden_from_picker']) result.push(imp);
     }
-    // Append any importers not in the explicit order
     for (const imp of this.importers) {
-      if (!order.includes(imp.name)) {
+      if (!order.includes(imp.name) && !imp['hidden_from_picker']) {
         result.push(imp);
       }
     }
     return result;
   }
 
+  /** Title-case an importer category id when no backend declaration exists.
+   *  ``"my_cloud"`` → ``"My Cloud"``. */
+  private fallbackTabLabel(id: string): string {
+    return id
+      .split(/[\s_-]+/)
+      .filter(Boolean)
+      .map((part) => part[0].toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  /** Picker tabs to display.  All tabs declared by the backend render in
+   *  their declared order, regardless of whether any importers populate
+   *  them — so categories like "Services" remain visible even when no
+   *  extension importers are installed.  Categories used by importers but
+   *  never declared get appended at the end with a title-cased label and
+   *  no icon. */
+  get visibleImporterTabs(): ImporterPickerTab[] {
+    const visible: ImporterPickerTab[] = [];
+    const seen = new Set<string>();
+    const declared = [...this.declaredTabs].sort(
+      (a, b) => (a.order ?? 100) - (b.order ?? 100),
+    );
+    for (const tab of declared) {
+      visible.push(tab);
+      seen.add(tab.id);
+    }
+    const usedCategories = new Set(
+      this.orderedImporters.map((imp) => imp.category || '').filter(Boolean),
+    );
+    for (const id of usedCategories) {
+      if (!seen.has(id)) {
+        visible.push({ id, label: this.fallbackTabLabel(id) });
+      }
+    }
+    return visible;
+  }
+
+  /** Importers belonging to the active tab. */
+  get importersForActiveTab(): ImporterInfo[] {
+    return this.orderedImporters.filter(
+      (imp) => (imp.category || '') === this.activeImporterTab,
+    );
+  }
+
+  /** Display label of the currently selected category tab, or empty when none. */
+  get activeImporterTabLabel(): string {
+    const tab = this.visibleImporterTabs.find((t) => t.id === this.activeImporterTab);
+    return tab?.label || '';
+  }
+
+  selectImporterTab(tabId: string): void {
+    this.activeImporterTab = tabId;
+    // Clearing the selected importer keeps the inner sub-tab row blank
+    // until the user explicitly clicks one — matching the "no auto-select"
+    // policy that applies at every tab level.
+    this.selectedImporter = null;
+  }
+
+  /** Title shown at the top of the modal. */
+  get modalTitle(): string {
+    return 'Add Dataset';
+  }
+
+  /** ``picker_view`` of the currently selected importer, or empty when
+   *  nothing is selected.  Drives which inline widget set is rendered
+   *  below the inner tab row. */
+  get activePickerView(): string {
+    return this.selectedImporter?.picker_view || '';
+  }
+
   selectImporter(importer: ImporterInfo): void {
+    // Dispatch to the importer-specific setup logic.  Each helper
+    // populates its own state slice but no longer changes a global
+    // ``view`` because the modal renders all tab levels together.
+    const pickerView = importer.picker_view || 'form';
+    if (pickerView === 'local_folder' || pickerView === 'local_files') {
+      this.openLocalFolderUploader(importer);
+      return;
+    }
+    if (pickerView === 'server_folder') {
+      this.openServerFolderBrowser(importer);
+      return;
+    }
+    if (pickerView === 'demo') {
+      this.openDemoPicker(importer);
+      return;
+    }
+
     this.selectedImporter = importer;
     this.formValues = {};
     this.error = '';
@@ -174,8 +298,6 @@ export class DatasetImporterModalComponent implements OnInit {
       this.loadClippers(defaultType);
       this.loadEmbedders(defaultType);
     }
-
-    this.view = 'form';
   }
 
   onMediaTypeChange(mediaType: string): void {
@@ -235,8 +357,8 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
-  openDemoPicker(): void {
-    this.view = 'demo';
+  openDemoPicker(importer?: ImporterInfo): void {
+    this.selectedImporter = importer || this.importers.find((i) => i.name === 'demo') || null;
     this.demoLoading = true;
     this.demos = [];
     this.demoTabs = [];
@@ -277,15 +399,9 @@ export class DatasetImporterModalComponent implements OnInit {
         this.demoTabs.push(mt);
       }
     }
-    if (this.demoTabs.length > 0 && !this.activeTab) {
-      // Prefer guessed media type if it has demos
-      if (this.guessedMediaType && this.demoTabs.includes(this.guessedMediaType)) {
-        this.activeTab = this.guessedMediaType;
-      } else {
-        this.activeTab = this.demoTabs[0];
-      }
-      this.loadDemoEmbedders(this.activeTab);
-    }
+    // Intentionally leave ``activeTab`` blank — no media-type tab is
+    // auto-selected.  The demo table stays empty until the user clicks
+    // one of the inner tabs.
   }
 
   private loadDemoEmbedders(mediaType: string): void {
@@ -386,8 +502,10 @@ export class DatasetImporterModalComponent implements OnInit {
   get filteredDemos(): DemoDataset[] {
     const items = this.demos.filter((d) => d.media_type === this.activeTab);
     const statusOrder: Record<string, number> = { ready: 0, needs_embedding: 1, needs_download: 2 };
+    const sortKey = this.demoCols.sortColumn;
+    const asc = this.demoCols.sortAsc;
     return items.sort((a, b) => {
-      const key = this.demoSortKey as keyof DemoDataset;
+      const key = sortKey as keyof DemoDataset;
       let va: any = a[key];
       let vb: any = b[key];
       if (key === 'status') {
@@ -395,11 +513,11 @@ export class DatasetImporterModalComponent implements OnInit {
         vb = statusOrder[vb as string] ?? 3;
       }
       if (typeof va === 'number' && typeof vb === 'number') {
-        return this.demoSortAsc ? va - vb : vb - va;
+        return asc ? va - vb : vb - va;
       }
       va = String(va || '').toLowerCase();
       vb = String(vb || '').toLowerCase();
-      return this.demoSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+      return asc ? va.localeCompare(vb) : vb.localeCompare(va);
     });
   }
 
@@ -408,127 +526,20 @@ export class DatasetImporterModalComponent implements OnInit {
     this.loadDemoEmbedders(tab);
   }
 
-  sortDemoBy(key: string): void {
-    if (this.demoSortKey === key) {
-      this.demoSortAsc = !this.demoSortAsc;
-    } else {
-      this.demoSortKey = key;
-      this.demoSortAsc = true;
-    }
+  onDemoHeaderClick(col: string): void {
+    if (this.demoCols.meta(col).sortable) this.demoCols.sortBy(col);
   }
 
-  demoSortIndicator(key: string): string {
-    if (this.demoSortKey !== key) return '';
-    return this.demoSortAsc ? ' \u25B2' : ' \u25BC';
-  }
-
-  // --- Demo table column resize ---
-
-  startDemoResize(event: MouseEvent, col: string): void {
-    event.stopPropagation();
-    event.preventDefault();
-
-    const th = (event.target as HTMLElement).closest('th') as HTMLElement;
-    const tableEl = th.closest('table') as HTMLTableElement;
-
-    if (!this.demoResizeInit) {
-      const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
-      let totalWidth = 0;
-      ths.forEach((t) => {
-        const colKey = t.getAttribute('data-col');
-        const w = t.offsetWidth;
-        if (colKey) this.demoColWidths[colKey] = w;
-        totalWidth += w;
-      });
-      this.demoTableWidth = totalWidth;
-      this.demoResizeInit = true;
-      this.demoTableFixed = true;
-    }
-
-    this.demoResizeState = {
-      startX: event.clientX,
-      startWidth: this.demoColWidths[col] ?? 100,
-      col,
-      dragged: false,
-      tableEl,
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }
+  // --- Document-level resize tracking ---
 
   @HostListener('document:mousemove', ['$event'])
-  onDemoResizeMove(event: MouseEvent): void {
-    if (!this.demoResizeState) return;
-    const delta = event.clientX - this.demoResizeState.startX;
-    if (Math.abs(delta) > 3) this.demoResizeState.dragged = true;
-    if (!this.demoResizeState.dragged) return;
-    const newWidth = Math.max(30, this.demoResizeState.startWidth + delta);
-    const prevWidth = this.demoColWidths[this.demoResizeState.col] ?? this.demoResizeState.startWidth;
-    this.demoColWidths[this.demoResizeState.col] = newWidth;
-    this.demoTableWidth = Math.max(100, this.demoTableWidth + (newWidth - prevWidth));
+  onDocResizeMove(event: MouseEvent): void {
+    this.demoCols.onResizeMove(event);
   }
 
   @HostListener('document:mouseup')
-  onDemoResizeEnd(): void {
-    if (!this.demoResizeState) return;
-    const state = this.demoResizeState;
-    this.demoResizeState = null;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-
-    if (!state.dragged) {
-      this.autoSizeDemoColumn(state.tableEl, state.col);
-    }
-  }
-
-  private autoSizeDemoColumn(tableEl: HTMLTableElement, col: string): void {
-    const ths = tableEl.querySelectorAll('thead tr th') as NodeListOf<HTMLElement>;
-    let colIndex = -1;
-    for (let i = 0; i < ths.length; i++) {
-      if (ths[i].getAttribute('data-col') === col) {
-        colIndex = i;
-        break;
-      }
-    }
-    if (colIndex < 0) return;
-
-    const prevTableWidth = tableEl.style.width;
-    tableEl.classList.remove('demo-table-fixed');
-    tableEl.style.width = 'auto';
-    ths[colIndex].style.width = '';
-
-    let maxWidth = 0;
-    const rows = tableEl.querySelectorAll('tbody tr');
-    rows.forEach((row) => {
-      const cell = row.children[colIndex] as HTMLElement | undefined;
-      if (cell) {
-        if (cell.hasAttribute('colspan')) return;
-        maxWidth = Math.max(maxWidth, cell.scrollWidth);
-      }
-    });
-    if (maxWidth === 0) {
-      maxWidth = ths[colIndex].offsetWidth;
-    }
-    maxWidth = Math.max(30, maxWidth + 2);
-
-    this.demoColWidths[col] = maxWidth;
-    this.demoTableFixed = true;
-    this.demoResizeInit = true;
-
-    let total = 0;
-    ths.forEach((t) => {
-      const key = t.getAttribute('data-col');
-      if (key && key !== col) {
-        if (!this.demoColWidths[key]) this.demoColWidths[key] = t.offsetWidth;
-        total += this.demoColWidths[key];
-      } else if (key === col) {
-        total += maxWidth;
-      }
-    });
-    this.demoTableWidth = total;
-
-    tableEl.style.width = prevTableWidth;
-    tableEl.classList.add('demo-table-fixed');
+  onDocResizeEnd(): void {
+    this.demoCols.onResizeEnd();
   }
 
   /** Convert a type_id (e.g. "image") to the corresponding folder_import_name (e.g. "images"). */
@@ -597,24 +608,186 @@ export class DatasetImporterModalComponent implements OnInit {
     // Clipper is reset by loadDemoEmbedders (called from selectDemoTab)
   }
 
-  back(): void {
-    this.view = 'picker';
-    this.selectedImporter = null;
-    this.error = '';
+  /** Read the ``recursive`` field's declared default ("true"/"false") from
+   *  the importer metadata; defaults to ``true`` when the field is absent. */
+  private readRecursiveDefault(importer: ImporterInfo | null): boolean {
+    const field = importer?.fields?.find((f) => f.key === 'recursive');
+    if (!field) return true;
+    return String(field.default ?? 'true').toLowerCase() !== 'false';
+  }
+
+  // --- Local folder upload (files come from the browser machine) ---
+
+  openLocalFolderUploader(importer?: ImporterInfo): void {
+    const resolved = importer
+      || this.importers.find((i) => i.name === 'local_folder')
+      || null;
+    this.selectedImporter = resolved;
+    this.lfPickerKind = resolved?.name === 'local_files' ? 'files' : 'folder';
+    this.lfFiles = [];
+    this.lfError = '';
+    this.lfSubmitting = false;
+    this.lfRecursive = this.readRecursiveDefault(resolved);
+
+    // Reuse the server_folder importer's media_type options for consistency.
+    const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
+    const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
+    this.lfMediaTypeOptions = mtField?.options || [];
+
+    const guessedFolder = this.toFolderName(this.guessedMediaType);
+    if (guessedFolder && this.lfMediaTypeOptions.includes(guessedFolder)) {
+      this.lfMediaType = guessedFolder;
+    } else {
+      this.lfMediaType = mtField?.default || this.lfMediaTypeOptions[0] || 'audio';
+    }
+
+    this.lfLoadEmbedders(this.lfMediaType);
+    this.lfLoadClippers(this.lfMediaType);
+  }
+
+  lfOnFolderSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files) {
+      this.lfFiles = [];
+      return;
+    }
+    this.lfFiles = Array.from(input.files);
+    this.lfError = '';
+  }
+
+  lfOnMediaTypeChange(mediaType: string): void {
+    this.lfMediaType = mediaType;
+    this.lfLoadEmbedders(mediaType);
+    this.lfLoadClippers(mediaType);
+  }
+
+  private lfLoadEmbedders(mediaType: string): void {
+    if (!mediaType) {
+      this.lfEmbedders = [];
+      this.lfSelectedEmbedder = '';
+      return;
+    }
+    this.datasetsApi.getEmbedders(mediaType).subscribe({
+      next: (embedders) => {
+        this.lfEmbedders = embedders;
+        const guessedMatch = this.guessedMediaEmbedder
+          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
+          : null;
+        this.lfSelectedEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
+      },
+    });
+  }
+
+  private lfLoadClippers(mediaType: string): void {
+    if (!mediaType) {
+      this.lfClippers = [];
+      this.lfSelectedClipper = '';
+      return;
+    }
+    this.datasetsApi.getClippers(mediaType).subscribe({
+      next: (clippers) => {
+        this.lfClippers = clippers;
+        this.lfSelectedClipper = clippers.length > 0 ? clippers[0].name : '';
+        this.lfResetClipperParams();
+      },
+    });
+  }
+
+  lfOnClipperChange(clipperName: string): void {
+    this.lfSelectedClipper = clipperName;
+    this.lfResetClipperParams();
+  }
+
+  private lfResetClipperParams(): void {
+    const clipper = this.lfClippers.find((c) => c.name === this.lfSelectedClipper);
+    this.lfClipperParams = clipper?.parameters || [];
+    this.lfClipperParamValues = {};
+    for (const param of this.lfClipperParams) {
+      this.lfClipperParamValues[param.key] = param.default;
+    }
+  }
+
+  /** First selected file's webkitRelativePath top-level segment, for display. */
+  get lfFolderName(): string {
+    if (this.lfFiles.length === 0) return '';
+    const rel = (this.lfFiles[0] as any).webkitRelativePath as string | undefined;
+    if (!rel) return '';
+    const idx = rel.indexOf('/');
+    return idx >= 0 ? rel.slice(0, idx) : rel;
+  }
+
+  lfSubmit(): void {
+    if (this.lfFiles.length === 0) {
+      this.lfError = 'Please select a folder to upload.';
+      return;
+    }
+
+    // When recursion is disabled in folder mode, drop any files that live
+    // inside subdirectories of the picked folder.  ``webkitRelativePath``
+    // looks like ``"top/file.wav"`` for top-level entries and
+    // ``"top/sub/file.wav"`` for files inside a subdirectory.
+    let filesToUpload = this.lfFiles;
+    if (this.lfPickerKind === 'folder' && !this.lfRecursive) {
+      filesToUpload = this.lfFiles.filter((file) => {
+        const rel = ((file as any).webkitRelativePath as string | undefined) || '';
+        return rel.split('/').length <= 2;
+      });
+      if (filesToUpload.length === 0) {
+        this.lfError = 'No files at the top level of the selected folder. Enable "Include subfolders" to import nested files.';
+        return;
+      }
+    }
+
+    this.lfSubmitting = true;
+    this.lfError = '';
+
+    const formData = new FormData();
+    formData.append('media_type', this.lfMediaType);
+    formData.append('recursive', this.lfRecursive ? 'true' : 'false');
+    if (this.lfChunkSize && this.lfChunkSize > 0) {
+      formData.append('chunk_size', String(Math.floor(this.lfChunkSize)));
+    }
+    if (this.lfSelectedEmbedder) {
+      formData.append('embedder', this.lfSelectedEmbedder);
+    }
+    if (this.lfSelectedClipper) {
+      formData.append('clipper', this.lfSelectedClipper);
+      if (this.lfClipperParams.length > 0 && Object.keys(this.lfClipperParamValues).length > 0) {
+        formData.append('clipper_params', JSON.stringify(this.lfClipperParamValues));
+      }
+    }
+    for (const file of filesToUpload) {
+      const rel = (file as any).webkitRelativePath as string | undefined;
+      // Browsers only populate webkitRelativePath when the input has the
+      // `webkitdirectory` attribute; fall back to the file's own name.
+      formData.append('files', file, rel && rel.length > 0 ? rel : file.name);
+    }
+
+    this.datasetsApi.importLocalFolder(formData).subscribe({
+      next: () => {
+        this.lfSubmitting = false;
+        this.importStarted.emit();
+      },
+      error: (err) => {
+        this.lfSubmitting = false;
+        this.lfError = err.error?.error || 'Upload failed';
+      },
+    });
   }
 
   // --- Server folder browser ---
 
-  openServerFolderBrowser(): void {
-    this.view = 'server_folder';
+  openServerFolderBrowser(importer?: ImporterInfo): void {
+    this.selectedImporter = importer || this.importers.find((i) => i.name === 'server_folder') || null;
     this.sfBrowsePath = '';
     this.sfBrowseRootPath = '';
     this.sfBrowseDirs = [];
     this.sfBrowseError = '';
     this.sfSubmitting = false;
+    this.sfRecursive = this.readRecursiveDefault(this.selectedImporter);
 
     // Load media type options from the folder importer's fields
-    const folderImporter = this.importers.find((imp) => imp.name === 'folder');
+    const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
     const mtField = folderImporter?.fields?.find((f) => f.key === 'media_type');
     this.sfMediaTypeOptions = mtField?.options || [];
 
@@ -730,14 +903,16 @@ export class DatasetImporterModalComponent implements OnInit {
 
   // --- Clipper chooser ---
 
-  openClipperChooser(context: 'form' | 'demo' | 'sf'): void {
+  openClipperChooser(context: 'form' | 'demo' | 'sf' | 'lf'): void {
     this.clipperChooserContext = context;
     if (context === 'form') {
       this.clipperChooserClippers = this.availableClippers;
     } else if (context === 'demo') {
       this.clipperChooserClippers = this.demoClippers;
-    } else {
+    } else if (context === 'sf') {
       this.clipperChooserClippers = this.sfClippers;
+    } else {
+      this.clipperChooserClippers = this.lfClippers;
     }
     this.clipperChooserOpen = true;
   }
@@ -752,9 +927,12 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedDemoClipper = selection.name;
       this.updateDemoStatuses();
       this.refetchDemoStatuses(this.selectedDemoEmbedder, this.selectedDemoClipper);
-    } else {
+    } else if (ctx === 'sf') {
       this.sfSelectedClipper = selection.name;
       this.sfClipperParamValues = { ...selection.params };
+    } else {
+      this.lfSelectedClipper = selection.name;
+      this.lfClipperParamValues = { ...selection.params };
     }
   }
 
@@ -772,14 +950,17 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedDemoClipper = defaultName;
       this.updateDemoStatuses();
       this.refetchDemoStatuses(this.selectedDemoEmbedder, this.selectedDemoClipper);
-    } else {
+    } else if (ctx === 'sf') {
       this.sfSelectedClipper = defaultName;
       this.sfResetClipperParams();
+    } else {
+      this.lfSelectedClipper = defaultName;
+      this.lfResetClipperParams();
     }
   }
 
   /** Display name for the currently selected clipper in a given context. */
-  clipperDisplayName(context: 'form' | 'demo' | 'sf'): string {
+  clipperDisplayName(context: 'form' | 'demo' | 'sf' | 'lf'): string {
     let clippers: ClipperInfo[];
     let selected: string;
     if (context === 'form') {
@@ -788,9 +969,12 @@ export class DatasetImporterModalComponent implements OnInit {
     } else if (context === 'demo') {
       clippers = this.demoClippers;
       selected = this.selectedDemoClipper;
-    } else {
+    } else if (context === 'sf') {
       clippers = this.sfClippers;
       selected = this.sfSelectedClipper;
+    } else {
+      clippers = this.lfClippers;
+      selected = this.lfSelectedClipper;
     }
     const clipper = clippers.find((c) => c.name === selected);
     if (!clipper) return 'None';
@@ -805,7 +989,11 @@ export class DatasetImporterModalComponent implements OnInit {
     const params: Record<string, unknown> = {
       path: this.sfAbsolutePath,
       media_type: this.sfMediaType,
+      recursive: this.sfRecursive,
     };
+    if (this.sfChunkSize && this.sfChunkSize > 0) {
+      params['chunk_size'] = Math.floor(this.sfChunkSize);
+    }
     if (this.sfSelectedEmbedder) {
       params['embedder'] = this.sfSelectedEmbedder;
     }
@@ -816,7 +1004,7 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
 
-    this.datasetsApi.runImporter('folder', params).subscribe({
+    this.datasetsApi.runImporter('server_folder', params).subscribe({
       next: () => {
         this.sfSubmitting = false;
         this.importStarted.emit();
@@ -851,6 +1039,9 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.selectedEmbedder) {
       submitValues['embedder'] = this.selectedEmbedder;
+    }
+    if (this.chunkSize && this.chunkSize > 0) {
+      submitValues['chunk_size'] = Math.floor(this.chunkSize);
     }
 
     // If there's a file field, use loadFile; otherwise runImporter

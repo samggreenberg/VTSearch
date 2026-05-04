@@ -12,6 +12,7 @@ from vtsearch.datasets.sources.local_folder import LocalFolderSource
 
 # ── MediaItem ─────────────────────────────────────────────────────────
 
+
 class TestMediaItem:
     def test_fields(self):
         item = MediaItem(key="sub/file.wav", filename="file.wav", source_name="local_folder")
@@ -26,6 +27,7 @@ class TestMediaItem:
 
 
 # ── LocalFolderSource ─────────────────────────────────────────────────
+
 
 class TestLocalFolderSource:
     def _make_tree(self, tmp_path):
@@ -141,6 +143,7 @@ class TestLocalFolderSource:
 
 # ── HttpArchiveSource ─────────────────────────────────────────────────
 
+
 class TestHttpArchiveSource:
     def test_lazy_extraction(self, tmp_path):
         """HttpArchiveSource downloads and extracts only on first access."""
@@ -167,6 +170,7 @@ class TestHttpArchiveSource:
             assert result.name == "clip.wav"
         finally:
             import shutil
+
             shutil.rmtree(cached, ignore_errors=True)
 
     def test_delegates_to_local_folder(self, tmp_path):
@@ -188,6 +192,7 @@ class TestHttpArchiveSource:
             zf.extractall(extract_dir)
 
         from vtsearch.datasets.sources.local_folder import LocalFolderSource
+
         source._extract_dir = extract_dir
         source._inner = LocalFolderSource(extract_dir)
 
@@ -209,6 +214,7 @@ class TestHttpArchiveSource:
         (source_dir / "file.wav").write_bytes(b"data")
 
         from vtsearch.datasets.sources.local_folder import LocalFolderSource
+
         source._extract_dir = source_dir
         source._inner = LocalFolderSource(source_dir)
 
@@ -226,6 +232,7 @@ class TestHttpArchiveSource:
         (cached_dir / "file.wav").write_bytes(b"data")
 
         from vtsearch.datasets.sources.local_folder import LocalFolderSource
+
         source._extract_dir = cached_dir
         source._inner = LocalFolderSource(cached_dir)
 
@@ -236,11 +243,12 @@ class TestHttpArchiveSource:
 
 # ── get_source_for_origin ─────────────────────────────────────────────
 
+
 class TestGetSourceForOrigin:
     def test_folder_origin(self, tmp_path):
         folder = tmp_path / "data"
         folder.mkdir()
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         source = get_source_for_origin(origin)
         assert source is not None
         assert isinstance(source, LocalFolderSource)
@@ -248,6 +256,7 @@ class TestGetSourceForOrigin:
 
     def test_http_archive_origin(self):
         from vtsearch.datasets.sources.http_archive import HttpArchiveSource
+
         origin = {"importer": "http_archive", "params": {"url": "https://example.com/data.zip"}}
         source = get_source_for_origin(origin)
         assert source is not None
@@ -266,7 +275,7 @@ class TestGetSourceForOrigin:
         assert get_source_for_origin(None) is None
 
     def test_empty_path_returns_none(self):
-        origin = {"importer": "folder", "params": {"path": ""}}
+        origin = {"importer": "server_folder", "params": {"path": ""}}
         assert get_source_for_origin(origin) is None
 
     def test_empty_url_returns_none(self):
@@ -276,15 +285,16 @@ class TestGetSourceForOrigin:
 
 # ── Folder importer delegates to LocalFolderSource ────────────────────
 
+
 class TestFolderImporterDelegatesToSource:
     def test_resolve_file_uses_source(self, tmp_path):
         folder = tmp_path / "audio"
         folder.mkdir()
         (folder / "clip.wav").write_bytes(b"audio")
 
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = IMPORTER.resolve_file(origin, origin_name="clip.wav")
         assert result == folder / "clip.wav"
 
@@ -294,14 +304,15 @@ class TestFolderImporterDelegatesToSource:
         sub.mkdir(parents=True)
         (sub / "item.wav").write_bytes(b"data")
 
-        from vtsearch.datasets.importers.folder import IMPORTER
+        from vtsearch.datasets.importers.server_folder import IMPORTER
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = IMPORTER.resolve_file(origin, origin_name="cat/item.wav")
         assert result == sub / "item.wav"
 
 
 # ── Resolver uses sources ─────────────────────────────────────────────
+
 
 class TestResolverUsesSource:
     def test_resolve_via_source(self, tmp_path):
@@ -312,12 +323,13 @@ class TestResolverUsesSource:
 
         from vtsearch.models.resolver import resolve_file_from_origin
 
-        origin = {"importer": "folder", "params": {"path": str(folder)}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = resolve_file_from_origin(origin, origin_name="clip.wav")
         assert result == folder / "clip.wav"
 
 
 # ── Ingest uses source fast-path ──────────────────────────────────────
+
 
 class TestIngestViaSource:
     def test_ingest_fetches_individually(self, tmp_path):
@@ -334,7 +346,7 @@ class TestIngestViaSource:
 
         from vtsearch.datasets.ingest import _ingest_via_source
 
-        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "audio"}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": "audio"}}
         entries = [
             {"origin": origin, "origin_name": "good.wav", "md5": "", "label": "good", "filename": "good.wav"},
             {"origin": origin, "origin_name": "bad.wav", "md5": "", "label": "bad", "filename": "bad.wav"},
@@ -367,7 +379,7 @@ class TestIngestViaSource:
 
         from vtsearch.datasets.ingest import _ingest_via_source
 
-        origin = {"importer": "folder", "params": {"path": str(folder), "media_type": "audio"}}
+        origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": "audio"}}
         entries = [
             {"origin": origin, "origin_name": "clip.wav", "md5": "", "label": "good", "filename": "clip.wav"},
         ]
@@ -391,6 +403,7 @@ class TestIngestViaSource:
 
 # ── Example-sort-origin API endpoint ──────────────────────────────────
 
+
 class TestExampleSortOriginEndpoint:
     def test_missing_origin(self, client):
         resp = client.post(
@@ -403,7 +416,7 @@ class TestExampleSortOriginEndpoint:
     def test_missing_key(self, client):
         resp = client.post(
             "/api/example-sort-origin",
-            json={"origin": {"importer": "folder", "params": {"path": "/tmp"}}},
+            json={"origin": {"importer": "server_folder", "params": {"path": "/tmp"}}},
         )
         assert resp.status_code == 400
         assert "key" in resp.get_json()["error"].lower()
@@ -425,7 +438,7 @@ class TestExampleSortOriginEndpoint:
         resp = client.post(
             "/api/example-sort-origin",
             json={
-                "origin": {"importer": "folder", "params": {"path": str(folder)}},
+                "origin": {"importer": "server_folder", "params": {"path": str(folder)}},
                 "key": "nonexistent.wav",
             },
         )
@@ -446,7 +459,7 @@ class TestExampleSortOriginEndpoint:
         resp = client.post(
             "/api/example-sort-origin",
             json={
-                "origin": {"importer": "folder", "params": {"path": str(folder)}},
+                "origin": {"importer": "server_folder", "params": {"path": str(folder)}},
                 "key": "example.wav",
             },
         )

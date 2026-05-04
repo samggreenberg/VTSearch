@@ -124,12 +124,6 @@ class TestDocumentMediaType:
         mt = DocumentMediaType()
         assert mt.demo_datasets == []
 
-    def test_embed_media_returns_none(self, tmp_path):
-        mt = DocumentMediaType()
-        pdf_path = tmp_path / "test.pdf"
-        pdf_path.write_bytes(_make_minimal_pdf())
-        assert mt.embed_media(pdf_path) is None
-
     def test_embed_text_returns_none(self):
         mt = DocumentMediaType()
         assert mt.embed_text("hello") is None
@@ -511,9 +505,9 @@ class TestConvertersPackage:
 
 class TestFolderImporterDocumentsOption:
     def test_documents_in_media_type_options(self):
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
 
-        importer = FolderDatasetImporter()
+        importer = ServerFolderDatasetImporter()
         media_type_field = next(f for f in importer.fields if f.key == "media_type")
         assert "document" in media_type_field.options
 
@@ -636,9 +630,9 @@ class TestDemoListConverters:
 
 class TestImporterConverterMetadata:
     def test_folder_importer_to_dict_has_converters(self):
-        from vtsearch.datasets.importers.folder import FolderDatasetImporter
+        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
 
-        importer = FolderDatasetImporter()
+        importer = ServerFolderDatasetImporter()
         d = importer.to_dict()
         assert "available_converters_by_media_type" in d
         by_mt = d["available_converters_by_media_type"]
@@ -650,7 +644,7 @@ class TestImporterConverterMetadata:
             assert "video2image" in names
 
     def test_http_archive_importer_to_dict_has_converters(self):
-        from vtsearch.datasets.importers.http_zip import HttpArchiveDatasetImporter
+        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         importer = HttpArchiveDatasetImporter()
         d = importer.to_dict()
@@ -665,7 +659,7 @@ class TestImporterConverterMetadata:
         resp = client.get("/api/dataset/importers")
         assert resp.status_code == 200
         importers = resp.get_json()["importers"]
-        folder_imp = next((i for i in importers if i["name"] == "folder"), None)
+        folder_imp = next((i for i in importers if i["name"] == "server_folder"), None)
         if folder_imp:
             assert "available_converters_by_media_type" in folder_imp
 

@@ -16,12 +16,13 @@
       [mode]="sortMode"
       (modeChange)="onSortModeChange($event)"
     />
-    <div class="view-btn-wrapper">
-      <button class="view-btn" (click)="onViewSettings()" title="Change display layout for labeled items: list vs. grid, focus mode, and icon size">View</button>
-      @if (showViewSettings) {
-        <vt-view-settings-modal [currentMediaType]="currentMediaType" (closed)="showViewSettings = false" />
-      }
-    </div>
+  </div>
+
+  <div class="view-row">
+    <vt-view-controls
+      side="right"
+      [currentMediaType]="currentMediaType"
+      class="view-controls-slot" />
   </div>
 
   <vt-label-list

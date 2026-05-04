@@ -569,24 +569,25 @@ class TestImporterMetadata:
         assert "tar" in desc
         assert "rar" in desc
 
-    def test_folder_importer_in_extended_list(self, client):
-        """Folder importer must appear in /api/dataset/importers (not a builtin)."""
+    def test_server_folder_importer_in_extended_list(self, client):
+        """server_folder importer must appear in /api/dataset/importers (not a builtin)."""
         resp = client.get("/api/dataset/importers")
         data = resp.get_json()
         names = [imp["name"] for imp in data["importers"]]
-        assert "folder" in names
+        assert "server_folder" in names
 
     def test_folder_importer_icon(self, client):
         resp = client.get("/api/dataset/importers")
         data = resp.get_json()
-        folder_imp = next((i for i in data["importers"] if i["name"] == "folder"), None)
+        folder_imp = next((i for i in data["importers"] if i["name"] == "server_folder"), None)
         assert folder_imp is not None
-        assert folder_imp["icon"] == "\U0001f4c2"
+        # 📁 — frontend renders this as a "folder" icon (see icon.component.ts).
+        assert folder_imp["icon"] == "\U0001f4c1"
 
     def test_folder_importer_description(self, client):
         resp = client.get("/api/dataset/importers")
         data = resp.get_json()
-        folder_imp = next((i for i in data["importers"] if i["name"] == "folder"), None)
+        folder_imp = next((i for i in data["importers"] if i["name"] == "server_folder"), None)
         assert folder_imp is not None
         # Description must not mention specific media-type names
         desc = folder_imp["description"]
@@ -610,7 +611,7 @@ class TestImporterMetadata:
         """Media-type dropdown should come before the path field."""
         resp = client.get("/api/dataset/importers")
         data = resp.get_json()
-        folder_imp = next((i for i in data["importers"] if i["name"] == "folder"), None)
+        folder_imp = next((i for i in data["importers"] if i["name"] == "server_folder"), None)
         assert folder_imp is not None
         keys = [f["key"] for f in folder_imp["fields"]]
         assert keys.index("media_type") < keys.index("path")
@@ -665,9 +666,7 @@ class TestDemoCacheEmbedderMismatch:
 
         # Write a fake cached pickle with a 'clip' sidecar
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
-        pkl_file.write_bytes(
-            pickle.dumps({"name": demo_name, "medias": {1: {"embedding": [0.1]}}})
-        )
+        pkl_file.write_bytes(pickle.dumps({"name": demo_name, "medias": {1: {"embedding": [0.1]}}}))
         _write_embedder_sidecar(pkl_file, "clip")
 
         # Create a fake embedder whose name is 'siglip'
@@ -703,18 +702,18 @@ class TestDemoCacheEmbedderMismatch:
         from vtsearch.datasets.loader import _write_embedder_sidecar, load_demo_dataset
 
         demo_name = next(iter(DEMO_DATASETS))
-        demo_info = DEMO_DATASETS[demo_name]
-        media_type_id = demo_info.get("media_type", "audio")
 
         embeddings_dir = tmp_path / "embeddings"
         embeddings_dir.mkdir()
 
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
         pkl_file.write_bytes(
-            pickle.dumps({
-                "name": demo_name,
-                "medias": {1: {"embedding": [0.1, 0.2], "file": "/fake/file.png"}},
-            })
+            pickle.dumps(
+                {
+                    "name": demo_name,
+                    "medias": {1: {"embedding": [0.1, 0.2], "file": "/fake/file.png"}},
+                }
+            )
         )
         _write_embedder_sidecar(pkl_file, "clip")
 
@@ -751,10 +750,12 @@ class TestDemoCacheEmbedderMismatch:
 
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
         pkl_file.write_bytes(
-            pickle.dumps({
-                "name": demo_name,
-                "medias": {1: {"embedding": [0.1], "file": "/fake/file.png"}},
-            })
+            pickle.dumps(
+                {
+                    "name": demo_name,
+                    "medias": {1: {"embedding": [0.1], "file": "/fake/file.png"}},
+                }
+            )
         )
         # No sidecar written — simulates a legacy pickle
 
@@ -1131,9 +1132,9 @@ class TestLoadProgressRaceCondition:
         assert get_progress()["error"] == "Previous load failed"
 
         # Start a new load (mock the thread so it doesn't actually run)
-        from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
-        with patch("vtsearch.routes.datasets_loading.threading.Thread"):
+        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
             _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -1165,7 +1166,7 @@ class TestLoadProgressRaceCondition:
         def _capture_update(status, message="", current=0, total=0, **kw):
             messages.append(message)
 
-        with patch("vtsearch.routes.datasets_loading.update_progress", side_effect=_capture_update):
+        with patch("vtsearch.datasets.load_pipeline.update_progress", side_effect=_capture_update):
             _load_embedder_for_clips()
 
         # Should have set "Loading embedding model…" before calling load_models
@@ -1219,7 +1220,7 @@ class TestCancelIngest:
                     dataset_progress.check_cancelled()
                     time.sleep(0.05)
 
-            from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
             _run_origin_load_in_background(
                 slow_load,
@@ -1261,9 +1262,9 @@ class TestCancelIngest:
         saved = dict(app_module.medias)
         try:
             # Start a new load — should reset the flag
-            from vtsearch.routes.datasets_loading import _run_origin_load_in_background
+            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
-            with patch("vtsearch.routes.datasets_loading._load_embedder_for_clips"):
+            with patch("vtsearch.datasets.load_pipeline._load_embedder_for_clips"):
                 _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},

@@ -171,9 +171,7 @@ class TestCombineDatasetsEnabledFlag:
         """combine_datasets is disabled with only one saved dataset."""
         from vtsearch.datasets import registry
 
-        registry.register_dataset(
-            name="solo", media_type="audio", num_items=10, pkl_path="/tmp/solo.pkl"
-        )
+        registry.register_dataset(name="solo", media_type="audio", num_items=10, pkl_path="/tmp/solo.pkl")
         try:
             imp = self._find_combine(client)
             assert imp["enabled"] is False
@@ -187,12 +185,8 @@ class TestCombineDatasetsEnabledFlag:
         """combine_datasets is disabled when two datasets have different media types."""
         from vtsearch.datasets import registry
 
-        e1 = registry.register_dataset(
-            name="audio_ds", media_type="audio", num_items=10, pkl_path="/tmp/a.pkl"
-        )
-        e2 = registry.register_dataset(
-            name="image_ds", media_type="image", num_items=10, pkl_path="/tmp/b.pkl"
-        )
+        e1 = registry.register_dataset(name="audio_ds", media_type="audio", num_items=10, pkl_path="/tmp/a.pkl")
+        e2 = registry.register_dataset(name="image_ds", media_type="image", num_items=10, pkl_path="/tmp/b.pkl")
         try:
             imp = self._find_combine(client)
             assert imp["enabled"] is False
@@ -204,12 +198,8 @@ class TestCombineDatasetsEnabledFlag:
         """combine_datasets is enabled when two datasets share a media type."""
         from vtsearch.datasets import registry
 
-        e1 = registry.register_dataset(
-            name="audio_a", media_type="audio", num_items=10, pkl_path="/tmp/a.pkl"
-        )
-        e2 = registry.register_dataset(
-            name="audio_b", media_type="audio", num_items=5, pkl_path="/tmp/b.pkl"
-        )
+        e1 = registry.register_dataset(name="audio_a", media_type="audio", num_items=10, pkl_path="/tmp/a.pkl")
+        e2 = registry.register_dataset(name="audio_b", media_type="audio", num_items=5, pkl_path="/tmp/b.pkl")
         try:
             imp = self._find_combine(client)
             assert imp["enabled"] is True

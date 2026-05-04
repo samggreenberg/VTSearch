@@ -85,11 +85,17 @@ serialisation. All plugin base classes inherit from it.
 ### PluginRegistry (Auto-Discovery)
 
 All plugin families use `PluginRegistry` for auto-discovery. The
-registry uses direct filesystem scanning (`Path.iterdir()`) to find
-**sub-packages** (directories with `__init__.py`) under the plugin
-directory. For each sub-package, it imports the module and looks for a
-module-level sentinel attribute. If found, the plugin is registered by
-its `name`.
+registry uses direct filesystem scanning (`Path.iterdir()`) under the
+plugin package directory. It discovers both **sub-packages**
+(directories with `__init__.py`) and, for registries created with
+`discover_modules=True`, **flat `.py` modules** (excluding `__init__.py`
+and `base.py`). In each module it looks for a module-level sentinel
+attribute; if found, the plugin is registered by its `name`.
+
+Most plugin families use sub-packages, which pair well with per-plugin
+`requirements.txt` files. The exception is **media sources**
+(`vtsearch.datasets.sources`), which use flat `.py` modules
+(`local_folder.py`, `http_archive.py`, `pullwrest.py`).
 
 | Plugin Family       | Package                            | Sentinel              | Base Class          |
 |---------------------|------------------------------------|-----------------------|---------------------|

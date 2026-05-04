@@ -577,9 +577,9 @@ class TestStabilitySkipsUnchangedModel:
         # Each step changes the training data
         history = [
             (0, "good", 1.0),
-            (1, "bad", 2.0),   # first model (both polarities)
+            (1, "bad", 2.0),  # first model (both polarities)
             (2, "good", 3.0),  # new model
-            (3, "bad", 4.0),   # new model
+            (3, "bad", 4.0),  # new model
             (4, "good", 5.0),  # new model
         ]
 
@@ -618,7 +618,9 @@ class TestLiveModelReuse:
         # Train a live model for good={0,2}, bad={1}
         good = {0: None, 2: None}
         bad = {1: None}
-        X = torch.tensor(np.array([clips[0]["embedding"], clips[2]["embedding"], clips[1]["embedding"]]), dtype=torch.float32)
+        X = torch.tensor(
+            np.array([clips[0]["embedding"], clips[2]["embedding"], clips[1]["embedding"]]), dtype=torch.float32
+        )
         y = torch.tensor([1.0, 1.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)
         live_threshold = 0.42
@@ -657,7 +659,9 @@ class TestLiveModelReuse:
         # Inject a live model for a DIFFERENT label set
         good = {5: None, 6: None}
         bad = {7: None}
-        X = torch.tensor(np.array([clips[5]["embedding"], clips[6]["embedding"], clips[7]["embedding"]]), dtype=torch.float32)
+        X = torch.tensor(
+            np.array([clips[5]["embedding"], clips[6]["embedding"], clips[7]["embedding"]]), dtype=torch.float32
+        )
         y = torch.tensor([1.0, 1.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)
         inject_live_model(good, bad, live_model, 0.5)

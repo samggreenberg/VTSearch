@@ -66,8 +66,9 @@ class ImageClipEmbedder(MediaEmbedder):
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading CLIP model weights…")
         CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
-        with intercept_tqdm_progress(self._on_progress), intercept_weight_loading_progress(
-            self._on_progress, "Loading CLIP model weights…"
+        with (
+            intercept_tqdm_progress(self._on_progress),
+            intercept_weight_loading_progress(self._on_progress, "Loading CLIP model weights…"),
         ):
             self._model = load_pretrained_local_first(
                 CLIPModel.from_pretrained, CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
@@ -93,17 +94,18 @@ class ImageClipEmbedder(MediaEmbedder):
             "a picture of {text}",
         ]
 
-    def _embed_media_impl(self, file_path: Path) -> Optional[np.ndarray]:
+    def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
         if self._model is None or self._processor is None:
             return None
+        file_path = Path(media["media_path"])
         try:
             from PIL import Image  # noqa: PLC0415
 
             image = Image.open(file_path).convert("RGB")
             return self.embed_pil_image(image)
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
@@ -124,7 +126,7 @@ class ImageClipEmbedder(MediaEmbedder):
                 outputs = self._model.get_image_features(**inputs)
                 embedding = _extract_tensor(outputs).detach().cpu().numpy()
             return embedding[0]
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding PIL image")
             return None
 
@@ -142,7 +144,7 @@ class ImageClipEmbedder(MediaEmbedder):
             with torch.no_grad():
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec
-        except Exception as e:
+        except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for image")
             return None
 
@@ -151,3 +153,6 @@ class ImageClipEmbedder(MediaEmbedder):
         if self._model is None:
             self.load_models()
         return self._model, self._processor
+
+
+EMBEDDER = ImageClipEmbedder()

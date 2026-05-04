@@ -343,7 +343,9 @@ def _example_sort_from_path(file_path: Path) -> tuple:
     emb = _get_embedder_for_loaded_data()
     if emb is None:
         raise ValueError("No embedder available for loaded dataset")
-    example_embedding = emb.embed_media(file_path)
+    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
+    example_embedding = emb.embed_media(media_from_path(file_path))
 
     if example_embedding is None:
         raise ValueError("Failed to embed media file")
@@ -498,7 +500,9 @@ def label_file_sort():
                 continue
 
             # Embed the media file using the dataset's embedder
-            embedding = emb.embed_media(media_path)
+            from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
+            embedding = emb.embed_media(media_from_path(media_path))
             if embedding is None:
                 skipped_count += 1
                 continue

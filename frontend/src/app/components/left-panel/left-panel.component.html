@@ -7,14 +7,13 @@
     <div class="tab-panel-manual" role="region" aria-label="Find results">
       <div class="images-header">
         <h3 class="images-header-title">
-          {{ mediaTypeName }}s ({{ medias.length }})
+          {{ mediaTypeName }}s ({{ medias.length | number }})
         </h3>
-        <div class="view-btn-wrapper">
-          <button class="view-btn" (click)="showLeftViewSettings = true" title="Change display layout: list vs. grid, focus mode, and icon size">View</button>
-          @if (showLeftViewSettings) {
-            <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
-          }
-        </div>
+        <vt-view-controls
+          side="left"
+          [currentMediaType]="medias.length > 0 ? medias[0].type : ''"
+          class="view-controls-slot" />
+
       </div>
 
       @if (sortBusy) {
@@ -115,14 +114,12 @@
 
         <div class="images-header">
           <h3 class="images-header-title">
-            {{ mediaTypeName }}s ({{ medias.length }})
+            {{ mediaTypeName }}s ({{ medias.length | number }})
           </h3>
-          <div class="view-btn-wrapper">
-            <button class="view-btn" (click)="showLeftViewSettings = true" title="Change display layout: list vs. grid, focus mode, and icon size">View</button>
-            @if (showLeftViewSettings) {
-              <vt-left-view-settings-modal [currentMediaType]="medias.length > 0 ? medias[0].type : ''" (closed)="showLeftViewSettings = false" />
-            }
-          </div>
+          <vt-view-controls
+            side="left"
+            [currentMediaType]="medias.length > 0 ? medias[0].type : ''"
+            class="view-controls-slot" />
         </div>
 
         <div class="media-list-container">

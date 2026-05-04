@@ -89,6 +89,62 @@ def _media_type_from_origin(origin_dict: dict[str, Any]) -> str:
     return ""
 
 
+def _embedder_name_for_type(medias: dict[int, dict[str, Any]], media_type_id: str) -> str:
+    """Return the embedder name used by existing medias of the given type.
+
+    Scans the live dataset for the first media whose ``type`` matches
+    *media_type_id* and returns its ``embedder`` field.  Returns an empty
+    string when no matching media is found (caller falls back to the default).
+    """
+    for m in medias.values():
+        if m.get("type") == media_type_id:
+            name = m.get("embedder", "")
+            if name:
+                return name
+    return ""
+
+
+def _build_media_data(
+    *,
+    origin_dict: dict[str, Any],
+    entry: dict[str, Any],
+    media_type_id: str,
+    origin_name: str,
+    file_path: Any,
+    file_bytes: bytes,
+    md5: str,
+    embedding: Any,
+    embedder_name: str = "",
+) -> dict[str, Any]:
+    """Build a media dict matching the shape produced by folder loading.
+
+    Mirrors the field set in ``loader.py`` so re-ingested medias carry
+    their media ``type`` (without it the frontend falls back to audio)
+    and any ``custom_metadata`` supplied by the label entry (via
+    :class:`~vtsearch.datasets.labelset.LabeledElement.metadata`).
+    """
+    name = origin_name or file_path.name
+    media_data: dict[str, Any] = {
+        "type": media_type_id,
+        "file_size": len(file_bytes),
+        "md5": md5,
+        "embedding": embedding,
+        "embedder": embedder_name,
+        "filename": entry.get("filename") or name,
+        "category": entry.get("category", ""),
+        "origin": origin_dict,
+        "origin_name": name,
+        "media_bytes": file_bytes,
+        "media_string": None,
+        "media_path": str(file_path),
+        "duration": 0,
+    }
+    custom_metadata = entry.get("metadata")
+    if custom_metadata:
+        media_data["custom_metadata"] = custom_metadata
+    return media_data
+
+
 def _ingest_via_source(
     origin_dict: dict[str, Any],
     entries: list[dict[str, Any]],
@@ -108,6 +164,7 @@ def _ingest_via_source(
         return -1
 
     media_type_id = _media_type_from_origin(origin_dict)
+    embedder_name = _embedder_name_for_type(medias, media_type_id) if media_type_id else ""
 
     from vtsearch.models.resolver import embed_file
 
@@ -124,7 +181,7 @@ def _ingest_via_source(
 
             # Embed the file — if embedding fails, fall back to legacy path
             # so we don't produce medias without embeddings.
-            embedding = embed_file(file_path, media_type_id) if media_type_id else None
+            embedding = embed_file(file_path, media_type_id, embedder_name) if media_type_id else None
             if embedding is None:
                 source.cleanup()
                 return -1  # Signal caller to use legacy full-import path
@@ -133,20 +190,24 @@ def _ingest_via_source(
             file_bytes = file_path.read_bytes()
             md5 = hashlib.md5(file_bytes).hexdigest()
 
+            media_data = _build_media_data(
+                origin_dict=origin_dict,
+                entry=entry,
+                media_type_id=media_type_id,
+                origin_name=origin_name,
+                file_path=file_path,
+                file_bytes=file_bytes,
+                md5=md5,
+                embedding=embedding,
+                embedder_name=embedder_name,
+            )
+
             # Allocate the ID and insert atomically, so two concurrent
             # ingests cannot collide on the same next_media_id.
             with _state_lock:
                 cid = next_media_id(medias)
-                medias[cid] = {
-                    "id": cid,
-                    "filename": origin_name or file_path.name,
-                    "origin": origin_dict,
-                    "origin_name": origin_name or file_path.name,
-                    "md5": md5,
-                    "embedding": embedding,
-                    "media_bytes": file_bytes,
-                    "media_path": str(file_path),
-                }
+                media_data["id"] = cid
+                medias[cid] = media_data
             ingested += 1
 
             on_progress(
@@ -181,6 +242,8 @@ def _ingest_via_resolver(
     if not media_type_id:
         return -1
 
+    embedder_name = _embedder_name_for_type(medias, media_type_id)
+
     from vtsearch.models.resolver import embed_file, resolve_file_from_origin
 
     ingested = 0
@@ -198,28 +261,32 @@ def _ingest_via_resolver(
         if origin_dict.get("params", {}).get("clipper"):
             from vtsearch.models.resolver import _apply_clip_and_embed
 
-            embedding = _apply_clip_and_embed(file_path, media_type_id, origin_dict)
+            embedding = _apply_clip_and_embed(file_path, media_type_id, origin_dict, embedder_name)
         else:
-            embedding = embed_file(file_path, media_type_id)
+            embedding = embed_file(file_path, media_type_id, embedder_name)
         if embedding is None:
             continue
 
         file_bytes = file_path.read_bytes()
         md5 = hashlib.md5(file_bytes).hexdigest()
 
+        media_data = _build_media_data(
+            origin_dict=origin_dict,
+            entry=entry,
+            media_type_id=media_type_id,
+            origin_name=origin_name,
+            file_path=file_path,
+            file_bytes=file_bytes,
+            md5=md5,
+            embedding=embedding,
+            embedder_name=embedder_name,
+        )
+
         # Atomic id allocation + insert, see _ingest_via_source above.
         with _state_lock:
             cid = next_media_id(medias)
-            medias[cid] = {
-                "id": cid,
-                "filename": origin_name or file_path.name,
-                "origin": origin_dict,
-                "origin_name": origin_name or file_path.name,
-                "md5": md5,
-                "embedding": embedding,
-                "media_bytes": file_bytes,
-                "media_path": str(file_path),
-            }
+            media_data["id"] = cid
+            medias[cid] = media_data
         ingested += 1
 
         on_progress(

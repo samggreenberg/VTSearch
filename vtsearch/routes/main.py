@@ -63,7 +63,6 @@ def favicon_variant(variant: str) -> tuple[str, int] | Response:
     return send_from_directory(str(static), filename, mimetype="image/x-icon")
 
 
-
 @main_bp.route("/logo.svg")
 def logo() -> tuple[str, int] | Response:
     """Serve the site logo from the static directory.
