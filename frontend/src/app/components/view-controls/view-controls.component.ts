@@ -83,7 +83,7 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   bumpSize(delta: 1 | -1): void {
-    if (!this.currentMediaType) return;
+    if (!this.currentMediaType || this.viewMode === 'list') return;
     const idx = ICON_SIZES.indexOf(this.gridIconSize);
     const next = ICON_SIZES[Math.max(0, Math.min(ICON_SIZES.length - 1, idx + delta))];
     if (next === this.gridIconSize) return;
