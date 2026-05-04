@@ -219,6 +219,102 @@ class LabelSet:
             elements.append(LabeledElement.from_dict(entry))
         return cls(elements)
 
+    # ------------------------------------------------------------------
+    # Merging
+    # ------------------------------------------------------------------
+
+    def merge(self, *others: LabelSet, conflict_policy: str = "drop") -> LabelSet:
+        """Merge this labelset with one or more others.
+
+        Elements are keyed by ``Origin`` (importer + params) when present,
+        falling back to ``md5`` for legacy entries with no origin.  Elements
+        with neither an origin nor an md5 are dropped (no way to dedupe).
+
+        Behaviour:
+
+        * Same key + same label across inputs → kept once.  Metadata dicts
+          from later sources are shallow-merged onto earlier ones (later
+          wins on key collision).
+        * Same key + different labels → conflict; resolved per
+          ``conflict_policy``.
+
+        Args:
+            *others: Additional :class:`LabelSet` instances to merge in.
+            conflict_policy: Currently only ``"drop"`` is supported, which
+                removes every entry that has a label disagreement across
+                the input labelsets.
+
+        Returns:
+            A new :class:`LabelSet`.  Insertion order follows ``self``
+            first, then each ``other`` in turn; on dedup the *first* entry
+            wins position, with later metadata merged in.
+        """
+        if conflict_policy != "drop":
+            raise ValueError(f"Unsupported conflict_policy: {conflict_policy!r}")
+
+        # First pass: collect every label-claim per key so we can detect
+        # disagreement before deciding what to keep.
+        labels_by_key: dict[Any, set[str]] = {}
+        for ls in (self, *others):
+            for el in ls.elements:
+                key = _element_key(el)
+                if key is None:
+                    continue
+                labels_by_key.setdefault(key, set()).add(el.label)
+
+        conflicting_keys = {k for k, labels in labels_by_key.items() if len(labels) > 1}
+
+        # Second pass: emit one element per non-conflicting key, in
+        # first-seen order.  Shallow-merge metadata from later occurrences.
+        merged: list[LabeledElement] = []
+        seen: dict[Any, int] = {}
+        for ls in (self, *others):
+            for el in ls.elements:
+                key = _element_key(el)
+                if key is None or key in conflicting_keys:
+                    continue
+                if key in seen:
+                    existing = merged[seen[key]]
+                    if el.metadata:
+                        merged_meta = dict(existing.metadata or {})
+                        merged_meta.update(el.metadata)
+                        existing.metadata = merged_meta
+                    continue
+                seen[key] = len(merged)
+                merged.append(
+                    LabeledElement(
+                        md5=el.md5,
+                        label=el.label,
+                        origin=dict(el.origin) if el.origin else None,
+                        origin_name=el.origin_name,
+                        filename=el.filename,
+                        category=el.category,
+                        metadata=dict(el.metadata) if el.metadata else None,
+                    )
+                )
+        return LabelSet(merged)
+
+
+def _element_key(el: LabeledElement) -> Any:
+    """Return a hashable identity key for an element, or ``None`` if it has none.
+
+    Prefers the element's ``Origin`` (importer + params) so that the same
+    source media can be deduped across labelsets even when re-embedded with
+    different embedders.  Falls back to ``md5`` for legacy entries that
+    have no origin.
+    """
+    if el.origin:
+        importer = el.origin.get("importer", "")
+        params = el.origin.get("params") or {}
+        try:
+            params_key = tuple(sorted(params.items()))
+        except TypeError:
+            params_key = tuple(sorted((str(k), str(v)) for k, v in params.items()))
+        return ("origin", importer, params_key, el.origin_name)
+    if el.md5:
+        return ("md5", el.md5)
+    return None
+
 
 def _clip_to_elements(media: dict[str, Any], label: str, *, expand_dupes: bool = True) -> list[LabeledElement]:
     """Convert a media dict into one or more :class:`LabeledElement` instances.

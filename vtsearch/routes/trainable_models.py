@@ -426,6 +426,133 @@ def import_labels_into_model(name: str, importer_name: str):
     )
 
 
+# ---------------------------------------------------------------------------
+# POST /api/trainable-models/combine
+# ---------------------------------------------------------------------------
+
+
+@trainable_models_bp.route("/api/trainable-models/combine", methods=["POST"])
+def combine_trainable_models():
+    """Combine the labelsets of two or more trainable models into a new model.
+
+    Expects JSON::
+
+        {
+            "names": ["Dog Barks", "More Dog Barks"],
+            "new_name": "All Dog Barks",
+            "conflict_policy": "drop"        # optional; default "drop"
+        }
+
+    All source models must share the same ``media_type``.  The new model's
+    labelset is the merge of all source labelsets, keyed by ``Origin``
+    (importer + params + origin_name) and falling back to ``md5`` for
+    legacy entries.  Per ``conflict_policy="drop"`` (the only supported
+    policy today), any element key that appears with disagreeing labels
+    across the sources is removed entirely.
+
+    The combined model is *purely a labelset entry* — no labelset-source
+    is inherited from the sources, and the threshold/MLP are computed
+    later when the model is activated against a dataset.
+
+    Returns ``201`` with a summary on success, or ``4xx`` on validation
+    errors (missing names, unknown source, media-type mismatch, name
+    collision, empty merged result).
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    names = body.get("names") or []
+    new_name = (body.get("new_name") or "").strip()
+    conflict_policy = (body.get("conflict_policy") or "drop").strip()
+
+    if not isinstance(names, list) or len(names) < 2:
+        return jsonify({"error": "names must be a list of at least 2 trainable model names"}), 400
+    if not new_name:
+        return jsonify({"error": "new_name is required"}), 400
+    if conflict_policy != "drop":
+        return jsonify({"error": f"Unsupported conflict_policy: {conflict_policy!r}"}), 400
+
+    new_path = _model_path(new_name)
+    if new_path.exists():
+        return jsonify({"error": f"A trainable model named '{new_name}' already exists"}), 409
+
+    from vtsearch.datasets.labelset import LabelSet
+
+    sources: list[dict] = []
+    for src_name in names:
+        src_path = _model_path(src_name)
+        src_data = _read_model(src_path)
+        if src_data is None:
+            return jsonify({"error": f"Trainable model '{src_name}' not found"}), 404
+        sources.append(src_data)
+
+    media_types = {s.get("media_type", "") for s in sources}
+    if len(media_types) > 1:
+        return jsonify(
+            {"error": f"All source models must share the same media_type; got {sorted(media_types)}"}
+        ), 400
+    media_type = next(iter(media_types))
+    if not media_type or media_type == "any":
+        return jsonify({"error": "Source models must have a specific media_type (not empty or 'any')"}), 400
+
+    labelsets = [LabelSet.from_dict(s.get("labelset") or {}) for s in sources]
+    merged = labelsets[0].merge(*labelsets[1:], conflict_policy=conflict_policy)
+
+    if len(merged) == 0:
+        return jsonify(
+            {
+                "error": (
+                    "Combined labelset is empty after applying conflict policy "
+                    f"{conflict_policy!r}; nothing to save."
+                )
+            }
+        ), 422
+
+    # Dedupe examples across sources by (type, value)
+    merged_examples: list[dict] = []
+    seen_ex: set[tuple[str, str]] = set()
+    for s in sources:
+        for ex in s.get("examples") or []:
+            key = (ex.get("type", ""), ex.get("value", ""))
+            if key in seen_ex:
+                continue
+            seen_ex.add(key)
+            merged_examples.append(ex)
+
+    text_query = ""
+    for ex in merged_examples:
+        if ex.get("type") == "text" and ex.get("value"):
+            text_query = ex["value"]
+            break
+    if not text_query:
+        for s in sources:
+            if s.get("text_query"):
+                text_query = s["text_query"]
+                break
+
+    new_data = {
+        "name": new_name,
+        "text_query": text_query,
+        "media_example": "",
+        "media_type": media_type,
+        "examples": merged_examples,
+        "created_at": time.time(),
+        "labelset": merged.to_dict(),
+        "combined_from": list(names),
+    }
+    _write_model(new_path, new_data)
+
+    return jsonify(
+        {
+            "success": True,
+            "name": new_name,
+            "media_type": media_type,
+            "num_labels": len(merged),
+            "combined_from": list(names),
+            "source_label_counts": [len(ls) for ls in labelsets],
+            "examples": merged_examples,
+        }
+    ), 201
+
+
 # Canonical location: vtsearch.models.training_workflow
 from vtsearch.models.training_workflow import apply_and_retrain as _apply_and_retrain  # noqa: E402
 
