@@ -1,10 +1,10 @@
-# VTSearch — slim dependencies (image search with SigLIP only)
+# VTSearch — SigLIP dependencies (image search with SigLIP only)
 #
 # Pared-down requirements for the most common deployment: browsing/voting
 # on an image dataset with the SigLIP embedder. Skips audio, video,
 # document, text, and extractor deps to keep the image small.
 #
-# Used by Dockerfile.slim.
+# Used by Dockerfile.siglip.
 
 # ── Core framework ───────────────────────────────────────────────────
 flask
