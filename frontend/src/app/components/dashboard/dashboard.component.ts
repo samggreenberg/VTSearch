@@ -421,7 +421,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   onCombineStarted(): void {
     this.closeCombineModal();
-    this.datasetState.refresh();
+    this.startProgressPolling();
   }
 
   /**

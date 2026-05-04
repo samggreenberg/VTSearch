@@ -32,6 +32,7 @@ export class CombineDatasetsModalComponent implements OnInit {
   mediaTypes: MediaTypeInfo[] = [];
   submitting = false;
   error = '';
+  name = '';
 
   constructor(private datasetsApi: DatasetsApiService) {}
 
@@ -46,11 +47,18 @@ export class CombineDatasetsModalComponent implements OnInit {
       }))
       .filter((r) => !!r.pkl_path);
 
+    this.name = this.defaultName();
+
     this.datasetsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypes = res.media_types || [];
       },
     });
+  }
+
+  /** Default combined-dataset name: source names joined with " + ". */
+  private defaultName(): string {
+    return this.rows.map((r) => r.name).filter((n) => !!n).join(' + ');
   }
 
   /** Total media items across all selected datasets, before deduplication. */
@@ -100,7 +108,8 @@ export class CombineDatasetsModalComponent implements OnInit {
     this.submitting = true;
     this.error = '';
     const paths = this.rows.map((r) => r.pkl_path);
-    this.datasetsApi.combineDatasets({ datasets: paths }).subscribe({
+    const name = (this.name || '').trim() || this.defaultName();
+    this.datasetsApi.combineDatasets({ datasets: paths, name }).subscribe({
       next: () => {
         this.submitting = false;
         this.combineStarted.emit();
