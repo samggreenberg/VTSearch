@@ -250,9 +250,22 @@ class TestAutorunDetectors:
         assert resp.get_json()["autodetect"] is True
         assert "ghost-model" in get_autorun_detector_names()
 
-    def test_set_autodetect_false_on_nonexistent_detector_returns_404(self, client):
+    def test_set_autodetect_false_on_unknown_detector_returns_404(self, client):
         resp = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": False})
         assert resp.status_code == 404
+
+    def test_set_autodetect_false_clears_settings_only_entry(self, client, isolated_settings):
+        """A model-registry entry persisted only in settings must be removable via the toggle."""
+        from vtsearch.settings import get_autorun_detector_names
+
+        on = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": True})
+        assert on.status_code == 200
+        assert "ghost-model" in get_autorun_detector_names()
+
+        off = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": False})
+        assert off.status_code == 200
+        assert off.get_json()["autodetect"] is False
+        assert "ghost-model" not in get_autorun_detector_names()
 
     def test_set_autodetect_missing_field_returns_400(self, client):
         resp = client.put("/api/autorun-detectors/any/autodetect", json={})
