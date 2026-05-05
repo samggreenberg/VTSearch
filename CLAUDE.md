@@ -26,6 +26,18 @@ Never ask the user whether to subscribe to PR activity, and never call `subscrib
 
 Breaking backwards compatibility is acceptable — do not add shims, feature flags, legacy re-exports, or other compatibility layers to preserve old behavior. Just make the clean change. When a change does break backwards compatibility, mention it to the user so they're aware.
 
+## Fix All Errors (CRITICAL)
+
+When you run a build, typecheck, linter, or test suite, **fix every error and failure you see — not only the ones you introduced**. Do not dismiss errors as "pre-existing", "unrelated to my change", or "not my fault" and move on. Do not announce them and ask the user to triage. The user does not want to scan your output for problems you decided to ignore.
+
+This applies to:
+- TypeScript errors from `tsc` / `npm run build:prod` (including in `*.spec.ts` files, even though specs do not currently run — they must still typecheck).
+- Python test failures from `./run-tests.sh` and `pytest` runs.
+- Linter errors from `ruff`.
+- Any other diagnostics surfaced by tooling you invoke.
+
+If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
+
 ## Commands
 - **Run tests (CPU, fast)**: `./run-tests.sh` (also checks frontend TypeScript build)
 - **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; `core` includes frontend build check)
