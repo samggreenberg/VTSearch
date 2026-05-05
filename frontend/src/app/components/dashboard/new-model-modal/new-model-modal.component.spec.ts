@@ -77,13 +77,13 @@ describe('NewModelModalComponent', () => {
   it('should disable Create button when not ready', () => {
     component.name = '';
     component.pendingText = '';
-    expect(component.canSubmit).toBeFalse();
+    expect(component.canSubmitBlank).toBeFalse();
 
     component.name = 'Test';
-    expect(component.canSubmit).toBeFalse();
+    expect(component.canSubmitBlank).toBeFalse();
 
     component.pendingText = 'query';
-    expect(component.canSubmit).toBeTrue();
+    expect(component.canSubmitBlank).toBeTrue();
   });
 
   it('should disable media buttons when text is entered', () => {

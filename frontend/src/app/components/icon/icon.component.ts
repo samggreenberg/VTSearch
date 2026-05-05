@@ -10,7 +10,7 @@ const KNOWN_TYPES = new Set([
   'server', 'globe', 'email', 'satellite',
   'folder', 'folder-open', 'upload',
   'graduation', 'arrow-up', 'shuffle', 'elephant', 'cloud',
-  'check', 'warning', 'x-circle', 'info', 'file', 'lightbulb',
+  'check', 'warning', 'x-circle', 'info', 'file', 'robot',
   'list', 'grid', 'cursor-click', 'cursor-hover',
   'palette', 'sort-descending', 'steering-wheel', 'cloud-upload',
   'thumbs-up', 'thumbs-down', 'factory',
@@ -128,8 +128,8 @@ function emojiToType(icon: string): string {
       @case ('info') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
       }
-      @case ('lightbulb') {
-        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>
+      @case ('robot') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="3" r="1.5"/><line x1="12" y1="4.5" x2="12" y2="7"/><rect x="4" y="7" width="16" height="12" rx="2.5"/><path d="M4 11a2 2 0 0 0 0 4"/><path d="M20 11a2 2 0 0 1 0 4"/><circle cx="9.5" cy="12.5" r="1.2"/><circle cx="14.5" cy="12.5" r="1.2"/><line x1="10" y1="16" x2="14" y2="16"/></svg>
       }
       @case ('file') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
