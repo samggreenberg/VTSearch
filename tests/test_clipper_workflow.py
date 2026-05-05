@@ -101,6 +101,49 @@ def _make_video_media(media_id: int, duration: float = 10.0) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# _apply_clipper — clip thumbnail regeneration
+# ---------------------------------------------------------------------------
+
+
+class TestApplyClipperThumbnails:
+    """Clipped audio/video sub-items must get fresh thumbnail_bytes so the
+    find/label list shows the clip's range, not the parent media."""
+
+    def test_audio_clips_get_fresh_waveform_thumbnails(self):
+        from vtsearch.datasets.load_pipeline import _apply_clipper
+
+        parent = _make_audio_media(1, duration=5.1)
+        # Pretend the loader generated a thumbnail from the full waveform.
+        parent["thumbnail_bytes"] = b"PARENT_WAVEFORM_PNG"
+        clips_dict = {1: parent}
+
+        _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
+
+        assert len(clips_dict) > 1
+        for clip in clips_dict.values():
+            assert clip.get("thumbnail_bytes") not in (None, b"PARENT_WAVEFORM_PNG"), (
+                "clip thumbnail should be regenerated from the clip's own bytes"
+            )
+            # PNG header check
+            assert clip["thumbnail_bytes"][:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_passthrough_clipper_keeps_parent_thumbnail(self):
+        from vtsearch.datasets.load_pipeline import _apply_clipper
+
+        parent = _make_audio_media(1, duration=2.0)
+        parent["thumbnail_bytes"] = b"PARENT_WAVEFORM_PNG"
+        clips_dict = {1: parent}
+
+        # sound_default returns the media unchanged — no clipping happens.
+        _apply_clipper(clips_dict, "sound_default")
+
+        assert len(clips_dict) == 1
+        clip = next(iter(clips_dict.values()))
+        # No regeneration needed for a non-clip; parent thumbnail preserved.
+        assert clip["thumbnail_bytes"] == b"PARENT_WAVEFORM_PNG"
+
+
+# ---------------------------------------------------------------------------
 # _apply_clipper — MD5 recomputation
 # ---------------------------------------------------------------------------
 

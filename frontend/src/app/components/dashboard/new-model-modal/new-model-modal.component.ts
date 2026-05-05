@@ -71,6 +71,8 @@ export class NewModelModalComponent implements OnInit {
   exampleType: 'text' | 'media' | null = null;
   exampleValue = '';
   exampleDisplay = '';
+  exampleMediaType = '';
+  exampleThumbFailed = false;
 
   // --- Media picker state (shares structure with the Add Dataset modal) ---
 
@@ -485,6 +487,8 @@ export class NewModelModalComponent implements OnInit {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
         this.exampleDisplay = res.original_name || entry.name;
+        this.exampleMediaType = this.activeDemoTab || this.mediaType;
+        this.exampleThumbFailed = false;
         this.pendingText = '';
         this.demoFileLoading = false;
         this.view = 'main';
@@ -581,6 +585,8 @@ export class NewModelModalComponent implements OnInit {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
         this.exampleDisplay = res.original_name || entry.name;
+        this.exampleMediaType = this.mediaType || this.mediaTypeFromFilename(entry.name);
+        this.exampleThumbFailed = false;
         this.pendingText = '';
         this.sfFileSelecting = false;
         this.view = 'main';
@@ -649,6 +655,8 @@ export class NewModelModalComponent implements OnInit {
           this.exampleType = 'media';
           this.exampleValue = res.filename;
           this.exampleDisplay = res.original_name || res.filename;
+          this.exampleMediaType = mediaType || this.mediaType;
+          this.exampleThumbFailed = false;
           this.pendingText = '';
           // Close the picker if it was open so the user lands back on the form.
           if (this.view === 'media-picker') this.view = 'main';
@@ -669,6 +677,27 @@ export class NewModelModalComponent implements OnInit {
     if (m.startsWith('audio/')) return 'audio';
     if (m.startsWith('video/')) return 'video';
     return '';
+  }
+
+  private mediaTypeFromFilename(name: string): string {
+    const ext = name.toLowerCase().split('.').pop() || '';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) return 'image';
+    if (['wav', 'mp3', 'ogg', 'flac', 'm4a', 'aac'].includes(ext)) return 'audio';
+    if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+    return '';
+  }
+
+  /** URL of the example thumbnail, or null if no media example is selected
+   *  or the thumbnail endpoint already failed (so we fall back to the icon). */
+  get exampleThumbnailUrl(): string | null {
+    if (this.exampleType !== 'media' || !this.exampleValue || this.exampleThumbFailed) {
+      return null;
+    }
+    return `/api/server-media-files/${encodeURIComponent(this.exampleValue)}/thumbnail`;
+  }
+
+  onExampleThumbError(): void {
+    this.exampleThumbFailed = true;
   }
 
   backToMain(): void {
@@ -706,6 +735,8 @@ export class NewModelModalComponent implements OnInit {
     this.exampleType = null;
     this.exampleValue = '';
     this.exampleDisplay = '';
+    this.exampleMediaType = '';
+    this.exampleThumbFailed = false;
     this.pendingText = '';
   }
 
