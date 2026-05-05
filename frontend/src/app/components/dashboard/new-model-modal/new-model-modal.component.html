@@ -83,7 +83,7 @@
             </div>
             <div class="example-col">
               <label class="col-label">Media Example</label>
-              <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" [disabled]="hasPendingText" title="Browse loaded media to pick an example">Browse Media...</button>
+              <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" [disabled]="hasPendingText" title="Browse demos, server folders, or upload a file to pick an example">Browse Media...</button>
               <input
                 #fileInput
                 type="file"
@@ -243,86 +243,269 @@
     <div class="media-picker">
       <button class="btn btn--secondary btn--sm back-btn" (click)="backToMain()" title="Return to the model creation form">&larr; Back</button>
 
-      <!-- Source selection (top level) -->
-      @if (!selectedSource) {
-        <p class="picker-instructions">Choose a source to browse media from:</p>
-        <div class="source-list">
-          @for (src of mediaSources; track src.name) {
-            <button class="importer-card" (click)="selectSource(src)">
-              <span class="importer-name">@if (src.icon) {<span class="importer-icon"><vt-icon [icon]="src.icon"></vt-icon></span> }{{ src.display_name || src.name }}</span>
-              @if (src.description) {
-                <span class="importer-desc">{{ src.description }}</span>
-              }
-            </button>
+      <!-- Category tabs (mirrors the Add Dataset modal so users see the same layout). -->
+      <div class="importer-picker">
+        <div class="importer-tab-bar">
+          @for (tab of visibleImporterTabs; track tab.id) {
+            <button
+              class="importer-tab"
+              [class.active]="activeImporterTab === tab.id"
+              (click)="selectImporterTab(tab.id)"
+              [title]="'Show ' + tab.label + ' media sources'"
+            >@if (tab.icon) {<vt-icon [type]="tab.icon" [size]="14"></vt-icon>}{{ tab.label }}</button>
           }
         </div>
-      }
-
-      <!-- Browse items (demo list or server media files) -->
-      @if (selectedSource && !fileBrowsing && !browseLoading && browseItems.length > 0) {
-        <p class="picker-instructions">Select an item from <strong>{{ selectedSource.display_name || selectedSource.name }}</strong>:</p>
-        <div class="browse-list">
-          @for (item of browseItems; track item.key) {
-            <button class="browse-item" (click)="selectBrowseItem(item)" [title]="item.key">
-              {{ item.display || item.key }}
-            </button>
-          }
-        </div>
-      }
-
-      <!-- File browser (recursive directory navigation) -->
-      @if (fileBrowsing) {
-        <div class="breadcrumbs">
-          @for (seg of browsePath; track $index) {
-            @if ($index > 0) { <span class="breadcrumb-sep">/</span> }
-            @if ($index < browsePath.length - 1) {
-              <button class="breadcrumb-link" (click)="navigateBreadcrumb($index)">{{ seg }}</button>
-            } @else {
-              <span class="breadcrumb-current">{{ seg }}</span>
-            }
-          }
-        </div>
-
-        @if (fileLoading) {
-          <p class="empty-state">Loading...</p>
+        @if (!activeImporterTab) {
+          <p class="tab-bar-hint">Select where to pick a media example from.</p>
         }
 
-        @if (!fileLoading && browseEntries.length > 0) {
-          <div class="browse-list">
-            @for (entry of browseEntries; track entry.path) {
-              @if (entry.isDir) {
-                <button class="browse-item browse-dir" (click)="enterDirectory(entry)" [title]="entry.path">
-                  <span class="entry-icon"><vt-icon type="folder"></vt-icon></span> {{ entry.name }}
-                  @if (entry.modified_at) {
-                    <span class="entry-date">{{ entry.modified_at }}</span>
-                  }
-                </button>
-              } @else {
-                <button class="browse-item browse-file" (click)="selectFile(entry)" [title]="entry.path">
-                  <span class="entry-icon"><vt-icon type="file-text"></vt-icon></span> {{ entry.name }}
-                  @if (entry.modified_at) {
-                    <span class="entry-date">{{ entry.modified_at }}</span>
-                  }
-                  @if (entry.size_bytes != null) {
-                    <span class="entry-size">{{ formatSize(entry.size_bytes) }}</span>
-                  }
-                </button>
-              }
+        @if (activeImporterTab) {
+          <div class="importer-subtab-bar">
+            @if (importersForActiveTab.length === 0) {
+              <span class="empty-state empty-state--inline">No sources in this category.</span>
+            }
+            @for (imp of importersForActiveTab; track imp.name) {
+              <button
+                class="importer-subtab"
+                [class.active]="selectedImporter?.name === imp.name"
+                (click)="selectImporter(imp)"
+                [title]="imp.description || ''"
+              >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
             }
           </div>
+          @if (!selectedImporter && importersForActiveTab.length > 0) {
+            <p class="tab-bar-hint">Select a {{ activeImporterTabLabel }} source to browse.</p>
+          }
         }
+      </div>
 
-        @if (!fileLoading && browseEntries.length === 0) {
-          <p class="empty-state">No media files found in this directory.</p>
-        }
+      <!-- Demo picker view: media-type tabs + sortable demo table. -->
+      @if (activePickerView === 'demo' && selectedImporter && !demoFileBrowsing) {
+        <div class="demo-picker">
+          @if (demoLoading) {
+            <p class="empty-state">Loading demo datasets...</p>
+          } @else if (demos.length === 0) {
+            <p class="empty-state">No demo datasets available.</p>
+          } @else {
+            <div class="demo-tab-bar">
+              @for (tab of demoTabs; track tab) {
+                <button
+                  class="demo-tab"
+                  [class.active]="activeDemoTab === tab"
+                  (click)="selectDemoTab(tab)"
+                  [title]="'Filter demos by media type: ' + getDemoTabLabel(tab)"
+                >@if (getDemoTabIcon(tab)) {<vt-icon [icon]="getDemoTabIcon(tab)" [size]="14"></vt-icon>}{{ getDemoTabLabel(tab) }}</button>
+              }
+            </div>
+            @if (!activeDemoTab) {
+              <p class="tab-bar-hint">Select the media type to demonstrate.</p>
+            }
+
+            @if (activeDemoTab) {
+              <div class="demo-content-area">
+                <table class="demo-table" [class.table-fixed]="demoCols.tableFixed">
+                  <thead>
+                    <tr>
+                      @for (col of demoCols.columnOrder; track col; let first = $first) {
+                        <th
+                          [class.sortable]="demoCols.meta(col).sortable"
+                          [class.col-drop-target]="demoCols.isDropTarget(col)"
+                          [class.col-dragging]="demoCols.isDragging(col)"
+                          [class.col-num]="col === 'num_files' || col === 'num_categories'"
+                          [attr.data-col]="col"
+                          [title]="demoCols.meta(col).title"
+                          [style.width.%]="demoCols.tableFixed ? demoCols.colWidths[col] : null"
+                          draggable="true"
+                          (click)="onDemoHeaderClick(col)"
+                          (dragstart)="demoCols.onColDragStart($event, col)"
+                          (dragover)="demoCols.onColDragOver($event, col)"
+                          (dragleave)="demoCols.onColDragLeave($event, col)"
+                          (drop)="demoCols.onColDrop($event, col)"
+                          (dragend)="demoCols.onColDragEnd($event)"
+                        >@if (!first) {<div class="col-resize-handle" (mousedown)="demoCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>}{{ demoCols.meta(col).label }}@if (demoCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="demoCols.isSortActive(col)">{{ demoCols.sortIndicator(col) }}</span>}</th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (demo of filteredDemos; track demo.name) {
+                      <tr
+                        class="demo-row"
+                        [class.ready]="demo.status === 'ready'"
+                        [class.disabled]="!isDemoBrowsable(demo)"
+                        role="button"
+                        tabindex="0"
+                        [attr.aria-label]="demo.label + ': ' + demo.description"
+                        [title]="isDemoBrowsable(demo) ? 'Browse files in ' + demo.label : 'This demo has not been downloaded. Use the Add Dataset window to fetch it first.'"
+                        (click)="selectDemo(demo)"
+                        (keydown.enter)="selectDemo(demo)"
+                        (keydown.space)="$event.preventDefault(); selectDemo(demo)"
+                      >
+                        @for (col of demoCols.columnOrder; track col) {
+                          @switch (col) {
+                            @case ('label') {
+                              <td class="col-name">{{ demo.label }}</td>
+                            }
+                            @case ('num_files') {
+                              <td class="col-num">{{ demo.num_files | number }}</td>
+                            }
+                            @case ('num_categories') {
+                              <td class="col-num">{{ demo.num_categories | number }}</td>
+                            }
+                            @case ('description') {
+                              <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>
+                            }
+                            @case ('status') {
+                              <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
+                            }
+                          }
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        </div>
       }
 
-      @if (browseLoading) {
-        <p class="empty-state">Loading items...</p>
+      <!-- Demo file browser: appears after picking a demo from the table.
+           Reuses the server-folder-browser chrome so both file pickers feel
+           the same. -->
+      @if (activePickerView === 'demo' && selectedImporter && demoFileBrowsing) {
+        <div class="server-folder-browser">
+          <button class="btn btn--secondary btn--sm back-btn" (click)="backToDemoTable()" title="Return to the demo list">&larr; Back to demo list</button>
+          <div class="sf-browse-section">
+            <div class="sf-breadcrumbs">
+              @for (seg of demoFileBrowsePath; track $index) {
+                @if ($index > 0) { <span class="sf-breadcrumb-sep">/</span> }
+                <button class="sf-breadcrumb" [class.active]="$index === demoFileBrowsePath.length - 1" (click)="navigateDemoBreadcrumb($index)">{{ seg }}</button>
+              }
+            </div>
+
+            <div class="sf-dir-list">
+              @if (demoFileLoading) {
+                <p class="empty-state">Loading...</p>
+              } @else if (demoFileBrowseEntries.length === 0) {
+                <p class="sf-empty-dir">No media files found in this directory.</p>
+              }
+              @for (entry of demoFileBrowseEntries; track entry.path) {
+                @if (entry.isDir) {
+                  <button class="sf-dir-item" (click)="enterDemoDirectory(entry)" [title]="entry.path">
+                    <span class="sf-dir-icon"><vt-icon type="folder"></vt-icon></span>
+                    <span class="sf-dir-name">{{ entry.name }}</span>
+                    @if (entry.modified_at) {
+                      <span class="sf-dir-date">{{ entry.modified_at }}</span>
+                    }
+                  </button>
+                } @else {
+                  <button class="sf-dir-item" (click)="selectDemoFile(entry)" [title]="'Use ' + entry.path + ' as the example'" [disabled]="demoFileLoading">
+                    <span class="sf-dir-icon"><vt-icon type="file-text"></vt-icon></span>
+                    <span class="sf-dir-name">{{ entry.name }}</span>
+                    @if (entry.size_bytes != null) {
+                      <span class="sf-dir-date">{{ formatSize(entry.size_bytes) }}</span>
+                    }
+                  </button>
+                }
+              }
+            </div>
+          </div>
+        </div>
       }
 
-      @if (selectedSource && !fileBrowsing && !browseLoading && browseItems.length === 0) {
-        <p class="empty-state">No items found in this source.</p>
+      <!-- Server folder browser: same breadcrumb chrome as the Add Dataset
+           modal, but lists files alongside directories so the user can pick
+           one to use as an example. -->
+      @if (activePickerView === 'server_folder' && selectedImporter) {
+        <div class="server-folder-browser">
+          <div class="sf-browse-section">
+            <label class="form-label">Browse server folders</label>
+            <div class="sf-breadcrumbs">
+              <button class="sf-breadcrumb" [class.active]="!sfBrowsePath" (click)="sfLoadDirectory('')">Root</button>
+              @for (crumb of sfBreadcrumbs; track $index) {
+                <span class="sf-breadcrumb-sep">/</span>
+                <button class="sf-breadcrumb" [class.active]="$index === sfBreadcrumbs.length - 1" (click)="sfNavigateBreadcrumb($index)">{{ crumb }}</button>
+              }
+            </div>
+
+            <div class="sf-dir-list">
+              @if (sfBrowseLoading) {
+                <p class="empty-state">Loading...</p>
+              } @else if (sfBrowseError) {
+                <p class="error-text">{{ sfBrowseError }}</p>
+              } @else if (sfBrowseDirs.length === 0 && sfBrowseFiles.length === 0) {
+                <p class="sf-empty-dir">No subdirectories or media files in this folder.</p>
+              }
+              @if (sfBrowsePath) {
+                <button class="sf-dir-item" (click)="sfGoUp()" title="Go to parent directory">
+                  <span class="sf-dir-icon"><vt-icon type="arrow-up"></vt-icon></span>
+                  <span class="sf-dir-name">..</span>
+                </button>
+              }
+              @for (dir of sfBrowseDirs; track dir.path) {
+                <button class="sf-dir-item" (click)="sfEnterDirectory(dir)" [title]="dir.path">
+                  <span class="sf-dir-icon"><vt-icon type="folder"></vt-icon></span>
+                  <span class="sf-dir-name">{{ dir.name }}</span>
+                  @if (dir.modified_at) {
+                    <span class="sf-dir-date">{{ dir.modified_at }}</span>
+                  }
+                </button>
+              }
+              @for (file of sfBrowseFiles; track file.path) {
+                <button class="sf-dir-item" (click)="sfSelectFile(file)" [title]="'Use ' + file.path + ' as the example'" [disabled]="sfFileSelecting">
+                  <span class="sf-dir-icon"><vt-icon type="file-text"></vt-icon></span>
+                  <span class="sf-dir-name">{{ file.name }}</span>
+                  @if (file.size_bytes != null) {
+                    <span class="sf-dir-date">{{ formatSize(file.size_bytes) }}</span>
+                  }
+                </button>
+              }
+            </div>
+
+            <div class="sf-selected-path">
+              <span class="form-label">Path:</span>
+              <code class="sf-path-display">{{ sfAbsolutePath }}</code>
+            </div>
+          </div>
+
+          @if (sfBrowseError && !sfBrowseLoading) {
+            <p class="error-text">{{ sfBrowseError }}</p>
+          }
+        </div>
+      }
+
+      <!-- Local file upload: pick a single file from the user's machine.
+           local_folder and local_files share this view since only one example
+           file is needed regardless of how many the input collects. -->
+      @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
+        <div class="local-folder-uploader">
+          <p class="info-text">
+            Pick a media file on <strong>this computer</strong>. It will be uploaded to the server
+            and used as the example for this model.
+          </p>
+          @if (activePickerView === 'local_folder') {
+            <input
+              id="nmm-local-folder-input"
+              type="file"
+              class="form-input"
+              webkitdirectory
+              directory
+              multiple
+              (change)="onLocalFileSelected($event)"
+            />
+            <p class="info-text">
+              The first file in the picked folder will be used. To pick a single file directly,
+              switch to the <strong>Local Files</strong> tab.
+            </p>
+          } @else {
+            <input
+              id="nmm-local-files-input"
+              type="file"
+              class="form-input"
+              (change)="onLocalFileSelected($event)"
+            />
+          }
+        </div>
       }
     </div>
   }
