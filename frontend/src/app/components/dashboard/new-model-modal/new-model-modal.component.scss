@@ -142,6 +142,15 @@
   color: var(--accent);
 }
 
+.example-thumbnail {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--radius-sm, 4px);
+  flex-shrink: 0;
+  background: var(--bg, #fff);
+}
+
 .example-label {
   overflow: hidden;
   text-overflow: ellipsis;
