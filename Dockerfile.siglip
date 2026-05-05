@@ -45,6 +45,12 @@ SiglipTokenizer.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache)"
 # ---------- application layer ----------
 COPY . .
 
+# Seed default settings so the SigLIP image embedder is preloaded at startup.
+# Docker copies this file into a fresh named volume on first creation, so new
+# deployments come ready-to-serve without the user manually toggling autoload.
+RUN mkdir -p /app/data && \
+    printf '{\n  "autoload_media_embedders": ["siglip"]\n}\n' > /app/data/settings.json
+
 # Runtime data directory (settings, embeddings, datasets, media files).
 # Mount a volume here to persist user data across container restarts.
 # Note: model weights live under /opt/vtsearch/models, NOT this volume.
