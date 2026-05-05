@@ -27,10 +27,14 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
+# Both dashboard tables (datagrid) and the shared importer-picker demo table
+# (used by both the Add Dataset and New Model > Browse Media modals) host
+# their own copies of the resize-handle rule.  The picker version lives in
+# the global ``_picker-shared.scss`` partial so the two modals don't have
+# duplicate scoped copies.
 SCSS_FILES = [
     REPO / "frontend/src/app/components/dashboard/dashboard.component.scss",
-    REPO
-    / "frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.scss",
+    REPO / "frontend/src/scss/_picker-shared.scss",
 ]
 
 
