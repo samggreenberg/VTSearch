@@ -6,7 +6,7 @@ import { FileBrowserComponent } from '../../file-browser/file-browser.component'
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
+import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 @Component({
@@ -116,6 +116,14 @@ export class DatasetImporterModalComponent implements OnInit {
 
   /** Maximum medias per chunk during embedding for the generic form view; 0 means "no chunking". */
   chunkSize = 0;
+
+  // Dynamic-options cache for the generic form view.  Keyed by ImporterField.key.
+  /** Options last fetched from the backend for dynamic-options fields. */
+  dynamicFieldOptions: Record<string, string[]> = {};
+  /** Whether a dynamic-options fetch is currently in flight for a field. */
+  dynamicFieldLoading: Record<string, boolean> = {};
+  /** Last fetch error for a dynamic-options field, if any. */
+  dynamicFieldError: Record<string, string> = {};
 
   // Clipper chooser modal state
   clipperChooserOpen = false;
@@ -273,6 +281,9 @@ export class DatasetImporterModalComponent implements OnInit {
     this.clipperParamValues = {};
     this.selectedEmbedder = '';
     this.availableEmbedders = [];
+    this.dynamicFieldOptions = {};
+    this.dynamicFieldLoading = {};
+    this.dynamicFieldError = {};
 
     // Pre-populate defaults
     if (importer.fields) {
@@ -298,12 +309,76 @@ export class DatasetImporterModalComponent implements OnInit {
       this.loadClippers(defaultType);
       this.loadEmbedders(defaultType);
     }
+
+    // Fetch initial options for dynamic fields whose deps are already filled.
+    for (const field of importer.fields || []) {
+      if (field.dynamic_options) {
+        this.refreshDynamicFieldOptions(field);
+      }
+    }
   }
 
   onMediaTypeChange(mediaType: string): void {
     this.formValues['media_type'] = mediaType;
     this.loadClippers(mediaType);
     this.loadEmbedders(mediaType);
+    this.onFormFieldChanged('media_type');
+  }
+
+  /** Called whenever a form field value changes.  Refreshes options for
+   *  every dynamic-options field whose ``depends_on`` includes *changedKey*.
+   *  Also clears the dependent field's current value so the user can't
+   *  submit a now-stale selection. */
+  onFormFieldChanged(changedKey: string): void {
+    const importer = this.selectedImporter;
+    if (!importer?.fields) return;
+    for (const field of importer.fields) {
+      if (!field.dynamic_options) continue;
+      if (!(field.depends_on || []).includes(changedKey)) continue;
+      this.formValues[field.key] = '';
+      this.refreshDynamicFieldOptions(field);
+    }
+  }
+
+  /** Fetch the option list for a dynamic-options field from the backend. */
+  private refreshDynamicFieldOptions(field: ImporterField): void {
+    const importer = this.selectedImporter;
+    if (!importer) return;
+    const key = field.key;
+    this.dynamicFieldLoading[key] = true;
+    this.dynamicFieldError[key] = '';
+    this.datasetsApi
+      .getImporterFieldOptions(importer.name, key, { ...this.formValues })
+      .subscribe({
+        next: (res) => {
+          this.dynamicFieldOptions[key] = res.options || [];
+          this.dynamicFieldLoading[key] = false;
+          // If the current value isn't in the new option list, clear it so
+          // the displayed select matches the value.  Pre-select the first
+          // option when the field is required and currently empty.
+          const current = this.formValues[key];
+          if (current && !this.dynamicFieldOptions[key].includes(String(current))) {
+            this.formValues[key] = '';
+          }
+          if (!this.formValues[key] && field.required && this.dynamicFieldOptions[key].length > 0) {
+            this.formValues[key] = this.dynamicFieldOptions[key][0];
+          }
+        },
+        error: (err) => {
+          this.dynamicFieldLoading[key] = false;
+          this.dynamicFieldError[key] = err?.error?.error || 'Could not load options';
+          this.dynamicFieldOptions[key] = [];
+        },
+      });
+  }
+
+  /** Effective option list for a select field — dynamic options when set,
+   *  otherwise the static options declared on the field. */
+  optionsFor(field: ImporterField): string[] {
+    if (field.dynamic_options) {
+      return this.dynamicFieldOptions[field.key] || [];
+    }
+    return field.options || [];
   }
 
   private loadClippers(mediaType: string): void {

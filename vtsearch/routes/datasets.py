@@ -455,6 +455,50 @@ def clear_staging():
 # ---------------------------------------------------------------------------
 
 
+@datasets_bp.route("/api/dataset/import/<importer_name>/options", methods=["POST"])
+def importer_field_options(importer_name: str):
+    """Return dropdown options for a dynamic-options field.
+
+    Body::
+
+        {"field_key": "query_id", "values": {"media_type": "audio", ...}}
+
+    The importer's ``get_field_options(field_key, current_values)`` is
+    called with the supplied snapshot of current form values.  Returns
+    ``{"options": [...]}`` on success.  Errors from the plugin (network
+    failure, auth error, etc.) are surfaced as a 502 with the original
+    message so the frontend can display them inline.
+    """
+    importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
+    if err:
+        return err
+
+    body = request.get_json(force=True, silent=True) or {}
+    field_key = str(body.get("field_key") or "").strip()
+    values = body.get("values") or {}
+    if not field_key:
+        return jsonify({"error": "Missing required field: 'field_key'"}), 400
+    if not isinstance(values, dict):
+        return jsonify({"error": "'values' must be an object"}), 400
+
+    field = next((f for f in importer.fields if f.key == field_key), None)
+    if field is None:
+        return jsonify({"error": f"Unknown field: {field_key!r}"}), 400
+    if not getattr(field, "dynamic_options", False):
+        return jsonify({"error": f"Field {field_key!r} is not dynamic"}), 400
+
+    try:
+        options = importer.get_field_options(field_key, values)
+    except NotImplementedError as exc:
+        return jsonify({"error": str(exc) or "Importer does not implement get_field_options"}), 501
+    except Exception as exc:  # noqa: BLE001 — surface remote-service errors verbatim
+        return jsonify({"error": str(exc) or type(exc).__name__}), 502
+
+    if not isinstance(options, list):
+        return jsonify({"error": "get_field_options must return a list"}), 500
+    return jsonify({"options": [str(o) for o in options]})
+
+
 @datasets_bp.route("/api/dataset/import/<importer_name>", methods=["POST"])
 def import_dataset(importer_name: str):
     """Run a registered importer by name in a background thread."""

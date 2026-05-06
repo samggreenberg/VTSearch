@@ -196,6 +196,44 @@ class DatasetImporter(PluginBase):
         raise NotImplementedError(f"{type(self).__name__}.run() is not implemented")
 
     # ------------------------------------------------------------------
+    # Dynamic field options
+    # ------------------------------------------------------------------
+
+    def get_field_options(
+        self,
+        field_key: str,
+        current_values: dict[str, Any],
+    ) -> list[str]:
+        """Return the dropdown options for *field_key* given current form values.
+
+        Override this on importers that declare any
+        :class:`~vtsearch.utils.registry.PluginField` with
+        ``dynamic_options=True``.  The frontend calls this via
+        ``POST /api/dataset/import/<name>/options`` whenever a field listed
+        in another field's ``depends_on`` changes — e.g. a ``query_id``
+        select might re-populate after the user picks a ``media_type``.
+
+        Args:
+            field_key: The :attr:`PluginField.key` of the field whose
+                options are being requested.
+            current_values: A snapshot of every form field's current value,
+                keyed by :attr:`PluginField.key`.  Values are plain strings
+                (or empty strings for unfilled fields).
+
+        Returns:
+            The list of allowed option strings for the dropdown.
+
+        Raises:
+            NotImplementedError: When the importer declares no dynamic
+                fields, or has not implemented this hook for *field_key*.
+                Subclasses should raise (or let the default raise) for any
+                ``field_key`` they do not handle.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__}.get_field_options({field_key!r}) is not implemented"
+        )
+
+    # ------------------------------------------------------------------
     # Chunked / piecewise loading
     # ------------------------------------------------------------------
 

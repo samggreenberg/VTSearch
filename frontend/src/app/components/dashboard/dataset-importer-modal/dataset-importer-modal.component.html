@@ -189,12 +189,21 @@
                 [id]="'field-' + field.key"
                 class="form-select"
                 [(ngModel)]="formValues[field.key]"
-                (ngModelChange)="field.key === 'media_type' ? onMediaTypeChange($event) : null"
+                [disabled]="dynamicFieldLoading[field.key] || (field.dynamic_options && optionsFor(field).length === 0)"
+                (ngModelChange)="onFormFieldChanged(field.key)"
               >
-                @for (opt of field.options || []; track opt) {
+                @if (field.dynamic_options && dynamicFieldLoading[field.key]) {
+                  <option [value]="''" disabled>Loading…</option>
+                } @else if (field.dynamic_options && optionsFor(field).length === 0 && !dynamicFieldError[field.key]) {
+                  <option [value]="''" disabled>No options available</option>
+                }
+                @for (opt of optionsFor(field); track opt) {
                   <option [value]="opt">{{ opt }}</option>
                 }
               </select>
+              @if (field.dynamic_options && dynamicFieldError[field.key]) {
+                <p class="error-text">{{ dynamicFieldError[field.key] }}</p>
+              }
             } @else {
               <input
                 [id]="'field-' + field.key"
@@ -202,6 +211,7 @@
                 class="form-input"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.description || field.label || field.key"
+                (change)="onFormFieldChanged(field.key)"
               />
             }
           </div>

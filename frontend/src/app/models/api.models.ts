@@ -204,6 +204,13 @@ export interface ImporterField {
   default?: string;
   required?: boolean;
   placeholder?: string;
+  /** When true, ``options`` is computed at runtime by calling
+   *  ``POST /api/dataset/import/<importer>/options`` with the current
+   *  field values.  The frontend re-fetches whenever any field listed in
+   *  ``depends_on`` changes. */
+  dynamic_options?: boolean;
+  /** Field keys whose values this field's options depend on. */
+  depends_on?: string[];
 }
 
 export interface ImporterPickerTab {

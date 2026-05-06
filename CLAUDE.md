@@ -111,6 +111,7 @@ If a failure is genuinely outside the scope of the current task (e.g. a flaky ne
   - `test_dashboard.py` — Dashboard API endpoint tests
   - `test_exporters.py` — Results exporter base classes, registry, built-in exporters, API routes
   - `test_importers.py` — Importer base class, HTTP archive/folder importer metadata, archive extraction
+  - `test_dynamic_field_options.py` — Dynamic-options importer fields: PluginField `dynamic_options`/`depends_on` serialisation, `DatasetImporter.get_field_options` default + override, `POST /api/dataset/import/<name>/options` route, ReCaller `query_id` dynamic dropdown
   - `test_importer_loading.py` — Folder loader: content_vectors, skip_embedding, custom-metadata flow
   - `test_importer_symlinks.py` — Symlinked importer discovery, rglob following symlinks
   - `test_dataset_importer_media.py` — End-to-end folder/pickle importer paths into media types

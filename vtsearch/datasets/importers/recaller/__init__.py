@@ -49,6 +49,15 @@ from vtsearch.media import all_folder_names
 # ---------------------------------------------------------------------------
 
 
+def _rc_list_queries(media_type: str) -> list[str]:
+    """Call ReCaller and return the list of query IDs for *media_type*.
+
+    Used to populate the ``query_id`` dropdown dynamically once the user
+    picks a media type.  Each entry is a ReCaller queryID string.
+    """
+    raise NotImplementedError("TODO: implement ReCaller list-queries API client")
+
+
 def _rc_fetch_results(query_id: str) -> list[dict[str, Any]]:
     """Call ReCaller and return the result list for *query_id*.
 
@@ -100,12 +109,6 @@ class ReCallerDatasetImporter(DatasetImporter):
     category = "services"
     fields = [
         ImporterField(
-            key="query_id",
-            label="Query ID",
-            field_type="text",
-            description="The ReCaller query ID referencing a recent browsing session.",
-        ),
-        ImporterField(
             key="media_type",
             label="Media Type",
             field_type="select",
@@ -113,7 +116,22 @@ class ReCallerDatasetImporter(DatasetImporter):
             default="audio",
             description="Only results matching this media type will be imported.",
         ),
+        ImporterField(
+            key="query_id",
+            label="Query ID",
+            field_type="select",
+            description="The ReCaller query referencing a recent browsing session.",
+            dynamic_options=True,
+            depends_on=["media_type"],
+        ),
     ]
+
+    def get_field_options(self, field_key: str, current_values: dict[str, Any]) -> list[str]:
+        """Populate ``query_id`` from ReCaller, scoped by the picked media type."""
+        if field_key == "query_id":
+            media_type = current_values.get("media_type") or "audio"
+            return list(_rc_list_queries(media_type))
+        return super().get_field_options(field_key, current_values)
 
     # The dataset-level origin (queryID) is NOT useful for provenance —
     # each media gets its own origin keyed by contentID.  Return an empty
