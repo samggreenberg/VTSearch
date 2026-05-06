@@ -229,9 +229,7 @@ class DatasetImporter(PluginBase):
                 Subclasses should raise (or let the default raise) for any
                 ``field_key`` they do not handle.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__}.get_field_options({field_key!r}) is not implemented"
-        )
+        raise NotImplementedError(f"{type(self).__name__}.get_field_options({field_key!r}) is not implemented")
 
     # ------------------------------------------------------------------
     # Chunked / piecewise loading

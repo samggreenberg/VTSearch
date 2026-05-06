@@ -189,7 +189,7 @@
                 [id]="'field-' + field.key"
                 class="form-select"
                 [(ngModel)]="formValues[field.key]"
-                [disabled]="dynamicFieldLoading[field.key] || (field.dynamic_options && optionsFor(field).length === 0)"
+                [disabled]="!!dynamicFieldLoading[field.key] || (!!field.dynamic_options && optionsFor(field).length === 0)"
                 (ngModelChange)="onFormFieldChanged(field.key)"
               >
                 @if (field.dynamic_options && dynamicFieldLoading[field.key]) {

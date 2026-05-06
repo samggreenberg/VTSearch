@@ -23,13 +23,8 @@ from vtsearch.routes.helpers import get_json_or_400, get_json_safe, get_plugin_o
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtsearch.datasets.loader import safe_pickle_load
 from vtsearch.datasets.registry import (
-    is_loaded as _reg_is_loaded,
     list_datasets as _reg_list_all,
     remove_loaded_id as _reg_remove_loaded,
-    add_loaded_id as _reg_add_loaded,
-    unregister_dataset as _reg_unregister,
-    update_dataset as _reg_update,
-    get_dataset as _reg_get,
 )
 from vtsearch.utils import (
     bad_votes,
@@ -839,7 +834,6 @@ def clear_dataset_route():
     else:
         clear_dataset()
     return jsonify({"ok": True})
-
 
 
 @datasets_bp.route("/api/dataset/load-source", methods=["POST"])

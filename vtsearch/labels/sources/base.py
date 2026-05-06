@@ -17,7 +17,7 @@ from vtsearch.utils.registry import PluginField
 from vtsearch.utils.sync_source import SyncSource
 
 if TYPE_CHECKING:
-    from vtsearch.datasets.labelset import LabelSet
+    pass
 
 LabelsetSourceField = PluginField
 

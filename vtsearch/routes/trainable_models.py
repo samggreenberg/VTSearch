@@ -32,7 +32,6 @@ import time
 
 from flask import Blueprint, jsonify, request
 
-from vtsearch.auth import get_current_user
 from vtsearch.models.trainable_model_store import (
     _model_path,
     _read_model,
