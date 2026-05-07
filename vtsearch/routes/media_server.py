@@ -1,14 +1,39 @@
 """Blueprint for server media file management and example-sort routes."""
 
+import io
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import DATA_DIR
 from vtsearch.routes.helpers import get_json_or_400
 from vtsearch.utils import snapshot_medias
 
 media_server_bp = Blueprint("media_server", __name__)
+
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+_AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac"}
+_VIDEO_EXTS = {".mp4", ".webm", ".mov", ".avi", ".mkv"}
+
+
+def _media_type_from_ext(suffix: str) -> str:
+    s = suffix.lower()
+    if s in _IMAGE_EXTS:
+        return "image"
+    if s in _AUDIO_EXTS:
+        return "audio"
+    if s in _VIDEO_EXTS:
+        return "video"
+    return ""
+
+
+_IMAGE_MIMETYPES = {
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+}
 
 #: Default directory for server-side example media files (single-user fallback).
 SERVER_MEDIA_DIR = DATA_DIR / "example_media"
@@ -76,6 +101,63 @@ def upload_server_media_file():
                 return jsonify({"error": "Invalid crop_params for this media type"}), 400
 
     return jsonify({"filename": safe_name, "original_name": file.filename}), 201
+
+
+@media_server_bp.route("/api/server-media-files/<path:filename>/thumbnail", methods=["GET"])
+def server_media_file_thumbnail(filename: str):
+    """Return a small image preview of an example media file.
+
+    Used by the new-model dialog to show the user which example was selected.
+    For images this serves the file bytes; for audio it returns a waveform PNG;
+    for video it returns the middle-frame PNG.  Other media types return 404.
+    """
+    media_dir = _get_server_media_dir()
+    file_path = media_dir / filename
+
+    try:
+        file_path.resolve().relative_to(media_dir.resolve())
+    except ValueError:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    if not file_path.is_file():
+        return jsonify({"error": f"File not found: {filename}"}), 404
+
+    suffix = file_path.suffix.lower()
+    media_type = _media_type_from_ext(suffix)
+
+    if media_type == "image":
+        mimetype = _IMAGE_MIMETYPES.get(suffix, "image/jpeg")
+        return send_file(
+            io.BytesIO(file_path.read_bytes()),
+            mimetype=mimetype,
+            download_name=file_path.name,
+        )
+
+    if media_type == "audio":
+        from vtsearch.media.audio.media_type import generate_waveform_thumbnail_from_file
+
+        thumb = generate_waveform_thumbnail_from_file(file_path)
+        if thumb is None:
+            return jsonify({"error": "Could not generate audio thumbnail"}), 500
+        return send_file(
+            io.BytesIO(thumb),
+            mimetype="image/png",
+            download_name=f"{file_path.stem}_waveform.png",
+        )
+
+    if media_type == "video":
+        from vtsearch.media.video.media_type import generate_video_thumbnail_from_file
+
+        thumb = generate_video_thumbnail_from_file(file_path)
+        if thumb is None:
+            return jsonify({"error": "Could not generate video thumbnail"}), 500
+        return send_file(
+            io.BytesIO(thumb),
+            mimetype="image/png",
+            download_name=f"{file_path.stem}_frame.png",
+        )
+
+    return jsonify({"error": f"No thumbnail available for {suffix}"}), 404
 
 
 @media_server_bp.route("/api/server-media-files", methods=["GET"])

@@ -159,6 +159,62 @@ class TestServerMediaFiles:
         assert files[0]["filename"] == "visible.wav"
 
 
+class TestServerMediaFileThumbnail:
+    """Tests for /api/server-media-files/<filename>/thumbnail."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_media_dir(self, tmp_path, monkeypatch):
+        from vtsearch.routes import media_server as media_server_module
+
+        self._media_dir = tmp_path / "example_media"
+        self._media_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(media_server_module, "SERVER_MEDIA_DIR", self._media_dir)
+
+    def _make_wav(self, name="example.wav", duration=0.1):
+        sample_rate = 16000
+        num_samples = int(sample_rate * duration)
+        samples = [int(32767 * np.sin(2 * np.pi * 440 * i / sample_rate)) for i in range(num_samples)]
+        path = self._media_dir / name
+        with wave.open(str(path), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(struct.pack(f"<{num_samples}h", *samples))
+        return path
+
+    def test_image_returns_file_bytes(self, client):
+        from PIL import Image
+
+        path = self._media_dir / "example.png"
+        Image.new("RGB", (16, 16), color=(123, 45, 67)).save(path)
+
+        resp = client.get("/api/server-media-files/example.png/thumbnail")
+        assert resp.status_code == 200
+        assert resp.mimetype == "image/png"
+        assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_audio_returns_waveform_png(self, client):
+        self._make_wav("example.wav")
+        resp = client.get("/api/server-media-files/example.wav/thumbnail")
+        assert resp.status_code == 200
+        assert resp.mimetype == "image/png"
+        assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_missing_file_returns_404(self, client):
+        resp = client.get("/api/server-media-files/nope.wav/thumbnail")
+        assert resp.status_code == 404
+
+    def test_path_traversal_rejected(self, client):
+        resp = client.get("/api/server-media-files/..%2F..%2Fetc%2Fpasswd/thumbnail")
+        # 400 (rejected by validation) or 404 (path doesn't resolve to a file)
+        assert resp.status_code in (400, 404)
+
+    def test_unsupported_extension_returns_404(self, client):
+        (self._media_dir / "doc.txt").write_text("hello")
+        resp = client.get("/api/server-media-files/doc.txt/thumbnail")
+        assert resp.status_code == 404
+
+
 class TestExampleSortServer:
     """Tests for /api/example-sort-server (sort by server-side media file)."""
 

@@ -1,3 +1,23 @@
+// Picker chrome (importer tabs, demo table, server folder browser, badges)
+// lives in `frontend/src/scss/_picker-shared.scss` so it's defined once
+// globally and shared with the Add Dataset modal — only styles unique to
+// this component remain below.
+
+// Pin the modal to a wider size when the media picker is on screen so the
+// demo table and folder browser have room (matches the Add Dataset modal at
+// 900px). The min-height keeps the dialog from collapsing to a thin strip
+// when the picker is in its "no source selected" state.
+:host {
+  ::ng-deep .modal-content {
+    min-height: 200px;
+  }
+
+  &:has(.media-picker) ::ng-deep .modal-content {
+    width: 900px;
+    min-height: 480px;
+  }
+}
+
 .tab-bar {
   display: flex;
   gap: 4px;
@@ -17,9 +37,7 @@
   margin-bottom: -1px;
   transition: color 0.15s, border-color 0.15s;
 
-  &:hover {
-    color: var(--text-primary);
-  }
+  &:hover { color: var(--text-primary); }
 
   &.active {
     color: var(--text-primary);
@@ -53,9 +71,7 @@
   gap: 4px;
 }
 
-.required {
-  color: var(--color-bad);
-}
+.required { color: var(--color-bad); }
 
 .info-text {
   color: var(--text-muted);
@@ -103,14 +119,10 @@
   text-align: center;
 }
 
-.hidden-file-input {
-  display: none;
-}
+.hidden-file-input { display: none; }
 
 // Single example display
-.example-display {
-  margin-top: 4px;
-}
+.example-display { margin-top: 4px; }
 
 .example-row {
   display: flex;
@@ -130,6 +142,15 @@
   color: var(--accent);
 }
 
+.example-thumbnail {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--radius-sm, 4px);
+  flex-shrink: 0;
+  background: var(--bg, #fff);
+}
+
 .example-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -139,22 +160,55 @@
   font-size: 0.9rem;
 }
 
-// Media picker view
+// Media picker view container
 .media-picker {
-  min-height: 200px;
-  width: 480px;
-  max-width: 100%;
+  min-height: 320px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.back-btn {
-  margin-bottom: 12px;
+.back-btn { align-self: flex-start; }
+
+.btn--sm {
+  padding: 2px 10px;
+  font-size: .85rem;
 }
 
-.picker-instructions {
-  margin: 0 0 8px;
-  font-size: 0.9rem;
-  color: var(--text-primary);
+.importer-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
+
+.demo-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.server-folder-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-left: 20px;
+}
+
+.sf-browse-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.local-folder-uploader {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 20px;
+}
+
+// --- Trained-tab importer cards (label-importer picker) ---
 
 .source-list {
   display: flex;
@@ -186,42 +240,11 @@
   font-size: 0.9rem;
 }
 
-.importer-icon {
-  margin-right: 4px;
-}
+.importer-icon { margin-right: 4px; }
 
 .importer-desc {
   font-size: 0.8rem;
   color: var(--text-muted);
-}
-
-.browse-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.browse-item {
-  display: block;
-  width: 100%;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg-subtle);
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: left;
-  font-size: 0.9rem;
-  transition: border-color 0.15s, background 0.15s;
-  white-space: normal;
-  word-break: break-word;
-
-  &:hover {
-    border-color: var(--accent);
-    background: var(--bg-hover);
-  }
 }
 
 .empty-state {
@@ -231,76 +254,8 @@
   padding: 16px 0;
 }
 
-// Breadcrumbs for file browser navigation
-.breadcrumbs {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px;
-  margin-bottom: 8px;
-  font-size: 0.85rem;
-}
-
-.breadcrumb-link {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--accent);
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-size: 0.85rem;
-
-  &:hover {
-    text-decoration: underline;
-    background: var(--bg-hover);
-  }
-}
-
-.breadcrumb-sep {
-  color: var(--text-muted);
-  margin: 0 1px;
-}
-
-.breadcrumb-current {
-  font-weight: 600;
-  padding: 2px 4px;
-}
-
-// File/directory entries
-.browse-dir {
-  font-weight: 600;
-}
-
-.browse-file {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.entry-icon {
-  flex-shrink: 0;
-}
-
-.entry-date {
-  margin-left: auto;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.entry-size {
-  margin-left: 0;
-  padding-left: 0.5rem;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  flex-shrink: 0;
-}
-
 // Custom select dropdown (supports icons inside options)
-.custom-select {
-  position: relative;
-}
+.custom-select { position: relative; }
 
 .custom-select-trigger {
   display: flex;
@@ -323,9 +278,7 @@
   opacity: 0.6;
   transition: transform 0.15s;
 
-  .custom-select.open & {
-    transform: rotate(180deg);
-  }
+  .custom-select.open & { transform: rotate(180deg); }
 }
 
 .custom-select-options {
@@ -356,9 +309,7 @@
   font-size: inherit;
   transition: background 0.1s;
 
-  &:hover {
-    background: var(--bg-hover);
-  }
+  &:hover { background: var(--bg-hover); }
 
   &.selected {
     background: var(--bg-active, var(--bg-hover));

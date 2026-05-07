@@ -69,11 +69,23 @@ class PluginField:
     - ``"text"``     – Generic single-line text input.
     - ``"password"`` – Text input whose characters are masked.
     - ``"email"``    – Text input pre-validated as an e-mail address.
-    - ``"select"``   – Drop-down; ``options`` must be populated.
+    - ``"select"``   – Drop-down; ``options`` must be populated (or
+      :attr:`dynamic_options` set, in which case options are fetched at
+      runtime from the plugin's ``get_field_options`` method).
     - ``"server_path"`` – File-browser picker for server filesystem paths.
     - ``"checkbox"`` – Boolean tick-box.  ``default`` should be ``"true"`` or
       ``"false"``; values arrive at :meth:`run` as plain strings (or already
       coerced bools) and should be parsed via ``str(value).lower() == "true"``.
+
+    Dynamic option fields
+    ---------------------
+    Set ``dynamic_options=True`` on a ``"select"`` field whose options must
+    be computed at runtime — e.g. by querying a remote service.  The plugin
+    must implement ``get_field_options(field_key, current_values)`` to return
+    the list.  The frontend re-fetches options every time any field listed
+    in :attr:`depends_on` changes value.  Currently honoured by dataset
+    importers (``POST /api/dataset/import/<name>/options``); other plugin
+    families may opt in similarly.
     """
 
     key: str
@@ -89,6 +101,14 @@ class PluginField:
     required: bool = True
     #: Hint shown as placeholder text inside the input widget.
     placeholder: str = ""
+    #: When ``True``, :attr:`options` is computed at runtime by the plugin's
+    #: ``get_field_options(field_key, current_values)`` method.  Static
+    #: :attr:`options` (if any) are still served as the initial list.
+    dynamic_options: bool = False
+    #: Field keys whose values this field's options depend on.  When any
+    #: listed field changes, the frontend re-fetches options for this field.
+    #: Only meaningful when :attr:`dynamic_options` is ``True``.
+    depends_on: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -101,6 +121,8 @@ class PluginField:
             "default": self.default,
             "required": self.required,
             "placeholder": self.placeholder,
+            "dynamic_options": self.dynamic_options,
+            "depends_on": list(self.depends_on),
         }
 
 

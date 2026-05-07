@@ -98,6 +98,93 @@ def generate_video_thumbnail_from_file(file_path: Path, *, size: int = _THUMB_SI
     return buf.getvalue()
 
 
+def _frame_at_time(cap, time_seconds: float) -> "tuple | None":
+    """Seek *cap* to *time_seconds* and read one frame.  Returns ``(ok, frame)`` or ``None``."""
+    import cv2  # noqa: PLC0415
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if frame_count <= 0:
+        return None
+    if fps and fps > 0:
+        target = max(0, min(int(round(time_seconds * fps)), frame_count - 1))
+    else:
+        target = frame_count // 2
+    cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+    ret, frame = cap.read()
+    if not ret:
+        return None
+    return frame
+
+
+def generate_video_thumbnail_at(video_bytes: bytes, time_seconds: float, *, size: int = _THUMB_SIZE) -> bytes | None:
+    """Extract a frame at *time_seconds* from *video_bytes* and return it as a PNG thumbnail."""
+    try:
+        import cv2  # noqa: PLC0415
+        from PIL import Image  # noqa: PLC0415
+    except Exception:
+        return None
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    try:
+        tmp.write(video_bytes)
+        tmp.close()
+
+        cap = cv2.VideoCapture(tmp.name)
+        try:
+            if not cap.isOpened():
+                return None
+            frame = _frame_at_time(cap, time_seconds)
+            if frame is None:
+                return None
+        finally:
+            cap.release()
+    finally:
+        import os  # noqa: PLC0415
+
+        os.unlink(tmp.name)
+
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    img = Image.fromarray(frame_rgb)
+    img.thumbnail((size, size))
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def generate_video_thumbnail_from_file_at(
+    file_path: Path, time_seconds: float, *, size: int = _THUMB_SIZE
+) -> bytes | None:
+    """Extract a frame at *time_seconds* from a video file and return it as a PNG thumbnail."""
+    try:
+        import cv2  # noqa: PLC0415
+        from PIL import Image  # noqa: PLC0415
+    except Exception:
+        return None
+
+    try:
+        cap = cv2.VideoCapture(str(file_path))
+        try:
+            if not cap.isOpened():
+                return None
+            frame = _frame_at_time(cap, time_seconds)
+            if frame is None:
+                return None
+        finally:
+            cap.release()
+    except Exception:
+        return None
+
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    img = Image.fromarray(frame_rgb)
+    img.thumbnail((size, size))
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
 _VIDEO_MIME_TYPES: dict[str, str] = {
     ".webm": "video/webm",
     ".mov": "video/quicktime",

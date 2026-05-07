@@ -27,10 +27,14 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
+# Both dashboard tables (datagrid) and the shared importer-picker demo table
+# (used by both the Add Dataset and New Model > Browse Media modals) host
+# their own copies of the resize-handle rule.  The picker version lives in
+# the global ``_picker-shared.scss`` partial so the two modals don't have
+# duplicate scoped copies.
 SCSS_FILES = [
     REPO / "frontend/src/app/components/dashboard/dashboard.component.scss",
-    REPO
-    / "frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.scss",
+    REPO / "frontend/src/scss/_picker-shared.scss",
 ]
 
 
@@ -86,9 +90,7 @@ class TestResizeHandleCentering:
             "entirely on one side, and `right: -6px` is covered by the next "
             "<th>'s stacking context."
         )
-        assert _decl(block, "width") == "12px", (
-            f"{scss_path.name}: .col-resize-handle must be `width: 12px`."
-        )
+        assert _decl(block, "width") == "12px", f"{scss_path.name}: .col-resize-handle must be `width: 12px`."
         # The handle must NOT also pin to the right edge — that would shrink or
         # mis-center the grab zone.
         assert _decl(block, "right") is None, (
@@ -107,9 +109,7 @@ class TestResizeHandleCentering:
             "so the 2px visual line is centered on the divider (handle starts "
             "at cell-x -6, so handle-x 5 = divider)."
         )
-        assert _decl(after, "width") == "2px", (
-            f"{scss_path.name}: .col-resize-handle::after must be `width: 2px`."
-        )
+        assert _decl(after, "width") == "2px", f"{scss_path.name}: .col-resize-handle::after must be `width: 2px`."
         assert _decl(after, "right") is None, (
             f"{scss_path.name}: .col-resize-handle::after should not set "
             "`right`; pinning to the right edge of the host cell sits the line "

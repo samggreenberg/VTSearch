@@ -134,6 +134,7 @@ def _get_embedder_for_medias(media_dict: dict):
     routes layer, which itself imports from this module.
     """
     from vtsearch.routes.helpers import get_embedder_for_medias as _impl
+
     return _impl(media_dict)
 
 
@@ -310,10 +311,75 @@ def _apply_clipper(
     # Recompute MD5 and re-embed every genuine sub-item.
     _fixup_clip_md5_and_embeddings(all_clipped, needs_recompute, clipper.media_type, on_progress=on_progress)
 
+    # Regenerate thumbnails so audio/video clips show their own range
+    # rather than the parent's full waveform / mid-frame.
+    _regenerate_clip_thumbnails(all_clipped, needs_recompute, clipper.media_type)
+
     clips_dict.clear()
     for new_id, clip in enumerate(all_clipped, 1):
         clip["id"] = new_id
         clips_dict[new_id] = clip
+
+
+def _regenerate_clip_thumbnails(
+    clips: list[dict],
+    needs_recompute: list[bool],
+    media_type: str,
+) -> None:
+    """Refresh ``thumbnail_bytes`` on clipped audio/video sub-items.
+
+    Audio and video clippers copy ``thumbnail_bytes`` verbatim from the parent
+    media; without this fixup, every sub-item would render the parent's
+    waveform or middle-frame thumbnail in the find/label list.
+
+    Image clips don't go through this path — their thumbnail is the cropped
+    ``media_bytes`` itself, served directly by the media-image route.
+    """
+    if media_type == "audio":
+        from vtsearch.media.audio.media_type import (
+            generate_waveform_thumbnail,
+            generate_waveform_thumbnail_from_file,
+        )
+
+        for clip, recompute in zip(clips, needs_recompute):
+            if not recompute:
+                continue
+            wav = clip.get("media_bytes")
+            thumb: bytes | None = None
+            if wav is not None:
+                thumb = generate_waveform_thumbnail(wav)
+            else:
+                path = clip.get("media_path")
+                if path:
+                    thumb = generate_waveform_thumbnail_from_file(Path(path))
+            if thumb is not None:
+                clip["thumbnail_bytes"] = thumb
+        return
+
+    if media_type == "video":
+        from vtsearch.media.video.media_type import (
+            generate_video_thumbnail_at,
+            generate_video_thumbnail_from_file_at,
+        )
+
+        for clip, recompute in zip(clips, needs_recompute):
+            if not recompute:
+                continue
+            t0 = clip.get("clip_start")
+            t1 = clip.get("clip_end")
+            if t0 is None or t1 is None:
+                continue
+            mid = (float(t0) + float(t1)) / 2.0
+            video_bytes = clip.get("media_bytes")
+            thumb: bytes | None = None
+            if video_bytes is not None:
+                thumb = generate_video_thumbnail_at(video_bytes, mid)
+            else:
+                path = clip.get("media_path")
+                if path:
+                    thumb = generate_video_thumbnail_from_file_at(Path(path), mid)
+            if thumb is not None:
+                clip["thumbnail_bytes"] = thumb
 
 
 def _fixup_clip_md5_and_embeddings(

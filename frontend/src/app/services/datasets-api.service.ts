@@ -124,6 +124,25 @@ export class DatasetsApiService {
   }
 
   /**
+   * Fetch dropdown options for an importer field whose options are computed
+   * at runtime by the importer (``dynamic_options=true``).
+   *
+   * The backend calls the importer's ``get_field_options(field_key, values)``
+   * Python method and returns the resulting list.  Errors from the remote
+   * service are surfaced as HTTP errors with an ``error`` message body.
+   */
+  getImporterFieldOptions(
+    importerName: string,
+    fieldKey: string,
+    values: Record<string, unknown>,
+  ): Observable<{ options: string[] }> {
+    return this.http.post<{ options: string[] }>(
+      `/api/dataset/import/${importerName}/options`,
+      { field_key: fieldKey, values },
+    );
+  }
+
+  /**
    * Upload a folder selected from the user's *browser* machine.
    *
    * The caller is responsible for building the FormData with the files

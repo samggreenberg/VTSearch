@@ -709,7 +709,9 @@ class TestFolderImporterWithConverters:
                 "vtsearch.datasets.importers.server_folder.load_dataset_from_folder",
                 side_effect=ValueError("No images files found"),
             ),
-            patch("vtsearch.datasets.importers.server_folder._run_selected_converters", side_effect=_fake_run_converters),
+            patch(
+                "vtsearch.datasets.importers.server_folder._run_selected_converters", side_effect=_fake_run_converters
+            ),
         ):
             medias: dict = {}
             IMPORTER.run(
