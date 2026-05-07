@@ -58,6 +58,7 @@ _DEFAULTS: dict[str, Any] = {
     "autoload_media_embedders": [],
     "autorun_processors": [],
     "autorun_detector_names": [],
+    "autorun_trainable_models": [],
     "autopilot_enabled": True,
     "hide_autopilot": False,
     "autopilot_top_greens": 3,
@@ -76,6 +77,7 @@ _DEFAULTS: dict[str, Any] = {
 _EXCLUDE_FROM_DEFAULTS = {
     "autorun_processors",
     "autorun_detector_names",
+    "autorun_trainable_models",
     "saved_datasets_dir",
     "detectors_dir",
     "trainable_models_dir",
@@ -451,6 +453,29 @@ def remove_autorun_detector_name(name: str) -> bool:
             set_autorun_detector_names(current)
             return True
         return False
+
+
+def get_autorun_trainable_models() -> list[str]:
+    """Return the list of trainable-model names flagged for CLI autodetect.
+
+    These are scored alongside :func:`get_autorun_detector_names` when the
+    CLI runs ``--autodetect``.  Each name maps to a JSON file under
+    ``data/trainable_models/``; scoring resolves the labelset's origins,
+    re-embeds, trains an MLP, and applies it to the loaded dataset.
+    """
+    with _settings_lock:
+        raw = _ensure_loaded().get("autorun_trainable_models", [])
+        if isinstance(raw, list):
+            return list(raw)
+        return []
+
+
+def set_autorun_trainable_models(value: list[str]) -> None:
+    """Set and persist the full list of autorun trainable-model names."""
+    with _settings_lock:
+        s = _ensure_loaded()
+        s["autorun_trainable_models"] = list(dict.fromkeys(value))  # dedupe, preserve order
+        _save(s)
 
 
 def is_autorun_detector(name: str) -> bool:

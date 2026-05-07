@@ -114,6 +114,7 @@ _TEST_GROUPS = {
     ],
     "cli": [
         "test_cli_autodetect",
+        "test_cli_trainable_models",
         "test_load_sort_window",
         "test_preload_progress",
         "test_tqdm_progress",
