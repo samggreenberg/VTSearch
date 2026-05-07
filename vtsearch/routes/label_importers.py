@@ -156,11 +156,12 @@ def run_label_import(importer_name: str):
         ingested = ingest_missing_medias(missing, medias)
 
         if ingested > 0:
-            # Re-apply labels now that new medias are available
+            # Re-apply labels now that new medias are available.  These entries
+            # were already removed from `skipped` above when we subtracted
+            # `len(missing)`, so we only need to bump `applied` here.
             origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
             resolved_applied, _ = _apply_labels(missing, origin_lookup, md5_lookup, name_lookup)
             applied += resolved_applied
-            skipped -= resolved_applied
 
         # Check which entries still couldn't be resolved
         if ingested < len(missing):
