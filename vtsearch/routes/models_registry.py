@@ -417,38 +417,48 @@ def load_model_route():
                     )
                     _seed_good_votes_from_examples(tm_data.get("examples", []))
 
-                    # Train the MLP from restored votes so that Find can use
-                    # det_ctx.model directly without re-resolving label origins.
+                    # Train the MLP from the *full* saved labelset, not just
+                    # votes that resolved into the active dataset.  Each
+                    # labelset element is resolved via its origin importer
+                    # and embedded with the active dataset's embedder; the
+                    # resulting vectors are cached on det_ctx.label_embeddings
+                    # for the rest of the session.
                     tracker.check_cancelled()
-                    from vtsearch.utils import good_votes as _gv, bad_votes as _bv, snapshot_medias as _snap_medias
+                    tracker.update(
+                        "loading",
+                        "Embedding labels…",
+                        0,
+                        0,
+                        step=3,
+                        total_steps=_LOAD_STEPS,
+                    )
 
-                    if _gv and _bv:
+                    from vtsearch.datasets.labelset import LabelSet
+                    from vtsearch.models.labelset_training import train_from_labelset
+                    from vtsearch.utils import snapshot_medias as _snap_medias
+
+                    labelset = LabelSet.from_dict(tm_data.get("labelset") or {})
+                    media_type = tm_data.get("media_type", "") or ""
+                    snap = _snap_medias()
+
+                    def _embed_progress(name: str, done: int, total: int) -> None:
+                        tracker.check_cancelled()
                         tracker.update(
                             "loading",
-                            "Training model…",
-                            0,
-                            0,
+                            f"Embedding labels… ({done}/{total})",
+                            done,
+                            total,
                             step=3,
                             total_steps=_LOAD_STEPS,
                         )
-                        from vtsearch.models.detector_training import train_and_threshold
 
-                        snap = _snap_medias()
-                        X_list = []
-                        y_list: list[float] = []
-                        for cid in _gv:
-                            if cid in snap:
-                                X_list.append(snap[cid]["embedding"])
-                                y_list.append(1.0)
-                        for cid in _bv:
-                            if cid in snap:
-                                X_list.append(snap[cid]["embedding"])
-                                y_list.append(0.0)
-
-                        if X_list and any(v == 1.0 for v in y_list) and any(v == 0.0 for v in y_list):
-                            trained_model, threshold = train_and_threshold(X_list, y_list, snap=snap)
-                            det_ctx.model = trained_model
-                            det_ctx.threshold = threshold
+                    train_from_labelset(
+                        det_ctx,
+                        labelset,
+                        media_type=media_type,
+                        snap=snap,
+                        on_progress=_embed_progress,
+                    )
 
             # Mark as fully loaded so the registry shows detector_loaded=True.
             add_loaded_model_id(model_id)

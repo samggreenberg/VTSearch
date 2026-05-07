@@ -151,19 +151,64 @@ def sort_clips():
 
 @sorting_bp.route("/api/learned-sort", methods=["POST"])
 def learned_sort():
-    """Train MLP on voted medias, return all medias sorted by predicted score."""
-    if not good_votes or not bad_votes:
-        return jsonify({"error": "need at least one good and one bad vote"}), 400
+    """Train MLP on the active detector's saved labelset (or active votes when
+    no trainable model is loaded) and return all medias sorted by predicted
+    score.
+
+    When a trainable model is active, training uses every label saved on
+    disk — including labels whose underlying media isn't part of the active
+    dataset.  Their vectors are pulled from
+    :attr:`DetectorContext.label_embeddings` (populated at load) so the MLP
+    isn't degraded by ignoring cross-dataset labels.
+    """
+    from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.models.labelset_training import labelset_train_and_score
+    from vtsearch.models.registry import get_model
+    from vtsearch.models.trainable_model_store import _model_path, _read_model
+    from vtsearch.utils.state_core import _empty_detector_context, get_active_detector_context
+
     snap = snapshot_medias()
-    results, threshold, model = train_and_score(
-        snap,
-        good_votes,
-        bad_votes,
-        get_inclusion(),
-        safe_thresholds=get_safe_thresholds(),
-        calibrate_count=get_calibrate_count(),
-        calibration_fraction=get_calibration_fraction(),
-    )
+
+    # Resolve the active trainable model's labelset (if any).
+    det_ctx = get_active_detector_context()
+    labelset: LabelSet | None = None
+    tm_media_type = ""
+    if det_ctx is not _empty_detector_context and det_ctx.detector_id:
+        entry = get_model(det_ctx.detector_id)
+        if entry and entry.get("trainable") and entry.get("trainable_model_name"):
+            tm_data = _read_model(_model_path(entry["trainable_model_name"]))
+            if tm_data:
+                labelset = LabelSet.from_dict(tm_data.get("labelset") or {})
+                tm_media_type = tm_data.get("media_type", "") or ""
+
+    if labelset is not None:
+        good_count = sum(1 for el in labelset.elements if el.label == "good")
+        bad_count = sum(1 for el in labelset.elements if el.label == "bad")
+        if good_count == 0 or bad_count == 0:
+            return jsonify({"error": "need at least one good and one bad vote"}), 400
+        results, threshold, model = labelset_train_and_score(
+            det_ctx,
+            labelset,
+            media_type=tm_media_type,
+            clips_dict=snap,
+            inclusion_value=get_inclusion(),
+            safe_thresholds=get_safe_thresholds(),
+            calibrate_count=get_calibrate_count(),
+            calibration_fraction=get_calibration_fraction(),
+        )
+    else:
+        if not good_votes or not bad_votes:
+            return jsonify({"error": "need at least one good and one bad vote"}), 400
+        results, threshold, model = train_and_score(
+            snap,
+            good_votes,
+            bad_votes,
+            get_inclusion(),
+            safe_thresholds=get_safe_thresholds(),
+            calibrate_count=get_calibrate_count(),
+            calibration_fraction=get_calibration_fraction(),
+        )
+
     # Store scores so the /api/votes endpoint can provide confidence info.
     update_learned_scores({r["id"]: r["score"] for r in results})
     # Inject the live model into the progress cache so indicators and the
@@ -172,11 +217,6 @@ def learned_sort():
     if model is not None:
         inject_live_model(good_votes, bad_votes, model, threshold)
 
-    # Cache the trained MLP and threshold in the active DetectorContext so
-    # that Find can use them directly without re-resolving and retraining.
-    from vtsearch.utils.state_core import get_active_detector_context, _empty_detector_context
-
-    det_ctx = get_active_detector_context()
     if det_ctx is not _empty_detector_context and model is not None:
         det_ctx.model = model
         det_ctx.threshold = threshold
@@ -186,7 +226,6 @@ def learned_sort():
             if cid in snap:
                 training[cid] = snap[cid]
         det_ctx.training_medias = training
-        # Record the embedder from the current dataset's media.
         if snap:
             first = next(iter(snap.values()), {})
             det_ctx.embedder = first.get("embedder", "")
