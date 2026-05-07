@@ -218,16 +218,18 @@ IMPORTER = S3Importer()
 
 ### DatasetImporter class reference
 
-**Required to implement:**
+**Required to implement (pick one approach):**
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `run()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | Populate `medias` in-place with loaded data |
+| `list_records()` + `fetch_record()` | see [Bulk-record hooks](#bulk-record-hooks) | Per-record / bulk-record split that mirrors `MediaEmbedder`. The default `run()` lists records, hands them all to `fetch_records_bulk()`, and assigns IDs |
 
 **Optional overrides:**
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
+| `_fetch_records_bulk_impl()` | `(records: list, field_values: dict, thin: bool) -> list[dict | None]` | Batched fetch hook. Default loops `fetch_record`. Override to issue concurrent / batched I/O |
 | `run_cli()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | CLI variant; default delegates to `run()`. Override when `run()` expects FileStorage objects |
 | `get_field_options()` | `(field_key: str, current_values: dict) -> list[str]` | Compute dropdown options for fields declared with `dynamic_options=True`. See [Dynamic field options](#dynamic-field-options) |
 | `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Set `supports_chunked = True` |
@@ -327,6 +329,69 @@ implementation captures dataset-level field values like query IDs that
 are not useful per-media).  The post-processing step only backfills
 `origin` on media that have `origin=None`, so per-media origins set
 in `run()` are preserved.
+
+### Bulk-record hooks
+
+For service-style importers — those that fetch records from a remote
+source rather than scanning a local folder — override the per-record /
+bulk-record hooks instead of writing `run()` from scratch.  The split
+mirrors the embedder's `embed_media` / `embed_media_bulk` pattern: a
+working baseline comes from the per-item method, and you can opt into
+batched / concurrent I/O by overriding the bulk hook.
+
+```python
+class MyServiceImporter(DatasetImporter):
+    def list_records(self, field_values):
+        # Return whatever shape you want — opaque to the framework.
+        return _api.list(query=field_values["query"])
+
+    def fetch_record(self, record, field_values, thin=False):
+        # Default per-item path. The framework loops this when no
+        # bulk override is provided. Return None to skip a record.
+        return {
+            "type": "audio",
+            "filename": record["id"],
+            "embedding": _api.get_embedding(record["id"]),
+            "media_bytes": None if thin else _api.fetch_bytes(record["url"]),
+            "media_url": record["url"],
+            # origin / origin_name auto-filled from build_origin if omitted
+        }
+
+    def _fetch_records_bulk_impl(self, records, field_values, thin=False):
+        # Optional: replace the per-item loop with a single bulk request,
+        # a thread/async pool, or whatever the source supports.
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            embeddings = list(pool.map(lambda r: _api.get_embedding(r["id"]), records))
+            blobs = ([] if thin else
+                     list(pool.map(lambda r: _api.fetch_bytes(r["url"]), records)))
+        return [
+            {"type": "audio", "filename": r["id"], "embedding": e,
+             "media_bytes": (None if thin else b), "media_url": r["url"]}
+            for r, e, b in zip(records, embeddings, blobs or [None] * len(records))
+        ]
+```
+
+The default `run()`:
+
+1. Calls `list_records(field_values)` to get the work list.
+2. Calls `fetch_records_bulk(records, field_values, thin)` once with all
+   records (which dispatches to `_fetch_records_bulk_impl`; the default
+   impl loops `fetch_record` and emits per-item progress).
+3. Assigns sequential integer IDs starting at 1 and stores the resulting
+   media dicts in *medias*.
+4. Backfills `media["origin"]` from `build_origin(field_values)` and
+   `media["origin_name"]` from `media["filename"]` for any record that
+   didn't set them.
+
+Records returning `None` are skipped (gaps are squeezed out, IDs stay
+sequential).
+
+For an end-to-end example see
+`vtsearch/datasets/importers/recaller/__init__.py`, which overrides the
+bulk hook to issue DataWrest embedding lookups and PullWrest downloads
+concurrently via a thread pool.
 
 ### Dynamic field options
 

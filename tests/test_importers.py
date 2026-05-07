@@ -452,5 +452,197 @@ class TestExtractArchive:
 
 
 # ---------------------------------------------------------------------------
+# DatasetImporter bulk-record hooks (list_records / fetch_record /
+# fetch_records_bulk).
+# ---------------------------------------------------------------------------
+
+
+class TestImporterBulkHooks:
+    """Verify the per-record / bulk-record split mirrors the embedder pattern."""
+
+    def _make_importer(self, *, fetch_one=None, fetch_bulk=None, records=None):
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        class _BulkTestImporter(DatasetImporter):
+            name = "bulk_test"
+            display_name = "Bulk Test"
+            description = "Test importer for bulk hooks."
+            fields = []
+
+            def list_records(self, field_values):
+                return list(records or [])
+
+            if fetch_one is not None:
+
+                def fetch_record(self, record, field_values, thin=False):
+                    return fetch_one(record, field_values, thin)
+
+            if fetch_bulk is not None:
+
+                def _fetch_records_bulk_impl(self, recs, field_values, thin=False):
+                    return fetch_bulk(recs, field_values, thin)
+
+        return _BulkTestImporter()
+
+    def test_default_run_uses_list_and_fetch_record(self):
+        records = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
+
+        def fetch_one(record, _fv, _thin):
+            return {"type": "audio", "filename": record["name"], "embedding": None}
+
+        imp = self._make_importer(records=records, fetch_one=fetch_one)
+        medias: dict = {}
+        imp.run({}, medias)
+
+        assert list(medias.keys()) == [1, 2, 3]
+        assert [medias[i]["filename"] for i in (1, 2, 3)] == ["a", "b", "c"]
+        # ID is assigned by the framework even though fetch_record didn't set one.
+        assert medias[1]["id"] == 1
+
+    def test_default_run_fills_origin_from_build_origin(self):
+        records = [{"name": "x"}]
+
+        def fetch_one(record, _fv, _thin):
+            # fetch_record may omit origin / origin_name — run() fills them in.
+            return {"type": "audio", "filename": record["name"], "embedding": None}
+
+        imp = self._make_importer(records=records, fetch_one=fetch_one)
+        medias: dict = {}
+        imp.run({"foo": "bar"}, medias)
+
+        assert medias[1]["origin"] == imp.build_origin({"foo": "bar"})
+        assert medias[1]["origin_name"] == "x"
+
+    def test_default_run_skips_none_records(self):
+        records = ["a", "skip", "b"]
+
+        def fetch_one(record, _fv, _thin):
+            if record == "skip":
+                return None
+            return {"type": "audio", "filename": record, "embedding": None}
+
+        imp = self._make_importer(records=records, fetch_one=fetch_one)
+        medias: dict = {}
+        imp.run({}, medias)
+
+        assert list(medias.keys()) == [1, 2]
+        assert [medias[i]["filename"] for i in (1, 2)] == ["a", "b"]
+
+    def test_default_bulk_impl_loops_fetch_record(self):
+        # If a subclass implements fetch_record but NOT _fetch_records_bulk_impl,
+        # the default bulk impl loops fetch_record once per record.
+        seen: list = []
+
+        def fetch_one(record, _fv, _thin):
+            seen.append(record)
+            return {"type": "audio", "filename": record, "embedding": None}
+
+        imp = self._make_importer(records=["x", "y"], fetch_one=fetch_one)
+        out = imp.fetch_records_bulk(["x", "y"], {})
+
+        assert seen == ["x", "y"]
+        assert [m["filename"] for m in out] == ["x", "y"]
+
+    def test_bulk_override_used_when_implemented(self):
+        # When a subclass overrides _fetch_records_bulk_impl, fetch_record must
+        # NOT be called — the bulk path takes over completely.
+        per_item_calls: list = []
+
+        def fetch_one(record, _fv, _thin):
+            per_item_calls.append(record)
+            return {"type": "audio", "filename": record, "embedding": None}
+
+        def fetch_bulk(records, _fv, _thin):
+            # Pretend we did one batched call.
+            return [
+                {"type": "audio", "filename": f"bulk:{r}", "embedding": None}
+                for r in records
+            ]
+
+        imp = self._make_importer(
+            records=["a", "b"], fetch_one=fetch_one, fetch_bulk=fetch_bulk
+        )
+        medias: dict = {}
+        imp.run({}, medias)
+
+        assert per_item_calls == []  # bulk override replaced the per-item loop
+        assert [medias[i]["filename"] for i in (1, 2)] == ["bulk:a", "bulk:b"]
+
+    def test_fetch_records_bulk_empty_returns_empty(self):
+        imp = self._make_importer(records=[], fetch_one=lambda *a: None)
+        assert imp.fetch_records_bulk([], {}) == []
+
+    def test_run_raises_when_neither_run_nor_hooks_implemented(self):
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        class _BareImporter(DatasetImporter):
+            name = "bare"
+            display_name = "Bare"
+            description = ""
+            fields = []
+
+        imp = _BareImporter()
+        with pytest.raises(NotImplementedError, match="list_records"):
+            imp.run({}, {})
+
+
+class TestReCallerBulkOverride:
+    """ReCaller is the worked example — verify its hooks return the same
+    media dicts whether the per-item or bulk path is used."""
+
+    def _stub_apis(self, monkeypatch):
+        import numpy as np
+
+        from vtsearch.datasets.importers import recaller as rc
+
+        results = [
+            {"contentID": f"C{i}", "mediaID": f"M{i}", "media_url": f"http://pw/{i}",
+             "media_type": "audio", "md5": f"md5_{i}"}
+            for i in range(3)
+        ]
+        monkeypatch.setattr(rc, "_rc_fetch_results", lambda _q: list(results))
+
+        rng = np.random.default_rng(42)
+        embeddings = {f"M{i}": rng.standard_normal(8).astype(np.float32) for i in range(3)}
+        monkeypatch.setattr(
+            rc,
+            "_dw_get_embedding",
+            lambda mid: {"embedding": embeddings[mid], "embedder": "fake-embedder"},
+        )
+        monkeypatch.setattr(rc, "_pw_fetch_media", lambda url: f"bytes-for-{url}".encode())
+        return results
+
+    def test_per_item_and_bulk_paths_agree(self, monkeypatch):
+        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+
+        records = self._stub_apis(monkeypatch)
+        field_values = {"query_id": "Q1", "media_type": "audio"}
+
+        imp = ReCallerDatasetImporter()
+        per_item = [imp.fetch_record(r, field_values, thin=True) for r in records]
+        bulk = imp._fetch_records_bulk_impl(records, field_values, thin=True)
+
+        assert len(per_item) == len(bulk) == 3
+        for a, b in zip(per_item, bulk):
+            assert a["filename"] == b["filename"]
+            assert a["origin"] == b["origin"]
+            assert a["custom_metadata"] == b["custom_metadata"]
+            assert (a["embedding"] == b["embedding"]).all()
+
+    def test_run_uses_bulk_override(self, monkeypatch):
+        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+
+        self._stub_apis(monkeypatch)
+        imp = ReCallerDatasetImporter()
+        medias: dict = {}
+        imp.run({"query_id": "Q1", "media_type": "audio"}, medias, thin=True)
+
+        assert list(medias.keys()) == [1, 2, 3]
+        for i in (1, 2, 3):
+            assert medias[i]["origin"]["params"]["contentID"] == f"C{i - 1}"
+            assert medias[i]["origin"]["params"]["mediaID"] == f"M{i - 1}"
+
+
+# ---------------------------------------------------------------------------
 # load_dataset_from_folder – content_vectors support
 # ---------------------------------------------------------------------------
