@@ -34,4 +34,8 @@ export class SettingsApiService {
   getEmbedders(): Observable<EmbeddersResponse> {
     return this.http.get<EmbeddersResponse>('/api/embedders');
   }
+
+  getVersion(): Observable<{ version: string }> {
+    return this.http.get<{ version: string }>('/api/version');
+  }
 }

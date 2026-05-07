@@ -212,3 +212,27 @@ class TestFrontendContentIntegrity:
         text = resp.data.decode("utf-8")
         # Angular global styles contain layout and panel classes
         assert "panel" in text or "grid" in text or "--bg-body" in text
+
+
+class TestVersionEndpoint:
+    """GET /api/version should return the app version string."""
+
+    def test_returns_200(self, client):
+        resp = client.get("/api/version")
+        assert resp.status_code == 200
+
+    def test_returns_version_field(self, client):
+        from vtsearch import __version__
+
+        resp = client.get("/api/version")
+        data = resp.get_json()
+        assert data == {"version": __version__}
+
+    def test_version_is_iso_utc_timestamp(self, client):
+        from datetime import datetime
+
+        resp = client.get("/api/version")
+        version = resp.get_json()["version"]
+        # Must be parseable as an ISO 8601 timestamp ending in Z (UTC).
+        assert version.endswith("Z")
+        datetime.fromisoformat(version.replace("Z", "+00:00"))

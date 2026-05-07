@@ -4,9 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, Response, current_app, send_from_directory
+from flask import Blueprint, Response, current_app, jsonify, send_from_directory
+
+from vtsearch import __version__
 
 main_bp = Blueprint("main", __name__)
+
+
+@main_bp.route("/api/version")
+def version() -> Response:
+    """Return the app version (UTC timestamp of the last dev->main merge)."""
+    return jsonify({"version": __version__})
 
 
 def _static_dir() -> Path:
