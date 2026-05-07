@@ -117,9 +117,7 @@ def _frame_at_time(cap, time_seconds: float) -> "tuple | None":
     return frame
 
 
-def generate_video_thumbnail_at(
-    video_bytes: bytes, time_seconds: float, *, size: int = _THUMB_SIZE
-) -> bytes | None:
+def generate_video_thumbnail_at(video_bytes: bytes, time_seconds: float, *, size: int = _THUMB_SIZE) -> bytes | None:
     """Extract a frame at *time_seconds* from *video_bytes* and return it as a PNG thumbnail."""
     try:
         import cv2  # noqa: PLC0415

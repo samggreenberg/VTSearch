@@ -926,9 +926,7 @@ class TestLoadDatasetRecursive:
         self._seed_layout(tmp_path)
         medias: dict = {}
         with self._patch_media_registry(self._make_fake_media_type()):
-            load_dataset_from_folder(
-                tmp_path, "audio", medias, on_progress=lambda *a: None, recursive=False
-            )
+            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None, recursive=False)
 
         names = sorted(m["filename"] for m in medias.values())
         assert names == ["top.wav"]
@@ -966,9 +964,7 @@ class TestServerFolderImporterRecursive:
     def test_build_origin_records_recursive(self):
         from vtsearch.datasets.importers.server_folder import IMPORTER
 
-        origin = IMPORTER.build_origin(
-            {"path": "/tmp/x", "media_type": "audio", "recursive": False}
-        )
+        origin = IMPORTER.build_origin({"path": "/tmp/x", "media_type": "audio", "recursive": False})
         assert origin["params"]["recursive"] == "false"
 
 

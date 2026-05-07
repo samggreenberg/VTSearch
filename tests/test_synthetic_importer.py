@@ -241,9 +241,7 @@ class TestRunEndToEnd:
         medias: dict[int, dict] = {}
         imp.run({"media_type": "audio", "size": "3"}, medias)
         media = next(iter(medias.values()))
-        resolved = imp.resolve_file(
-            media["origin"], origin_name=media["origin_name"], filename=media["filename"]
-        )
+        resolved = imp.resolve_file(media["origin"], origin_name=media["origin_name"], filename=media["filename"])
         assert resolved is not None
         assert resolved.is_file()
 

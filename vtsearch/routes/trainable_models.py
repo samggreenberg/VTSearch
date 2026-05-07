@@ -485,9 +485,7 @@ def combine_trainable_models():
 
     media_types = {s.get("media_type", "") for s in sources}
     if len(media_types) > 1:
-        return jsonify(
-            {"error": f"All source models must share the same media_type; got {sorted(media_types)}"}
-        ), 400
+        return jsonify({"error": f"All source models must share the same media_type; got {sorted(media_types)}"}), 400
     media_type = next(iter(media_types))
     if not media_type or media_type == "any":
         return jsonify({"error": "Source models must have a specific media_type (not empty or 'any')"}), 400
@@ -499,8 +497,7 @@ def combine_trainable_models():
         return jsonify(
             {
                 "error": (
-                    "Combined labelset is empty after applying conflict policy "
-                    f"{conflict_policy!r}; nothing to save."
+                    f"Combined labelset is empty after applying conflict policy {conflict_policy!r}; nothing to save."
                 )
             }
         ), 422
@@ -554,4 +551,3 @@ def combine_trainable_models():
 
 # Canonical location: vtsearch.models.training_workflow
 from vtsearch.models.training_workflow import apply_and_retrain as _apply_and_retrain  # noqa: E402
-
