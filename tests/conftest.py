@@ -94,6 +94,7 @@ _TEST_GROUPS = {
         "test_eval_voting_iterations",
         "test_resolver",
         "test_new_embedders",
+        "test_labelset_elements_api",
     ],
     "downloads": [
         "test_ag_news_download",

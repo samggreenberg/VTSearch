@@ -329,8 +329,10 @@ def load_model_route():
         if entry is None:
             return jsonify({"error": "Model not found"}), 404
 
-    # Save current model's labels before switching — but only if there
-    # are votes in the active detector context.
+    # Save current model's labels before switching — only when there are
+    # votes to save.  An empty-votes context could be a fresh/un-restored
+    # detector or a discarded one; merging "no votes" against the same
+    # dataset as the saved labelset would wipe the labelset.
     if good_votes or bad_votes:
         sync_labels_to_loaded_model()
 
@@ -501,7 +503,8 @@ def unload_model_route(model_id: str):
     if not is_model_loaded(model_id):
         return jsonify({"error": "Model is not loaded"}), 400
 
-    # Save labels if this model is currently resolved by the context
+    # Save labels if this model is currently resolved by the context.
+    # Skip when votes are empty — see load_model_route for rationale.
     det_ctx = get_active_detector_context()
     if det_ctx.detector_id == model_id and (good_votes or bad_votes):
         sync_labels_to_loaded_model()
