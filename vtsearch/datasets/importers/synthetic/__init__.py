@@ -87,19 +87,22 @@ class SyntheticDatasetImporter(DatasetImporter):
 
     def _generate(self, media_type: str, size: int) -> Path:
         """Render files into the cache dir, return the dir path."""
+        from vtsearch.utils.progress import get_thread_progress  # noqa: PLC0415
+
+        on_progress = get_thread_progress()
         out_dir = _cache_dir(media_type, size)
         if media_type == "image":
             from vtsearch.utils.synthetic import generate_image_dataset  # noqa: PLC0415
 
-            generate_image_dataset(out_dir, size, seed=_DEFAULT_SEED)
+            generate_image_dataset(out_dir, size, seed=_DEFAULT_SEED, on_progress=on_progress)
         elif media_type == "audio":
             from vtsearch.utils.synthetic import generate_audio_dataset  # noqa: PLC0415
 
-            generate_audio_dataset(out_dir, size, seed=_DEFAULT_SEED)
+            generate_audio_dataset(out_dir, size, seed=_DEFAULT_SEED, on_progress=on_progress)
         elif media_type == "video":
             from vtsearch.utils.synthetic import generate_video_dataset  # noqa: PLC0415
 
-            generate_video_dataset(out_dir, size, seed=_DEFAULT_SEED)
+            generate_video_dataset(out_dir, size, seed=_DEFAULT_SEED, on_progress=on_progress)
         else:
             raise ValueError(f"Unsupported media_type {media_type!r}")
         return out_dir

@@ -10,8 +10,11 @@ from __future__ import annotations
 import math
 import wave
 from pathlib import Path
+from typing import Callable, Optional
 
 import numpy as np
+
+ProgressCallback = Callable[[str, str, int, int], None]
 
 SAMPLE_RATE = 48000
 
@@ -166,24 +169,46 @@ _GENERATORS = [
 ]
 
 
-def generate_audio_dataset(output_dir: Path, count: int, seed: int = 42) -> list[Path]:
+def generate_audio_dataset(
+    output_dir: Path,
+    count: int,
+    seed: int = 42,
+    on_progress: Optional[ProgressCallback] = None,
+) -> list[Path]:
     """Generate ``count`` synthetic WAV files into ``output_dir``.
 
     Cycles through six ideas (tone, chord, drum, rain, wind, bird) so the
     resulting dataset has clear semantic clusters. Existing files are kept,
     so reloads are fast.
+
+    If *on_progress* is supplied, it is called as
+    ``on_progress(status, message, current, total)`` once per file (and
+    once at the start and end) so the caller can drive a progress bar.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
     width = max(4, len(str(count)))
+    if on_progress is not None:
+        on_progress("downloading", f"Generating {count} synthetic audio clips…", 0, count)
     for i in range(count):
         idea, gen = _GENERATORS[i % len(_GENERATORS)]
         path = output_dir / f"{idea}_{i:0{width}d}.wav"
         paths.append(path)
-        if path.exists():
+        cached = path.exists()
+        if on_progress is not None:
+            verb = "Reusing cached" if cached else "Synthesising"
+            on_progress(
+                "downloading",
+                f"{verb} synthetic audio {i + 1}/{count} ({idea})…",
+                i,
+                count,
+            )
+        if cached:
             continue
         rng = np.random.default_rng(seed + i)
         duration = float(rng.uniform(1.0, 2.5))
         samples, _meta = gen(rng, duration)
         _write_wav(path, samples)
+    if on_progress is not None:
+        on_progress("downloading", f"Generated {count} synthetic audio clips", count, count)
     return paths
