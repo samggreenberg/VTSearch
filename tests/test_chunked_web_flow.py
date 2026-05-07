@@ -227,6 +227,54 @@ class TestImportRouteChunkSize:
             assert mock_run.call_args.kwargs["chunk_size"] == 0
 
 
+class TestImportRouteClipperParams:
+    """``clipper_params`` from the modal must reach the load pipeline so
+    user-tuned values (e.g. tiling duration) override the clipper's
+    registry default.  Regression: the route used to drop them silently,
+    leaving e.g. a 1s tiling clip selection running with the registered
+    default of 2s — a no-op for 2s synthetic videos.
+    """
+
+    def test_clipper_params_passed_through_json(self, client):
+        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+            resp = client.post(
+                "/api/dataset/import/server_folder",
+                json={
+                    "path": "/tmp/test",
+                    "media_type": "video",
+                    "clipper": "video_tiling",
+                    "clipper_params": {"duration": 1.0, "min_overlap": 0.0},
+                },
+            )
+            assert resp.status_code == 200
+            field_values = mock_run.call_args.args[1]
+            assert field_values["clipper"] == "video_tiling"
+            assert field_values["clipper_params"] == {"duration": 1.0, "min_overlap": 0.0}
+
+    def test_no_clipper_params_when_omitted(self, client):
+        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+            resp = client.post(
+                "/api/dataset/import/server_folder",
+                json={"path": "/tmp/test", "media_type": "image"},
+            )
+            assert resp.status_code == 200
+            field_values = mock_run.call_args.args[1]
+            assert "clipper_params" not in field_values
+
+    def test_invalid_clipper_params_returns_400(self, client):
+        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+            resp = client.post(
+                "/api/dataset/import/server_folder",
+                json={
+                    "path": "/tmp/test",
+                    "media_type": "image",
+                    "clipper_params": "not-a-dict",
+                },
+            )
+            assert resp.status_code == 400
+            mock_run.assert_not_called()
+
+
 # ===========================================================================
 # Route plumbing — POST /api/dataset/import-local-folder
 # ===========================================================================

@@ -512,6 +512,12 @@ def import_dataset(importer_name: str):
         if val:
             field_values[key] = val
 
+    clipper_params, params_err = _extract_clipper_params(bool(file_keys))
+    if params_err:
+        return params_err
+    if clipper_params is not None:
+        field_values["clipper_params"] = clipper_params
+
     chunk_size = _parse_chunk_size(get_request_field("chunk_size", bool(file_keys)))
 
     task_id = _run_importer_in_background(importer, field_values, chunk_size=chunk_size)
@@ -523,6 +529,32 @@ def import_dataset(importer_name: str):
 # ---------------------------------------------------------------------------
 
 LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
+
+
+def _extract_clipper_params(has_file_fields: bool) -> tuple[dict | None, Any]:
+    """Read optional ``clipper_params`` from form/JSON, returning (params, error_response).
+
+    JSON requests carry the value as a dict directly.  Multipart form
+    requests carry it as a JSON-encoded string (since form fields are
+    flat).  Either form is accepted; anything else is a 400 error.
+    Returns ``(None, None)`` when no value is present.
+    """
+    if has_file_fields:
+        raw = request.form.get("clipper_params") or ""
+        if not raw:
+            return None, None
+        try:
+            parsed = json.loads(raw)
+        except (ValueError, TypeError) as exc:
+            return None, (jsonify({"error": f"Invalid clipper_params: {exc}"}), 400)
+    else:
+        parsed = get_json_safe().get("clipper_params")
+        if parsed is None or parsed == "":
+            return None, None
+
+    if not isinstance(parsed, dict):
+        return None, (jsonify({"error": "clipper_params must be a JSON object"}), 400)
+    return parsed, None
 
 
 def _parse_chunk_size(value: Any) -> int:
