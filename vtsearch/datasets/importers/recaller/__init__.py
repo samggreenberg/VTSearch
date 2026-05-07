@@ -33,6 +33,18 @@ stores ``media_url`` instead of ``media_bytes``/``media_path``, relying on
 VTSearch's URL-based lazy-fetch in :meth:`MediaType._resolve_media_bytes`.
 Embeddings still come from DataWrest, so sorting and scoring work without
 downloading the actual media.
+
+Bulk fetch
+----------
+This importer overrides
+:meth:`~vtsearch.datasets.importers.base.DatasetImporter._fetch_records_bulk_impl`
+to issue DataWrest embedding lookups and PullWrest media-byte downloads
+concurrently via a thread pool.  The per-record :meth:`fetch_record` is
+kept as a serial fallback (and as the simplest possible reference
+implementation).  Importers built on top of this base get the same
+per-record / bulk-record split: implement :meth:`fetch_record` for a
+working baseline, override :meth:`_fetch_records_bulk_impl` when the
+backing service can be batched.
 """
 
 from __future__ import annotations
@@ -94,6 +106,53 @@ def _pw_fetch_media(media_url: str) -> bytes:
 
 
 # ---------------------------------------------------------------------------
+# Media-dict assembly (shared by per-item and bulk paths)
+# ---------------------------------------------------------------------------
+
+
+def _build_media(
+    record: dict[str, Any],
+    media_type: str,
+    embedding_info: dict[str, Any],
+    media_bytes: bytes | None,
+    importer_name: str,
+) -> dict[str, Any]:
+    content_id = record["contentID"]
+    media_id = record["mediaID"]
+    media_url = record["media_url"]
+    origin = {
+        "importer": importer_name,
+        "params": {
+            "contentID": content_id,
+            "mediaID": media_id,
+            "media_url": media_url,
+            "media_type": media_type,
+        },
+    }
+    return {
+        "type": media_type,
+        "filename": content_id,
+        "md5": record["md5"],
+        "embedding": embedding_info["embedding"],
+        "embedder": embedding_info["embedder"],
+        "media_bytes": media_bytes,
+        "media_path": None,
+        "media_url": media_url,
+        "media_string": None,
+        "file_size": len(media_bytes) if media_bytes else 0,
+        "duration": 0,
+        "category": "",
+        "origin": origin,
+        "origin_name": content_id,
+        "custom_metadata": {
+            "contentID": content_id,
+            "mediaID": media_id,
+            "media_url": media_url,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 # Importer
 # ---------------------------------------------------------------------------
 
@@ -134,79 +193,79 @@ class ReCallerDatasetImporter(DatasetImporter):
         return super().get_field_options(field_key, current_values)
 
     # The dataset-level origin (queryID) is NOT useful for provenance —
-    # each media gets its own origin keyed by contentID.  Return an empty
-    # origin here; run() sets per-media origins.
+    # each media gets its own origin keyed by contentID via fetch_record.
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         return {"importer": self.name, "params": {}}
 
-    def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
+    # ------------------------------------------------------------------
+    # Bulk import hooks
+    # ------------------------------------------------------------------
+
+    def list_records(self, field_values: dict[str, Any]) -> list[dict[str, Any]]:
         query_id = (field_values.get("query_id") or "").strip()
         if not query_id:
             raise ValueError("A query ID is required.")
         media_type = field_values.get("media_type", "audio")
 
-        # 1. Fetch and filter RC results
         all_results = _rc_fetch_results(query_id)
         results = [r for r in all_results if r.get("media_type") == media_type]
         if not results:
             raise ValueError(f"No results of type '{media_type}' found for query '{query_id}'.")
+        return results
 
-        # 2. Build media dicts
-        for i, rc in enumerate(results, start=1):
-            content_id = rc["contentID"]
-            media_id = rc["mediaID"]
-            media_url = rc["media_url"]
-            md5 = rc["md5"]
+    def fetch_record(
+        self,
+        record: dict[str, Any],
+        field_values: dict[str, Any],
+        thin: bool = False,
+    ) -> dict[str, Any]:
+        """Fetch a single ReCaller record into a media dict.
 
-            # --- Embedding from DataWrest ---
-            dw = _dw_get_embedding(media_id)
-            embedding = dw["embedding"]
-            embedder = dw["embedder"]
+        Per-item path: one DataWrest call for the embedding plus (in
+        non-thin mode) one PullWrest call for the bytes.  Override
+        :meth:`_fetch_records_bulk_impl` to batch these across many
+        records concurrently.
+        """
+        media_type = field_values.get("media_type", "audio")
+        embedding_info = _dw_get_embedding(record["mediaID"])
+        media_bytes = None if thin else _pw_fetch_media(record["media_url"])
+        return _build_media(record, media_type, embedding_info, media_bytes, self.name)
 
-            # --- Media bytes (skip in thin mode) ---
-            media_bytes = None
-            media_path = None
-            if not thin:
-                media_bytes = _pw_fetch_media(media_url)
-                # Optionally write to a temp folder and set media_path:
-                # media_path = _save_to_temp(media_bytes, content_id, media_type)
+    def _fetch_records_bulk_impl(
+        self,
+        records: list[dict[str, Any]],
+        field_values: dict[str, Any],
+        thin: bool = False,
+    ) -> list[dict[str, Any] | None]:
+        """Concurrent bulk fetch.
 
-            # --- Per-media origin (NOT queryID) ---
-            origin = {
-                "importer": self.name,
-                "params": {
-                    "contentID": content_id,
-                    "mediaID": media_id,
-                    "media_url": media_url,
-                    "media_type": media_type,
-                },
-            }
+        Issues all DataWrest embedding lookups and PullWrest media-byte
+        downloads in parallel via a thread pool, then assembles the media
+        dicts in the original order.  Each record still goes through
+        :func:`_build_media`, so the per-item shape stays identical to
+        :meth:`fetch_record`.
+        """
+        from concurrent.futures import ThreadPoolExecutor
 
-            # --- Custom metadata (visible in enriched label exports) ---
-            custom_metadata = {
-                "contentID": content_id,
-                "mediaID": media_id,
-                "media_url": media_url,
-            }
+        from vtsearch.utils import update_progress
 
-            medias[i] = {
-                "id": i,
-                "type": media_type,
-                "filename": content_id,  # use contentID as the filename key
-                "md5": md5,
-                "embedding": embedding,
-                "embedder": embedder,
-                "media_bytes": media_bytes,
-                "media_path": media_path,
-                "media_url": media_url,  # URL-based lazy-fetch fallback
-                "media_string": None,
-                "file_size": len(media_bytes) if media_bytes else 0,
-                "duration": 0,
-                "category": "",
-                "origin": origin,
-                "origin_name": content_id,
-                "custom_metadata": custom_metadata,
-            }
+        media_type = field_values.get("media_type", "audio")
+        total = len(records)
+        update_progress("loading", f"Fetching {total} ReCaller records…", 0, total)
+
+        max_workers = min(16, max(1, total))
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            embed_infos = list(pool.map(lambda r: _dw_get_embedding(r["mediaID"]), records))
+            if thin:
+                byte_blobs: list[bytes | None] = [None] * total
+            else:
+                byte_blobs = list(pool.map(lambda r: _pw_fetch_media(r["media_url"]), records))
+
+        results: list[dict[str, Any] | None] = []
+        for i, (rec, ei, mb) in enumerate(zip(records, embed_infos, byte_blobs)):
+            update_progress("loading", f"Importing {i + 1} of {total}…", i + 1, total)
+            results.append(_build_media(rec, media_type, ei, mb, self.name))
+        return results
 
     def origin_display(self, origin: dict[str, Any]) -> str:
         content_id = origin.get("params", {}).get("contentID", "")
