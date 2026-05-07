@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import { BehaviorSubject, Subject, timer } from 'rxjs';
-import { switchMap, takeUntil } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY, Observable, Subject, timer } from 'rxjs';
+import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
 import { LabelElement, LabelsDetailResponse } from '../models/api.models';
 import { TrainableModelsApiService } from './trainable-models-api.service';
 
@@ -96,30 +96,22 @@ export class LabelsetStateService implements OnDestroy {
     this.badSubject.next(nextBad);
   }
 
-  private fetch$() {
+  private fetch$(): Observable<LabelsDetailResponse | never> {
     if (!this.modelName) {
       this.goodSubject.next([]);
       this.badSubject.next([]);
       this.mediaTypeSubject.next('');
-      return new Promise<LabelsDetailResponse>((resolve) =>
-        resolve({ good: [], bad: [], media_type: '' }),
-      );
+      return EMPTY;
     }
     const name = this.modelName;
-    return new Promise<LabelsDetailResponse>((resolve) => {
-      this.api.getLabelsDetail(name).subscribe({
-        next: (resp) => {
-          if (this.modelName !== name) {
-            resolve(resp);
-            return;
-          }
-          this.goodSubject.next(resp.good ?? []);
-          this.badSubject.next(resp.bad ?? []);
-          this.mediaTypeSubject.next(resp.media_type ?? '');
-          resolve(resp);
-        },
-        error: () => resolve({ good: [], bad: [], media_type: '' }),
-      });
-    });
+    return this.api.getLabelsDetail(name).pipe(
+      tap((resp) => {
+        if (this.modelName !== name) return;
+        this.goodSubject.next(resp.good ?? []);
+        this.badSubject.next(resp.bad ?? []);
+        this.mediaTypeSubject.next(resp.media_type ?? '');
+      }),
+      catchError(() => EMPTY),
+    );
   }
 }
