@@ -39,6 +39,16 @@ describe('LeftPanelComponent', () => {
     expect(component.activeTab).toBe('manual');
   });
 
+  it('should default to manual tab when alreadyTrained is true', () => {
+    const fresh = TestBed.createComponent(LeftPanelComponent);
+    const comp = fresh.componentInstance;
+    comp.alreadyTrained = true;
+    spyOn(comp.autopilotStart, 'emit');
+    fresh.detectChanges();
+    expect(comp.activeTab).toBe('manual');
+    expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
+  });
+
   it('should render autopilot tab content by default', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.tab-panel-autopilot')).toBeTruthy();

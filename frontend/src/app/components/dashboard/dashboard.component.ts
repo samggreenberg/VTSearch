@@ -1138,6 +1138,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.labelSession.mediaExample = model?.media_example || '';
     this.labelSession.examples = (model?.['examples'] as { type: string; value: string }[]) || [];
     this.labelSession.modelName = model?.name || '';
+    this.labelSession.alreadyTrained = (model?.num_training ?? 0) > 0;
   }
 
   onLabel(): void {
