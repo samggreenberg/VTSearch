@@ -67,10 +67,15 @@ def _make_audio_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
 
 
 def _settings_file_with_trainable_models(tmp_path: Path, tm_names: list[str]) -> Path:
-    """Settings JSON that activates *tm_names* but defines no autorun processors."""
+    """Settings JSON that activates *tm_names* but defines no autorun processors.
+
+    Includes ``trainable_models_dir`` so ``set_settings_path`` doesn't reset
+    the directory to the production default after conftest redirected it.
+    """
     settings = {
         "autorun_processors": [],
         "autorun_trainable_models": list(tm_names),
+        "trainable_models_dir": str(get_trainable_models_dir()),
     }
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps(settings))
