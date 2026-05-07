@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import Callable, Optional
 
 import numpy as np
+
+ProgressCallback = Callable[[str, str, int, int], None]
 
 CANVAS_SIZE = 224
 FPS = 12
@@ -184,24 +187,46 @@ def _encode_frames(path: Path, frames: list[np.ndarray], fps: int) -> None:
         writer.close()
 
 
-def generate_video_dataset(output_dir: Path, count: int, seed: int = 42) -> list[Path]:
+def generate_video_dataset(
+    output_dir: Path,
+    count: int,
+    seed: int = 42,
+    on_progress: Optional[ProgressCallback] = None,
+) -> list[Path]:
     """Generate ``count`` short synthetic mp4s into ``output_dir``.
 
     Cycles through four ideas (bouncing ball, walking smiley, rotating
     shape, scrolling marquee) so the dataset has both motion and
     appearance variety. Existing files are kept across reloads.
+
+    If *on_progress* is supplied, it is called as
+    ``on_progress(status, message, current, total)`` once per file (and
+    once at the start) so the caller can drive a progress bar. The
+    ``status`` is always ``"downloading"`` so it maps to the dataset
+    pipeline's "fetching files" step.
     """
     from PIL import Image, ImageDraw  # noqa: PLC0415
 
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
     width = max(4, len(str(count)))
+    if on_progress is not None:
+        on_progress("downloading", f"Generating {count} synthetic videos…", 0, count)
     for i in range(count):
         make_params, render = _GENERATORS[i % len(_GENERATORS)]
         idea, _ = make_params(np.random.default_rng(seed + i))
         path = output_dir / f"{idea}_{i:0{width}d}.mp4"
         paths.append(path)
-        if path.exists():
+        cached = path.exists()
+        if on_progress is not None:
+            verb = "Reusing cached" if cached else "Rendering"
+            on_progress(
+                "downloading",
+                f"{verb} synthetic video {i + 1}/{count} ({idea})…",
+                i,
+                count,
+            )
+        if cached:
             continue
         rng = np.random.default_rng(seed + i)
         _name, params = make_params(rng)
@@ -213,4 +238,6 @@ def generate_video_dataset(output_dir: Path, count: int, seed: int = 42) -> list
             render(rng, t, params, draw, CANVAS_SIZE)
             frames.append(np.asarray(img, dtype=np.uint8))
         _encode_frames(path, frames, FPS)
+    if on_progress is not None:
+        on_progress("downloading", f"Generated {count} synthetic videos", count, count)
     return paths
