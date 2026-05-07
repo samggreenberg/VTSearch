@@ -134,6 +134,7 @@ def _get_embedder_for_medias(media_dict: dict):
     routes layer, which itself imports from this module.
     """
     from vtsearch.routes.helpers import get_embedder_for_medias as _impl
+
     return _impl(media_dict)
 
 

@@ -10,7 +10,7 @@ Three external services are involved:
 
 | Service | What it does | VTSearch talks to it via |
 |---------|-------------|------------------------|
-| **ReCaller (RC)** | Browse tool. Given a `queryID`, returns a collection of results: `{contentID, mediaID, media_type, media_url, md5, ...}` | `_rc_fetch_results()` in the RC importer |
+| **ReCaller (RC)** | Browse tool. Given a `queryID`, returns a collection of results: `{contentID, mediaID, media_type, media_url, md5, ...}`.  Also exposes a list of recent queryIDs filtered by `media_type`, used to populate the importer's dynamic `query_id` dropdown | `_rc_fetch_results()` and `_rc_list_queries()` in the RC importer |
 | **DataWrest (DW)** | Given a `mediaID`, returns `{embedding, embedder}`. All media of a given type share the same embedder | `_dw_get_embedding()` in the RC importer |
 | **PullWrest (PW)** | Given a `media_url`, returns the raw media bytes | `_pw_fetch_media()` in the RC importer + PW media source |
 | **Holder** | ContentID storage. Create packages, add folders, write/read contentIDs with metadata | `_holder_*()` functions in the Holder exporter and importer |
@@ -55,6 +55,16 @@ just inline in each plugin) with HTTP functions for each service.
 ### 1a. ReCaller client
 
 ```python
+def _rc_list_queries(media_type: str) -> list[str]:
+    """GET /api/rc/queries?media_type=<type> → list of recent queryIDs.
+
+    Powers the importer's ``query_id`` dropdown (declared with
+    ``dynamic_options=True, depends_on=["media_type"]``).  The frontend
+    re-fetches whenever the user picks a different media type, so the
+    user never has to copy-paste a queryID — they pick from a list.
+    """
+
+
 def _rc_fetch_results(query_id: str) -> list[dict[str, Any]]:
     """GET /api/rc/query/{query_id} → list of result dicts.
 
@@ -67,7 +77,7 @@ def _rc_fetch_results(query_id: str) -> list[dict[str, Any]]:
     """
 ```
 
-Replace the `NotImplementedError` stub in
+Replace the `NotImplementedError` stubs in
 `vtsearch/datasets/importers/recaller/__init__.py`.
 
 ### 1b. DataWrest client

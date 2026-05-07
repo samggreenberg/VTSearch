@@ -237,9 +237,7 @@ class TestLocalFolderRouteChunked:
     and route through ``run_chunked`` when set."""
 
     def test_chunk_size_form_field_routes_to_run_chunked(self, client, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "vtsearch.routes.datasets.LOCAL_UPLOADS_DIR", tmp_path / "uploads"
-        )
+        monkeypatch.setattr("vtsearch.routes.datasets.LOCAL_UPLOADS_DIR", tmp_path / "uploads")
 
         captured: dict[str, Any] = {}
 
@@ -289,9 +287,7 @@ class TestLocalFolderRouteChunked:
         assert sorted(captured["target"].keys()) == [1]
 
     def test_no_chunk_size_uses_run(self, client, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "vtsearch.routes.datasets.LOCAL_UPLOADS_DIR", tmp_path / "uploads"
-        )
+        monkeypatch.setattr("vtsearch.routes.datasets.LOCAL_UPLOADS_DIR", tmp_path / "uploads")
 
         from vtsearch.datasets.importers import get_importer
 

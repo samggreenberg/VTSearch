@@ -74,9 +74,7 @@ class TestLabelSetMerge:
         legacy_bad = LabeledElement(md5="bb", label="bad")
         legacy_bad_conflict = LabeledElement(md5="bb", label="good")
 
-        merged = LabelSet([legacy_good, legacy_bad]).merge(
-            LabelSet([legacy_good_2, legacy_bad_conflict])
-        )
+        merged = LabelSet([legacy_good, legacy_bad]).merge(LabelSet([legacy_good_2, legacy_bad_conflict]))
         keys = [(e.md5, e.label) for e in merged]
         assert keys == [("aa", "good")]  # bb dropped on conflict
 

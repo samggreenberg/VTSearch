@@ -51,6 +51,8 @@ families use the same field type (aliased as `ImporterField`,
 | `default`     | `str`       | `""`     | Pre-filled value                                        |
 | `required`    | `bool`      | `True`   | Whether the field must be filled before submitting      |
 | `placeholder` | `str`       | `""`     | Hint shown as placeholder text in the input widget      |
+| `dynamic_options` | `bool`  | `False`  | When `True`, options for this `"select"` field are fetched at runtime from the plugin's `get_field_options()` method (see [Dynamic field options](#dynamic-field-options)) |
+| `depends_on`  | `list[str]` | `[]`     | Other field keys whose values this field's options depend on; the frontend re-fetches whenever any depended-on field changes |
 
 ### PluginBase
 
@@ -227,6 +229,7 @@ IMPORTER = S3Importer()
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `run_cli()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | CLI variant; default delegates to `run()`. Override when `run()` expects FileStorage objects |
+| `get_field_options()` | `(field_key: str, current_values: dict) -> list[str]` | Compute dropdown options for fields declared with `dynamic_options=True`. See [Dynamic field options](#dynamic-field-options) |
 | `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Set `supports_chunked = True` |
 | `run_chunked_cli()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | CLI variant of `run_chunked()` |
 | `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
@@ -325,6 +328,49 @@ are not useful per-media).  The post-processing step only backfills
 `origin` on media that have `origin=None`, so per-media origins set
 in `run()` are preserved.
 
+### Dynamic field options
+
+When a `"select"` field's options must be computed at runtime — for
+example, populating a list of remote queries after the user picks a
+media type — declare it with `dynamic_options=True` and list the parent
+fields it depends on in `depends_on`.  Then implement
+`get_field_options(field_key, current_values)` on your importer:
+
+```python
+class ReCallerImporter(DatasetImporter):
+    name = "recaller"
+    fields = [
+        ImporterField("media_type", "Media Type", "select",
+                      options=all_folder_names(), default="audio"),
+        ImporterField(
+            "query_id", "Query ID", "select",
+            dynamic_options=True,
+            depends_on=["media_type"],   # re-fetch when media_type changes
+        ),
+    ]
+
+    def get_field_options(self, field_key, current_values):
+        if field_key == "query_id":
+            return _list_recent_queries(current_values.get("media_type", ""))
+        return super().get_field_options(field_key, current_values)
+```
+
+The frontend wiring is fully automatic:
+
+1. When the user opens your importer, the modal pre-fetches options for
+   every `dynamic_options=True` field.
+2. Whenever a field listed in another field's `depends_on` changes, the
+   modal clears the dependent field's value and re-fetches its options.
+3. While a fetch is in-flight the dropdown is disabled and shows
+   `Loading…`.  Errors raised by `get_field_options()` are surfaced
+   inline next to the field.
+
+API contract: `POST /api/dataset/import/<name>/options` with body
+`{"field_key": "...", "values": {...}}` returns `{"options": [...]}`.
+Any exception your `get_field_options()` raises is returned as a 502
+with the exception message — perfect for surfacing remote-service
+errors directly to the user.
+
 ### How it gets invoked
 
 1. `GET /api/dataset/all-importers` returns all registered importers (your
@@ -332,7 +378,9 @@ in `run()` are preserved.
    returns importers with `ui_mode == "form"`.
 2. `POST /api/dataset/import/<name>` invokes `run()` in a background
    daemon thread.
-3. `GET /api/dataset/progress` provides progress bar data.
+3. `POST /api/dataset/import/<name>/options` invokes `get_field_options()`
+   to populate dynamic-options dropdowns (see above).
+4. `GET /api/dataset/progress` provides progress bar data.
 
 ### Progress reporting
 

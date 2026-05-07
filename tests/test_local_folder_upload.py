@@ -248,9 +248,7 @@ class TestFolderImporterPickerVisibility:
 
     def test_server_folder_importer_description_mentions_server(self, client):
         resp = client.get("/api/dataset/importers")
-        folder_imp = next(
-            i for i in resp.get_json()["importers"] if i["name"] == "server_folder"
-        )
+        folder_imp = next(i for i in resp.get_json()["importers"] if i["name"] == "server_folder")
         # The user reading the picker should not be misled into thinking
         # this scans their browser machine.
         assert "server" in folder_imp["description"].lower()

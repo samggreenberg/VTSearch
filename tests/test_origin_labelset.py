@@ -456,8 +456,18 @@ class TestBuildClipLookup:
     def test_md5_lookup_groups_duplicates(self):
         """Two medias with the same MD5 should both appear in the md5_lookup."""
         medias = {
-            1: {"id": 1, "md5": "same_hash", "origin": {"importer": "server_folder", "params": {}}, "origin_name": "a.wav"},
-            2: {"id": 2, "md5": "same_hash", "origin": {"importer": "server_folder", "params": {}}, "origin_name": "b.wav"},
+            1: {
+                "id": 1,
+                "md5": "same_hash",
+                "origin": {"importer": "server_folder", "params": {}},
+                "origin_name": "a.wav",
+            },
+            2: {
+                "id": 2,
+                "md5": "same_hash",
+                "origin": {"importer": "server_folder", "params": {}},
+                "origin_name": "b.wav",
+            },
         }
         _, md5_lookup, _ = build_media_lookup(medias)
         assert sorted(md5_lookup["same_hash"]) == [1, 2]
@@ -497,7 +507,11 @@ class TestResolveClipIds:
 
     def test_match_by_origin(self):
         origin_lookup, md5_lookup, _ = self._make_lookups()
-        entry = {"md5": "wrong", "origin": {"importer": "server_folder", "params": {"path": "/a"}}, "origin_name": "a.wav"}
+        entry = {
+            "md5": "wrong",
+            "origin": {"importer": "server_folder", "params": {"path": "/a"}},
+            "origin_name": "a.wav",
+        }
         ids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert ids == [1]
 

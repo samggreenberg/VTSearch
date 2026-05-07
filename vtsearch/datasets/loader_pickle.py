@@ -11,17 +11,13 @@ from __future__ import annotations
 import gc
 import hashlib
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 import numpy as np
 from PIL import Image
 
 from vtsearch.datasets.loader import (
     ProgressCallback,
-    _get_embedding_value,
-    _get_md5_value,
-    _pop_md5_key,
-    _pop_embedding_key,
 )
 from vtsearch.datasets.pickle_security import safe_pickle_load
 
