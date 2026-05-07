@@ -53,6 +53,8 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Input() textQuery = '';
   @Input() autopilotCollapsed = false;
   @Input() autopilotEnabled = true;
+  /** When true, the selected model already has training labels; start in Manual mode. */
+  @Input() alreadyTrained = false;
   /** 'label' = full labeling UI (default), 'find' = simplified media-only view */
   @Input() panelMode: 'label' | 'find' = 'label';
   /** Disable all interaction (used during Find scoring). */
@@ -97,8 +99,9 @@ export class LeftPanelComponent implements OnInit, OnChanges {
       // Find mode doesn't use tabs — keep manual as a no-op default
       this.activeTab = 'manual';
     } else {
-      this.activeTab = this.autopilotEnabled ? 'autopilot' : 'manual';
-      if (this.autopilotEnabled) {
+      const shouldStartAutopilot = this.autopilotEnabled && !this.alreadyTrained;
+      this.activeTab = shouldStartAutopilot ? 'autopilot' : 'manual';
+      if (shouldStartAutopilot) {
         this.autopilotStart.emit();
       }
     }

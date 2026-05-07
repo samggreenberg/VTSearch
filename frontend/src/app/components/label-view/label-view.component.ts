@@ -48,6 +48,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   rightWidth = 300;
   autopilotCollapsed = false;
   autopilotEnabled = true;
+  alreadyTrained = false;
   progressModalMetric: ProgressMetric | null = null;
 
   // Re-sort prompt state
@@ -98,6 +99,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit(): void {
     this.autopilotStateService.clear();
     this.voteState.clear();
+    this.alreadyTrained = this.labelSession.alreadyTrained;
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     this.mediaState.loadMedias();
