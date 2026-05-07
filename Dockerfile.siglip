@@ -32,15 +32,28 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # ---------- pre-download SigLIP weights into the image ----------
 # Bake weights into a non-volume path so they survive volume mounts on
 # /app/data. The app reads MODELS_CACHE_DIR from VTSEARCH_MODELS_DIR.
-ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models
+#
+# PYTHONUNBUFFERED + python -u + flushed prints surface progress in
+# BuildKit's UI; without them the ~370 MB download looks like a hang.
+# Tip: run `docker build --progress=plain ...` to see step output live.
+# HF_HUB_DOWNLOAD_TIMEOUT makes a stalled connection error out (and
+# huggingface_hub auto-retry) instead of blocking the build forever.
+ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models \
+    HF_HUB_DOWNLOAD_TIMEOUT=120 \
+    PYTHONUNBUFFERED=1
 RUN mkdir -p "$VTSEARCH_MODELS_DIR" && \
-    python -c "import os; \
+    python -u -c "import os; \
 from vtsearch.config import SIGLIP_MODEL_ID; \
-from transformers import SiglipModel, SiglipImageProcessor, SiglipTokenizer; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
+print(f'Pre-downloading {SIGLIP_MODEL_ID} to {cache}', flush=True); \
+print('[1/3] importing transformers...', flush=True); \
+from transformers import SiglipModel, SiglipImageProcessor, SiglipTokenizer; \
+print('[2/3] downloading model weights (~370 MB)...', flush=True); \
 SiglipModel.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache); \
+print('[3/3] downloading image processor + tokenizer...', flush=True); \
 SiglipImageProcessor.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache); \
-SiglipTokenizer.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache)"
+SiglipTokenizer.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache); \
+print('SigLIP weights cached.', flush=True)"
 
 # ---------- application layer ----------
 COPY . .
@@ -60,7 +73,6 @@ EXPOSE 5000
 
 ENV OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
-    PYTHONUNBUFFERED=1 \
     VTSEARCH_SERVER_INIT=1
 
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
