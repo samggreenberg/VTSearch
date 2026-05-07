@@ -536,6 +536,8 @@ class TestLabelImportMissingElements:
             assert result["ingested"] == 1
             assert result["missing_count"] == 0
             assert result["missing"] == []
+            # Auto-resolved entries must not double-decrement skipped (regression).
+            assert result["skipped"] == 0
             # The new media should be in the dataset and labeled
             new_ids = [cid for cid, m in app_module.medias.items() if m.get("md5") == md5]
             assert len(new_ids) == 1
