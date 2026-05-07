@@ -252,4 +252,13 @@
   display: flex;
   gap: var(--space-md);
   justify-content: flex-end;
+  align-items: center;
+}
+
+.settings-version {
+  margin-right: auto;
+  font-size: var(--font-xs);
+  font-family: var(--font-mono, monospace);
+  color: var(--text-secondary);
+  user-select: text;
 }

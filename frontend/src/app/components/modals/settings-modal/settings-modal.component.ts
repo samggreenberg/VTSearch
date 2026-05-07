@@ -32,6 +32,7 @@ export class SettingsModalComponent implements OnInit {
   error = '';
   showImporterModal = false;
   showExporterModal = false;
+  version = '';
 
   constructor(
     private settingsApi: SettingsApiService,
@@ -45,9 +46,11 @@ export class SettingsModalComponent implements OnInit {
       settings: this.settingsApi.getSettings(),
       embedders: this.settingsApi.getEmbedders(),
       mediaTypes: this.datasetsApi.getMediaTypes(),
+      version: this.settingsApi.getVersion(),
     }).subscribe({
       next: (res) => {
         this.settings = res.settings;
+        this.version = res.version.version;
         this.embedders = (res.embedders.embedders || []).sort(
           (a, b) => a.media_type_id.localeCompare(b.media_type_id) || a.name.localeCompare(b.name),
         );
