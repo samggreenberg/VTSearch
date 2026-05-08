@@ -275,6 +275,14 @@
       </button>
       <span class="btn-disabled-reason" [style.visibility]="(!findEnabled && findHint) ? 'visible' : 'hidden'">{{ findHint || '&nbsp;' }}</span>
     </div>
+    @if (diskUsage) {
+      <div class="disk-usage" [title]="'Server disk: ' + diskFreeText">
+        <div class="disk-usage-label">Disk: {{ diskFreeText }}</div>
+        <div class="disk-usage-bar" [class.warn]="diskUsedPct >= 80" [class.critical]="diskUsedPct >= 95">
+          <div class="disk-usage-fill" [style.width.%]="diskUsedPct"></div>
+        </div>
+      </div>
+    }
   </div>
 </div>
 

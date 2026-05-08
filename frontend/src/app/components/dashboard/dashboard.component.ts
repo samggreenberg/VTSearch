@@ -177,6 +177,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   currentUser = '';
   isDefaultLogin = true;
 
+  diskUsage: { total: number; used: number; free: number } | null = null;
+
   constructor(
     private router: Router,
     private datasetsApi: DatasetsApiService,
@@ -244,6 +246,40 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
     this.refresh();
     this.resumeActivePolling();
+    this.startDiskUsagePolling();
+  }
+
+  private startDiskUsagePolling(): void {
+    timer(0, 10000)
+      .pipe(
+        takeUntil(this.destroy$),
+        switchMap(() => this.datasetsApi.getDiskUsage().pipe(catchError(() => EMPTY))),
+      )
+      .subscribe((usage) => {
+        this.diskUsage = { total: usage.total, used: usage.used, free: usage.free };
+      });
+  }
+
+  get diskUsedPct(): number {
+    if (!this.diskUsage || this.diskUsage.total <= 0) return 0;
+    return (this.diskUsage.used / this.diskUsage.total) * 100;
+  }
+
+  get diskFreeText(): string {
+    if (!this.diskUsage) return '';
+    return `${this.formatBytes(this.diskUsage.free)} free of ${this.formatBytes(this.diskUsage.total)}`;
+  }
+
+  private formatBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    const units = ['KB', 'MB', 'GB', 'TB', 'PB'];
+    let v = n / 1024;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i++;
+    }
+    return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
   }
 
   /** Check for in-progress loading tasks (e.g. after a page reload) and resume polling. */
