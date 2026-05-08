@@ -9,7 +9,6 @@ describe('ModelCardComponent', () => {
     id: 'm1',
     name: 'Test Model',
     media_type: 'audio',
-    trainable: true,
     num_training: 50,
     last_trained_at: 1700000000,
     created_at: 1699000000,
@@ -45,20 +44,6 @@ describe('ModelCardComponent', () => {
   it('should display training count', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('50');
-  });
-
-  it('should show trainable checkmark', () => {
-    const el = fixture.nativeElement as HTMLElement;
-    const checks = el.querySelectorAll('.check');
-    expect(checks.length).toBeGreaterThan(0);
-  });
-
-  it('should show dash when not trainable', () => {
-    component.model = { ...mockModel, trainable: false };
-    fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
-    const dims = el.querySelectorAll('.dim');
-    expect(dims.length).toBeGreaterThan(0);
   });
 
   it('should enter rename mode on rename button click', () => {

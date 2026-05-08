@@ -825,7 +825,6 @@ export class NewModelModalComponent implements OnInit {
             this.error = 'Server did not return a model id';
             return;
           }
-          // Kick off loading so the detector becomes trainable in the grid.
           this.modelsApi.loadModel(newId).subscribe({
             next: () => {
               this.submitting = false;
@@ -883,7 +882,6 @@ export class NewModelModalComponent implements OnInit {
       .registerModel({
         name: trimmedName,
         media_type: this.mediaType,
-        trainable: true,
         text_query: textQuery,
         media_example: mediaExample,
         examples: examplesPayload,

@@ -73,24 +73,6 @@
       @case ('num_training') {
         <td>{{ (model.num_training ?? 0) | number }}</td>
       }
-      @case ('trainable') {
-        <td>
-          @if (model.trainable) {
-            <span class="status-icon" title="Model supports training" aria-label="Trainable">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-            </span>
-          } @else {
-            <span class="status-icon" title="Model does not support training" aria-label="Not trainable">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </span>
-          }
-        </td>
-      }
       @case ('autodetect') {
         <td>
           <button class="autorun-toggle" (click)="onAutorunToggle($event)" aria-label="Autorun" title="Include in CLI autorun">

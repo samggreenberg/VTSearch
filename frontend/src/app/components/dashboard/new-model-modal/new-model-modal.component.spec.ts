@@ -68,7 +68,6 @@ describe('NewModelModalComponent', () => {
     expect(req.request.body.name).toBe('Dog Barks');
     expect(req.request.body.media_type).toBe('audio');
     expect(req.request.body.text_query).toBe('dog barking sounds');
-    expect(req.request.body.trainable).toBe(true);
     req.flush({ id: '123', name: 'Dog Barks' });
 
     expect(component.created.emit).toHaveBeenCalled();
