@@ -18,11 +18,11 @@ import pytest
 
 from vtsearch.eval.config import EvalQuery
 from vtsearch.eval.runner import eval_text_sort
-from vtsearch.media.audio.embedder import AudioClapEmbedder
+from vtsearch.media.audio.embedder_clap import AudioClapEmbedder
 from vtsearch.media.embedder import MediaEmbedder
 from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
-from vtsearch.media.text.embedder import TextE5Embedder
-from vtsearch.media.video.embedder import VideoXClipEmbedder
+from vtsearch.media.text.embedder_e5 import TextE5Embedder
+from vtsearch.media.video.embedder_xclip import VideoXClipEmbedder
 from vtsearch.models.embeddings import embed_text_query
 
 

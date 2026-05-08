@@ -417,6 +417,16 @@ class MediaEmbedder(ABC):
     def media_type_id(self) -> str:
         """The ``type_id`` of the media type this embedder works with."""
 
+    @property
+    def is_default(self) -> bool:
+        """Whether this embedder is the default for its media type.
+
+        Exactly one embedder per media type should override this to ``True``.
+        :func:`vtsearch.media.embedders_for_type` returns defaults first so
+        callers using ``embedders_for_type(t)[0]`` get the default.
+        """
+        return False
+
     # ------------------------------------------------------------------
     # Model lifecycle
     # ------------------------------------------------------------------

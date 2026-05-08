@@ -196,7 +196,7 @@ _VIDEO_MIME_TYPES: dict[str, str] = {
 class VideoMediaType(MediaType):
     """Handles video medias — file import, HTTP serving, and demo datasets.
 
-    Embedding is handled by :class:`~vtsearch.media.video.embedder.VideoXClipEmbedder`.
+    Embedding is handled by :class:`~vtsearch.media.video.embedder_xclip.VideoXClipEmbedder`.
     """
 
     def __init__(self) -> None:

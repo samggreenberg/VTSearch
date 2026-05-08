@@ -81,7 +81,7 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 | Text (`text`) | `bge` | BGE (`BAAI/bge-base-en-v1.5`) | 768 |
 | Document (`document`) | — | None (no embedder) | N/A |
 
-Audio and text media types each have an **alternative embedder** in addition to the default. Each embedder lives in its own `embedder*.py` file inside the media-type package and exposes a module-level `EMBEDDER` sentinel; the default for a given media type is the one whose file sorts first (plain `embedder.py` ahead of `embedder_<variant>.py`).
+Audio and text media types each have an **alternative embedder** in addition to the default. Each embedder lives in its own `embedder_<name>.py` file inside the media-type package and exposes a module-level `EMBEDDER` sentinel; the default for a given media type is whichever embedder overrides `is_default` to return `True` (exactly one per media type).
 
 The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtsearch/converters/` before embedding.
 

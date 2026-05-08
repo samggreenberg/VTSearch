@@ -36,10 +36,10 @@ module-level sentinel attributes:
 |--------------|----------------------------------|----------------------|--------------------------------------|
 | `MEDIA_TYPE` | media-type package `__init__.py` | `MediaType`          | A single media type instance         |
 | `CLIPPERS`   | media-type package `__init__.py` | `list[MediaClipper]` | Clipper instances (may be empty)     |
-| `EMBEDDER`   | an `embedder*.py` file inside the media-type package | `MediaEmbedder` | One embedder per module              |
+| `EMBEDDER`   | an `embedder_<name>.py` file inside the media-type package | `MediaEmbedder` | One embedder per module              |
 
-Embedders use **one module per embedder**: any `embedder*.py` file inside
-a media-type package is auto-loaded and its module-level `EMBEDDER`
+Embedders use **one module per embedder**: any `embedder_<name>.py` file
+inside a media-type package is auto-loaded and its module-level `EMBEDDER`
 sentinel is registered. Symlinked directories **and** symlinked embedder
 files are both supported, so a custom embedder can live outside the
 VTSearch tree and be wired in by symlinking a single file into the
@@ -62,7 +62,7 @@ datasets are available, and how to load media-specific fields from files.
 vtsearch/media/<your_type>/
 ├── __init__.py       # Must expose MEDIA_TYPE and CLIPPERS sentinels
 ├── media_type.py     # Your MediaType subclass (required)
-└── embedder*.py      # Optional — one file per embedder, each exposing EMBEDDER
+└── embedder_<name>.py  # Optional — one file per embedder, each exposing EMBEDDER
 ```
 
 ### What to implement
@@ -161,7 +161,7 @@ MEDIA_TYPE = CodeMediaType()
 CLIPPERS = []  # No clippers yet — add when needed
 ```
 
-Each embedder lives in its own `embedder*.py` file with an `EMBEDDER`
+Each embedder lives in its own `embedder_<name>.py` file with an `EMBEDDER`
 sentinel at the bottom:
 
 ```python
@@ -248,27 +248,30 @@ media type may have multiple embedders.
 
 ```
 vtsearch/media/<type>/
-├── embedder.py              # Default embedder (required for new media types)
-└── embedder_<variant>.py    # Alternative embedder (optional, e.g. embedder_siglip.py)
+└── embedder_<name>.py    # One file per embedder, each exposing EMBEDDER
 ```
 
-Each media type has one default embedder in `embedder.py`. To add an
-**alternative** embedder for an existing media type, create a new file named
-`embedder_<variant>.py` (e.g. `embedder_clap_music.py`, `embedder_siglip.py`,
-`embedder_bge.py`) and register it the same way. Existing alternatives:
+Every embedder lives in its own `embedder_<name>.py` file. Exactly one
+embedder per media type should override the `is_default` property to return
+`True`; that embedder is what callers using
+`embedders_for_type(t)[0]` receive. Existing embedders:
 
-| File | Embedder | Media type |
-|------|----------|-----------|
-| `audio/embedder_clap_music.py` | `AudioClapMusicEmbedder` | audio |
-| `image/embedder_siglip.py` | `ImageSiglipEmbedder` | image |
-| `text/embedder_bge.py` | `TextBGEEmbedder` | text |
+| File | Embedder | Media type | Default |
+|------|----------|-----------|---------|
+| `audio/embedder_clap.py` | `AudioClapEmbedder` | audio | ✅ |
+| `audio/embedder_clap_music.py` | `AudioClapMusicEmbedder` | audio | |
+| `image/embedder_siglip.py` | `ImageSiglipEmbedder` | image | ✅ |
+| `text/embedder_e5.py` | `TextE5Embedder` | text | ✅ |
+| `text/embedder_bge.py` | `TextBGEEmbedder` | text | |
+| `video/embedder_xclip.py` | `VideoXClipEmbedder` | video | ✅ |
+| `video/embedder_languagebind.py` | `VideoLanguageBindEmbedder` | video | |
 
 ### What to implement
 
 Subclass `MediaEmbedder` from `vtsearch.media.embedder`.
 
 ```python
-# vtsearch/media/code/embedder.py
+# vtsearch/media/code/embedder_codebert.py
 
 from __future__ import annotations
 
@@ -298,6 +301,15 @@ class CodeBertEmbedder(MediaEmbedder):
     def media_type_id(self) -> str:
         """The type_id of the media type this embedder works with."""
         return "code"
+
+    @property
+    def is_default(self) -> bool:
+        """Mark this embedder as the default for its media type.
+
+        Exactly one embedder per media type should override this to ``True``;
+        callers using ``embedders_for_type(t)[0]`` receive that one.
+        """
+        return True
 
     # --- Model lifecycle (required abstract method) ---
 
@@ -394,7 +406,7 @@ path; the dict wrapper picks it up automatically.
 
 ### Register the embedder
 
-Drop the embedder into an `embedder*.py` file inside the media-type
+Drop the embedder into an `embedder_<name>.py` file inside the media-type
 package and expose an `EMBEDDER` sentinel at the bottom. Discovery is
 automatic — no edits to `__init__.py` are needed:
 

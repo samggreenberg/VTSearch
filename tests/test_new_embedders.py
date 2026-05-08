@@ -467,24 +467,24 @@ class TestEmbedderSentinelDiscovery:
     """
 
     def test_every_builtin_embedder_module_has_sentinel(self):
-        from vtsearch.media.audio import embedder as audio_clap
+        from vtsearch.media.audio import embedder_clap
         from vtsearch.media.audio import embedder_clap_music
         from vtsearch.media.image import embedder_siglip
-        from vtsearch.media.text import embedder as text_e5
         from vtsearch.media.text import embedder_bge
-        from vtsearch.media.video import embedder as video_xclip
+        from vtsearch.media.text import embedder_e5
         from vtsearch.media.video import embedder_languagebind
+        from vtsearch.media.video import embedder_xclip
 
         from vtsearch.media.embedder import MediaEmbedder
 
         modules = [
-            audio_clap,
+            embedder_clap,
             embedder_clap_music,
             embedder_siglip,
-            text_e5,
             embedder_bge,
-            video_xclip,
+            embedder_e5,
             embedder_languagebind,
+            embedder_xclip,
         ]
         for mod in modules:
             sentinel = getattr(mod, "EMBEDDER", None)
@@ -494,7 +494,7 @@ class TestEmbedderSentinelDiscovery:
     def test_sentinel_identity_matches_registry(self):
         """The registered embedder for each name should be the module's EMBEDDER sentinel."""
         from vtsearch.media import get_embedder
-        from vtsearch.media.audio.embedder import EMBEDDER as clap_sentinel
+        from vtsearch.media.audio.embedder_clap import EMBEDDER as clap_sentinel
         from vtsearch.media.text.embedder_bge import EMBEDDER as bge_sentinel
         from vtsearch.media.video.embedder_languagebind import EMBEDDER as lb_sentinel
 

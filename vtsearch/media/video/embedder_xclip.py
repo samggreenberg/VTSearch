@@ -47,6 +47,10 @@ class VideoXClipEmbedder(MediaEmbedder):
     def media_type_id(self) -> str:
         return "video"
 
+    @property
+    def is_default(self) -> bool:
+        return True
+
     # ------------------------------------------------------------------
     # Model lifecycle
     # ------------------------------------------------------------------
