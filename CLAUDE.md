@@ -52,6 +52,7 @@ When you run a build, typecheck, linter, or test suite, **fix every error and fa
 
 This applies to:
 - TypeScript errors from `tsc` / `npm run build:prod` (including in `*.spec.ts` files, even though specs do not currently run — they must still typecheck).
+- Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them — fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
 - Linter errors from `ruff`.
 - Any other diagnostics surfaced by tooling you invoke.
