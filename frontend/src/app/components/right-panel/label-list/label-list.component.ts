@@ -145,6 +145,10 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
     return '\u25A1';
   }
 
+  isMissing(id: number): boolean {
+    return !this.mediaMap.has(id);
+  }
+
   onEntryClick(id: number): void {
     if (this.focusMode === 'hover') {
       this.mediaVote.emit({ id, vote: 'bad' });

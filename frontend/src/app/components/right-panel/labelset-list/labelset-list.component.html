@@ -7,9 +7,11 @@
       <div
         class="vote-entry"
         [class.vote-entry-grid]="isGrid"
+        [class.vote-entry-missing]="isMissing(entry)"
+        [attr.title]="isMissing(entry) ? entry.name + ' — not in the current dataset' : null"
         role="button"
         tabindex="0"
-        [attr.aria-label]="(label === 'good' ? 'Good' : 'Bad') + ': ' + entry.name"
+        [attr.aria-label]="(label === 'good' ? 'Good' : 'Bad') + ': ' + entry.name + (isMissing(entry) ? ' (not in current dataset)' : '')"
         (click)="onEntryClick(entry)"
         (contextmenu)="onEntryContextMenu($event, entry)"
         (mouseenter)="onEntryMouseEnter(entry)"

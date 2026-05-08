@@ -130,6 +130,10 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
     return '□';
   }
 
+  isMissing(entry: LabelElement): boolean {
+    return entry.cid === null || entry.cid === undefined;
+  }
+
   onEntryClick(entry: LabelElement): void {
     if (this.focusMode === 'hover') {
       this.elementVote.emit({ id: entry.id, vote: 'bad' });
