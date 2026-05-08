@@ -27,7 +27,7 @@ _IMAGE_MIME_TYPES: dict[str, str] = {
 class ImageMediaType(MediaType):
     """Handles image medias — file import, HTTP serving, and demo datasets.
 
-    Embedding is handled by :class:`~vtsearch.media.image.embedder.ImageClipEmbedder`.
+    Embedding is handled by :class:`~vtsearch.media.image.embedder_siglip.ImageSiglipEmbedder`.
     """
 
     def __init__(self) -> None:

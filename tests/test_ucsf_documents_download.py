@@ -229,7 +229,7 @@ class TestLoadDemoSourceUcsfDocuments:
 
     def _make_fake_embedder(self):
         emb = MagicMock()
-        emb.name = "clip"
+        emb.name = "siglip"
         emb.media_type_id = "image"
         emb._model = True
         emb._on_progress = lambda *a: None

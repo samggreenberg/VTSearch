@@ -1,4 +1,4 @@
-"""Image embedder — CLIP (openai/clip-vit-base-patch32)."""
+"""Video embedder — X-CLIP (microsoft/xclip-base-patch32)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import CLIP_MODEL_ID
+from vtsearch.config import XCLIP_MODEL_ID
 from vtsearch.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
@@ -20,23 +20,20 @@ from vtsearch.media.embedder import (
 )
 
 if TYPE_CHECKING:
-    from PIL import Image
-    from transformers import CLIPModel, CLIPProcessor
+    from transformers import XCLIPModel, XCLIPProcessor
 
 
-class ImageClipEmbedder(MediaEmbedder):
-    """Embeds images using the CLIP model (openai/clip-vit-base-patch32).
+class VideoXClipEmbedder(MediaEmbedder):
+    """Embeds videos using the X-CLIP model (microsoft/xclip-base-patch32).
 
-    * Images → 768-dimensional vectors via CLIP's vision encoder.
-    * Text queries → 768-dimensional vectors via CLIP's text encoder.
-    * Also exposes :meth:`embed_pil_image` for in-memory PIL Image objects
-      (used for CIFAR-10 demo datasets and PDF rendering).
+    * Videos → 768-dimensional vectors via X-CLIP's video encoder (8 sampled frames).
+    * Text queries → 768-dimensional vectors via X-CLIP's text encoder.
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self._model: Optional[CLIPModel] = None
-        self._processor: Optional[CLIPProcessor] = None
+        self._model: Optional[XCLIPModel] = None
+        self._processor: Optional[XCLIPProcessor] = None
 
     # ------------------------------------------------------------------
     # Identity
@@ -44,11 +41,15 @@ class ImageClipEmbedder(MediaEmbedder):
 
     @property
     def name(self) -> str:
-        return "clip"
+        return "xclip"
 
     @property
     def media_type_id(self) -> str:
-        return "image"
+        return "video"
+
+    @property
+    def is_default(self) -> bool:
+        return True
 
     # ------------------------------------------------------------------
     # Model lifecycle
@@ -62,22 +63,22 @@ class ImageClipEmbedder(MediaEmbedder):
             import torch  # noqa: F401, PLC0415
 
         with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 2):
-            from transformers import CLIPModel, CLIPProcessor  # noqa: PLC0415
+            from transformers import XCLIPModel, XCLIPProcessor  # noqa: PLC0415
 
-        cache_dir = embedder_load_setup(self._on_progress, "Loading CLIP model weights…")
-        CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
+        cache_dir = embedder_load_setup(self._on_progress, "Loading X-CLIP model weights…")
+        XCLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
         with (
             intercept_tqdm_progress(self._on_progress),
-            intercept_weight_loading_progress(self._on_progress, "Loading CLIP model weights…"),
+            intercept_weight_loading_progress(self._on_progress, "Loading X-CLIP model weights…"),
         ):
             self._model = load_pretrained_local_first(
-                CLIPModel.from_pretrained, CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
+                XCLIPModel.from_pretrained, XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
             )
         self._model = self._model.to("cpu")
-        self._on_progress("loading", "Loading CLIP processor…", 0, 0)
+        self._on_progress("loading", "Loading X-CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(
-                CLIPProcessor.from_pretrained, CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True, token=False
+                XCLIPProcessor.from_pretrained, XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False, token=False
             )
 
     # ------------------------------------------------------------------
@@ -87,11 +88,11 @@ class ImageClipEmbedder(MediaEmbedder):
     @property
     def description_wrappers(self) -> list[str]:
         return [
-            "a photo of {text}",
-            "a photograph of {text}",
-            "an image of {text}",
+            "a video of {text}",
+            "a media showing {text}",
             "{text}",
-            "a picture of {text}",
+            "footage of {text}",
+            "a video media of {text}",
         ]
 
     def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
@@ -101,33 +102,50 @@ class ImageClipEmbedder(MediaEmbedder):
             return None
         file_path = Path(media["media_path"])
         try:
+            import cv2  # noqa: PLC0415
+            import torch  # noqa: PLC0415
             from PIL import Image  # noqa: PLC0415
 
-            image = Image.open(file_path).convert("RGB")
-            return self.embed_pil_image(image)
-        except Exception:
-            logging.getLogger(__name__).exception("Error embedding %s", file_path)
-            return None
+            cap = cv2.VideoCapture(str(file_path))
+            if not cap.isOpened():
+                print(f"Error opening video {file_path}")
+                return None
 
-    def embed_pil_image(self, image: Image.Image) -> Optional[np.ndarray]:
-        """Embed a PIL Image that is already in memory (e.g. from CIFAR-10)."""
-        if self._model is None:
-            self.load_models()
-        if self._model is None or self._processor is None:
-            return None
-        try:
-            import torch  # noqa: PLC0415
+            try:
+                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                if frame_count <= 0:
+                    print(f"Error: could not determine frame count for {file_path}")
+                    return None
+                num_frames = min(8, max(1, frame_count))
+                indices = np.linspace(0, frame_count - 1, num_frames, dtype=int)
 
-            image = image.convert("RGB")
-            inputs = self._processor(images=image, return_tensors="pt")
+                frames = []
+                for idx in indices:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                    ret, frame = cap.read()
+                    if ret:
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        frames.append(Image.fromarray(frame))
+            finally:
+                cap.release()
+
+            if not frames:
+                print(f"Error: could not extract frames from {file_path}")
+                return None
+
+            # X-CLIP expects exactly 8 frames; pad by repeating if we have fewer
+            while len(frames) < 8:
+                frames.append(frames[-1])
+
+            inputs = self._processor(images=[list(frames)], return_tensors="pt")
             device = next(self._model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
-                outputs = self._model.get_image_features(**inputs)
+                outputs = self._model.get_video_features(**inputs)
                 embedding = _extract_tensor(outputs).detach().cpu().numpy()
             return embedding[0]
         except Exception:
-            logging.getLogger(__name__).exception("Error embedding PIL image")
+            logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
@@ -145,7 +163,7 @@ class ImageClipEmbedder(MediaEmbedder):
                 text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
             return text_vec
         except Exception:
-            logging.getLogger(__name__).exception("Error embedding text query for image")
+            logging.getLogger(__name__).exception("Error embedding text query for video")
             return None
 
     # Internal helper used by loader.py bridge
@@ -155,4 +173,4 @@ class ImageClipEmbedder(MediaEmbedder):
         return self._model, self._processor
 
 
-EMBEDDER = ImageClipEmbedder()
+EMBEDDER = VideoXClipEmbedder()

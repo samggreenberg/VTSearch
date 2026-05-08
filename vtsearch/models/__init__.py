@@ -10,7 +10,6 @@ from vtsearch.models.embeddings import (
 )
 from vtsearch.models.loader import (
     get_clap_model,
-    get_clip_model,
     get_e5_model,
     get_xclip_model,
     initialize_models,
@@ -57,7 +56,6 @@ __all__ = [
     "preload_autoload_media_types",
     "get_clap_model",
     "get_xclip_model",
-    "get_clip_model",
     "get_e5_model",
     # Detector training helpers
     "serialize_weights",

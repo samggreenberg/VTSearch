@@ -19,7 +19,7 @@ from vtsearch.media.base import (
 class TextMediaType(MediaType):
     """Handles plain-text paragraphs — file import, HTTP serving, and demo datasets.
 
-    Embedding is handled by :class:`~vtsearch.media.text.embedder.TextE5Embedder`.
+    Embedding is handled by :class:`~vtsearch.media.text.embedder_e5.TextE5Embedder`.
     """
 
     def __init__(self) -> None:

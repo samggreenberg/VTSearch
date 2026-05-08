@@ -114,7 +114,7 @@ class TestFolderImporterPdf:
 
     def _make_fake_embedder(self):
         emb = mock.MagicMock()
-        emb.name = "clip"
+        emb.name = "siglip"
         emb.media_type_id = "image"
         emb._model = True
         emb.embed_media.return_value = np.zeros(768)
@@ -363,7 +363,7 @@ class TestPdfSymlinkDiscovery:
 
     def _make_fake_embedder(self):
         emb = mock.MagicMock()
-        emb.name = "clip"
+        emb.name = "siglip"
         emb.media_type_id = "image"
         emb._model = True
         emb.embed_media.return_value = np.zeros(768)
@@ -394,7 +394,7 @@ class TestPdfSymlinkDiscovery:
             stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
             stack.enter_context(mock.patch("vtsearch.media.get_embedder", return_value=emb))
             stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]))
-            _load_pdf_images(root, medias, embedder_name="clip")
+            _load_pdf_images(root, medias, embedder_name="siglip")
 
         assert len(medias) == 2
         filenames = {m["filename"] for m in medias.values()}

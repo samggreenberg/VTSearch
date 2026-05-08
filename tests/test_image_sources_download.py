@@ -350,7 +350,7 @@ class TestLoadDemoSourceOxfordFlowers:
 
     def _make_mock_embedder(self):
         mock_emb = MagicMock()
-        mock_emb.name = "clip"
+        mock_emb.name = "siglip"
         mock_emb.media_type_id = "image"
         mock_emb._model = True
         mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
@@ -431,7 +431,7 @@ class TestLoadDemoSourceFood101:
 
     def _make_mock_embedder(self):
         mock_emb = MagicMock()
-        mock_emb.name = "clip"
+        mock_emb.name = "siglip"
         mock_emb.media_type_id = "image"
         mock_emb._model = True
         mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
@@ -479,7 +479,7 @@ class TestLoadDemoSourceEurosat:
 
     def _make_mock_embedder(self):
         mock_emb = MagicMock()
-        mock_emb.name = "clip"
+        mock_emb.name = "siglip"
         mock_emb.media_type_id = "image"
         mock_emb._model = True
         mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
@@ -527,7 +527,7 @@ class TestLoadDemoSourceStanfordDogs:
 
     def _make_mock_embedder(self):
         mock_emb = MagicMock()
-        mock_emb.name = "clip"
+        mock_emb.name = "siglip"
         mock_emb.media_type_id = "image"
         mock_emb._model = True
         mock_emb.embed_media = MagicMock(return_value=np.zeros(768))

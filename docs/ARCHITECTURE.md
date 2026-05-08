@@ -27,7 +27,7 @@ documents.  It combines:
 
 - **Semantic sorting** — LAION-CLAP (audio), SigLIP (images), X-CLIP
   (video), E5-base-v2 (text) for embedding-based similarity search,
-  with alternative embedders available (CLAP Music, OpenAI CLIP, BGE).
+  with alternative embedders available (CLAP Music, BGE).
 - **Learned sorting** — a small MLP trained on user votes to predict
   good/bad labels.
 - **Flask web UI** — Angular SPA frontend with a REST API.
@@ -55,23 +55,23 @@ VTSearch/
 │   │   ├── base.py                 MediaType, MediaEmbedder, MediaClipper, Processor, Detector, Localizer, Extractor ABCs
 │   │   ├── __init__.py             Three registries: register/register_embedder/register_clipper
 │   │   ├── audio/media_type.py     Audio media type (WAV serving, folder import)
-│   │   ├── audio/embedder.py       AudioClapEmbedder (LAION CLAP, 512-d)
+│   │   ├── audio/embedder_clap.py  AudioClapEmbedder (LAION CLAP, 512-d, default)
 │   │   ├── audio/embedder_clap_music.py  AudioClapMusicEmbedder (CLAP Music, 512-d)
 │   │   ├── audio/clipper.py        SoundDefaultClipper, SoundTilingClipper
 │   │   ├── audio/speech_extractor.py  SpeechExtractor processor
 │   │   ├── image/media_type.py     Image media type (JPEG/PNG serving)
-│   │   ├── image/embedder.py       ImageClipEmbedder (OpenAI CLIP, 768-d)
 │   │   ├── image/embedder_siglip.py  ImageSiglipEmbedder (SigLIP, 768-d, default)
 │   │   ├── image/clipper.py        ImageDefaultClipper, ImageTilingClipper
 │   │   ├── image/extractor.py      ImageClassExtractor (YOLO-based)
 │   │   ├── image/face_localizer.py FaceLocalizer (MediaPipe-based)
 │   │   ├── image/ocr_extractor.py  OCRExtractor
 │   │   ├── text/media_type.py      Text media type (JSON serving, type_id="text")
-│   │   ├── text/embedder.py        TextE5Embedder (E5-base-v2, 768-d)
 │   │   ├── text/embedder_bge.py    TextBGEEmbedder (BGE-base-en-v1.5, 768-d)
+│   │   ├── text/embedder_e5.py     TextE5Embedder (E5-base-v2, 768-d, default)
 │   │   ├── text/clipper.py         TextDefaultClipper, TextSentenceClipper
 │   │   ├── video/media_type.py     Video media type (MP4/WebM serving)
-│   │   ├── video/embedder.py       VideoXClipEmbedder (X-CLIP, 768-d)
+│   │   ├── video/embedder_languagebind.py  VideoLanguageBindEmbedder (LanguageBind, 768-d)
+│   │   ├── video/embedder_xclip.py VideoXClipEmbedder (X-CLIP, 768-d, default)
 │   │   ├── video/clipper.py        VideoDefaultClipper, VideoTilingClipper
 │   │   ├── document/media_type.py  Document handling (no embedder; convert first)
 │   │   └── document/clipper.py     DocumentDefaultClipper
@@ -386,7 +386,7 @@ Instantiate it, call `load_models()`, then use `embed_media()` /
 dataset loader builds); for ad-hoc files, use the `media_from_path` helper:
 
 ```python
-from vtsearch.media.audio.embedder import AudioClapEmbedder
+from vtsearch.media.audio.embedder_clap import AudioClapEmbedder
 from vtsearch.media.embedder import media_from_path
 
 embedder = AudioClapEmbedder()

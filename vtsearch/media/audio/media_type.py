@@ -93,7 +93,7 @@ def generate_waveform_thumbnail_from_file(file_path: Path, *, size: int = _THUMB
 class AudioMediaType(MediaType):
     """Handles audio medias — file import, HTTP serving, and demo datasets.
 
-    Embedding is handled by :class:`~vtsearch.media.audio.embedder.AudioClapEmbedder`.
+    Embedding is handled by :class:`~vtsearch.media.audio.embedder_clap.AudioClapEmbedder`.
     """
 
     def __init__(self) -> None:

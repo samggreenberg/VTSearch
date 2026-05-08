@@ -139,13 +139,12 @@ settings).
 
 #### Alternative embedders
 
-Three additional embedder models are available as alternatives to the defaults.
+Two additional embedder models are available as alternatives to the defaults.
 These are only downloaded if explicitly selected:
 
 | Model | Media type | HuggingFace ID | Approx. size |
 |-------|-----------|----------------|-------------|
 | CLAP Music & Speech | Audio | `laion/larger_clap_music_and_speech` | ~1.3 GB |
-| CLIP | Image | `openai/clip-vit-base-patch32` | ~350 MB |
 | BGE | Text | `BAAI/bge-base-en-v1.5` | ~440 MB |
 
 All model downloads use `token=False` — no HuggingFace account or API
