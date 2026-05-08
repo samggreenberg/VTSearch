@@ -236,3 +236,35 @@ class TestVersionEndpoint:
         # Must be parseable as an ISO 8601 timestamp ending in Z (UTC).
         assert version.endswith("Z")
         datetime.fromisoformat(version.replace("Z", "+00:00"))
+
+
+class TestVersionResolution:
+    """`vtsearch.__init__` resolves __version__ from git, then a baked file, then a fallback."""
+
+    def test_git_resolver_returns_iso_utc_for_real_repo(self):
+        from vtsearch import _version_from_git
+
+        version = _version_from_git()
+        assert version is not None, "tests run from a git checkout — git resolution must succeed"
+        assert version.endswith("Z")
+
+    def test_file_resolver_reads_baked_version(self, tmp_path, monkeypatch):
+        import vtsearch as pkg
+
+        baked = tmp_path / "_version.txt"
+        baked.write_text("2030-01-02T03:04:05Z\n", encoding="utf-8")
+        monkeypatch.setattr(pkg, "__file__", str(tmp_path / "__init__.py"))
+        assert pkg._version_from_file() == "2030-01-02T03:04:05Z"
+
+    def test_file_resolver_returns_none_when_missing(self, tmp_path, monkeypatch):
+        import vtsearch as pkg
+
+        monkeypatch.setattr(pkg, "__file__", str(tmp_path / "__init__.py"))
+        assert pkg._version_from_file() is None
+
+    def test_fallback_when_git_and_file_unavailable(self, monkeypatch):
+        import vtsearch as pkg
+
+        monkeypatch.setattr(pkg, "_version_from_git", lambda: None)
+        monkeypatch.setattr(pkg, "_version_from_file", lambda: None)
+        assert pkg._resolve_version() == "0.0.0-unknown"
