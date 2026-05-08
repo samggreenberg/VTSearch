@@ -20,9 +20,9 @@ export class LabelImportersApiService {
           formData.append(key, String(value ?? ''));
         }
       }
-      return this.http.post(`/api/label-importers/import/${importerName}`, formData);
+      return this.http.post(`/api/label-importers/import/${encodeURIComponent(importerName)}`, formData);
     }
-    return this.http.post(`/api/label-importers/import/${importerName}`, params);
+    return this.http.post(`/api/label-importers/import/${encodeURIComponent(importerName)}`, params);
   }
 
   runModelImport(
@@ -32,7 +32,7 @@ export class LabelImportersApiService {
     file?: File,
     fileFieldKey?: string,
   ): Observable<unknown> {
-    const url = `/api/detectors/${encodeURIComponent(modelName)}/import-labels/${importerName}`;
+    const url = `/api/detectors/${encodeURIComponent(modelName)}/import-labels/${encodeURIComponent(importerName)}`;
     if (file && fileFieldKey) {
       const formData = new FormData();
       formData.append(fileFieldKey, file, file.name);

@@ -14,10 +14,14 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Callable, Optional
+from urllib.parse import urljoin
 
 import requests
 
 from vtsearch.config import DATA_DIR
+from vtsearch.utils.url_validation import validate_url
+
+_MAX_REDIRECTS = 10
 
 # Demo dataset directory paths (derived from DATA_DIR)
 IMAGE_DIR = DATA_DIR / "images"
@@ -119,7 +123,26 @@ def download_file_with_progress(
 
     # (connect_timeout, read_timeout): fail fast on unresponsive hosts
     # and abort if the server stops streaming bytes for 60s mid-download.
-    response = requests.get(url, stream=True, timeout=(10, 60))
+    # We follow redirects manually so that every hop is re-checked by
+    # validate_url() — otherwise a public URL could redirect to an internal
+    # host (SSRF), bypassing the up-front check that callers performed.
+    session = requests.Session()
+    current_url = url
+    response = session.get(current_url, stream=True, timeout=(10, 60), allow_redirects=False)
+    redirects = 0
+    while response.is_redirect or response.is_permanent_redirect:
+        if redirects >= _MAX_REDIRECTS:
+            response.close()
+            raise requests.TooManyRedirects(f"Exceeded {_MAX_REDIRECTS} redirects following {url}")
+        location = response.headers.get("Location")
+        if not location:
+            break
+        next_url = urljoin(current_url, location)
+        validate_url(next_url)
+        response.close()
+        current_url = next_url
+        response = session.get(current_url, stream=True, timeout=(10, 60), allow_redirects=False)
+        redirects += 1
     response.raise_for_status()
     total_size = int(response.headers.get("content-length", 0))
     if total_size == 0:

@@ -167,11 +167,14 @@ def simulate_voting_iterations(
 
     vote_seq = _make_vote_sequence(sim_ids, clips_dict, target_category, rng)
 
-    # Pre-compute all-media embeddings for safe threshold GMM scoring
+    # Pre-compute embeddings for safe-threshold GMM scoring.  Restrict to the
+    # simulation set so the held-out ``test_ids`` never feed into the GMM that
+    # picks the threshold — otherwise the test scores leak into calibration
+    # and the reported metrics are biased upward.
     if safe_thresholds:
-        all_media_ids = sorted(clips_dict.keys())
-        all_clip_embs = np.array([clips_dict[cid]["embedding"] for cid in all_media_ids])
-        X_all_clips = torch.tensor(all_clip_embs, dtype=torch.float32)
+        gmm_media_ids = sorted(sim_ids)
+        gmm_clip_embs = np.array([clips_dict[cid]["embedding"] for cid in gmm_media_ids])
+        X_all_clips = torch.tensor(gmm_clip_embs, dtype=torch.float32)
 
     good_votes: dict[int, None] = {}
     bad_votes: dict[int, None] = {}
