@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
-import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
+import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
@@ -43,13 +43,13 @@ type ModalTab = 'blank' | 'trained';
 type TrainedSubView = 'picker' | 'form';
 
 @Component({
-  selector: 'vt-new-model-modal',
+  selector: 'vt-new-detector-modal',
   standalone: true,
   imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent, MediaCropModalComponent],
-  templateUrl: './new-model-modal.component.html',
-  styleUrl: './new-model-modal.component.scss',
+  templateUrl: './new-detector-modal.component.html',
+  styleUrl: './new-detector-modal.component.scss',
 })
-export class NewModelModalComponent implements OnInit {
+export class NewDetectorModalComponent implements OnInit {
   /** Media type of the currently active dataset, if any. */
   @Input() defaultMediaType = '';
 
@@ -127,9 +127,9 @@ export class NewModelModalComponent implements OnInit {
   private static readonly DEMO_COL_ORDER_KEY = 'vtsearch.dashboard.demoColumnOrder';
 
   demoCols = new ManagedColumns(
-    NewModelModalComponent.DEMO_COLUMNS_DEFAULT,
-    NewModelModalComponent.DEMO_COL_META,
-    { initialSort: 'num_files', storageKey: NewModelModalComponent.DEMO_COL_ORDER_KEY },
+    NewDetectorModalComponent.DEMO_COLUMNS_DEFAULT,
+    NewDetectorModalComponent.DEMO_COL_META,
+    { initialSort: 'num_files', storageKey: NewDetectorModalComponent.DEMO_COL_ORDER_KEY },
   );
 
   // --- Demo file browser (shown after picking a demo from the table) ---
@@ -164,7 +164,7 @@ export class NewModelModalComponent implements OnInit {
   labelImporterFileFieldKey: string | null = null;
 
   constructor(
-    private modelsApi: TrainableModelsApiService,
+    private detectorsApi: DetectorsApiService,
     private datasetsApi: DatasetsApiService,
     private sortingApi: SortingApiService,
     private labelImportersApi: LabelImportersApiService,
@@ -268,7 +268,7 @@ export class NewModelModalComponent implements OnInit {
         this.mediaImporters = (res.importers || []).filter(
           (imp) =>
             !imp['hidden_from_picker'] &&
-            NewModelModalComponent.SUPPORTED_PICKER_VIEWS.has(imp.picker_view || ''),
+            NewDetectorModalComponent.SUPPORTED_PICKER_VIEWS.has(imp.picker_view || ''),
         );
         this.declaredImporterTabs = res.tabs || [];
       },
@@ -278,7 +278,7 @@ export class NewModelModalComponent implements OnInit {
   /** Importers ordered like the Add Dataset modal: known picker_views
    *  first, then any extras in registry order. */
   get orderedImporters(): ImporterInfo[] {
-    const order = NewModelModalComponent.PICKER_ORDER;
+    const order = NewDetectorModalComponent.PICKER_ORDER;
     const result: ImporterInfo[] = [];
     for (const name of order) {
       const imp = this.mediaImporters.find((i) => i.name === name);
@@ -810,8 +810,8 @@ export class NewModelModalComponent implements OnInit {
       ...this.labelImporterValues,
     };
 
-    this.modelsApi
-      .registerModelFromLabelset(
+    this.detectorsApi
+      .registerDetectorFromLabelset(
         this.selectedLabelImporter.name,
         params,
         this.labelImporterFile ?? undefined,
@@ -825,7 +825,7 @@ export class NewModelModalComponent implements OnInit {
             this.error = 'Server did not return a model id';
             return;
           }
-          this.modelsApi.loadModel(newId).subscribe({
+          this.detectorsApi.loadDetector(newId).subscribe({
             next: () => {
               this.submitting = false;
               this.created.emit(newId);
@@ -878,8 +878,8 @@ export class NewModelModalComponent implements OnInit {
     const mediaExample = this.exampleType === 'media' ? this.exampleValue : '';
     const examplesPayload = [{ type: this.exampleType!, value: this.exampleValue }];
 
-    this.modelsApi
-      .registerModel({
+    this.detectorsApi
+      .registerDetector({
         name: trimmedName,
         media_type: this.mediaType,
         text_query: textQuery,

@@ -191,11 +191,11 @@ def update_settings():
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
-    if "autorun_trainable_models" in body:
-        val = body["autorun_trainable_models"]
+    if "autorun_detectors" in body:
+        val = body["autorun_detectors"]
         if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
-            return jsonify({"error": "autorun_trainable_models must be a list of strings"}), 400
-        settings.set_autorun_trainable_models(val)
+            return jsonify({"error": "autorun_detectors must be a list of strings"}), 400
+        settings.set_autorun_detectors(val)
 
     # Directory path settings
     import vtsearch.utils.paths as _paths
@@ -203,7 +203,7 @@ def update_settings():
     _dir_base = _paths.get_file_access_base_dir()
     for dir_key, setter in (
         ("saved_datasets_dir", settings.set_saved_datasets_dir),
-        ("trainable_models_dir", settings.set_trainable_models_dir),
+        ("detectors_dir", settings.set_detectors_dir),
     ):
         if dir_key in body:
             val = body[dir_key]

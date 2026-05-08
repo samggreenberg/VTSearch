@@ -32,7 +32,7 @@ describe('DatasetStateService', () => {
     service.refresh();
 
     const datasetsReq = httpMock.expectOne('/api/datasets/registry');
-    const modelsReq = httpMock.expectOne('/api/trainable-models/registry');
+    const modelsReq = httpMock.expectOne('/api/detectors/registry');
 
     datasetsReq.flush({ datasets: [{ id: '1', name: 'test' }] });
     modelsReq.flush({ models: [{ id: 'm1', name: 'model1' }] });
@@ -48,13 +48,13 @@ describe('DatasetStateService', () => {
     service.refresh();
     tick();
     const staleDs = httpMock.expectOne('/api/datasets/registry');
-    const staleModels = httpMock.expectOne('/api/trainable-models/registry');
+    const staleModels = httpMock.expectOne('/api/detectors/registry');
 
     // Second refresh — this one should win
     service.refresh();
     tick();
     const freshDs = httpMock.expectOne('/api/datasets/registry');
-    const freshModels = httpMock.expectOne('/api/trainable-models/registry');
+    const freshModels = httpMock.expectOne('/api/detectors/registry');
 
     // The first (stale) requests were cancelled by switchMap
     expect(staleDs.cancelled).toBeTrue();

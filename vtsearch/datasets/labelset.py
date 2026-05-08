@@ -128,7 +128,7 @@ class LabelSet:
                 are expanded into one element per member so that an exported
                 labelset records full provenance.  Set to ``False`` when the
                 labelset will be re-imported into the same system (e.g.
-                trainable-model persistence) to avoid inflating the label
+                detector persistence) to avoid inflating the label
                 count.
 
         Returns:
@@ -338,7 +338,7 @@ def _clip_to_elements(media: dict[str, Any], label: str, *, expand_dupes: bool =
     produced for each original member so that an exported labelset reflects
     the full duplicate set.  When ``False``, a single element is emitted
     using the representative's own MD5 and origin, which avoids inflating
-    the label count for internal round-trip use cases (e.g. trainable-model
+    the label count for internal round-trip use cases (e.g. detector
     persistence).
     """
     origin = media.get("origin")

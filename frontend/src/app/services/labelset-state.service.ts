@@ -2,7 +2,7 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, EMPTY, Observable, Subject, timer } from 'rxjs';
 import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
 import { LabelElement, LabelsDetailResponse } from '../models/api.models';
-import { TrainableModelsApiService } from './trainable-models-api.service';
+import { DetectorsApiService } from './detectors-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class LabelsetStateService implements OnDestroy {
@@ -18,7 +18,7 @@ export class LabelsetStateService implements OnDestroy {
   readonly bad$ = this.badSubject.asObservable();
   readonly mediaType$ = this.mediaTypeSubject.asObservable();
 
-  constructor(private api: TrainableModelsApiService) {}
+  constructor(private api: DetectorsApiService) {}
 
   ngOnDestroy(): void {
     this.stopPolling();

@@ -83,7 +83,7 @@ class TestInvalidRequestBodies:
 
     def test_register_model_with_null_body(self, client):
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             data="null",
             content_type="application/json",
         )
@@ -103,7 +103,7 @@ class TestMissingRequiredFields:
 
     def test_register_model_missing_name(self, client):
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"media_type": "audio"},
         )
         assert resp.status_code == 400
@@ -111,7 +111,7 @@ class TestMissingRequiredFields:
 
     def test_register_model_missing_media_type(self, client):
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "test"},
         )
         assert resp.status_code == 400
@@ -119,20 +119,20 @@ class TestMissingRequiredFields:
 
     def test_register_model_rename_missing_new_name(self, client):
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "rename_test", "media_type": "audio"},
         )
-        model_id = resp.get_json()["model"]["id"]
-        resp = client.put(f"/api/models/registry/{model_id}/rename", json={})
+        detector_id = resp.get_json()["detector"]["id"]
+        resp = client.put(f"/api/detectors/registry/{detector_id}/rename", json={})
         assert resp.status_code == 400
 
     def test_autorun_flag_missing_value(self, client):
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "ad_test", "media_type": "audio"},
         )
-        model_id = resp.get_json()["model"]["id"]
-        resp = client.put(f"/api/models/registry/{model_id}/autorun", json={})
+        detector_id = resp.get_json()["detector"]["id"]
+        resp = client.put(f"/api/detectors/registry/{detector_id}/autorun", json={})
         assert resp.status_code == 400
 
     def test_fill_from_sort_missing_threshold(self, client):
@@ -267,19 +267,19 @@ class TestNonexistentResources:
         assert resp.status_code == 404
 
     def test_delete_nonexistent_model(self, client):
-        resp = client.delete("/api/models/registry/does_not_exist")
+        resp = client.delete("/api/detectors/registry/does_not_exist")
         assert resp.status_code == 404
 
     def test_rename_nonexistent_model(self, client):
         resp = client.put(
-            "/api/models/registry/does_not_exist/rename",
+            "/api/detectors/registry/does_not_exist/rename",
             json={"name": "new"},
         )
         assert resp.status_code == 404
 
     def test_autorun_nonexistent_model(self, client):
         resp = client.put(
-            "/api/models/registry/does_not_exist/autorun",
+            "/api/detectors/registry/does_not_exist/autorun",
             json={"autorun": False},
         )
         assert resp.status_code == 404
@@ -485,14 +485,14 @@ class TestModelRegistryEdgeCases:
 
     def test_create_model_with_empty_name(self, client):
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "", "media_type": "audio"},
         )
         assert resp.status_code == 400
 
     def test_create_model_with_whitespace_name(self, client):
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "   ", "media_type": "audio"},
         )
         assert resp.status_code == 400
@@ -500,13 +500,13 @@ class TestModelRegistryEdgeCases:
     def test_double_delete_model(self, client):
         """Deleting a model twice: second should 404."""
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "del_twice", "media_type": "audio"},
         )
-        model_id = resp.get_json()["model"]["id"]
-        resp1 = client.delete(f"/api/models/registry/{model_id}")
+        detector_id = resp.get_json()["detector"]["id"]
+        resp1 = client.delete(f"/api/detectors/registry/{detector_id}")
         assert resp1.status_code == 200
-        resp2 = client.delete(f"/api/models/registry/{model_id}")
+        resp2 = client.delete(f"/api/detectors/registry/{detector_id}")
         assert resp2.status_code == 404
 
 

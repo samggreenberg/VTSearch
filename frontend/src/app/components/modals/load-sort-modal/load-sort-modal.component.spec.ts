@@ -31,7 +31,7 @@ describe('LoadSortModalComponent', () => {
         { name: 'sample', filename: 'sample.wav', path: '/data/sample.wav', size_bytes: 2000 },
       ],
     });
-    httpMock.expectOne('/api/models/registry').flush({
+    httpMock.expectOne('/api/detectors/registry').flush({
       models: [
         { id: 'm1', name: 'My Model', media_type: 'audio', num_training: 12 },
         { id: 'm2', name: 'Untrained', media_type: 'audio', num_training: 0 },

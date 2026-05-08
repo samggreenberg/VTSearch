@@ -152,34 +152,33 @@ def sort_clips():
 @sorting_bp.route("/api/learned-sort", methods=["POST"])
 def learned_sort():
     """Train MLP on the active detector's saved labelset (or active votes when
-    no trainable model is loaded) and return all medias sorted by predicted
-    score.
+    no detector is loaded) and return all medias sorted by predicted score.
 
-    When a trainable model is active, training uses every label saved on
-    disk — including labels whose underlying media isn't part of the active
-    dataset.  Their vectors are pulled from
-    :attr:`DetectorContext.label_embeddings` (populated at load) so the MLP
-    isn't degraded by ignoring cross-dataset labels.
+    When a detector is active, training uses every label saved on disk —
+    including labels whose underlying media isn't part of the active dataset.
+    Their vectors are pulled from :attr:`DetectorContext.label_embeddings`
+    (populated at load) so the MLP isn't degraded by ignoring cross-dataset
+    labels.
     """
     from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.models.detector_registry import get_detector
+    from vtsearch.models.detector_store import _detector_path, _read_detector
     from vtsearch.models.labelset_training import labelset_train_and_score
-    from vtsearch.models.registry import get_model
-    from vtsearch.models.trainable_model_store import _model_path, _read_model
     from vtsearch.utils.state_core import _empty_detector_context, get_active_detector_context
 
     snap = snapshot_medias()
 
-    # Resolve the active trainable model's labelset (if any).
+    # Resolve the active detector's labelset (if any).
     det_ctx = get_active_detector_context()
     labelset: LabelSet | None = None
-    tm_media_type = ""
+    det_media_type = ""
     if det_ctx is not _empty_detector_context and det_ctx.detector_id:
-        entry = get_model(det_ctx.detector_id)
+        entry = get_detector(det_ctx.detector_id)
         if entry and entry.get("name"):
-            tm_data = _read_model(_model_path(entry["name"]))
-            if tm_data:
-                labelset = LabelSet.from_dict(tm_data.get("labelset") or {})
-                tm_media_type = tm_data.get("media_type", "") or ""
+            det_data = _read_detector(_detector_path(entry["name"]))
+            if det_data:
+                labelset = LabelSet.from_dict(det_data.get("labelset") or {})
+                det_media_type = det_data.get("media_type", "") or ""
 
     if labelset is not None:
         good_count = sum(1 for el in labelset.elements if el.label == "good")
@@ -189,7 +188,7 @@ def learned_sort():
         results, threshold, model = labelset_train_and_score(
             det_ctx,
             labelset,
-            media_type=tm_media_type,
+            media_type=det_media_type,
             clips_dict=snap,
             inclusion_value=get_inclusion(),
             safe_thresholds=get_safe_thresholds(),
@@ -292,9 +291,9 @@ def seed_votes_from_examples():
     skipped = len(examples) - seeded
 
     if seeded > 0:
-        from vtsearch.models.label_sync import sync_labels_to_loaded_model
+        from vtsearch.models.label_sync import sync_labels_to_loaded_detector
 
-        sync_labels_to_loaded_model()
+        sync_labels_to_loaded_detector()
 
         from vtsearch.labels.sync import sync_to_labelset_source
 

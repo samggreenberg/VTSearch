@@ -1,8 +1,8 @@
 """Command-line interface utilities for VTSearch.
 
 The only CLI workflow is autodetect: load a dataset (from pickle or via an
-importer), score it against the trainable models flagged for autorun in the
-settings file, and export the results.
+importer), score it against the detectors flagged for autorun in the settings
+file, and export the results.
 """
 
 from __future__ import annotations
@@ -32,74 +32,74 @@ def _list_exporter_names() -> list[str]:
     return [exp.name for exp in list_exporters()]
 
 
-def _load_and_train_trainable_models(
-    tm_names: list[str],
+def _load_and_train_detectors(
+    detector_names: list[str],
     media_type: str,
     snap: dict[int, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Resolve, re-embed, and train an MLP for each named trainable model.
+    """Resolve, re-embed, and train an MLP for each named detector.
 
-    For every name in *tm_names* the on-disk JSON is read, the labelset's
-    origins are resolved via their importer's ``resolve_file()``, the files
-    are embedded with the dataset's embedder, and an MLP is trained from
-    the resulting vectors.  Models whose ``media_type`` doesn't match the
-    dataset are skipped with a warning.
+    For every name in *detector_names* the on-disk JSON is read, the
+    labelset's origins are resolved via their importer's ``resolve_file()``,
+    the files are embedded with the dataset's embedder, and an MLP is trained
+    from the resulting vectors.  Detectors whose ``media_type`` doesn't match
+    the dataset are skipped with a warning.
 
-    Returns a ``{name: {"model": nn.Sequential, "threshold": float}}``
-    map.  Raises :class:`ValueError` if a model cannot be trained — for
-    example when none of its labels' origin files are resolvable from the
-    CLI environment.
+    Returns a ``{name: {"mlp": nn.Sequential, "threshold": float}}`` map.
+    Raises :class:`ValueError` if a detector cannot be trained — for example
+    when none of its labels' origin files are resolvable from the CLI
+    environment.
     """
     from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.models.detector_store import _detector_path, _read_detector
     from vtsearch.models.labelset_training import train_from_labelset
-    from vtsearch.models.trainable_model_store import _model_path, _read_model
     from vtsearch.utils.state_core import DetectorContext
 
     out: dict[str, dict[str, Any]] = {}
-    for tm_name in tm_names:
-        tm = _read_model(_model_path(tm_name))
-        if tm is None:
-            raise ValueError(f"Trainable model '{tm_name}' not found in the trainable_models dir.")
+    for det_name in detector_names:
+        det = _read_detector(_detector_path(det_name))
+        if det is None:
+            raise ValueError(f"Detector '{det_name}' not found in the detectors dir.")
 
-        tm_media_type = tm.get("media_type", "") or ""
-        if media_type and tm_media_type and tm_media_type != media_type:
+        det_media_type = det.get("media_type", "") or ""
+        if media_type and det_media_type and det_media_type != media_type:
             print(
-                f"Skipping trainable model '{tm_name}': media_type "
-                f"{tm_media_type!r} doesn't match dataset {media_type!r}.",
+                f"Skipping detector '{det_name}': media_type "
+                f"{det_media_type!r} doesn't match dataset {media_type!r}.",
                 flush=True,
             )
             continue
 
-        labelset = LabelSet.from_dict(tm.get("labelset") or {})
+        labelset = LabelSet.from_dict(det.get("labelset") or {})
         if not labelset.elements:
-            raise ValueError(f"Trainable model '{tm_name}' has no labels.")
+            raise ValueError(f"Detector '{det_name}' has no labels.")
 
-        det_ctx = DetectorContext(tm_name, media_type=tm_media_type or media_type)
+        det_ctx = DetectorContext(det_name, media_type=det_media_type or media_type)
         trained = train_from_labelset(
             det_ctx,
             labelset,
-            media_type=tm_media_type or media_type,
+            media_type=det_media_type or media_type,
             snap=snap,
         )
         if not trained:
             cached = len(det_ctx.label_embeddings)
             total = len(labelset.elements)
             raise ValueError(
-                f"Trainable model '{tm_name}': could not train MLP "
+                f"Detector '{det_name}': could not train MLP "
                 f"(resolved {cached} of {total} label origins, need ≥1 good and ≥1 bad). "
                 "The original media may not be reachable from the CLI — for example, "
                 "labels collected through the local_folder importer have no resolve_file() path."
             )
-        out[tm_name] = {"model": det_ctx.model, "threshold": det_ctx.threshold}
+        out[det_name] = {"mlp": det_ctx.model, "threshold": det_ctx.threshold}
     return out
 
 
-def _score_medias_with_trainable_models(
+def _score_medias_with_detectors(
     medias: dict[int, dict[str, Any]],
-    tm_models: dict[str, dict[str, Any]],
+    detector_mlps: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Score *medias* against pre-trained trainable-model MLPs."""
-    if not medias or not tm_models:
+    """Score *medias* against pre-trained detector MLPs."""
+    if not medias or not detector_mlps:
         return {}
 
     import torch  # noqa: PLC0415
@@ -109,11 +109,11 @@ def _score_medias_with_trainable_models(
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
     results: dict[str, dict[str, Any]] = {}
-    for tm_name, info in tm_models.items():
-        model = info["model"]
+    for det_name, info in detector_mlps.items():
+        mlp = info["mlp"]
         threshold = info["threshold"]
         with torch.no_grad():
-            scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+            scores = torch.sigmoid(mlp(X_all)).squeeze(1).tolist()
 
         positive_hits: list[dict[str, Any]] = []
         negative_hits: list[dict[str, Any]] = []
@@ -126,8 +126,8 @@ def _score_medias_with_trainable_models(
         positive_hits.sort(key=lambda x: x["score"], reverse=True)
         negative_hits.sort(key=lambda x: x["score"], reverse=True)
 
-        results[tm_name] = {
-            "detector_name": tm_name,
+        results[det_name] = {
+            "detector_name": det_name,
             "threshold": round(threshold, 4),
             "total_hits": len(positive_hits),
             "hits": positive_hits,
@@ -173,20 +173,20 @@ def _run_exporter(
     print(result.get("message", "Export complete."))
 
 
-def import_labels_into_trainable_model_from_file(
-    tm_name: str,
+def import_labels_into_detector_from_file(
+    det_name: str,
     importer_name: str,
     filepath: str,
 ) -> tuple[int, int]:
-    """Run a label importer against a single file and merge into a trainable model."""
+    """Run a label importer against a single file and merge into a detector."""
     from vtsearch.datasets.labelset import LabeledElement, LabelSet
     from vtsearch.labels.importers import get_label_importer
-    from vtsearch.models.trainable_model_store import _model_path, _read_model, _write_model
+    from vtsearch.models.detector_store import _detector_path, _read_detector, _write_detector
 
-    path = _model_path(tm_name)
-    data = _read_model(path)
+    path = _detector_path(det_name)
+    data = _read_detector(path)
     if data is None:
-        raise ValueError(f"Trainable model '{tm_name}' not found.")
+        raise ValueError(f"Detector '{det_name}' not found.")
 
     importer = get_label_importer(importer_name)
     if importer is None:
@@ -216,7 +216,7 @@ def import_labels_into_trainable_model_from_file(
         applied += 1
 
     data["labelset"] = existing.to_dict()
-    _write_model(path, data)
+    _write_detector(path, data)
     return applied, skipped
 
 
@@ -314,11 +314,11 @@ def _run_pipeline(
 
         set_settings_path(settings_path)
 
-    from vtsearch.settings import get_autorun_trainable_models
+    from vtsearch.settings import get_autorun_detectors
 
     merged_results: dict[str, dict[str, Any]] = {}
     media_type: str | None = None
-    tm_models: dict[str, dict[str, Any]] | None = None
+    detector_mlps: dict[str, dict[str, Any]] | None = None
     total_medias = 0
     chunk_num = 0
 
@@ -332,27 +332,27 @@ def _run_pipeline(
         if media_type is None:
             media_type = _detect_media_type(chunk_medias)
 
-            tm_names = get_autorun_trainable_models()
-            if tm_names:
-                # Train each trainable model exactly once, using the first
-                # chunk as the fast-path snap; subsequent chunks reuse the
-                # cached MLPs.
-                tm_models = _load_and_train_trainable_models(tm_names, media_type, chunk_medias)
+            detector_names = get_autorun_detectors()
+            if detector_names:
+                # Train each detector exactly once, using the first chunk as
+                # the fast-path snap; subsequent chunks reuse the cached
+                # MLPs.
+                detector_mlps = _load_and_train_detectors(detector_names, media_type, chunk_medias)
             else:
-                tm_models = {}
+                detector_mlps = {}
 
-            if not tm_models:
+            if not detector_mlps:
                 raise ValueError(
-                    f"No autorun trainable models found for media type: {media_type}. "
-                    "Add trainable models to the settings file's autorun_trainable_models list."
+                    f"No autorun detectors found for media type: {media_type}. "
+                    "Add detectors to the settings file's autorun_detectors list."
                 )
 
         if chunk_num > 1 or total_medias != len(chunk_medias):
             print(f"Processing chunk {chunk_num} ({len(chunk_medias)} medias)...", flush=True)
 
-        if tm_models:
-            tm_results = _score_medias_with_trainable_models(chunk_medias, tm_models)
-            _merge_detector_results(merged_results, tm_results)
+        if detector_mlps:
+            chunk_results = _score_medias_with_detectors(chunk_medias, detector_mlps)
+            _merge_detector_results(merged_results, chunk_results)
 
     if not merged_results:
         raise ValueError(empty_error)
@@ -370,7 +370,7 @@ def autodetect_main(
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
 ) -> None:
-    """CLI entry point: run autodetect with all autorun trainable models."""
+    """CLI entry point: run autodetect with all autorun detectors."""
     try:
         _run_pipeline(
             _load_pickle_whole(dataset_path),

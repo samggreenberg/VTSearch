@@ -1,6 +1,10 @@
 """Flask blueprints for organizing application routes."""
 
 from vtsearch.routes.auth import auth_bp
+from vtsearch.routes.detector_find import detector_find_bp
+from vtsearch.routes.detector_scoring import detector_scoring_bp
+from vtsearch.routes.detectors import detectors_bp
+from vtsearch.routes.detectors_registry import detectors_registry_bp
 from vtsearch.routes.eval import eval_bp
 from vtsearch.routes.file_browser import file_browser_bp
 from vtsearch.routes.labels import labels_bp
@@ -11,18 +15,18 @@ from vtsearch.routes.datasets_registry import datasets_registry_bp
 from vtsearch.routes.exporters import exporters_bp
 from vtsearch.routes.label_importers import label_importers_bp
 from vtsearch.routes.main import main_bp
-from vtsearch.routes.model_find import model_find_bp
-from vtsearch.routes.model_scoring import model_scoring_bp
-from vtsearch.routes.models_registry import models_registry_bp
 from vtsearch.routes.processors import processors_bp
 from vtsearch.routes.settings import settings_bp
 from vtsearch.routes.settings_io import settings_io_bp
 from vtsearch.routes.sorting import sorting_bp
 from vtsearch.routes.sync_sources import sync_sources_bp
-from vtsearch.routes.trainable_models import trainable_models_bp
 
 __all__ = [
     "auth_bp",
+    "detector_find_bp",
+    "detector_scoring_bp",
+    "detectors_bp",
+    "detectors_registry_bp",
     "eval_bp",
     "file_browser_bp",
     "labels_bp",
@@ -35,11 +39,7 @@ __all__ = [
     "datasets_registry_bp",
     "exporters_bp",
     "label_importers_bp",
-    "model_find_bp",
-    "model_scoring_bp",
-    "models_registry_bp",
     "processors_bp",
     "settings_bp",
     "settings_io_bp",
-    "trainable_models_bp",
 ]

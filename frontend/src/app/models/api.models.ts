@@ -168,7 +168,7 @@ export interface LoadingTask {
   error?: string;
   created_at: number;
   dataset_id?: string;
-  model_id?: string;
+  detector_id?: string;
   media_type?: string;
   embedder?: string;
 }
@@ -312,7 +312,7 @@ export interface AppSettings {
   panel_pct_right?: Record<string, number>;
   autoload_media_types?: string[];
   autoload_media_embedders?: string[];
-  autorun_trainable_models?: string[];
+  autorun_detectors?: string[];
   autopilot_enabled?: boolean;
   hide_autopilot?: boolean;
   autopilot_top_greens?: number;
@@ -335,15 +335,15 @@ export interface ExporterInfo {
   [key: string]: unknown;
 }
 
-// --- Trainable Models ---
+// --- Detectors ---
 
-export interface TrainableModel {
+export interface Detector {
   name: string;
   [key: string]: unknown;
 }
 
-export interface TrainableModelsResponse {
-  models: TrainableModel[];
+export interface DetectorsResponse {
+  detectors: Detector[];
 }
 
 export interface LabelElement {
@@ -365,7 +365,7 @@ export interface LabelsDetailResponse {
   media_type: string;
 }
 
-export interface ModelRegistryEntry {
+export interface DetectorRegistryEntry {
   id: string;
   name: string;
   media_type: string;
@@ -375,17 +375,15 @@ export interface ModelRegistryEntry {
   loaded?: boolean;
   detector_loaded?: boolean;
   autorun?: boolean;
-  /** @deprecated Backwards-compat alias for `autorun`. */
-  autodetect?: boolean;
   last_trained_at?: number | null;
   [key: string]: unknown;
 }
 
-export interface ModelsRegistryResponse {
-  models: ModelRegistryEntry[];
+export interface DetectorsRegistryResponse {
+  detectors: DetectorRegistryEntry[];
 }
 
-export interface CombineModelsResult {
+export interface CombineDetectorsResult {
   success: boolean;
   name: string;
   media_type: string;

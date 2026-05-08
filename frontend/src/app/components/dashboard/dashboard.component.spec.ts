@@ -31,7 +31,7 @@ describe('DashboardComponent', () => {
   ): void {
     fixture.detectChanges();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets });
-    httpMock.expectOne('/api/models/registry').flush({ models });
+    httpMock.expectOne('/api/detectors/registry').flush({ models });
   }
 
   it('should create', () => {
@@ -56,7 +56,7 @@ describe('DashboardComponent', () => {
   it('should auto-select single model', () => {
     const models = [{ id: 'm1', name: 'Only One' }];
     flushInitialRequests([], models);
-    expect(component.selectedModelIds.has('m1')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
   });
 
   it('should not auto-select when multiple datasets on initial load', () => {
@@ -81,7 +81,7 @@ describe('DashboardComponent', () => {
         { id: 'd2', name: 'Second' },
       ],
     });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
 
     expect(component.selectedDatasetIds.has('d1')).toBeFalse();
     expect(component.selectedDatasetIds.has('d2')).toBeTrue();
@@ -90,20 +90,20 @@ describe('DashboardComponent', () => {
   it('should auto-select newly added model', () => {
     const models = [{ id: 'm1', name: 'First' }];
     flushInitialRequests([], models);
-    expect(component.selectedModelIds.has('m1')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
 
     // Simulate adding a second model via refresh
     component.refresh();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({
+    httpMock.expectOne('/api/detectors/registry').flush({
       models: [
         { id: 'm1', name: 'First' },
         { id: 'm2', name: 'Second' },
       ],
     });
 
-    expect(component.selectedModelIds.has('m1')).toBeTrue();
-    expect(component.selectedModelIds.has('m2')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m2')).toBeTrue();
   });
 
   it('should toggle dataset selection on click', () => {
@@ -153,8 +153,8 @@ describe('DashboardComponent', () => {
     ];
     flushInitialRequests([], models);
 
-    component.modelCols.sortBy('name');
-    expect(component.sortedModels[0].name).toBe('Alpha');
+    component.detectorCols.sortBy('name');
+    expect(component.sortedDetectors[0].name).toBe('Alpha');
   });
 
   it('should show sort indicators', () => {
@@ -171,7 +171,7 @@ describe('DashboardComponent', () => {
     it('should disable Label when nothing selected', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      component.selectedModelIds.clear();
+      component.selectedDetectorIds.clear();
       expect(component.labelEnabled).toBeFalse();
     });
 
@@ -200,7 +200,7 @@ describe('DashboardComponent', () => {
     it('should disable Find with no selections', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      component.selectedModelIds.clear();
+      component.selectedDetectorIds.clear();
       expect(component.findEnabled).toBeFalse();
     });
 
@@ -240,7 +240,7 @@ describe('DashboardComponent', () => {
       ];
       flushInitialRequests(datasets, models);
       component.selectedDatasetIds.add('d2');
-      component.selectedModelIds.add('m2');
+      component.selectedDetectorIds.add('m2');
       expect(component.findEnabled).toBeTrue();
     });
 
@@ -269,7 +269,7 @@ describe('DashboardComponent', () => {
     it('should hint about missing model', () => {
       flushInitialRequests();
       component.selectedDatasetIds.add('d1');
-      component.selectedModelIds.clear();
+      component.selectedDetectorIds.clear();
       expect(component.labelHint).toBe('Select a model');
     });
 
@@ -283,8 +283,8 @@ describe('DashboardComponent', () => {
     it('should hint about multiple models', () => {
       flushInitialRequests();
       component.selectedDatasetIds.add('d1');
-      component.selectedModelIds.add('m1');
-      component.selectedModelIds.add('m2');
+      component.selectedDetectorIds.add('m1');
+      component.selectedDetectorIds.add('m2');
       expect(component.labelHint).toBe('Select exactly 1 model');
     });
 
@@ -307,21 +307,21 @@ describe('DashboardComponent', () => {
     it('should hint about missing dataset and model', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      component.selectedModelIds.clear();
+      component.selectedDetectorIds.clear();
       expect(component.findHint).toBe('Select a dataset and a model');
     });
 
     it('should hint about missing dataset', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      component.selectedModelIds.add('m1');
+      component.selectedDetectorIds.add('m1');
       expect(component.findHint).toBe('Select a dataset');
     });
 
     it('should hint about missing model', () => {
       flushInitialRequests();
       component.selectedDatasetIds.add('d1');
-      component.selectedModelIds.clear();
+      component.selectedDetectorIds.clear();
       expect(component.findHint).toBe('Select a model');
     });
 
@@ -359,7 +359,7 @@ describe('DashboardComponent', () => {
 
     // Refresh calls
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
   });
 
   it('should delete a dataset after confirmation', fakeAsync(() => {
@@ -380,7 +380,7 @@ describe('DashboardComponent', () => {
     expect(component.selectedDatasetIds.has('d1')).toBeFalse();
 
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
   }));
 
   it('should open and close importer modal', () => {
@@ -416,10 +416,10 @@ describe('DashboardComponent', () => {
       const routerSpy = spyOn(component['router'], 'navigate');
       component.onLabel();
 
-      // Flush the loadModel call
-      const loadModelReq = httpMock.expectOne('/api/models/registry/load');
+      // Flush the loadDetector call
+      const loadModelReq = httpMock.expectOne('/api/detectors/registry/load');
       expect(loadModelReq.request.method).toBe('POST');
-      expect(loadModelReq.request.body).toEqual({ model_id: 'm1' });
+      expect(loadModelReq.request.body).toEqual({ detector_id: 'm1' });
       loadModelReq.flush({ ok: true });
 
       expect(routerSpy).toHaveBeenCalledWith(['/label']);
@@ -435,7 +435,7 @@ describe('DashboardComponent', () => {
       spyOn(component['router'], 'navigate');
       component.onLabel();
 
-      const loadModelReq = httpMock.expectOne('/api/models/registry/load');
+      const loadModelReq = httpMock.expectOne('/api/detectors/registry/load');
       loadModelReq.flush({ ok: true });
 
       expect(session.textQuery).toBe('dog barking');
@@ -462,15 +462,15 @@ describe('DashboardComponent', () => {
       const progressReq = httpMock.expectOne('/api/dataset/progress');
       progressReq.flush({ status: 'idle' });
 
-      // Flush the loadModel call triggered after progress completes
-      const loadModelReq = httpMock.expectOne('/api/models/registry/load');
+      // Flush the loadDetector call triggered after progress completes
+      const loadModelReq = httpMock.expectOne('/api/detectors/registry/load');
       loadModelReq.flush({ ok: true });
 
       expect(routerSpy).toHaveBeenCalledWith(['/label']);
 
       // Refresh after completion
       httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-      httpMock.expectOne('/api/models/registry').flush({ models: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
     });
 
     it('should not navigate on load error progress', () => {
@@ -492,7 +492,7 @@ describe('DashboardComponent', () => {
 
       // Refresh after error
       httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-      httpMock.expectOne('/api/models/registry').flush({ models: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
     });
 
     it('should do nothing when no dataset is selected', () => {
@@ -527,7 +527,7 @@ describe('DashboardComponent', () => {
 
     // Refresh after completion
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
   }));
 
   it('should load demo dataset on demoSelected', () => {
@@ -551,6 +551,6 @@ describe('DashboardComponent', () => {
 
     // After idle, it should refresh
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
   });
 });

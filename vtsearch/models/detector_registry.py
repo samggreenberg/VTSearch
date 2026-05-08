@@ -1,16 +1,16 @@
-"""Persistent model registry.
+"""Persistent detector registry.
 
-Maintains a JSON manifest at ``data/model_registry.json`` that tracks every
-trainable model the user has created.  Each entry stores enough metadata to
-display the model in the dashboard grid.
+Maintains a JSON manifest at ``data/detector_registry.json`` that tracks every
+detector the user has created.  Each entry stores enough metadata to display
+the detector in the dashboard grid.
 
-Every entry is backed by a labelset file at
-``data/trainable_models/<name>.json``.  The MLP that scores the model is
-trained on demand from the labelset and lives only in RAM
-(see :class:`~vtsearch.utils.DetectorContext`).
+Every entry is backed by a labelset file at ``data/detectors/<name>.json``.
+The MLP that scores the detector is trained on demand from the labelset and
+lives only in RAM (see :class:`~vtsearch.utils.DetectorContext`).
 
-Multiple models can be *loaded* into memory simultaneously.  Which model
-the UI interacts with is determined per-request via the ``X-Model-Id`` header.
+Multiple detectors can be *loaded* into memory simultaneously.  Which detector
+the UI interacts with is determined per-request via the ``X-Detector-Id``
+header.
 """
 
 from __future__ import annotations
@@ -25,18 +25,17 @@ from vtsearch.config import DATA_DIR
 
 logger = logging.getLogger(__name__)
 
-REGISTRY_PATH = DATA_DIR / "model_registry.json"
+REGISTRY_PATH = DATA_DIR / "detector_registry.json"
 
 _lock = threading.RLock()
 
 _entries: list[dict[str, Any]] | None = None
 
-# Set of model IDs currently loaded in memory (each has a DetectorContext).
+# Set of detector IDs currently loaded in memory (each has a DetectorContext).
 _loaded_ids: set[str] = set()
 
-# When ``True`` the model most recently used for scoring is in "find mode"
-# — its labels should NOT be synced back to the trainable model's saved
-# labelset.
+# When ``True`` the detector most recently used for scoring is in "find mode"
+# — its labels should NOT be synced back to the detector's saved labelset.
 _find_mode: bool = False
 
 
@@ -53,7 +52,7 @@ def _load() -> list[dict[str, Any]]:
             if isinstance(data, list):
                 return data
         except Exception as exc:
-            logger.warning("Failed to read model registry: %s", exc)
+            logger.warning("Failed to read detector registry: %s", exc)
     return []
 
 
@@ -78,22 +77,22 @@ def _ensure_loaded() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def list_models() -> list[dict[str, Any]]:
-    """Return summary info for all registered models."""
+def list_detectors() -> list[dict[str, Any]]:
+    """Return summary info for all registered detectors."""
     with _lock:
         return [dict(e) for e in _ensure_loaded()]
 
 
-def get_model(model_id: str) -> dict[str, Any] | None:
-    """Return a single registry entry by *model_id*, or ``None``."""
+def get_detector(detector_id: str) -> dict[str, Any] | None:
+    """Return a single registry entry by *detector_id*, or ``None``."""
     with _lock:
         for entry in _ensure_loaded():
-            if entry["id"] == model_id:
+            if entry["id"] == detector_id:
                 return dict(entry)
     return None
 
 
-def register_model(
+def register_detector(
     *,
     name: str,
     media_type: str,
@@ -102,17 +101,16 @@ def register_model(
     media_example: str = "",
     created_by: str = "default",
 ) -> dict[str, Any]:
-    """Add a new model to the registry and persist.
+    """Add a new detector to the registry and persist.
 
     Args:
         name: Display name for the dashboard.  Also the slug used to look
-            up the on-disk labelset file at
-            ``data/trainable_models/<name>.json``.
+            up the on-disk labelset file at ``data/detectors/<name>.json``.
         media_type: ``"audio"``, ``"image"``, ``"video"``, ``"text"``, etc.
         num_training: Number of training examples (label count).
-        text_query: Text-sort query associated with the model.
+        text_query: Text-sort query associated with the detector.
         media_example: Optional path to an example media file.
-        created_by: Username of the user who created this model.
+        created_by: Username of the user who created this detector.
 
     Returns:
         The newly created entry dict.
@@ -136,37 +134,37 @@ def register_model(
     return entry
 
 
-def unregister_model(model_id: str) -> bool:
-    """Remove a model from the registry. Returns ``True`` if found."""
+def unregister_detector(detector_id: str) -> bool:
+    """Remove a detector from the registry. Returns ``True`` if found."""
     with _lock:
         entries = _ensure_loaded()
         for i, entry in enumerate(entries):
-            if entry["id"] == model_id:
+            if entry["id"] == detector_id:
                 entries.pop(i)
-                _loaded_ids.discard(model_id)
+                _loaded_ids.discard(detector_id)
                 _save(entries)
                 return True
     return False
 
 
-def rename_model(model_id: str, new_name: str) -> bool:
-    """Rename a registered model. Returns ``True`` on success."""
+def rename_detector(detector_id: str, new_name: str) -> bool:
+    """Rename a registered detector. Returns ``True`` on success."""
     with _lock:
         entries = _ensure_loaded()
         for entry in entries:
-            if entry["id"] == model_id:
+            if entry["id"] == detector_id:
                 entry["name"] = new_name
                 _save(entries)
                 return True
     return False
 
 
-def update_model(model_id: str, **fields: Any) -> bool:
-    """Update arbitrary fields on a registered model."""
+def update_detector(detector_id: str, **fields: Any) -> bool:
+    """Update arbitrary fields on a registered detector."""
     with _lock:
         entries = _ensure_loaded()
         for entry in entries:
-            if entry["id"] == model_id:
+            if entry["id"] == detector_id:
                 entry.update(fields)
                 _save(entries)
                 return True
@@ -182,42 +180,38 @@ def find_by_name(name: str) -> dict[str, Any] | None:
     return None
 
 
-# Backwards-compat alias used in older code paths during migration.
-find_by_trainable_model_name = find_by_name
-
-
-def add_loaded_model_id(model_id: str) -> None:
-    """Add *model_id* to the set of loaded models (without changing active)."""
+def add_loaded_detector_id(detector_id: str) -> None:
+    """Add *detector_id* to the set of loaded detectors (without changing active)."""
     with _lock:
-        _loaded_ids.add(model_id)
+        _loaded_ids.add(detector_id)
 
 
-def remove_loaded_model_id(model_id: str) -> None:
-    """Remove *model_id* from the loaded set."""
+def remove_loaded_detector_id(detector_id: str) -> None:
+    """Remove *detector_id* from the loaded set."""
     with _lock:
-        _loaded_ids.discard(model_id)
+        _loaded_ids.discard(detector_id)
 
 
-def is_model_loaded(model_id: str) -> bool:
-    """Return ``True`` if *model_id* is in the loaded set."""
+def is_detector_loaded(detector_id: str) -> bool:
+    """Return ``True`` if *detector_id* is in the loaded set."""
     with _lock:
-        return model_id in _loaded_ids
+        return detector_id in _loaded_ids
 
 
-def get_loaded_model_ids() -> set[str]:
-    """Return a copy of all loaded model IDs."""
+def get_loaded_detector_ids() -> set[str]:
+    """Return a copy of all loaded detector IDs."""
     with _lock:
         return set(_loaded_ids)
 
 
 def is_find_mode() -> bool:
-    """Return ``True`` if the active model is in find/scoring mode."""
+    """Return ``True`` if the active detector is in find/scoring mode."""
     with _lock:
         return _find_mode
 
 
 def set_find_mode(enabled: bool = True) -> None:
-    """Set or clear find mode for the active model."""
+    """Set or clear find mode for the active detector."""
     global _find_mode
     with _lock:
         _find_mode = enabled

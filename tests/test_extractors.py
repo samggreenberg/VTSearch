@@ -91,7 +91,7 @@ class TestImageClassExtractor:
     def test_to_dict(self):
         from vtsearch.media.image.extractor import ImageClassExtractor
 
-        ext = ImageClassExtractor("test", "person", threshold=0.3, model_id="yolo11n.pt")
+        ext = ImageClassExtractor("test", "person", threshold=0.3, detector_id="yolo11n.pt")
         d = ext.to_dict()
         assert d["name"] == "test"
         assert d["media_type"] == "image"

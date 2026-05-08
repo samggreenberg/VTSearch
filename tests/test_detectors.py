@@ -1,30 +1,30 @@
-"""Tests for trainable model CRUD and label persistence."""
+"""Tests for detector CRUD and label persistence."""
 
 import json
 import shutil
 
 import pytest
 
-from tests import load_model_and_wait as _load_model_and_wait
-from vtsearch.settings import get_trainable_models_dir
+from tests import load_detector_and_wait as _load_detector_and_wait
+from vtsearch.settings import get_detectors_dir
 
 
 @pytest.fixture(autouse=True)
-def clean_trainable_models_dir():
-    """Remove the trainable models directory before and after each test."""
-    tm_dir = get_trainable_models_dir()
+def clean_detectors_dir():
+    """Remove the detectors directory before and after each test."""
+    tm_dir = get_detectors_dir()
     if tm_dir.is_dir():
         shutil.rmtree(tm_dir)
     yield
-    tm_dir = get_trainable_models_dir()
+    tm_dir = get_detectors_dir()
     if tm_dir.is_dir():
         shutil.rmtree(tm_dir)
 
 
-class TestCreateTrainableModel:
+class TestCreateDetector:
     def test_create_success(self, client):
         res = client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Dog Barks", "media_type": "audio", "text_query": "sounds of dogs barking"},
         )
         assert res.status_code == 201
@@ -36,7 +36,7 @@ class TestCreateTrainableModel:
 
     def test_create_missing_name(self, client):
         res = client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"text_query": "sounds"},
         )
         assert res.status_code == 400
@@ -44,7 +44,7 @@ class TestCreateTrainableModel:
 
     def test_create_missing_text_query(self, client):
         res = client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Test", "media_type": "audio"},
         )
         assert res.status_code == 400
@@ -52,7 +52,7 @@ class TestCreateTrainableModel:
 
     def test_create_missing_media_type(self, client):
         res = client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Test", "text_query": "sounds"},
         )
         assert res.status_code == 400
@@ -60,7 +60,7 @@ class TestCreateTrainableModel:
 
     def test_create_rejects_any_media_type(self, client):
         res = client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Test", "media_type": "any", "text_query": "sounds"},
         )
         assert res.status_code == 400
@@ -68,21 +68,21 @@ class TestCreateTrainableModel:
 
     def test_create_duplicate(self, client):
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Dog Barks", "media_type": "audio", "text_query": "dogs"},
         )
         res = client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Dog Barks", "media_type": "audio", "text_query": "dogs again"},
         )
         assert res.status_code == 409
 
     def test_file_created_on_disk(self, client):
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Test Model", "media_type": "audio", "text_query": "test"},
         )
-        files = list(get_trainable_models_dir().glob("*.json"))
+        files = list(get_detectors_dir().glob("*.json"))
         assert len(files) == 1
         data = json.loads(files[0].read_text())
         assert data["name"] == "Test Model"
@@ -90,36 +90,36 @@ class TestCreateTrainableModel:
         assert data["labelset"] == {"labels": []}
 
 
-class TestListTrainableModels:
+class TestListDetectors:
     def test_empty_list(self, client):
-        res = client.get("/api/trainable-models")
+        res = client.get("/api/detectors")
         assert res.status_code == 200
         data = res.get_json()
-        assert data["models"] == []
+        assert data["detectors"] == []
 
     def test_list_after_create(self, client):
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Model A", "media_type": "audio", "text_query": "a"},
         )
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Model B", "media_type": "audio", "text_query": "b"},
         )
-        res = client.get("/api/trainable-models")
+        res = client.get("/api/detectors")
         data = res.get_json()
-        names = [m["name"] for m in data["models"]]
+        names = [m["name"] for m in data["detectors"]]
         assert "Model A" in names
         assert "Model B" in names
 
 
-class TestGetTrainableModel:
+class TestGetDetector:
     def test_get_existing(self, client):
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "My Model", "media_type": "audio", "text_query": "test query"},
         )
-        res = client.get("/api/trainable-models/My%20Model")
+        res = client.get("/api/detectors/My%20Model")
         assert res.status_code == 200
         data = res.get_json()
         assert data["name"] == "My Model"
@@ -127,37 +127,37 @@ class TestGetTrainableModel:
         assert "labelset" in data
 
     def test_get_nonexistent(self, client):
-        res = client.get("/api/trainable-models/nonexistent")
+        res = client.get("/api/detectors/nonexistent")
         assert res.status_code == 404
 
 
-class TestDeleteTrainableModel:
+class TestDeleteDetector:
     def test_delete_existing(self, client):
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "To Delete", "media_type": "audio", "text_query": "test"},
         )
-        res = client.delete("/api/trainable-models/To%20Delete")
+        res = client.delete("/api/detectors/To%20Delete")
         assert res.status_code == 200
         assert res.get_json()["success"] is True
 
         # Verify it's gone
-        res = client.get("/api/trainable-models/To%20Delete")
+        res = client.get("/api/detectors/To%20Delete")
         assert res.status_code == 404
 
     def test_delete_nonexistent(self, client):
-        res = client.delete("/api/trainable-models/nonexistent")
+        res = client.delete("/api/detectors/nonexistent")
         assert res.status_code == 404
 
 
-class TestRenameTrainableModel:
+class TestRenameDetector:
     def test_rename_success(self, client):
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Old Name", "media_type": "audio", "text_query": "test"},
         )
         res = client.put(
-            "/api/trainable-models/Old%20Name/rename",
+            "/api/detectors/Old%20Name/rename",
             json={"new_name": "New Name"},
         )
         assert res.status_code == 200
@@ -166,57 +166,57 @@ class TestRenameTrainableModel:
         assert data["new_name"] == "New Name"
 
         # Old name should be gone
-        res = client.get("/api/trainable-models/Old%20Name")
+        res = client.get("/api/detectors/Old%20Name")
         assert res.status_code == 404
 
         # New name should exist
-        res = client.get("/api/trainable-models/New%20Name")
+        res = client.get("/api/detectors/New%20Name")
         assert res.status_code == 200
         assert res.get_json()["name"] == "New Name"
 
     def test_rename_nonexistent(self, client):
         res = client.put(
-            "/api/trainable-models/nonexistent/rename",
+            "/api/detectors/nonexistent/rename",
             json={"new_name": "Foo"},
         )
         assert res.status_code == 404
 
     def test_rename_missing_new_name(self, client):
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Test", "media_type": "audio", "text_query": "test"},
         )
         res = client.put(
-            "/api/trainable-models/Test/rename",
+            "/api/detectors/Test/rename",
             json={},
         )
         assert res.status_code == 400
 
     def test_rename_updates_model_registry(self, client):
-        """Renaming a trainable model should update registry references."""
-        from vtsearch.models.registry import find_by_name, get_model
+        """Renaming a detector should update registry references."""
+        from vtsearch.models.detector_registry import find_by_name, get_detector
 
-        # Create a trainable model and register it in the model registry
+        # Create a detector and register it in the model registry
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Original", "media_type": "audio", "text_query": "test"},
         )
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "Original", "media_type": "audio", "text_query": "test"},
         )
         assert res.status_code == 201
-        model_id = res.get_json()["model"]["id"]
+        detector_id = res.get_json()["detector"]["id"]
 
-        # Rename the trainable model directly (not through the registry endpoint)
+        # Rename the detector directly (not through the registry endpoint)
         res = client.put(
-            "/api/trainable-models/Original/rename",
+            "/api/detectors/Original/rename",
             json={"new_name": "Renamed"},
         )
         assert res.status_code == 200
 
         # Registry entry should now reference the new name
-        entry = get_model(model_id)
+        entry = get_detector(detector_id)
         assert entry is not None
         assert entry["name"] == "Renamed"
 
@@ -228,15 +228,15 @@ class TestRenameTrainableModel:
 
     def test_rename_conflict(self, client):
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Model A", "media_type": "audio", "text_query": "a"},
         )
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Model B", "media_type": "audio", "text_query": "b"},
         )
         res = client.put(
-            "/api/trainable-models/Model%20A/rename",
+            "/api/detectors/Model%20A/rename",
             json={"new_name": "Model B"},
         )
         assert res.status_code == 409
@@ -246,10 +246,10 @@ class TestSaveLabels:
     def test_save_labels_empty(self, client):
         """Save labels when there are no votes — should produce empty labelset."""
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Labeler", "media_type": "audio", "text_query": "test"},
         )
-        res = client.post("/api/trainable-models/Labeler/labels")
+        res = client.post("/api/detectors/Labeler/labels")
         assert res.status_code == 200
         data = res.get_json()
         assert data["success"] is True
@@ -274,16 +274,16 @@ class TestSaveLabels:
         client.post(f"/api/medias/{second_id}/vote", json={"vote": "bad"})
 
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Voted Model", "media_type": "audio", "text_query": "test"},
         )
-        res = client.post("/api/trainable-models/Voted%20Model/labels")
+        res = client.post("/api/detectors/Voted%20Model/labels")
         assert res.status_code == 200
         data = res.get_json()
         assert data["num_labels"] == 2
 
         # Verify the labels are persisted on disk
-        model_res = client.get("/api/trainable-models/Voted%20Model")
+        model_res = client.get("/api/detectors/Voted%20Model")
         model_data = model_res.get_json()
         labels = model_data["labelset"]["labels"]
         assert len(labels) == 2
@@ -292,7 +292,7 @@ class TestSaveLabels:
         assert "bad" in label_values
 
     def test_save_labels_nonexistent_model(self, client):
-        res = client.post("/api/trainable-models/nonexistent/labels")
+        res = client.post("/api/detectors/nonexistent/labels")
         assert res.status_code == 404
 
     def test_save_labels_does_not_expand_dupes(self, client):
@@ -329,15 +329,15 @@ class TestSaveLabels:
         }
         try:
             client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
-            client.post("/api/trainable-models", json={"name": "DupeTest", "media_type": "audio", "text_query": "test"})
+            client.post("/api/detectors", json={"name": "DupeTest", "media_type": "audio", "text_query": "test"})
 
-            res = client.post("/api/trainable-models/DupeTest/labels")
+            res = client.post("/api/detectors/DupeTest/labels")
             assert res.status_code == 200
             data = res.get_json()
             # Should be 1 label (the vote), NOT 5 (the dupe members)
             assert data["num_labels"] == 1
 
-            model_res = client.get("/api/trainable-models/DupeTest")
+            model_res = client.get("/api/detectors/DupeTest")
             labels = model_res.get_json()["labelset"]["labels"]
             assert len(labels) == 1
         finally:
@@ -359,14 +359,14 @@ class TestLabelVoteIsolation:
         if len(ids) < 4:
             pytest.skip("Need at least 4 medias")
 
-        # Create two trainable models
-        client.post("/api/trainable-models", json={"name": "Model A", "media_type": "audio", "text_query": "a"})
-        client.post("/api/trainable-models", json={"name": "Model B", "media_type": "audio", "text_query": "b"})
+        # Create two detectors
+        client.post("/api/detectors", json={"name": "Model A", "media_type": "audio", "text_query": "a"})
+        client.post("/api/detectors", json={"name": "Model B", "media_type": "audio", "text_query": "b"})
 
         # Simulate labeling with Model A: vote on ids[0] and ids[1]
         client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
         client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
-        client.post("/api/trainable-models/Model%20A/labels")  # save 2 labels
+        client.post("/api/detectors/Model%20A/labels")  # save 2 labels
 
         # Now clear votes (as the Label button should do) and import Model B's labels
         client.post("/api/votes/clear")
@@ -374,7 +374,7 @@ class TestLabelVoteIsolation:
         assert len(bad_votes) == 0
 
         # Model B has no labels, so import is a no-op — votes should remain empty
-        model_b = client.get("/api/trainable-models/Model%20B").get_json()
+        model_b = client.get("/api/detectors/Model%20B").get_json()
         assert len(model_b["labelset"]["labels"]) == 0
 
         client.post("/api/labels/import", json={"labels": model_b["labelset"]["labels"]})
@@ -390,10 +390,10 @@ class TestLabelVoteIsolation:
             pytest.skip("Need at least 4 medias")
 
         # Create model and label 2 items
-        client.post("/api/trainable-models", json={"name": "Target", "media_type": "audio", "text_query": "t"})
+        client.post("/api/detectors", json={"name": "Target", "media_type": "audio", "text_query": "t"})
         client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
         client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
-        client.post("/api/trainable-models/Target/labels")
+        client.post("/api/detectors/Target/labels")
 
         # Add extra votes that DON'T belong to the model (simulating stale state)
         client.post(f"/api/medias/{ids[2]}/vote", json={"vote": "good"})
@@ -403,7 +403,7 @@ class TestLabelVoteIsolation:
 
         # Clear votes, then import only Target's labels
         client.post("/api/votes/clear")
-        target_data = client.get("/api/trainable-models/Target").get_json()
+        target_data = client.get("/api/detectors/Target").get_json()
         client.post("/api/labels/import", json={"labels": target_data["labelset"]["labels"]})
 
         # Should only have the 2 labels from Target, not the 4 from before
@@ -413,93 +413,93 @@ class TestLabelVoteIsolation:
 
 
 class TestDeleteRegisteredModel:
-    """Tests for DELETE /api/models/registry/<model_id>."""
+    """Tests for DELETE /api/detectors/registry/<detector_id>."""
 
     def test_delete_registered_model(self, client):
         """Deleting a registered model removes it from the registry."""
-        from vtsearch.models.registry import get_model
+        from vtsearch.models.detector_registry import get_detector
 
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "DelMe", "media_type": "audio", "text_query": "test"},
         )
         assert res.status_code == 201
-        model_id = res.get_json()["model"]["id"]
+        detector_id = res.get_json()["detector"]["id"]
 
-        res = client.delete(f"/api/models/registry/{model_id}")
+        res = client.delete(f"/api/detectors/registry/{detector_id}")
         assert res.status_code == 200
         assert res.get_json()["ok"] is True
-        assert get_model(model_id) is None
+        assert get_detector(detector_id) is None
 
     def test_delete_nonexistent(self, client):
-        res = client.delete("/api/models/registry/nonexistent_id")
+        res = client.delete("/api/detectors/registry/nonexistent_id")
         assert res.status_code == 404
 
     def test_delete_loaded_model(self, client):
         """Deleting a loaded model should also unload it."""
-        from vtsearch.models.registry import get_model, is_model_loaded
+        from vtsearch.models.detector_registry import get_detector, is_detector_loaded
 
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "LoadDel", "media_type": "audio", "text_query": "test"},
         )
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "LoadDel", "media_type": "audio", "text_query": "test"},
         )
-        model_id = res.get_json()["model"]["id"]
-        _load_model_and_wait(client, model_id)
-        assert is_model_loaded(model_id)
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
+        assert is_detector_loaded(detector_id)
 
-        res = client.delete(f"/api/models/registry/{model_id}")
+        res = client.delete(f"/api/detectors/registry/{detector_id}")
         assert res.status_code == 200
-        assert get_model(model_id) is None
-        assert not is_model_loaded(model_id)
+        assert get_detector(detector_id) is None
+        assert not is_detector_loaded(detector_id)
 
     def test_delete_removes_autorun_flag(self, client):
         """Deleting a model that is flagged for autorun clears it from settings."""
-        from vtsearch.models.registry import get_model
-        from vtsearch.settings import add_autorun_trainable_model, get_autorun_trainable_models
+        from vtsearch.models.detector_registry import get_detector
+        from vtsearch.settings import add_autorun_detector, get_autorun_detectors
 
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "DetDel", "media_type": "audio"},
         )
-        model_id = res.get_json()["model"]["id"]
-        add_autorun_trainable_model("DetDel")
+        detector_id = res.get_json()["detector"]["id"]
+        add_autorun_detector("DetDel")
 
-        res = client.delete(f"/api/models/registry/{model_id}")
+        res = client.delete(f"/api/detectors/registry/{detector_id}")
         assert res.status_code == 200
-        assert "DetDel" not in get_autorun_trainable_models()
-        assert get_model(model_id) is None
+        assert "DetDel" not in get_autorun_detectors()
+        assert get_detector(detector_id) is None
 
 
 class TestLoadModelEndpoint:
-    """Tests for POST /api/models/registry/load."""
+    """Tests for POST /api/detectors/registry/load."""
 
     def test_load_model(self, client):
-        from vtsearch.models.registry import is_model_loaded
+        from vtsearch.models.detector_registry import is_detector_loaded
 
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "M", "media_type": "audio", "text_query": "test"},
         )
-        model_id = res.get_json()["model"]["id"]
+        detector_id = res.get_json()["detector"]["id"]
 
-        res = _load_model_and_wait(client, model_id)
+        res = _load_detector_and_wait(client, detector_id)
         assert res.status_code == 200
-        assert is_model_loaded(model_id)
+        assert is_detector_loaded(detector_id)
 
     def test_unload_model(self, client):
-        from vtsearch.models.registry import add_loaded_model_id, is_model_loaded
+        from vtsearch.models.detector_registry import add_loaded_detector_id, is_detector_loaded
 
-        add_loaded_model_id("fake")
-        assert is_model_loaded("fake")
-        res = client.post("/api/models/registry/load", json={"model_id": None})
+        add_loaded_detector_id("fake")
+        assert is_detector_loaded("fake")
+        res = client.post("/api/detectors/registry/load", json={"detector_id": None})
         assert res.status_code == 200
 
     def test_load_nonexistent(self, client):
-        res = client.post("/api/models/registry/load", json={"model_id": "nope"})
+        res = client.post("/api/detectors/registry/load", json={"detector_id": "nope"})
         assert res.status_code == 404
 
     def test_load_clears_previous_labels(self, client):
@@ -511,32 +511,32 @@ class TestLoadModelEndpoint:
 
         ids = list(medias.keys())
 
-        # Create two trainable models + registry entries.
+        # Create two detectors + registry entries.
         for name in ("ModelA", "ModelB"):
             client.post(
-                "/api/trainable-models",
+                "/api/detectors",
                 json={"name": name, "media_type": "audio", "text_query": "test"},
             )
         res_a = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "ModelA", "media_type": "audio", "text_query": "test"},
         )
-        mid_a = res_a.get_json()["model"]["id"]
+        mid_a = res_a.get_json()["detector"]["id"]
         res_b = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "ModelB", "media_type": "audio", "text_query": "test"},
         )
-        mid_b = res_b.get_json()["model"]["id"]
+        mid_b = res_b.get_json()["detector"]["id"]
 
         # Load model A and cast some votes.
-        _load_model_and_wait(client, mid_a)
+        _load_detector_and_wait(client, mid_a)
         client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
         client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
         assert ids[0] in good_votes
         assert ids[1] in bad_votes
 
         # Now load model B — votes from A must be gone.
-        _load_model_and_wait(client, mid_b)
+        _load_detector_and_wait(client, mid_b)
         assert ids[0] not in good_votes, "good vote from model A leaked into model B"
         assert ids[1] not in bad_votes, "bad vote from model A leaked into model B"
 
@@ -551,64 +551,64 @@ class TestLoadModelEndpoint:
 
         # Create model, load it, vote, then save labels.
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Persist", "media_type": "audio", "text_query": "test"},
         )
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "Persist", "media_type": "audio", "text_query": "test"},
         )
-        mid = res.get_json()["model"]["id"]
-        _load_model_and_wait(client, mid)
+        mid = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, mid)
         client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
-        # Labels auto-sync on vote, so the trainable model file now has 1 label.
+        # Labels auto-sync on vote, so the detector file now has 1 label.
 
         # Unload to clear votes, then reload — label should be restored.
-        client.post("/api/models/registry/load", json={"model_id": None})
+        client.post("/api/detectors/registry/load", json={"detector_id": None})
         assert ids[0] not in good_votes
 
-        res = _load_model_and_wait(client, mid)
+        res = _load_detector_and_wait(client, mid)
         assert res.status_code == 200
         assert ids[0] in good_votes, "saved label was not restored on model load"
 
 
 class TestVoteSyncsToLoadedModel:
-    """Voting while a trainable model is loaded should auto-update the model's labelset."""
+    """Voting while a detector is loaded should auto-update the model's labelset."""
 
     def test_vote_updates_model_labels(self, client):
         """Casting a vote with a loaded model should persist labels and update registry stats."""
-        from vtsearch.models.registry import get_model
+        from vtsearch.models.detector_registry import get_detector
         from vtsearch.utils import medias
 
         if not medias:
             pytest.skip("No medias loaded")
 
-        # Create and register a trainable model
+        # Create and register a detector
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "AutoSync", "media_type": "audio", "text_query": "test"},
         )
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "AutoSync", "media_type": "audio", "text_query": "test"},
         )
-        model_id = res.get_json()["model"]["id"]
+        detector_id = res.get_json()["detector"]["id"]
 
         # Load the model
-        _load_model_and_wait(client, model_id)
+        _load_detector_and_wait(client, detector_id)
 
         # Cast a vote
         first_id = next(iter(medias))
         client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
 
         # Check that the model's labelset was updated
-        model_data = client.get("/api/trainable-models/AutoSync").get_json()
+        model_data = client.get("/api/detectors/AutoSync").get_json()
         labels = model_data["labelset"]["labels"]
         assert len(labels) == 1
         assert labels[0]["label"] == "good"
 
         # Check that the registry entry was updated
-        entry = get_model(model_id)
+        entry = get_detector(detector_id)
         assert entry["num_training"] == 1
         assert entry.get("last_trained_at") is not None
 
@@ -620,25 +620,25 @@ class TestVoteSyncsToLoadedModel:
             pytest.skip("No medias loaded")
 
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "ToggleSync", "media_type": "audio", "text_query": "test"},
         )
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "ToggleSync", "media_type": "audio", "text_query": "test"},
         )
-        model_id = res.get_json()["model"]["id"]
-        _load_model_and_wait(client, model_id)
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
 
         first_id = next(iter(medias))
         # Vote good
         client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
-        model_data = client.get("/api/trainable-models/ToggleSync").get_json()
+        model_data = client.get("/api/detectors/ToggleSync").get_json()
         assert len(model_data["labelset"]["labels"]) == 1
 
         # Toggle off (vote good again)
         client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
-        model_data = client.get("/api/trainable-models/ToggleSync").get_json()
+        model_data = client.get("/api/detectors/ToggleSync").get_json()
         assert len(model_data["labelset"]["labels"]) == 0
 
     def test_no_sync_without_loaded_model(self, client):
@@ -649,7 +649,7 @@ class TestVoteSyncsToLoadedModel:
             pytest.skip("No medias loaded")
 
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "NoSync", "media_type": "audio", "text_query": "test"},
         )
 
@@ -657,27 +657,27 @@ class TestVoteSyncsToLoadedModel:
         client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
 
         # Model should still have empty labelset
-        model_data = client.get("/api/trainable-models/NoSync").get_json()
+        model_data = client.get("/api/detectors/NoSync").get_json()
         assert len(model_data["labelset"]["labels"]) == 0
 
     def test_label_import_syncs_to_loaded_model(self, client):
         """Importing labels with a loaded model should persist to the model."""
-        from vtsearch.models.registry import get_model
+        from vtsearch.models.detector_registry import get_detector
         from vtsearch.utils import medias
 
         if not medias:
             pytest.skip("No medias loaded")
 
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "ImportSync", "media_type": "audio", "text_query": "test"},
         )
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "ImportSync", "media_type": "audio", "text_query": "test"},
         )
-        model_id = res.get_json()["model"]["id"]
-        _load_model_and_wait(client, model_id)
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
 
         # Get an MD5 from the first media
         first_id = next(iter(medias))
@@ -688,10 +688,10 @@ class TestVoteSyncsToLoadedModel:
         client.post("/api/labels/import", json={"labels": [{"md5": md5, "label": "good"}]})
 
         # Model should have the imported label
-        model_data = client.get("/api/trainable-models/ImportSync").get_json()
+        model_data = client.get("/api/detectors/ImportSync").get_json()
         assert len(model_data["labelset"]["labels"]) == 1
 
-        entry = get_model(model_id)
+        entry = get_detector(detector_id)
         assert entry["num_training"] == 1
 
 
@@ -907,7 +907,7 @@ class TestSeedVotesFromExamples:
 
         # Create model with a media example
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={
                 "name": "AutoSeed",
                 "media_type": "audio",
@@ -916,7 +916,7 @@ class TestSeedVotesFromExamples:
         )
         # Register in model registry
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={
                 "name": "AutoSeed",
                 "media_type": "audio",
@@ -925,14 +925,14 @@ class TestSeedVotesFromExamples:
                 "media_example": fname,
             },
         )
-        model_id = res.get_json()["model"]["id"]
+        detector_id = res.get_json()["detector"]["id"]
 
         # Clear any prior votes
         client.post("/api/votes/clear")
         assert len(good_votes) == 0
 
         # Load model — should auto-seed
-        res = _load_model_and_wait(client, model_id)
+        res = _load_detector_and_wait(client, detector_id)
         assert res.status_code == 200
         assert first_id in good_votes, "example media should be seeded as good vote"
 
@@ -941,11 +941,11 @@ class TestSeedVotesFromExamples:
         from vtsearch.utils import good_votes
 
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "TextOnly", "media_type": "audio", "text_query": "dogs"},
         )
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={
                 "name": "TextOnly",
                 "media_type": "audio",
@@ -953,10 +953,10 @@ class TestSeedVotesFromExamples:
                 "text_query": "dogs",
             },
         )
-        model_id = res.get_json()["model"]["id"]
+        detector_id = res.get_json()["detector"]["id"]
 
         client.post("/api/votes/clear")
-        res = _load_model_and_wait(client, model_id)
+        res = _load_detector_and_wait(client, detector_id)
         assert res.status_code == 200
         assert len(good_votes) == 0
 
@@ -980,11 +980,11 @@ class TestSeedVotesFromExamples:
 
         examples = [{"type": "media", "value": fn} for fn in fnames]
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "SkipGood", "media_type": "audio", "examples": examples},
         )
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={
                 "name": "SkipGood",
                 "media_type": "audio",
@@ -992,10 +992,10 @@ class TestSeedVotesFromExamples:
                 "text_query": "",
             },
         )
-        model_id = res.get_json()["model"]["id"]
+        detector_id = res.get_json()["detector"]["id"]
 
         client.post("/api/votes/clear")
-        _load_model_and_wait(client, model_id)
+        _load_detector_and_wait(client, detector_id)
 
         # With default autopilot_top_greens=3, 4 good votes is enough to skip Good phase
         assert len(good_votes) >= 4
@@ -1008,7 +1008,7 @@ class TestSeedVotesFromExamples:
         fname = self._create_example_file(b"novel-load-bytes", "novel_load.wav")
 
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={
                 "name": "NovelSeed",
                 "media_type": "audio",
@@ -1016,7 +1016,7 @@ class TestSeedVotesFromExamples:
             },
         )
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={
                 "name": "NovelSeed",
                 "media_type": "audio",
@@ -1024,10 +1024,10 @@ class TestSeedVotesFromExamples:
                 "text_query": "",
             },
         )
-        model_id = res.get_json()["model"]["id"]
+        detector_id = res.get_json()["detector"]["id"]
 
         client.post("/api/votes/clear")
-        res = _load_model_and_wait(client, model_id)
+        res = _load_detector_and_wait(client, detector_id)
         assert res.status_code == 200
 
         # A new media should have been inserted
@@ -1064,9 +1064,9 @@ class TestLoadModelCrossDatasetResolution:
 
         import numpy as np
 
-        from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.models.trainable_model_store import _write_model
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.models.detector_registry import register_detector, reset_for_tests
+        from vtsearch.models.detector_store import _write_detector
+        from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.utils import good_votes, bad_votes, medias
 
         reset_for_tests()
@@ -1106,12 +1106,12 @@ class TestLoadModelCrossDatasetResolution:
             },
         ]
 
-        # --- Write trainable model ---
-        original_dir = get_trainable_models_dir()
-        set_trainable_models_dir(tmp_path)
+        # --- Write detector ---
+        original_dir = get_detectors_dir()
+        set_detectors_dir(tmp_path)
         try:
             tm_name = "cross-dataset-load"
-            _write_model(
+            _write_detector(
                 tmp_path / f"{tm_name}.json",
                 {
                     "name": tm_name,
@@ -1122,11 +1122,11 @@ class TestLoadModelCrossDatasetResolution:
                 },
             )
 
-            entry = register_model(
+            entry = register_detector(
                 name=tm_name,
                 media_type="audio",
             )
-            model_id = entry["id"]
+            detector_id = entry["id"]
 
             # --- Replace medias with Dataset B (same file content, different origins) ---
             saved = dict(medias)
@@ -1152,7 +1152,7 @@ class TestLoadModelCrossDatasetResolution:
             }
 
             try:
-                res = _load_model_and_wait(client, model_id)
+                res = _load_detector_and_wait(client, detector_id)
                 assert res.status_code == 200
                 assert 1 in good_votes, "good label should be applied to media 1"
                 assert 2 in bad_votes, "bad label should be applied to media 2"
@@ -1160,7 +1160,7 @@ class TestLoadModelCrossDatasetResolution:
                 medias.clear()
                 medias.update(saved)
         finally:
-            set_trainable_models_dir(original_dir)
+            set_detectors_dir(original_dir)
 
     def test_load_model_does_not_silently_match_on_basename_collision(self, client, tmp_path):
         """Loading a detector trained on dataset B against dataset C must NOT
@@ -1175,9 +1175,9 @@ class TestLoadModelCrossDatasetResolution:
         """
         import numpy as np
 
-        from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.models.trainable_model_store import _write_model
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.models.detector_registry import register_detector, reset_for_tests
+        from vtsearch.models.detector_store import _write_detector
+        from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.utils import good_votes, medias
 
         reset_for_tests()
@@ -1192,11 +1192,11 @@ class TestLoadModelCrossDatasetResolution:
             },
         ]
 
-        original_dir = get_trainable_models_dir()
-        set_trainable_models_dir(tmp_path)
+        original_dir = get_detectors_dir()
+        set_detectors_dir(tmp_path)
         try:
             tm_name = "name-fallback"
-            _write_model(
+            _write_detector(
                 tmp_path / f"{tm_name}.json",
                 {
                     "name": tm_name,
@@ -1207,11 +1207,11 @@ class TestLoadModelCrossDatasetResolution:
                 },
             )
 
-            entry = register_model(
+            entry = register_detector(
                 name=tm_name,
                 media_type="audio",
             )
-            model_id = entry["id"]
+            detector_id = entry["id"]
 
             saved = dict(medias)
             medias.clear()
@@ -1227,7 +1227,7 @@ class TestLoadModelCrossDatasetResolution:
             }
 
             try:
-                res = _load_model_and_wait(client, model_id)
+                res = _load_detector_and_wait(client, detector_id)
                 assert res.status_code == 200
                 assert 1 not in good_votes, (
                     "label must NOT be applied: only the basename matches; the md5 "
@@ -1237,13 +1237,13 @@ class TestLoadModelCrossDatasetResolution:
                 medias.clear()
                 medias.update(saved)
         finally:
-            set_trainable_models_dir(original_dir)
+            set_detectors_dir(original_dir)
 
 
 class TestRegisterModelFromLabelset:
-    """Tests for POST /api/models/registry/from-labelset/<importer_name>.
+    """Tests for POST /api/detectors/registry/from-labelset/<importer_name>.
 
-    This endpoint creates a trainable model seeded with labels produced by
+    This endpoint creates a detector seeded with labels produced by
     a label importer in a single call: the importer runs, the trainable
     model JSON is written with the full labelset, and a registry entry is
     created.  The frontend then calls the load endpoint to resolve origins
@@ -1279,7 +1279,7 @@ class TestRegisterModelFromLabelset:
         labels_path.write_text(payload)
 
         res = client.post(
-            "/api/models/registry/from-labelset/server_json_file",
+            "/api/detectors/registry/from-labelset/server_json_file",
             json={"name": "From LS", "filepath": str(labels_path)},
         )
         assert res.status_code == 201, res.get_json()
@@ -1289,16 +1289,16 @@ class TestRegisterModelFromLabelset:
         assert data["skipped"] == 0
         assert data["num_labels"] == 2
         # Media type inferred from the origin metadata.
-        assert data["model"]["media_type"] == "audio"
-        assert data["model"]["num_training"] == 2
+        assert data["detector"]["media_type"] == "audio"
+        assert data["detector"]["num_training"] == 2
 
         # Registry now has the model
-        reg_res = client.get("/api/models/registry")
-        names = [m["name"] for m in reg_res.get_json()["models"]]
+        reg_res = client.get("/api/detectors/registry")
+        names = [m["name"] for m in reg_res.get_json()["detectors"]]
         assert "From LS" in names
 
         # Trainable-model file has the labelset baked in
-        tm_res = client.get("/api/trainable-models/From%20LS")
+        tm_res = client.get("/api/detectors/From%20LS")
         tm_data = tm_res.get_json()
         assert len(tm_data["labelset"]["labels"]) == 2
         assert tm_data["text_query"] == ""
@@ -1309,7 +1309,7 @@ class TestRegisterModelFromLabelset:
         labels_path = tmp_path / "labels.json"
         labels_path.write_text('{"labels": []}')
         res = client.post(
-            "/api/models/registry/from-labelset/server_json_file",
+            "/api/detectors/registry/from-labelset/server_json_file",
             json={"filepath": str(labels_path)},
         )
         assert res.status_code == 400
@@ -1324,7 +1324,7 @@ class TestRegisterModelFromLabelset:
         labels_path = tmp_path / "labels.json"
         labels_path.write_text(payload)
         res = client.post(
-            "/api/models/registry/from-labelset/server_json_file",
+            "/api/detectors/registry/from-labelset/server_json_file",
             json={"name": "NoOrigin", "filepath": str(labels_path)},
         )
         assert res.status_code == 400
@@ -1347,7 +1347,7 @@ class TestRegisterModelFromLabelset:
         labels_path = tmp_path / "labels.json"
         labels_path.write_text(payload)
         res = client.post(
-            "/api/models/registry/from-labelset/server_json_file",
+            "/api/detectors/registry/from-labelset/server_json_file",
             json={"name": "Mixed", "filepath": str(labels_path)},
         )
         assert res.status_code == 400
@@ -1356,14 +1356,14 @@ class TestRegisterModelFromLabelset:
 
     def test_unknown_importer_returns_404(self, client):
         res = client.post(
-            "/api/models/registry/from-labelset/no_such_importer",
+            "/api/detectors/registry/from-labelset/no_such_importer",
             json={"name": "X"},
         )
         assert res.status_code == 404
         assert "no_such_importer" in res.get_json()["error"]
 
     def test_duplicate_name_returns_409(self, client, tmp_path):
-        """Name collision with an existing trainable-model file."""
+        """Name collision with an existing detector file."""
         import app as app_module
 
         md5 = app_module.medias[1]["md5"]
@@ -1377,11 +1377,11 @@ class TestRegisterModelFromLabelset:
         labels_path = tmp_path / "labels.json"
         labels_path.write_text(payload)
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": "Dup", "media_type": "audio", "text_query": "dup"},
         )
         res = client.post(
-            "/api/models/registry/from-labelset/server_json_file",
+            "/api/detectors/registry/from-labelset/server_json_file",
             json={"name": "Dup", "filepath": str(labels_path)},
         )
         assert res.status_code == 409
@@ -1402,7 +1402,7 @@ class TestRegisterModelFromLabelset:
         labels_path = tmp_path / "labels.json"
         labels_path.write_text(payload)
         res = client.post(
-            "/api/models/registry/from-labelset/server_json_file",
+            "/api/detectors/registry/from-labelset/server_json_file",
             json={"name": "SkipInvalid", "filepath": str(labels_path)},
         )
         assert res.status_code == 201
@@ -1410,7 +1410,7 @@ class TestRegisterModelFromLabelset:
         assert data["applied"] == 1
         assert data["skipped"] == 1
         assert data["num_labels"] == 1
-        assert data["model"]["media_type"] == "audio"
+        assert data["detector"]["media_type"] == "audio"
 
     def test_loading_after_creation_restores_labels(self, client, tmp_path):
         """Loading the newly-created model resolves labels into the active dataset."""
@@ -1432,11 +1432,11 @@ class TestRegisterModelFromLabelset:
         labels_path.write_text(payload)
 
         res = client.post(
-            "/api/models/registry/from-labelset/server_json_file",
+            "/api/detectors/registry/from-labelset/server_json_file",
             json={"name": "Loadable", "filepath": str(labels_path)},
         )
-        model_id = res.get_json()["model"]["id"]
-        _load_model_and_wait(client, model_id)
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
 
         # Labels resolved into the loaded detector's votes (matched by md5).
         assert 1 in good_votes

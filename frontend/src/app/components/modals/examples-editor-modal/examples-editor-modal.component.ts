@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
-import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
+import { DetectorsApiService } from '../../../services/detectors-api.service';
 
 interface Example {
   type: 'good' | 'bad';
@@ -28,14 +28,14 @@ export class ExamplesEditorModalComponent implements OnInit {
   error = '';
   status = '';
 
-  constructor(private modelsApi: TrainableModelsApiService) {}
+  constructor(private detectorsApi: DetectorsApiService) {}
 
   ngOnInit(): void {
     if (!this.modelName) {
       this.loading = false;
       return;
     }
-    this.modelsApi.get(this.modelName).subscribe({
+    this.detectorsApi.get(this.modelName).subscribe({
       next: (data: any) => {
         this.examples = data.examples || [];
         this.loading = false;
@@ -74,7 +74,7 @@ export class ExamplesEditorModalComponent implements OnInit {
     this.saving = true;
     this.error = '';
     this.status = '';
-    this.modelsApi.setExamples(this.modelName, this.examples).subscribe({
+    this.detectorsApi.setExamples(this.modelName, this.examples).subscribe({
       next: () => {
         this.saving = false;
         this.status = 'Saved.';

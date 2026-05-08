@@ -6,14 +6,14 @@ import { ProgressBarComponent } from '../../progress-bar/progress-bar.component'
 import { formatProgressFraction } from '../../../utils/format-progress';
 
 @Component({
-  selector: 'vt-model-card',
+  selector: 'vt-detector-card',
   standalone: true,
   imports: [CommonModule, FormsModule, ProgressBarComponent],
-  templateUrl: './model-card.component.html',
-  styleUrl: './model-card.component.scss',
+  templateUrl: './detector-card.component.html',
+  styleUrl: './detector-card.component.scss',
 })
-export class ModelCardComponent implements OnChanges {
-  @Input() model: any;
+export class DetectorCardComponent implements OnChanges {
+  @Input() detector: any;
   @Input() columnOrder: string[] = [];
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
@@ -56,13 +56,13 @@ export class ModelCardComponent implements OnChanges {
     event.stopPropagation();
     this.editing = true;
     this.wasEditing = true;
-    this.editName = this.model.name;
+    this.editName = this.detector.name;
     setTimeout(() => this.renameInput?.nativeElement.focus());
   }
 
   confirmRename(): void {
     const trimmed = this.editName.trim();
-    if (trimmed && trimmed !== this.model.name) {
+    if (trimmed && trimmed !== this.detector.name) {
       this.rename.emit(trimmed);
     }
     this.editing = false;
@@ -129,7 +129,7 @@ export class ModelCardComponent implements OnChanges {
 
   onAutorunToggle(event: MouseEvent): void {
     event.stopPropagation();
-    this.autorunToggle.emit(!this.model.autodetect);
+    this.autorunToggle.emit(!this.detector.autorun);
   }
 
   onCheckboxClick(event: MouseEvent): void {

@@ -7,18 +7,18 @@ import shutil
 import numpy as np
 import pytest
 
-from tests import load_model_and_wait as _load_model_and_wait
-from vtsearch.settings import get_trainable_models_dir
+from tests import load_detector_and_wait as _load_detector_and_wait
+from vtsearch.settings import get_detectors_dir
 
 
 @pytest.fixture(autouse=True)
-def clean_trainable_models_dir():
-    """Remove the trainable models directory before and after each test."""
-    tm_dir = get_trainable_models_dir()
+def clean_detectors_dir():
+    """Remove the detectors directory before and after each test."""
+    tm_dir = get_detectors_dir()
     if tm_dir.is_dir():
         shutil.rmtree(tm_dir)
     yield
-    tm_dir = get_trainable_models_dir()
+    tm_dir = get_detectors_dir()
     if tm_dir.is_dir():
         shutil.rmtree(tm_dir)
 
@@ -232,38 +232,38 @@ class TestModelRegistryMultiLoaded:
     """Model registry supports multiple loaded models."""
 
     def test_multiple_models_loaded(self):
-        from vtsearch.models.registry import (
-            add_loaded_model_id,
-            get_loaded_model_ids,
-            is_model_loaded,
+        from vtsearch.models.detector_registry import (
+            add_loaded_detector_id,
+            get_loaded_detector_ids,
+            is_detector_loaded,
         )
 
-        add_loaded_model_id("m1")
-        add_loaded_model_id("m2")
-        assert is_model_loaded("m1")
-        assert is_model_loaded("m2")
-        assert len(get_loaded_model_ids()) == 2
+        add_loaded_detector_id("m1")
+        add_loaded_detector_id("m2")
+        assert is_detector_loaded("m1")
+        assert is_detector_loaded("m2")
+        assert len(get_loaded_detector_ids()) == 2
 
     def test_remove_loaded_removes_from_set(self):
-        from vtsearch.models.registry import (
-            add_loaded_model_id,
-            is_model_loaded,
-            remove_loaded_model_id,
+        from vtsearch.models.detector_registry import (
+            add_loaded_detector_id,
+            is_detector_loaded,
+            remove_loaded_detector_id,
         )
 
-        add_loaded_model_id("m1")
-        assert is_model_loaded("m1")
-        remove_loaded_model_id("m1")
-        assert not is_model_loaded("m1")
+        add_loaded_detector_id("m1")
+        assert is_detector_loaded("m1")
+        remove_loaded_detector_id("m1")
+        assert not is_detector_loaded("m1")
 
     def test_add_loaded_model_id_adds_to_loaded_set(self):
-        from vtsearch.models.registry import (
-            add_loaded_model_id,
-            is_model_loaded,
+        from vtsearch.models.detector_registry import (
+            add_loaded_detector_id,
+            is_detector_loaded,
         )
 
-        add_loaded_model_id("m1")
-        assert is_model_loaded("m1")
+        add_loaded_detector_id("m1")
+        assert is_detector_loaded("m1")
 
 
 # ---------------------------------------------------------------------------
@@ -275,13 +275,13 @@ class TestModelLoadEndpoints:
     """Test the multi-loaded model API endpoints."""
 
     def _register_trainable_model(self, client, name):
-        """Helper: create trainable model + register in model registry."""
+        """Helper: create detector + register in model registry."""
         client.post(
-            "/api/trainable-models",
+            "/api/detectors",
             json={"name": name, "media_type": "audio", "text_query": "test"},
         )
         res = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={
                 "name": name,
                 "media_type": "audio",
@@ -289,13 +289,13 @@ class TestModelLoadEndpoints:
                 "text_query": "test",
             },
         )
-        return res.get_json()["model"]["id"]
+        return res.get_json()["detector"]["id"]
 
     def test_load_creates_detector_context(self, client):
         from vtsearch.utils.state_core import get_detector_context
 
         mid = self._register_trainable_model(client, "LoadCtx")
-        res = _load_model_and_wait(client, mid)
+        res = _load_detector_and_wait(client, mid)
         assert res.status_code == 200
 
         det = get_detector_context(mid)
@@ -306,11 +306,11 @@ class TestModelLoadEndpoints:
         from vtsearch.utils.state_core import get_detector_context
 
         mid = self._register_trainable_model(client, "LoadTwice")
-        _load_model_and_wait(client, mid)
+        _load_detector_and_wait(client, mid)
         det1 = get_detector_context(mid)
 
         # Load again — should reuse, not create new
-        _load_model_and_wait(client, mid)
+        _load_detector_and_wait(client, mid)
         det2 = get_detector_context(mid)
         assert det1 is det2
 
@@ -318,45 +318,45 @@ class TestModelLoadEndpoints:
         mid1 = self._register_trainable_model(client, "Reg1")
         mid2 = self._register_trainable_model(client, "Reg2")
 
-        _load_model_and_wait(client, mid1)
-        _load_model_and_wait(client, mid2)
+        _load_detector_and_wait(client, mid1)
+        _load_detector_and_wait(client, mid2)
 
-        res = client.get("/api/models/registry")
-        models = {m["id"]: m for m in res.get_json()["models"]}
+        res = client.get("/api/detectors/registry")
+        models = {m["id"]: m for m in res.get_json()["detectors"]}
 
         assert models[mid1]["loaded"] is True
         assert models[mid2]["loaded"] is True
 
     def test_unload_removes_context(self, client):
-        from vtsearch.models.registry import is_model_loaded
+        from vtsearch.models.detector_registry import is_detector_loaded
         from vtsearch.utils.state_core import get_detector_context
 
         mid = self._register_trainable_model(client, "Unload")
-        _load_model_and_wait(client, mid)
+        _load_detector_and_wait(client, mid)
         assert get_detector_context(mid) is not None
 
-        res = client.post(f"/api/models/registry/{mid}/unload")
+        res = client.post(f"/api/detectors/registry/{mid}/unload")
         assert res.status_code == 200
         assert get_detector_context(mid) is None
-        assert not is_model_loaded(mid)
+        assert not is_detector_loaded(mid)
 
     def test_unload_not_loaded_returns_400(self, client):
         mid = self._register_trainable_model(client, "UnloadNot")
-        res = client.post(f"/api/models/registry/{mid}/unload")
+        res = client.post(f"/api/detectors/registry/{mid}/unload")
         assert res.status_code == 400
 
     def test_delete_cleans_up_context(self, client):
-        from vtsearch.models.registry import is_model_loaded
+        from vtsearch.models.detector_registry import is_detector_loaded
         from vtsearch.utils.state_core import get_detector_context
 
         mid = self._register_trainable_model(client, "Delete")
-        _load_model_and_wait(client, mid)
+        _load_detector_and_wait(client, mid)
         assert get_detector_context(mid) is not None
 
-        res = client.delete(f"/api/models/registry/{mid}")
+        res = client.delete(f"/api/detectors/registry/{mid}")
         assert res.status_code == 200
         assert get_detector_context(mid) is None
-        assert not is_model_loaded(mid)
+        assert not is_detector_loaded(mid)
 
 
 # ---------------------------------------------------------------------------
@@ -368,12 +368,12 @@ class TestModelLoadingTasks:
     """Test the model loading tasks progress API."""
 
     def test_loading_tasks_empty(self, client):
-        res = client.get("/api/models/loading-tasks")
+        res = client.get("/api/detectors/loading-tasks")
         assert res.status_code == 200
         assert res.get_json()["tasks"] == []
 
     def test_cancel_nonexistent_task(self, client):
-        res = client.post("/api/models/cancel/nonexistent")
+        res = client.post("/api/detectors/cancel/nonexistent")
         assert res.status_code == 404
 
 

@@ -251,7 +251,7 @@ def build_results_dict(hits, model_name, media_type="unknown"):
 
 
 def make_trainable_model_file(tmp_path, name, good_ids, bad_ids, snap, media_type="audio"):
-    """Write a trainable-model JSON file populated from *snap* and votes.
+    """Write a detector JSON file populated from *snap* and votes.
 
     Returns the path to the written JSON file.
     """
@@ -275,15 +275,15 @@ def make_trainable_model_file(tmp_path, name, good_ids, bad_ids, snap, media_typ
 
 
 def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type="audio"):
-    """Build a trainable model on disk + register it.  Returns its registry id.
+    """Build a detector on disk + register it.  Returns its registry id.
 
-    Writes ``<get_trainable_models_dir()>/<name>.json`` with a labelset built
+    Writes ``<get_detectors_dir()>/<name>.json`` with a labelset built
     from *good_ids* and *bad_ids* using *snap* as the medias source, and
-    registers the model so ``/api/models/registry`` lists it.
+    registers the model so ``/api/detectors/registry`` lists it.
     """
     from vtsearch.datasets.labelset import LabelSet  # noqa: PLC0415
-    from vtsearch.models.registry import register_model  # noqa: PLC0415
-    from vtsearch.models.trainable_model_store import _model_path, _write_model  # noqa: PLC0415
+    from vtsearch.models.detector_registry import register_detector  # noqa: PLC0415
+    from vtsearch.models.detector_store import _detector_path, _write_detector  # noqa: PLC0415
 
     good_votes_dict = {k: None for k in good_ids}
     bad_votes_dict = {k: None for k in bad_ids}
@@ -297,7 +297,7 @@ def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type=
         "examples": [],
         "labelset": labelset.to_dict(),
     }
-    _write_model(_model_path(name), data)
+    _write_detector(_detector_path(name), data)
 
-    entry = register_model(name=name, media_type=media_type, num_training=len(labelset))
+    entry = register_detector(name=name, media_type=media_type, num_training=len(labelset))
     return entry["id"]

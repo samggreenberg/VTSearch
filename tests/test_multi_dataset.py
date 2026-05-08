@@ -5,7 +5,7 @@ import hashlib
 
 import numpy as np
 
-from tests import load_model_and_wait as _load_model_and_wait
+from tests import load_detector_and_wait as _load_detector_and_wait
 
 from vtsearch.utils.state_core import (
     DatasetContext,
@@ -586,7 +586,7 @@ class TestEmptyContextFallback:
 
 
 class TestSyncLabelsAcrossDatasets:
-    """sync_labels_to_loaded_model must not destroy training data when the
+    """sync_labels_to_loaded_detector must not destroy training data when the
     active dataset has been switched (no votes in the new context)."""
 
     def test_load_model_route_skips_sync_when_no_votes(self, client, tmp_path):
@@ -594,9 +594,9 @@ class TestSyncLabelsAcrossDatasets:
         votes, preventing destruction of the model's saved labelset from a
         prior training session on a different dataset."""
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
-        from vtsearch.models.trainable_model_store import _read_model, _write_model
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.models.detector_registry import add_loaded_detector_id, register_detector, reset_for_tests
+        from vtsearch.models.detector_store import _read_detector, _write_detector
+        from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
         from vtsearch.utils.state_core import DetectorContext, register_detector_context
 
@@ -611,12 +611,12 @@ class TestSyncLabelsAcrossDatasets:
         original_label_count = len(labelset)
         assert original_label_count == 6
 
-        original_dir = get_trainable_models_dir()
-        set_trainable_models_dir(tmp_path)
+        original_dir = get_detectors_dir()
+        set_detectors_dir(tmp_path)
         try:
             tm_name = "sync-protect-test"
             tm_path = tmp_path / f"{tm_name}.json"
-            _write_model(
+            _write_detector(
                 tm_path,
                 {
                     "name": tm_name,
@@ -627,13 +627,13 @@ class TestSyncLabelsAcrossDatasets:
                 },
             )
 
-            entry = register_model(
+            entry = register_detector(
                 name="Sync Protect Test",
                 media_type="audio",
             )
-            model_id = entry["id"]
-            add_loaded_model_id(model_id)
-            det_ctx = DetectorContext(model_id)
+            detector_id = entry["id"]
+            add_loaded_detector_id(detector_id)
+            det_ctx = DetectorContext(detector_id)
             register_detector_context(det_ctx)
             set_thread_detector_context(det_ctx)
 
@@ -642,27 +642,27 @@ class TestSyncLabelsAcrossDatasets:
             bad_votes.clear()
 
             # Phase 3: re-load the same model via the API endpoint
-            resp = _load_model_and_wait(client, model_id)
+            resp = _load_detector_and_wait(client, detector_id)
             assert resp.status_code == 200
 
-            saved = _read_model(tm_path)
+            saved = _read_detector(tm_path)
             saved_labels = saved["labelset"]["labels"]
             assert len(saved_labels) == original_label_count, (
                 f"Expected {original_label_count} training labels but load_model "
                 f"overwrote them with {len(saved_labels)} (empty votes context)"
             )
         finally:
-            set_trainable_models_dir(original_dir)
+            set_detectors_dir(original_dir)
 
     def test_load_model_on_new_dataset_preserves_labels(self, client, tmp_path):
-        """Load a trained model on Dataset B via /api/models/registry/load.
+        """Load a trained model on Dataset B via /api/detectors/registry/load.
 
         The model's saved labelset from Dataset A must survive the load
         even though Dataset B has no votes."""
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
-        from vtsearch.models.trainable_model_store import _read_model, _write_model
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.models.detector_registry import add_loaded_detector_id, register_detector, reset_for_tests
+        from vtsearch.models.detector_store import _read_detector, _write_detector
+        from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
         from vtsearch.utils.state_core import DetectorContext, register_detector_context
 
@@ -677,12 +677,12 @@ class TestSyncLabelsAcrossDatasets:
         original_label_count = len(labelset)
         assert original_label_count == 4
 
-        original_dir = get_trainable_models_dir()
-        set_trainable_models_dir(tmp_path)
+        original_dir = get_detectors_dir()
+        set_detectors_dir(tmp_path)
         try:
             tm_name = "load-protect-test"
             tm_path = tmp_path / f"{tm_name}.json"
-            _write_model(
+            _write_detector(
                 tm_path,
                 {
                     "name": tm_name,
@@ -693,13 +693,13 @@ class TestSyncLabelsAcrossDatasets:
                 },
             )
 
-            entry = register_model(
+            entry = register_detector(
                 name="Load Protect Test",
                 media_type="audio",
             )
-            model_id = entry["id"]
-            add_loaded_model_id(model_id)
-            det_ctx = DetectorContext(model_id)
+            detector_id = entry["id"]
+            add_loaded_detector_id(detector_id)
+            det_ctx = DetectorContext(detector_id)
             register_detector_context(det_ctx)
             set_thread_detector_context(det_ctx)
 
@@ -708,15 +708,15 @@ class TestSyncLabelsAcrossDatasets:
             bad_votes.clear()
 
             # Phase 3: re-load the same model (as the dashboard would)
-            resp = _load_model_and_wait(client, model_id)
+            resp = _load_detector_and_wait(client, detector_id)
             assert resp.status_code == 200
 
             # The model file must still have the original labels
-            saved = _read_model(tm_path)
+            saved = _read_detector(tm_path)
             saved_labels = saved["labelset"]["labels"]
             assert len(saved_labels) == original_label_count, (
                 f"Expected {original_label_count} training labels but load_model "
                 f"overwrote them — got {len(saved_labels)}"
             )
         finally:
-            set_trainable_models_dir(original_dir)
+            set_detectors_dir(original_dir)

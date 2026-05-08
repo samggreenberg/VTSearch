@@ -2,7 +2,7 @@
 
 import app as app_module  # noqa: F401 — triggers conftest side effects
 from vtsearch.datasets.registry import register_dataset
-from vtsearch.models.registry import register_model
+from vtsearch.models.detector_registry import register_detector
 from vtsearch.utils import medias
 
 
@@ -508,88 +508,87 @@ class TestDashboardModelRegistryColumns:
 
     def test_model_registry_includes_created_at(self, client):
         """Registered models include a created_at timestamp."""
-        register_model(name="ts-model", media_type="audio")
-        resp = client.get("/api/models/registry")
+        register_detector(name="ts-model", media_type="audio")
+        resp = client.get("/api/detectors/registry")
         data = resp.get_json()
-        m = data["models"][0]
+        m = data["detectors"][0]
         assert "created_at" in m
         assert isinstance(m["created_at"], (int, float))
         assert m["created_at"] > 0
 
     def test_model_registry_includes_autorun_false_by_default(self, client):
-        """Models that are not flagged for autorun show autorun=False."""
-        register_model(name="no-autorun", media_type="image")
-        resp = client.get("/api/models/registry")
+        """Detectors that are not flagged for autorun show autorun=False."""
+        register_detector(name="no-autorun", media_type="image")
+        resp = client.get("/api/detectors/registry")
         data = resp.get_json()
-        m = data["models"][0]
+        m = data["detectors"][0]
         assert m["autorun"] is False
-        assert m["autodetect"] is False  # backwards-compat alias
 
     def test_autorun_toggle_via_api(self, client):
         """Toggling autorun via PUT updates the model registry response."""
-        from vtsearch.settings import get_autorun_trainable_models
+        from vtsearch.settings import get_autorun_detectors
 
-        entry = register_model(name="toggle-det", media_type="audio")
+        entry = register_detector(name="toggle-det", media_type="audio")
 
-        resp = client.get("/api/models/registry")
-        m = resp.get_json()["models"][0]
+        resp = client.get("/api/detectors/registry")
+        m = resp.get_json()["detectors"][0]
         assert m["autorun"] is False
 
         resp = client.put(
-            f"/api/models/registry/{entry['id']}/autorun",
+            f"/api/detectors/registry/{entry['id']}/autorun",
             json={"autorun": True},
         )
         assert resp.status_code == 200
-        assert "toggle-det" in get_autorun_trainable_models()
+        assert "toggle-det" in get_autorun_detectors()
 
-        resp = client.get("/api/models/registry")
-        m = resp.get_json()["models"][0]
+        resp = client.get("/api/detectors/registry")
+        m = resp.get_json()["detectors"][0]
         assert m["autorun"] is True
 
     def test_model_registry_includes_loaded_field(self, client):
         """Registered models include the loaded boolean (not shown in UI)."""
-        register_model(name="ld-model", media_type="audio")
-        resp = client.get("/api/models/registry")
+        register_detector(name="ld-model", media_type="audio")
+        resp = client.get("/api/detectors/registry")
         data = resp.get_json()
-        m = data["models"][0]
+        m = data["detectors"][0]
         assert "loaded" in m
         assert isinstance(m["loaded"], bool)
 
     def test_model_registry_detector_loaded_follows_loaded(self, client):
         """detector_loaded reflects whether a DetectorContext is registered."""
-        from vtsearch.models.registry import add_loaded_model_id
+        from vtsearch.models.detector_registry import add_loaded_detector_id
 
-        entry = register_model(name="train-ld", media_type="audio")
-        resp = client.get("/api/models/registry")
-        m = resp.get_json()["models"][0]
+        entry = register_detector(name="train-ld", media_type="audio")
+        resp = client.get("/api/detectors/registry")
+        m = resp.get_json()["detectors"][0]
         assert m["detector_loaded"] is False
 
-        add_loaded_model_id(entry["id"])
-        resp = client.get("/api/models/registry")
-        m = resp.get_json()["models"][0]
+        add_loaded_detector_id(entry["id"])
+        resp = client.get("/api/detectors/registry")
+        m = resp.get_json()["detectors"][0]
         assert m["detector_loaded"] is True
 
     def test_model_registry_includes_last_trained_at(self, client):
         """Registered models include the last_trained_at field (None by default)."""
-        register_model(name="lt-model", media_type="audio")
-        resp = client.get("/api/models/registry")
+        register_detector(name="lt-model", media_type="audio")
+        resp = client.get("/api/detectors/registry")
         data = resp.get_json()
-        m = data["models"][0]
+        m = data["detectors"][0]
         assert "last_trained_at" in m
         assert m["last_trained_at"] is None
 
     def test_model_registry_last_trained_at_set_on_label_save(self, client):
         """Saving labels updates last_trained_at to a timestamp."""
-        from vtsearch.models.registry import register_model as reg_model, update_model
+        from vtsearch.models.detector_registry import register_detector as reg_model, update_detector
 
         entry = reg_model(name="lt-save", media_type="audio")
         import time
 
         now = time.time()
-        update_model(entry["id"], last_trained_at=now)
-        resp = client.get("/api/models/registry")
+        update_detector(entry["id"], last_trained_at=now)
+        resp = client.get("/api/detectors/registry")
         data = resp.get_json()
-        m = data["models"][0]
+        m = data["detectors"][0]
         assert isinstance(m["last_trained_at"], (int, float))
         assert m["last_trained_at"] >= now
 
@@ -599,47 +598,47 @@ class TestAutorunCheckboxPersistence:
 
     def test_autorun_toggle_persists_to_settings(self, client):
         """Toggling autorun on saves the model name to settings."""
-        from vtsearch.settings import get_autorun_trainable_models
+        from vtsearch.settings import get_autorun_detectors
 
-        entry = register_model(name="persist-det", media_type="audio")
+        entry = register_detector(name="persist-det", media_type="audio")
 
         resp = client.put(
-            f"/api/models/registry/{entry['id']}/autorun",
+            f"/api/detectors/registry/{entry['id']}/autorun",
             json={"autorun": True},
         )
         assert resp.status_code == 200
-        assert "persist-det" in get_autorun_trainable_models()
+        assert "persist-det" in get_autorun_detectors()
 
     def test_autorun_toggle_off_removes_from_settings(self, client):
         """Toggling autorun off removes the model name from settings."""
-        from vtsearch.settings import add_autorun_trainable_model, get_autorun_trainable_models
+        from vtsearch.settings import add_autorun_detector, get_autorun_detectors
 
-        entry = register_model(name="remove-det", media_type="audio")
-        add_autorun_trainable_model("remove-det")
+        entry = register_detector(name="remove-det", media_type="audio")
+        add_autorun_detector("remove-det")
 
         resp = client.put(
-            f"/api/models/registry/{entry['id']}/autorun",
+            f"/api/detectors/registry/{entry['id']}/autorun",
             json={"autorun": False},
         )
         assert resp.status_code == 200
-        assert "remove-det" not in get_autorun_trainable_models()
+        assert "remove-det" not in get_autorun_detectors()
 
     def test_model_registry_settings_drives_autorun_flag(self, client):
-        """Adding a name to autorun_trainable_models flips the registry flag."""
-        from vtsearch.settings import add_autorun_trainable_model
+        """Adding a name to autorun_detectors flips the registry flag."""
+        from vtsearch.settings import add_autorun_detector
 
-        register_model(name="settings-det", media_type="audio")
-        add_autorun_trainable_model("settings-det")
+        register_detector(name="settings-det", media_type="audio")
+        add_autorun_detector("settings-det")
 
-        resp = client.get("/api/models/registry")
-        m = resp.get_json()["models"][0]
+        resp = client.get("/api/detectors/registry")
+        m = resp.get_json()["detectors"][0]
         assert m["autorun"] is True
 
     def test_autorun_not_in_settings_defaults(self, client):
-        """autorun_trainable_models should not appear in the defaults endpoint."""
+        """autorun_detectors should not appear in the defaults endpoint."""
         resp = client.get("/api/settings/defaults")
         data = resp.get_json()
-        assert "autorun_trainable_models" not in data
+        assert "autorun_detectors" not in data
 
 
 class TestDashboardColumnHeaders:
@@ -673,21 +672,21 @@ class TestFindButtonValidation:
     """Tests that the Find endpoint rejects invalid requests and that
     the frontend bundle contains the resolved-count validation logic."""
 
-    def test_find_rejects_empty_model_ids(self, client):
+    def test_find_rejects_empty_detector_ids(self, client):
         """POST /api/find with no models returns 400."""
         register_dataset(name="find-ds", media_type="audio", num_items=5, pkl_path="/tmp/find.pkl")
         resp = client.get("/api/datasets/registry")
         ds_id = resp.get_json()["datasets"][0]["id"]
-        resp = client.post("/api/find", json={"dataset_ids": [ds_id], "model_ids": []})
+        resp = client.post("/api/find", json={"dataset_ids": [ds_id], "detector_ids": []})
         assert resp.status_code == 400
-        assert "No models selected" in resp.get_json()["error"]
+        assert "No detectors selected" in resp.get_json()["error"]
 
     def test_find_rejects_empty_dataset_ids(self, client):
         """POST /api/find with no datasets returns 400."""
-        register_model(name="find-m", media_type="audio")
-        resp = client.get("/api/models/registry")
-        m_id = resp.get_json()["models"][0]["id"]
-        resp = client.post("/api/find", json={"dataset_ids": [], "model_ids": [m_id]})
+        register_detector(name="find-m", media_type="audio")
+        resp = client.get("/api/detectors/registry")
+        m_id = resp.get_json()["detectors"][0]["id"]
+        resp = client.post("/api/find", json={"dataset_ids": [], "detector_ids": [m_id]})
         assert resp.status_code == 400
         assert "No datasets selected" in resp.get_json()["error"]
 
@@ -743,16 +742,16 @@ class TestFindProgress:
 
         ds = register_dataset(name="prog-ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
 
-        # Build a trainable model with labels matching the dataset's md5s so
+        # Build a detector with labels matching the dataset's md5s so
         # the on-the-fly trainer has both a good and a bad example.
-        model_id = setup_trainable_model_in_registry(
+        detector_id = setup_trainable_model_in_registry(
             "prog-det",
             good_ids=[0, 1],
             bad_ids=[2],
             snap=ds_medias,
             media_type="audio",
         )
-        m = {"id": model_id}
+        m = {"id": detector_id}
 
         # Capture progress snapshots during find by monkey-patching update
         snapshots = []
@@ -764,7 +763,7 @@ class TestFindProgress:
 
         find_progress.update = capturing_update
         try:
-            resp = client.post("/api/find", json={"dataset_ids": [ds["id"]], "model_ids": [m["id"]]})
+            resp = client.post("/api/find", json={"dataset_ids": [ds["id"]], "detector_ids": [m["id"]]})
         finally:
             find_progress.update = original_update
 
@@ -797,7 +796,7 @@ class TestFindProgress:
         """Progress resets to idle when Find returns an error."""
         from vtsearch.utils.progress import find_progress
 
-        resp = client.post("/api/find", json={"dataset_ids": [], "model_ids": []})
+        resp = client.post("/api/find", json={"dataset_ids": [], "detector_ids": []})
         assert resp.status_code == 400
         data = find_progress.get()
         assert data["status"] == "idle"
