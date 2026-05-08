@@ -246,12 +246,11 @@ and a pair of action buttons underneath.
   click the **×** to load into memory (a checkmark appears when
   it's in). Per-row icon buttons: **Rename** (pencil), **Stats**
   (pie chart), and **Delete** (trash).
-- **Models** — every trained detector. Each row shows media type,
-  training count, whether the model is **trainable**, whether it's
-  an **autorun** (scored automatically during CLI autodetect),
-  last-trained / created dates, and loaded state. Per-row icon
-  buttons: **Rename**, **Add Labels** (import labels into this
-  model), **Export**, and **Delete**.
+- **Detectors** — every saved detector. Each row shows media type,
+  training count, whether it's an **autorun** (scored automatically
+  during CLI autodetect), last-trained / created dates, and loaded
+  state. Per-row icon buttons: **Rename**, **Add Labels** (import
+  labels into this detector), **Export**, and **Delete**.
 
 **Starting a labeling session:** click a dataset row and a model
 row to select them, then click the **Train** button in the action

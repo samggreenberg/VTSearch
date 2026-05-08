@@ -93,7 +93,7 @@ You can also load your own data from pickle files or folders via the same menu.
 
 ## HTTP API
 
-VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the full endpoint reference, including media listing, sorting, voting, dataset management, detector/exporter/importer operations, settings, and trainable models.
+VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the full endpoint reference, including media listing, sorting, voting, dataset management, detector/exporter/importer operations, settings, and detectors.
 
 ## Deployment
 

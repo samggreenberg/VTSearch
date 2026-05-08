@@ -76,12 +76,12 @@ Per-dataset runtime state (`medias`, diversity tree, display name) is
 isolated in `DatasetContext` objects, and per-detector state (votes,
 label history, click times, learned scores, inclusion, labelset source)
 is isolated in `DetectorContext` objects. The frontend sends
-`X-Dataset-Id` / `X-Model-Id` headers, and a `before_request`
+`X-Dataset-Id` / `X-Detector-Id` headers, and a `before_request`
 middleware resolves the active contexts per request — so multiple users
 can work with different datasets/models simultaneously.
 
 The auth infrastructure supports ownership tracking (`created_by` on
-detectors, datasets, and trainable models) and per-user data
+detectors, datasets, and detectors) and per-user data
 directories via `get_user_data_dir(username, base)`. **Settings remain
 globally shared** across all users — there is no per-user settings
 isolation yet.
@@ -273,9 +273,9 @@ See [EXTENDING-processors.md](EXTENDING-processors.md).
 - [ ] Register as autorun via `POST /api/autorun-extractors` or
       `POST /api/autorun-localizers`
 
-For ML classifiers, create a trainable model instead — register it via
-`POST /api/models/registry`, label items in the right pane, and toggle
-its autorun flag with `PUT /api/models/registry/<id>/autorun`.
+For ML classifiers, create a detector instead — register it via
+`POST /api/detectors/registry`, label items in the right pane, and toggle
+its autorun flag with `PUT /api/detectors/registry/<id>/autorun`.
 
 ### New Login Provider Checklist
 

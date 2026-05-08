@@ -283,8 +283,8 @@ class TestCliScoringNegativeHits:
             out = rebuilt(torch.zeros((1, weights["0.weight"][0].__len__()), dtype=torch.float32))
         assert out is not None
 
-        tm_models = {"test": {"model": mlp, "threshold": threshold}}
-        det_results = _score_medias_with_detectors(medias, tm_models)
+        detector_mlps = {"test": {"mlp": mlp, "threshold": threshold}}
+        det_results = _score_medias_with_detectors(medias, detector_mlps)
         for det_result in det_results.values():
             assert "negative_hits" in det_result
             assert isinstance(det_result["negative_hits"], list)

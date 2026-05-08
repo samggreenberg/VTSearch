@@ -184,8 +184,8 @@ VTSearch/
 │   │   ├── processors.py           Extractor/localizer/pregen-processor blueprint
 │   │   ├── processors_crud.py      Extractor/localizer CRUD + pregen processors
 │   │   ├── processors_scoring.py   /api/extract, /api/auto-extract, /api/localize, /api/auto-localize
-│   │   ├── model_scoring.py        /api/auto-detect, /api/find-label (trainable models)
-│   │   ├── model_find.py           Multi-dataset / multi-model Find subsystem
+│   │   ├── detector_scoring.py        /api/auto-detect, /api/find-label (detectors)
+│   │   ├── detector_find.py           Multi-dataset / multi-model Find subsystem
 │   │   ├── datasets.py             Media-type/clipper/converter listings, import, demos
 │   │   ├── datasets_ui.py          Dataset UI helpers and demo listing
 │   │   ├── datasets_registry.py    Dataset registry CRUD (/api/datasets/registry/*)
@@ -199,8 +199,8 @@ VTSearch/
 │   │   ├── settings_io.py          Settings import/export plugin routes
 │   │   ├── sync_sources.py         Sync source management (settings + labelset sources)
 │   │   ├── file_browser.py         File browser API for directory navigation
-│   │   ├── trainable_models.py     Persistent trainable model store (/api/trainable-models/*)
-│   │   └── models_registry.py      In-memory model registry (/api/models/registry/*)
+│   │   ├── detectors.py     Persistent detector store (/api/detectors/*)
+│   │   └── detectors_registry.py      In-memory model registry (/api/detectors/registry/*)
 │   │
 │   ├── settings_factory.py         Accessor factories used by settings.py
 │   │
@@ -552,13 +552,13 @@ auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
 `panel_pct_*` (per-media-type layout), `autoload_media_embedders`,
 `autopilot_enabled`, `hide_autopilot`, `autopilot_top_greens`,
 `autopilot_hard_reds`, `autopilot_goal_diversity`,
-`autorun_trainable_models`, and infrastructure directories
-`saved_datasets_dir`, `trainable_models_dir`.
+`autorun_detectors`, and infrastructure directories
+`saved_datasets_dir`, `detectors_dir`.
 See `_DEFAULTS` in `settings.py` for the full list.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
 
-Trainable models are persisted as JSON files in `data/trainable_models/`
-via the `trainable_models_bp` route blueprint.  Each stores a name,
+Trainable models are persisted as JSON files in `data/detectors/`
+via the `detectors_bp` route blueprint.  Each stores a name,
 text query, media type, examples list, and labelset.
 
 **Primarily Flask routes mutate this state.**  Most ML and dataset
@@ -599,7 +599,7 @@ objects** (`_ProxyDict` / `_ProxyList`) that delegate to the context
 resolved per-request:
 
 1. **Inside a Flask request** — the `before_request` handler reads
-   `X-Dataset-Id` and `X-Model-Id` headers, resolves the matching
+   `X-Dataset-Id` and `X-Detector-Id` headers, resolves the matching
    contexts, and stashes them on Flask's `g`. Proxies check `g` first.
 2. **Outside a request** (background threads, CLI, tests) — proxies
    fall back to a thread-local context set via
@@ -618,7 +618,7 @@ API endpoints: `POST /api/datasets/registry/<id>/load` (load from pkl),
 
 The Angular frontend's `ActiveContextService` tracks which dataset/model
 the user selected, and `activeContextInterceptor` attaches
-`X-Dataset-Id` / `X-Model-Id` headers to every API request.
+`X-Dataset-Id` / `X-Detector-Id` headers to every API request.
 
 ---
 
@@ -652,7 +652,7 @@ background threads) it falls back to `"default"`.
 
 ### Ownership tracking
 
-Routes that create detectors, datasets, or trainable models record
+Routes that create detectors, datasets, or detectors record
 `created_by = get_current_user()` for provenance. The auth endpoint
 `GET /api/auth/status` returns the provider name, current user,
 authentication state, and login-required flag.

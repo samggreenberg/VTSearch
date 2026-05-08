@@ -567,7 +567,7 @@ class TestMultiFindCrossDatasetFallback:
         # Every media should have a verdict from the model
         # (either Good or Bad, not N/A since resolver found the files)
         for r in data["results"]:
-            verdicts = r["model_verdicts"]
+            verdicts = r["detector_verdicts"]
             assert "Test Cross Detector" in verdicts
             assert verdicts["Test Cross Detector"]["verdict"] in ("Good", "Bad")
 
@@ -912,7 +912,7 @@ class TestFindCheckLabels:
         assert len(data["warnings"]) == 1
 
         w = data["warnings"][0]
-        assert w["model_name"] == "Diff Model"
+        assert w["detector_name"] == "Diff Model"
         assert w["total_labels"] == 3
         assert w["failed_labels"] == 3
         assert w["resolved_labels"] == 0
@@ -1003,7 +1003,7 @@ class TestFindCheckLabels:
         assert len(data["warnings"]) == 1
 
         w = data["warnings"][0]
-        assert w["model_name"] == "Part Model"
+        assert w["detector_name"] == "Part Model"
         assert w["total_labels"] == 2
         assert w["resolved_labels"] == 1
         assert w["failed_labels"] == 1

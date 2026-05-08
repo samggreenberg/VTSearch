@@ -103,7 +103,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   static readonly DATASET_COLUMNS_DEFAULT = [
     'media_type', 'num_items', 'created_at', 'created_by', 'readers', 'loaded',
   ];
-  static readonly MODEL_COLUMNS_DEFAULT = [
+  static readonly DETECTOR_COLUMNS_DEFAULT = [
     'media_type', 'num_training', 'autodetect', 'last_trained_at',
     'created_at', 'detector_loaded',
   ];
@@ -122,15 +122,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },
     actions: { label: 'Actions', title: 'Available operations for this dataset', sortable: false },
   };
-  static readonly MODEL_COL_META: Record<string, ColMeta> = {
-    name: { label: 'Name', title: 'Model display name (click to sort)', sortable: true },
-    media_type: { label: 'Type', title: 'Media type this model operates on (click to sort)', sortable: true },
+  static readonly DETECTOR_COL_META: Record<string, ColMeta> = {
+    name: { label: 'Name', title: 'Detector display name (click to sort)', sortable: true },
+    media_type: { label: 'Type', title: 'Media type this detector operates on (click to sort)', sortable: true },
     num_training: { label: '# Training', title: 'Number of labeled training examples (click to sort)', sortable: true },
-    autodetect: { label: 'Autorun?', title: 'Include this model in CLI autorun (click to sort)', sortable: true },
-    last_trained_at: { label: 'Last Trained', title: 'When the model was last trained (click to sort)', sortable: true },
-    created_at: { label: 'Created', title: 'When the model was created (click to sort)', sortable: true },
-    detector_loaded: { label: 'Loaded?', title: "Whether the model's inference data is cached in memory", sortable: false },
-    actions: { label: 'Actions', title: 'Available operations for this model', sortable: false },
+    autodetect: { label: 'Autorun?', title: 'Include this detector in CLI autorun (click to sort)', sortable: true },
+    last_trained_at: { label: 'Last Trained', title: 'When the detector was last trained (click to sort)', sortable: true },
+    created_at: { label: 'Created', title: 'When the detector was created (click to sort)', sortable: true },
+    detector_loaded: { label: 'Loaded?', title: "Whether the detector's inference data is cached in memory", sortable: false },
+    actions: { label: 'Actions', title: 'Available operations for this detector', sortable: false },
   };
 
   datasetCols = new ManagedColumns(
@@ -139,8 +139,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { initialSort: 'name', storageKey: DashboardComponent.DATASET_COL_ORDER_KEY },
   );
   detectorCols = new ManagedColumns(
-    DashboardComponent.MODEL_COLUMNS_DEFAULT,
-    DashboardComponent.MODEL_COL_META,
+    DashboardComponent.DETECTOR_COLUMNS_DEFAULT,
+    DashboardComponent.DETECTOR_COL_META,
     { initialSort: 'name', storageKey: DashboardComponent.DETECTOR_COL_ORDER_KEY },
   );
 

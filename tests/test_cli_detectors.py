@@ -181,7 +181,7 @@ class TestAutorunDetectorsCLI:
 
 class TestImportLabelsIntoDetectorCLI:
     def test_merges_external_labels_into_trainable_model(self, tmp_path):
-        """Calling import_labels_into_trainable_model_from_file with a
+        """Calling import_labels_into_detector_from_file with a
         server_json_file label file appends new entries to the on-disk
         labelset and dedupes by (md5, label)."""
         # Seed model with one existing entry — to verify dedup.
@@ -209,11 +209,11 @@ class TestImportLabelsIntoDetectorCLI:
         labels_path = tmp_path / "new_labels.json"
         labels_path.write_text(json.dumps(new_labels))
 
-        from vtsearch.cli import import_labels_into_trainable_model_from_file
+        from vtsearch.cli import import_labels_into_detector_from_file
         from vtsearch.datasets.labelset import LabelSet
         from vtsearch.models.detector_store import _detector_path, _read_detector
 
-        applied, skipped = import_labels_into_trainable_model_from_file(
+        applied, skipped = import_labels_into_detector_from_file(
             "import-tm",
             "server_json_file",
             str(labels_path),
@@ -230,8 +230,8 @@ class TestImportLabelsIntoDetectorCLI:
         labels_path = tmp_path / "labels.json"
         labels_path.write_text(json.dumps({"labels": []}))
 
-        from vtsearch.cli import import_labels_into_trainable_model_from_file
+        from vtsearch.cli import import_labels_into_detector_from_file
 
         with pytest.raises(ValueError) as exc:
-            import_labels_into_trainable_model_from_file("no-such-model", "server_json_file", str(labels_path))
+            import_labels_into_detector_from_file("no-such-model", "server_json_file", str(labels_path))
         assert "no-such-model" in str(exc.value)
