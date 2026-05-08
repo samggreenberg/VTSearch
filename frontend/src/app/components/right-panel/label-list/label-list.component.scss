@@ -81,6 +81,12 @@ h3 {
   }
 }
 
+.vote-entry-missing {
+  outline: 1px solid var(--missing-border);
+  outline-offset: -1px;
+  border-radius: 3px;
+}
+
 .vote-thumbnail {
   width: 28px;
   height: 28px;
