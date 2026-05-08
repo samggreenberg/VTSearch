@@ -526,9 +526,7 @@ def import_dataset(importer_name: str):
     if clipper_params is not None:
         field_values["clipper_params"] = clipper_params
 
-    chunk_size = _parse_chunk_size(get_request_field("chunk_size", bool(file_keys)))
-
-    task_id = _run_importer_in_background(importer, field_values, chunk_size=chunk_size)
+    task_id = _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
@@ -563,21 +561,6 @@ def _extract_clipper_params(has_file_fields: bool) -> tuple[dict | None, Any]:
     if not isinstance(parsed, dict):
         return None, (jsonify({"error": "clipper_params must be a JSON object"}), 400)
     return parsed, None
-
-
-def _parse_chunk_size(value: Any) -> int:
-    """Parse an optional ``chunk_size`` form/JSON value into a non-negative int.
-
-    Returns ``0`` when the value is missing, blank, or non-numeric — which
-    means "no chunking, load everything in one pass".
-    """
-    if value is None or value == "":
-        return 0
-    try:
-        n = int(value)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, n)
 
 
 def _safe_relative_upload_path(filename: str) -> PurePosixPath | None:
@@ -635,7 +618,6 @@ def import_local_folder():
     converters = (request.form.get("converters") or "").strip()
     recursive_raw = (request.form.get("recursive") or "true").strip().lower()
     recursive = recursive_raw not in ("false", "0", "no", "off")
-    chunk_size = _parse_chunk_size(request.form.get("chunk_size"))
     user_dataset_name = (request.form.get("dataset_name") or "").strip()
     clipper_params_raw = request.form.get("clipper_params") or ""
     clipper_params: dict | None = None
@@ -697,9 +679,14 @@ def import_local_folder():
         field_values["skip_embedding"] = True
 
     from vtsearch.auth import get_current_user
-    from vtsearch.datasets.load_pipeline import _normalize_media_type, consume_chunks_into
+    from vtsearch.datasets.load_pipeline import (
+        _normalize_media_type,
+        auto_chunk_size,
+        consume_chunks_into,
+    )
 
-    use_chunked = chunk_size > 0 and getattr(importer, "supports_chunked", False)
+    use_chunked = getattr(importer, "supports_chunked", False)
+    chunk_size = auto_chunk_size(media_type) if use_chunked else 0
 
     def _load(target_medias):
         try:

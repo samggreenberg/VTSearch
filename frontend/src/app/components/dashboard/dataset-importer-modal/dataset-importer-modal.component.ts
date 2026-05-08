@@ -94,8 +94,6 @@ export class DatasetImporterModalComponent implements OnInit {
   lfPickerKind: 'folder' | 'files' = 'folder';
   /** Whether subfolders inside the picked local folder are included. */
   lfRecursive = true;
-  /** Maximum medias per chunk during embedding; 0 means "no chunking". */
-  lfChunkSize = 0;
   /** Optional user-supplied dataset name for local-folder uploads. */
   lfDatasetName = '';
   /** Whether the user has manually edited :prop:`lfDatasetName` (so we stop
@@ -119,15 +117,10 @@ export class DatasetImporterModalComponent implements OnInit {
   sfSubmitting = false;
   /** Whether subdirectories of the picked server folder are scanned. */
   sfRecursive = true;
-  /** Maximum medias per chunk during embedding; 0 means "no chunking". */
-  sfChunkSize = 0;
   /** Optional user-supplied dataset name for server-folder imports. */
   sfDatasetName = '';
   /** Whether the user has manually edited :prop:`sfDatasetName`. */
   private sfDatasetNameDirty = false;
-
-  /** Maximum medias per chunk during embedding for the generic form view; 0 means "no chunking". */
-  chunkSize = 0;
 
   // Dynamic-options cache for the generic form view.  Keyed by ImporterField.key.
   /** Options last fetched from the backend for dynamic-options fields. */
@@ -866,9 +859,6 @@ export class DatasetImporterModalComponent implements OnInit {
     if (lfName) {
       formData.append('dataset_name', lfName);
     }
-    if (this.lfChunkSize && this.lfChunkSize > 0) {
-      formData.append('chunk_size', String(Math.floor(this.lfChunkSize)));
-    }
     if (this.lfSelectedEmbedder) {
       formData.append('embedder', this.lfSelectedEmbedder);
     }
@@ -1135,9 +1125,6 @@ export class DatasetImporterModalComponent implements OnInit {
     if (sfName) {
       params['dataset_name'] = sfName;
     }
-    if (this.sfChunkSize && this.sfChunkSize > 0) {
-      params['chunk_size'] = Math.floor(this.sfChunkSize);
-    }
     if (this.sfSelectedEmbedder) {
       params['embedder'] = this.sfSelectedEmbedder;
     }
@@ -1183,9 +1170,6 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.selectedEmbedder) {
       submitValues['embedder'] = this.selectedEmbedder;
-    }
-    if (this.chunkSize && this.chunkSize > 0) {
-      submitValues['chunk_size'] = Math.floor(this.chunkSize);
     }
 
     // If there's a file field, use loadFile; otherwise runImporter
