@@ -9,6 +9,7 @@ import {
   LabelsDetailResponse,
   LoadingTasksResponse,
 } from '../models/api.models';
+import { ActiveContextService } from './active-context.service';
 
 export interface FindLabelWarning {
   detector_name: string;
@@ -25,7 +26,7 @@ export interface FindLabelWarning {
  */
 @Injectable({ providedIn: 'root' })
 export class DetectorsApiService {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private activeContext: ActiveContextService) {}
 
   // --- Detector CRUD ---
 
@@ -71,11 +72,15 @@ export class DetectorsApiService {
   }
 
   labelPreviewUrl(name: string, elementId: string): string {
-    return `/api/detectors/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/preview`;
+    return this.activeContext.mediaUrl(
+      `/api/detectors/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/preview`,
+    );
   }
 
   labelThumbnailUrl(name: string, elementId: string): string {
-    return `/api/detectors/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/thumbnail`;
+    return this.activeContext.mediaUrl(
+      `/api/detectors/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/thumbnail`,
+    );
   }
 
   combine(
