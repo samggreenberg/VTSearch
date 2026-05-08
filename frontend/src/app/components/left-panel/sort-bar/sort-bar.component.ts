@@ -24,7 +24,7 @@ export class SortBarComponent implements OnInit, OnDestroy {
   @Output() textSort = new EventEmitter<string>();
   @Output() learnedSort = new EventEmitter<void>();
   @Output() loadSort = new EventEmitter<void>();
-  @Output() detectorLoaded = new EventEmitter<unknown>();
+  @Output() modelSelected = new EventEmitter<string>();
   @Output() exampleSortStarted = new EventEmitter<unknown>();
 
   textQuery = '';
@@ -76,9 +76,9 @@ export class SortBarComponent implements OnInit, OnDestroy {
     this.showLoadSortModal = true;
   }
 
-  onDetectorLoaded(data: unknown): void {
+  onModelSelected(modelId: string): void {
     this.showLoadSortModal = false;
-    this.detectorLoaded.emit(data);
+    this.modelSelected.emit(modelId);
   }
 
   onExampleSortStarted(data: unknown): void {

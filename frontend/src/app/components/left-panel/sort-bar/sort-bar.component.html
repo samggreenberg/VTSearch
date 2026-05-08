@@ -78,7 +78,7 @@
 @if (showLoadSortModal) {
   <vt-load-sort-modal
     (closed)="showLoadSortModal = false"
-    (detectorLoaded)="onDetectorLoaded($event)"
+    (modelSelected)="onModelSelected($event)"
     (exampleSortStarted)="onExampleSortStarted($event)"
   />
 }

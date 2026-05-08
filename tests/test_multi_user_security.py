@@ -189,21 +189,7 @@ class TestFlaskAuthMiddleware:
 
 
 class TestOwnershipMetadata:
-    """Test that created_by is recorded on detectors, datasets, and models."""
-
-    def test_autorun_detector_has_created_by(self):
-        from vtsearch.utils import add_autorun_detector, get_autorun_detectors
-
-        add_autorun_detector("test_det", "audio", created_by="alice")
-        dets = get_autorun_detectors()
-        assert dets["test_det"]["created_by"] == "alice"
-
-    def test_autorun_detector_default_created_by(self):
-        from vtsearch.utils import add_autorun_detector, get_autorun_detectors
-
-        add_autorun_detector("test_det2", "audio")
-        dets = get_autorun_detectors()
-        assert dets["test_det2"]["created_by"] == "default"
+    """Test that created_by is recorded on datasets and models."""
 
     def test_dataset_registry_has_created_by(self):
         from vtsearch.datasets.registry import register_dataset
@@ -234,7 +220,6 @@ class TestOwnershipMetadata:
         entry = register_model(
             name="test_model",
             media_type="audio",
-            trainable=True,
             created_by="carol",
         )
         assert entry["created_by"] == "carol"
@@ -245,7 +230,6 @@ class TestOwnershipMetadata:
         entry = register_model(
             name="test_model2",
             media_type="audio",
-            trainable=False,
         )
         assert entry["created_by"] == "default"
 

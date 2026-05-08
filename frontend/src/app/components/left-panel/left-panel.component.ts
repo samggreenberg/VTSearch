@@ -68,7 +68,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Output() textSort = new EventEmitter<string>();
   @Output() learnedSort = new EventEmitter<void>();
   @Output() loadSort = new EventEmitter<void>();
-  @Output() detectorLoaded = new EventEmitter<unknown>();
+  @Output() modelSelected = new EventEmitter<string>();
   @Output() exampleSortStarted = new EventEmitter<unknown>();
   @Output() mediaSelect = new EventEmitter<number>();
   @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();

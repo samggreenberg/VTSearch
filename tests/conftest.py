@@ -72,7 +72,6 @@ _TEST_GROUPS = {
         "test_label_import_endpoint",
         "test_label_import_ingestion",
         "test_labels",
-        "test_processor_importers",
         "test_pdf_import",
         "test_corrections_export",
         "test_settings_io",
@@ -80,9 +79,7 @@ _TEST_GROUPS = {
         "test_bulk_embedding",
     ],
     "models": [
-        "test_detectors",
-        "test_detector_find",
-        "test_detector_export",
+        "test_find_label",
         "test_extractors",
         "test_processors",
         "test_trainable_models",
@@ -107,13 +104,10 @@ _TEST_GROUPS = {
         "test_video_datasets_download",
     ],
     "integration": [
-        "test_integration",
-        "test_slow_integration",
         "test_thread_safety",
         "test_multi_media_coverage",
     ],
     "cli": [
-        "test_cli_autodetect",
         "test_cli_trainable_models",
         "test_load_sort_window",
         "test_preload_progress",
@@ -343,7 +337,6 @@ def reset_state():
 
     medias.update({k: dict(v) for k, v in _test_medias_snapshot.items()})
 
-    _core.autorun_detectors.clear()
     _core.autorun_extractors.clear()
     _core.autorun_localizers.clear()
     clear_progress_cache()
@@ -384,7 +377,6 @@ def isolated_settings(tmp_path, monkeypatch):
 
     # Redirect storage directories to temp paths via settings
     settings_mod.set_saved_datasets_dir(str(tmp_path / "saved_datasets"))
-    settings_mod.set_detectors_dir(str(tmp_path / "detectors"))
     settings_mod.set_trainable_models_dir(str(tmp_path / "trainable_models"))
 
     ds_reg_mod.reset_for_tests()

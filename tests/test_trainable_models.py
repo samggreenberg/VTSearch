@@ -194,7 +194,7 @@ class TestRenameTrainableModel:
 
     def test_rename_updates_model_registry(self, client):
         """Renaming a trainable model should update registry references."""
-        from vtsearch.models.registry import find_by_trainable_model_name, get_model
+        from vtsearch.models.registry import find_by_name, get_model
 
         # Create a trainable model and register it in the model registry
         client.post(
@@ -203,7 +203,7 @@ class TestRenameTrainableModel:
         )
         res = client.post(
             "/api/models/registry",
-            json={"name": "Original", "media_type": "audio", "trainable": True, "text_query": "test"},
+            json={"name": "Original", "media_type": "audio", "text_query": "test"},
         )
         assert res.status_code == 201
         model_id = res.get_json()["model"]["id"]
@@ -219,13 +219,12 @@ class TestRenameTrainableModel:
         entry = get_model(model_id)
         assert entry is not None
         assert entry["name"] == "Renamed"
-        assert entry["trainable_model_name"] == "Renamed"
 
         # Look up by old name should fail
-        assert find_by_trainable_model_name("Original") is None
+        assert find_by_name("Original") is None
 
         # Look up by new name should succeed
-        assert find_by_trainable_model_name("Renamed") is not None
+        assert find_by_name("Renamed") is not None
 
     def test_rename_conflict(self, client):
         client.post(
@@ -422,7 +421,7 @@ class TestDeleteRegisteredModel:
 
         res = client.post(
             "/api/models/registry",
-            json={"name": "DelMe", "media_type": "audio", "trainable": True, "text_query": "test"},
+            json={"name": "DelMe", "media_type": "audio", "text_query": "test"},
         )
         assert res.status_code == 201
         model_id = res.get_json()["model"]["id"]
@@ -446,7 +445,7 @@ class TestDeleteRegisteredModel:
         )
         res = client.post(
             "/api/models/registry",
-            json={"name": "LoadDel", "media_type": "audio", "trainable": True, "text_query": "test"},
+            json={"name": "LoadDel", "media_type": "audio", "text_query": "test"},
         )
         model_id = res.get_json()["model"]["id"]
         _load_model_and_wait(client, model_id)
@@ -457,24 +456,21 @@ class TestDeleteRegisteredModel:
         assert get_model(model_id) is None
         assert not is_model_loaded(model_id)
 
-    def test_delete_removes_autorun_detector(self, client):
-        """Deleting a model that has a detector_name cleans up autorun_detectors."""
+    def test_delete_removes_autorun_flag(self, client):
+        """Deleting a model that is flagged for autorun clears it from settings."""
         from vtsearch.models.registry import get_model
-        from vtsearch.utils import autorun_detectors
+        from vtsearch.settings import add_autorun_trainable_model, get_autorun_trainable_models
 
-        # Register with a detector_name
         res = client.post(
             "/api/models/registry",
-            json={"name": "DetDel", "media_type": "audio", "trainable": False, "detector_name": "my_det"},
+            json={"name": "DetDel", "media_type": "audio"},
         )
         model_id = res.get_json()["model"]["id"]
-
-        # Simulate an autorun detector being present
-        autorun_detectors["my_det"] = lambda scores: scores
+        add_autorun_trainable_model("DetDel")
 
         res = client.delete(f"/api/models/registry/{model_id}")
         assert res.status_code == 200
-        assert "my_det" not in autorun_detectors
+        assert "DetDel" not in get_autorun_trainable_models()
         assert get_model(model_id) is None
 
 
@@ -486,7 +482,7 @@ class TestLoadModelEndpoint:
 
         res = client.post(
             "/api/models/registry",
-            json={"name": "M", "media_type": "audio", "trainable": True, "text_query": "test"},
+            json={"name": "M", "media_type": "audio", "text_query": "test"},
         )
         model_id = res.get_json()["model"]["id"]
 
@@ -523,12 +519,12 @@ class TestLoadModelEndpoint:
             )
         res_a = client.post(
             "/api/models/registry",
-            json={"name": "ModelA", "media_type": "audio", "trainable": True, "text_query": "test"},
+            json={"name": "ModelA", "media_type": "audio", "text_query": "test"},
         )
         mid_a = res_a.get_json()["model"]["id"]
         res_b = client.post(
             "/api/models/registry",
-            json={"name": "ModelB", "media_type": "audio", "trainable": True, "text_query": "test"},
+            json={"name": "ModelB", "media_type": "audio", "text_query": "test"},
         )
         mid_b = res_b.get_json()["model"]["id"]
 
@@ -560,7 +556,7 @@ class TestLoadModelEndpoint:
         )
         res = client.post(
             "/api/models/registry",
-            json={"name": "Persist", "media_type": "audio", "trainable": True, "text_query": "test"},
+            json={"name": "Persist", "media_type": "audio", "text_query": "test"},
         )
         mid = res.get_json()["model"]["id"]
         _load_model_and_wait(client, mid)
@@ -594,7 +590,7 @@ class TestVoteSyncsToLoadedModel:
         )
         res = client.post(
             "/api/models/registry",
-            json={"name": "AutoSync", "media_type": "audio", "trainable": True, "text_query": "test"},
+            json={"name": "AutoSync", "media_type": "audio", "text_query": "test"},
         )
         model_id = res.get_json()["model"]["id"]
 
@@ -629,7 +625,7 @@ class TestVoteSyncsToLoadedModel:
         )
         res = client.post(
             "/api/models/registry",
-            json={"name": "ToggleSync", "media_type": "audio", "trainable": True, "text_query": "test"},
+            json={"name": "ToggleSync", "media_type": "audio", "text_query": "test"},
         )
         model_id = res.get_json()["model"]["id"]
         _load_model_and_wait(client, model_id)
@@ -678,7 +674,7 @@ class TestVoteSyncsToLoadedModel:
         )
         res = client.post(
             "/api/models/registry",
-            json={"name": "ImportSync", "media_type": "audio", "trainable": True, "text_query": "test"},
+            json={"name": "ImportSync", "media_type": "audio", "text_query": "test"},
         )
         model_id = res.get_json()["model"]["id"]
         _load_model_and_wait(client, model_id)
@@ -924,7 +920,7 @@ class TestSeedVotesFromExamples:
             json={
                 "name": "AutoSeed",
                 "media_type": "audio",
-                "trainable": True,
+
                 "text_query": "",
                 "media_example": fname,
             },
@@ -953,7 +949,7 @@ class TestSeedVotesFromExamples:
             json={
                 "name": "TextOnly",
                 "media_type": "audio",
-                "trainable": True,
+
                 "text_query": "dogs",
             },
         )
@@ -992,7 +988,7 @@ class TestSeedVotesFromExamples:
             json={
                 "name": "SkipGood",
                 "media_type": "audio",
-                "trainable": True,
+
                 "text_query": "",
             },
         )
@@ -1024,7 +1020,7 @@ class TestSeedVotesFromExamples:
             json={
                 "name": "NovelSeed",
                 "media_type": "audio",
-                "trainable": True,
+
                 "text_query": "",
             },
         )
@@ -1127,10 +1123,8 @@ class TestLoadModelCrossDatasetResolution:
             )
 
             entry = register_model(
-                name="Cross Load Test",
+                name=tm_name,
                 media_type="audio",
-                trainable=True,
-                trainable_model_name=tm_name,
             )
             model_id = entry["id"]
 
@@ -1214,10 +1208,8 @@ class TestLoadModelCrossDatasetResolution:
             )
 
             entry = register_model(
-                name="Name Fallback Test",
+                name=tm_name,
                 media_type="audio",
-                trainable=True,
-                trainable_model_name=tm_name,
             )
             model_id = entry["id"]
 
@@ -1298,7 +1290,6 @@ class TestRegisterModelFromLabelset:
         assert data["num_labels"] == 2
         # Media type inferred from the origin metadata.
         assert data["model"]["media_type"] == "audio"
-        assert data["model"]["trainable"] is True
         assert data["model"]["num_training"] == 2
 
         # Registry now has the model

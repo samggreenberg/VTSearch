@@ -1,16 +1,13 @@
 """Persistent model registry.
 
 Maintains a JSON manifest at ``data/model_registry.json`` that tracks every
-model (detector / processor) the user has created.  Each entry stores enough
-metadata to display the model in the dashboard grid.
+trainable model the user has created.  Each entry stores enough metadata to
+display the model in the dashboard grid.
 
-Models come in two flavours:
-
-* **Trainable** — backed by a labelset (``data/trainable_models/<slug>.json``).
-  Shows a training-count in the "# Training" column.  Can be loaded for
-  labeling and then used for Find.
-* **Non-trainable** (pregen) — backed by weights (in-memory autorun detector
-  or a detector JSON file on disk).  Shows "-" in the "# Training" column.
+Every entry is backed by a labelset file at
+``data/trainable_models/<name>.json``.  The MLP that scores the model is
+trained on demand from the labelset and lives only in RAM
+(see :class:`~vtsearch.utils.DetectorContext`).
 
 Multiple models can be *loaded* into memory simultaneously.  Which model
 the UI interacts with is determined per-request via the ``X-Model-Id`` header.
@@ -100,10 +97,7 @@ def register_model(
     *,
     name: str,
     media_type: str,
-    trainable: bool,
     num_training: int = 0,
-    detector_name: str = "",
-    trainable_model_name: str = "",
     text_query: str = "",
     media_example: str = "",
     created_by: str = "default",
@@ -111,13 +105,13 @@ def register_model(
     """Add a new model to the registry and persist.
 
     Args:
-        name: Display name for the dashboard.
+        name: Display name for the dashboard.  Also the slug used to look
+            up the on-disk labelset file at
+            ``data/trainable_models/<name>.json``.
         media_type: ``"audio"``, ``"image"``, ``"video"``, ``"text"``, etc.
-        trainable: Whether the model has a labelset that can be extended.
-        num_training: Number of training examples (label count or "-" marker).
-        detector_name: The key used in ``autorun_detectors`` (for non-trainable).
-        trainable_model_name: The key used in ``data/trainable_models/`` (for trainable).
+        num_training: Number of training examples (label count).
         text_query: Text-sort query associated with the model.
+        media_example: Optional path to an example media file.
         created_by: Username of the user who created this model.
 
     Returns:
@@ -129,10 +123,7 @@ def register_model(
         "id": uuid.uuid4().hex,
         "name": name,
         "media_type": media_type,
-        "trainable": trainable,
         "num_training": num_training,
-        "detector_name": detector_name,
-        "trainable_model_name": trainable_model_name,
         "text_query": text_query,
         "media_example": media_example,
         "created_by": created_by,
@@ -182,22 +173,17 @@ def update_model(model_id: str, **fields: Any) -> bool:
     return False
 
 
-def find_by_detector_name(det_name: str) -> dict[str, Any] | None:
-    """Return the entry whose ``detector_name`` matches, or ``None``."""
+def find_by_name(name: str) -> dict[str, Any] | None:
+    """Return the entry whose ``name`` matches, or ``None``."""
     with _lock:
         for entry in _ensure_loaded():
-            if entry.get("detector_name") == det_name:
+            if entry.get("name") == name:
                 return dict(entry)
     return None
 
 
-def find_by_trainable_model_name(tm_name: str) -> dict[str, Any] | None:
-    """Return the entry whose ``trainable_model_name`` matches, or ``None``."""
-    with _lock:
-        for entry in _ensure_loaded():
-            if entry.get("trainable_model_name") == tm_name:
-                return dict(entry)
-    return None
+# Backwards-compat alias used in older code paths during migration.
+find_by_trainable_model_name = find_by_name
 
 
 def add_loaded_model_id(model_id: str) -> None:

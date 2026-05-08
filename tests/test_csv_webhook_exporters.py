@@ -8,15 +8,7 @@ from unittest import mock
 import pytest
 
 import app as app_module  # noqa: F401
-from helpers import (
-    build_results_dict as _build_results_dict,
-    make_dataset_file as _make_dataset_file,
-    make_detector_file as _make_detector_file,
-)
-from vtsearch.cli import (
-    _run_exporter,
-    run_autodetect,
-)
+from vtsearch.cli import _run_exporter
 
 
 # ---------------------------------------------------------------------------
@@ -559,15 +551,10 @@ class TestJsonExporterLabelsFormat:
 
 
 class TestCsvExporterIntegration:
-    """Integration: CSV exporter via _run_exporter and with real detector results."""
+    """Integration: CSV exporter via _run_exporter."""
 
     def test_csv_via_run_exporter(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
-
-        hits = run_autodetect(str(dataset_path), str(detector_path))
-        results = _build_results_dict(hits, str(detector_path), "audio")
-
+        results = _make_sample_results()
         output_file = tmp_path / "integrated.csv"
         _run_exporter("server_csv_file", {"filepath": str(output_file)}, results)
 
@@ -801,12 +788,7 @@ class TestWebhookExporterIntegration:
     """Integration: Webhook exporter via _run_exporter."""
 
     def test_webhook_via_run_exporter(self, client, tmp_path):
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        detector_path, _ = _make_detector_file(tmp_path, [1, 2, 3], [18, 19, 20])
-
-        hits = run_autodetect(str(dataset_path), str(detector_path))
-        results = _build_results_dict(hits, str(detector_path), "audio")
-
+        results = _make_sample_results()
         mock_resp = mock.MagicMock()
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None

@@ -2,11 +2,16 @@
 
 VTSearch provides a CLI workflow for running detectors on datasets and exporting results — all without starting the web server.
 
-## Auto-detect (run detectors on a dataset)
+## Auto-detect (run trainable models on a dataset)
 
-Score every item in a dataset with your autorun processors (detectors) and output the items predicted as "Good."
+Score every item in a dataset with the trainable models flagged for
+autorun and output the items each model predicts as "Good."
 
-Detectors are specified via a **settings file** (`--settings`) that lists autorun processors. Each processor is a recipe referencing a processor importer (e.g. `server_detector_file` for a pre-trained detector JSON on disk). See below for how to create one.
+Models are specified via a **settings file** (`--settings`) whose
+`autorun_trainable_models` list names registered models.  Each name
+maps to `data/trainable_models/<name>.json`; the CLI re-resolves the
+labelset's origins, embeds them with the dataset's embedder, trains an
+MLP, and applies it to the dataset.  See below for the exact format.
 
 **From a pickle file:**
 
@@ -44,21 +49,16 @@ Available exporters: `server_json_file` (JSON to server path), `server_csv_file`
 **How to get the files:**
 
 - **Dataset file** — Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
-- **Settings file** — A JSON file listing autorun processors. Each processor references a processor importer and its field values. Example:
+- **Settings file** — A JSON file listing the trainable-model names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/trainable_models/<name>.json`; the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh MLP, and scores the dataset.
 
 ```json
 {
-  "autorun_processors": [
-    {
-      "processor_name": "my detector",
-      "processor_importer": "server_detector_file",
-      "field_values": { "filepath": "/path/to/detector.json" }
-    }
-  ]
+  "autorun_trainable_models": ["Dog Barks", "Cat Meows"],
+  "trainable_models_dir": "data/trainable_models"
 }
 ```
 
-- **Detector file** — In the web UI, vote on some items, then export a detector to the server via the sorting panel. Detector files store origin information (not weights); weights are re-derived at load time.
+- **Trainable-model file** — Created from the dashboard by labeling items in the right pane. The file stores origin info plus labels (no weights); the MLP is rebuilt from origins at scoring time.
 
 **Example output:**
 

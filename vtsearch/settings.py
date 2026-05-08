@@ -2,24 +2,6 @@
 
 Settings are stored as a JSON file in ``data/settings.json``.  The module
 exposes simple get/set helpers and auto-saves on every mutation.
-
-Schema (all keys optional, missing keys use defaults)::
-
-    {
-        "volume": 1.0,
-        "inclusion": 0,
-        "autorun_processors": [
-            {
-                "processor_name": "my detector",
-                "processor_importer": "server_detector_file",
-                "field_values": {"filepath": "/path/to/detector.json"}
-            }
-        ]
-    }
-
-Autorun processors store the *recipe* for importing a processor (the importer
-name, field values, and desired detector name).  They are only materialised
-into autorun detectors on demand — during autodetect.
 """
 
 from __future__ import annotations
@@ -56,8 +38,6 @@ _DEFAULTS: dict[str, Any] = {
     "panel_pct_left": {},
     "panel_pct_right": {},
     "autoload_media_embedders": [],
-    "autorun_processors": [],
-    "autorun_detector_names": [],
     "autorun_trainable_models": [],
     "autopilot_enabled": True,
     "hide_autopilot": False,
@@ -66,7 +46,6 @@ _DEFAULTS: dict[str, Any] = {
     "autopilot_resort_interval": 10,
     "autopilot_goal_diversity": 40,
     "saved_datasets_dir": str(DATA_DIR / "saved_datasets"),
-    "detectors_dir": str(DATA_DIR / "detectors"),
     "trainable_models_dir": str(DATA_DIR / "trainable_models"),
     "max_concurrent_dataset_downloads": 1,
     "max_concurrent_dataset_embeddings": 1,
@@ -75,11 +54,8 @@ _DEFAULTS: dict[str, Any] = {
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
 #: should not be reset by the Default button).
 _EXCLUDE_FROM_DEFAULTS = {
-    "autorun_processors",
-    "autorun_detector_names",
     "autorun_trainable_models",
     "saved_datasets_dir",
-    "detectors_dir",
     "trainable_models_dir",
     "settings_source",
 }
@@ -355,113 +331,12 @@ def toggle_autoload_media_embedder(embedder_name: str) -> list[str]:
         return current
 
 
-def get_autorun_processors() -> list[dict[str, Any]]:
-    """Return the list of autorun processor recipes."""
-    with _settings_lock:
-        return list(_ensure_loaded().get("autorun_processors", []))
-
-
-def add_autorun_processor(
-    processor_name: str,
-    processor_importer: str,
-    field_values: dict[str, Any],
-) -> None:
-    """Add a autorun processor recipe (or overwrite one with the same name)."""
-    with _settings_lock:
-        s = _ensure_loaded()
-        procs: list[dict[str, Any]] = s.setdefault("autorun_processors", [])
-        # Remove existing entry with same name
-        procs[:] = [p for p in procs if p.get("processor_name") != processor_name]
-        procs.append(
-            {
-                "processor_name": processor_name,
-                "processor_importer": processor_importer,
-                "field_values": field_values,
-            }
-        )
-        _save(s)
-
-
-def remove_autorun_processor(processor_name: str) -> bool:
-    """Remove a autorun processor by name.  Returns True if found."""
-    with _settings_lock:
-        s = _ensure_loaded()
-        procs: list[dict[str, Any]] = s.get("autorun_processors", [])
-        before = len(procs)
-        procs[:] = [p for p in procs if p.get("processor_name") != processor_name]
-        if len(procs) < before:
-            s["autorun_processors"] = procs
-            _save(s)
-            return True
-        return False
-
-
-def to_settings_json(entry: dict[str, Any]) -> str:
-    """Build the JSON snippet for a autorun processor entry.
-
-    Returns the JSON object that would appear inside the
-    ``autorun_processors`` array in a settings file.  Useful for showing
-    users how to recreate this processor configuration.
-
-    Example output::
-
-        {"processor_name": "my detector", "processor_importer": "server_detector_file",
-         "field_values": {"filepath": "detector.json"}}
-    """
-    import json
-
-    snippet = {
-        "processor_name": entry["processor_name"],
-        "processor_importer": entry["processor_importer"],
-        "field_values": entry.get("field_values", {}),
-    }
-    return json.dumps(snippet)
-
-
-def get_autorun_detector_names() -> list[str]:
-    """Return the list of detector names flagged for autorun."""
-    with _settings_lock:
-        raw = _ensure_loaded().get("autorun_detector_names", [])
-        if isinstance(raw, list):
-            return list(raw)
-        return []
-
-
-def set_autorun_detector_names(value: list[str]) -> None:
-    """Set and persist the full list of autorun detector names."""
-    with _settings_lock:
-        s = _ensure_loaded()
-        s["autorun_detector_names"] = list(dict.fromkeys(value))  # deduplicate, preserve order
-        _save(s)
-
-
-def add_autorun_detector_name(name: str) -> None:
-    """Add a detector name to the autorun list (idempotent)."""
-    with _settings_lock:
-        current = get_autorun_detector_names()
-        if name not in current:
-            current.append(name)
-            set_autorun_detector_names(current)
-
-
-def remove_autorun_detector_name(name: str) -> bool:
-    """Remove a detector name from the autorun list. Returns True if found."""
-    with _settings_lock:
-        current = get_autorun_detector_names()
-        if name in current:
-            current.remove(name)
-            set_autorun_detector_names(current)
-            return True
-        return False
-
-
 def get_autorun_trainable_models() -> list[str]:
-    """Return the list of trainable-model names flagged for CLI autodetect.
+    """Return the list of trainable-model names flagged for autorun.
 
-    These are scored alongside :func:`get_autorun_detector_names` when the
-    CLI runs ``--autodetect``.  Each name maps to a JSON file under
-    ``data/trainable_models/``; scoring resolves the labelset's origins,
-    re-embeds, trains an MLP, and applies it to the loaded dataset.
+    Each name maps to a JSON file under ``data/trainable_models/``; scoring
+    resolves the labelset's origins, re-embeds, trains an MLP, and applies
+    it to the loaded dataset.
     """
     with _settings_lock:
         raw = _ensure_loaded().get("autorun_trainable_models", [])
@@ -478,63 +353,29 @@ def set_autorun_trainable_models(value: list[str]) -> None:
         _save(s)
 
 
-def is_autorun_detector(name: str) -> bool:
-    """Check whether a detector name is in the autorun list."""
-    return name in get_autorun_detector_names()
+def add_autorun_trainable_model(name: str) -> None:
+    """Add a trainable-model name to the autorun list (idempotent)."""
+    with _settings_lock:
+        current = get_autorun_trainable_models()
+        if name not in current:
+            current.append(name)
+            set_autorun_trainable_models(current)
 
 
-def ensure_autorun_processors_imported() -> list[str]:
-    """Import any autorun processors that are not already loaded as autorun detectors.
+def remove_autorun_trainable_model(name: str) -> bool:
+    """Remove a trainable-model name from the autorun list. Returns True if found."""
+    with _settings_lock:
+        current = get_autorun_trainable_models()
+        if name in current:
+            current.remove(name)
+            set_autorun_trainable_models(current)
+            return True
+        return False
 
-    This is the lazy-load mechanism: autorun processor recipes are materialised
-    into real autorun detectors only when this function is called (typically
-    right before autodetect).
 
-    Returns:
-        A list of processor names that were newly imported.
-    """
-    from vtsearch.processors.importers import get_processor_importer
-    from vtsearch.utils import add_autorun_detector, get_autorun_detectors
-
-    existing = get_autorun_detectors()
-    imported: list[str] = []
-
-    for entry in get_autorun_processors():
-        name = entry.get("processor_name", "")
-        if not name or name in existing:
-            continue
-
-        importer_name = entry.get("processor_importer", "")
-        importer = get_processor_importer(importer_name)
-        if importer is None:
-            logger.warning("Autorun processor '%s': unknown importer '%s'", name, importer_name)
-            continue
-
-        field_values = dict(entry.get("field_values", {}))
-
-        try:
-            importer.validate_cli_field_values(field_values)
-            result = importer.run_cli(field_values)
-
-            if not isinstance(result, dict) or not result.get("weights"):
-                logger.warning("Autorun processor '%s': importer returned invalid result", name)
-                continue
-
-            add_autorun_detector(
-                name,
-                result.get("media_type", "audio"),
-                result["weights"],
-                result.get("threshold", 0.5),
-                autodetect=True,
-                good_origins=result.get("good_origins"),
-                bad_origins=result.get("bad_origins"),
-                inclusion=result.get("inclusion", 0),
-            )
-            imported.append(name)
-        except Exception as exc:
-            logger.warning("Autorun processor '%s': import failed: %s", name, exc)
-
-    return imported
+def is_autorun_trainable_model(name: str) -> bool:
+    """Check whether a trainable-model name is in the autorun list."""
+    return name in get_autorun_trainable_models()
 
 
 # -------------------------------------------------------------------
@@ -567,16 +408,6 @@ def set_saved_datasets_dir(value: str | Path) -> None:
     _set_dir("saved_datasets_dir", value)
 
 
-def get_detectors_dir() -> Path:
-    """Return the configured detectors directory."""
-    return _get_dir("detectors_dir")
-
-
-def set_detectors_dir(value: str | Path) -> None:
-    """Set the detectors directory."""
-    _set_dir("detectors_dir", value)
-
-
 def get_trainable_models_dir() -> Path:
     """Return the configured trainable-models directory."""
     return _get_dir("trainable_models_dir")
@@ -588,12 +419,7 @@ def set_trainable_models_dir(value: str | Path) -> None:
 
 
 def set_settings_path(path: str | Path) -> None:
-    """Override the settings file path and reset the in-memory cache.
-
-    Call this before :func:`ensure_autorun_processors_imported` to load
-    autorun processors from a custom settings file (e.g. the ``--settings``
-    CLI flag).
-    """
+    """Override the settings file path and reset the in-memory cache."""
     global SETTINGS_PATH, _settings
     with _settings_lock:
         SETTINGS_PATH = Path(path)

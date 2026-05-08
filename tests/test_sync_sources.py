@@ -801,8 +801,9 @@ class TestLabelsetSourcesAPI:
 
     def test_get_detector_source_unknown_detector(self, client):
         resp = client.get("/api/detectors/nonexistent/labelset-source")
-        # Detector not found — returns 404
-        assert resp.status_code == 404
+        # Without a loaded DetectorContext we just report "no source" (null).
+        assert resp.status_code == 200
+        assert resp.get_json() is None
 
     def test_set_detector_source_not_loaded(self, client):
         resp = client.put(

@@ -181,20 +181,18 @@ class TestLabelImportEndpoint:
     def test_import_syncs_model_registry_num_training(self, client, tmp_path):
         """Importing labels should update the loaded model's num_training in the registry."""
         from vtsearch.models.registry import add_loaded_model_id, get_model, register_model, reset_for_tests
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+        from vtsearch.settings import set_trainable_models_dir
         from vtsearch.models.trainable_model_store import _write_model
 
         reset_for_tests()
         set_trainable_models_dir(str(tmp_path / "models"))
 
         # Create a trainable model file on disk
-        tm_name = "test_import_sync"
-        from pathlib import Path
+        tm_name = "Import Sync Test"
+        from vtsearch.models.trainable_model_store import _model_path
 
-        model_dir = Path(get_trainable_models_dir())
-        model_dir.mkdir(parents=True, exist_ok=True)
         _write_model(
-            model_dir / f"{tm_name}.json",
+            _model_path(tm_name),
             {
                 "name": tm_name,
                 "media_type": "audio",
@@ -204,10 +202,8 @@ class TestLabelImportEndpoint:
         )
 
         entry = register_model(
-            name="Import Sync Test",
+            name=tm_name,
             media_type="audio",
-            trainable=True,
-            trainable_model_name=tm_name,
             num_training=0,
         )
         add_loaded_model_id(entry["id"])

@@ -1,0 +1,101 @@
+"""Tests for POST /api/find-label and the auto-detect / multi-find pipelines.
+
+After the detector→trainable-model migration, every "model" used by
+find-label is a trainable model.  Its MLP is trained on demand from the
+labelset stored on disk.
+"""
+
+from __future__ import annotations
+
+import app as app_module
+from helpers import setup_trainable_model_in_registry
+from vtsearch.utils import snapshot_medias
+
+
+class TestFindLabel:
+    """``POST /api/find-label`` against a trainable model in the registry."""
+
+    def test_find_label_marks_all_items(self, client):
+        """find-label should mark every loaded media as good or bad."""
+        model_id = setup_trainable_model_in_registry(
+            "find-label-model",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        resp = client.post("/api/find-label", json={"model_id": model_id})
+        assert resp.status_code == 200, resp.get_json()
+        data = resp.get_json()
+        assert data["ok"] is True
+        total = data["good_count"] + data["bad_count"]
+        assert total == app_module.NUM_MEDIAS
+
+    def test_find_label_missing_model_id(self, client):
+        resp = client.post("/api/find-label", json={})
+        assert resp.status_code == 400
+
+    def test_find_label_unknown_model_id(self, client):
+        resp = client.post("/api/find-label", json={"model_id": "does-not-exist"})
+        assert resp.status_code == 404
+
+    def test_find_label_no_medias(self, client):
+        # Build the model first while medias are loaded so the labelset has md5s.
+        model_id = setup_trainable_model_in_registry(
+            "no-medias",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        saved = dict(app_module.medias)
+        app_module.medias.clear()
+        try:
+            resp = client.post("/api/find-label", json={"model_id": model_id})
+            assert resp.status_code == 400
+        finally:
+            app_module.medias.update(saved)
+
+
+class TestAutoDetect:
+    """``POST /api/auto-detect`` iterates trainable models flagged for autorun."""
+
+    def test_no_autorun_models_returns_400(self, client):
+        resp = client.post("/api/auto-detect", json={})
+        assert resp.status_code == 400
+
+    def test_autorun_model_runs(self, client):
+        from vtsearch.settings import add_autorun_trainable_model
+
+        setup_trainable_model_in_registry(
+            "auto-detect-model",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        add_autorun_trainable_model("auto-detect-model")
+
+        resp = client.post("/api/auto-detect", json={})
+        assert resp.status_code == 200, resp.get_json()
+        data = resp.get_json()
+        assert data["media_type"] == "audio"
+        assert data["detectors_run"] == 1
+        assert "auto-detect-model" in data["results"]
+        result = data["results"]["auto-detect-model"]
+        assert "hits" in result
+        assert "negative_hits" in result
+        assert len(result["hits"]) + len(result["negative_hits"]) == app_module.NUM_MEDIAS
+
+    def test_autorun_filters_by_media_type(self, client):
+        from vtsearch.settings import add_autorun_trainable_model
+
+        # Image-only model should be skipped on an audio dataset.
+        setup_trainable_model_in_registry(
+            "image-only",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+            media_type="image",
+        )
+        add_autorun_trainable_model("image-only")
+
+        resp = client.post("/api/auto-detect", json={})
+        assert resp.status_code == 400

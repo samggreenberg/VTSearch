@@ -433,24 +433,28 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  onDetectorLoaded(data: unknown): void {
-    const detector = data as Record<string, unknown>;
-    const name = (detector['name'] as string) || 'Detector';
+  onModelSelected(modelId: string): void {
+    if (!modelId) return;
     this.sortState.setSortMode('load');
     this.sortState.setSortBusy(true);
-    this.sortState.setSortStatus('Scoring with detector…');
+    this.sortState.setSortStatus('Scoring with model…');
     this.sortState.setSortProgress(0, 0);
 
     this.startScoringProgressPoll();
 
-    this.detectorsApi.detectorSort({ detector }).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (response) => {
+    this.detectorsApi.findLabel({ model_id: modelId }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (raw) => {
+        const response = raw as {
+          results: { id: number; score: number }[];
+          threshold: number;
+          model_name?: string;
+        };
         this.stopScoringProgressPoll();
         this.sortState.setSortResults(
           response.results.map((r) => ({ id: r.id, score: r.score })),
           response.threshold,
         );
-        this.sortState.setLoadSortLabel(name);
+        this.sortState.setLoadSortLabel(response.model_name || 'Model');
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
         this.sortState.setSortProgress(0, 0);
@@ -459,7 +463,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       error: () => {
         this.stopScoringProgressPoll();
         this.sortState.setSortBusy(false);
-        this.sortState.setSortStatus('Detector sort failed');
+        this.sortState.setSortStatus('Model sort failed');
         this.sortState.setSortProgress(0, 0);
       },
     });
@@ -536,8 +540,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.modelsApi.getRegistry().pipe(takeUntil(this.destroy$)).subscribe({
       next: (resp) => {
         const entry = resp.models.find((m: ModelRegistryEntry) => m.id === modelId);
-        const tmName = (entry?.['trainable_model_name'] as string | undefined) || '';
-        this.trainableModelName = entry?.trainable && tmName ? tmName : null;
+        this.trainableModelName = entry?.name || null;
       },
       error: () => {
         this.trainableModelName = null;

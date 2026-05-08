@@ -175,8 +175,8 @@ def learned_sort():
     tm_media_type = ""
     if det_ctx is not _empty_detector_context and det_ctx.detector_id:
         entry = get_model(det_ctx.detector_id)
-        if entry and entry.get("trainable") and entry.get("trainable_model_name"):
-            tm_data = _read_model(_model_path(entry["trainable_model_name"]))
+        if entry and entry.get("name"):
+            tm_data = _read_model(_model_path(entry["name"]))
             if tm_data:
                 labelset = LabelSet.from_dict(tm_data.get("labelset") or {})
                 tm_media_type = tm_data.get("media_type", "") or ""

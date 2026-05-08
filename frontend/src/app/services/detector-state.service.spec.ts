@@ -22,17 +22,8 @@ describe('DetectorStateService', () => {
   });
 
   it('should start with empty state', () => {
-    expect(service.detectors).toEqual([]);
     expect(service.extractors).toEqual([]);
     expect(service.localizers).toEqual([]);
-  });
-
-  it('loadDetectors should fetch and store detectors', () => {
-    service.loadDetectors();
-    const req = httpMock.expectOne('/api/autorun-detectors');
-    req.flush({ detectors: [{ name: 'det1' }] });
-    expect(service.detectors.length).toBe(1);
-    expect(service.detectors[0].name).toBe('det1');
   });
 
   it('loadExtractors should fetch and store extractors', () => {
@@ -49,19 +40,17 @@ describe('DetectorStateService', () => {
     expect(service.localizers.length).toBe(1);
   });
 
-  it('loadAll should fetch all three', () => {
+  it('loadAll should fetch extractors and localizers', () => {
     service.loadAll();
-    httpMock.expectOne('/api/autorun-detectors').flush({ detectors: [] });
     httpMock.expectOne('/api/autorun-extractors').flush({ extractors: [] });
     httpMock.expectOne('/api/autorun-localizers').flush({ localizers: [] });
   });
 
   it('clear should reset all state', () => {
-    service.loadDetectors();
-    httpMock.expectOne('/api/autorun-detectors').flush({ detectors: [{ name: 'x' }] });
+    service.loadExtractors();
+    httpMock.expectOne('/api/autorun-extractors').flush({ extractors: [{ name: 'x' }] });
 
     service.clear();
-    expect(service.detectors).toEqual([]);
     expect(service.extractors).toEqual([]);
     expect(service.localizers).toEqual([]);
   });

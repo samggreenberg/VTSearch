@@ -25,11 +25,17 @@ describe('LoadSortModalComponent', () => {
 
   function flushInit(): void {
     fixture.detectChanges();
-    httpMock.expectOne('/api/detector/server-files').flush({
-      files: [{ name: 'det1', path: '/data/det1.json', size_bytes: 100 }, { name: 'det2', path: '/data/det2.json', size_bytes: 200 }],
-    });
     httpMock.expectOne('/api/server-media-files').flush({
-      files: [{ name: 'example', filename: 'example.wav', path: '/data/example.wav', size_bytes: 1000 }, { name: 'sample', filename: 'sample.wav', path: '/data/sample.wav', size_bytes: 2000 }],
+      files: [
+        { name: 'example', filename: 'example.wav', path: '/data/example.wav', size_bytes: 1000 },
+        { name: 'sample', filename: 'sample.wav', path: '/data/sample.wav', size_bytes: 2000 },
+      ],
+    });
+    httpMock.expectOne('/api/models/registry').flush({
+      models: [
+        { id: 'm1', name: 'My Model', media_type: 'audio', num_training: 12 },
+        { id: 'm2', name: 'Untrained', media_type: 'audio', num_training: 0 },
+      ],
     });
   }
 
@@ -38,34 +44,24 @@ describe('LoadSortModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should load server files on init', () => {
+  it('should load server files and registry models on init', () => {
     flushInit();
-    expect(component.serverDetectors.length).toBe(2);
-    expect(component.serverDetectors[0].name).toBe('det1');
     expect(component.serverMediaFiles.length).toBe(2);
     expect(component.serverMediaFiles[0].filename).toBe('example.wav');
+    expect(component.registryModels.length).toBe(1);
+    expect(component.registryModels[0].name).toBe('My Model');
     expect(component.loading).toBeFalse();
   });
 
-  it('should load server detector and emit', () => {
+  it('should emit modelSelected and close when a registry model is loaded', () => {
     flushInit();
-    spyOn(component.detectorLoaded, 'emit');
+    spyOn(component.modelSelected, 'emit');
     spyOn(component.closed, 'emit');
 
-    component.loadServerDetector('det1.json');
-    httpMock.expectOne('/api/detector/server-files/det1.json').flush({ weights: [1, 2, 3] });
+    component.loadRegistryModel({ id: 'm1', name: 'My Model', media_type: 'audio', num_training: 12 });
 
-    expect(component.detectorLoaded.emit).toHaveBeenCalledWith({ weights: [1, 2, 3] });
+    expect(component.modelSelected.emit).toHaveBeenCalledWith('m1');
     expect(component.closed.emit).toHaveBeenCalled();
-  });
-
-  it('should handle detector load error', () => {
-    flushInit();
-    component.loadServerDetector('bad.json');
-    httpMock
-      .expectOne('/api/detector/server-files/bad.json')
-      .flush({}, { status: 404, statusText: 'Not Found' });
-    expect(component.error).toBe('Failed to load detector');
   });
 
   it('should load server media and emit', () => {
@@ -85,7 +81,7 @@ describe('LoadSortModalComponent', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     const items = el.querySelectorAll('.file-item');
-    expect(items.length).toBe(4); // 2 detectors + 2 media files
+    expect(items.length).toBe(3); // 1 trained model + 2 media files
   });
 
   it('should emit closed on close', () => {

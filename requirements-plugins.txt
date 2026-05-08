@@ -24,4 +24,3 @@
 -r vtsearch/media/image/requirements.txt
 -r vtsearch/media/text/requirements.txt
 -r vtsearch/media/video/requirements.txt
--r vtsearch/processors/importers/server_detector_file/requirements.txt

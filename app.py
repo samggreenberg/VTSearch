@@ -51,12 +51,13 @@ from vtsearch.routes import (  # noqa: E402
     medias_bp,
     datasets_bp,
     datasets_registry_bp,
-    detectors_bp,
     exporters_bp,
     label_importers_bp,
     main_bp,
+    model_find_bp,
+    model_scoring_bp,
     models_registry_bp,
-    processor_importers_bp,
+    processors_bp,
     settings_bp,
     settings_io_bp,
     sorting_bp,
@@ -173,17 +174,18 @@ app.register_blueprint(media_server_bp)
 app.register_blueprint(main_bp)
 app.register_blueprint(medias_bp)
 app.register_blueprint(sorting_bp)
-app.register_blueprint(detectors_bp)
+app.register_blueprint(processors_bp)
 app.register_blueprint(datasets_bp)
 app.register_blueprint(datasets_registry_bp)
 app.register_blueprint(exporters_bp)
 app.register_blueprint(label_importers_bp)
-app.register_blueprint(processor_importers_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(settings_io_bp)
 app.register_blueprint(sync_sources_bp)
 app.register_blueprint(trainable_models_bp)
 app.register_blueprint(models_registry_bp)
+app.register_blueprint(model_scoring_bp)
+app.register_blueprint(model_find_bp)
 
 
 # ---------------------------------------------------------------------------
