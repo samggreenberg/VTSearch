@@ -62,16 +62,22 @@ class ServerFileSettingsSource(SettingsSource):
 
 
 def _resolve_filepath(field_values: dict[str, Any]) -> str:
-    """Resolve the filepath, expanding {username} template."""
+    """Resolve the filepath, expanding the ``{username}`` template.
+
+    The substituted username is sanitized so that a name containing path
+    separators or ``..`` cannot escape the directory implied by the
+    admin-configured template.
+    """
     filepath = (field_values.get("filepath") or "").strip()
     if not filepath:
         raise ValueError("A file path is required.")
 
     if "{username}" in filepath:
         from vtsearch.auth import get_current_user
+        from vtsearch.utils.paths import sanitize_template_value
 
         username = get_current_user() or "default"
-        filepath = filepath.replace("{username}", username)
+        filepath = filepath.replace("{username}", sanitize_template_value(username))
 
     return filepath
 
