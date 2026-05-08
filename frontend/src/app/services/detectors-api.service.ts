@@ -74,6 +74,10 @@ export class DetectorsApiService {
     return `/api/detectors/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/preview`;
   }
 
+  labelThumbnailUrl(name: string, elementId: string): string {
+    return `/api/detectors/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/thumbnail`;
+  }
+
   combine(
     names: string[],
     newName: string,

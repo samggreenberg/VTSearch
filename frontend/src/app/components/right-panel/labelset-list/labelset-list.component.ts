@@ -116,7 +116,7 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
 
   thumbnailUrl(entry: LabelElement): string {
     if (!this.modelName) return '';
-    return this.detectorsApi.labelPreviewUrl(this.modelName, entry.id);
+    return this.detectorsApi.labelThumbnailUrl(this.modelName, entry.id);
   }
 
   onThumbnailError(id: string): void {
