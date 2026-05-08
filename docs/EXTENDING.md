@@ -262,14 +262,20 @@ See [EXTENDING-media.md § Adding a Media Converter](EXTENDING-media.md#adding-a
 - [ ] Expose `CONVERTER = YourConverter()` at module level
 - [ ] Test: convert a source-type media and verify output dicts are valid
 
-### New Detector / Localizer / Extractor Checklist
+### New Localizer / Extractor Checklist
 
 See [EXTENDING-processors.md](EXTENDING-processors.md).
 
-- [ ] Subclass `Detector`, `Localizer`, or `Extractor` from `vtsearch.media.base`
-- [ ] Implement `name`, `media_type`, and the type-specific method (`detect`, `localize`, or `extract`)
+- [ ] Subclass `Localizer` or `Extractor` from `vtsearch.media.base`
+- [ ] Implement `name`, `media_type`, and the type-specific method
+      (`localize` or `extract`)
 - [ ] Optionally override `load_model()` for one-time resource loading
-- [ ] Register as autorun via `POST /api/autorun-detectors` (or extractors/localizers)
+- [ ] Register as autorun via `POST /api/autorun-extractors` or
+      `POST /api/autorun-localizers`
+
+For ML classifiers, create a trainable model instead — register it via
+`POST /api/models/registry`, label items in the right pane, and toggle
+its autorun flag with `PUT /api/models/registry/<id>/autorun`.
 
 ### New Login Provider Checklist
 

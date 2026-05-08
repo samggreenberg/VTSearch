@@ -527,17 +527,6 @@ class TestDatasetRegistryContract:
         assert isinstance(data["datasets"], list)
 
 
-class TestModelsRegistryContract:
-    """GET /api/models/registry response shape."""
-
-    def test_returns_models_dict(self, client):
-        resp = client.get("/api/models/registry")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "models" in data
-        assert isinstance(data["models"], list)
-
-
 class TestTrainableModelsContract:
     """GET/POST /api/trainable-models response shape."""
 

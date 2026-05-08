@@ -167,10 +167,6 @@ VTSearch/
 │   │   │   └── server_json_file/   Sync labels with server JSON file
 │   │   └── sync.py                 sync_to/from_labelset_source utilities
 │   │
-│   ├── processors/importers/       Plugin system for processor sources
-│   │   ├── base.py                 ProcessorImporter ABC + ProcessorImporterField
-│   │   └── server_detector_file/   Import detector from server JSON file
-│   │
 │   ├── eval/                       Evaluation framework
 │   │   ├── __main__.py             CLI entry point (python -m vtsearch.eval)
 │   │   ├── config.py               Eval dataset catalogue
@@ -185,11 +181,11 @@ VTSearch/
 │   │   ├── main.py                 Root route, favicon, logo
 │   │   ├── medias.py               Media listing, serving, voting
 │   │   ├── sorting.py              Text/learned/example sort, labels, diversity
-│   │   ├── detectors.py            Detector/extractor/localizer management, autodetect
-│   │   ├── detectors_crud.py       Detector CRUD operations (create, rename, delete)
-│   │   ├── detectors_scoring.py    Detector scoring and autodetect execution
-│   │   ├── detectors_training.py   Detector training from votes
-│   │   ├── detectors_find.py       Multi-dataset / multi-model Find subsystem
+│   │   ├── processors.py           Extractor/localizer/pregen-processor blueprint
+│   │   ├── processors_crud.py      Extractor/localizer CRUD + pregen processors
+│   │   ├── processors_scoring.py   /api/extract, /api/auto-extract, /api/localize, /api/auto-localize
+│   │   ├── model_scoring.py        /api/auto-detect, /api/find-label (trainable models)
+│   │   ├── model_find.py           Multi-dataset / multi-model Find subsystem
 │   │   ├── datasets.py             Media-type/clipper/converter listings, import, demos
 │   │   ├── datasets_ui.py          Dataset UI helpers and demo listing
 │   │   ├── datasets_registry.py    Dataset registry CRUD (/api/datasets/registry/*)
@@ -266,17 +262,17 @@ modules on the right.
 │ (NO Flask)   │ │ (NO Flask) │
 └──────────────┘ └────────────┘
 
-┌──────────────────────────┐  ┌────────────────────────┐  ┌──────────────────────────┐
-│ exporters/*              │  │ labels/importers/*     │  │ processors/importers/*   │
-│                          │  │                        │  │                          │
-│ base.py (ABC)            │  │ base.py (ABC)          │  │ base.py (ABC)            │
-│ server_json, server_csv  │  │ server_json, server_csv│  │ server_detector_file     │
-│ email_smtp, webhook, gui │  │                        │  │                          │
-│                          │  │ (NO Flask, NO state,   │  │ (NO Flask, NO state,     │
-│ (NO Flask, NO state,     │  │  pure data processing) │  │  pure data processing)   │
-│  pure data in/out)       │  │                        │  │                          │
-│                          │  │                        │  │                          │
-└──────────────────────────┘  └────────────────────────┘  └──────────────────────────┘
+┌──────────────────────────┐  ┌────────────────────────┐
+│ exporters/*              │  │ labels/importers/*     │
+│                          │  │                        │
+│ base.py (ABC)            │  │ base.py (ABC)          │
+│ server_json, server_csv  │  │ server_json, server_csv│
+│ email_smtp, webhook, gui │  │                        │
+│                          │  │ (NO Flask, NO state,   │
+│ (NO Flask, NO state,     │  │  pure data processing) │
+│  pure data in/out)       │  │                        │
+│                          │  │                        │
+└──────────────────────────┘  └────────────────────────┘
 
                           ┌──────────────────────────┐
                           │ utils/sync_source.py     │
@@ -536,18 +532,17 @@ protected by `_state_lock` (a `threading.RLock`):
 | `last_learned_scores` | `dict[int, float]` | Media ID → score from the most recent learned sort |
 | `inclusion` | `int \| None` | FPR/FNR trade-off parameter; lazy-loaded from settings |
 | `textsort_suggestions` | `list[str]` | Text queries that received a Good vote (MRU order) |
-| `autorun_detectors` | `dict` | Saved detector configurations (with `autodetect` flag, `examples`, `num_labels`) |
 | `autorun_extractors` | `dict` | Saved extractor configurations |
 | `autorun_localizers` | `dict` | Saved localizer configurations |
 | `_diversity_tree` | `DiversityTree \| None` | Hierarchical k-means tree for diverse sampling |
 | `_dataset_display_name` | `str \| None` | Custom display name for the loaded dataset |
 
-Of these, only `autorun_detectors`, `autorun_extractors`, and
-`autorun_localizers` are truly global (shared across all loaded
-datasets). The rest are per-dataset (`medias`, `_diversity_tree`,
-`_dataset_display_name`) or per-detector (votes, label history, click
-times, learned scores, inclusion, textsort suggestions) and resolve via
-the active `DatasetContext` / `DetectorContext`.
+Of these, only `autorun_extractors` and `autorun_localizers` are truly
+global (shared across all loaded datasets). The rest are per-dataset
+(`medias`, `_diversity_tree`, `_dataset_display_name`) or per-detector
+(votes, label history, click times, learned scores, inclusion, textsort
+suggestions) and resolve via the active `DatasetContext` /
+`DetectorContext`.
 
 Persistent settings live separately in `vtsearch/settings.py` and are
 auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
@@ -555,10 +550,10 @@ auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
 `calibration_fraction`, `audio_playing`, `swipe_animation`,
 `show_metadata`, `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`,
 `panel_pct_*` (per-media-type layout), `autoload_media_embedders`,
-`autopilot_enabled`, `hide_autopilot`,
-`autopilot_top_greens`, `autopilot_hard_reds`, `autopilot_goal_diversity`,
-autorun processor recipes, and infrastructure directories
-`saved_datasets_dir`, `detectors_dir`, `trainable_models_dir`.
+`autopilot_enabled`, `hide_autopilot`, `autopilot_top_greens`,
+`autopilot_hard_reds`, `autopilot_goal_diversity`,
+`autorun_trainable_models`, and infrastructure directories
+`saved_datasets_dir`, `trainable_models_dir`.
 See `_DEFAULTS` in `settings.py` for the full list.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
 

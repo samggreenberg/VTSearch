@@ -607,7 +607,7 @@ endpoints:
 |--------------------------------|--------|-------------------------------------------|-----------------|
 | `/api/dataset/export`          | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
 | `/api/labels/export`           | GET    | LabelSet — labels with per-element origin  | JSON            |
-| `/api/detector/export-server`  | POST   | Detector origins + inclusion to server file| JSON            |
+| `/api/trainable-models/{name}` | GET    | Trainable model labelset + examples        | JSON            |
 
 ### Wiring up dependencies
 
@@ -702,125 +702,23 @@ LABEL_IMPORTER = PostgresLabelImporter()
 
 ---
 
-## Adding a Processor Importer
+## Adding a trainable model from external labels
 
-Processor importers let users import processors (detectors/extractors) from
-external sources. A processor importer takes input (a JSON detector file,
-etc.) and returns a dict containing model weights and a threshold — which
-is then saved as an autorun detector.
+The detector and processor-importer plugin systems were removed.  To
+publish or share a classifier:
 
-### File structure
+1. Use `POST /api/trainable-models` (or
+   `POST /api/models/registry/from-labelset/<importer>`) to create a
+   trainable model file under `data/trainable_models/<name>.json`.
+2. Toggle its autorun flag with
+   `PUT /api/models/registry/<id>/autorun` so it runs from
+   `/api/auto-detect` and the CLI's `--autodetect` flow.
+3. The MLP itself lives only in RAM — it's trained on demand from the
+   labelset's origins each time the model is loaded or scored.
 
-```
-vtsearch/processors/importers/<your_importer>/
-└── __init__.py       # Importer class + PROCESSOR_IMPORTER instance (required)
-```
-
-### What to implement
-
-Subclass `ProcessorImporter` from `vtsearch.processors.importers.base`.
-The `run()` method must return a dict with model data.
-
-```python
-# vtsearch/processors/importers/s3/__init__.py
-
-from vtsearch.processors.importers.base import ProcessorImporter, ProcessorImporterField
-
-
-class S3ProcessorImporter(ProcessorImporter):
-    name = "s3"
-    display_name = "S3 Detector File"
-    description = "Download a detector JSON file from an S3 bucket."
-    icon = "☁️"
-    fields = [
-        ProcessorImporterField("bucket", "S3 Bucket", "text"),
-        ProcessorImporterField("key", "Object Key", "text"),
-    ]
-
-    def run(self, field_values: dict) -> dict:
-        """Download and parse a detector JSON from S3.
-
-        Must return a dict with at minimum:
-            - "good_origins" (list): origin dicts for Good-labeled media
-            - "bad_origins" (list): origin dicts for Bad-labeled media
-            - "media_type" (str): e.g. "audio", "image"
-        May also include:
-            - "inclusion" (int): inclusion bias from training
-            - "weights" (dict): pre-computed MLP weights (fallback)
-            - "threshold" (float): decision boundary in [0, 1]
-            - "name" (str): suggested default name
-        """
-        import json
-        import boto3
-
-        s3 = boto3.client("s3")
-        obj = s3.get_object(Bucket=field_values["bucket"], Key=field_values["key"])
-        data = json.loads(obj["Body"].read())
-
-        from vtsearch.models.weights_compat import normalize_detector_weights
-
-        nw = normalize_detector_weights(data)
-        return {
-            "media_type": data.get("media_type", "audio"),
-            "good_origins": nw.good_origins,
-            "bad_origins": nw.bad_origins,
-            "inclusion": nw.inclusion,
-            "weights": nw.weights,
-            "threshold": nw.threshold,
-        }
-
-
-PROCESSOR_IMPORTER = S3ProcessorImporter()
-```
-
-### ProcessorImporter class reference
-
-**Required to implement:**
-
-| Member | Signature | Description |
-|--------|-----------|-------------|
-| `run()` | `(field_values: dict) -> dict` | Return dict with `good_origins`, `bad_origins`, `media_type`, `weights`, `threshold` |
-
-**Optional overrides:**
-
-| Member | Signature | Description |
-|--------|-----------|-------------|
-| `run_cli()` | `(field_values: dict) -> dict` | CLI variant; default delegates to `run()` |
-
-**Default class attributes:**
-
-| Attribute | Default | Description |
-|-----------|---------|-------------|
-| `icon` | `"🧩"` | Emoji shown in the UI |
-
-### How it gets invoked
-
-1. `GET /api/processor-importers` returns available importers.
-2. `POST /api/processor-importers/import/<name>` invokes `run()`, combines
-   with user-supplied name, and saves as an autorun detector.
-
-### CLI usage
-
-Processor importers are used from the CLI via the settings file. Add a
-processor recipe to `autorun_processors` in `settings.json`:
-
-```json
-{
-    "autorun_processors": [
-        {
-            "processor_name": "my detector",
-            "processor_importer": "server_detector_file",
-            "field_values": {"filepath": "/path/to/detector.json"}
-        }
-    ]
-}
-```
-
-Then run autodetect:
-
-```bash
-python app.py --autodetect --dataset data.pkl --settings settings.json
-```
+For ready-made classifiers without labels (e.g. an OCR or face-detector
+heuristic), build an Extractor or Localizer plugin instead — see
+[EXTENDING-processors.md](EXTENDING-processors.md).
 
 ---
 

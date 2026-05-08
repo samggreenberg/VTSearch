@@ -1,12 +1,11 @@
 """Settings API route tests.
 
 Covers Flask API routes: GET/PUT /api/settings,
-GET/POST/DELETE /api/settings/autorun-processors.
+including autorun_trainable_models persistence.
 """
 
 from __future__ import annotations
 
-import json
 
 import pytest
 

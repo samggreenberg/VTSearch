@@ -112,16 +112,21 @@ GET /api/models/registry
       "id": "abc123",
       "name": "Dog Barks",
       "media_type": "audio",
-      "trainable": true,
       "text_query": "dog barking",
-      "detector_name": "",
-      "trainable_model_name": "Dog Barks",
       "num_training": 50,
-      "loaded": true
+      "loaded": true,
+      "detector_loaded": true,
+      "autorun": false
     }
   ]
 }
 ```
+
+`name` is the slug used to look up the on-disk labelset file at
+`data/trainable_models/<name>.json`.  Every registered model is a
+trainable model — the MLP is trained on demand from the labelset and
+lives only in RAM.  `autorun` mirrors whether the model's name appears
+in `autorun_trainable_models` settings (toggle it with the route below).
 
 ### Register model
 
@@ -135,14 +140,23 @@ POST /api/models/registry
 {
   "name": "Dog Barks",
   "media_type": "audio",
-  "trainable": true,
-  "text_query": "dog barking sounds",
-  "detector_name": "",
-  "trainable_model_name": ""
+  "text_query": "dog barking sounds"
 }
 ```
 
 → `{"ok": true, "model": {...}}` (201)
+
+### Toggle autorun flag
+
+```
+PUT /api/models/registry/{model_id}/autorun
+```
+
+**Body:** `{"autorun": true}`
+
+→ `{"ok": true, "autorun": true}` — writes the model's name into
+`autorun_trainable_models` so `/api/auto-detect` and the CLI
+`--autodetect` flow pick it up.
 
 ### Load / unload model
 

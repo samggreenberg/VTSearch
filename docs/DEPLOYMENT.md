@@ -328,16 +328,14 @@ and auto-saved on every change. Schema:
   "panel_pct_left": {},
   "panel_pct_right": {},
   "autoload_media_embedders": [],
-  "autorun_processors": [],
+  "autorun_trainable_models": [],
   "autopilot_enabled": true,
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
   "autopilot_resort_interval": 10,
   "autopilot_goal_diversity": 40,
-  "autorun_detector_names": [],
   "saved_datasets_dir": "data/saved_datasets",
-  "detectors_dir": "data/detectors",
   "trainable_models_dir": "data/trainable_models",
   "max_concurrent_dataset_downloads": 1,
   "max_concurrent_dataset_embeddings": 1
@@ -349,9 +347,11 @@ Notable fields:
 - `autoload_media_embedders` — embedders to preload at startup (e.g.
   `["clap", "siglip"]`); triggers model downloads if not yet cached.
   Leave empty to defer loading until each media type is first used.
-- `autorun_processors` — saved detector/extractor configurations with
-  importer name, processor name, and field values
-- `saved_datasets_dir`, `detectors_dir`, `trainable_models_dir` —
+- `autorun_trainable_models` — list of registered trainable-model names
+  to run during `/api/auto-detect` and the CLI `--autodetect` flow.
+  Toggle a model's flag through the UI or
+  `PUT /api/models/registry/<id>/autorun`.
+- `saved_datasets_dir`, `trainable_models_dir` —
   infrastructure directories (overridable for custom data layouts)
 - `max_concurrent_dataset_downloads` /
   `max_concurrent_dataset_embeddings` — concurrency gates for dataset
