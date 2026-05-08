@@ -127,7 +127,7 @@ class SyntheticDatasetImporter(DatasetImporter):
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         self.run(field_values, medias, thin=thin)
 
-    def resolve_display_name(self, field_values: dict[str, Any]) -> str:
+    def default_display_name(self, field_values: dict[str, Any]) -> str:
         try:
             mt = self._media_type(field_values)
             n = self._parse_size(field_values)

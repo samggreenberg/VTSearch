@@ -61,7 +61,7 @@ class CombineDatasetsImporter(DatasetImporter):
         ),
     ]
 
-    def resolve_display_name(self, field_values: dict[str, Any]) -> str:
+    def default_display_name(self, field_values: dict[str, Any]) -> str:
         name = (field_values.get("name") or "").strip()
         return name or self.display_name
 

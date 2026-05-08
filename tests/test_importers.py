@@ -330,6 +330,167 @@ class TestFolderImporterMetadata:
 
 
 # ---------------------------------------------------------------------------
+# DatasetImporter base class — user-typed dataset name
+# ---------------------------------------------------------------------------
+
+
+class TestImporterDatasetName:
+    """The base DatasetImporter exposes a user-typeable ``dataset_name``
+    field that overrides the per-importer default name."""
+
+    def _make_importer(self):
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        class Imp(DatasetImporter):
+            name = "named"
+            display_name = "Named"
+            description = "Has a default name."
+            fields = []
+
+            def default_display_name(self, field_values):
+                return field_values.get("flavour") or self.display_name
+
+            def run(self, field_values, medias):
+                pass
+
+        return Imp()
+
+    def test_to_dict_prepends_dataset_name_field(self):
+        from vtsearch.datasets.importers.base import (
+            DATASET_NAME_FIELD_KEY,
+            DatasetImporter,
+            ImporterField,
+        )
+
+        class Imp(DatasetImporter):
+            name = "imp"
+            display_name = "Imp"
+            description = "."
+            fields = [ImporterField("path", "Path", "text")]
+
+            def run(self, field_values, medias):
+                pass
+
+        d = Imp().to_dict()
+        assert d["fields"][0]["key"] == DATASET_NAME_FIELD_KEY
+        assert d["fields"][0]["required"] is False
+        assert d["fields"][0]["field_type"] == "text"
+        assert d["fields"][1]["key"] == "path"
+
+    def test_class_fields_attribute_unchanged_by_to_dict(self):
+        """to_dict() prepends dataset_name only on the serialised payload —
+        the class-level ``fields`` attribute remains as the developer wrote it."""
+        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+
+        class Imp(DatasetImporter):
+            name = "imp2"
+            display_name = "Imp"
+            description = "."
+            fields = [ImporterField("path", "Path", "text")]
+
+            def run(self, field_values, medias):
+                pass
+
+        imp = Imp()
+        # to_dict shouldn't mutate the class attribute.
+        imp.to_dict()
+        keys = [f.key for f in Imp.fields]
+        assert keys == ["path"]
+        assert "dataset_name" not in keys
+
+    def test_resolve_display_name_prefers_user_value(self):
+        imp = self._make_importer()
+        assert (
+            imp.resolve_display_name({"dataset_name": "My Pictures", "flavour": "blue"})
+            == "My Pictures"
+        )
+
+    def test_resolve_display_name_falls_back_to_default(self):
+        imp = self._make_importer()
+        assert imp.resolve_display_name({"flavour": "blue"}) == "blue"
+
+    def test_resolve_display_name_strips_whitespace(self):
+        imp = self._make_importer()
+        # An all-whitespace name is treated as empty — the default wins.
+        assert imp.resolve_display_name({"dataset_name": "   "}) == imp.display_name
+
+    def test_resolve_display_name_empty_field_values(self):
+        imp = self._make_importer()
+        # Defensive: still returns *something* for empty input.
+        assert imp.resolve_display_name({}) == imp.display_name
+        assert imp.resolve_display_name(None) == imp.display_name
+
+
+class TestImporterDefaultDisplayName:
+    """Each importer derives a sensible default name from its field values."""
+
+    def test_demo_uses_entry_label(self):
+        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtsearch.datasets.importers.demo import IMPORTER
+
+        first_name = next(iter(DEMO_DATASETS.keys()))
+        first_label = DEMO_DATASETS[first_name].get("label", first_name)
+        assert IMPORTER.default_display_name({"name": first_name}) == first_label
+
+    def test_demo_user_typed_name_wins(self):
+        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtsearch.datasets.importers.demo import IMPORTER
+
+        first_name = next(iter(DEMO_DATASETS.keys()))
+        assert (
+            IMPORTER.resolve_display_name({"name": first_name, "dataset_name": "Override"})
+            == "Override"
+        )
+
+    def test_synthetic_default_name_matches_size_and_type(self):
+        from vtsearch.datasets.importers.synthetic import IMPORTER
+
+        out = IMPORTER.default_display_name({"media_type": "audio", "size": "12"})
+        assert "audio" in out
+        assert "12" in out
+
+    def test_server_folder_uses_leaf_path(self):
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        assert IMPORTER.default_display_name({"path": "/data/sounds/sirens"}) == "sirens"
+        assert IMPORTER.default_display_name({}) == IMPORTER.display_name
+
+    def test_http_archive_strips_archive_extension(self):
+        from vtsearch.datasets.importers.http_archive import IMPORTER
+
+        assert (
+            IMPORTER.default_display_name({"url": "https://example.org/data/genres.tar.gz"})
+            == "genres"
+        )
+        assert (
+            IMPORTER.default_display_name({"url": "https://example.org/data/photos.zip"})
+            == "photos"
+        )
+        # No URL → falls back to display_name
+        assert IMPORTER.default_display_name({}) == IMPORTER.display_name
+
+    def test_pickle_default_name_strips_extension(self):
+        from vtsearch.datasets.importers.pickle import IMPORTER
+
+        assert IMPORTER.default_display_name({"file": "/tmp/genres.pkl"}) == "genres"
+
+    def test_server_files_default_name_uses_paths_file_stem(self):
+        from vtsearch.datasets.importers.server_files import IMPORTER
+
+        assert IMPORTER.default_display_name({"paths_file": "/tmp/audio_list.txt"}) == "audio_list"
+
+    def test_origin_does_not_include_dataset_name(self):
+        """The user-typed display name is UI metadata, not provenance —
+        it must NOT leak into origin params (which feed Detector reload)."""
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        origin = IMPORTER.build_origin(
+            {"path": "/data/x", "media_type": "audio", "dataset_name": "My Set"}
+        )
+        assert "dataset_name" not in origin["params"]
+
+
+# ---------------------------------------------------------------------------
 # Folder importer not in builtin names
 # ---------------------------------------------------------------------------
 

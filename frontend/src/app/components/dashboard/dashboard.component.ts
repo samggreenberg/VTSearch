@@ -815,7 +815,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.startProgressPolling();
   }
 
-  onDemoSelected(demo: { label: string; name: string; embedder?: string; clipper?: string }): void {
+  onDemoSelected(demo: { label: string; name: string; embedder?: string; clipper?: string; dataset_name?: string }): void {
     this.importerModalOpen = false;
     this.importerClosing = true;
     const params: Record<string, string> = {};
@@ -824,6 +824,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     if (demo.clipper) {
       params['clipper'] = demo.clipper;
+    }
+    const userName = (demo.dataset_name || '').trim();
+    if (userName) {
+      params['dataset_name'] = userName;
     }
     this.datasetsApi.loadDemo(demo.name, params).subscribe({
       next: () => {
