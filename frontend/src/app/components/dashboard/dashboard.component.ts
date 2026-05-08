@@ -580,7 +580,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.selectedModelIds.size < 2) return false;
     const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
     if (targets.length < 2) return false;
-    if (!targets.every((m) => m.trainable)) return false;
     const types = new Set(targets.map((m) => m.media_type));
     return types.size === 1;
   }
@@ -590,9 +589,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return 'Select two or more trainable models to combine';
     }
     const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
-    if (!targets.every((m) => m.trainable)) {
-      return 'Only trainable models can be combined';
-    }
     const types = new Set(targets.map((m) => m.media_type));
     if (types.size !== 1) {
       return 'All selected models must be of the same media type';
@@ -735,8 +731,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   toggleAutorun(model: ModelRegistryEntry, autorun: boolean): void {
-    const detectorName = model.detector_name || model.name;
-    this.detectorsApi.setAutodetect(detectorName, autorun).subscribe({
+    this.detectorsApi.setAutorun(model.id, autorun).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
@@ -744,7 +739,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Export modal ---
 
   openExportModal(model: ModelRegistryEntry): void {
-    this.exportModelName = model.detector_name || model.name;
+    this.exportModelName = model.name;
     this.exportModalOpen = true;
   }
 
@@ -757,7 +752,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   openAddLabelsModal(model: ModelRegistryEntry): void {
     this.addLabelsModelId = model.id;
-    this.addLabelsModelName = (model['trainable_model_name'] as string) || model.name;
+    this.addLabelsModelName = model.name;
     this.addLabelsModalOpen = true;
   }
 
@@ -1073,7 +1068,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (selectedModels.length === 0) return true; // will prompt to create a model
     if (selectedModels.length !== 1) return false;
     const model = selectedModels[0];
-    if (!model.trainable) return false;
     if (model.media_type !== selectedDatasets[0].media_type) return false;
     return true;
   }
@@ -1087,7 +1081,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private hasUntrainedModel(): boolean {
-    return this.resolvedSelectedModels.some((m) => m.trainable && (m.num_training ?? 0) === 0);
+    return this.resolvedSelectedModels.some((m) => (m.num_training ?? 0) === 0);
   }
 
   private get resolvedSelectedDatasets(): DatasetRegistryEntry[] {
@@ -1124,7 +1118,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (nModels === 0) return 'Create a new model and start training';
     if (nModels > 1) return 'Select exactly 1 model';
     const model = this.resolvedSelectedModels[0];
-    if (model && !model.trainable) return 'Model is not trainable';
     const dataset = this.resolvedSelectedDatasets[0];
     if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';

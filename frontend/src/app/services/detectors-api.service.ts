@@ -1,15 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import {
-  AutorunDetectorsResponse,
-  DetectorCreateResponse,
-  DetectorDeleteResponse,
-  DetectorRenameResponse,
-  DetectorSortResponse,
-  AutoDetectResponse,
-  DetectorServerFilesResponse,
-} from '../models/api.models';
+import { AutoDetectResponse } from '../models/api.models';
 
 export interface FindLabelWarning {
   model_name: string;
@@ -18,42 +10,20 @@ export interface FindLabelWarning {
   failed_labels: number;
 }
 
+/**
+ * API surface for trainable-model scoring and shared processor (extractor /
+ * localizer) endpoints.  Detectors no longer exist as a separate concept —
+ * every "model" is a trainable model managed via TrainableModelsApiService
+ * and the model registry.
+ */
 @Injectable({ providedIn: 'root' })
 export class DetectorsApiService {
   constructor(private http: HttpClient) {}
 
-  // --- CRUD ---
+  // --- Autorun toggle (model registry) ---
 
-  getAutorunDetectors(): Observable<AutorunDetectorsResponse> {
-    return this.http.get<AutorunDetectorsResponse>('/api/autorun-detectors');
-  }
-
-  createDetector(params: { name: string; media_type: string }): Observable<DetectorCreateResponse> {
-    return this.http.post<DetectorCreateResponse>('/api/autorun-detectors', params);
-  }
-
-  deleteDetector(name: string): Observable<DetectorDeleteResponse> {
-    return this.http.delete<DetectorDeleteResponse>(`/api/autorun-detectors/${name}`);
-  }
-
-  renameDetector(name: string, newName: string): Observable<DetectorRenameResponse> {
-    return this.http.put<DetectorRenameResponse>(`/api/autorun-detectors/${name}/rename`, { new_name: newName });
-  }
-
-  setAutodetect(name: string, autodetect: boolean): Observable<unknown> {
-    return this.http.put(`/api/autorun-detectors/${name}/autodetect`, { autodetect });
-  }
-
-  exportDetector(name: string): Observable<unknown> {
-    return this.http.get(`/api/autorun-detectors/${name}/export`);
-  }
-
-  getServerFiles(): Observable<DetectorServerFilesResponse> {
-    return this.http.get<DetectorServerFilesResponse>('/api/detector/server-files');
-  }
-
-  getServerFile(name: string): Observable<unknown> {
-    return this.http.get(`/api/detector/server-files/${name}`);
+  setAutorun(modelId: string, autorun: boolean): Observable<unknown> {
+    return this.http.put(`/api/models/registry/${modelId}/autorun`, { autorun });
   }
 
   // --- Extractors ---
@@ -94,10 +64,6 @@ export class DetectorsApiService {
 
   // --- Scoring ---
 
-  detectorSort(params: Record<string, unknown>): Observable<DetectorSortResponse> {
-    return this.http.post<DetectorSortResponse>('/api/detector-sort', params);
-  }
-
   autoDetect(params: Record<string, unknown>): Observable<AutoDetectResponse> {
     return this.http.post<AutoDetectResponse>('/api/auto-detect', params);
   }
@@ -118,15 +84,7 @@ export class DetectorsApiService {
     return this.http.post('/api/auto-localize', {});
   }
 
-  // --- Training ---
-
-  importFromLabels(params: Record<string, unknown>): Observable<unknown> {
-    return this.http.post('/api/autorun-detectors/import-labels', params);
-  }
-
-  importFromLabelImporter(importerName: string, params: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`/api/autorun-detectors/from-label-import/${importerName}`, params);
-  }
+  // --- Find ---
 
   findCheckLabels(params: Record<string, unknown>): Observable<{ warnings: FindLabelWarning[] }> {
     return this.http.post<{ warnings: FindLabelWarning[] }>('/api/find/check-labels', params);

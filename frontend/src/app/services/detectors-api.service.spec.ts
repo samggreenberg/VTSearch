@@ -21,43 +21,12 @@ describe('DetectorsApiService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('getAutorunDetectors should GET', () => {
-    service.getAutorunDetectors().subscribe(data => expect(data.detectors).toBeDefined());
-    const req = httpMock.expectOne('/api/autorun-detectors');
-    expect(req.request.method).toBe('GET');
-    req.flush({ detectors: [] });
-  });
-
-  it('createDetector should POST', () => {
-    service.createDetector({ name: 'det1', media_type: 'audio' }).subscribe(data => {
-      expect(data.success).toBeTrue();
-    });
-    const req = httpMock.expectOne('/api/autorun-detectors');
-    expect(req.request.method).toBe('POST');
-    expect(req.request.body.name).toBe('det1');
-    req.flush({ success: true, name: 'det1' });
-  });
-
-  it('deleteDetector should DELETE', () => {
-    service.deleteDetector('det1').subscribe(data => expect(data.success).toBeTrue());
-    const req = httpMock.expectOne('/api/autorun-detectors/det1');
-    expect(req.request.method).toBe('DELETE');
-    req.flush({ success: true });
-  });
-
-  it('renameDetector should PUT', () => {
-    service.renameDetector('old', 'new').subscribe(data => expect(data.new_name).toBe('new'));
-    const req = httpMock.expectOne('/api/autorun-detectors/old/rename');
+  it('setAutorun should PUT to the model registry', () => {
+    service.setAutorun('m1', true).subscribe();
+    const req = httpMock.expectOne('/api/models/registry/m1/autorun');
     expect(req.request.method).toBe('PUT');
-    expect(req.request.body).toEqual({ new_name: 'new' });
-    req.flush({ success: true, new_name: 'new' });
-  });
-
-  it('detectorSort should POST', () => {
-    service.detectorSort({ detector: 'det1' }).subscribe();
-    const req = httpMock.expectOne('/api/detector-sort');
-    expect(req.request.method).toBe('POST');
-    req.flush({ results: [], threshold: 0.5 });
+    expect(req.request.body).toEqual({ autorun: true });
+    req.flush({ ok: true });
   });
 
   it('autoDetect should POST', () => {
@@ -67,11 +36,11 @@ describe('DetectorsApiService', () => {
     req.flush({});
   });
 
-  it('getServerFiles should GET', () => {
-    service.getServerFiles().subscribe();
-    const req = httpMock.expectOne('/api/detector/server-files');
-    expect(req.request.method).toBe('GET');
-    req.flush({ files: [] });
+  it('findLabel should POST', () => {
+    service.findLabel({ model_id: 'm1' }).subscribe();
+    const req = httpMock.expectOne('/api/find-label');
+    expect(req.request.method).toBe('POST');
+    req.flush({});
   });
 
   it('getAutorunExtractors should GET', () => {

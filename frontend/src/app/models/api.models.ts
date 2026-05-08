@@ -283,37 +283,7 @@ export interface DatasetRegistryResponse {
   datasets: DatasetRegistryEntry[];
 }
 
-// --- Detectors ---
-
-export interface DetectorInfo {
-  name: string;
-  media_type?: string;
-  autodetect?: boolean;
-  [key: string]: unknown;
-}
-
-export interface AutorunDetectorsResponse {
-  detectors: DetectorInfo[];
-}
-
-export interface DetectorCreateResponse {
-  success: boolean;
-  name: string;
-}
-
-export interface DetectorDeleteResponse {
-  success: boolean;
-}
-
-export interface DetectorRenameResponse {
-  success: boolean;
-  new_name: string;
-}
-
-export interface DetectorSortResponse {
-  results: { id: number; score: number }[];
-  threshold: number;
-}
+// --- Detector scoring ---
 
 export interface AutoDetectResponse {
   [key: string]: unknown;
@@ -342,18 +312,13 @@ export interface AppSettings {
   panel_pct_right?: Record<string, number>;
   autoload_media_types?: string[];
   autoload_media_embedders?: string[];
-  autorun_processors?: AutorunProcessor[];
+  autorun_trainable_models?: string[];
   autopilot_enabled?: boolean;
   hide_autopilot?: boolean;
   autopilot_top_greens?: number;
   autopilot_hard_reds?: number;
   autopilot_resort_interval?: number;
   autopilot_goal_diversity?: number;
-  [key: string]: unknown;
-}
-
-export interface AutorunProcessor {
-  name: string;
   [key: string]: unknown;
 }
 
@@ -404,13 +369,15 @@ export interface ModelRegistryEntry {
   id: string;
   name: string;
   media_type: string;
-  trainable?: boolean;
   num_training?: number;
   text_query?: string;
   media_example?: string;
-  detector_name?: string;
   loaded?: boolean;
   detector_loaded?: boolean;
+  autorun?: boolean;
+  /** @deprecated Backwards-compat alias for `autorun`. */
+  autodetect?: boolean;
+  last_trained_at?: number | null;
   [key: string]: unknown;
 }
 
@@ -501,10 +468,6 @@ export interface ServerFileEntry {
 }
 
 export interface ServerMediaFilesResponse {
-  files: ServerFileEntry[];
-}
-
-export interface DetectorServerFilesResponse {
   files: ServerFileEntry[];
 }
 

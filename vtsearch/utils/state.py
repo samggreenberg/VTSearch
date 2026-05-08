@@ -18,7 +18,6 @@ from typing import Any
 # Re-export all state variables from state_core --------------------------
 from vtsearch.utils.state_core import (  # noqa: F401
     _state_lock,
-    autorun_detectors,
     autorun_extractors,
     autorun_localizers,
     bad_votes,
@@ -88,25 +87,16 @@ from vtsearch.utils.state_votes import (  # noqa: F401
 
 # Re-export processor CRUD -------------------------------------------------
 from vtsearch.utils.state_processors import (  # noqa: F401
-    add_autorun_detector,
     add_autorun_extractor,
     add_autorun_localizer,
-    get_autodetect_detectors_by_media,
-    get_autorun_detector_examples,
-    get_autorun_detectors,
-    get_autorun_detectors_by_media,
     get_autorun_extractors,
     get_autorun_extractors_by_media,
     get_autorun_localizers,
     get_autorun_localizers_by_media,
-    remove_autorun_detector,
     remove_autorun_extractor,
     remove_autorun_localizer,
-    rename_autorun_detector,
     rename_autorun_extractor,
     rename_autorun_localizer,
-    set_autorun_detector_autodetect,
-    set_autorun_detector_examples,
 )
 
 # Re-export diversity tree --------------------------------------------------

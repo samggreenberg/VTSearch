@@ -681,7 +681,6 @@ class with_detector_context:
         set_thread_detector_context(self._previous_ctx)
 
 
-# Autorun detectors/extractors/localizers are GLOBAL (not per-dataset).
-autorun_detectors: dict[str, dict[str, Any]] = {}
+# Autorun extractors/localizers are GLOBAL (not per-dataset).
 autorun_extractors: dict[str, dict[str, Any]] = {}
 autorun_localizers: dict[str, dict[str, Any]] = {}

@@ -91,20 +91,9 @@
     </div>
   } @else {
     <div class="load-sort-sections">
-      <!-- Sort by Detector -->
+      <!-- Sort by Trained Model -->
       <div class="sort-section">
-        <h3 title="Load a saved detector model and rank all items by its predicted scores">Sort by Detector</h3>
-        <h4 title="Detector weight files saved on the server">Server Detectors</h4>
-        @if (serverDetectors.length > 0) {
-          <div class="file-list">
-            @for (det of serverDetectors; track det.name) {
-              <button class="file-item" (click)="loadServerDetector(det.name)" [title]="'Load detector: ' + det.name">{{ det.name }}</button>
-            }
-          </div>
-        } @else {
-          <p class="empty-state">No server detector files found.</p>
-        }
-        <h4 title="Trained models created from the Dashboard">Dashboard Models</h4>
+        <h3 title="Load a trained model and use it to find matching items in the active dataset">Sort by Model</h3>
         @if (registryModels.length > 0) {
           <div class="file-list">
             @for (model of registryModels; track model.id) {
@@ -117,7 +106,7 @@
             }
           </div>
         } @else {
-          <p class="empty-state">No trained dashboard models found.</p>
+          <p class="empty-state">No trained models found. Add some labels in the Dashboard first.</p>
         }
       </div>
 

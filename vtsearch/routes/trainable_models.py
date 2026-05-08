@@ -208,12 +208,22 @@ def rename_trainable_model(name: str):
         old_path.unlink(missing_ok=True)
 
     # Update the model registry entry that references this trainable model
-    from vtsearch.models.registry import find_by_trainable_model_name, rename_model, update_model
+    from vtsearch.models.registry import find_by_name, rename_model
 
-    reg_entry = find_by_trainable_model_name(name)
+    reg_entry = find_by_name(name)
     if reg_entry:
-        update_model(reg_entry["id"], trainable_model_name=new_name)
         rename_model(reg_entry["id"], new_name)
+
+    # Rename autorun flag if present.
+    try:
+        from vtsearch.settings import get_autorun_trainable_models, set_autorun_trainable_models
+
+        current = get_autorun_trainable_models()
+        if name in current:
+            current = [new_name if n == name else n for n in current]
+            set_autorun_trainable_models(current)
+    except Exception:
+        logger.exception("Failed to rename autorun entry for %s", name)
 
     return jsonify({"success": True, "old_name": name, "new_name": new_name})
 
@@ -276,11 +286,11 @@ def save_trainable_model_labels(name: str):
     _write_model(path, data)
 
     # Also update the model registry entry if one exists
-    from vtsearch.models.registry import find_by_trainable_model_name, update_model
+    from vtsearch.models.registry import find_by_name, update_model
 
     import time as _time
 
-    reg_entry = find_by_trainable_model_name(name)
+    reg_entry = find_by_name(name)
     if reg_entry:
         update_model(reg_entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
@@ -386,9 +396,9 @@ def import_labels_into_model(name: str, importer_name: str):
     _write_model(path, data)
 
     # Update the model registry entry
-    from vtsearch.models.registry import find_by_trainable_model_name, update_model
+    from vtsearch.models.registry import find_by_name, update_model
 
-    reg_entry = find_by_trainable_model_name(name)
+    reg_entry = find_by_name(name)
     if reg_entry:
         update_model(reg_entry["id"], num_training=len(existing_ls), last_trained_at=time.time())
 
@@ -727,9 +737,9 @@ def vote_trainable_model_label(name: str, element_id: str):
 
         toggle_vote(cid_before, vote)
 
-    from vtsearch.models.registry import find_by_trainable_model_name, update_model
+    from vtsearch.models.registry import find_by_name, update_model
 
-    reg_entry = find_by_trainable_model_name(name)
+    reg_entry = find_by_name(name)
     if reg_entry:
         new_count = len(LabelSet.from_dict(data.get("labelset") or {}))
         update_model(reg_entry["id"], num_training=new_count, last_trained_at=time.time())

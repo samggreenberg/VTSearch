@@ -48,13 +48,9 @@ export class CombineModelsModalComponent implements OnInit {
     this.mediaType = this.sources[0]?.media_type ?? '';
   }
 
-  /**
-   * The combine API operates on trainable-model file names, which match
-   * `trainable_model_name` for UI-created models and fall back to the
-   * registry display name.
-   */
+  /** The combine API operates on the registry name (= labelset filename). */
   private trainableNameOf(m: ModelRegistryEntry): string {
-    return ((m['trainable_model_name'] as string) || m.name || '').trim();
+    return (m.name || '').trim();
   }
 
   get nameCollision(): boolean {

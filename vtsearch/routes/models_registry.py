@@ -1,10 +1,8 @@
 """Blueprint for model-registry routes (the in-memory model catalog).
 
-A *registered model* is an entry in the in-memory model registry — distinct
-from a *trainable model*, which is the on-disk labelset+query store handled
-by :mod:`vtsearch.routes.trainable_models`.  A registered model can be
-loaded into a :class:`~vtsearch.utils.DetectorContext` so the user can vote
-or run Find against it.
+Every registered model is a *trainable model* — backed by a labelset file
+on disk and an MLP that lives only in :class:`~vtsearch.utils.DetectorContext`
+once the user activates the model.
 
 Endpoints
 ---------
@@ -14,6 +12,7 @@ POST   /api/models/registry/load                   Load a model into memory.
 POST   /api/models/registry/<id>/unload            Unload a model from memory.
 DELETE /api/models/registry/<id>                   Remove a model from the registry.
 PUT    /api/models/registry/<id>/rename            Rename a registered model.
+PUT    /api/models/registry/<id>/autorun           Toggle the model's autorun flag.
 GET    /api/models/loading-tasks                   Active model-load progress.
 POST   /api/models/cancel/<task_id>                Cancel a load task.
 """
@@ -45,35 +44,21 @@ models_registry_bp = Blueprint("models_registry", __name__)
 
 @models_registry_bp.route("/api/models/registry")
 def list_registered_models():
-    """Return all registered models with their loaded state and autodetect flag."""
+    """Return all registered models with their loaded state and autorun flag."""
     from vtsearch.models.registry import get_loaded_model_ids, list_models
-    from vtsearch.settings import get_autorun_detector_names
-    from vtsearch.utils import get_autorun_detectors
+    from vtsearch.settings import get_autorun_trainable_models
 
     entries = list_models()
     loaded_ids = get_loaded_model_ids()
-    detectors = get_autorun_detectors()
-    autorun_names = set(get_autorun_detector_names())
+    autorun_names = set(get_autorun_trainable_models())
     for entry in entries:
         mid = entry["id"]
         entry["loaded"] = mid in loaded_ids
-        # Trainable models created through the UI have detector_name="", but their
-        # autorun key is the display name (matches the frontend's toggleAutorun fallback).
-        det_name = entry.get("detector_name", "") or entry.get("name", "")
-        det = detectors.get(det_name) if det_name else None
-        if det:
-            entry["autodetect"] = bool(det.get("autodetect"))
-        else:
-            entry["autodetect"] = det_name in autorun_names if det_name else False
+        entry["autorun"] = entry.get("name", "") in autorun_names
+        # Backwards-compat alias for any frontend still reading "autodetect".
+        entry["autodetect"] = entry["autorun"]
         entry.setdefault("last_trained_at", None)
-        # detector_loaded: True when the model has inference data in RAM.
-        # Either via a DetectorContext (multi-loaded) or via autorun_detectors weights.
-        if mid in loaded_ids:
-            entry["detector_loaded"] = True
-        elif det:
-            entry["detector_loaded"] = det.get("weights") is not None
-        else:
-            entry["detector_loaded"] = False
+        entry["detector_loaded"] = mid in loaded_ids
     return jsonify({"models": entries})
 
 
@@ -86,7 +71,6 @@ def register_model_route():
         {
             "name": "Dog Barks",
             "media_type": "audio",
-            "trainable": true,
             "text_query": "dog barking sounds"
         }
     """
@@ -95,46 +79,37 @@ def register_model_route():
     data = request.get_json(force=True, silent=True) or {}
     name = data.get("name", "").strip()
     media_type = data.get("media_type", "").strip()
-    trainable = data.get("trainable", True)
     text_query = data.get("text_query", "")
     media_example = data.get("media_example", "")
-    detector_name = data.get("detector_name", "")
-    trainable_model_name = data.get("trainable_model_name", "")
 
     if not name:
         return jsonify({"error": "name is required"}), 400
     if not media_type or media_type == "any":
         return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
 
-    # If trainable, also create the trainable model file if needed
-    if trainable and not trainable_model_name:
-        trainable_model_name = name
-        tm_path = _model_path(name)
-        if not tm_path.exists():
-            examples = data.get("examples", [])
-            if not examples and text_query:
-                examples = [{"type": "text", "value": text_query}]
-            if not examples and media_example:
-                examples = [{"type": "media", "value": media_example}]
-            model_data = {
-                "name": name,
-                "text_query": text_query,
-                "media_example": media_example,
-                "media_type": media_type,
-                "examples": examples,
-                "created_at": time.time(),
-                "labelset": {"labels": []},
-            }
-            _write_model(tm_path, model_data)
+    tm_path = _model_path(name)
+    if not tm_path.exists():
+        examples = data.get("examples", [])
+        if not examples and text_query:
+            examples = [{"type": "text", "value": text_query}]
+        if not examples and media_example:
+            examples = [{"type": "media", "value": media_example}]
+        model_data = {
+            "name": name,
+            "text_query": text_query,
+            "media_example": media_example,
+            "media_type": media_type,
+            "examples": examples,
+            "created_at": time.time(),
+            "labelset": {"labels": []},
+        }
+        _write_model(tm_path, model_data)
 
     entry = register_model(
         name=name,
         media_type=media_type,
-        trainable=trainable,
         text_query=text_query,
         media_example=media_example,
-        detector_name=detector_name,
-        trainable_model_name=trainable_model_name,
         created_by=get_current_user(),
     )
     return jsonify({"ok": True, "model": entry}), 201
@@ -145,36 +120,7 @@ def register_model_route():
     methods=["POST"],
 )
 def register_model_from_labelset(importer_name: str):
-    """Create a trainable model seeded with labels from a label importer.
-
-    The new model has no text_query or media_example — the imported labels
-    serve as its training data.  A ``trainable_models/<name>.json`` file is
-    written with the full labelset baked in, a registry entry is created,
-    and the frontend can then call :func:`load_model_route` with the
-    returned ``model.id`` to resolve origins and train the MLP.
-
-    Accepts ``multipart/form-data`` (when the importer has ``file`` fields)
-    or JSON.  Top-level fields read from the request:
-
-      * ``name`` — trainable model name (required).
-
-    All remaining fields are treated as importer field values.  The media
-    type is inferred from the labels' origins: every origin that carries a
-    detectable type (folder origins with ``params.media_type``, demo
-    origins via ``DEMO_DATASETS``) must agree on the same type.  Returns
-    ``400`` if no origins carry a type (e.g. legacy md5-only labelsets) or
-    if the origins disagree.
-
-    Returns ``201`` with::
-
-        {
-            "ok": true,
-            "model": {<registry entry>},
-            "applied": <int>,   # entries turned into labels
-            "skipped": <int>,   # entries rejected (unknown label value)
-            "num_labels": <int>,
-        }
-    """
+    """Create a trainable model seeded with labels from a label importer."""
     from vtsearch.datasets.ingest import _media_type_from_origin
     from vtsearch.datasets.labelset import LabeledElement, LabelSet
     from vtsearch.labels.importers import get_label_importer, list_label_importers
@@ -271,9 +217,7 @@ def register_model_from_labelset(importer_name: str):
     entry = register_model(
         name=name,
         media_type=media_type,
-        trainable=True,
         num_training=len(labelset),
-        trainable_model_name=name,
         created_by=get_current_user(),
     )
     update_model(entry["id"], last_trained_at=time.time())
@@ -293,22 +237,7 @@ def register_model_from_labelset(importer_name: str):
 
 @models_registry_bp.route("/api/models/registry/load", methods=["POST"])
 def load_model_route():
-    """Load a model into memory and make it active.
-
-    Expects JSON::
-
-        {"model_id": "abc123"}
-
-    Pass ``model_id: null`` to deactivate (no model active).
-
-    When loading a trainable model:
-
-    1. The current model's labels are saved (auto-sync).
-    2. A new DetectorContext is created for the model (or an existing one
-       is reused if already loaded).
-    3. The model's saved labelset is restored into the DetectorContext.
-    4. Media examples are seeded as good votes.
-    """
+    """Load a model into memory and make it active."""
     from vtsearch.models.registry import (
         get_model,
         is_model_loaded,
@@ -329,15 +258,10 @@ def load_model_route():
         if entry is None:
             return jsonify({"error": "Model not found"}), 404
 
-    # Save current model's labels before switching — only when there are
-    # votes to save.  An empty-votes context could be a fresh/un-restored
-    # detector or a discarded one; merging "no votes" against the same
-    # dataset as the saved labelset would wipe the labelset.
     if good_votes or bad_votes:
         sync_labels_to_loaded_model()
 
     if model_id is None:
-        # No model requested — unload the current model (if any) and clear find mode.
         from vtsearch.models.registry import remove_loaded_model_id, set_find_mode
 
         det_ctx = get_active_detector_context()
@@ -351,11 +275,8 @@ def load_model_route():
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
     if is_model_loaded(model_id):
-        # Already loaded — nothing more to do.
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
-    # New load: create a DetectorContext, register it, then load labels
-    # asynchronously so the frontend can show a progress bar.
     from vtsearch.utils.progress import CancelledError, model_loading_tasks
 
     det_ctx = DetectorContext(
@@ -375,9 +296,8 @@ def load_model_route():
     )
     tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
 
-    # Capture values needed by the background thread.
-    tm_name = entry.get("trainable_model_name", "")
-    # Capture the dataset context so the thread can resolve medias.
+    tm_name = entry.get("name", "")
+
     from vtsearch.utils import get_active_context
 
     _thread_ds_ctx = get_active_context()
@@ -386,8 +306,6 @@ def load_model_route():
         from vtsearch.models.registry import add_loaded_model_id, remove_loaded_model_id
         from vtsearch.utils.state_core import set_thread_dataset_context, set_thread_detector_context
 
-        # Set thread-local contexts so proxy objects (medias, good_votes, etc.)
-        # resolve correctly in this background thread.
         set_thread_dataset_context(_thread_ds_ctx)
         set_thread_detector_context(det_ctx)
 
@@ -417,12 +335,6 @@ def load_model_route():
                     )
                     _seed_good_votes_from_examples(tm_data.get("examples", []))
 
-                    # Train the MLP from the *full* saved labelset, not just
-                    # votes that resolved into the active dataset.  Each
-                    # labelset element is resolved via its origin importer
-                    # and embedded with the active dataset's embedder; the
-                    # resulting vectors are cached on det_ctx.label_embeddings
-                    # for the rest of the session.
                     tracker.check_cancelled()
                     tracker.update(
                         "loading",
@@ -460,7 +372,6 @@ def load_model_route():
                         on_progress=_embed_progress,
                     )
 
-            # Mark as fully loaded so the registry shows detector_loaded=True.
             add_loaded_model_id(model_id)
             tracker.update("idle", "", 0, 0, step=None, total_steps=None)
         except CancelledError:
@@ -495,10 +406,7 @@ def load_model_route():
 
 @models_registry_bp.route("/api/models/registry/<model_id>/unload", methods=["POST"])
 def unload_model_route(model_id: str):
-    """Unload a model from memory (frees its DetectorContext).
-
-    Saves labels before unloading if the model is active.
-    """
+    """Unload a model from memory (frees its DetectorContext)."""
     from vtsearch.models.registry import get_model, is_model_loaded, remove_loaded_model_id
     from vtsearch.utils import (
         bad_votes,
@@ -513,13 +421,10 @@ def unload_model_route(model_id: str):
     if not is_model_loaded(model_id):
         return jsonify({"error": "Model is not loaded"}), 400
 
-    # Save labels if this model is currently resolved by the context.
-    # Skip when votes are empty — see load_model_route for rationale.
     det_ctx = get_active_detector_context()
     if det_ctx.detector_id == model_id and (good_votes or bad_votes):
         sync_labels_to_loaded_model()
 
-    # Remove from memory
     unregister_detector_context(model_id)
     remove_loaded_model_id(model_id)
 
@@ -528,33 +433,21 @@ def unload_model_route(model_id: str):
 
 @models_registry_bp.route("/api/models/registry/<model_id>", methods=["DELETE"])
 def delete_registered_model(model_id: str):
-    """Remove a model from the registry."""
+    """Remove a model from the registry, including its labelset file."""
     from vtsearch.models.registry import get_model, unregister_model
 
     entry = get_model(model_id)
     if entry is None:
         return jsonify({"error": "Model not found"}), 404
 
-    # Clean up associated resources.  Failures here must not prevent the
-    # registry entry from being removed — otherwise the user sees a detector
-    # that cannot be deleted.
     try:
-        tm_name = entry.get("trainable_model_name", "")
+        tm_name = entry.get("name", "")
         if tm_name:
             tm_path = _model_path(tm_name)
             if tm_path.exists():
                 tm_path.unlink(missing_ok=True)
     except Exception:
         logger.exception("Failed to delete trainable-model file for %s", model_id)
-
-    try:
-        det_name = entry.get("detector_name", "")
-        if det_name:
-            from vtsearch.utils import remove_autorun_detector
-
-            remove_autorun_detector(det_name)
-    except Exception:
-        logger.exception("Failed to remove autorun detector for %s", model_id)
 
     try:
         from vtsearch.models.registry import is_model_loaded, remove_loaded_model_id
@@ -565,6 +458,14 @@ def delete_registered_model(model_id: str):
             remove_loaded_model_id(model_id)
     except Exception:
         logger.exception("Failed to unregister detector context for %s", model_id)
+
+    # Drop autorun flag if set.
+    try:
+        from vtsearch.settings import remove_autorun_trainable_model
+
+        remove_autorun_trainable_model(entry.get("name", ""))
+    except Exception:
+        logger.exception("Failed to drop autorun flag for %s", model_id)
 
     unregister_model(model_id)
     return jsonify({"ok": True})
@@ -591,7 +492,7 @@ def cancel_model_loading_task(task_id: str):
 
 @models_registry_bp.route("/api/models/registry/<model_id>/rename", methods=["PUT"])
 def rename_registered_model(model_id: str):
-    """Rename a registered model."""
+    """Rename a registered model and its on-disk labelset file."""
     from vtsearch.models.registry import get_model, rename_model
 
     data = request.get_json(force=True, silent=True) or {}
@@ -603,10 +504,9 @@ def rename_registered_model(model_id: str):
     if entry is None:
         return jsonify({"error": "Model not found"}), 404
 
-    # Rename the underlying trainable model file if applicable
-    tm_name = entry.get("trainable_model_name", "")
-    if tm_name:
-        old_path = _model_path(tm_name)
+    old_name = entry.get("name", "")
+    if old_name and old_name != new_name:
+        old_path = _model_path(old_name)
         tm_data = _read_model(old_path)
         if tm_data:
             new_path = _model_path(new_name)
@@ -614,9 +514,56 @@ def rename_registered_model(model_id: str):
             _write_model(new_path, tm_data)
             if new_path != old_path:
                 old_path.unlink(missing_ok=True)
-        from vtsearch.models.registry import update_model
 
-        update_model(model_id, trainable_model_name=new_name)
+        # Rename autorun setting if present.
+        try:
+            from vtsearch.settings import get_autorun_trainable_models, set_autorun_trainable_models
+
+            current = get_autorun_trainable_models()
+            if old_name in current:
+                current = [new_name if n == old_name else n for n in current]
+                set_autorun_trainable_models(current)
+        except Exception:
+            logger.exception("Failed to rename autorun entry for %s", model_id)
 
     rename_model(model_id, new_name)
     return jsonify({"ok": True, "name": new_name})
+
+
+@models_registry_bp.route("/api/models/registry/<model_id>/autorun", methods=["PUT"])
+def set_model_autorun(model_id: str):
+    """Toggle the autorun flag for a registered model.
+
+    Body: ``{"autorun": true}`` (or ``"autodetect"`` for backwards-compat).
+
+    The flag is stored in ``settings.json`` under ``autorun_trainable_models``
+    so the CLI's ``--autodetect`` flow and the active-dataset
+    ``/api/auto-detect`` route both see it.
+    """
+    from vtsearch.models.registry import get_model
+    from vtsearch.settings import (
+        add_autorun_trainable_model,
+        remove_autorun_trainable_model,
+    )
+
+    entry = get_model(model_id)
+    if entry is None:
+        return jsonify({"error": "Model not found"}), 404
+
+    data = request.get_json(force=True, silent=True) or {}
+    if "autorun" in data:
+        flag = bool(data["autorun"])
+    elif "autodetect" in data:
+        flag = bool(data["autodetect"])
+    else:
+        return jsonify({"error": "autorun is required"}), 400
+
+    name = entry.get("name", "")
+    if not name:
+        return jsonify({"error": "Model has no name"}), 500
+
+    if flag:
+        add_autorun_trainable_model(name)
+    else:
+        remove_autorun_trainable_model(name)
+    return jsonify({"ok": True, "autorun": flag})

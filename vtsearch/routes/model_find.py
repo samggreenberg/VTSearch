@@ -1,8 +1,9 @@
 """Multi-dataset, multi-model Find routes.
 
 Run selected trainable models against selected datasets and return merged
-hit/miss results.  Split out from ``detectors_training.py`` because the
-orchestration logic for cross-dataset scoring is large enough to stand alone.
+hit/miss results.  Each model's MLP is sourced from its in-memory
+:class:`~vtsearch.utils.DetectorContext` (when loaded) or trained on demand
+from its on-disk labelset.
 """
 
 from __future__ import annotations
@@ -12,42 +13,24 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify
 
-from vtsearch.models import build_model_from_weights
 from vtsearch.models.detector_training import train_and_threshold
 from vtsearch.routes.helpers import get_json_safe
-from vtsearch.utils import get_autorun_detectors
 from vtsearch.utils.progress import get_find_progress, update_find_progress
 
-detectors_find_bp = Blueprint("detectors_find", __name__)
+model_find_bp = Blueprint("model_find", __name__)
 
 
 # Number of high-level Find steps: prepare models, load data, score.
 _FIND_STEPS = 3
 
 
-@detectors_find_bp.route("/api/find/check-labels", methods=["POST"])
+@model_find_bp.route("/api/find/check-labels", methods=["POST"])
 def find_check_labels():
     """Pre-flight check: report how many trainable-model labels can be resolved.
 
     Takes the same ``model_ids`` / ``dataset_ids`` payload as ``/api/find``
     and returns per-model resolution statistics so the frontend can warn the
     user before starting the (potentially expensive) Find operation.
-
-    Returns JSON::
-
-        {
-            "warnings": [
-                {
-                    "model_name": "Mammals",
-                    "total_labels": 82,
-                    "resolved_labels": 60,
-                    "failed_labels": 22
-                }
-            ]
-        }
-
-    ``warnings`` only contains entries for models that have at least one
-    unresolved label.  An empty ``warnings`` list means everything is fine.
     """
     from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
@@ -61,17 +44,16 @@ def find_check_labels():
     if not dataset_ids or not model_ids:
         return jsonify({"warnings": []})
 
-    # Collect trainable models that need label resolution
     warnings: list[dict] = []
     for m_id in model_ids:
         m = reg_get_model(m_id)
         if m is None:
             continue
-        tm_name = m.get("trainable_model_name", "")
-        if not tm_name:
+        name = m.get("name", "")
+        if not name:
             continue
 
-        tm_path = _model_path(tm_name)
+        tm_path = _model_path(name)
         tm_data = _read_model(tm_path)
         if not tm_data:
             continue
@@ -79,7 +61,6 @@ def find_check_labels():
         if not labels:
             continue
 
-        # Check if labels match any of the selected datasets directly
         any_direct_match = False
         for ds_id in dataset_ids:
             ds = reg_get_ds(ds_id)
@@ -111,10 +92,8 @@ def find_check_labels():
                 break
 
         if any_direct_match:
-            # Labels matched the dataset directly — no resolution needed
             continue
 
-        # Cross-dataset scenario: try the resolver
         from vtsearch.models.resolver import resolve_label_embeddings
 
         media_type = tm_data.get("media_type", "audio")
@@ -124,7 +103,7 @@ def find_check_labels():
         if failed > 0:
             warnings.append(
                 {
-                    "model_name": m.get("name", tm_name),
+                    "model_name": m.get("name", name),
                     "total_labels": resolved.total_count,
                     "resolved_labels": resolved.resolved_count,
                     "failed_labels": failed,
@@ -134,13 +113,13 @@ def find_check_labels():
     return jsonify({"warnings": warnings})
 
 
-@detectors_find_bp.route("/api/find/progress")
+@model_find_bp.route("/api/find/progress")
 def find_progress_endpoint():
     """Return the current progress of the Find operation."""
     return jsonify(get_find_progress())
 
 
-@detectors_find_bp.route("/api/find", methods=["POST"])
+@model_find_bp.route("/api/find", methods=["POST"])
 def multi_find():
     """Run selected models on selected datasets and return merged results.
 
@@ -174,7 +153,6 @@ def multi_find():
         update_find_progress("idle", "", step=None, total_steps=None)
         return jsonify({"error": "No models selected"}), 400
 
-    # -- Step 1/3: Preparing models --
     update_find_progress(
         "running",
         "Preparing models…",
@@ -184,7 +162,6 @@ def multi_find():
         total_steps=_FIND_STEPS,
     )
 
-    # Resolve datasets and models from registries
     datasets = []
     for ds_id in dataset_ids:
         ds = reg_get_ds(ds_id)
@@ -205,12 +182,8 @@ def multi_find():
             return jsonify({"error": f"Model '{m_id}' not found"}), 404
         models.append(m)
 
-    # Build the list of detector configs (weights+threshold) for each model
     model_configs = []
     for mi, m in enumerate(models):
-        det_name = m.get("detector_name", "")
-        tm_name = m.get("trainable_model_name", "")
-
         update_find_progress(
             "running",
             f'Preparing model "{m["name"]}"…',
@@ -220,7 +193,6 @@ def multi_find():
             total_steps=_FIND_STEPS,
         )
 
-        # Try loaded DetectorContext first (cached MLP — skip resolve + train)
         from vtsearch.utils.state_core import get_detector_context
 
         det_ctx = get_detector_context(m["id"])
@@ -235,39 +207,21 @@ def multi_find():
             )
             continue
 
-        # Try autorun detector next (has serialized weights)
-        if det_name:
-            det = get_autorun_detectors().get(det_name)
-            has_weights = det and det.get("weights")
-            if has_weights:
-                model_configs.append(
-                    {
-                        "name": m["name"],
-                        "model_id": m["id"],
-                        "weights": det["weights"],
-                        "threshold": det.get("threshold", 0.5),
-                    }
-                )
-                continue
-
-        # For trainable models, we need to train on-the-fly from their labelset
-        if tm_name:
-            tm_path = _model_path(tm_name)
-            tm_data = _read_model(tm_path)
-            if tm_data and tm_data.get("labelset", {}).get("labels"):
-                model_configs.append(
-                    {
-                        "name": m["name"],
-                        "model_id": m["id"],
-                        "trainable_model_data": tm_data,
-                    }
-                )
-                continue
+        tm_path = _model_path(m["name"])
+        tm_data = _read_model(tm_path)
+        if tm_data and tm_data.get("labelset", {}).get("labels"):
+            model_configs.append(
+                {
+                    "name": m["name"],
+                    "model_id": m["id"],
+                    "trainable_model_data": tm_data,
+                }
+            )
+            continue
 
         update_find_progress("idle", "", step=None, total_steps=None)
-        return jsonify({"error": f"Model '{m['name']}' has no weights or labels for detection"}), 400
+        return jsonify({"error": f"Model '{m['name']}' has no labels for detection"}), 400
 
-    # Run Find across all datasets × models
     all_results = []
     all_negative_results = []
     detected_media_type = ""
@@ -275,13 +229,10 @@ def multi_find():
     multiple_models = len(model_configs) > 1
     model_names = [mc["name"] for mc in model_configs]
 
-    # Compute total scoring units for step 3 progress:
-    # We'll count items scored across all dataset×model combos.
     total_scoring_units = 0
     scored_units = 0
 
     for di, ds in enumerate(datasets):
-        # -- Step 2/3: Loading dataset --
         ds_label = f'Loading dataset "{ds["name"]}"'
         if len(datasets) > 1:
             ds_label += f" ({di + 1}/{len(datasets)})"
@@ -295,7 +246,6 @@ def multi_find():
             total_steps=_FIND_STEPS,
         )
 
-        # Load dataset from pkl
         temp_medias: dict = {}
         try:
             pkl_path = ds["pkl_path"]
@@ -319,20 +269,16 @@ def multi_find():
         if not temp_medias:
             continue
 
-        # Detect media type from loaded dataset
         if not detected_media_type:
             first_media = next(iter(temp_medias.values()), {})
             detected_media_type = first_media.get("type", "")
 
-        # Build embeddings tensor
         all_ids = sorted(temp_medias.keys())
         all_embs = np.array([temp_medias[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
 
-        # Update total scoring units now that we know the dataset size
         total_scoring_units += len(all_ids) * len(model_configs)
 
-        # Per-media result: {media_id -> {info, per_model_scores}}
         media_results: dict[int, dict] = {}
         for cid in all_ids:
             clip = temp_medias[cid]
@@ -346,7 +292,6 @@ def multi_find():
                 "model_verdicts": {},
             }
 
-        # -- Step 3/3: Scoring --
         for mc in model_configs:
             score_label = f'Scoring with "{mc["name"]}" on "{ds["name"]}"'
             if len(datasets) > 1 or len(model_configs) > 1:
@@ -362,7 +307,6 @@ def multi_find():
             )
 
             if "live_model" in mc:
-                # Loaded detector with cached MLP — use directly, no resolve/train
                 try:
                     model = mc["live_model"]
                     with torch.no_grad():
@@ -382,33 +326,10 @@ def multi_find():
                             "verdict": "Error",
                             "score": 0,
                         }
-            elif "weights" in mc:
-                # Pre-trained detector with serialized weights
-                try:
-                    model = build_model_from_weights(mc["weights"])
-                    with torch.no_grad():
-                        raw_logits = model(X_all)
-                        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
-                    threshold = mc.get("threshold", 0.5)
-
-                    for cid, score in zip(all_ids, scores):
-                        verdict = "Good" if score >= threshold else "Bad"
-                        media_results[cid]["model_verdicts"][mc["name"]] = {
-                            "verdict": verdict,
-                            "score": round(score, 4),
-                        }
-                except Exception:
-                    for cid in all_ids:
-                        media_results[cid]["model_verdicts"][mc["name"]] = {
-                            "verdict": "Error",
-                            "score": 0,
-                        }
             elif "trainable_model_data" in mc:
-                # Trainable model — train from labelset, then score
                 tm_data = mc["trainable_model_data"]
                 labels = tm_data.get("labelset", {}).get("labels", [])
 
-                # Try to match labels to this dataset's medias and train
                 try:
                     from vtsearch.utils import build_media_lookup, resolve_media_ids
 
@@ -429,8 +350,6 @@ def multi_find():
                         X_list = good_embs + bad_embs
                         y_list = [1.0] * len(good_embs) + [0.0] * len(bad_embs)
                     else:
-                        # Labels didn't match this dataset — resolve from
-                        # original sources (cross-dataset scenario).
                         from vtsearch.models.resolver import resolve_label_embeddings
 
                         media_type = tm_data.get("media_type", "audio")
@@ -455,7 +374,6 @@ def multi_find():
                                 "score": round(score, 4),
                             }
                     else:
-                        # Not enough labels resolved
                         for cid in all_ids:
                             media_results[cid]["model_verdicts"][mc["name"]] = {
                                 "verdict": "N/A",
@@ -478,7 +396,6 @@ def multi_find():
                 total_steps=_FIND_STEPS,
             )
 
-        # Collect positive and negative hits
         for cid, mr in media_results.items():
             verdicts = mr["model_verdicts"]
             if any(v["verdict"] == "Good" for v in verdicts.values()):
@@ -486,11 +403,9 @@ def multi_find():
             elif any(v["verdict"] in ("Bad", "Error", "N/A") for v in verdicts.values()):
                 all_negative_results.append(mr)
 
-        # Free memory
         del temp_medias, X_all
         gc.collect()
 
-    # Reset progress to idle
     update_find_progress("idle", "", step=None, total_steps=None)
 
     return jsonify(
