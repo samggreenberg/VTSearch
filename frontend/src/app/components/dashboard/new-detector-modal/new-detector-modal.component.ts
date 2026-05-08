@@ -819,10 +819,10 @@ export class NewDetectorModalComponent implements OnInit {
       )
       .subscribe({
         next: (resp: any) => {
-          const newId = resp?.model?.id || '';
+          const newId = resp?.detector?.id || '';
           if (!newId) {
             this.submitting = false;
-            this.error = 'Server did not return a model id';
+            this.error = 'Server did not return a detector id';
             return;
           }
           this.detectorsApi.loadDetector(newId).subscribe({
@@ -839,7 +839,7 @@ export class NewDetectorModalComponent implements OnInit {
         },
         error: (err) => {
           this.submitting = false;
-          this.error = err.error?.error || 'Failed to create model from labelset';
+          this.error = err.error?.error || 'Failed to create detector from labelset';
         },
       });
   }
@@ -889,11 +889,11 @@ export class NewDetectorModalComponent implements OnInit {
       .subscribe({
         next: (resp: any) => {
           this.submitting = false;
-          this.created.emit(resp?.model?.id || '');
+          this.created.emit(resp?.detector?.id || '');
         },
         error: (err) => {
           this.submitting = false;
-          this.error = err.error?.error || 'Failed to create model';
+          this.error = err.error?.error || 'Failed to create detector';
         },
       });
   }
