@@ -38,7 +38,7 @@ _DEFAULTS: dict[str, Any] = {
     "panel_pct_left": {},
     "panel_pct_right": {},
     "autoload_media_embedders": [],
-    "autorun_trainable_models": [],
+    "autorun_detectors": [],
     "autopilot_enabled": True,
     "hide_autopilot": False,
     "autopilot_top_greens": 3,
@@ -46,7 +46,7 @@ _DEFAULTS: dict[str, Any] = {
     "autopilot_resort_interval": 10,
     "autopilot_goal_diversity": 40,
     "saved_datasets_dir": str(DATA_DIR / "saved_datasets"),
-    "trainable_models_dir": str(DATA_DIR / "trainable_models"),
+    "detectors_dir": str(DATA_DIR / "detectors"),
     "max_concurrent_dataset_downloads": 1,
     "max_concurrent_dataset_embeddings": 1,
 }
@@ -54,9 +54,9 @@ _DEFAULTS: dict[str, Any] = {
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
 #: should not be reset by the Default button).
 _EXCLUDE_FROM_DEFAULTS = {
-    "autorun_trainable_models",
+    "autorun_detectors",
     "saved_datasets_dir",
-    "trainable_models_dir",
+    "detectors_dir",
     "settings_source",
 }
 
@@ -331,51 +331,51 @@ def toggle_autoload_media_embedder(embedder_name: str) -> list[str]:
         return current
 
 
-def get_autorun_trainable_models() -> list[str]:
-    """Return the list of trainable-model names flagged for autorun.
+def get_autorun_detectors() -> list[str]:
+    """Return the list of detector names flagged for autorun.
 
-    Each name maps to a JSON file under ``data/trainable_models/``; scoring
-    resolves the labelset's origins, re-embeds, trains an MLP, and applies
-    it to the loaded dataset.
+    Each name maps to a JSON file under ``data/detectors/``; scoring resolves
+    the labelset's origins, re-embeds, trains an MLP, and applies it to the
+    loaded dataset.
     """
     with _settings_lock:
-        raw = _ensure_loaded().get("autorun_trainable_models", [])
+        raw = _ensure_loaded().get("autorun_detectors", [])
         if isinstance(raw, list):
             return list(raw)
         return []
 
 
-def set_autorun_trainable_models(value: list[str]) -> None:
-    """Set and persist the full list of autorun trainable-model names."""
+def set_autorun_detectors(value: list[str]) -> None:
+    """Set and persist the full list of autorun detector names."""
     with _settings_lock:
         s = _ensure_loaded()
-        s["autorun_trainable_models"] = list(dict.fromkeys(value))  # dedupe, preserve order
+        s["autorun_detectors"] = list(dict.fromkeys(value))  # dedupe, preserve order
         _save(s)
 
 
-def add_autorun_trainable_model(name: str) -> None:
-    """Add a trainable-model name to the autorun list (idempotent)."""
+def add_autorun_detector(name: str) -> None:
+    """Add a detector name to the autorun list (idempotent)."""
     with _settings_lock:
-        current = get_autorun_trainable_models()
+        current = get_autorun_detectors()
         if name not in current:
             current.append(name)
-            set_autorun_trainable_models(current)
+            set_autorun_detectors(current)
 
 
-def remove_autorun_trainable_model(name: str) -> bool:
-    """Remove a trainable-model name from the autorun list. Returns True if found."""
+def remove_autorun_detector(name: str) -> bool:
+    """Remove a detector name from the autorun list. Returns True if found."""
     with _settings_lock:
-        current = get_autorun_trainable_models()
+        current = get_autorun_detectors()
         if name in current:
             current.remove(name)
-            set_autorun_trainable_models(current)
+            set_autorun_detectors(current)
             return True
         return False
 
 
-def is_autorun_trainable_model(name: str) -> bool:
-    """Check whether a trainable-model name is in the autorun list."""
-    return name in get_autorun_trainable_models()
+def is_autorun_detector(name: str) -> bool:
+    """Check whether a detector name is in the autorun list."""
+    return name in get_autorun_detectors()
 
 
 # -------------------------------------------------------------------
@@ -408,14 +408,14 @@ def set_saved_datasets_dir(value: str | Path) -> None:
     _set_dir("saved_datasets_dir", value)
 
 
-def get_trainable_models_dir() -> Path:
-    """Return the configured trainable-models directory."""
-    return _get_dir("trainable_models_dir")
+def get_detectors_dir() -> Path:
+    """Return the configured detectors directory."""
+    return _get_dir("detectors_dir")
 
 
-def set_trainable_models_dir(value: str | Path) -> None:
-    """Set the trainable-models directory."""
-    _set_dir("trainable_models_dir", value)
+def set_detectors_dir(value: str | Path) -> None:
+    """Set the detectors directory."""
+    _set_dir("detectors_dir", value)
 
 
 def set_settings_path(path: str | Path) -> None:

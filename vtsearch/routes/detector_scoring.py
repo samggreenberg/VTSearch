@@ -1,8 +1,8 @@
-"""Trainable-model scoring routes.
+"""Detector scoring routes.
 
 Implements the active-dataset scoring endpoints — find-label and auto-detect —
-on top of the trainable-model concept.  Models are loaded into
-``DetectorContext`` instances on demand; weights live exclusively in RAM.
+on top of the detector concept.  Detectors are loaded into ``DetectorContext``
+instances on demand; weights live exclusively in RAM.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from vtsearch.utils.progress import update_find_progress
 
 logger = logging.getLogger(__name__)
 
-model_scoring_bp = Blueprint("model_scoring", __name__)
+detector_scoring_bp = Blueprint("detector_scoring", __name__)
 
 # Keys excluded from API responses (large binary/vector data).
 _HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string", "thumbnail_bytes")
@@ -30,38 +30,38 @@ def _media_info_for_response(media: dict) -> dict:
     return {k: v for k, v in media.items() if k not in _HEAVYWEIGHT_KEYS}
 
 
-def _resolve_or_train_model(
-    model_id: str,
-    tm_data: dict | None,
+def _resolve_or_train_detector(
+    detector_id: str,
+    det_data: dict | None,
     media_type: str,
     snap: dict | None,
     *,
     progress_step: int = 2,
     progress_total_steps: int = 4,
 ) -> tuple[object | None, float, dict | None]:
-    """Return (mlp, threshold, diagnostic) for *model_id*.
+    """Return (mlp, threshold, diagnostic) for *detector_id*.
 
     Tries the loaded :class:`DetectorContext` first.  Falls back to training
-    on demand from the trainable-model labelset, embedding label media via
-    its origin importer.  Returns ``(None, _, diag)`` when training is not
+    on demand from the detector's labelset, embedding label media via its
+    origin importer.  Returns ``(None, _, diag)`` when training is not
     possible.
     """
     from vtsearch.utils.state_core import get_detector_context
 
-    det_ctx = get_detector_context(model_id)
+    det_ctx = get_detector_context(detector_id)
     if det_ctx is not None and det_ctx.model is not None:
         return det_ctx.model, det_ctx.threshold, None
 
-    if tm_data is None:
+    if det_data is None:
         return None, 0.5, None
 
-    label_entries = tm_data.get("labelset", {}).get("labels", [])
+    label_entries = det_data.get("labelset", {}).get("labels", [])
     if not label_entries:
         return None, 0.5, None
 
     update_find_progress(
         "running",
-        "Training model from labels…",
+        "Training detector from labels…",
         current=0,
         total=0,
         step=progress_step,
@@ -131,8 +131,8 @@ def _resolve_or_train_model(
             step=progress_step,
             total_steps=progress_total_steps,
         )
-        trained_model, threshold = train_and_threshold(X_list, y_list, snap=snap)
-        return trained_model, threshold, None
+        trained_mlp, threshold = train_and_threshold(X_list, y_list, snap=snap)
+        return trained_mlp, threshold, None
 
     diagnostic: dict = {
         "total_labels": md5_matched + len(unresolved),
@@ -162,22 +162,22 @@ def _resolve_or_train_model(
     return None, 0.5, diagnostic
 
 
-@model_scoring_bp.route("/api/find-label", methods=["POST"])
+@detector_scoring_bp.route("/api/find-label", methods=["POST"])
 def find_label():
-    """Score all loaded medias with a model and apply labels based on threshold.
+    """Score all loaded medias with a detector and apply labels based on threshold.
 
     Expects JSON::
 
-        {"model_id": "abc123"}
+        {"detector_id": "abc123"}
 
-    Resolves the model from the registry, scores every loaded media, and
+    Resolves the detector from the registry, scores every loaded media, and
     applies Good/Bad labels for ALL elements based on the threshold.  Returns
     the sort results so the frontend can display the stripe and scroll order.
     """
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.registry import get_model as reg_get_model
-    from vtsearch.models.trainable_model_store import _model_path, _read_model
+    from vtsearch.models.detector_registry import get_detector as reg_get_detector
+    from vtsearch.models.detector_store import _detector_path, _read_detector
     from vtsearch.utils import (
         apply_labels_bulk_with_click_time,
         set_find_initial_labels,
@@ -187,10 +187,10 @@ def find_label():
     _FIND_LABEL_STEPS = 4
 
     body = get_json_safe()
-    model_id = body.get("model_id")
-    if not model_id:
+    detector_id = body.get("detector_id")
+    if not detector_id:
         update_find_progress("idle", "")
-        return jsonify({"error": "model_id is required"}), 400
+        return jsonify({"error": "detector_id is required"}), 400
 
     # If the request body specifies a dataset_id, override the request-scoped
     # context so scoring runs against the correct dataset.
@@ -205,30 +205,30 @@ def find_label():
 
     update_find_progress(
         "running",
-        "Resolving model…",
+        "Resolving detector…",
         current=0,
         total=0,
         step=1,
         total_steps=_FIND_LABEL_STEPS,
     )
 
-    m = reg_get_model(model_id)
-    if m is None:
+    d = reg_get_detector(detector_id)
+    if d is None:
         update_find_progress("idle", "")
-        return jsonify({"error": f"Model '{model_id}' not found"}), 404
+        return jsonify({"error": f"Detector '{detector_id}' not found"}), 404
 
     snap = snapshot_medias()
     if not snap:
         update_find_progress("idle", "")
         return jsonify({"error": "No medias loaded"}), 400
 
-    media_type = m.get("media_type", "") or next(iter(snap.values())).get("type", "image")
-    tm_path = _model_path(m["name"])
-    tm_data = _read_model(tm_path)
+    media_type = d.get("media_type", "") or next(iter(snap.values())).get("type", "image")
+    det_path = _detector_path(d["name"])
+    det_data = _read_detector(det_path)
 
-    mlp, threshold, diagnostic = _resolve_or_train_model(
-        model_id,
-        tm_data,
+    mlp, threshold, diagnostic = _resolve_or_train_detector(
+        detector_id,
+        det_data,
         media_type,
         snap,
         progress_step=2,
@@ -238,7 +238,7 @@ def find_label():
         update_find_progress("idle", "")
         if diagnostic is not None:
             error_msg = (
-                f"Model '{m['name']}' could not be trained: "
+                f"Detector '{d['name']}' could not be trained: "
                 f"{diagnostic['total_labels']} training labels found, "
                 f"{diagnostic['md5_matched']} matched current dataset by MD5, "
                 f"{diagnostic['needed_resolution']} needed origin resolution, "
@@ -268,7 +268,7 @@ def find_label():
                     ),
                 }
             ), 400
-        return jsonify({"error": f"Model '{m['name']}' has no labels for scoring"}), 400
+        return jsonify({"error": f"Detector '{d['name']}' has no labels for scoring"}), 400
 
     n_total = len(snap)
     update_find_progress(
@@ -325,7 +325,7 @@ def find_label():
 
     set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
 
-    from vtsearch.models.registry import set_find_mode
+    from vtsearch.models.detector_registry import set_find_mode
 
     set_find_mode(True)
 
@@ -349,30 +349,30 @@ def find_label():
             "threshold": round(threshold, 4),
             "good_count": good_count,
             "bad_count": bad_count,
-            "model_name": m.get("name", ""),
+            "detector_name": d.get("name", ""),
         }
     )
 
 
-@model_scoring_bp.route("/api/auto-detect", methods=["POST"])
+@detector_scoring_bp.route("/api/auto-detect", methods=["POST"])
 def auto_detect():
-    """Score the active dataset with every trainable model flagged for autorun.
+    """Score the active dataset with every detector flagged for autorun.
 
-    Iterates :func:`~vtsearch.settings.get_autorun_trainable_models` and
-    trains each one's MLP on demand from its on-disk labelset.  Returns one
-    result column per model.
+    Iterates :func:`~vtsearch.settings.get_autorun_detectors` and trains each
+    one's MLP on demand from its on-disk labelset.  Returns one result column
+    per detector.
 
     Accepts an optional JSON body with ``detector_name`` to run a single
-    autorun model by name.
+    autorun detector by name.
     """
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.registry import (
-        find_by_trainable_model_name,
-        list_models,
+    from vtsearch.models.detector_registry import (
+        find_by_name,
+        list_detectors,
     )
-    from vtsearch.models.trainable_model_store import _model_path, _read_model
-    from vtsearch.settings import get_autorun_trainable_models
+    from vtsearch.models.detector_store import _detector_path, _read_detector
+    from vtsearch.settings import get_autorun_detectors
 
     snap = snapshot_medias()
     if not snap:
@@ -380,47 +380,47 @@ def auto_detect():
 
     media_type = next(iter(snap.values())).get("type", "audio")
 
-    autorun_names = get_autorun_trainable_models()
+    autorun_names = get_autorun_detectors()
     body = request.get_json(silent=True) or {}
     single_name = body.get("detector_name")
     if single_name:
         if single_name not in autorun_names:
-            return jsonify({"error": f"Trainable model '{single_name}' not flagged for autorun"}), 404
+            return jsonify({"error": f"Detector '{single_name}' not flagged for autorun"}), 404
         autorun_names = [single_name]
 
     if not autorun_names:
-        return jsonify({"error": f"No autorun trainable models found for media type: {media_type}"}), 400
+        return jsonify({"error": f"No autorun detectors found for media type: {media_type}"}), 400
 
-    # Build per-name (tm_data, registry entry) pairs, filtered by media type.
-    models_to_run: list[tuple[str, dict, dict | None]] = []
+    # Build per-name (det_data, registry entry) pairs, filtered by media type.
+    detectors_to_run: list[tuple[str, dict, dict | None]] = []
     for name in autorun_names:
-        tm_data = _read_model(_model_path(name))
-        if tm_data is None:
+        det_data = _read_detector(_detector_path(name))
+        if det_data is None:
             continue
-        if tm_data.get("media_type", "") != media_type:
+        if det_data.get("media_type", "") != media_type:
             continue
-        reg_entry = find_by_trainable_model_name(name)
+        reg_entry = find_by_name(name)
         if reg_entry is None:
             # Fallback: also accept registry entries whose name matches.
-            for entry in list_models():
+            for entry in list_detectors():
                 if entry.get("name") == name:
                     reg_entry = entry
                     break
-        models_to_run.append((name, tm_data, reg_entry))
+        detectors_to_run.append((name, det_data, reg_entry))
 
-    if not models_to_run:
-        return jsonify({"error": f"No autorun trainable models found for media type: {media_type}"}), 400
+    if not detectors_to_run:
+        return jsonify({"error": f"No autorun detectors found for media type: {media_type}"}), 400
 
     all_ids = sorted(snap.keys())
     all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
     X_all = torch.tensor(all_embs, dtype=torch.float32)
 
-    def _run_single(name: str, tm_data: dict, reg_entry: dict | None):
+    def _run_single(name: str, det_data: dict, reg_entry: dict | None):
         try:
-            model_id = reg_entry["id"] if reg_entry else name
-            mlp, threshold, _diag = _resolve_or_train_model(
-                model_id,
-                tm_data,
+            detector_id = reg_entry["id"] if reg_entry else name
+            mlp, threshold, _diag = _resolve_or_train_detector(
+                detector_id,
+                det_data,
                 media_type,
                 snap,
                 progress_step=1,
@@ -453,12 +453,12 @@ def auto_detect():
                 "negative_hits": negative_hits,
             }
         except Exception:
-            logger.exception("Auto-detect failed for trainable model %s", name)
+            logger.exception("Auto-detect failed for detector %s", name)
             return None
 
     results: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=min(len(models_to_run), 8)) as pool:
-        futures = [pool.submit(_run_single, name, data, entry) for name, data, entry in models_to_run]
+    with ThreadPoolExecutor(max_workers=min(len(detectors_to_run), 8)) as pool:
+        futures = [pool.submit(_run_single, name, data, entry) for name, data, entry in detectors_to_run]
         for future in futures:
             outcome = future.result()
             if outcome is not None:

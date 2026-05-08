@@ -1,7 +1,7 @@
 """Tests for request-scoped dataset/model context resolution.
 
 Phase 1 of the "active" state simplification: the frontend can send
-``X-Dataset-Id`` and ``X-Model-Id`` headers to select which loaded
+``X-Dataset-Id`` and ``X-Detector-Id`` headers to select which loaded
 dataset/model a request operates on, without mutating global "active" state.
 """
 
@@ -113,15 +113,15 @@ class TestRequestScopedDataset:
 
 
 # ---------------------------------------------------------------------------
-# Tests: X-Model-Id header overrides active detector per-request
+# Tests: X-Detector-Id header overrides active detector per-request
 # ---------------------------------------------------------------------------
 
 
 class TestRequestScopedModel:
-    """X-Model-Id header makes vote proxies resolve to a specific detector."""
+    """X-Detector-Id header makes vote proxies resolve to a specific detector."""
 
     def test_header_overrides_active_detector(self, client):
-        """Sending X-Model-Id routes vote reads to that detector."""
+        """Sending X-Detector-Id routes vote reads to that detector."""
         det_a = _make_detector("req_det_a")
         det_b = _make_detector("req_det_b")
 
@@ -139,7 +139,7 @@ class TestRequestScopedModel:
         assert 1 in set(data.get("good", []))
 
         # With header: votes come from B
-        resp = client.get("/api/votes", headers={"X-Model-Id": "req_det_b"})
+        resp = client.get("/api/votes", headers={"X-Detector-Id": "req_det_b"})
         assert resp.status_code == 200
         data = resp.get_json()
         good_ids = set(data.get("good", []))
@@ -150,14 +150,14 @@ class TestRequestScopedModel:
         assert get_thread_detector_context().detector_id == "req_det_a"
 
     def test_model_header_with_unloaded_id_falls_back(self, client):
-        """If X-Model-Id refers to a detector not in memory, fall back to global."""
+        """If X-Detector-Id refers to a detector not in memory, fall back to global."""
         det = _make_detector("req_det_fb")
         det.good_votes[5] = None
         from vtsearch.utils.state_core import get_detector_context
 
         set_thread_detector_context(get_detector_context("req_det_fb"))
 
-        resp = client.get("/api/votes", headers={"X-Model-Id": "nonexistent"})
+        resp = client.get("/api/votes", headers={"X-Detector-Id": "nonexistent"})
         assert resp.status_code == 200
         data = resp.get_json()
         assert 5 in set(data.get("good", []))
@@ -174,7 +174,7 @@ class TestRequestScopedModel:
 
         from app import app
 
-        with app.test_request_context(headers={"X-Model-Id": "req_det_ctx_b"}):
+        with app.test_request_context(headers={"X-Detector-Id": "req_det_ctx_b"}):
             app.preprocess_request()
             ctx = get_active_detector_context()
             assert ctx.detector_id == "req_det_ctx_b"
@@ -188,7 +188,7 @@ class TestRequestScopedModel:
 
 
 class TestRequestScopedBoth:
-    """Both X-Dataset-Id and X-Model-Id can be sent together."""
+    """Both X-Dataset-Id and X-Detector-Id can be sent together."""
 
     def test_both_headers_resolve_independently(self, client):
         """Dataset and model headers resolve to their respective contexts."""
@@ -203,7 +203,7 @@ class TestRequestScopedBoth:
 
         from app import app
 
-        with app.test_request_context(headers={"X-Dataset-Id": "req_both_ds", "X-Model-Id": "req_both_det"}):
+        with app.test_request_context(headers={"X-Dataset-Id": "req_both_ds", "X-Detector-Id": "req_both_det"}):
             app.preprocess_request()
             assert get_active_context().dataset_id == "req_both_ds"
             assert get_active_detector_context().detector_id == "req_both_det"
@@ -263,7 +263,7 @@ class TestRequestIsolation:
 
 
 class TestQueryParamContext:
-    """Query params ``dataset_id`` / ``model_id`` work as fallback for
+    """Query params ``dataset_id`` / ``detector_id`` work as fallback for
     browser-native requests (``<img src>``, ``<audio src>``, etc.) that
     bypass Angular's HttpClient interceptor and therefore cannot send
     custom headers.
@@ -284,7 +284,7 @@ class TestQueryParamContext:
             assert 1000 not in medias
 
     def test_model_id_query_param(self, client):
-        """?model_id= resolves the correct detector context."""
+        """?detector_id= resolves the correct detector context."""
         det_a = _make_detector("qp_det_a")
         det_b = _make_detector("qp_det_b")
         det_a.good_votes[10] = None
@@ -295,7 +295,7 @@ class TestQueryParamContext:
 
         from app import app
 
-        with app.test_request_context("/?model_id=qp_det_b"):
+        with app.test_request_context("/?detector_id=qp_det_b"):
             app.preprocess_request()
             assert get_active_detector_context().detector_id == "qp_det_b"
             assert 20 in good_votes

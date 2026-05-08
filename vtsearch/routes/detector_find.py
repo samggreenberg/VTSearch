@@ -1,7 +1,7 @@
-"""Multi-dataset, multi-model Find routes.
+"""Multi-dataset, multi-detector Find routes.
 
-Run selected trainable models against selected datasets and return merged
-hit/miss results.  Each model's MLP is sourced from its in-memory
+Run selected detectors against selected datasets and return merged hit/miss
+results.  Each detector's MLP is sourced from its in-memory
 :class:`~vtsearch.utils.DetectorContext` (when loaded) or trained on demand
 from its on-disk labelset.
 """
@@ -17,47 +17,47 @@ from vtsearch.models.detector_training import train_and_threshold
 from vtsearch.routes.helpers import get_json_safe
 from vtsearch.utils.progress import get_find_progress, update_find_progress
 
-model_find_bp = Blueprint("model_find", __name__)
+detector_find_bp = Blueprint("detector_find", __name__)
 
 
-# Number of high-level Find steps: prepare models, load data, score.
+# Number of high-level Find steps: prepare detectors, load data, score.
 _FIND_STEPS = 3
 
 
-@model_find_bp.route("/api/find/check-labels", methods=["POST"])
+@detector_find_bp.route("/api/find/check-labels", methods=["POST"])
 def find_check_labels():
-    """Pre-flight check: report how many trainable-model labels can be resolved.
+    """Pre-flight check: report how many detector labels can be resolved.
 
-    Takes the same ``model_ids`` / ``dataset_ids`` payload as ``/api/find``
-    and returns per-model resolution statistics so the frontend can warn the
-    user before starting the (potentially expensive) Find operation.
+    Takes the same ``detector_ids`` / ``dataset_ids`` payload as ``/api/find``
+    and returns per-detector resolution statistics so the frontend can warn
+    the user before starting the (potentially expensive) Find operation.
     """
     from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
-    from vtsearch.models.registry import get_model as reg_get_model
-    from vtsearch.models.trainable_model_store import _model_path, _read_model
+    from vtsearch.models.detector_registry import get_detector as reg_get_detector
+    from vtsearch.models.detector_store import _detector_path, _read_detector
 
     body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
-    model_ids = body.get("model_ids", [])
+    detector_ids = body.get("detector_ids", [])
 
-    if not dataset_ids or not model_ids:
+    if not dataset_ids or not detector_ids:
         return jsonify({"warnings": []})
 
     warnings: list[dict] = []
-    for m_id in model_ids:
-        m = reg_get_model(m_id)
-        if m is None:
+    for d_id in detector_ids:
+        d = reg_get_detector(d_id)
+        if d is None:
             continue
-        name = m.get("name", "")
+        name = d.get("name", "")
         if not name:
             continue
 
-        tm_path = _model_path(name)
-        tm_data = _read_model(tm_path)
-        if not tm_data:
+        det_path = _detector_path(name)
+        det_data = _read_detector(det_path)
+        if not det_data:
             continue
-        labels = tm_data.get("labelset", {}).get("labels", [])
+        labels = det_data.get("labelset", {}).get("labels", [])
         if not labels:
             continue
 
@@ -96,14 +96,14 @@ def find_check_labels():
 
         from vtsearch.models.resolver import resolve_label_embeddings
 
-        media_type = tm_data.get("media_type", "audio")
+        media_type = det_data.get("media_type", "audio")
         resolved = resolve_label_embeddings(labels, media_type)
 
         failed = resolved.total_count - resolved.resolved_count
         if failed > 0:
             warnings.append(
                 {
-                    "model_name": m.get("name", name),
+                    "detector_name": d.get("name", name),
                     "total_labels": resolved.total_count,
                     "resolved_labels": resolved.resolved_count,
                     "failed_labels": failed,
@@ -113,24 +113,24 @@ def find_check_labels():
     return jsonify({"warnings": warnings})
 
 
-@model_find_bp.route("/api/find/progress")
+@detector_find_bp.route("/api/find/progress")
 def find_progress_endpoint():
     """Return the current progress of the Find operation."""
     return jsonify(get_find_progress())
 
 
-@model_find_bp.route("/api/find", methods=["POST"])
+@detector_find_bp.route("/api/find", methods=["POST"])
 def multi_find():
-    """Run selected models on selected datasets and return merged results.
+    """Run selected detectors on selected datasets and return merged results.
 
     Expects JSON::
 
         {
             "dataset_ids": ["abc123", "def456"],
-            "model_ids": ["ghi789", "jkl012"]
+            "detector_ids": ["ghi789", "jkl012"]
         }
 
-    For each dataset: loads it from its saved pkl, then for each model runs
+    For each dataset: loads it from its saved pkl, then for each detector runs
     detection.  Returns a merged results table.
     """
     import gc
@@ -139,25 +139,25 @@ def multi_find():
 
     from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
-    from vtsearch.models.registry import get_model as reg_get_model
-    from vtsearch.models.trainable_model_store import _model_path, _read_model
+    from vtsearch.models.detector_registry import get_detector as reg_get_detector
+    from vtsearch.models.detector_store import _detector_path, _read_detector
 
     body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
-    model_ids = body.get("model_ids", [])
+    detector_ids = body.get("detector_ids", [])
 
     if not dataset_ids:
         update_find_progress("idle", "", step=None, total_steps=None)
         return jsonify({"error": "No datasets selected"}), 400
-    if not model_ids:
+    if not detector_ids:
         update_find_progress("idle", "", step=None, total_steps=None)
-        return jsonify({"error": "No models selected"}), 400
+        return jsonify({"error": "No detectors selected"}), 400
 
     update_find_progress(
         "running",
-        "Preparing models…",
+        "Preparing detectors…",
         current=0,
-        total=len(model_ids),
+        total=len(detector_ids),
         step=1,
         total_steps=_FIND_STEPS,
     )
@@ -174,60 +174,60 @@ def multi_find():
             return jsonify({"error": f"Dataset file missing for '{ds.get('name', ds_id)}'"}), 404
         datasets.append(ds)
 
-    models = []
-    for m_id in model_ids:
-        m = reg_get_model(m_id)
-        if m is None:
+    detectors = []
+    for d_id in detector_ids:
+        d = reg_get_detector(d_id)
+        if d is None:
             update_find_progress("idle", "", step=None, total_steps=None)
-            return jsonify({"error": f"Model '{m_id}' not found"}), 404
-        models.append(m)
+            return jsonify({"error": f"Detector '{d_id}' not found"}), 404
+        detectors.append(d)
 
-    model_configs = []
-    for mi, m in enumerate(models):
+    detector_configs = []
+    for di, d in enumerate(detectors):
         update_find_progress(
             "running",
-            f'Preparing model "{m["name"]}"…',
-            current=mi + 1,
-            total=len(models),
+            f'Preparing detector "{d["name"]}"…',
+            current=di + 1,
+            total=len(detectors),
             step=1,
             total_steps=_FIND_STEPS,
         )
 
         from vtsearch.utils.state_core import get_detector_context
 
-        det_ctx = get_detector_context(m["id"])
+        det_ctx = get_detector_context(d["id"])
         if det_ctx is not None and det_ctx.model is not None:
-            model_configs.append(
+            detector_configs.append(
                 {
-                    "name": m["name"],
-                    "model_id": m["id"],
-                    "live_model": det_ctx.model,
+                    "name": d["name"],
+                    "detector_id": d["id"],
+                    "live_mlp": det_ctx.model,
                     "threshold": det_ctx.threshold,
                 }
             )
             continue
 
-        tm_path = _model_path(m["name"])
-        tm_data = _read_model(tm_path)
-        if tm_data and tm_data.get("labelset", {}).get("labels"):
-            model_configs.append(
+        det_path = _detector_path(d["name"])
+        det_data = _read_detector(det_path)
+        if det_data and det_data.get("labelset", {}).get("labels"):
+            detector_configs.append(
                 {
-                    "name": m["name"],
-                    "model_id": m["id"],
-                    "trainable_model_data": tm_data,
+                    "name": d["name"],
+                    "detector_id": d["id"],
+                    "detector_data": det_data,
                 }
             )
             continue
 
         update_find_progress("idle", "", step=None, total_steps=None)
-        return jsonify({"error": f"Model '{m['name']}' has no labels for detection"}), 400
+        return jsonify({"error": f"Detector '{d['name']}' has no labels for detection"}), 400
 
     all_results = []
     all_negative_results = []
     detected_media_type = ""
     multiple_datasets = len(datasets) > 1
-    multiple_models = len(model_configs) > 1
-    model_names = [mc["name"] for mc in model_configs]
+    multiple_detectors = len(detector_configs) > 1
+    detector_names = [dc["name"] for dc in detector_configs]
 
     total_scoring_units = 0
     scored_units = 0
@@ -277,7 +277,7 @@ def multi_find():
         all_embs = np.array([temp_medias[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
 
-        total_scoring_units += len(all_ids) * len(model_configs)
+        total_scoring_units += len(all_ids) * len(detector_configs)
 
         media_results: dict[int, dict] = {}
         for cid in all_ids:
@@ -289,12 +289,12 @@ def multi_find():
                 "origin_name": clip.get("origin_name", clip.get("filename", "")),
                 "origin": clip.get("origin"),
                 "dataset_name": ds["name"],
-                "model_verdicts": {},
+                "detector_verdicts": {},
             }
 
-        for mc in model_configs:
-            score_label = f'Scoring with "{mc["name"]}" on "{ds["name"]}"'
-            if len(datasets) > 1 or len(model_configs) > 1:
+        for dc in detector_configs:
+            score_label = f'Scoring with "{dc["name"]}" on "{ds["name"]}"'
+            if len(datasets) > 1 or len(detector_configs) > 1:
                 score_label += f" ({scored_units}/{total_scoring_units} items)"
             score_label += "…"
             update_find_progress(
@@ -306,29 +306,29 @@ def multi_find():
                 total_steps=_FIND_STEPS,
             )
 
-            if "live_model" in mc:
+            if "live_mlp" in dc:
                 try:
-                    model = mc["live_model"]
+                    mlp = dc["live_mlp"]
                     with torch.no_grad():
-                        raw_logits = model(X_all)
+                        raw_logits = mlp(X_all)
                         scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
-                    threshold = mc.get("threshold", 0.5)
+                    threshold = dc.get("threshold", 0.5)
 
                     for cid, score in zip(all_ids, scores):
                         verdict = "Good" if score >= threshold else "Bad"
-                        media_results[cid]["model_verdicts"][mc["name"]] = {
+                        media_results[cid]["detector_verdicts"][dc["name"]] = {
                             "verdict": verdict,
                             "score": round(score, 4),
                         }
                 except Exception:
                     for cid in all_ids:
-                        media_results[cid]["model_verdicts"][mc["name"]] = {
+                        media_results[cid]["detector_verdicts"][dc["name"]] = {
                             "verdict": "Error",
                             "score": 0,
                         }
-            elif "trainable_model_data" in mc:
-                tm_data = mc["trainable_model_data"]
-                labels = tm_data.get("labelset", {}).get("labels", [])
+            elif "detector_data" in dc:
+                det_data = dc["detector_data"]
+                labels = det_data.get("labelset", {}).get("labels", [])
 
                 try:
                     from vtsearch.utils import build_media_lookup, resolve_media_ids
@@ -352,7 +352,7 @@ def multi_find():
                     else:
                         from vtsearch.models.resolver import resolve_label_embeddings
 
-                        media_type = tm_data.get("media_type", "audio")
+                        media_type = det_data.get("media_type", "audio")
                         resolved = resolve_label_embeddings(labels, media_type)
                         if resolved.has_good_and_bad:
                             X_list = resolved.embeddings
@@ -362,26 +362,26 @@ def multi_find():
                             y_list = []
 
                     if X_list and any(v == 1.0 for v in y_list) and any(v == 0.0 for v in y_list):
-                        model, threshold = train_and_threshold(X_list, y_list)
+                        mlp, threshold = train_and_threshold(X_list, y_list)
 
                         with torch.no_grad():
-                            scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+                            scores = torch.sigmoid(mlp(X_all)).squeeze(1).tolist()
 
                         for cid, score in zip(all_ids, scores):
                             verdict = "Good" if score >= threshold else "Bad"
-                            media_results[cid]["model_verdicts"][mc["name"]] = {
+                            media_results[cid]["detector_verdicts"][dc["name"]] = {
                                 "verdict": verdict,
                                 "score": round(score, 4),
                             }
                     else:
                         for cid in all_ids:
-                            media_results[cid]["model_verdicts"][mc["name"]] = {
+                            media_results[cid]["detector_verdicts"][dc["name"]] = {
                                 "verdict": "N/A",
                                 "score": 0,
                             }
                 except Exception:
                     for cid in all_ids:
-                        media_results[cid]["model_verdicts"][mc["name"]] = {
+                        media_results[cid]["detector_verdicts"][dc["name"]] = {
                             "verdict": "Error",
                             "score": 0,
                         }
@@ -389,7 +389,7 @@ def multi_find():
             scored_units += len(all_ids)
             update_find_progress(
                 "running",
-                f'Scored "{mc["name"]}" on "{ds["name"]}"',
+                f'Scored "{dc["name"]}" on "{ds["name"]}"',
                 current=scored_units,
                 total=total_scoring_units,
                 step=3,
@@ -397,7 +397,7 @@ def multi_find():
             )
 
         for cid, mr in media_results.items():
-            verdicts = mr["model_verdicts"]
+            verdicts = mr["detector_verdicts"]
             if any(v["verdict"] == "Good" for v in verdicts.values()):
                 all_results.append(mr)
             elif any(v["verdict"] in ("Bad", "Error", "N/A") for v in verdicts.values()):
@@ -413,10 +413,10 @@ def multi_find():
             "results": all_results,
             "negative_results": all_negative_results,
             "datasets": [ds["name"] for ds in datasets],
-            "models": model_names,
+            "detectors": detector_names,
             "media_type": detected_media_type,
             "multiple_datasets": multiple_datasets,
-            "multiple_models": multiple_models,
+            "multiple_detectors": multiple_detectors,
             "total_hits": len(all_results),
         }
     )

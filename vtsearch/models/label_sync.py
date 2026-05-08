@@ -1,8 +1,8 @@
-"""Sync current votes into the loaded trainable model's labelset on disk.
+"""Sync current votes into the loaded detector's labelset on disk.
 
-Provides :func:`sync_labels_to_loaded_model` which persists the active
-detector's votes into the corresponding trainable-model JSON file so the
-dashboard stays up-to-date without an explicit save.
+Provides :func:`sync_labels_to_loaded_detector` which persists the active
+detector's votes into the corresponding detector JSON file so the dashboard
+stays up-to-date without an explicit save.
 
 The sync is *non-destructive across datasets*: entries in the on-disk
 labelset whose origin does not match anything in the currently-loaded
@@ -14,18 +14,18 @@ label, or removed when the user has untoggled the vote.
 from __future__ import annotations
 
 
-def sync_labels_to_loaded_model() -> None:
-    """Persist the current votes into the loaded model's labelset (if any).
+def sync_labels_to_loaded_detector() -> None:
+    """Persist the current votes into the loaded detector's labelset (if any).
 
-    Called automatically after each vote so the dashboard's "# Training"
-    and "Last Trained" columns stay up to date without an explicit save.
+    Called automatically after each vote so the dashboard's "# Training" and
+    "Last Trained" columns stay up to date without an explicit save.
 
-    Skipped when the model is in "find mode" (after ``/api/find-label``),
+    Skipped when the detector is in "find mode" (after ``/api/find-label``),
     because the global votes reflect scoring results on a different dataset,
-    not the model's original training labels.
+    not the detector's original training labels.
     """
-    from vtsearch.models.registry import get_model, is_find_mode, update_model
-    from vtsearch.models.trainable_model_store import _model_path, _read_model, _write_model
+    from vtsearch.models.detector_registry import get_detector, is_find_mode, update_detector
+    from vtsearch.models.detector_store import _detector_path, _read_detector, _write_detector
     from vtsearch.utils import get_active_detector_context
 
     if is_find_mode():
@@ -36,13 +36,13 @@ def sync_labels_to_loaded_model() -> None:
     if not loaded_id:
         return
 
-    entry = get_model(loaded_id)
+    entry = get_detector(loaded_id)
     if not entry or not entry.get("name"):
         return
 
-    tm_name = entry["name"]
-    path = _model_path(tm_name)
-    data = _read_model(path)
+    det_name = entry["name"]
+    path = _detector_path(det_name)
+    data = _read_detector(path)
     if data is None:
         return
 
@@ -85,8 +85,8 @@ def sync_labels_to_loaded_model() -> None:
 
     merged = LabelSet(new_elements)
     data["labelset"] = merged.to_dict()
-    _write_model(path, data)
+    _write_detector(path, data)
 
     import time as _time
 
-    update_model(entry["id"], num_training=len(merged), last_trained_at=_time.time())
+    update_detector(entry["id"], num_training=len(merged), last_trained_at=_time.time())

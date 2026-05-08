@@ -3,7 +3,7 @@
 Covers:
 - Settings file read/write (vtsearch.settings)
 - Volume persistence
-- autorun_trainable_models list management
+- autorun_detectors list management
 - Flask API routes: GET/PUT /api/settings
 """
 
@@ -26,7 +26,7 @@ class TestSettingsModule:
     def test_defaults_when_no_file(self):
         data = settings_mod.get_all()
         assert data["volume"] == 1.0
-        assert data["autorun_trainable_models"] == []
+        assert data["autorun_detectors"] == []
 
     def test_get_set_volume(self, isolated_settings):
         settings_mod.set_volume(0.42)
@@ -66,54 +66,54 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_inclusion() == 7
 
-    def test_autorun_trainable_models_default_empty(self):
-        assert settings_mod.get_autorun_trainable_models() == []
+    def test_autorun_detectors_default_empty(self):
+        assert settings_mod.get_autorun_detectors() == []
 
     def test_add_autorun_trainable_model(self, isolated_settings):
-        settings_mod.add_autorun_trainable_model("model-a")
-        assert settings_mod.get_autorun_trainable_models() == ["model-a"]
+        settings_mod.add_autorun_detector("model-a")
+        assert settings_mod.get_autorun_detectors() == ["model-a"]
 
     def test_add_autorun_trainable_model_idempotent(self, isolated_settings):
-        settings_mod.add_autorun_trainable_model("model-a")
-        settings_mod.add_autorun_trainable_model("model-a")
-        assert settings_mod.get_autorun_trainable_models() == ["model-a"]
+        settings_mod.add_autorun_detector("model-a")
+        settings_mod.add_autorun_detector("model-a")
+        assert settings_mod.get_autorun_detectors() == ["model-a"]
 
     def test_remove_autorun_trainable_model(self, isolated_settings):
-        settings_mod.add_autorun_trainable_model("model-a")
-        assert settings_mod.remove_autorun_trainable_model("model-a") is True
-        assert settings_mod.get_autorun_trainable_models() == []
+        settings_mod.add_autorun_detector("model-a")
+        assert settings_mod.remove_autorun_detector("model-a") is True
+        assert settings_mod.get_autorun_detectors() == []
 
     def test_remove_autorun_trainable_model_nonexistent(self):
-        assert settings_mod.remove_autorun_trainable_model("nope") is False
+        assert settings_mod.remove_autorun_detector("nope") is False
 
     def test_is_autorun_trainable_model(self, isolated_settings):
-        settings_mod.add_autorun_trainable_model("model-a")
-        assert settings_mod.is_autorun_trainable_model("model-a") is True
-        assert settings_mod.is_autorun_trainable_model("model-b") is False
+        settings_mod.add_autorun_detector("model-a")
+        assert settings_mod.is_autorun_detector("model-a") is True
+        assert settings_mod.is_autorun_detector("model-b") is False
 
-    def test_autorun_trainable_models_persists_across_reset(self, isolated_settings):
-        settings_mod.add_autorun_trainable_model("model-a")
-        settings_mod.add_autorun_trainable_model("model-b")
+    def test_autorun_detectors_persists_across_reset(self, isolated_settings):
+        settings_mod.add_autorun_detector("model-a")
+        settings_mod.add_autorun_detector("model-b")
         settings_mod.reset()
-        assert settings_mod.get_autorun_trainable_models() == ["model-a", "model-b"]
+        assert settings_mod.get_autorun_detectors() == ["model-a", "model-b"]
 
-    def test_set_autorun_trainable_models(self, isolated_settings):
-        settings_mod.set_autorun_trainable_models(["x", "y", "z"])
-        assert settings_mod.get_autorun_trainable_models() == ["x", "y", "z"]
+    def test_set_autorun_detectors(self, isolated_settings):
+        settings_mod.set_autorun_detectors(["x", "y", "z"])
+        assert settings_mod.get_autorun_detectors() == ["x", "y", "z"]
 
-    def test_set_autorun_trainable_models_deduplicates(self, isolated_settings):
-        settings_mod.set_autorun_trainable_models(["x", "y", "x"])
-        assert settings_mod.get_autorun_trainable_models() == ["x", "y"]
+    def test_set_autorun_detectors_deduplicates(self, isolated_settings):
+        settings_mod.set_autorun_detectors(["x", "y", "x"])
+        assert settings_mod.get_autorun_detectors() == ["x", "y"]
 
     def test_persistence_survives_reset(self, isolated_settings):
         settings_mod.set_volume(0.7)
-        settings_mod.add_autorun_trainable_model("p")
+        settings_mod.add_autorun_detector("p")
 
         # Simulate restart
         settings_mod.reset()
 
         assert settings_mod.get_volume() == pytest.approx(0.7)
-        assert settings_mod.get_autorun_trainable_models() == ["p"]
+        assert settings_mod.get_autorun_detectors() == ["p"]
 
     def test_get_set_calibrate_count(self, isolated_settings):
         settings_mod.set_calibrate_count(5)
@@ -499,10 +499,10 @@ class TestSettingsModule:
         assert defaults["autopilot_top_greens"] == 3
         assert defaults["autopilot_hard_reds"] == 4
         assert defaults["autopilot_goal_diversity"] == 40
-        assert "autorun_trainable_models" not in defaults
+        assert "autorun_detectors" not in defaults
         # Directory settings excluded from defaults (not reset by Default button)
         assert "saved_datasets_dir" not in defaults
-        assert "trainable_models_dir" not in defaults
+        assert "detectors_dir" not in defaults
 
     def test_get_set_autopilot_top_greens(self, isolated_settings):
         settings_mod.set_autopilot_top_greens(20)
@@ -590,4 +590,4 @@ class TestSettingsModule:
         settings_mod.reset()
         # Should fall back to defaults
         assert settings_mod.get_volume() == 1.0
-        assert settings_mod.get_autorun_trainable_models() == []
+        assert settings_mod.get_autorun_detectors() == []

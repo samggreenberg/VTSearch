@@ -3,10 +3,10 @@
 These cover three concerns introduced together so that a detector loaded
 against a different dataset still shows its training labels on the right:
 
-* ``GET /api/trainable-models/<name>/labels-detail`` — read.
-* ``POST /api/trainable-models/<name>/labels/<id>/vote`` — toggle on a
+* ``GET /api/detectors/<name>/labels-detail`` — read.
+* ``POST /api/detectors/<name>/labels/<id>/vote`` — toggle on a
   saved labelset element (origin-keyed, dataset-agnostic).
-* ``sync_labels_to_loaded_model`` is now non-destructive across datasets:
+* ``sync_labels_to_loaded_detector`` is now non-destructive across datasets:
   a vote in dataset B no longer wipes labels saved from dataset A.
 """
 
@@ -16,16 +16,16 @@ import shutil
 
 import pytest
 
-from vtsearch.settings import get_trainable_models_dir
+from vtsearch.settings import get_detectors_dir
 
 
 @pytest.fixture(autouse=True)
-def clean_trainable_models_dir():
-    tm_dir = get_trainable_models_dir()
+def clean_detectors_dir():
+    tm_dir = get_detectors_dir()
     if tm_dir.is_dir():
         shutil.rmtree(tm_dir)
     yield
-    tm_dir = get_trainable_models_dir()
+    tm_dir = get_detectors_dir()
     if tm_dir.is_dir():
         shutil.rmtree(tm_dir)
 
@@ -36,7 +36,7 @@ def clean_trainable_models_dir():
 
 
 def _seed_cross_dataset_model(tm_name: str = "cross-ds-model", *, mark_loaded: bool = True) -> str:
-    """Write a trainable model whose labelset references a *different* dataset.
+    """Write a detector whose labelset references a *different* dataset.
 
     The labels' origins use importer ``"ds_a"`` so they don't resolve against
     the test medias (which use importer ``"test"``).
@@ -45,15 +45,15 @@ def _seed_cross_dataset_model(tm_name: str = "cross-ds-model", *, mark_loaded: b
     :class:`DetectorContext` and marks the model as loaded — convenient for
     tests that exercise the labels-detail / vote APIs without running the
     real load task.  When ``False``, only the on-disk model + registry
-    entry are created, so a subsequent ``POST /api/models/registry/load``
+    entry are created, so a subsequent ``POST /api/detectors/registry/load``
     triggers the full load task.
     """
-    from vtsearch.models.registry import (
-        add_loaded_model_id,
-        register_model,
+    from vtsearch.models.detector_registry import (
+        add_loaded_detector_id,
+        register_detector,
         reset_for_tests,
     )
-    from vtsearch.models.trainable_model_store import _model_path, _write_model
+    from vtsearch.models.detector_store import _detector_path, _write_detector
     from vtsearch.utils.state_core import (
         DetectorContext,
         register_detector_context,
@@ -87,8 +87,8 @@ def _seed_cross_dataset_model(tm_name: str = "cross-ds-model", *, mark_loaded: b
             },
         ]
     }
-    _write_model(
-        _model_path(tm_name),
+    _write_detector(
+        _detector_path(tm_name),
         {
             "name": tm_name,
             "text_query": "",
@@ -98,27 +98,27 @@ def _seed_cross_dataset_model(tm_name: str = "cross-ds-model", *, mark_loaded: b
         },
     )
 
-    entry = register_model(
+    entry = register_detector(
         name=tm_name,
         media_type="audio",
     )
-    model_id = entry["id"]
+    detector_id = entry["id"]
     if mark_loaded:
-        add_loaded_model_id(model_id)
-        det_ctx = DetectorContext(model_id)
+        add_loaded_detector_id(detector_id)
+        det_ctx = DetectorContext(detector_id)
         register_detector_context(det_ctx)
         set_thread_detector_context(det_ctx)
-    return model_id
+    return detector_id
 
 
 # ---------------------------------------------------------------------------
-# GET /api/trainable-models/<name>/labels-detail
+# GET /api/detectors/<name>/labels-detail
 # ---------------------------------------------------------------------------
 
 
 class TestLabelsDetail:
     def test_returns_404_for_unknown_model(self, client):
-        res = client.get("/api/trainable-models/does-not-exist/labels-detail")
+        res = client.get("/api/detectors/does-not-exist/labels-detail")
         assert res.status_code == 404
 
     def test_lists_saved_labels_independent_of_loaded_dataset(self, client):
@@ -126,7 +126,7 @@ class TestLabelsDetail:
         the active dataset — the whole point of the labelset-driven pane."""
         _seed_cross_dataset_model()
 
-        res = client.get("/api/trainable-models/cross-ds-model/labels-detail")
+        res = client.get("/api/detectors/cross-ds-model/labels-detail")
         assert res.status_code == 200
         body = res.get_json()
 
@@ -145,41 +145,41 @@ class TestLabelsDetail:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/trainable-models/<name>/labels/<id>/vote
+# POST /api/detectors/<name>/labels/<id>/vote
 # ---------------------------------------------------------------------------
 
 
 class TestLabelElementVote:
     def test_flip_label(self, client):
         _seed_cross_dataset_model()
-        detail = client.get("/api/trainable-models/cross-ds-model/labels-detail").get_json()
+        detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         target = detail["good"][0]
 
         res = client.post(
-            f"/api/trainable-models/cross-ds-model/labels/{target['id']}/vote",
+            f"/api/detectors/cross-ds-model/labels/{target['id']}/vote",
             json={"vote": "bad"},
         )
         assert res.status_code == 200
         assert res.get_json()["action"] == "flipped"
 
-        after = client.get("/api/trainable-models/cross-ds-model/labels-detail").get_json()
+        after = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         assert len(after["good"]) == 1
         assert len(after["bad"]) == 2
         assert any(e["id"] == target["id"] for e in after["bad"])
 
     def test_same_vote_removes_element(self, client):
         _seed_cross_dataset_model()
-        detail = client.get("/api/trainable-models/cross-ds-model/labels-detail").get_json()
+        detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         target = detail["good"][0]
 
         res = client.post(
-            f"/api/trainable-models/cross-ds-model/labels/{target['id']}/vote",
+            f"/api/detectors/cross-ds-model/labels/{target['id']}/vote",
             json={"vote": "good"},
         )
         assert res.status_code == 200
         assert res.get_json()["action"] == "removed"
 
-        after = client.get("/api/trainable-models/cross-ds-model/labels-detail").get_json()
+        after = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         assert len(after["good"]) == 1
         assert len(after["bad"]) == 1
         assert not any(e["id"] == target["id"] for e in after["good"] + after["bad"])
@@ -187,17 +187,17 @@ class TestLabelElementVote:
     def test_unknown_id_404(self, client):
         _seed_cross_dataset_model()
         res = client.post(
-            "/api/trainable-models/cross-ds-model/labels/deadbeef/vote",
+            "/api/detectors/cross-ds-model/labels/deadbeef/vote",
             json={"vote": "good"},
         )
         assert res.status_code == 404
 
     def test_invalid_vote_value_400(self, client):
         _seed_cross_dataset_model()
-        detail = client.get("/api/trainable-models/cross-ds-model/labels-detail").get_json()
+        detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         target = detail["good"][0]
         res = client.post(
-            f"/api/trainable-models/cross-ds-model/labels/{target['id']}/vote",
+            f"/api/detectors/cross-ds-model/labels/{target['id']}/vote",
             json={"vote": "maybe"},
         )
         assert res.status_code == 400
@@ -215,8 +215,8 @@ class TestCrossDatasetVoteDoesNotWipeLabels:
     """
 
     def test_vote_in_active_dataset_merges_with_saved_labelset(self, client):
-        from vtsearch.models.label_sync import sync_labels_to_loaded_model
-        from vtsearch.models.trainable_model_store import _model_path, _read_model
+        from vtsearch.models.label_sync import sync_labels_to_loaded_detector
+        from vtsearch.models.detector_store import _detector_path, _read_detector
         from vtsearch.utils import good_votes
 
         _seed_cross_dataset_model()
@@ -225,9 +225,9 @@ class TestCrossDatasetVoteDoesNotWipeLabels:
         good_votes[1] = None
         good_votes[2] = None
 
-        sync_labels_to_loaded_model()
+        sync_labels_to_loaded_detector()
 
-        saved = _read_model(_model_path("cross-ds-model"))
+        saved = _read_detector(_detector_path("cross-ds-model"))
         keys = {
             (el.get("origin", {}).get("importer", ""), el.get("origin_name", "")) for el in saved["labelset"]["labels"]
         }
@@ -292,12 +292,12 @@ class TestCrossDatasetMLPTraining:
         from vtsearch.models.labelset_elements import stable_element_id
         from vtsearch.utils.state_core import get_detector_context
 
-        model_id = self._seed_with_resolvable_labelset(tmp_path, monkeypatch)
+        detector_id = self._seed_with_resolvable_labelset(tmp_path, monkeypatch)
 
         # Trigger the load task via the public API (so the embed pass runs).
-        _load_model_and_wait_local(client, model_id)
+        _load_detector_and_wait_local(client, detector_id)
 
-        det_ctx = get_detector_context(model_id)
+        det_ctx = get_detector_context(detector_id)
         assert det_ctx is not None, "Load task must register a DetectorContext"
         assert len(det_ctx.label_embeddings) == 3, (
             f"Expected all 3 cross-dataset labels embedded, got {list(det_ctx.label_embeddings)}"
@@ -307,9 +307,9 @@ class TestCrossDatasetMLPTraining:
         # Verify the cache is keyed by stable_element_id (so subsequent
         # lookups find the right vector).
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.trainable_model_store import _model_path, _read_model
+        from vtsearch.models.detector_store import _detector_path, _read_detector
 
-        saved = _read_model(_model_path("cross-ds-model"))
+        saved = _read_detector(_detector_path("cross-ds-model"))
         ls = LabelSet.from_dict(saved["labelset"])
         for el in ls.elements:
             assert stable_element_id(el) in det_ctx.label_embeddings
@@ -317,8 +317,8 @@ class TestCrossDatasetMLPTraining:
     def test_learned_sort_uses_cross_dataset_labels_with_zero_active_votes(self, client, tmp_path, monkeypatch):
         """No active-dataset votes — yet learned-sort should still produce a
         ranked list, because training uses the cross-dataset labelset."""
-        model_id = self._seed_with_resolvable_labelset(tmp_path, monkeypatch)
-        _load_model_and_wait_local(client, model_id)
+        detector_id = self._seed_with_resolvable_labelset(tmp_path, monkeypatch)
+        _load_detector_and_wait_local(client, detector_id)
 
         res = client.post("/api/learned-sort", json={})
         assert res.status_code == 200, res.get_data(as_text=True)
@@ -332,24 +332,24 @@ class TestCrossDatasetMLPTraining:
 # ---------------------------------------------------------------------------
 
 
-def _load_model_and_wait_local(client, model_id, timeout=5.0):
-    """Local copy of tests.load_model_and_wait that doesn't reset state, so
+def _load_detector_and_wait_local(client, detector_id, timeout=5.0):
+    """Local copy of tests.load_detector_and_wait that doesn't reset state, so
     the labelset and registered detector context survive the load.
     """
     import time
 
     from vtsearch.utils.state_core import get_detector_context, set_thread_detector_context
 
-    res = client.post("/api/models/registry/load", json={"model_id": model_id})
+    res = client.post("/api/detectors/registry/load", json={"detector_id": detector_id})
     assert res.status_code in (200, 202), res.get_data(as_text=True)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        tasks = client.get("/api/models/loading-tasks").get_json().get("tasks", [])
+        tasks = client.get("/api/detectors/loading-tasks").get_json().get("tasks", [])
         if not [t for t in tasks if t.get("status") != "idle"]:
             break
         time.sleep(0.05)
 
-    det_ctx = get_detector_context(model_id)
+    det_ctx = get_detector_context(detector_id)
     if det_ctx is not None:
         set_thread_detector_context(det_ctx)
     return res

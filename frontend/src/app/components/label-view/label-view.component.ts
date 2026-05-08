@@ -16,8 +16,7 @@ import { SortStateService, SortMode, SelectMode, SortedItem } from '../../servic
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
-import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
-import { ModelRegistryEntry } from '../../models/api.models';
+import { DetectorRegistryEntry } from '../../models/api.models';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import { LabelingStatusResponse } from '../../models/api.models';
@@ -102,7 +101,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private settingsState: SettingsStateService,
     private autopilotStateService: AutopilotStateService,
     private activeContext: ActiveContextService,
-    private modelsApi: TrainableModelsApiService,
   ) {}
 
   ngOnInit(): void {
@@ -442,7 +440,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.startScoringProgressPoll();
 
-    this.detectorsApi.findLabel({ model_id: modelId }).pipe(takeUntil(this.destroy$)).subscribe({
+    this.detectorsApi.findLabel({ detector_id: modelId }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (raw) => {
         const response = raw as {
           results: { id: number; score: number }[];
@@ -537,9 +535,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.trainableModelName = null;
       return;
     }
-    this.modelsApi.getRegistry().pipe(takeUntil(this.destroy$)).subscribe({
+    this.detectorsApi.getRegistry().pipe(takeUntil(this.destroy$)).subscribe({
       next: (resp) => {
-        const entry = resp.models.find((m: ModelRegistryEntry) => m.id === modelId);
+        const entry = resp.detectors.find((m: DetectorRegistryEntry) => m.id === modelId);
         this.trainableModelName = entry?.name || null;
       },
       error: () => {

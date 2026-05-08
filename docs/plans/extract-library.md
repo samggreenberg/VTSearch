@@ -39,7 +39,7 @@ Files to convert:
 - `vtsearch/datasets/registry.py`
 - `vtsearch/models/loader.py`
 - `vtsearch/models/progress.py`
-- `vtsearch/models/trainable_model_store.py`
+- `vtsearch/models/detector_store.py`
 - `vtsearch/utils/state.py`
 - `vtsearch/utils/sync_source.py`
 

@@ -1,7 +1,7 @@
-"""Tests for combining trainable models via labelset merge.
+"""Tests for combining detectors via labelset merge.
 
 Covers both the underlying ``LabelSet.merge`` helper and the
-``POST /api/trainable-models/combine`` endpoint.
+``POST /api/detectors/combine`` endpoint.
 """
 
 from __future__ import annotations
@@ -11,16 +11,16 @@ import shutil
 import pytest
 
 from vtsearch.datasets.labelset import LabeledElement, LabelSet
-from vtsearch.settings import get_trainable_models_dir
+from vtsearch.settings import get_detectors_dir
 
 
 @pytest.fixture(autouse=True)
-def clean_trainable_models_dir():
-    tm_dir = get_trainable_models_dir()
+def clean_detectors_dir():
+    tm_dir = get_detectors_dir()
     if tm_dir.is_dir():
         shutil.rmtree(tm_dir)
     yield
-    tm_dir = get_trainable_models_dir()
+    tm_dir = get_detectors_dir()
     if tm_dir.is_dir():
         shutil.rmtree(tm_dir)
 
@@ -119,45 +119,45 @@ class TestLabelSetMerge:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/trainable-models/combine endpoint
+# POST /api/detectors/combine endpoint
 # ---------------------------------------------------------------------------
 
 
 def _create_model(client, name, *, media_type="audio", text_query="q"):
     res = client.post(
-        "/api/trainable-models",
+        "/api/detectors",
         json={"name": name, "media_type": media_type, "text_query": text_query},
     )
     assert res.status_code == 201, res.get_json()
 
 
 def _save_labelset(client, name, labelset_dict):
-    """Directly write a labelset onto an existing trainable model on disk."""
-    from vtsearch.models.trainable_model_store import _model_path, _read_model, _write_model
+    """Directly write a labelset onto an existing detector on disk."""
+    from vtsearch.models.detector_store import _detector_path, _read_detector, _write_detector
 
-    p = _model_path(name)
-    data = _read_model(p)
+    p = _detector_path(name)
+    data = _read_detector(p)
     assert data is not None
     data["labelset"] = labelset_dict
-    _write_model(p, data)
+    _write_detector(p, data)
 
 
 class TestCombineEndpointValidation:
     def test_missing_names(self, client):
-        res = client.post("/api/trainable-models/combine", json={"new_name": "X"})
+        res = client.post("/api/detectors/combine", json={"new_name": "X"})
         assert res.status_code == 400
         assert "names" in res.get_json()["error"]
 
     def test_only_one_name(self, client):
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A"], "new_name": "X"},
         )
         assert res.status_code == 400
 
     def test_missing_new_name(self, client):
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "B"]},
         )
         assert res.status_code == 400
@@ -166,7 +166,7 @@ class TestCombineEndpointValidation:
     def test_unknown_source_model(self, client):
         _create_model(client, "A")
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "Nope"], "new_name": "X"},
         )
         assert res.status_code == 404
@@ -175,7 +175,7 @@ class TestCombineEndpointValidation:
         _create_model(client, "A", media_type="audio")
         _create_model(client, "B", media_type="image")
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "B"], "new_name": "X"},
         )
         assert res.status_code == 400
@@ -190,7 +190,7 @@ class TestCombineEndpointValidation:
         _save_labelset(client, "A", ls)
         _save_labelset(client, "B", ls)
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "B"], "new_name": "X"},
         )
         assert res.status_code == 409
@@ -199,7 +199,7 @@ class TestCombineEndpointValidation:
         _create_model(client, "A")
         _create_model(client, "B")
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "B"], "new_name": "X", "conflict_policy": "majority"},
         )
         assert res.status_code == 400
@@ -210,7 +210,7 @@ class TestCombineEndpointValidation:
         _save_labelset(client, "A", LabelSet([_el("aa", "good")]).to_dict())
         _save_labelset(client, "B", LabelSet([_el("aa", "bad")]).to_dict())
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "B"], "new_name": "X"},
         )
         assert res.status_code == 422
@@ -233,7 +233,7 @@ class TestCombineEndpointSuccess:
         )
 
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "B"], "new_name": "Combined"},
         )
         assert res.status_code == 201
@@ -251,11 +251,11 @@ class TestCombineEndpointSuccess:
         _save_labelset(client, "B", LabelSet([_el("bb", "good")]).to_dict())
 
         client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "B"], "new_name": "Combined"},
         )
 
-        got = client.get("/api/trainable-models/Combined").get_json()
+        got = client.get("/api/detectors/Combined").get_json()
         assert got["name"] == "Combined"
         assert got["combined_from"] == ["A", "B"]
         assert len(got["labelset"]["labels"]) == 2
@@ -276,7 +276,7 @@ class TestCombineEndpointSuccess:
             LabelSet([_el("agree", "good"), _el("conflict", "bad")]).to_dict(),
         )
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "B"], "new_name": "Combined"},
         )
         assert res.status_code == 201
@@ -290,7 +290,7 @@ class TestCombineEndpointSuccess:
         _save_labelset(client, "B", LabelSet([_el("bb", "good")]).to_dict())
 
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "B"], "new_name": "Combined"},
         )
         body = res.get_json()
@@ -307,7 +307,7 @@ class TestCombineEndpointSuccess:
         _save_labelset(client, "C", LabelSet([_el("cc", "bad")]).to_dict())
 
         res = client.post(
-            "/api/trainable-models/combine",
+            "/api/detectors/combine",
             json={"names": ["A", "B", "C"], "new_name": "Combined"},
         )
         assert res.status_code == 201

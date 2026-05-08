@@ -152,7 +152,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.startProgressPolling();
 
     const datasetId = this.findSession.datasetId;
-    this.detectorsApi.findLabel({ model_id: modelId, ...(datasetId ? { dataset_id: datasetId } : {}) })
+    this.detectorsApi.findLabel({ detector_id: modelId, ...(datasetId ? { dataset_id: datasetId } : {}) })
       .pipe(
         takeUntil(this.destroy$),
         finalize(() => {

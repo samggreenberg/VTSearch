@@ -180,19 +180,19 @@ class TestLabelImportEndpoint:
 
     def test_import_syncs_model_registry_num_training(self, client, tmp_path):
         """Importing labels should update the loaded model's num_training in the registry."""
-        from vtsearch.models.registry import add_loaded_model_id, get_model, register_model, reset_for_tests
-        from vtsearch.settings import set_trainable_models_dir
-        from vtsearch.models.trainable_model_store import _write_model
+        from vtsearch.models.detector_registry import add_loaded_detector_id, get_detector, register_detector, reset_for_tests
+        from vtsearch.settings import set_detectors_dir
+        from vtsearch.models.detector_store import _write_detector
 
         reset_for_tests()
-        set_trainable_models_dir(str(tmp_path / "models"))
+        set_detectors_dir(str(tmp_path / "models"))
 
-        # Create a trainable model file on disk
+        # Create a detector file on disk
         tm_name = "Import Sync Test"
-        from vtsearch.models.trainable_model_store import _model_path
+        from vtsearch.models.detector_store import _detector_path
 
-        _write_model(
-            _model_path(tm_name),
+        _write_detector(
+            _detector_path(tm_name),
             {
                 "name": tm_name,
                 "media_type": "audio",
@@ -201,14 +201,14 @@ class TestLabelImportEndpoint:
             },
         )
 
-        entry = register_model(
+        entry = register_detector(
             name=tm_name,
             media_type="audio",
             num_training=0,
         )
-        add_loaded_model_id(entry["id"])
+        add_loaded_detector_id(entry["id"])
 
-        # Set active detector so sync_labels_to_loaded_model() can find it
+        # Set active detector so sync_labels_to_loaded_detector() can find it
         from vtsearch.utils.state_core import DetectorContext, register_detector_context, set_thread_detector_context
 
         det_ctx = DetectorContext(entry["id"])
@@ -228,7 +228,7 @@ class TestLabelImportEndpoint:
         assert res.get_json()["applied"] == 1
 
         # The registry entry should now reflect the updated label count
-        updated = get_model(entry["id"])
+        updated = get_detector(entry["id"])
         assert updated["num_training"] == 1
 
     def test_path_traversal_absolute_rejected(self, client):

@@ -32,7 +32,7 @@ export class LabelImportersApiService {
     file?: File,
     fileFieldKey?: string,
   ): Observable<unknown> {
-    const url = `/api/trainable-models/${encodeURIComponent(modelName)}/import-labels/${importerName}`;
+    const url = `/api/detectors/${encodeURIComponent(modelName)}/import-labels/${importerName}`;
     if (file && fileFieldKey) {
       const formData = new FormData();
       formData.append(fileFieldKey, file, file.name);

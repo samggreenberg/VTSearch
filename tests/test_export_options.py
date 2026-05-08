@@ -254,16 +254,16 @@ class TestFillFromSortConfirm:
 
 
 # ---------------------------------------------------------------------------
-# CLI _score_medias_with_trainable_models negative_hits
+# CLI _score_medias_with_detectors negative_hits
 # ---------------------------------------------------------------------------
 
 
 class TestCliScoringNegativeHits:
     def test_trainable_model_scoring_returns_negative_hits(self, client):
-        """The trainable-model CLI scorer should include negative_hits."""
+        """The detector CLI scorer should include negative_hits."""
         import torch
 
-        from vtsearch.cli import _score_medias_with_trainable_models
+        from vtsearch.cli import _score_medias_with_detectors
         from vtsearch.models import build_model_from_weights
         from vtsearch.models.detector_training import serialize_weights, train_and_threshold
         from vtsearch.utils import medias, snapshot_medias
@@ -283,8 +283,8 @@ class TestCliScoringNegativeHits:
             out = rebuilt(torch.zeros((1, weights["0.weight"][0].__len__()), dtype=torch.float32))
         assert out is not None
 
-        tm_models = {"test": {"model": mlp, "threshold": threshold}}
-        det_results = _score_medias_with_trainable_models(medias, tm_models)
+        detector_mlps = {"test": {"mlp": mlp, "threshold": threshold}}
+        det_results = _score_medias_with_detectors(medias, detector_mlps)
         for det_result in det_results.values():
             assert "negative_hits" in det_result
             assert isinstance(det_result["negative_hits"], list)

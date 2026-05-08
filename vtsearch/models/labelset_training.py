@@ -1,4 +1,4 @@
-"""Train and score using a trainable model's full labelset, not just current votes.
+"""Train and score using a detector's full labelset, not just current votes.
 
 The detector's saved labelset on disk is origin-keyed and dataset-agnostic.
 At load time we resolve every element to a file via its origin importer,
@@ -146,8 +146,8 @@ def train_from_labelset(
 ) -> bool:
     """Populate the embedding cache, build (X, y), train, and store on *det_ctx*.
 
-    Returns ``True`` when a model was trained (need ≥1 good and ≥1 bad
-    cached vector); otherwise leaves ``det_ctx.model`` untouched.
+    Returns ``True`` when an MLP was trained (need ≥1 good and ≥1 bad cached
+    vector); otherwise leaves ``det_ctx.model`` untouched.
     """
     populate_label_embeddings(
         det_ctx,
@@ -164,8 +164,8 @@ def train_from_labelset(
 
     from vtsearch.models.detector_training import train_and_threshold
 
-    model, threshold = train_and_threshold(X_list, y_list, snap=snap)
-    det_ctx.model = model
+    mlp, threshold = train_and_threshold(X_list, y_list, snap=snap)
+    det_ctx.model = mlp
     det_ctx.threshold = threshold
     return True
 

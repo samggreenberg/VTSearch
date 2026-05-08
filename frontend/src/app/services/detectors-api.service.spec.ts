@@ -23,7 +23,7 @@ describe('DetectorsApiService', () => {
 
   it('setAutorun should PUT to the model registry', () => {
     service.setAutorun('m1', true).subscribe();
-    const req = httpMock.expectOne('/api/models/registry/m1/autorun');
+    const req = httpMock.expectOne('/api/detectors/registry/m1/autorun');
     expect(req.request.method).toBe('PUT');
     expect(req.request.body).toEqual({ autorun: true });
     req.flush({ ok: true });
@@ -37,7 +37,7 @@ describe('DetectorsApiService', () => {
   });
 
   it('findLabel should POST', () => {
-    service.findLabel({ model_id: 'm1' }).subscribe();
+    service.findLabel({ detector_id: 'm1' }).subscribe();
     const req = httpMock.expectOne('/api/find-label');
     expect(req.request.method).toBe('POST');
     req.flush({});

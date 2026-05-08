@@ -607,7 +607,7 @@ endpoints:
 |--------------------------------|--------|-------------------------------------------|-----------------|
 | `/api/dataset/export`          | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
 | `/api/labels/export`           | GET    | LabelSet — labels with per-element origin  | JSON            |
-| `/api/trainable-models/{name}` | GET    | Trainable model labelset + examples        | JSON            |
+| `/api/detectors/{name}` | GET    | Trainable model labelset + examples        | JSON            |
 
 ### Wiring up dependencies
 
@@ -702,16 +702,16 @@ LABEL_IMPORTER = PostgresLabelImporter()
 
 ---
 
-## Adding a trainable model from external labels
+## Adding a detector from external labels
 
 The detector and processor-importer plugin systems were removed.  To
 publish or share a classifier:
 
-1. Use `POST /api/trainable-models` (or
-   `POST /api/models/registry/from-labelset/<importer>`) to create a
-   trainable model file under `data/trainable_models/<name>.json`.
+1. Use `POST /api/detectors` (or
+   `POST /api/detectors/registry/from-labelset/<importer>`) to create a
+   detector file under `data/detectors/<name>.json`.
 2. Toggle its autorun flag with
-   `PUT /api/models/registry/<id>/autorun` so it runs from
+   `PUT /api/detectors/registry/<id>/autorun` so it runs from
    `/api/auto-detect` and the CLI's `--autodetect` flow.
 3. The MLP itself lives only in RAM — it's trained on demand from the
    labelset's origins each time the model is loaded or scored.

@@ -44,6 +44,10 @@ from vtsearch.medias import init_medias  # noqa: E402, F401 — used by tests vi
 from vtsearch.models import initialize_models, preload_autoload_media_types  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
     auth_bp,
+    detector_find_bp,
+    detector_scoring_bp,
+    detectors_bp,
+    detectors_registry_bp,
     eval_bp,
     file_browser_bp,
     labels_bp,
@@ -54,15 +58,11 @@ from vtsearch.routes import (  # noqa: E402
     exporters_bp,
     label_importers_bp,
     main_bp,
-    model_find_bp,
-    model_scoring_bp,
-    models_registry_bp,
     processors_bp,
     settings_bp,
     settings_io_bp,
     sorting_bp,
     sync_sources_bp,
-    trainable_models_bp,
 )
 from vtsearch.media import set_progress_callback  # noqa: E402
 from vtsearch.utils import update_progress  # noqa: E402
@@ -104,18 +104,18 @@ def _set_user_context():
 
 @app.before_request
 def _set_request_context():
-    """Resolve per-request dataset/model context from HTTP headers.
+    """Resolve per-request dataset/detector context from HTTP headers.
 
-    If the frontend sends ``X-Dataset-Id`` or ``X-Model-Id``, the
+    If the frontend sends ``X-Dataset-Id`` or ``X-Detector-Id``, the
     corresponding context is stashed on ``g`` so that proxy objects
-    (``medias``, ``good_votes``, etc.) resolve to it for the duration
-    of this request — without mutating global "active" state.
+    (``medias``, ``good_votes``, etc.) resolve to it for the duration of
+    this request — without mutating global "active" state.
 
-    When the headers are absent the proxies fall back to the global
-    active pointers, preserving backward compatibility.
+    When the headers are absent the proxies fall back to the global active
+    pointers, preserving backward compatibility.
 
-    Any failure here must not 500 every subsequent request — fall back
-    to the default (empty) context.
+    Any failure here must not 500 every subsequent request — fall back to
+    the default (empty) context.
     """
     from flask import request
     from vtsearch.utils.state_core import (
@@ -133,9 +133,9 @@ def _set_request_context():
             if ctx is not None:
                 g._dataset_context = ctx
 
-        model_id = request.headers.get("X-Model-Id") or request.args.get("model_id")
-        if model_id:
-            det_ctx = get_detector_context(model_id)
+        detector_id = request.headers.get("X-Detector-Id") or request.args.get("detector_id")
+        if detector_id:
+            det_ctx = get_detector_context(detector_id)
             if det_ctx is not None:
                 g._detector_context = det_ctx
     except Exception:
@@ -182,10 +182,10 @@ app.register_blueprint(label_importers_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(settings_io_bp)
 app.register_blueprint(sync_sources_bp)
-app.register_blueprint(trainable_models_bp)
-app.register_blueprint(models_registry_bp)
-app.register_blueprint(model_scoring_bp)
-app.register_blueprint(model_find_bp)
+app.register_blueprint(detectors_bp)
+app.register_blueprint(detectors_registry_bp)
+app.register_blueprint(detector_scoring_bp)
+app.register_blueprint(detector_find_bp)
 
 
 # ---------------------------------------------------------------------------
@@ -280,7 +280,7 @@ if __name__ == "__main__":
         default=None,
         dest="import_labels_into",
         help=(
-            "Trainable-model name to merge labels into before scoring. "
+            "Detector name to merge labels into before scoring. "
             "Used with --autodetect plus --label-importer-file."
         ),
     )
@@ -343,26 +343,26 @@ if __name__ == "__main__":
 
         chunk_size = getattr(args, "chunk_size", None)
 
-        # Optional one-shot label import into a trainable model before scoring.
+        # Optional one-shot label import into a detector before scoring.
         # The merged labelset is picked up by the autodetect pipeline below.
         if args.import_labels_into:
             if not args.label_importer_file:
                 parser.error("--import-labels-into requires --label-importer-file <path>")
-            # Settings file controls trainable_models_dir, so apply it first.
+            # Settings file controls detectors_dir, so apply it first.
             if settings_path:
                 from vtsearch.settings import set_settings_path
 
                 set_settings_path(settings_path)
-            from vtsearch.cli import import_labels_into_trainable_model_from_file
+            from vtsearch.cli import import_labels_into_detector_from_file
 
             try:
-                applied, skipped = import_labels_into_trainable_model_from_file(
+                applied, skipped = import_labels_into_detector_from_file(
                     args.import_labels_into,
                     args.label_importer,
                     args.label_importer_file,
                 )
                 print(
-                    f"Imported {applied} label(s) into trainable model "
+                    f"Imported {applied} label(s) into detector "
                     f"'{args.import_labels_into}' (skipped {skipped} duplicate/invalid).",
                     flush=True,
                 )

@@ -1,28 +1,28 @@
-"""Blueprint for trainable model routes.
+"""Blueprint for detector routes.
 
-Trainable models are a persistent reference to a labelset file plus a text-sort
-query.  They live on disk in ``data/trainable_models/<slug>.json`` and can
+Detectors are a persistent reference to a labelset file plus a text-sort
+query.  They live on disk in ``data/detectors/<slug>.json`` and can
 accumulate labels over repeated training sessions.
 
 Endpoints
 ---------
-GET  /api/trainable-models
-    List all trainable models.
+GET  /api/detectors
+    List all detectors.
 
-POST /api/trainable-models
-    Create a new trainable model (requires ``name`` and ``text_query``).
+POST /api/detectors
+    Create a new detector (requires ``name`` and ``text_query``).
 
-GET  /api/trainable-models/<name>
-    Retrieve a single trainable model with its labelset.
+GET  /api/detectors/<name>
+    Retrieve a single detector with its labelset.
 
-DELETE /api/trainable-models/<name>
-    Delete a trainable model.
+DELETE /api/detectors/<name>
+    Delete a detector.
 
-PUT  /api/trainable-models/<name>/rename
-    Rename a trainable model.
+PUT  /api/detectors/<name>/rename
+    Rename a detector.
 
-POST /api/trainable-models/<name>/labels
-    Save the current votes as the model's labelset.
+POST /api/detectors/<name>/labels
+    Save the current votes as the detector's labelset.
 """
 
 from __future__ import annotations
@@ -33,32 +33,32 @@ import time
 
 from flask import Blueprint, jsonify, request, send_file
 
-from vtsearch.models.trainable_model_store import (
-    _model_path,
-    _read_model,
-    _write_model,
-    get_trainable_models_dir,
+from vtsearch.models.detector_store import (
+    _detector_path,
+    _read_detector,
+    _write_detector,
+    get_detectors_dir,
 )
 
 logger = logging.getLogger(__name__)
 
-trainable_models_bp = Blueprint("trainable_models", __name__)
+detectors_bp = Blueprint("detectors", __name__)
 
 
 def _list_all() -> list[dict]:
-    """Return summary info for every trainable model on disk."""
-    tm_dir = get_trainable_models_dir()
-    if not tm_dir.is_dir():
+    """Return summary info for every detector on disk."""
+    det_dir = get_detectors_dir()
+    if not det_dir.is_dir():
         return []
-    models = []
-    for p in sorted(tm_dir.iterdir()):
+    detectors = []
+    for p in sorted(det_dir.iterdir()):
         if p.suffix != ".json":
             continue
-        data = _read_model(p)
+        data = _read_detector(p)
         if data is None:
             continue
         labels = data.get("labelset", {}).get("labels", [])
-        models.append(
+        detectors.append(
             {
                 "name": data["name"],
                 "text_query": data.get("text_query", ""),
@@ -69,28 +69,28 @@ def _list_all() -> list[dict]:
                 "created_at": data.get("created_at", 0),
             }
         )
-    return models
+    return detectors
 
 
 # ---------------------------------------------------------------------------
-# GET /api/trainable-models
+# GET /api/detectors
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route("/api/trainable-models", methods=["GET"])
-def list_trainable_models():
-    """Return all trainable models (summary only, no full labelset)."""
-    return jsonify({"models": _list_all()})
+@detectors_bp.route("/api/detectors", methods=["GET"])
+def list_detectors():
+    """Return all detectors (summary only, no full labelset)."""
+    return jsonify({"detectors": _list_all()})
 
 
 # ---------------------------------------------------------------------------
-# POST /api/trainable-models
+# POST /api/detectors
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route("/api/trainable-models", methods=["POST"])
-def create_trainable_model():
-    """Create a new trainable model.
+@detectors_bp.route("/api/detectors", methods=["POST"])
+def create_detector():
+    """Create a new detector.
 
     Expects JSON::
 
@@ -110,9 +110,9 @@ def create_trainable_model():
     if not media_type or media_type == "any":
         return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
 
-    path = _model_path(name)
+    path = _detector_path(name)
     if path.exists():
-        return jsonify({"error": f"A trainable model named '{name}' already exists"}), 409
+        return jsonify({"error": f"A detector named '{name}' already exists"}), 409
 
     # Build examples list; if text_query/media_example provided without
     # explicit examples, create a single example from it for backward compat.
@@ -121,7 +121,7 @@ def create_trainable_model():
     elif examples is None and media_example:
         examples = [{"type": "media", "value": media_example}]
 
-    model_data = {
+    detector_data = {
         "name": name,
         "text_query": text_query,
         "media_example": media_example,
@@ -130,7 +130,7 @@ def create_trainable_model():
         "created_at": time.time(),
         "labelset": {"labels": []},
     }
-    _write_model(path, model_data)
+    _write_detector(path, detector_data)
 
     return jsonify(
         {
@@ -146,82 +146,82 @@ def create_trainable_model():
 
 
 # ---------------------------------------------------------------------------
-# GET /api/trainable-models/<name>
+# GET /api/detectors/<name>
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route("/api/trainable-models/<name>", methods=["GET"])
-def get_trainable_model(name: str):
-    """Retrieve a single trainable model with its full labelset."""
-    path = _model_path(name)
-    data = _read_model(path)
+@detectors_bp.route("/api/detectors/<name>", methods=["GET"])
+def get_detector(name: str):
+    """Retrieve a single detector with its full labelset."""
+    path = _detector_path(name)
+    data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
     return jsonify(data)
 
 
 # ---------------------------------------------------------------------------
-# DELETE /api/trainable-models/<name>
+# DELETE /api/detectors/<name>
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route("/api/trainable-models/<name>", methods=["DELETE"])
-def delete_trainable_model(name: str):
-    """Delete a trainable model."""
-    path = _model_path(name)
+@detectors_bp.route("/api/detectors/<name>", methods=["DELETE"])
+def delete_detector(name: str):
+    """Delete a detector."""
+    path = _detector_path(name)
     if not path.exists():
-        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
     path.unlink()
     return jsonify({"success": True, "name": name})
 
 
 # ---------------------------------------------------------------------------
-# PUT /api/trainable-models/<name>/rename
+# PUT /api/detectors/<name>/rename
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route("/api/trainable-models/<name>/rename", methods=["PUT"])
-def rename_trainable_model(name: str):
-    """Rename a trainable model.
+@detectors_bp.route("/api/detectors/<name>/rename", methods=["PUT"])
+def rename_detector(name: str):
+    """Rename a detector.
 
     Expects JSON::
 
         {"new_name": "Cat Meows"}
     """
-    old_path = _model_path(name)
-    data = _read_model(old_path)
+    old_path = _detector_path(name)
+    data = _read_detector(old_path)
     if data is None:
-        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
 
     body = request.get_json(force=True, silent=True) or {}
     new_name = body.get("new_name", "").strip()
     if not new_name:
         return jsonify({"error": "new_name is required"}), 400
 
-    new_path = _model_path(new_name)
+    new_path = _detector_path(new_name)
     if new_path.exists() and new_path != old_path:
-        return jsonify({"error": f"A model named '{new_name}' already exists"}), 409
+        return jsonify({"error": f"A detector named '{new_name}' already exists"}), 409
 
     data["name"] = new_name
-    _write_model(new_path, data)
+    _write_detector(new_path, data)
     if new_path != old_path:
         old_path.unlink(missing_ok=True)
 
-    # Update the model registry entry that references this trainable model
-    from vtsearch.models.registry import find_by_name, rename_model
+    # Update the detector registry entry that references this detector
+    from vtsearch.models.detector_registry import find_by_name, rename_detector as _rename_in_registry
 
     reg_entry = find_by_name(name)
     if reg_entry:
-        rename_model(reg_entry["id"], new_name)
+        _rename_in_registry(reg_entry["id"], new_name)
 
     # Rename autorun flag if present.
     try:
-        from vtsearch.settings import get_autorun_trainable_models, set_autorun_trainable_models
+        from vtsearch.settings import get_autorun_detectors, set_autorun_detectors
 
-        current = get_autorun_trainable_models()
+        current = get_autorun_detectors()
         if name in current:
             current = [new_name if n == name else n for n in current]
-            set_autorun_trainable_models(current)
+            set_autorun_detectors(current)
     except Exception:
         logger.exception("Failed to rename autorun entry for %s", name)
 
@@ -229,22 +229,22 @@ def rename_trainable_model(name: str):
 
 
 # ---------------------------------------------------------------------------
-# PUT /api/trainable-models/<name>/examples
+# PUT /api/detectors/<name>/examples
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route("/api/trainable-models/<name>/examples", methods=["PUT"])
-def set_trainable_model_examples(name: str):
-    """Set/replace the examples for a trainable model.
+@detectors_bp.route("/api/detectors/<name>/examples", methods=["PUT"])
+def set_detector_examples(name: str):
+    """Set/replace the examples for a detector.
 
     Expects JSON::
 
         {"examples": [{"type": "text", "value": "dog barking"}]}
     """
-    path = _model_path(name)
-    data = _read_model(path)
+    path = _detector_path(name)
+    data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
 
     body = request.get_json(force=True, silent=True) or {}
     examples = body.get("examples")
@@ -256,43 +256,43 @@ def set_trainable_model_examples(name: str):
     text_examples = [e for e in examples if e.get("type") == "text" and e.get("value")]
     if text_examples:
         data["text_query"] = text_examples[0]["value"]
-    _write_model(path, data)
+    _write_detector(path, data)
 
     return jsonify({"success": True, "name": name, "examples": examples})
 
 
 # ---------------------------------------------------------------------------
-# POST /api/trainable-models/<name>/labels
+# POST /api/detectors/<name>/labels
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route("/api/trainable-models/<name>/labels", methods=["POST"])
-def save_trainable_model_labels(name: str):
-    """Save the current votes as the model's labelset.
+@detectors_bp.route("/api/detectors/<name>/labels", methods=["POST"])
+def save_detector_labels(name: str):
+    """Save the current votes as the detector's labelset.
 
     Reads good_votes/bad_votes from global state and the current medias
-    to build a fresh LabelSet, then persists it into the model's JSON file.
+    to build a fresh LabelSet, then persists it into the detector's JSON file.
     """
-    path = _model_path(name)
-    data = _read_model(path)
+    path = _detector_path(name)
+    data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
 
     from vtsearch.datasets.labelset import LabelSet
     from vtsearch.utils import bad_votes, good_votes, snapshot_medias
 
     labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bad_votes, expand_dupes=False)
     data["labelset"] = labelset.to_dict()
-    _write_model(path, data)
+    _write_detector(path, data)
 
-    # Also update the model registry entry if one exists
-    from vtsearch.models.registry import find_by_name, update_model
+    # Also update the detector registry entry if one exists
+    from vtsearch.models.detector_registry import find_by_name, update_detector
 
     import time as _time
 
     reg_entry = find_by_name(name)
     if reg_entry:
-        update_model(reg_entry["id"], num_training=len(labelset), last_trained_at=_time.time())
+        update_detector(reg_entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
     return jsonify(
         {
@@ -304,34 +304,35 @@ def save_trainable_model_labels(name: str):
 
 
 # ---------------------------------------------------------------------------
-# POST /api/trainable-models/<name>/import-labels/<importer_name>
+# POST /api/detectors/<name>/import-labels/<importer_name>
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route(
-    "/api/trainable-models/<name>/import-labels/<importer_name>",
+@detectors_bp.route(
+    "/api/detectors/<name>/import-labels/<importer_name>",
     methods=["POST"],
 )
-def import_labels_into_model(name: str, importer_name: str):
-    """Run a label importer and merge results into this model's labelset.
+def import_labels_into_detector(name: str, importer_name: str):
+    """Run a label importer and merge results into this detector's labelset.
 
     Unlike the regular ``/api/label-importers/import/`` route, this does
     **not** require a dataset to be loaded.  The imported label entries are
-    merged directly into the trainable model's persisted labelset, and the
-    model-registry entry is updated so the dashboard reflects the new count.
+    merged directly into the detector's persisted labelset, and the
+    detector-registry entry is updated so the dashboard reflects the new
+    count.
 
-    When the model's detector context **is** loaded, the new labels are also
-    resolved against the loaded dataset's medias, applied to the detector's
-    votes, and a fresh MLP is trained with a cross-validated threshold — all
-    inside the loaded detector context.
+    When the detector is loaded into memory, the new labels are also resolved
+    against the loaded dataset's medias, applied to the detector's votes, and
+    a fresh MLP is trained with a cross-validated threshold — all inside the
+    loaded detector context.
 
     Returns JSON with ``applied``, ``skipped``, ``num_labels``, and
     ``message`` keys.
     """
-    path = _model_path(name)
-    data = _read_model(path)
+    path = _detector_path(name)
+    data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
 
     from vtsearch.labels.importers import get_label_importer, list_label_importers
     from vtsearch.routes.helpers import (
@@ -393,14 +394,14 @@ def import_labels_into_model(name: str, importer_name: str):
         applied += 1
 
     data["labelset"] = existing_ls.to_dict()
-    _write_model(path, data)
+    _write_detector(path, data)
 
-    # Update the model registry entry
-    from vtsearch.models.registry import find_by_name, update_model
+    # Update the detector registry entry
+    from vtsearch.models.detector_registry import find_by_name, update_detector
 
     reg_entry = find_by_name(name)
     if reg_entry:
-        update_model(reg_entry["id"], num_training=len(existing_ls), last_trained_at=time.time())
+        update_detector(reg_entry["id"], num_training=len(existing_ls), last_trained_at=time.time())
 
     # ------------------------------------------------------------------
     # 2) If the detector is loaded, resolve + apply + retrain in context
@@ -419,7 +420,7 @@ def import_labels_into_model(name: str, importer_name: str):
                 name,
             )
 
-    msg = f"Added {applied} label(s) to model '{name}', skipped {skipped}."
+    msg = f"Added {applied} label(s) to detector '{name}', skipped {skipped}."
     if resolved > 0:
         msg += f" Resolved {resolved} into the loaded detector."
     if trained:
@@ -437,13 +438,13 @@ def import_labels_into_model(name: str, importer_name: str):
 
 
 # ---------------------------------------------------------------------------
-# POST /api/trainable-models/combine
+# POST /api/detectors/combine
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route("/api/trainable-models/combine", methods=["POST"])
-def combine_trainable_models():
-    """Combine the labelsets of two or more trainable models into a new model.
+@detectors_bp.route("/api/detectors/combine", methods=["POST"])
+def combine_detectors():
+    """Combine the labelsets of two or more detectors into a new detector.
 
     Expects JSON::
 
@@ -453,16 +454,16 @@ def combine_trainable_models():
             "conflict_policy": "drop"        # optional; default "drop"
         }
 
-    All source models must share the same ``media_type``.  The new model's
-    labelset is the merge of all source labelsets, keyed by ``Origin``
-    (importer + params + origin_name) and falling back to ``md5`` for
-    legacy entries.  Per ``conflict_policy="drop"`` (the only supported
+    All source detectors must share the same ``media_type``.  The new
+    detector's labelset is the merge of all source labelsets, keyed by
+    ``Origin`` (importer + params + origin_name) and falling back to ``md5``
+    for legacy entries.  Per ``conflict_policy="drop"`` (the only supported
     policy today), any element key that appears with disagreeing labels
     across the sources is removed entirely.
 
-    The combined model is *purely a labelset entry* — no labelset-source
-    is inherited from the sources, and the threshold/MLP are computed
-    later when the model is activated against a dataset.
+    The combined detector is *purely a labelset entry* — no labelset-source
+    is inherited from the sources, and the threshold/MLP are computed later
+    when the detector is activated against a dataset.
 
     Returns ``201`` with a summary on success, or ``4xx`` on validation
     errors (missing names, unknown source, media-type mismatch, name
@@ -474,32 +475,32 @@ def combine_trainable_models():
     conflict_policy = (body.get("conflict_policy") or "drop").strip()
 
     if not isinstance(names, list) or len(names) < 2:
-        return jsonify({"error": "names must be a list of at least 2 trainable model names"}), 400
+        return jsonify({"error": "names must be a list of at least 2 detector names"}), 400
     if not new_name:
         return jsonify({"error": "new_name is required"}), 400
     if conflict_policy != "drop":
         return jsonify({"error": f"Unsupported conflict_policy: {conflict_policy!r}"}), 400
 
-    new_path = _model_path(new_name)
+    new_path = _detector_path(new_name)
     if new_path.exists():
-        return jsonify({"error": f"A trainable model named '{new_name}' already exists"}), 409
+        return jsonify({"error": f"A detector named '{new_name}' already exists"}), 409
 
     from vtsearch.datasets.labelset import LabelSet
 
     sources: list[dict] = []
     for src_name in names:
-        src_path = _model_path(src_name)
-        src_data = _read_model(src_path)
+        src_path = _detector_path(src_name)
+        src_data = _read_detector(src_path)
         if src_data is None:
-            return jsonify({"error": f"Trainable model '{src_name}' not found"}), 404
+            return jsonify({"error": f"Detector '{src_name}' not found"}), 404
         sources.append(src_data)
 
     media_types = {s.get("media_type", "") for s in sources}
     if len(media_types) > 1:
-        return jsonify({"error": f"All source models must share the same media_type; got {sorted(media_types)}"}), 400
+        return jsonify({"error": f"All source detectors must share the same media_type; got {sorted(media_types)}"}), 400
     media_type = next(iter(media_types))
     if not media_type or media_type == "any":
-        return jsonify({"error": "Source models must have a specific media_type (not empty or 'any')"}), 400
+        return jsonify({"error": "Source detectors must have a specific media_type (not empty or 'any')"}), 400
 
     labelsets = [LabelSet.from_dict(s.get("labelset") or {}) for s in sources]
     merged = labelsets[0].merge(*labelsets[1:], conflict_policy=conflict_policy)
@@ -545,7 +546,7 @@ def combine_trainable_models():
         "labelset": merged.to_dict(),
         "combined_from": list(names),
     }
-    _write_model(new_path, new_data)
+    _write_detector(new_path, new_data)
 
     return jsonify(
         {
@@ -561,13 +562,13 @@ def combine_trainable_models():
 
 
 # ---------------------------------------------------------------------------
-# GET /api/trainable-models/<name>/labels-detail
+# GET /api/detectors/<name>/labels-detail
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route("/api/trainable-models/<name>/labels-detail", methods=["GET"])
-def get_trainable_model_labels_detail(name: str):
-    """Return the model's saved labelset elements with right-pane render data.
+@detectors_bp.route("/api/detectors/<name>/labels-detail", methods=["GET"])
+def get_detector_labels_detail(name: str):
+    """Return the detector's saved labelset elements with right-pane render data.
 
     Each element gets a stable ``id`` (derived from its origin/md5 identity)
     plus ``label``, ``media_type``, display ``name``, and — when the
@@ -580,37 +581,37 @@ def get_trainable_model_labels_detail(name: str):
     """
     from vtsearch.models.labelset_elements import build_labels_detail
 
-    path = _model_path(name)
-    data = _read_model(path)
+    path = _detector_path(name)
+    data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
     return jsonify(build_labels_detail(data))
 
 
 # ---------------------------------------------------------------------------
-# GET /api/trainable-models/<name>/labels/<element_id>/preview
+# GET /api/detectors/<name>/labels/<element_id>/preview
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route(
-    "/api/trainable-models/<name>/labels/<element_id>/preview",
+@detectors_bp.route(
+    "/api/detectors/<name>/labels/<element_id>/preview",
     methods=["GET"],
 )
-def preview_trainable_model_label(name: str, element_id: str):
+def preview_detector_label(name: str, element_id: str):
     """Stream the underlying media file for a saved labelset element.
 
     Resolves the element via its origin (using the importer's
     ``resolve_file()`` hook) and serves the raw bytes with a mimetype
-    chosen by the trainable model's ``media_type``.  Returns 404 if the
-    element is unknown or its file cannot be located.
+    chosen by the detector's ``media_type``.  Returns 404 if the element
+    is unknown or its file cannot be located.
     """
     from vtsearch.datasets.labelset import LabelSet
     from vtsearch.models.labelset_elements import find_element_by_id, resolve_element_to_path
 
-    path = _model_path(name)
-    data = _read_model(path)
+    path = _detector_path(name)
+    data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
 
     labelset = LabelSet.from_dict(data.get("labelset") or {})
     found = find_element_by_id(labelset.elements, element_id)
@@ -679,15 +680,15 @@ _DEFAULT_MIMETYPE_BY_TYPE = {
 
 
 # ---------------------------------------------------------------------------
-# POST /api/trainable-models/<name>/labels/<element_id>/vote
+# POST /api/detectors/<name>/labels/<element_id>/vote
 # ---------------------------------------------------------------------------
 
 
-@trainable_models_bp.route(
-    "/api/trainable-models/<name>/labels/<element_id>/vote",
+@detectors_bp.route(
+    "/api/detectors/<name>/labels/<element_id>/vote",
     methods=["POST"],
 )
-def vote_trainable_model_label(name: str, element_id: str):
+def vote_detector_label(name: str, element_id: str):
     """Toggle the label on a saved labelset element.
 
     Body: ``{"vote": "good"}`` or ``{"vote": "bad"}``.
@@ -708,10 +709,10 @@ def vote_trainable_model_label(name: str, element_id: str):
     if vote not in ("good", "bad"):
         return jsonify({"error": "vote must be 'good' or 'bad'"}), 400
 
-    path = _model_path(name)
-    data = _read_model(path)
+    path = _detector_path(name)
+    data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
 
     from vtsearch.datasets.labelset import LabelSet
     from vtsearch.models.labelset_elements import find_element_by_id
@@ -728,7 +729,7 @@ def vote_trainable_model_label(name: str, element_id: str):
     if not changed:
         return jsonify({"ok": True, "action": action})
 
-    _write_model(path, data)
+    _write_detector(path, data)
 
     # Mirror into in-memory votes when the element resolves into the active
     # dataset, so the MLP and learned-sort stay aligned with the labelset.
@@ -737,12 +738,12 @@ def vote_trainable_model_label(name: str, element_id: str):
 
         toggle_vote(cid_before, vote)
 
-    from vtsearch.models.registry import find_by_name, update_model
+    from vtsearch.models.detector_registry import find_by_name, update_detector
 
     reg_entry = find_by_name(name)
     if reg_entry:
         new_count = len(LabelSet.from_dict(data.get("labelset") or {}))
-        update_model(reg_entry["id"], num_training=new_count, last_trained_at=time.time())
+        update_detector(reg_entry["id"], num_training=new_count, last_trained_at=time.time())
 
     return jsonify({"ok": True, "action": action})
 

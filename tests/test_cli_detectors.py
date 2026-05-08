@@ -1,6 +1,6 @@
-"""Tests for the trainable-model CLI autodetect path.
+"""Tests for the detector CLI autodetect path.
 
-Exercises the new ``autorun_trainable_models`` settings key, the
+Exercises the new ``autorun_detectors`` settings key, the
 ``--import-labels-into`` one-shot import flow, and the clear-error path
 when a labelset's origin files can't be resolved from the CLI environment.
 """
@@ -15,26 +15,26 @@ import pytest
 
 import app as app_module
 from helpers import make_dataset_file as _make_dataset_file
-from vtsearch.settings import get_trainable_models_dir
+from vtsearch.settings import get_detectors_dir
 from vtsearch.utils.audio_generator import generate_wav
 
 
 @pytest.fixture(autouse=True)
 def _clean_tm_dir():
-    tm_dir = get_trainable_models_dir()
+    tm_dir = get_detectors_dir()
     if tm_dir.is_dir():
         shutil.rmtree(tm_dir)
     yield
-    tm_dir = get_trainable_models_dir()
+    tm_dir = get_detectors_dir()
     if tm_dir.is_dir():
         shutil.rmtree(tm_dir)
 
 
 def _write_trainable_model(name: str, labelset: dict) -> Path:
-    from vtsearch.models.trainable_model_store import _model_path, _write_model
+    from vtsearch.models.detector_store import _detector_path, _write_detector
 
-    path = _model_path(name)
-    _write_model(
+    path = _detector_path(name)
+    _write_detector(
         path,
         {
             "name": name,
@@ -66,15 +66,15 @@ def _make_audio_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
     return out
 
 
-def _settings_file_with_trainable_models(tmp_path: Path, tm_names: list[str]) -> Path:
+def _settings_file_with_detectors(tmp_path: Path, tm_names: list[str]) -> Path:
     """Settings JSON that activates *tm_names* but defines no autorun processors.
 
-    Includes ``trainable_models_dir`` so ``set_settings_path`` doesn't reset
+    Includes ``detectors_dir`` so ``set_settings_path`` doesn't reset
     the directory to the production default after conftest redirected it.
     """
     settings = {
-        "autorun_trainable_models": list(tm_names),
-        "trainable_models_dir": str(get_trainable_models_dir()),
+        "autorun_detectors": list(tm_names),
+        "detectors_dir": str(get_detectors_dir()),
     }
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps(settings))
@@ -82,14 +82,14 @@ def _settings_file_with_trainable_models(tmp_path: Path, tm_names: list[str]) ->
 
 
 # ---------------------------------------------------------------------------
-# autorun_trainable_models in settings drives CLI autodetect
+# autorun_detectors in settings drives CLI autodetect
 # ---------------------------------------------------------------------------
 
 
-class TestAutorunTrainableModelsCLI:
+class TestAutorunDetectorsCLI:
     def test_settings_drives_trainable_model_scoring(self, client, tmp_path, monkeypatch):
-        """A settings file with autorun_trainable_models scores the dataset
-        with each named trainable model.  No autorun_processors needed."""
+        """A settings file with autorun_detectors scores the dataset
+        with each named detector.  No autorun_processors needed."""
         files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
         _stub_resolve(monkeypatch, files)
 
@@ -118,7 +118,7 @@ class TestAutorunTrainableModelsCLI:
         _write_trainable_model("ds-a-detector", labelset)
 
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        settings_path = _settings_file_with_trainable_models(tmp_path, ["ds-a-detector"])
+        settings_path = _settings_file_with_detectors(tmp_path, ["ds-a-detector"])
         out_path = tmp_path / "hits.json"
 
         from vtsearch.cli import autodetect_main
@@ -132,7 +132,7 @@ class TestAutorunTrainableModelsCLI:
 
         body = json.loads(out_path.read_text())
         results = body.get("results", {})
-        assert "ds-a-detector" in results, f"Expected trainable model in results, got {list(results)}"
+        assert "ds-a-detector" in results, f"Expected detector in results, got {list(results)}"
         det = results["ds-a-detector"]
         assert isinstance(det.get("hits"), list)
         assert det["detector_name"] == "ds-a-detector"
@@ -163,7 +163,7 @@ class TestAutorunTrainableModelsCLI:
         _write_trainable_model("unreachable-tm", labelset)
 
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        settings_path = _settings_file_with_trainable_models(tmp_path, ["unreachable-tm"])
+        settings_path = _settings_file_with_detectors(tmp_path, ["unreachable-tm"])
 
         from vtsearch.cli import _run_pipeline, _load_pickle_whole
 
@@ -179,9 +179,9 @@ class TestAutorunTrainableModelsCLI:
 # ---------------------------------------------------------------------------
 
 
-class TestImportLabelsIntoTrainableModelCLI:
+class TestImportLabelsIntoDetectorCLI:
     def test_merges_external_labels_into_trainable_model(self, tmp_path):
-        """Calling import_labels_into_trainable_model_from_file with a
+        """Calling import_labels_into_detector_from_file with a
         server_json_file label file appends new entries to the on-disk
         labelset and dedupes by (md5, label)."""
         # Seed model with one existing entry — to verify dedup.
@@ -209,11 +209,11 @@ class TestImportLabelsIntoTrainableModelCLI:
         labels_path = tmp_path / "new_labels.json"
         labels_path.write_text(json.dumps(new_labels))
 
-        from vtsearch.cli import import_labels_into_trainable_model_from_file
+        from vtsearch.cli import import_labels_into_detector_from_file
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.trainable_model_store import _model_path, _read_model
+        from vtsearch.models.detector_store import _detector_path, _read_detector
 
-        applied, skipped = import_labels_into_trainable_model_from_file(
+        applied, skipped = import_labels_into_detector_from_file(
             "import-tm",
             "server_json_file",
             str(labels_path),
@@ -221,7 +221,7 @@ class TestImportLabelsIntoTrainableModelCLI:
         assert applied == 2
         assert skipped == 1
 
-        saved = _read_model(_model_path("import-tm"))
+        saved = _read_detector(_detector_path("import-tm"))
         ls = LabelSet.from_dict(saved["labelset"])
         md5s = sorted(el.md5 for el in ls.elements)
         assert md5s == sorted(["a" * 32, "b" * 32, "c" * 32])
@@ -230,8 +230,8 @@ class TestImportLabelsIntoTrainableModelCLI:
         labels_path = tmp_path / "labels.json"
         labels_path.write_text(json.dumps({"labels": []}))
 
-        from vtsearch.cli import import_labels_into_trainable_model_from_file
+        from vtsearch.cli import import_labels_into_detector_from_file
 
         with pytest.raises(ValueError) as exc:
-            import_labels_into_trainable_model_from_file("no-such-model", "server_json_file", str(labels_path))
+            import_labels_into_detector_from_file("no-such-model", "server_json_file", str(labels_path))
         assert "no-such-model" in str(exc.value)

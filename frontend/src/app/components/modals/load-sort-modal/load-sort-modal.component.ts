@@ -4,8 +4,8 @@ import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
-import { ServerFileEntry, ModelRegistryEntry, ImporterInfo } from '../../../models/api.models';
+import { DetectorsApiService } from '../../../services/detectors-api.service';
+import { ServerFileEntry, DetectorRegistryEntry, ImporterInfo } from '../../../models/api.models';
 import {
   MediaCropModalComponent,
   MediaCropResult,
@@ -39,7 +39,7 @@ export class LoadSortModalComponent implements OnInit {
   @Output() exampleSortStarted = new EventEmitter<unknown>();
 
   serverMediaFiles: ServerFileEntry[] = [];
-  registryModels: ModelRegistryEntry[] = [];
+  registryModels: DetectorRegistryEntry[] = [];
   loading = true;
   status = '';
   error = '';
@@ -67,7 +67,7 @@ export class LoadSortModalComponent implements OnInit {
   constructor(
     private sortingApi: SortingApiService,
     private datasetsApi: DatasetsApiService,
-    private modelsApi: TrainableModelsApiService,
+    private detectorsApi: DetectorsApiService,
   ) {}
 
   ngOnInit(): void {
@@ -76,10 +76,10 @@ export class LoadSortModalComponent implements OnInit {
         this.serverMediaFiles = res.files || [];
       },
     });
-    this.modelsApi.getRegistry().subscribe({
+    this.detectorsApi.getRegistry().subscribe({
       next: (res) => {
-        // Show models that have at least one training label.
-        this.registryModels = (res.models || []).filter(
+        // Show detectors that have at least one training label.
+        this.registryModels = (res.detectors || []).filter(
           (m) => (m.num_training ?? 0) > 0,
         );
         this.loading = false;
@@ -92,7 +92,7 @@ export class LoadSortModalComponent implements OnInit {
 
   // --- Model loading ---
 
-  loadRegistryModel(model: ModelRegistryEntry): void {
+  loadRegistryModel(model: DetectorRegistryEntry): void {
     this.status = 'Loading model…';
     this.modelSelected.emit(model.id);
     this.closed.emit();

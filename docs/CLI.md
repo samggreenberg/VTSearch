@@ -2,14 +2,14 @@
 
 VTSearch provides a CLI workflow for running detectors on datasets and exporting results — all without starting the web server.
 
-## Auto-detect (run trainable models on a dataset)
+## Auto-detect (run detectors on a dataset)
 
-Score every item in a dataset with the trainable models flagged for
+Score every item in a dataset with the detectors flagged for
 autorun and output the items each model predicts as "Good."
 
 Models are specified via a **settings file** (`--settings`) whose
-`autorun_trainable_models` list names registered models.  Each name
-maps to `data/trainable_models/<name>.json`; the CLI re-resolves the
+`autorun_detectors` list names registered models.  Each name
+maps to `data/detectors/<name>.json`; the CLI re-resolves the
 labelset's origins, embeds them with the dataset's embedder, trains an
 MLP, and applies it to the dataset.  See below for the exact format.
 
@@ -49,12 +49,12 @@ Available exporters: `server_json_file` (JSON to server path), `server_csv_file`
 **How to get the files:**
 
 - **Dataset file** — Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
-- **Settings file** — A JSON file listing the trainable-model names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/trainable_models/<name>.json`; the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh MLP, and scores the dataset.
+- **Settings file** — A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/<name>.json`; the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh MLP, and scores the dataset.
 
 ```json
 {
-  "autorun_trainable_models": ["Dog Barks", "Cat Meows"],
-  "trainable_models_dir": "data/trainable_models"
+  "autorun_detectors": ["Dog Barks", "Cat Meows"],
+  "detectors_dir": "data/detectors"
 }
 ```
 

@@ -4,7 +4,7 @@ Covers:
 - /api/example-sort (generic, media-type-aware)
 - /api/server-media-files (listing)
 - /api/example-sort-server (server-side example sort)
-- /api/models/registry (dashboard models for model loading)
+- /api/detectors/registry (dashboard models for model loading)
 - /api/example-sort-origin (sort by origin-based media file)
 """
 
@@ -312,29 +312,29 @@ class TestExampleSortServer:
         assert saved_duration == pytest.approx(0.3, abs=0.01)
 
 
-class TestRegistryModelsForLoadSort:
-    """Tests for the model registry surface used by the Load Sort window."""
+class TestRegistryDetectorsForLoadSort:
+    """Tests for the detector registry surface used by the Load Sort window."""
 
-    def test_registry_lists_models(self, client):
-        """GET /api/models/registry returns models list."""
-        resp = client.get("/api/models/registry")
+    def test_registry_lists_detectors(self, client):
+        """GET /api/detectors/registry returns detectors list."""
+        resp = client.get("/api/detectors/registry")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "models" in data
-        assert isinstance(data["models"], list)
+        assert "detectors" in data
+        assert isinstance(data["detectors"], list)
 
-    def test_create_and_list_registry_model(self, client):
-        """A registered model appears in the registry listing."""
+    def test_create_and_list_registry_detector(self, client):
+        """A registered detector appears in the registry listing."""
         resp = client.post(
-            "/api/models/registry",
-            json={"name": "Test LoadSort Model", "media_type": "audio"},
+            "/api/detectors/registry",
+            json={"name": "Test LoadSort Detector", "media_type": "audio"},
         )
         assert resp.status_code == 201
 
-        resp = client.get("/api/models/registry")
-        models = resp.get_json()["models"]
-        names = [m["name"] for m in models]
-        assert "Test LoadSort Model" in names
+        resp = client.get("/api/detectors/registry")
+        detectors = resp.get_json()["detectors"]
+        names = [d["name"] for d in detectors]
+        assert "Test LoadSort Detector" in names
 
 
 class TestExampleSortOrigin:

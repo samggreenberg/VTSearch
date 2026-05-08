@@ -281,7 +281,7 @@ data/
 │   ├── models--microsoft--xclip-base-patch32/
 │   └── models--intfloat--e5-base-v2/
 ├── embeddings/                       # Cached dataset embeddings (.pkl files)
-├── trainable_models/                 # Persistent trainable model definitions (.json)
+├── detectors/                 # Persistent detector definitions (.json)
 ├── settings.json                     # User preferences, autorun config, thresholds
 ├── audio/                            # Audio media files
 ├── video/                            # Video media files
@@ -297,7 +297,7 @@ data/
 | `data/models/` | **Yes** | Re-downloading is slow (~3.2 GB) |
 | `data/embeddings/` | **Yes** | Contains cached embeddings; losing them means recomputing |
 | `data/settings.json` | **Yes** | User preferences, trained detectors, autorun processors |
-| `data/trainable_models/` | **Yes** | Persistent trainable model definitions with labelsets |
+| `data/detectors/` | **Yes** | Persistent detector definitions with labelsets |
 | `data/audio/`, `video/`, `images/`, `paragraphs/`, `documents/` | Depends | Media files from imported datasets; re-import if lost |
 | Demo dataset archives (`.zip`, `.tar.gz`) | Safe to delete | Can be re-downloaded |
 | Extracted demo folders (`ESC-50-master/`, etc.) | Safe to delete | Can be re-extracted from archives |
@@ -328,7 +328,7 @@ and auto-saved on every change. Schema:
   "panel_pct_left": {},
   "panel_pct_right": {},
   "autoload_media_embedders": [],
-  "autorun_trainable_models": [],
+  "autorun_detectors": [],
   "autopilot_enabled": true,
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
@@ -336,7 +336,7 @@ and auto-saved on every change. Schema:
   "autopilot_resort_interval": 10,
   "autopilot_goal_diversity": 40,
   "saved_datasets_dir": "data/saved_datasets",
-  "trainable_models_dir": "data/trainable_models",
+  "detectors_dir": "data/detectors",
   "max_concurrent_dataset_downloads": 1,
   "max_concurrent_dataset_embeddings": 1
 }
@@ -347,11 +347,11 @@ Notable fields:
 - `autoload_media_embedders` — embedders to preload at startup (e.g.
   `["clap", "siglip"]`); triggers model downloads if not yet cached.
   Leave empty to defer loading until each media type is first used.
-- `autorun_trainable_models` — list of registered trainable-model names
+- `autorun_detectors` — list of registered detector names
   to run during `/api/auto-detect` and the CLI `--autodetect` flow.
   Toggle a model's flag through the UI or
-  `PUT /api/models/registry/<id>/autorun`.
-- `saved_datasets_dir`, `trainable_models_dir` —
+  `PUT /api/detectors/registry/<id>/autorun`.
+- `saved_datasets_dir`, `detectors_dir` —
   infrastructure directories (overridable for custom data layouts)
 - `max_concurrent_dataset_downloads` /
   `max_concurrent_dataset_embeddings` — concurrency gates for dataset

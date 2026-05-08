@@ -159,7 +159,7 @@ class LoadingTasksTracker:
         name: str = "",
         dataset_id: str = "",
         media_type: str = "",
-        model_id: str = "",
+        detector_id: str = "",
         embedder: str = "",
     ) -> ProgressTracker:
         """Create and register a new loading task.
@@ -175,7 +175,7 @@ class LoadingTasksTracker:
                 "finished_at": None,
                 "dataset_id": dataset_id,
                 "media_type": media_type,
-                "model_id": model_id,
+                "detector_id": detector_id,
                 "embedder": embedder,
             }
         return tracker
@@ -249,8 +249,8 @@ class LoadingTasksTracker:
                 snapshot["created_at"] = entry["created_at"]
                 if entry.get("dataset_id"):
                     snapshot["dataset_id"] = entry["dataset_id"]
-                if entry.get("model_id"):
-                    snapshot["model_id"] = entry["model_id"]
+                if entry.get("detector_id"):
+                    snapshot["detector_id"] = entry["detector_id"]
                 if entry.get("media_type"):
                     snapshot["media_type"] = entry["media_type"]
                 if entry.get("embedder"):
@@ -263,8 +263,8 @@ class LoadingTasksTracker:
                 snapshot["created_at"] = entry["created_at"]
                 if entry.get("dataset_id"):
                     snapshot["dataset_id"] = entry["dataset_id"]
-                if entry.get("model_id"):
-                    snapshot["model_id"] = entry["model_id"]
+                if entry.get("detector_id"):
+                    snapshot["detector_id"] = entry["detector_id"]
                 if entry.get("media_type"):
                     snapshot["media_type"] = entry["media_type"]
                 if entry.get("embedder"):
@@ -291,8 +291,8 @@ class LoadingTasksTracker:
 #: Application-wide loading tasks tracker (for datasets).
 loading_tasks = LoadingTasksTracker()
 
-#: Application-wide loading tasks tracker (for models/detectors).
-model_loading_tasks = LoadingTasksTracker()
+#: Application-wide loading tasks tracker (for detectors).
+detector_loading_tasks = LoadingTasksTracker()
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, S
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
+import { DetectorsApiService } from '../../services/detectors-api.service';
 import { LabelElement, MediaItem } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
@@ -73,7 +73,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   private destroy$ = new Subject<void>();
 
   constructor(
-    private modelsApi: TrainableModelsApiService,
+    private detectorsApi: DetectorsApiService,
     public voteState: VoteStateService,
     public labelsetState: LabelsetStateService,
     private settingsState: SettingsStateService,
@@ -159,7 +159,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   onDetectorRenamed(newName: string): void {
     if (!this.trainMode?.model?.registry_id) return;
-    this.modelsApi.renameInRegistry(this.trainMode.model.registry_id, newName).subscribe({
+    this.detectorsApi.renameInRegistry(this.trainMode.model.registry_id, newName).subscribe({
       next: () => {
         if (this.trainMode?.model) {
           this.trainMode.model.name = newName;

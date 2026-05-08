@@ -2,8 +2,8 @@ import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
-import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
-import { CombineModelsResult, ModelRegistryEntry } from '../../../models/api.models';
+import { DetectorsApiService } from '../../../services/detectors-api.service';
+import { CombineDetectorsResult, DetectorRegistryEntry } from '../../../models/api.models';
 
 interface SourceRow {
   name: string;
@@ -12,15 +12,15 @@ interface SourceRow {
 }
 
 @Component({
-  selector: 'vt-combine-models-modal',
+  selector: 'vt-combine-detectors-modal',
   standalone: true,
   imports: [CommonModule, FormsModule, ModalComponent],
-  templateUrl: './combine-models-modal.component.html',
-  styleUrl: './combine-models-modal.component.scss',
+  templateUrl: './combine-detectors-modal.component.html',
+  styleUrl: './combine-detectors-modal.component.scss',
 })
-export class CombineModelsModalComponent implements OnInit {
+export class CombineDetectorsModalComponent implements OnInit {
   /** Trainable models the user has selected on the dashboard. */
-  @Input() sources: ModelRegistryEntry[] = [];
+  @Input() sources: DetectorRegistryEntry[] = [];
   /** All registered model names — used for inline name-collision check. */
   @Input() existingNames: string[] = [];
 
@@ -36,7 +36,7 @@ export class CombineModelsModalComponent implements OnInit {
   totalLabels = 0;
   mediaType = '';
 
-  constructor(private modelsApi: TrainableModelsApiService) {}
+  constructor(private detectorsApi: DetectorsApiService) {}
 
   ngOnInit(): void {
     this.rows = this.sources.map((m) => ({
@@ -49,7 +49,7 @@ export class CombineModelsModalComponent implements OnInit {
   }
 
   /** The combine API operates on the registry name (= labelset filename). */
-  private trainableNameOf(m: ModelRegistryEntry): string {
+  private trainableNameOf(m: DetectorRegistryEntry): string {
     return (m.name || '').trim();
   }
 
@@ -82,8 +82,8 @@ export class CombineModelsModalComponent implements OnInit {
     this.submitting = true;
     this.error = '';
 
-    this.modelsApi.combine(names, trimmed, this.conflictPolicy).subscribe({
-      next: (resp: CombineModelsResult) => {
+    this.detectorsApi.combine(names, trimmed, this.conflictPolicy).subscribe({
+      next: (resp: CombineDetectorsResult) => {
         this.submitting = false;
         this.created.emit(resp?.name || trimmed);
       },

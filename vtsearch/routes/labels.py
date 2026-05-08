@@ -153,9 +153,9 @@ def import_labels():
             apply_label(cid, label)
         applied += 1
 
-    from vtsearch.models.label_sync import sync_labels_to_loaded_model
+    from vtsearch.models.label_sync import sync_labels_to_loaded_detector
 
-    sync_labels_to_loaded_model()
+    sync_labels_to_loaded_detector()
 
     from vtsearch.labels.sync import sync_to_labelset_source
 
@@ -269,9 +269,9 @@ def fill_labels_from_sort():
         },
     }
 
-    from vtsearch.models.label_sync import sync_labels_to_loaded_model
+    from vtsearch.models.label_sync import sync_labels_to_loaded_detector
 
-    sync_labels_to_loaded_model()
+    sync_labels_to_loaded_detector()
 
     from vtsearch.labels.sync import sync_to_labelset_source
 

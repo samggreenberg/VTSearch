@@ -31,7 +31,7 @@ GET /api/settings
   "panel_pct_left": {},
   "panel_pct_right": {},
   "autoload_media_embedders": [],
-  "autorun_trainable_models": [],
+  "autorun_detectors": [],
   "autopilot_enabled": true,
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
@@ -39,7 +39,7 @@ GET /api/settings
   "autopilot_resort_interval": 10,
   "autopilot_goal_diversity": 40,
   "saved_datasets_dir": "data/saved_datasets",
-  "trainable_models_dir": "data/trainable_models"
+  "detectors_dir": "data/detectors"
 }
 ```
 
@@ -71,8 +71,8 @@ Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `autopilot_enabled` (bool),
 `hide_autopilot` (bool), `autopilot_top_greens` (int),
 `autopilot_hard_reds` (int), `autopilot_resort_interval` (int),
-`autopilot_goal_diversity` (int), `autorun_trainable_models` (list of trainable-model names),
-`saved_datasets_dir` (string path), `trainable_models_dir` (string path).
+`autopilot_goal_diversity` (int), `autorun_detectors` (list of detector names),
+`saved_datasets_dir` (string path), `detectors_dir` (string path).
 
 ### Get default settings
 
@@ -81,14 +81,14 @@ GET /api/settings/defaults
 ```
 
 → Default values for all settings (excluding infrastructure keys like
-`autorun_trainable_models`, `saved_datasets_dir`, `trainable_models_dir`,
+`autorun_detectors`, `saved_datasets_dir`, `detectors_dir`,
 and `settings_source`).
 
 ### Trainable-model autorun
 
-`autorun_trainable_models` is a flat list of registered model names that
+`autorun_detectors` is a flat list of registered model names that
 should run during `/api/auto-detect` and the CLI's `--autodetect` flow.
-Toggle a model via `PUT /api/models/registry/{model_id}/autorun` (see
+Toggle a model via `PUT /api/detectors/registry/{model_id}/autorun` (see
 `docs/api/models.md`) — the registry endpoint is the source of truth and
 writes through to this settings list.
 

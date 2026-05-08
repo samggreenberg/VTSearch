@@ -1,15 +1,15 @@
-"""Restore saved labels from a trainable model's labelset into votes.
+"""Restore saved labels from a detector's labelset into votes.
 
-Provides :func:`restore_labels_from_trainable_model` which matches labelset
-entries to loaded medias by origin, MD5, and origin_name, with a second pass
+Provides :func:`restore_labels_from_detector` which matches labelset entries
+to loaded medias by origin, MD5, and origin_name, with a second pass
 resolving origin files for cross-dataset scenarios.
 """
 
 from __future__ import annotations
 
 
-def restore_labels_from_trainable_model(tm_data: dict) -> int:
-    """Restore saved labels from a trainable model's labelset into votes.
+def restore_labels_from_detector(det_data: dict) -> int:
+    """Restore saved labels from a detector's labelset into votes.
 
     Matches labelset entries to loaded medias by origin+origin_name, MD5, and
     origin_name fallback.  For entries that still don't match (cross-dataset
@@ -26,7 +26,7 @@ def restore_labels_from_trainable_model(tm_data: dict) -> int:
         snapshot_medias,
     )
 
-    labelset_dict = tm_data.get("labelset")
+    labelset_dict = det_data.get("labelset")
     if not labelset_dict:
         return 0
 

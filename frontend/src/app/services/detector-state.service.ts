@@ -5,8 +5,9 @@ import { DetectorsApiService } from './detectors-api.service';
 
 /**
  * Shared cache for autorun extractors / localizers loaded from the backend.
- * Detectors no longer exist as a separate concept — model state lives in
- * the model registry instead (see TrainableModelsApiService).
+ * The DetectorContext (loaded detector state) lives in the detector registry
+ * (see DetectorsApiService); this service only caches the autorun
+ * extractor / localizer lists.
  */
 @Injectable({ providedIn: 'root' })
 export class DetectorStateService implements OnDestroy {

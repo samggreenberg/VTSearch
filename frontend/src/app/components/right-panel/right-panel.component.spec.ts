@@ -105,12 +105,12 @@ describe('RightPanelComponent', () => {
     cleanup();
   }));
 
-  it('should rename detector via modelsApi', fakeAsync(() => {
+  it('should rename detector via detectorsApi', fakeAsync(() => {
     component.trainMode = { model: { name: 'Old', registry_id: 'r1' } };
     flushInit();
 
     component.onDetectorRenamed('New Name');
-    const req = httpMock.expectOne('/api/models/registry/r1/rename');
+    const req = httpMock.expectOne('/api/detectors/registry/r1/rename');
     expect(req.request.method).toBe('PUT');
     expect(req.request.body).toEqual({ name: 'New Name' });
     req.flush({});

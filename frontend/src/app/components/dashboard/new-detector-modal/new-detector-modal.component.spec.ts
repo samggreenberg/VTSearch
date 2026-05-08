@@ -1,20 +1,20 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { NewModelModalComponent } from './new-model-modal.component';
+import { NewDetectorModalComponent } from './new-model-modal.component';
 
-describe('NewModelModalComponent', () => {
-  let component: NewModelModalComponent;
-  let fixture: ComponentFixture<NewModelModalComponent>;
+describe('NewDetectorModalComponent', () => {
+  let component: NewDetectorModalComponent;
+  let fixture: ComponentFixture<NewDetectorModalComponent>;
   let httpMock: HttpTestingController;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [NewModelModalComponent],
+      imports: [NewDetectorModalComponent],
       providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(NewModelModalComponent);
+    fixture = TestBed.createComponent(NewDetectorModalComponent);
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
@@ -63,7 +63,7 @@ describe('NewModelModalComponent', () => {
     component.pendingText = 'dog barking sounds';
     component.submit();
 
-    const req = httpMock.expectOne('/api/models/registry');
+    const req = httpMock.expectOne('/api/detectors/registry');
     expect(req.request.method).toBe('POST');
     expect(req.request.body.name).toBe('Dog Barks');
     expect(req.request.body.media_type).toBe('audio');
@@ -109,7 +109,7 @@ describe('NewModelModalComponent', () => {
     component.pendingText = 'test';
     component.submit();
 
-    httpMock.expectOne('/api/models/registry').flush(
+    httpMock.expectOne('/api/detectors/registry').flush(
       { error: 'Model already exists' },
       { status: 409, statusText: 'Conflict' },
     );

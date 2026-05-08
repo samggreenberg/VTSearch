@@ -276,9 +276,9 @@ class TestSettingsContract:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "volume" in data
-        assert "autorun_trainable_models" in data
+        assert "autorun_detectors" in data
         assert isinstance(data["volume"], (int, float))
-        assert isinstance(data["autorun_trainable_models"], list)
+        assert isinstance(data["autorun_detectors"], list)
 
     def test_get_defaults_returns_dict(self, client):
         resp = client.get("/api/settings/defaults")
@@ -352,45 +352,45 @@ class TestLabelImportersContract:
             assert "name" in imp
 
 
-class TestModelsRegistryContract:
-    """GET/POST/DELETE /api/models/registry response shape."""
+class TestDetectorsRegistryContract:
+    """GET/POST/DELETE /api/detectors/registry response shape."""
 
-    def test_get_returns_models_list(self, client):
-        resp = client.get("/api/models/registry")
+    def test_get_returns_detectors_list(self, client):
+        resp = client.get("/api/detectors/registry")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "models" in data
-        assert isinstance(data["models"], list)
+        assert "detectors" in data
+        assert isinstance(data["detectors"], list)
 
     def test_create_returns_model(self, client):
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "test_det", "media_type": "audio"},
         )
         assert resp.status_code == 201
         data = resp.get_json()
         assert data["ok"] is True
-        assert data["model"]["name"] == "test_det"
+        assert data["detector"]["name"] == "test_det"
 
     def test_delete_returns_ok(self, client):
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "to_delete", "media_type": "audio"},
         )
-        model_id = resp.get_json()["model"]["id"]
-        resp = client.delete(f"/api/models/registry/{model_id}")
+        detector_id = resp.get_json()["detector"]["id"]
+        resp = client.delete(f"/api/detectors/registry/{detector_id}")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["ok"] is True
 
     def test_rename_returns_ok(self, client):
         resp = client.post(
-            "/api/models/registry",
+            "/api/detectors/registry",
             json={"name": "old_name", "media_type": "audio"},
         )
-        model_id = resp.get_json()["model"]["id"]
+        detector_id = resp.get_json()["detector"]["id"]
         resp = client.put(
-            f"/api/models/registry/{model_id}/rename",
+            f"/api/detectors/registry/{detector_id}/rename",
             json={"name": "new_name"},
         )
         assert resp.status_code == 200
@@ -527,15 +527,15 @@ class TestDatasetRegistryContract:
         assert isinstance(data["datasets"], list)
 
 
-class TestTrainableModelsContract:
-    """GET/POST /api/trainable-models response shape."""
+class TestDetectorsContract:
+    """GET/POST /api/detectors response shape."""
 
-    def test_list_returns_models_dict(self, client):
-        resp = client.get("/api/trainable-models")
+    def test_list_returns_detectors_dict(self, client):
+        resp = client.get("/api/detectors")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "models" in data
-        assert isinstance(data["models"], list)
+        assert "detectors" in data
+        assert isinstance(data["detectors"], list)
 
 
 class TestErrorResponseFormat:

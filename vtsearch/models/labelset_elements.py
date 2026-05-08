@@ -1,11 +1,11 @@
-"""Helpers for serving the saved labelset of a trainable model as right-pane content.
+"""Helpers for serving the saved labelset of a detector as right-pane content.
 
 The right pane in label/train mode is *labelset-driven* (not cid-driven):
 each entry is a :class:`~vtsearch.datasets.labelset.LabeledElement` from the
-trainable-model JSON on disk.  This module turns those elements into the
-shape the frontend needs (stable element id, display metadata, optional
-current-dataset cid for click-time / learned-score correlation) and provides
-the lookup helpers used by the preview and vote routes.
+detector JSON on disk.  This module turns those elements into the shape the
+frontend needs (stable element id, display metadata, optional current-dataset
+cid for click-time / learned-score correlation) and provides the lookup
+helpers used by the preview and vote routes.
 """
 
 from __future__ import annotations
@@ -107,15 +107,15 @@ def build_element_view(
     }
 
 
-def build_labels_detail(model_data: dict[str, Any]) -> dict[str, Any]:
-    """Build the response body for ``GET /api/trainable-models/<name>/labels-detail``.
+def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
+    """Build the response body for ``GET /api/detectors/<name>/labels-detail``.
 
     Returns ``{"good": [...], "bad": [...], "media_type": "..."}``.
     """
     from vtsearch.utils import get_active_detector_context
 
-    media_type = model_data.get("media_type", "") or ""
-    labelset = LabelSet.from_dict(model_data.get("labelset") or {})
+    media_type = detector_data.get("media_type", "") or ""
+    labelset = LabelSet.from_dict(detector_data.get("labelset") or {})
 
     det_ctx = get_active_detector_context()
     click_times = dict(det_ctx.vote_click_times)
@@ -138,7 +138,7 @@ def build_labels_detail(model_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def apply_element_vote_in_data(
-    model_data: dict[str, Any],
+    detector_data: dict[str, Any],
     target_id: str,
     vote: str,
 ) -> tuple[bool, LabeledElement | None, str]:
@@ -161,7 +161,7 @@ def apply_element_vote_in_data(
     if vote not in ("good", "bad"):
         return False, None, "unchanged"
 
-    labelset = LabelSet.from_dict(model_data.get("labelset") or {})
+    labelset = LabelSet.from_dict(detector_data.get("labelset") or {})
     found = find_element_by_id(labelset.elements, target_id)
     if found is None:
         return False, None, "not_found"
@@ -169,9 +169,9 @@ def apply_element_vote_in_data(
     idx, el = found
     if el.label == vote:
         labelset.elements.pop(idx)
-        model_data["labelset"] = labelset.to_dict()
+        detector_data["labelset"] = labelset.to_dict()
         return True, None, "removed"
 
     el.label = vote
-    model_data["labelset"] = labelset.to_dict()
+    detector_data["labelset"] = labelset.to_dict()
     return True, el, "flipped"

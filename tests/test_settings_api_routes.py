@@ -1,7 +1,7 @@
 """Settings API route tests.
 
 Covers Flask API routes: GET/PUT /api/settings,
-including autorun_trainable_models persistence.
+including autorun_detectors persistence.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ class TestSettingsAPI:
         assert res.status_code == 200
         data = res.get_json()
         assert "volume" in data
-        assert "autorun_trainable_models" in data
+        assert "autorun_detectors" in data
 
     def test_update_volume(self, client):
         res = client.put(
@@ -95,19 +95,19 @@ class TestSettingsAPI:
         )
         assert res.status_code == 400
 
-    def test_update_autorun_trainable_models(self, client):
+    def test_update_autorun_detectors(self, client):
         res = client.put(
             "/api/settings",
-            json={"autorun_trainable_models": ["model-a", "model-b"]},
+            json={"autorun_detectors": ["model-a", "model-b"]},
         )
         assert res.status_code == 200
         data = res.get_json()
-        assert data["autorun_trainable_models"] == ["model-a", "model-b"]
+        assert data["autorun_detectors"] == ["model-a", "model-b"]
 
-    def test_update_autorun_trainable_models_invalid(self, client):
+    def test_update_autorun_detectors_invalid(self, client):
         res = client.put(
             "/api/settings",
-            json={"autorun_trainable_models": "not a list"},
+            json={"autorun_detectors": "not a list"},
         )
         assert res.status_code == 400
 
@@ -126,9 +126,9 @@ class TestSettingsAPI:
         assert isinstance(data["focus_mode_right"], dict)
         for v in data["focus_mode_right"].values():
             assert v == "click"
-        assert "autorun_trainable_models" not in data
+        assert "autorun_detectors" not in data
         assert "saved_datasets_dir" not in data
-        assert "trainable_models_dir" not in data
+        assert "detectors_dir" not in data
 
     def test_update_safe_thresholds(self, client):
         res = client.put("/api/settings", json={"safe_thresholds": True})
@@ -454,4 +454,4 @@ class TestSettingsAPI:
         data = res.get_json()
         assert "saved_datasets_dir" not in data
         assert "detectors_dir" not in data
-        assert "trainable_models_dir" not in data
+        assert "detectors_dir" not in data

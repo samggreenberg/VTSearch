@@ -12,7 +12,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { LabelElement } from '../../../models/api.models';
 import { LabelSortMode } from '../label-sort/label-sort.component';
-import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
+import { DetectorsApiService } from '../../../services/detectors-api.service';
 
 interface SortedElement extends LabelElement {
   confidence: number;
@@ -42,7 +42,7 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
   private pendingScrollPct: number | null = null;
   private thumbnailFailedIds = new Set<string>();
 
-  constructor(private modelsApi: TrainableModelsApiService) {}
+  constructor(private detectorsApi: DetectorsApiService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['viewMode'] && !changes['viewMode'].firstChange && this.voteListContainer) {
@@ -116,7 +116,7 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
 
   thumbnailUrl(entry: LabelElement): string {
     if (!this.modelName) return '';
-    return this.modelsApi.labelPreviewUrl(this.modelName, entry.id);
+    return this.detectorsApi.labelPreviewUrl(this.modelName, entry.id);
   }
 
   onThumbnailError(id: string): void {
