@@ -630,8 +630,6 @@ class TestSyncLabelsAcrossDatasets:
             entry = register_model(
                 name="Sync Protect Test",
                 media_type="audio",
-                trainable=True,
-                trainable_model_name=tm_name,
             )
             model_id = entry["id"]
             add_loaded_model_id(model_id)
@@ -698,8 +696,6 @@ class TestSyncLabelsAcrossDatasets:
             entry = register_model(
                 name="Load Protect Test",
                 media_type="audio",
-                trainable=True,
-                trainable_model_name=tm_name,
             )
             model_id = entry["id"]
             add_loaded_model_id(model_id)

@@ -73,7 +73,6 @@ def _settings_file_with_trainable_models(tmp_path: Path, tm_names: list[str]) ->
     the directory to the production default after conftest redirected it.
     """
     settings = {
-        "autorun_processors": [],
         "autorun_trainable_models": list(tm_names),
         "trainable_models_dir": str(get_trainable_models_dir()),
     }

@@ -230,22 +230,19 @@ def make_document_media(media_id: int, embedding_dim: int = 512) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Detector / results helpers
+# Trainable model / results helpers
 # ---------------------------------------------------------------------------
 
 
-def build_results_dict(hits, detector_path, media_type="unknown"):
-    """Build a single-detector results dict (same shape as exporter input)."""
-    detector_data = json.loads(Path(detector_path).read_text())
-    detector_name = detector_data.get("name", Path(detector_path).stem)
-    threshold = detector_data.get("threshold", 0.5)
+def build_results_dict(hits, model_name, media_type="unknown"):
+    """Build a single-model results dict (same shape as exporter input)."""
     return {
         "media_type": media_type,
         "detectors_run": 1,
         "results": {
-            detector_name: {
-                "detector_name": detector_name,
-                "threshold": threshold,
+            model_name: {
+                "detector_name": model_name,
+                "threshold": 0.5,
                 "total_hits": len(hits),
                 "hits": hits,
             }
@@ -253,65 +250,54 @@ def build_results_dict(hits, detector_path, media_type="unknown"):
     }
 
 
-def make_detector_file(tmp_path, good_ids, bad_ids, name="detector.json"):
-    """Train a detector from given vote IDs and write its JSON to a file.
+def make_trainable_model_file(tmp_path, name, good_ids, bad_ids, snap, media_type="audio"):
+    """Write a trainable-model JSON file populated from *snap* and votes.
 
-    Returns ``(detector_path, detector_dict)``.
+    Returns the path to the written JSON file.
     """
-    import app as app_module  # noqa: PLC0415
+    from vtsearch.datasets.labelset import LabelSet  # noqa: PLC0415
 
-    app_module.good_votes.update({k: None for k in good_ids})
-    app_module.bad_votes.update({k: None for k in bad_ids})
-    detector = train_detector_from_votes()
-    app_module.good_votes.clear()
-    app_module.bad_votes.clear()
+    good_votes_dict = {k: None for k in good_ids}
+    bad_votes_dict = {k: None for k in bad_ids}
+    labelset = LabelSet.from_clips_and_votes(snap, good_votes_dict, bad_votes_dict, expand_dupes=False)
 
-    detector_path = tmp_path / name
-    detector_path.write_text(json.dumps(detector))
-    return detector_path, detector
-
-
-def train_detector_from_votes():
-    """Train a detector from current good/bad votes and return the payload.
-
-    Replacement for the removed ``POST /api/detector/export`` endpoint.
-    Returns a dict with ``weights``, ``threshold``, ``good_origins``,
-    ``bad_origins``, ``inclusion``, and ``media_type``.
-    """
-    from vtsearch.models import collect_media_origins
-    from vtsearch.models.detector_training import serialize_weights, train_and_threshold
-    from vtsearch.utils import bad_votes, get_inclusion, good_votes, snapshot_medias
-
-    if not good_votes or not bad_votes:
-        raise ValueError("Need at least one good and one bad vote")
-
-    snap = snapshot_medias()
-
-    good_origins = collect_media_origins(good_votes, snap)
-    bad_origins = collect_media_origins(bad_votes, snap)
-
-    X_list, y_list = [], []
-    for cid in good_votes:
-        if cid in snap and "embedding" in snap[cid]:
-            X_list.append(snap[cid]["embedding"])
-            y_list.append(1.0)
-    for cid in bad_votes:
-        if cid in snap and "embedding" in snap[cid]:
-            X_list.append(snap[cid]["embedding"])
-            y_list.append(0.0)
-
-    model, threshold = train_and_threshold(X_list, y_list, snap)
-    weights = serialize_weights(model)
-
-    media_type = "audio"
-    if snap:
-        media_type = next(iter(snap.values())).get("type", "audio")
-
-    return {
-        "weights": weights,
-        "threshold": threshold,
-        "good_origins": good_origins,
-        "bad_origins": bad_origins,
-        "inclusion": get_inclusion(),
+    data = {
+        "name": name,
+        "text_query": "",
+        "media_example": "",
         "media_type": media_type,
+        "examples": [],
+        "labelset": labelset.to_dict(),
     }
+    path = tmp_path / f"{name}.json"
+    path.write_text(json.dumps(data))
+    return path
+
+
+def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type="audio"):
+    """Build a trainable model on disk + register it.  Returns its registry id.
+
+    Writes ``<get_trainable_models_dir()>/<name>.json`` with a labelset built
+    from *good_ids* and *bad_ids* using *snap* as the medias source, and
+    registers the model so ``/api/models/registry`` lists it.
+    """
+    from vtsearch.datasets.labelset import LabelSet  # noqa: PLC0415
+    from vtsearch.models.registry import register_model  # noqa: PLC0415
+    from vtsearch.models.trainable_model_store import _model_path, _write_model  # noqa: PLC0415
+
+    good_votes_dict = {k: None for k in good_ids}
+    bad_votes_dict = {k: None for k in bad_ids}
+    labelset = LabelSet.from_clips_and_votes(snap, good_votes_dict, bad_votes_dict, expand_dupes=False)
+
+    data = {
+        "name": name,
+        "text_query": "",
+        "media_example": "",
+        "media_type": media_type,
+        "examples": [],
+        "labelset": labelset.to_dict(),
+    }
+    _write_model(_model_path(name), data)
+
+    entry = register_model(name=name, media_type=media_type, num_training=len(labelset))
+    return entry["id"]

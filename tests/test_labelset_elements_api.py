@@ -101,8 +101,6 @@ def _seed_cross_dataset_model(tm_name: str = "cross-ds-model", *, mark_loaded: b
     entry = register_model(
         name=tm_name,
         media_type="audio",
-        trainable=True,
-        trainable_model_name=tm_name,
     )
     model_id = entry["id"]
     if mark_loaded:

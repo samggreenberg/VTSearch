@@ -535,9 +535,7 @@ class TestMultiFindCrossDatasetFallback:
         model_entry = register_model(
             name="Test Cross Detector",
             media_type="audio",
-            trainable=True,
             num_training=2,
-            trainable_model_name=tm_name,
         )
 
         # Mock the embedder to return deterministic vectors
@@ -642,9 +640,7 @@ class TestMultiFindCrossDatasetFallback:
         model_entry = register_model(
             name="Test MT Detector",
             media_type="audio",
-            trainable=True,
             num_training=2,
-            trainable_model_name=tm_name,
         )
 
         good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
@@ -733,9 +729,7 @@ class TestMultiFindCrossDatasetFallback:
         model_entry = register_model(
             name="Test NR Detector",
             media_type="image",
-            trainable=True,
             num_training=2,
-            trainable_model_name=tm_name,
         )
 
         good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
@@ -826,9 +820,7 @@ class TestFindCheckLabels:
         model_entry = register_model(
             name="Match Model",
             media_type="audio",
-            trainable=True,
             num_training=2,
-            trainable_model_name=tm_name,
         )
 
         resp = client.post(
@@ -907,9 +899,7 @@ class TestFindCheckLabels:
         model_entry = register_model(
             name="Diff Model",
             media_type="audio",
-            trainable=True,
             num_training=3,
-            trainable_model_name=tm_name,
         )
 
         resp = client.post(
@@ -993,9 +983,7 @@ class TestFindCheckLabels:
         model_entry = register_model(
             name="Part Model",
             media_type="audio",
-            trainable=True,
             num_training=2,
-            trainable_model_name=tm_name,
         )
 
         good_emb = np.random.RandomState(100).randn(512).astype(np.float32)

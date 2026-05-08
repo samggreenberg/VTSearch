@@ -206,8 +206,6 @@ class TestLabelImportEndpoint:
         entry = register_model(
             name="Import Sync Test",
             media_type="audio",
-            trainable=True,
-            trainable_model_name=tm_name,
             num_training=0,
         )
         add_loaded_model_id(entry["id"])
