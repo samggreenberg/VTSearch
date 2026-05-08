@@ -498,6 +498,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           if (response.id !== null) {
             this.mediaState.selectMedia(response.id);
           }
+          if (typeof response.diversity_level === 'number') {
+            this.autopilotStateService.updateDiversityLevel(response.diversity_level);
+          }
         },
       });
   }
