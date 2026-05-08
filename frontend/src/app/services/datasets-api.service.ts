@@ -53,7 +53,7 @@ export class DatasetsApiService {
   }
 
   getDemoCategories(name: string): Observable<{ categories: string[] }> {
-    return this.http.get<{ categories: string[] }>(`/api/dataset/demo-categories/${name}`);
+    return this.http.get<{ categories: string[] }>(`/api/dataset/demo-categories/${encodeURIComponent(name)}`);
   }
 
   browseMediaFiles(
@@ -120,7 +120,7 @@ export class DatasetsApiService {
   }
 
   runImporter(importerName: string, params: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`/api/dataset/import/${importerName}`, params);
+    return this.http.post(`/api/dataset/import/${encodeURIComponent(importerName)}`, params);
   }
 
   /**
@@ -137,7 +137,7 @@ export class DatasetsApiService {
     values: Record<string, unknown>,
   ): Observable<{ options: string[] }> {
     return this.http.post<{ options: string[] }>(
-      `/api/dataset/import/${importerName}/options`,
+      `/api/dataset/import/${encodeURIComponent(importerName)}/options`,
       { field_key: fieldKey, values },
     );
   }
@@ -172,11 +172,11 @@ export class DatasetsApiService {
   }
 
   stageImport(importerName: string, params: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`/api/dataset/stage-import/${importerName}`, params);
+    return this.http.post(`/api/dataset/stage-import/${encodeURIComponent(importerName)}`, params);
   }
 
   stageDemo(name: string): Observable<unknown> {
-    return this.http.post(`/api/dataset/stage-demo/${name}`, {});
+    return this.http.post(`/api/dataset/stage-demo/${encodeURIComponent(name)}`, {});
   }
 
   clearStaging(): Observable<unknown> {
@@ -198,7 +198,7 @@ export class DatasetsApiService {
   }
 
   cancelTask(taskId: string): Observable<OkResponse> {
-    return this.http.post<OkResponse>(`/api/dataset/cancel/${taskId}`, {});
+    return this.http.post<OkResponse>(`/api/dataset/cancel/${encodeURIComponent(taskId)}`, {});
   }
 
   clearDataset(): Observable<OkResponse> {
@@ -214,23 +214,23 @@ export class DatasetsApiService {
   }
 
   loadRegistered(datasetId: string): Observable<unknown> {
-    return this.http.post(`/api/datasets/registry/${datasetId}/load`, {});
+    return this.http.post(`/api/datasets/registry/${encodeURIComponent(datasetId)}/load`, {});
   }
 
   unloadRegistered(datasetId: string): Observable<unknown> {
-    return this.http.post(`/api/datasets/registry/${datasetId}/unload`, {});
+    return this.http.post(`/api/datasets/registry/${encodeURIComponent(datasetId)}/unload`, {});
   }
 
   deleteRegistered(datasetId: string): Observable<unknown> {
-    return this.http.delete(`/api/datasets/registry/${datasetId}`);
+    return this.http.delete(`/api/datasets/registry/${encodeURIComponent(datasetId)}`);
   }
 
   renameRegistered(datasetId: string, newName: string): Observable<unknown> {
-    return this.http.put(`/api/datasets/registry/${datasetId}/rename`, { name: newName });
+    return this.http.put(`/api/datasets/registry/${encodeURIComponent(datasetId)}/rename`, { name: newName });
   }
 
   updateReaders(datasetId: string, readers: string[]): Observable<unknown> {
-    return this.http.put(`/api/datasets/registry/${datasetId}/readers`, { readers });
+    return this.http.put(`/api/datasets/registry/${encodeURIComponent(datasetId)}/readers`, { readers });
   }
 
   loadSource(params: Record<string, unknown>): Observable<unknown> {
@@ -238,6 +238,6 @@ export class DatasetsApiService {
   }
 
   getDatasetStats(datasetId: string): Observable<DatasetStatsResponse> {
-    return this.http.get<DatasetStatsResponse>(`/api/datasets/registry/${datasetId}/stats`);
+    return this.http.get<DatasetStatsResponse>(`/api/datasets/registry/${encodeURIComponent(datasetId)}/stats`);
   }
 }

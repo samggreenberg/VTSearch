@@ -248,16 +248,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Check for in-progress loading tasks (e.g. after a page reload) and resume polling. */
   private resumeActivePolling(): void {
-    this.datasetsApi.getLoadingTasks().subscribe((tasks) => {
-      if (tasks.some((t) => t.status !== 'idle')) {
-        this.startProgressPolling();
-      }
-    });
-    this.detectorsApi.getDetectorLoadingTasks().subscribe((resp) => {
-      if ((resp.tasks ?? []).some((t: LoadingTask) => t.status !== 'idle')) {
-        this.startDetectorProgressPolling();
-      }
-    });
+    this.datasetsApi
+      .getLoadingTasks()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((tasks) => {
+        if (tasks.some((t) => t.status !== 'idle')) {
+          this.startProgressPolling();
+        }
+      });
+    this.detectorsApi
+      .getDetectorLoadingTasks()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((resp) => {
+        if ((resp.tasks ?? []).some((t: LoadingTask) => t.status !== 'idle')) {
+          this.startDetectorProgressPolling();
+        }
+      });
   }
 
   // --- Column resize / drag-reorder ---

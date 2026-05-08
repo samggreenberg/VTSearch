@@ -1,7 +1,8 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { forkJoin } from 'rxjs';
+import { forkJoin, Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { SettingsImporterModalComponent } from '../settings-importer-modal/settings-importer-modal.component';
@@ -19,7 +20,7 @@ import { Theme, ThemeService } from '../../../services/theme.service';
   templateUrl: './settings-modal.component.html',
   styleUrl: './settings-modal.component.scss',
 })
-export class SettingsModalComponent implements OnInit {
+export class SettingsModalComponent implements OnInit, OnDestroy {
   @Input() preselectedViewTab = '';
   @Output() closed = new EventEmitter<void>();
 
@@ -34,6 +35,8 @@ export class SettingsModalComponent implements OnInit {
   showExporterModal = false;
   version = '';
 
+  private destroy$ = new Subject<void>();
+
   constructor(
     private settingsApi: SettingsApiService,
     private settingsState: SettingsStateService,
@@ -41,13 +44,20 @@ export class SettingsModalComponent implements OnInit {
     private themeService: ThemeService,
   ) {}
 
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
   ngOnInit(): void {
     forkJoin({
       settings: this.settingsApi.getSettings(),
       embedders: this.settingsApi.getEmbedders(),
       mediaTypes: this.datasetsApi.getMediaTypes(),
       version: this.settingsApi.getVersion(),
-    }).subscribe({
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
       next: (res) => {
         this.settings = res.settings;
         this.version = res.version.version;
@@ -153,15 +163,18 @@ export class SettingsModalComponent implements OnInit {
   }
 
   resetDefaults(): void {
-    this.settingsApi.getDefaults().subscribe({
-      next: (defaults) => {
-        this.settings = defaults;
-        if (defaults.theme) {
-          this.themeService.setTheme(defaults.theme as Theme);
-        }
-        this.save();
-      },
-    });
+    this.settingsApi
+      .getDefaults()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (defaults) => {
+          this.settings = defaults;
+          if (defaults.theme) {
+            this.themeService.setTheme(defaults.theme as Theme);
+          }
+          this.save();
+        },
+      });
   }
 
 
@@ -171,14 +184,17 @@ export class SettingsModalComponent implements OnInit {
 
   onImportComplete(): void {
     // Reload settings from the server after import
-    this.settingsApi.getSettings().subscribe({
-      next: (s) => {
-        this.settings = s;
-        if (s.theme) {
-          this.themeService.setTheme(s.theme as Theme);
-        }
-      },
-    });
+    this.settingsApi
+      .getSettings()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (s) => {
+          this.settings = s;
+          if (s.theme) {
+            this.themeService.setTheme(s.theme as Theme);
+          }
+        },
+      });
   }
 
   openExporter(): void {
@@ -186,11 +202,14 @@ export class SettingsModalComponent implements OnInit {
   }
 
   private save(): void {
-    this.settingsState.update(this.settings).subscribe({
-      error: () => {
-        this.error = 'Failed to save settings';
-      },
-    });
+    this.settingsState
+      .update(this.settings)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        error: () => {
+          this.error = 'Failed to save settings';
+        },
+      });
   }
 
   close(): void {

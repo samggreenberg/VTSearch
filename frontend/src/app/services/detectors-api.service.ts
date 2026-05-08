@@ -38,23 +38,23 @@ export class DetectorsApiService {
   }
 
   get(name: string): Observable<unknown> {
-    return this.http.get(`/api/detectors/${name}`);
+    return this.http.get(`/api/detectors/${encodeURIComponent(name)}`);
   }
 
   delete(name: string): Observable<unknown> {
-    return this.http.delete(`/api/detectors/${name}`);
+    return this.http.delete(`/api/detectors/${encodeURIComponent(name)}`);
   }
 
   rename(name: string, newName: string): Observable<unknown> {
-    return this.http.put(`/api/detectors/${name}/rename`, { new_name: newName });
+    return this.http.put(`/api/detectors/${encodeURIComponent(name)}/rename`, { new_name: newName });
   }
 
   setExamples(name: string, examples: unknown[]): Observable<unknown> {
-    return this.http.put(`/api/detectors/${name}/examples`, { examples });
+    return this.http.put(`/api/detectors/${encodeURIComponent(name)}/examples`, { examples });
   }
 
   saveLabels(name: string): Observable<unknown> {
-    return this.http.post(`/api/detectors/${name}/labels`, {});
+    return this.http.post(`/api/detectors/${encodeURIComponent(name)}/labels`, {});
   }
 
   getLabelsDetail(name: string): Observable<LabelsDetailResponse> {
@@ -102,7 +102,7 @@ export class DetectorsApiService {
     file?: File,
     fileFieldKey?: string,
   ): Observable<unknown> {
-    const url = `/api/detectors/registry/from-labelset/${importerName}`;
+    const url = `/api/detectors/registry/from-labelset/${encodeURIComponent(importerName)}`;
     if (file && fileFieldKey) {
       const formData = new FormData();
       formData.append(fileFieldKey, file, file.name);
@@ -117,11 +117,11 @@ export class DetectorsApiService {
   }
 
   deleteFromRegistry(detectorId: string): Observable<unknown> {
-    return this.http.delete(`/api/detectors/registry/${detectorId}`);
+    return this.http.delete(`/api/detectors/registry/${encodeURIComponent(detectorId)}`);
   }
 
   renameInRegistry(detectorId: string, newName: string): Observable<unknown> {
-    return this.http.put(`/api/detectors/registry/${detectorId}/rename`, { name: newName });
+    return this.http.put(`/api/detectors/registry/${encodeURIComponent(detectorId)}/rename`, { name: newName });
   }
 
   loadDetector(detectorId: string | null): Observable<unknown> {
@@ -129,7 +129,7 @@ export class DetectorsApiService {
   }
 
   unloadDetector(detectorId: string): Observable<unknown> {
-    return this.http.post(`/api/detectors/registry/${detectorId}/unload`, {});
+    return this.http.post(`/api/detectors/registry/${encodeURIComponent(detectorId)}/unload`, {});
   }
 
   getDetectorLoadingTasks(): Observable<LoadingTasksResponse> {
@@ -137,11 +137,11 @@ export class DetectorsApiService {
   }
 
   cancelDetectorLoadingTask(taskId: string): Observable<unknown> {
-    return this.http.post(`/api/detectors/cancel/${taskId}`, {});
+    return this.http.post(`/api/detectors/cancel/${encodeURIComponent(taskId)}`, {});
   }
 
   setAutorun(detectorId: string, autorun: boolean): Observable<unknown> {
-    return this.http.put(`/api/detectors/registry/${detectorId}/autorun`, { autorun });
+    return this.http.put(`/api/detectors/registry/${encodeURIComponent(detectorId)}/autorun`, { autorun });
   }
 
   // --- Extractors ---
@@ -155,11 +155,11 @@ export class DetectorsApiService {
   }
 
   deleteExtractor(name: string): Observable<unknown> {
-    return this.http.delete(`/api/autorun-extractors/${name}`);
+    return this.http.delete(`/api/autorun-extractors/${encodeURIComponent(name)}`);
   }
 
   renameExtractor(name: string, newName: string): Observable<unknown> {
-    return this.http.put(`/api/autorun-extractors/${name}/rename`, { new_name: newName });
+    return this.http.put(`/api/autorun-extractors/${encodeURIComponent(name)}/rename`, { new_name: newName });
   }
 
   // --- Localizers ---
@@ -173,11 +173,11 @@ export class DetectorsApiService {
   }
 
   deleteLocalizer(name: string): Observable<unknown> {
-    return this.http.delete(`/api/autorun-localizers/${name}`);
+    return this.http.delete(`/api/autorun-localizers/${encodeURIComponent(name)}`);
   }
 
   renameLocalizer(name: string, newName: string): Observable<unknown> {
-    return this.http.put(`/api/autorun-localizers/${name}/rename`, { new_name: newName });
+    return this.http.put(`/api/autorun-localizers/${encodeURIComponent(name)}/rename`, { new_name: newName });
   }
 
   // --- Scoring ---
