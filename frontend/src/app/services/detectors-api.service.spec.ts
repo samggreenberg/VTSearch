@@ -58,7 +58,7 @@ describe('DetectorsApiService', () => {
   });
 
   it('find should POST', () => {
-    service.find({ datasets: [], models: [] }).subscribe();
+    service.find({ dataset_ids: [], detector_ids: [] }).subscribe();
     const req = httpMock.expectOne('/api/find');
     expect(req.request.method).toBe('POST');
     req.flush({});
