@@ -27,10 +27,11 @@ POST /api/trainable-models/<name>/labels
 
 from __future__ import annotations
 
+import io
 import logging
 import time
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.models.trainable_model_store import (
     _model_path,
@@ -547,6 +548,193 @@ def combine_trainable_models():
             "examples": merged_examples,
         }
     ), 201
+
+
+# ---------------------------------------------------------------------------
+# GET /api/trainable-models/<name>/labels-detail
+# ---------------------------------------------------------------------------
+
+
+@trainable_models_bp.route("/api/trainable-models/<name>/labels-detail", methods=["GET"])
+def get_trainable_model_labels_detail(name: str):
+    """Return the model's saved labelset elements with right-pane render data.
+
+    Each element gets a stable ``id`` (derived from its origin/md5 identity)
+    plus ``label``, ``media_type``, display ``name``, and — when the
+    element resolves into the active dataset — its current ``cid``,
+    ``time`` (click time), and ``score`` (last learned-sort score).
+
+    This is the right pane's data source in label/train mode.  Unlike
+    ``/api/votes`` it is *not* gated on the loaded dataset, so detector
+    labels survive across dataset switches.
+    """
+    from vtsearch.models.labelset_elements import build_labels_detail
+
+    path = _model_path(name)
+    data = _read_model(path)
+    if data is None:
+        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+    return jsonify(build_labels_detail(data))
+
+
+# ---------------------------------------------------------------------------
+# GET /api/trainable-models/<name>/labels/<element_id>/preview
+# ---------------------------------------------------------------------------
+
+
+@trainable_models_bp.route(
+    "/api/trainable-models/<name>/labels/<element_id>/preview",
+    methods=["GET"],
+)
+def preview_trainable_model_label(name: str, element_id: str):
+    """Stream the underlying media file for a saved labelset element.
+
+    Resolves the element via its origin (using the importer's
+    ``resolve_file()`` hook) and serves the raw bytes with a mimetype
+    chosen by the trainable model's ``media_type``.  Returns 404 if the
+    element is unknown or its file cannot be located.
+    """
+    from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.models.labelset_elements import find_element_by_id, resolve_element_to_path
+
+    path = _model_path(name)
+    data = _read_model(path)
+    if data is None:
+        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+
+    labelset = LabelSet.from_dict(data.get("labelset") or {})
+    found = find_element_by_id(labelset.elements, element_id)
+    if found is None:
+        return jsonify({"error": "Label element not found"}), 404
+
+    _, elem = found
+    file_path = resolve_element_to_path(elem)
+    if file_path is None or not file_path.is_file():
+        return jsonify({"error": "Element media file unavailable"}), 404
+
+    media_type = data.get("media_type", "")
+    if media_type == "text":
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            return jsonify({"error": "Element media file unreadable"}), 404
+        return jsonify(
+            {
+                "content": content,
+                "word_count": len(content.split()),
+                "character_count": len(content),
+            }
+        )
+
+    try:
+        file_bytes = file_path.read_bytes()
+    except OSError:
+        return jsonify({"error": "Element media file unreadable"}), 404
+
+    suffix = file_path.suffix.lower()
+    mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or _DEFAULT_MIMETYPE_BY_TYPE.get(media_type, "application/octet-stream")
+    return send_file(
+        io.BytesIO(file_bytes),
+        mimetype=mimetype,
+        download_name=elem.origin_name or elem.filename or f"label{suffix or ''}",
+    )
+
+
+_MIMETYPE_BY_SUFFIX = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".flac": "audio/flac",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+}
+
+_DEFAULT_MIMETYPE_BY_TYPE = {
+    "audio": "audio/wav",
+    "image": "image/jpeg",
+    "video": "video/mp4",
+    "document": "application/pdf",
+    "text": "text/plain",
+}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/trainable-models/<name>/labels/<element_id>/vote
+# ---------------------------------------------------------------------------
+
+
+@trainable_models_bp.route(
+    "/api/trainable-models/<name>/labels/<element_id>/vote",
+    methods=["POST"],
+)
+def vote_trainable_model_label(name: str, element_id: str):
+    """Toggle the label on a saved labelset element.
+
+    Body: ``{"vote": "good"}`` or ``{"vote": "bad"}``.
+
+    Toggle semantics mirror :func:`~vtsearch.utils.toggle_vote`: the same
+    vote on an element with that label removes the element; the opposite
+    vote flips it.  When the element resolves into the active dataset, the
+    detector's in-memory ``good_votes`` / ``bad_votes`` are kept in sync so
+    MLP retraining and learned-sort see the change.
+    """
+    from vtsearch.models.labelset_elements import (
+        apply_element_vote_in_data,
+        resolve_current_dataset_cid,
+    )
+
+    body = request.get_json(force=True, silent=True) or {}
+    vote = body.get("vote", "")
+    if vote not in ("good", "bad"):
+        return jsonify({"error": "vote must be 'good' or 'bad'"}), 400
+
+    path = _model_path(name)
+    data = _read_model(path)
+    if data is None:
+        return jsonify({"error": f"Trainable model '{name}' not found"}), 404
+
+    from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.models.labelset_elements import find_element_by_id
+
+    pre_labelset = LabelSet.from_dict(data.get("labelset") or {})
+    pre_found = find_element_by_id(pre_labelset.elements, element_id)
+    if pre_found is None:
+        return jsonify({"error": "Label element not found"}), 404
+    _, pre_elem = pre_found
+
+    cid_before = resolve_current_dataset_cid(pre_elem)
+
+    changed, _updated, action = apply_element_vote_in_data(data, element_id, vote)
+    if not changed:
+        return jsonify({"ok": True, "action": action})
+
+    _write_model(path, data)
+
+    # Mirror into in-memory votes when the element resolves into the active
+    # dataset, so the MLP and learned-sort stay aligned with the labelset.
+    if cid_before is not None:
+        from vtsearch.utils import toggle_vote
+
+        toggle_vote(cid_before, vote)
+
+    from vtsearch.models.registry import find_by_trainable_model_name, update_model
+
+    reg_entry = find_by_trainable_model_name(name)
+    if reg_entry:
+        new_count = len(LabelSet.from_dict(data.get("labelset") or {}))
+        update_model(reg_entry["id"], num_training=new_count, last_trained_at=time.time())
+
+    return jsonify({"ok": True, "action": action})
 
 
 # Canonical location: vtsearch.models.training_workflow

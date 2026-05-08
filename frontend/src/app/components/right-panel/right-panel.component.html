@@ -25,35 +25,63 @@
       class="view-controls-slot" />
   </div>
 
-  <vt-label-list
-    label="good"
-    [ids]="goodIds"
-    [medias]="medias"
-    [clickTimes]="clickTimes"
-    [learnedScores]="learnedScores"
-    [sortMode]="sortMode"
-    [viewMode]="viewMode"
-    [gridGoalWidth]="gridGoalWidth"
-    [focusMode]="focusMode"
-    (mediaSelected)="onMediaSelected($event)"
-    (mediaVote)="onMediaVote($event)"
-  />
+  @if (useLabelset) {
+    <vt-labelset-list
+      label="good"
+      [elements]="goodElements"
+      [modelName]="trainableModelName ?? ''"
+      [sortMode]="sortMode"
+      [viewMode]="viewMode"
+      [gridGoalWidth]="gridGoalWidth"
+      [focusMode]="focusMode"
+      (elementSelected)="onLabelsetElementSelected($event)"
+      (elementVote)="onLabelsetElementVote($event)"
+    />
 
-  <div class="label-divider"></div>
+    <div class="label-divider"></div>
 
-  <vt-label-list
-    label="bad"
-    [ids]="badIds"
-    [medias]="medias"
-    [clickTimes]="clickTimes"
-    [learnedScores]="learnedScores"
-    [sortMode]="sortMode"
-    [viewMode]="viewMode"
-    [gridGoalWidth]="gridGoalWidth"
-    [focusMode]="focusMode"
-    (mediaSelected)="onMediaSelected($event)"
-    (mediaVote)="onMediaVote($event)"
-  />
+    <vt-labelset-list
+      label="bad"
+      [elements]="badElements"
+      [modelName]="trainableModelName ?? ''"
+      [sortMode]="sortMode"
+      [viewMode]="viewMode"
+      [gridGoalWidth]="gridGoalWidth"
+      [focusMode]="focusMode"
+      (elementSelected)="onLabelsetElementSelected($event)"
+      (elementVote)="onLabelsetElementVote($event)"
+    />
+  } @else {
+    <vt-label-list
+      label="good"
+      [ids]="goodIds"
+      [medias]="medias"
+      [clickTimes]="clickTimes"
+      [learnedScores]="learnedScores"
+      [sortMode]="sortMode"
+      [viewMode]="viewMode"
+      [gridGoalWidth]="gridGoalWidth"
+      [focusMode]="focusMode"
+      (mediaSelected)="onMediaSelected($event)"
+      (mediaVote)="onMediaVote($event)"
+    />
+
+    <div class="label-divider"></div>
+
+    <vt-label-list
+      label="bad"
+      [ids]="badIds"
+      [medias]="medias"
+      [clickTimes]="clickTimes"
+      [learnedScores]="learnedScores"
+      [sortMode]="sortMode"
+      [viewMode]="viewMode"
+      [gridGoalWidth]="gridGoalWidth"
+      [focusMode]="focusMode"
+      (mediaSelected)="onMediaSelected($event)"
+      (mediaVote)="onMediaVote($event)"
+    />
+  }
 
   <div class="export-row">
     <button class="panel-btn export-btn" [disabled]="disabled" (click)="onExport()" title="Export labeled items to clipboard, file, email, or webhook">Export</button>

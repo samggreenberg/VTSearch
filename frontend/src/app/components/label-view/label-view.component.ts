@@ -15,6 +15,9 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { ActiveContextService } from '../../services/active-context.service';
+import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
+import { ModelRegistryEntry } from '../../models/api.models';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import { LabelingStatusResponse } from '../../models/api.models';
@@ -32,6 +35,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
   datasetName = '';
+  /** Name of the trainable model owning the labels shown on the right pane.
+   *  Empty when no trainable model is active — the right pane then falls
+   *  back to cid-based vote display. */
+  trainableModelName: string | null = null;
   labelingStatus: LabelingStatusResponse | null = null;
   viewModeLeft: 'grid' | 'list' = 'list';
   gridGoalWidthLeft: number = 80;
@@ -94,6 +101,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     public sortState: SortStateService,
     private settingsState: SettingsStateService,
     private autopilotStateService: AutopilotStateService,
+    private activeContext: ActiveContextService,
+    private modelsApi: TrainableModelsApiService,
   ) {}
 
   ngOnInit(): void {
@@ -109,6 +118,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
+
+    this.activeContext.modelId$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((modelId) => this.refreshTrainableModelName(modelId));
+    this.refreshTrainableModelName(this.activeContext.modelId);
 
     this.mediaState.medias$
       .pipe(takeUntil(this.destroy$))
@@ -512,6 +526,23 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onMediaSelect(id: number): void {
     this.mediaState.selectMedia(id);
+  }
+
+  private refreshTrainableModelName(modelId: string): void {
+    if (!modelId) {
+      this.trainableModelName = null;
+      return;
+    }
+    this.modelsApi.getRegistry().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (resp) => {
+        const entry = resp.models.find((m: ModelRegistryEntry) => m.id === modelId);
+        const tmName = (entry?.['trainable_model_name'] as string | undefined) || '';
+        this.trainableModelName = entry?.trainable && tmName ? tmName : null;
+      },
+      error: () => {
+        this.trainableModelName = null;
+      },
+    });
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {

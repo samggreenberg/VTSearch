@@ -94,6 +94,7 @@ _TEST_GROUPS = {
         "test_eval_voting_iterations",
         "test_resolver",
         "test_new_embedders",
+        "test_labelset_elements_api",
     ],
     "downloads": [
         "test_ag_news_download",
@@ -113,6 +114,7 @@ _TEST_GROUPS = {
     ],
     "cli": [
         "test_cli_autodetect",
+        "test_cli_trainable_models",
         "test_load_sort_window",
         "test_preload_progress",
         "test_tqdm_progress",

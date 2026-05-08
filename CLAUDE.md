@@ -26,6 +26,22 @@ Never ask the user whether to subscribe to PR activity, and never call `subscrib
 
 Breaking backwards compatibility is acceptable — do not add shims, feature flags, legacy re-exports, or other compatibility layers to preserve old behavior. Just make the clean change. When a change does break backwards compatibility, mention it to the user so they're aware.
 
+## No Persisted Vectors or MLPs (CRITICAL)
+
+**Embeddings and trained MLP weights are in-memory artifacts only.** Never serialize them to disk, to `data/settings.json`, to detector / trainable-model JSON files, or to any other persistent store. Origins are the canonical persisted form: the system rederives `origin → file → embedding → MLP` on demand.
+
+This rule applies to all detector- and model-related code:
+
+- Trainable-model JSON files store `LabeledElement`s with origin info, never embeddings.
+- Detector JSON files (legacy) store origins; the `weights` field on disk is treated as deprecated and must not be written by new code.
+- In-memory caches are fine and encouraged: `DetectorContext.label_embeddings`, `DetectorContext.model`, `autorun_detectors[name]["weights"]`, etc. — they live for the lifetime of the process and are repopulated from origins on the next start.
+- New features that cache vectors must use a process-scoped data structure (e.g. a field on `DetectorContext`), not a file or settings key.
+- Embedder version drift is impossible by construction because every load resolves+re-embeds against the active embedder.
+
+The single exception is **dataset pickle files**, which are by design a snapshot of media + their embeddings — they ARE the dataset, not a cache.
+
+If a feature seems to require persisting a vector or MLP, push back: either re-derive on demand, or change the design.
+
 ## Fix All Errors (CRITICAL)
 
 When you run a build, typecheck, linter, or test suite, **fix every error and failure you see — not only the ones you introduced**. Do not dismiss errors as "pre-existing", "unrelated to my change", or "not my fault" and move on. Do not announce them and ask the user to triage. The user does not want to scan your output for problems you decided to ignore.
@@ -81,7 +97,7 @@ If a failure is genuinely outside the scope of the current task (e.g. a flaky ne
 - `vtsearch/settings_factory.py` — Accessor factories (`make_accessors`, `make_per_side_setting`, `clamp`, `one_of`) used by `vtsearch/settings.py` to generate get/set pairs from the `_SETTING_SPECS` table
 - `frontend/` — Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`. `ActiveContextService` tracks which dataset/model the user selected; `activeContextInterceptor` attaches `X-Dataset-Id`/`X-Model-Id` headers to every API request
 - `static/` — Angular build output (index.html, main.js, polyfills.js, styles.css) and assets (favicons, logo.svg, logo.png)
-- `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md + EXTENDING-plugins.md + EXTENDING-media.md + EXTENDING-processors.md, HANDOFF.md, ML.md, SETUP.md, USER_GUIDE.md, demos.md, design/cli-detector-converter.md, plans/sync-sources.md, plans/structural-detectors.md, plans/combine-models-ui.md, plans/extract-library.md, plans/RCDatasetImporter.md)
+- `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md + EXTENDING-plugins.md + EXTENDING-media.md + EXTENDING-processors.md, HANDOFF.md, ML.md, SETUP.md, USER_GUIDE.md, demos.md, design/cli-detector-converter.md, plans/sync-sources.md, plans/structural-detectors.md, plans/combine-models-ui.md, plans/extract-library.md, plans/RCDatasetImporter.md, plans/delete-detectors.md)
 - `tests/` — Test suite split by module:
   - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client)
   - `test_api_contracts.py` — API response shape verification: status codes, content types, required keys, error format consistency

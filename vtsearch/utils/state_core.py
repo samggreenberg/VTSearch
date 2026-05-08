@@ -124,6 +124,7 @@ class DetectorContext:
         "inclusion",
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
+        "label_embeddings",  # str → np.ndarray, keyed by stable_element_id
         "model",  # nn.Sequential | None — current trained MLP
         "threshold",  # decision threshold
         # Sync source
@@ -148,6 +149,12 @@ class DetectorContext:
         self.inclusion: int | None = None
         # Cached in-memory data (never exported)
         self.training_medias: dict[int, dict[str, Any]] = {}
+        # Embeddings for every saved labelset element, keyed by
+        # stable_element_id.  Populated at detector load (resolve_file +
+        # embed_file) and topped up when new votes come in.  Lets MLP
+        # training and learned-sort use *all* saved labels — including
+        # those whose underlying media isn't part of the active dataset.
+        self.label_embeddings: dict[str, Any] = {}
         self.model: Any = None  # nn.Sequential | None
         self.threshold: float = 0.5
         # Sync source

@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import warnings
 
 # Limit threads to reduce memory overhead in constrained environments
@@ -271,6 +272,30 @@ if __name__ == "__main__":
             "dataset is loaded at once (original behaviour)."
         ),
     )
+    parser.add_argument(
+        "--import-labels-into",
+        type=str,
+        default=None,
+        dest="import_labels_into",
+        help=(
+            "Trainable-model name to merge labels into before scoring. "
+            "Used with --autodetect plus --label-importer-file."
+        ),
+    )
+    parser.add_argument(
+        "--label-importer",
+        type=str,
+        default="server_json_file",
+        dest="label_importer",
+        help=("Label importer name to use with --import-labels-into (default: server_json_file)."),
+    )
+    parser.add_argument(
+        "--label-importer-file",
+        type=str,
+        default=None,
+        dest="label_importer_file",
+        help=("Path passed to the label importer's ``filepath`` field. Used with --import-labels-into."),
+    )
 
     # Two-pass parsing: first pass gets --importer and --exporter names;
     # second pass adds their plugin-specific arguments and re-parses.
@@ -315,6 +340,33 @@ if __name__ == "__main__":
         settings_path = getattr(args, "settings", None)
 
         chunk_size = getattr(args, "chunk_size", None)
+
+        # Optional one-shot label import into a trainable model before scoring.
+        # The merged labelset is picked up by the autodetect pipeline below.
+        if args.import_labels_into:
+            if not args.label_importer_file:
+                parser.error("--import-labels-into requires --label-importer-file <path>")
+            # Settings file controls trainable_models_dir, so apply it first.
+            if settings_path:
+                from vtsearch.settings import set_settings_path
+
+                set_settings_path(settings_path)
+            from vtsearch.cli import import_labels_into_trainable_model_from_file
+
+            try:
+                applied, skipped = import_labels_into_trainable_model_from_file(
+                    args.import_labels_into,
+                    args.label_importer,
+                    args.label_importer_file,
+                )
+                print(
+                    f"Imported {applied} label(s) into trainable model "
+                    f"'{args.import_labels_into}' (skipped {skipped} duplicate/invalid).",
+                    flush=True,
+                )
+            except (FileNotFoundError, ValueError) as exc:
+                print(f"Error importing labels: {exc}", file=sys.stderr)
+                sys.exit(1)
 
         if args.importer:
             # Importer-based path

@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
   CombineModelsResult,
+  LabelsDetailResponse,
   LoadingTasksResponse,
   TrainableModelsResponse,
   ModelsRegistryResponse,
@@ -38,6 +39,23 @@ export class TrainableModelsApiService {
 
   saveLabels(name: string): Observable<unknown> {
     return this.http.post(`/api/trainable-models/${name}/labels`, {});
+  }
+
+  getLabelsDetail(name: string): Observable<LabelsDetailResponse> {
+    return this.http.get<LabelsDetailResponse>(
+      `/api/trainable-models/${encodeURIComponent(name)}/labels-detail`,
+    );
+  }
+
+  voteLabelElement(name: string, elementId: string, vote: 'good' | 'bad'): Observable<unknown> {
+    return this.http.post(
+      `/api/trainable-models/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/vote`,
+      { vote },
+    );
+  }
+
+  labelPreviewUrl(name: string, elementId: string): string {
+    return `/api/trainable-models/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/preview`;
   }
 
   combine(

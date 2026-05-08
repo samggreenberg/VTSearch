@@ -381,6 +381,25 @@ export interface TrainableModelsResponse {
   models: TrainableModel[];
 }
 
+export interface LabelElement {
+  id: string;
+  label: 'good' | 'bad';
+  media_type: string;
+  name: string;
+  filename: string;
+  origin_name: string;
+  md5: string;
+  cid: number | null;
+  time: number;
+  score: number;
+}
+
+export interface LabelsDetailResponse {
+  good: LabelElement[];
+  bad: LabelElement[];
+  media_type: string;
+}
+
 export interface ModelRegistryEntry {
   id: string;
   name: string;
