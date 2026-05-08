@@ -1241,11 +1241,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Old Find window — runs multi-dataset multi-model find and shows results modal. */
+  /** Old Find window — runs multi-dataset multi-detector find and shows results modal. */
   onOldFind(): void {
     const datasetIds = [...this.selectedDatasetIds];
-    const modelIds = [...this.selectedDetectorIds];
-    const findParams = { dataset_ids: datasetIds, model_ids: modelIds };
+    const detectorIds = [...this.selectedDetectorIds];
+    const findParams = { dataset_ids: datasetIds, detector_ids: detectorIds };
 
     this.datasetState.setLoading(true);
     this.datasetState.setProgressMessage('Checking labels...');
@@ -1338,18 +1338,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
           origin_name: r.origin_name || '',
           origin: r.origin,
           dataset_name: r.dataset_name || '',
-          model_verdicts: r.model_verdicts || {},
+          detector_verdicts: r.detector_verdicts || {},
         });
 
         const hits = (response.results || []).map(mapHit);
         const negativeHits = (response.negative_results || []).map(mapHit);
 
-        const modelNames: string[] = response.models || [];
+        const detectorNames: string[] = response.detectors || [];
         const detectorResults: Record<string, any> = {};
 
-        if (modelNames.length <= 1) {
-          // Single model: one result group
-          const label = modelNames[0] || 'Find';
+        if (detectorNames.length <= 1) {
+          // Single detector: one result group
+          const label = detectorNames[0] || 'Find';
           detectorResults[label] = {
             detector_name: label,
             total_hits: hits.length,
@@ -1357,31 +1357,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
             negative_hits: negativeHits,
           };
         } else {
-          // Multiple models: group hits by model
-          for (const name of modelNames) {
-            const modelHits = hits.filter(
-              (h: any) => h.model_verdicts?.[name]?.verdict === 'Good',
+          // Multiple detectors: group hits by detector
+          for (const name of detectorNames) {
+            const detectorHits = hits.filter(
+              (h: any) => h.detector_verdicts?.[name]?.verdict === 'Good',
             );
-            const modelNegHits = negativeHits.filter(
-              (h: any) => h.model_verdicts?.[name]?.verdict !== 'Good',
+            const detectorNegHits = negativeHits.filter(
+              (h: any) => h.detector_verdicts?.[name]?.verdict !== 'Good',
             );
             detectorResults[name] = {
               detector_name: name,
-              total_hits: modelHits.length,
-              hits: modelHits,
-              negative_hits: modelNegHits,
+              total_hits: detectorHits.length,
+              hits: detectorHits,
+              negative_hits: detectorNegHits,
             };
           }
         }
 
         this.findResultsData = {
           media_type: response.media_type || 'unknown',
-          detectors_run: modelNames.length,
+          detectors_run: detectorNames.length,
           results: detectorResults,
-          models: modelNames,
+          detectors: detectorNames,
           datasets: response.datasets || [],
           multiple_datasets: response.multiple_datasets || false,
-          multiple_models: response.multiple_models || false,
+          multiple_detectors: response.multiple_detectors || false,
         } as AutoDetectResultsData;
 
         this.findResultsOpen = true;

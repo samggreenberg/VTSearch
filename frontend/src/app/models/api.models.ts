@@ -532,10 +532,10 @@ export interface AutoDetectResultsData {
   detectors_run?: string | number;
   results: Record<string, AutoDetectDetectorResult>;
   // Find mode fields
-  models?: string[];
+  detectors?: string[];
   datasets?: string[];
   multiple_datasets?: boolean;
-  multiple_models?: boolean;
+  multiple_detectors?: boolean;
   [key: string]: unknown;
 }
 

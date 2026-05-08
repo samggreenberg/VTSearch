@@ -32,8 +32,8 @@ describe('LoadSortModalComponent', () => {
       ],
     });
     httpMock.expectOne('/api/detectors/registry').flush({
-      models: [
-        { id: 'm1', name: 'My Model', media_type: 'audio', num_training: 12 },
+      detectors: [
+        { id: 'm1', name: 'My Detector', media_type: 'audio', num_training: 12 },
         { id: 'm2', name: 'Untrained', media_type: 'audio', num_training: 0 },
       ],
     });
@@ -49,7 +49,7 @@ describe('LoadSortModalComponent', () => {
     expect(component.serverMediaFiles.length).toBe(2);
     expect(component.serverMediaFiles[0].filename).toBe('example.wav');
     expect(component.registryModels.length).toBe(1);
-    expect(component.registryModels[0].name).toBe('My Model');
+    expect(component.registryModels[0].name).toBe('My Detector');
     expect(component.loading).toBeFalse();
   });
 
@@ -58,7 +58,7 @@ describe('LoadSortModalComponent', () => {
     spyOn(component.modelSelected, 'emit');
     spyOn(component.closed, 'emit');
 
-    component.loadRegistryModel({ id: 'm1', name: 'My Model', media_type: 'audio', num_training: 12 });
+    component.loadRegistryModel({ id: 'm1', name: 'My Detector', media_type: 'audio', num_training: 12 });
 
     expect(component.modelSelected.emit).toHaveBeenCalledWith('m1');
     expect(component.closed.emit).toHaveBeenCalled();

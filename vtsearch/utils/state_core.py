@@ -36,9 +36,9 @@ _state_lock = threading.RLock()
 # Request-scoped context helpers
 # ---------------------------------------------------------------------------
 # When running inside a Flask request that carries ``X-Dataset-Id`` or
-# ``X-Model-Id`` headers, the proxy objects should resolve to the context
+# ``X-Detector-Id`` headers, the proxy objects should resolve to the context
 # specified by the request rather than the global "active" pointer.  This
-# allows the frontend to declare which dataset/model it is operating on
+# allows the frontend to declare which dataset/detector it is operating on
 # per-request, eliminating the need for a persistent "active" flag.
 #
 # Outside a Flask request (background threads, CLI, tests) the proxies
@@ -269,7 +269,7 @@ def get_active_detector_context() -> DetectorContext:
     """Return the ``DetectorContext`` for the current execution context.
 
     Resolution order:
-    1. Request-scoped context (set by ``before_request`` from ``X-Model-Id`` header)
+    1. Request-scoped context (set by ``before_request`` from ``X-Detector-Id`` header)
     2. Thread-local context (set by ``set_thread_detector_context``)
     3. Empty fallback context
     """

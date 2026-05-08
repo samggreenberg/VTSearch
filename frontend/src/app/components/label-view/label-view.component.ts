@@ -443,14 +443,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         const response = raw as {
           results: { id: number; score: number }[];
           threshold: number;
-          model_name?: string;
+          detector_name?: string;
         };
         this.stopScoringProgressPoll();
         this.sortState.setSortResults(
           response.results.map((r) => ({ id: r.id, score: r.score })),
           response.threshold,
         );
-        this.sortState.setLoadSortLabel(response.model_name || 'Model');
+        this.sortState.setLoadSortLabel(response.detector_name || 'Detector');
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
         this.sortState.setSortProgress(0, 0);
