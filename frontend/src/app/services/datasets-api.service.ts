@@ -240,4 +240,10 @@ export class DatasetsApiService {
   getDatasetStats(datasetId: string): Observable<DatasetStatsResponse> {
     return this.http.get<DatasetStatsResponse>(`/api/datasets/registry/${encodeURIComponent(datasetId)}/stats`);
   }
+
+  getDiskUsage(): Observable<{ total: number; used: number; free: number; path: string }> {
+    return this.http.get<{ total: number; used: number; free: number; path: string }>(
+      '/api/dashboard/disk-usage',
+    );
+  }
 }

@@ -103,6 +103,25 @@ class TestDashboardDatasetInfo:
                     v["origin"] = saved_origins[k]
 
 
+class TestDashboardDiskUsage:
+    """Tests for GET /api/dashboard/disk-usage."""
+
+    def test_returns_disk_usage(self, client):
+        """Endpoint returns total/used/free byte counts and a path."""
+        resp = client.get("/api/dashboard/disk-usage")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        for key in ("total", "used", "free", "path"):
+            assert key in data
+        assert isinstance(data["total"], int)
+        assert isinstance(data["used"], int)
+        assert isinstance(data["free"], int)
+        assert data["total"] > 0
+        assert data["used"] >= 0
+        assert data["free"] >= 0
+        assert data["used"] + data["free"] <= data["total"] + 1  # rounding tolerance
+
+
 class TestDashboardHtmlPresent:
     """Test that the dashboard-related content is present in the Angular bundle."""
 

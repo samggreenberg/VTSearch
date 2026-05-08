@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
-from vtsearch.config import EMBEDDINGS_DIR
+from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS
 from vtsearch.datasets.loader import read_pkl_clipper, read_pkl_embedder
 from vtsearch.datasets.load_pipeline import _origin_to_str
@@ -407,3 +408,18 @@ def dashboard_dataset_rename():
 
     set_dataset_display_name(new_name)
     return jsonify({"success": True, "name": new_name})
+
+
+@datasets_ui_bp.route("/api/dashboard/disk-usage")
+def dashboard_disk_usage():
+    """Return free / used / total bytes for the partition holding ``DATA_DIR``."""
+    probe = DATA_DIR if DATA_DIR.exists() else DATA_DIR.parent
+    usage = shutil.disk_usage(str(probe))
+    return jsonify(
+        {
+            "total": usage.total,
+            "used": usage.used,
+            "free": usage.free,
+            "path": str(probe),
+        }
+    )
