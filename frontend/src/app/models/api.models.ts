@@ -53,6 +53,8 @@ export interface VotesResponse {
   bad: number[];
   click_times: Record<string, number>;
   learned_scores: Record<string, number>;
+  labelset_good_count?: number;
+  labelset_bad_count?: number;
 }
 
 export interface InclusionResponse {

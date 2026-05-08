@@ -127,6 +127,13 @@ class DetectorContext:
         "label_embeddings",  # str → np.ndarray, keyed by stable_element_id
         "model",  # nn.Sequential | None — current trained MLP
         "threshold",  # decision threshold
+        # Cross-dataset training-corpus counts (from on-disk labelset).  These
+        # are independent of ``good_votes``/``bad_votes``, which only count
+        # labels for media in the *currently loaded* dataset.  They drive the
+        # frontend's "Sort by Learned" gating so a detector trained on dataset
+        # A stays trainable when the user switches to dataset B.
+        "labelset_good_count",
+        "labelset_bad_count",
         # Sync source
         "labelset_source",  # dict | None — {"source_name": "...", "field_values": {...}}
     )
@@ -157,6 +164,8 @@ class DetectorContext:
         self.label_embeddings: dict[str, Any] = {}
         self.model: Any = None  # nn.Sequential | None
         self.threshold: float = 0.5
+        self.labelset_good_count: int = 0
+        self.labelset_bad_count: int = 0
         # Sync source
         self.labelset_source: dict[str, Any] | None = None
 

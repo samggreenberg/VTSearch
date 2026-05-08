@@ -378,7 +378,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onLearnedSort(autoSelect = true): void {
-    if (this.voteState.goodVotes.size === 0 || this.voteState.badVotes.size === 0) return;
+    if (!this.voteState.learnedSortAvailable) return;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Training...');
     this.sortingApi.learnedSort().pipe(takeUntil(this.destroy$)).subscribe({
@@ -511,7 +511,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setInclusion(value);
     this.sortingApi.setInclusion(value).pipe(takeUntil(this.destroy$)).subscribe();
     this.autoSelectNext();
-    if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
+    if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
       this.scheduleLearnedSort(false);
     }
   }
@@ -559,7 +559,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.applyOptimisticVote(event.id, event.vote);
     this.voteState.loadVotes();
     this.autoSelectNext(event.id);
-    if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
+    if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
       this.scheduleLearnedSort(false);
     }
     this.checkResortPrompt();

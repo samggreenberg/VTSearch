@@ -76,8 +76,7 @@ describe('SortBarComponent', () => {
 
   it('should show hint when learned is disabled', () => {
     component.sortMode = 'learned';
-    component.hasGoodVotes = false;
-    component.hasBadVotes = false;
+    component.learnedSortAvailable = false;
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.sort-hint')?.textContent).toContain('Need at least');
   });
