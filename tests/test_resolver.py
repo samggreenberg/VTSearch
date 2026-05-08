@@ -502,7 +502,7 @@ class TestMultiFindCrossDatasetFallback:
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder), "media_type": "audio"}}
         from vtsearch.models.trainable_model_store import _model_path, _write_model
 
-        tm_name = "test_cross_detector"
+        tm_name = "Test Cross Detector"
         tm_path = _model_path(tm_name)
         tm_data = {
             "name": "Test Cross Detector",
@@ -609,9 +609,9 @@ class TestMultiFindCrossDatasetFallback:
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder)}}
         from vtsearch.models.trainable_model_store import _model_path, _write_model
 
-        tm_name = "test_mt_detector"
+        tm_name = "Test MT Detector"
         tm_data = {
-            "name": "Test MT Detector",
+            "name": tm_name,
             "text_query": "",
             "media_type": "audio",
             "examples": [],
@@ -698,9 +698,9 @@ class TestMultiFindCrossDatasetFallback:
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder)}}
         from vtsearch.models.trainable_model_store import _model_path, _write_model
 
-        tm_name = "test_nr_detector"
+        tm_name = "Test NR Detector"
         tm_data = {
-            "name": "Test NR Detector",
+            "name": tm_name,
             "text_query": "",
             "media_type": "image",
             "examples": [],
@@ -801,7 +801,7 @@ class TestFindCheckLabels:
         ds = register_dataset(name="cl_match_ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
 
         # Trainable model with labels that match by md5
-        tm_name = "test_cl_match"
+        tm_name = "Match Model"
         tm_data = {
             "name": "Match Model",
             "text_query": "",
@@ -861,9 +861,9 @@ class TestFindCheckLabels:
 
         # Trainable model with labels from a nonexistent folder
         label_origin = {"importer": "server_folder", "params": {"path": "/nonexistent/folder"}}
-        tm_name = "test_cl_diff"
+        tm_name = "Diff Model"
         tm_data = {
-            "name": "Diff Model",
+            "name": tm_name,
             "text_query": "",
             "media_type": "audio",
             "examples": [],
@@ -897,7 +897,7 @@ class TestFindCheckLabels:
         _write_model(_model_path(tm_name), tm_data)
 
         model_entry = register_model(
-            name="Diff Model",
+            name=tm_name,
             media_type="audio",
             num_training=3,
         )
@@ -952,9 +952,9 @@ class TestFindCheckLabels:
         # bad.wav does NOT exist
 
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder), "media_type": "audio"}}
-        tm_name = "test_cl_part"
+        tm_name = "Part Model"
         tm_data = {
-            "name": "Part Model",
+            "name": tm_name,
             "text_query": "",
             "media_type": "audio",
             "examples": [],
@@ -981,7 +981,7 @@ class TestFindCheckLabels:
         _write_model(_model_path(tm_name), tm_data)
 
         model_entry = register_model(
-            name="Part Model",
+            name=tm_name,
             media_type="audio",
             num_training=2,
         )

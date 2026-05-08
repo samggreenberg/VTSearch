@@ -37,10 +37,10 @@ def sync_labels_to_loaded_model() -> None:
         return
 
     entry = get_model(loaded_id)
-    if not entry or not entry.get("trainable") or not entry.get("trainable_model_name"):
+    if not entry or not entry.get("name"):
         return
 
-    tm_name = entry["trainable_model_name"]
+    tm_name = entry["name"]
     path = _model_path(tm_name)
     data = _read_model(path)
     if data is None:

@@ -188,7 +188,7 @@ class TestLabelImportEndpoint:
         set_trainable_models_dir(str(tmp_path / "models"))
 
         # Create a trainable model file on disk
-        tm_name = "test_import_sync"
+        tm_name = "Import Sync Test"
         from pathlib import Path
 
         model_dir = Path(get_trainable_models_dir())
@@ -204,7 +204,7 @@ class TestLabelImportEndpoint:
         )
 
         entry = register_model(
-            name="Import Sync Test",
+            name=tm_name,
             media_type="audio",
             num_training=0,
         )

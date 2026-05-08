@@ -684,7 +684,7 @@ class TestFindButtonValidation:
 
     def test_find_rejects_empty_dataset_ids(self, client):
         """POST /api/find with no datasets returns 400."""
-        register_model(name="find-m", media_type="audio", trainable=True)
+        register_model(name="find-m", media_type="audio")
         resp = client.get("/api/models/registry")
         m_id = resp.get_json()["models"][0]["id"]
         resp = client.post("/api/find", json={"dataset_ids": [], "model_ids": [m_id]})
