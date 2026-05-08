@@ -68,9 +68,9 @@ describe('NewDetectorModalComponent', () => {
     expect(req.request.body.name).toBe('Dog Barks');
     expect(req.request.body.media_type).toBe('audio');
     expect(req.request.body.text_query).toBe('dog barking sounds');
-    req.flush({ id: '123', name: 'Dog Barks' });
+    req.flush({ ok: true, detector: { id: '123', name: 'Dog Barks' } });
 
-    expect(component.created.emit).toHaveBeenCalled();
+    expect(component.created.emit).toHaveBeenCalledWith('123');
   });
 
   it('should disable Create button when not ready', () => {
@@ -110,11 +110,11 @@ describe('NewDetectorModalComponent', () => {
     component.submit();
 
     httpMock.expectOne('/api/detectors/registry').flush(
-      { error: 'Model already exists' },
+      { error: 'Detector already exists' },
       { status: 409, statusText: 'Conflict' },
     );
 
-    expect(component.error).toBe('Model already exists');
+    expect(component.error).toBe('Detector already exists');
   });
 
   it('should return media type icon', () => {
