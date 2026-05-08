@@ -189,12 +189,10 @@ class TestLabelImportEndpoint:
 
         # Create a trainable model file on disk
         tm_name = "Import Sync Test"
-        from pathlib import Path
+        from vtsearch.models.trainable_model_store import _model_path
 
-        model_dir = Path(get_trainable_models_dir())
-        model_dir.mkdir(parents=True, exist_ok=True)
         _write_model(
-            model_dir / f"{tm_name}.json",
+            _model_path(tm_name),
             {
                 "name": tm_name,
                 "media_type": "audio",
