@@ -616,6 +616,20 @@ class TestImporterMetadata:
         keys = [f["key"] for f in folder_imp["fields"]]
         assert keys.index("media_type") < keys.index("path")
 
+    def test_every_importer_exposes_dataset_name_field(self, client):
+        """Every importer's serialised field list begins with a non-required
+        ``dataset_name`` text field so the user can override the auto-generated
+        display name."""
+        resp = client.get("/api/dataset/importers")
+        data = resp.get_json()
+        assert data["importers"], "expected at least one importer"
+        for imp in data["importers"]:
+            keys = [f["key"] for f in imp["fields"]]
+            assert keys[0] == "dataset_name", f"{imp['name']} missing dataset_name field at index 0"
+            ds_field = imp["fields"][0]
+            assert ds_field["field_type"] == "text"
+            assert ds_field["required"] is False
+
 
 class TestLoadEmbedderForClips:
     """_load_embedder_for_clips should warm up the text encoder at dataset load time."""

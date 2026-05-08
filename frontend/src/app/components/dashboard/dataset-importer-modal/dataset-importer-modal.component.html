@@ -57,6 +57,19 @@
           <p class="tab-bar-hint">Select the media type to demonstrate.</p>
         }
 
+        @if (activeTab) {
+          <div class="form-group">
+            <label class="form-label" for="demo-dataset-name" title="Optional name for the new dataset. Leave blank to use the demo's name.">Dataset Name</label>
+            <input
+              id="demo-dataset-name"
+              type="text"
+              class="form-input"
+              [(ngModel)]="demoDatasetName"
+              placeholder="Leave blank to use the demo's name"
+            />
+          </div>
+        }
+
         @if (activeTab && (demoEmbedders.length > 1 || demoClippers.length > 1)) {
           <div class="demo-embedder-row">
             @if (demoEmbedders.length > 1) {
@@ -286,6 +299,18 @@
       }
 
       <div class="form-group">
+        <label class="form-label" for="lf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder/file name.">Dataset Name</label>
+        <input
+          id="lf-dataset-name"
+          type="text"
+          class="form-input"
+          [ngModel]="lfDatasetName"
+          (ngModelChange)="lfOnDatasetNameInput($event)"
+          placeholder="Leave blank to use a default name"
+        />
+      </div>
+
+      <div class="form-group">
         <label class="form-label" for="lf-media-type" title="The type of media files (audio, image, text, video, or document)">Media Type</label>
         <select
           id="lf-media-type"
@@ -401,6 +426,18 @@
 
   @if (activePickerView === 'server_folder' && selectedImporter) {
     <div class="server-folder-browser">
+      <div class="form-group">
+        <label class="form-label" for="sf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder name.">Dataset Name</label>
+        <input
+          id="sf-dataset-name"
+          type="text"
+          class="form-input"
+          [ngModel]="sfDatasetName"
+          (ngModelChange)="sfOnDatasetNameInput($event)"
+          placeholder="Leave blank to use a default name"
+        />
+      </div>
+
       <div class="form-group">
         <label class="form-label" for="sf-media-type" title="The type of media files in the folder (audio, image, text, video, or document)">Media Type</label>
         <select

@@ -76,6 +76,13 @@ class TestSyntheticImporterValidation:
         assert "audio" in imp.resolve_display_name({"media_type": "audio", "size": "7"})
         assert "7" in imp.resolve_display_name({"media_type": "audio", "size": "7"})
 
+    def test_user_dataset_name_overrides_default(self):
+        imp = SyntheticDatasetImporter()
+        out = imp.resolve_display_name(
+            {"media_type": "audio", "size": "7", "dataset_name": "My Tones"}
+        )
+        assert out == "My Tones"
+
 
 class TestOriginRoundTrip:
     def test_build_and_reload_origin(self):

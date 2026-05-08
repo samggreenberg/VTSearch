@@ -345,6 +345,14 @@ class ServerFolderDatasetImporter(DatasetImporter):
             base += f" --converters {converters}"
         return base
 
+    def default_display_name(self, field_values: dict[str, Any]) -> str:
+        path_str = (field_values.get("path") or "").strip()
+        if path_str:
+            leaf = Path(path_str).name
+            if leaf:
+                return leaf
+        return self.display_name
+
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         origin = super().build_origin(field_values)
         converters = field_values.get("converters", "")

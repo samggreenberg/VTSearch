@@ -381,12 +381,17 @@ def _extract_importer_fields(importer):
         for f in importer.fields:
             if f.field_type != "file":
                 field_values[f.key] = request.form.get(f.key, f.default)
+        dataset_name = (request.form.get("dataset_name") or "").strip()
     else:
         body = request.get_json(force=True) or {}
         for f in importer.fields:
             if f.key not in body and f.required:
                 return None, (jsonify({"error": f"Missing required field: {f.key!r}"}), 400)
             field_values[f.key] = body.get(f.key, f.default)
+        dataset_name = str(body.get("dataset_name") or "").strip()
+
+    if dataset_name:
+        field_values["dataset_name"] = dataset_name
 
     return field_values, None
 
@@ -425,12 +430,15 @@ def stage_demo(name: str):
 
     body = request.get_json(force=True, silent=True) or {}
     converter_name = body.get("converter", "")
+    dataset_name = str(body.get("dataset_name") or "").strip()
 
     field_values: dict = {"name": name}
     if converter_name:
         field_values["converter"] = converter_name
+    if dataset_name:
+        field_values["dataset_name"] = dataset_name
 
-    label = DEMO_DATASETS[name].get("label", name)
+    label = dataset_name or DEMO_DATASETS[name].get("label", name)
     _stage_importer_in_background(importer, field_values, label=label)
     return jsonify({"ok": True, "message": "Staging demo dataset..."})
 
@@ -628,6 +636,7 @@ def import_local_folder():
     recursive_raw = (request.form.get("recursive") or "true").strip().lower()
     recursive = recursive_raw not in ("false", "0", "no", "off")
     chunk_size = _parse_chunk_size(request.form.get("chunk_size"))
+    user_dataset_name = (request.form.get("dataset_name") or "").strip()
     clipper_params_raw = request.form.get("clipper_params") or ""
     clipper_params: dict | None = None
     if clipper_params_raw:
@@ -704,7 +713,7 @@ def import_local_folder():
     task_id = _run_origin_load_in_background(
         _load,
         origin,
-        name="Local folder upload",
+        name=user_dataset_name or "Local folder upload",
         clipper=clipper_name,
         clipper_params=inner_clipper_params,
         embedder=embedder,
@@ -736,6 +745,7 @@ def load_demo_dataset_route():
     embedder_name = data.get("embedder", "")
     clipper_name = data.get("clipper", "")
     converter_name = data.get("converter", "")
+    user_dataset_name = str(data.get("dataset_name") or "").strip()
 
     if not dataset_name or dataset_name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
@@ -746,6 +756,8 @@ def load_demo_dataset_route():
 
     demo_info = DEMO_DATASETS[dataset_name]
     field_values: dict = {"name": dataset_name}
+    if user_dataset_name:
+        field_values["dataset_name"] = user_dataset_name
     # Inject media_type so the loading task exposes it to the frontend,
     # allowing the "guessed type" logic to consider in-progress loads.
     if converter_name:

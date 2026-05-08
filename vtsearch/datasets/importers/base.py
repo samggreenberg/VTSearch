@@ -63,6 +63,26 @@ __all__ = ["DatasetImporter", "ImporterField"]
 PickerView = str  # one of: "form", "demo", "server_folder", "local_folder"
 
 
+# Synthetic per-importer field that lets the user pick a name for the new
+# dataset.  Injected at the front of every importer's serialised field list
+# in :meth:`DatasetImporter.to_dict`, so the frontend renders it generically
+# without each subclass having to duplicate the declaration.  The field is
+# extracted out of band by the import route handler — see
+# :func:`vtsearch.routes.datasets._extract_importer_fields`.
+DATASET_NAME_FIELD_KEY = "dataset_name"
+
+
+def _dataset_name_field() -> PluginField:
+    return PluginField(
+        key=DATASET_NAME_FIELD_KEY,
+        label="Dataset Name",
+        field_type="text",
+        description="Leave blank to use a default name",
+        required=False,
+        placeholder="Leave blank to use a default name",
+    )
+
+
 class DatasetImporter(PluginBase):
     """Abstract base class for dataset importers.
 
@@ -146,7 +166,32 @@ class DatasetImporter(PluginBase):
         d = super().to_dict()
         d["picker_view"] = self.picker_view
         d["category"] = self.category
+        d["fields"] = [_dataset_name_field().to_dict()] + d["fields"]
         return d
+
+    def default_display_name(self, field_values: dict[str, Any]) -> str:
+        """Return the importer-computed default name for a dataset.
+
+        Subclasses override this to derive a sensible default from
+        *field_values* (e.g. the demo importer reads the demo entry's
+        label).  The base implementation just returns :attr:`display_name`.
+        The user-typed ``dataset_name`` (when present) takes priority over
+        whatever this method returns — see :meth:`resolve_display_name`.
+        """
+        return self.display_name
+
+    def resolve_display_name(self, field_values: dict[str, Any]) -> str:
+        """Return the human-readable name to use for a dataset loaded with *field_values*.
+
+        Importer subclasses should override :meth:`default_display_name`
+        rather than this method.  ``resolve_display_name`` first honours
+        the user-typed ``dataset_name`` field (when non-empty) and falls
+        back to :meth:`default_display_name` otherwise.
+        """
+        user_name = (field_values.get("dataset_name") or "").strip() if field_values else ""
+        if user_name:
+            return user_name
+        return self.default_display_name(field_values or {})
 
     def __init__(self) -> None:
         #: Mapping of filename to pre-computed embedding vector.  Importers
