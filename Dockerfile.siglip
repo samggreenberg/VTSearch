@@ -58,6 +58,10 @@ print('SigLIP weights cached.', flush=True)"
 # ---------- application layer ----------
 COPY . .
 
+# Bake the version into the image. See Dockerfile for the pattern.
+ARG VTSEARCH_VERSION=
+RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
+
 # Seed default settings so the SigLIP image embedder is preloaded at startup.
 # Docker copies this file into a fresh named volume on first creation, so new
 # deployments come ready-to-serve without the user manually toggling autoload.
