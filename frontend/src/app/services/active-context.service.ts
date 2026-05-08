@@ -5,7 +5,7 @@ import { BehaviorSubject } from 'rxjs';
  * Tracks which dataset and model the user is currently working with.
  *
  * The HTTP interceptor (`activeContextInterceptor`) reads from this
- * service and attaches `X-Dataset-Id` / `X-Model-Id` headers to every
+ * service and attaches `X-Dataset-Id` / `X-Detector-Id` headers to every
  * outgoing API request so the backend resolves the correct context
  * per-request — no server-side "active" state needed.
  */
@@ -50,7 +50,7 @@ export class ActiveContextService {
     const ds = this.datasetIdSubject.value;
     if (ds) params.push(`dataset_id=${encodeURIComponent(ds)}`);
     const model = this.modelIdSubject.value;
-    if (model) params.push(`model_id=${encodeURIComponent(model)}`);
+    if (model) params.push(`detector_id=${encodeURIComponent(model)}`);
     return params.length ? `${path}?${params.join('&')}` : path;
   }
 }

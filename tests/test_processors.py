@@ -443,7 +443,7 @@ class TestPregenProcessorsRoute:
 
 class TestExtractorFactoryRegistration:
     def test_ocr_factory_registered(self):
-        from vtsearch.routes.detectors import _EXTRACTOR_FACTORIES, _ensure_extractor_factories
+        from vtsearch.routes.processors import _EXTRACTOR_FACTORIES, _ensure_extractor_factories
 
         _EXTRACTOR_FACTORIES.clear()
         _ensure_extractor_factories()
@@ -452,7 +452,7 @@ class TestExtractorFactoryRegistration:
         assert "image_class" in _EXTRACTOR_FACTORIES
 
     def test_build_ocr_extractor(self):
-        from vtsearch.routes.detectors import _EXTRACTOR_FACTORIES, _build_extractor, _ensure_extractor_factories
+        from vtsearch.routes.processors import _EXTRACTOR_FACTORIES, _build_extractor, _ensure_extractor_factories
 
         _EXTRACTOR_FACTORIES.clear()
         _ensure_extractor_factories()
@@ -461,7 +461,7 @@ class TestExtractorFactoryRegistration:
         assert ext.media_type == "image"
 
     def test_build_speech_extractor(self):
-        from vtsearch.routes.detectors import _EXTRACTOR_FACTORIES, _build_extractor, _ensure_extractor_factories
+        from vtsearch.routes.processors import _EXTRACTOR_FACTORIES, _build_extractor, _ensure_extractor_factories
 
         _EXTRACTOR_FACTORIES.clear()
         _ensure_extractor_factories()
@@ -472,14 +472,14 @@ class TestExtractorFactoryRegistration:
 
 class TestLocalizerFactoryRegistration:
     def test_face_factory_registered(self):
-        from vtsearch.routes.detectors import _LOCALIZER_FACTORIES, _ensure_localizer_factories
+        from vtsearch.routes.processors import _LOCALIZER_FACTORIES, _ensure_localizer_factories
 
         _LOCALIZER_FACTORIES.clear()
         _ensure_localizer_factories()
         assert "face" in _LOCALIZER_FACTORIES
 
     def test_build_face_localizer(self):
-        from vtsearch.routes.detectors import _LOCALIZER_FACTORIES, _build_localizer, _ensure_localizer_factories
+        from vtsearch.routes.processors import _LOCALIZER_FACTORIES, _build_localizer, _ensure_localizer_factories
 
         _LOCALIZER_FACTORIES.clear()
         _ensure_localizer_factories()

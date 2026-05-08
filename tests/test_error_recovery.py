@@ -81,9 +81,9 @@ class TestInvalidRequestBodies:
         )
         assert resp.status_code == 400
 
-    def test_autorun_detector_create_with_null_body(self, client):
+    def test_register_model_with_null_body(self, client):
         resp = client.post(
-            "/api/autorun-detectors",
+            "/api/detectors/registry",
             data="null",
             content_type="application/json",
         )
@@ -101,46 +101,38 @@ class TestMissingRequiredFields:
         resp = client.post("/api/medias/1/vote", json={"label": "good"})
         assert resp.status_code == 400
 
-    def test_autorun_detector_missing_name(self, client):
+    def test_register_model_missing_name(self, client):
         resp = client.post(
-            "/api/autorun-detectors",
-            json={
-                "media_type": "audio",
-            },
+            "/api/detectors/registry",
+            json={"media_type": "audio"},
         )
         assert resp.status_code == 400
         assert "name" in resp.get_json()["error"]
 
-    def test_autorun_detector_missing_media_type(self, client):
+    def test_register_model_missing_media_type(self, client):
         resp = client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": "test",
-            },
+            "/api/detectors/registry",
+            json={"name": "test"},
         )
         assert resp.status_code == 400
         assert "media_type" in resp.get_json()["error"]
 
-    def test_autorun_detector_rename_missing_new_name(self, client):
-        client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": "rename_test",
-                "media_type": "audio",
-            },
+    def test_register_model_rename_missing_new_name(self, client):
+        resp = client.post(
+            "/api/detectors/registry",
+            json={"name": "rename_test", "media_type": "audio"},
         )
-        resp = client.put("/api/autorun-detectors/rename_test/rename", json={})
+        detector_id = resp.get_json()["detector"]["id"]
+        resp = client.put(f"/api/detectors/registry/{detector_id}/rename", json={})
         assert resp.status_code == 400
 
-    def test_autodetect_flag_missing_autodetect(self, client):
-        client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": "ad_test",
-                "media_type": "audio",
-            },
+    def test_autorun_flag_missing_value(self, client):
+        resp = client.post(
+            "/api/detectors/registry",
+            json={"name": "ad_test", "media_type": "audio"},
         )
-        resp = client.put("/api/autorun-detectors/ad_test/autodetect", json={})
+        detector_id = resp.get_json()["detector"]["id"]
+        resp = client.put(f"/api/detectors/registry/{detector_id}/autorun", json={})
         assert resp.status_code == 400
 
     def test_fill_from_sort_missing_threshold(self, client):
@@ -172,25 +164,6 @@ class TestMissingRequiredFields:
     def test_textsort_suggestion_whitespace_text(self, client):
         resp = client.post("/api/textsort-suggestions", json={"text": "   "})
         assert resp.status_code == 400
-
-    def test_autorun_processor_missing_name(self, client):
-        resp = client.post(
-            "/api/settings/autorun-processors",
-            json={
-                "processor_importer": "some_importer",
-            },
-        )
-        assert resp.status_code == 400
-
-    def test_autorun_processor_missing_importer(self, client):
-        resp = client.post(
-            "/api/settings/autorun-processors",
-            json={
-                "processor_name": "some_name",
-            },
-        )
-        assert resp.status_code == 400
-
 
 class TestTypeMismatches:
     """Routes should reject wrong-typed values."""
@@ -293,41 +266,21 @@ class TestNonexistentResources:
         resp = client.post("/api/medias/99999/vote", json={"vote": "good"})
         assert resp.status_code == 404
 
-    def test_delete_nonexistent_detector(self, client):
-        resp = client.delete("/api/autorun-detectors/does_not_exist")
+    def test_delete_nonexistent_model(self, client):
+        resp = client.delete("/api/detectors/registry/does_not_exist")
         assert resp.status_code == 404
 
-    def test_rename_nonexistent_detector(self, client):
+    def test_rename_nonexistent_model(self, client):
         resp = client.put(
-            "/api/autorun-detectors/does_not_exist/rename",
-            json={
-                "new_name": "new",
-            },
-        )
-        assert resp.status_code == 400  # "not found or new name already exists"
-
-    def test_autodetect_nonexistent_detector(self, client):
-        # autodetect=True on a name without an in-memory detector persists to
-        # settings (for model-registry entries that haven't been trained yet)
-        # and returns 200; disabling on a missing detector still returns 404.
-        resp = client.put(
-            "/api/autorun-detectors/does_not_exist/autodetect",
-            json={
-                "autodetect": False,
-            },
+            "/api/detectors/registry/does_not_exist/rename",
+            json={"name": "new"},
         )
         assert resp.status_code == 404
 
-    def test_export_nonexistent_detector(self, client):
-        resp = client.get("/api/autorun-detectors/does_not_exist/export")
-        assert resp.status_code == 404
-
-    def test_set_examples_nonexistent_detector(self, client):
+    def test_autorun_nonexistent_model(self, client):
         resp = client.put(
-            "/api/autorun-detectors/does_not_exist/examples",
-            json={
-                "examples": [],
-            },
+            "/api/detectors/registry/does_not_exist/autorun",
+            json={"autorun": False},
         )
         assert resp.status_code == 404
 
@@ -344,16 +297,8 @@ class TestNonexistentResources:
         resp = client.post("/api/label-importers/import/nonexistent", json={})
         assert resp.status_code == 404
 
-    def test_unknown_processor_importer(self, client):
-        resp = client.post("/api/processor-importers/import/nonexistent", json={})
-        assert resp.status_code == 404
-
     def test_unknown_dataset_importer(self, client):
         resp = client.post("/api/dataset/import/nonexistent", json={})
-        assert resp.status_code == 404
-
-    def test_delete_nonexistent_autorun_processor(self, client):
-        resp = client.delete("/api/settings/autorun-processors/does_not_exist")
         assert resp.status_code == 404
 
     def test_media_id_zero(self, client):
@@ -535,65 +480,33 @@ class TestBoundaryValues:
         assert data["skipped"] == 3
 
 
-class TestDetectorEdgeCases:
-    """Edge cases for detector operations."""
+class TestModelRegistryEdgeCases:
+    """Edge cases for model-registry operations."""
 
-    def test_export_detector_no_weights(self, client):
-        """Exporting a detector with no weights should return 400."""
-        client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": "no_weights",
-                "media_type": "audio",
-            },
-        )
-        resp = client.get("/api/autorun-detectors/no_weights/export")
-        assert resp.status_code == 400
-        assert "no trained weights" in resp.get_json()["error"]
-
-    def test_create_detector_with_empty_name(self, client):
+    def test_create_model_with_empty_name(self, client):
         resp = client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": "",
-                "media_type": "audio",
-            },
+            "/api/detectors/registry",
+            json={"name": "", "media_type": "audio"},
         )
         assert resp.status_code == 400
 
-    def test_create_detector_with_whitespace_name(self, client):
+    def test_create_model_with_whitespace_name(self, client):
         resp = client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": "   ",
-                "media_type": "audio",
-            },
+            "/api/detectors/registry",
+            json={"name": "   ", "media_type": "audio"},
         )
         assert resp.status_code == 400
 
-    def test_set_examples_missing_examples_field(self, client):
-        client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": "ex_test",
-                "media_type": "audio",
-            },
+    def test_double_delete_model(self, client):
+        """Deleting a model twice: second should 404."""
+        resp = client.post(
+            "/api/detectors/registry",
+            json={"name": "del_twice", "media_type": "audio"},
         )
-        resp = client.put("/api/autorun-detectors/ex_test/examples", json={})
-        assert resp.status_code == 400
-
-    def test_double_delete_detector(self, client):
-        """Deleting a detector twice: second should 404."""
-        client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": "del_twice",
-                "media_type": "audio",
-            },
-        )
-        resp1 = client.delete("/api/autorun-detectors/del_twice")
+        detector_id = resp.get_json()["detector"]["id"]
+        resp1 = client.delete(f"/api/detectors/registry/{detector_id}")
         assert resp1.status_code == 200
-        resp2 = client.delete("/api/autorun-detectors/del_twice")
+        resp2 = client.delete(f"/api/detectors/registry/{detector_id}")
         assert resp2.status_code == 404
 
 
@@ -624,20 +537,6 @@ class TestSettingsEdgeCases:
         )
         assert resp.status_code == 200
 
-    def test_autorun_processor_add_and_remove(self, client):
-        resp = client.post(
-            "/api/settings/autorun-processors",
-            json={
-                "processor_name": "test_proc",
-                "processor_importer": "some_importer",
-                "field_values": {"key": "value"},
-            },
-        )
-        assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
-
-        resp = client.delete("/api/settings/autorun-processors/test_proc")
-        assert resp.status_code == 200
 
 
 class TestVoteEdgeCases:
@@ -712,25 +611,3 @@ class TestPathTraversalPrevention:
         )
         assert resp.status_code == 400
 
-    # -- /api/autorun-detectors/import-labels --------------------------------
-
-    def test_import_labels_rejects_absolute_escape(self, client):
-        """Absolute paths outside DATA_DIR must be skipped."""
-        buf = self._make_label_file(["/etc/passwd", "/etc/shadow"])
-        resp = client.post(
-            "/api/autorun-detectors/import-labels",
-            data={"file": (buf, "labels.json"), "name": "test_det"},
-            content_type="multipart/form-data",
-        )
-        assert resp.status_code == 400
-        assert "2 valid" in resp.get_json()["error"] or "loaded 0" in resp.get_json()["error"]
-
-    def test_import_labels_rejects_relative_traversal(self, client):
-        """Relative paths that traverse out of DATA_DIR must be skipped."""
-        buf = self._make_label_file(["../../etc/passwd", "../../../etc/shadow"])
-        resp = client.post(
-            "/api/autorun-detectors/import-labels",
-            data={"file": (buf, "labels.json"), "name": "test_det"},
-            content_type="multipart/form-data",
-        )
-        assert resp.status_code == 400

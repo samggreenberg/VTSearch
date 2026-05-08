@@ -67,18 +67,24 @@ class ServerFileLabelsetSource(LabelsetSource):
 
 
 def _resolve_filepath(field_values: dict[str, Any]) -> str:
-    """Resolve the filepath, expanding template variables."""
+    """Resolve the filepath, expanding template variables.
+
+    Substituted values are sanitized so that an attacker-controlled detector
+    name like ``../../etc/passwd`` cannot escape the directory implied by the
+    admin-configured template.
+    """
     filepath = (field_values.get("filepath") or "").strip()
     if not filepath:
         raise ValueError("A file path is required.")
 
     if "{detector_id}" in filepath or "{detector_name}" in filepath:
+        from vtsearch.utils.paths import sanitize_template_value
         from vtsearch.utils.state_core import get_active_detector_context
 
         ctx = get_active_detector_context()
         if ctx is not None:
-            filepath = filepath.replace("{detector_id}", ctx.detector_id)
-            filepath = filepath.replace("{detector_name}", ctx.name)
+            filepath = filepath.replace("{detector_id}", sanitize_template_value(ctx.detector_id))
+            filepath = filepath.replace("{detector_name}", sanitize_template_value(ctx.name))
 
     return filepath
 

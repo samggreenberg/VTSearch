@@ -133,70 +133,70 @@
   </div>
   </div>
 
-  <!-- Model Section -->
+  <!-- Detector Section -->
   <div class="dashboard-section-wrap">
   <div class="dashboard-section">
     <div class="dashboard-section-header">
-      <span class="dashboard-section-title" title="Trained models for scoring and finding media"><vt-icon type="robot" [size]="18"></vt-icon> Models</span>
+      <span class="dashboard-section-title" title="Trained detectors for scoring and finding media"><vt-icon type="robot" [size]="18"></vt-icon> Detectors</span>
       <div class="dashboard-section-actions">
         <button class="btn btn--primary btn--sm"
           [disabled]="isLoading"
-          (click)="openNewModelModal()" title="Create a new model"><span class="plus-icon"
-            [class.plus-open]="newModelModalOpen"
-            [class.plus-close]="newModelClosing"
-            (animationend)="onNewModelAnimationEnd()">+</span></button>
+          (click)="openNewDetectorModal()" title="Create a new detector"><span class="plus-icon"
+            [class.plus-open]="newDetectorModalOpen"
+            [class.plus-close]="newDetectorClosing"
+            (animationend)="onNewDetectorAnimationEnd()">+</span></button>
       </div>
     </div>
 
-    @if (models.length === 0) {
-      <p class="empty-state">No models yet. Click + to add one.</p>
+    @if (detectors.length === 0) {
+      <p class="empty-state">No detectors yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
-        <table class="dash-table" [class.table-fixed]="modelCols.tableFixed">
+        <table class="dash-table" [class.table-fixed]="detectorCols.tableFixed">
           <thead>
             <tr>
-              <th (click)="modelCols.sortBy('name')" class="sortable name-col" title="Model display name (click to sort)" data-col="name" [style.width.%]="modelCols.tableFixed ? modelCols.colWidths['name'] : null">Name<span class="sort-indicator" [class.active]="modelCols.isSortActive('name')">{{ modelCols.sortIndicator('name') }}</span></th>
-              @for (col of visibleModelColumns; track col) {
+              <th (click)="detectorCols.sortBy('name')" class="sortable name-col" title="Detector display name (click to sort)" data-col="name" [style.width.%]="detectorCols.tableFixed ? detectorCols.colWidths['name'] : null">Name<span class="sort-indicator" [class.active]="detectorCols.isSortActive('name')">{{ detectorCols.sortIndicator('name') }}</span></th>
+              @for (col of visibleDetectorColumns; track col) {
                 <th
-                  [class.sortable]="modelCols.meta(col).sortable"
-                  [class.col-drop-target]="modelCols.isDropTarget(col)"
-                  [class.col-dragging]="modelCols.isDragging(col)"
+                  [class.sortable]="detectorCols.meta(col).sortable"
+                  [class.col-drop-target]="detectorCols.isDropTarget(col)"
+                  [class.col-dragging]="detectorCols.isDragging(col)"
                   [attr.data-col]="col"
-                  [title]="modelCols.meta(col).title"
-                  [style.width.%]="modelCols.tableFixed ? modelCols.colWidths[col] : null"
+                  [title]="detectorCols.meta(col).title"
+                  [style.width.%]="detectorCols.tableFixed ? detectorCols.colWidths[col] : null"
                   draggable="true"
-                  (click)="onModelHeaderClick(col)"
-                  (dragstart)="modelCols.onColDragStart($event, col)"
-                  (dragover)="modelCols.onColDragOver($event, col)"
-                  (dragleave)="modelCols.onColDragLeave($event, col)"
-                  (drop)="modelCols.onColDrop($event, col)"
-                  (dragend)="modelCols.onColDragEnd($event)"
-                ><div class="col-resize-handle" (mousedown)="modelCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelCols.meta(col).label }}@if (modelCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="modelCols.isSortActive(col)">{{ modelCols.sortIndicator(col) }}</span>}</th>
+                  (click)="onDetectorHeaderClick(col)"
+                  (dragstart)="detectorCols.onColDragStart($event, col)"
+                  (dragover)="detectorCols.onColDragOver($event, col)"
+                  (dragleave)="detectorCols.onColDragLeave($event, col)"
+                  (drop)="detectorCols.onColDrop($event, col)"
+                  (dragend)="detectorCols.onColDragEnd($event)"
+                ><div class="col-resize-handle" (mousedown)="detectorCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ detectorCols.meta(col).label }}@if (detectorCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="detectorCols.isSortActive(col)">{{ detectorCols.sortIndicator(col) }}</span>}</th>
               }
-              <th class="actions-col" data-col="actions" [title]="modelCols.meta('actions').title" [style.width.%]="modelCols.tableFixed ? modelCols.colWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="modelCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ modelCols.meta('actions').label }}</th>
+              <th class="actions-col" data-col="actions" [title]="detectorCols.meta('actions').title" [style.width.%]="detectorCols.tableFixed ? detectorCols.colWidths['actions'] : null"><div class="col-resize-handle" (mousedown)="detectorCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>{{ detectorCols.meta('actions').label }}</th>
             </tr>
           </thead>
           <tbody>
-            @for (model of sortedModels; track model.id) {
-              <vt-model-card
-                [model]="model"
-                [columnOrder]="visibleModelColumns"
-                [selected]="isModelSelected(model.id)"
-                [dimmed]="isLoading && !isModelSelected(model.id)"
-                [loadingTask]="getInlineModelTask(model.id)"
-                [deleteConfirmOpen]="deletingModelId === model.id"
-                [addLabelsOpen]="addLabelsModalOpen && addLabelsModelId === model.id"
-                (rowClick)="!isLoading && toggleModelSelection(model.id, $event)"
-                (checkboxToggle)="!isLoading && toggleModelCheckbox(model.id)"
-                (rename)="renameModel(model, $event)"
-                (delete)="deleteModel(model)"
-                (load)="loadModel(model)"
-                (unload)="unloadModel(model)"
-                (export)="openExportModal(model)"
-                (addLabels)="openAddLabelsModal(model)"
-                (autorunToggle)="toggleAutorun(model, $event)"
-                (cancelTask)="cancelModelLoadingTask($event)"
-                (dismissTask)="dismissModelLoadingTask($event)"
+            @for (detector of sortedDetectors; track detector.id) {
+              <vt-detector-card
+                [detector]="detector"
+                [columnOrder]="visibleDetectorColumns"
+                [selected]="isDetectorSelected(detector.id)"
+                [dimmed]="isLoading && !isDetectorSelected(detector.id)"
+                [loadingTask]="getInlineDetectorTask(detector.id)"
+                [deleteConfirmOpen]="deletingDetectorId === detector.id"
+                [addLabelsOpen]="addLabelsModalOpen && addLabelsDetectorId === detector.id"
+                (rowClick)="!isLoading && toggleDetectorSelection(detector.id, $event)"
+                (checkboxToggle)="!isLoading && toggleDetectorCheckbox(detector.id)"
+                (rename)="renameDetector(detector, $event)"
+                (delete)="deleteDetector(detector)"
+                (load)="loadDetector(detector)"
+                (unload)="unloadDetector(detector)"
+                (export)="openExportModal(detector)"
+                (addLabels)="openAddLabelsModal(detector)"
+                (autorunToggle)="toggleAutorun(detector, $event)"
+                (cancelTask)="cancelDetectorLoadingTask($event)"
+                (dismissTask)="dismissDetectorLoadingTask($event)"
               />
             }
           </tbody>
@@ -205,18 +205,18 @@
     }
   </div>
   <div class="dashboard-side-actions">
-    <button class="side-action-btn" (click)="selectAllModels()" [disabled]="isLoading || models.length === 0" title="Select all models" aria-label="Select all">
-      <svg aria-hidden="true" [class.side-action-spin]="spinSelectAllModels" (animationend)="onSpinSelectAllModelsEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" fill="currentColor" stroke-dasharray="2 2.2">
+    <button class="side-action-btn" (click)="selectAllDetectors()" [disabled]="isLoading || detectors.length === 0" title="Select all detectors" aria-label="Select all">
+      <svg aria-hidden="true" [class.side-action-spin]="spinSelectAllDetectors" (animationend)="onSpinSelectAllDetectorsEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" fill="currentColor" stroke-dasharray="2 2.2">
         <rect x="3" y="3" width="18" height="18" rx="2"/>
       </svg>
     </button>
-    <button class="side-action-btn" (click)="selectNoneModels()" [disabled]="isLoading || selectedModelIds.size === 0" title="Select none" aria-label="Select none">
-      <svg aria-hidden="true" [class.side-action-spin]="spinSelectNoneModels" (animationend)="onSpinSelectNoneModelsEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 2.2">
+    <button class="side-action-btn" (click)="selectNoneDetectors()" [disabled]="isLoading || selectedDetectorIds.size === 0" title="Select none" aria-label="Select none">
+      <svg aria-hidden="true" [class.side-action-spin]="spinSelectNoneDetectors" (animationend)="onSpinSelectNoneDetectorsEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 2.2">
         <rect x="3" y="3" width="18" height="18" rx="2"/>
       </svg>
     </button>
     <div class="side-action-gap"></div>
-    <button class="side-action-btn" (click)="openCombineModelsModal()" [disabled]="isLoading || !combineSelectedModelsEnabled" [title]="combineSelectedModelsHint" aria-label="Combine selected models">
+    <button class="side-action-btn" (click)="openCombineDetectorsModal()" [disabled]="isLoading || !combineSelectedDetectorsEnabled" [title]="combineSelectedDetectorsHint" aria-label="Combine selected detectors">
       <!-- Two horizontal arrows on the left, merging smoothly into a single arrow on the right. -->
       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 7 C 10 7, 10 12, 17 12 L 21 12"/>
@@ -224,8 +224,8 @@
         <polyline points="18 9 21 12 18 15"/>
       </svg>
     </button>
-    <button class="side-action-btn side-action-delete" (click)="deleteSelectedModels()" [disabled]="isLoading || selectedModelIds.size === 0" [title]="selectedModelIds.size === 0 ? 'No models selected' : 'Delete selected models'" aria-label="Delete selected">
-      <svg aria-hidden="true" [class.side-action-delete-active]="deletingSelectedModelsConfirm" [class.side-action-delete-inactive]="!deletingSelectedModelsConfirm && wasDeletingSelectedModelsConfirm" (animationend)="onDeleteSelectedModelsAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <button class="side-action-btn side-action-delete" (click)="deleteSelectedDetectors()" [disabled]="isLoading || selectedDetectorIds.size === 0" [title]="selectedDetectorIds.size === 0 ? 'No detectors selected' : 'Delete selected detectors'" aria-label="Delete selected">
+      <svg aria-hidden="true" [class.side-action-delete-active]="deletingSelectedDetectorsConfirm" [class.side-action-delete-inactive]="!deletingSelectedDetectorsConfirm && wasDeletingSelectedDetectorsConfirm" (animationend)="onDeleteSelectedDetectorsAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="3 6 5 6 21 6"></polyline>
         <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
         <path d="M10 11v6"></path>
@@ -275,6 +275,14 @@
       </button>
       <span class="btn-disabled-reason" [style.visibility]="(!findEnabled && findHint) ? 'visible' : 'hidden'">{{ findHint || '&nbsp;' }}</span>
     </div>
+    @if (diskUsage) {
+      <div class="disk-usage" [title]="'Server disk: ' + diskFreeText">
+        <div class="disk-usage-label">Disk: {{ diskFreeText }}</div>
+        <div class="disk-usage-bar" [class.warn]="diskUsedPct >= 80" [class.critical]="diskUsedPct >= 95">
+          <div class="disk-usage-fill" [style.width.%]="diskUsedPct"></div>
+        </div>
+      </div>
+    }
   </div>
 </div>
 
@@ -296,26 +304,26 @@
   />
 }
 
-@if (newModelModalOpen) {
-  <vt-new-model-modal
+@if (newDetectorModalOpen) {
+  <vt-new-detector-modal
     [defaultMediaType]="activeDatasetMediaType"
-    (closed)="closeNewModelModal()"
-    (created)="onModelCreated($event)"
+    (closed)="closeNewDetectorModal()"
+    (created)="onDetectorCreated($event)"
   />
 }
 
-@if (combineModelsModalOpen) {
-  <vt-combine-models-modal
-    [sources]="combineSelectedModelSources"
-    [existingNames]="allModelNames"
-    (closed)="closeCombineModelsModal()"
-    (created)="onModelsCombined($event)"
+@if (combineDetectorsModalOpen) {
+  <vt-combine-detectors-modal
+    [sources]="combineSelectedDetectorSources"
+    [existingNames]="allDetectorNames"
+    (closed)="closeCombineDetectorsModal()"
+    (created)="onDetectorsCombined($event)"
   />
 }
 
 @if (exportModalOpen) {
   <vt-label-exporter-modal
-    [customTitle]="'Export Labelset: ' + exportModelName"
+    [customTitle]="'Export Labelset: ' + exportDetectorName"
     (closed)="closeExportModal()"
     (exportComplete)="closeExportModal()"
   />
@@ -323,7 +331,7 @@
 
 @if (addLabelsModalOpen) {
   <vt-label-importer-modal
-    [targetModelName]="addLabelsModelName"
+    [targetModelName]="addLabelsDetectorName"
     (closed)="closeAddLabelsModal()"
     (imported)="onAddLabelsImported()"
   />

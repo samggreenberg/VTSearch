@@ -5,7 +5,6 @@ import { EMPTY, Subject, timer } from 'rxjs';
 import { catchError, filter, take, takeUntil, switchMap } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
-import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { FindSessionService } from '../../services/find-session.service';
@@ -13,17 +12,17 @@ import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, ModelRegistryEntry } from '../../models/api.models';
+import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, DetectorRegistryEntry } from '../../models/api.models';
 import { formatProgressFraction } from '../../utils/format-progress';
 import { ColMeta, ManagedColumns } from '../../utils/managed-columns';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
-import { ModelCardComponent } from './model-card/model-card.component';
+import { DetectorCardComponent } from './detector-card/detector-card.component';
 import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { CombineDatasetsModalComponent } from './combine-datasets-modal/combine-datasets-modal.component';
-import { NewModelModalComponent } from './new-model-modal/new-model-modal.component';
-import { CombineModelsModalComponent } from './combine-models-modal/combine-models-modal.component';
+import { NewDetectorModalComponent } from './new-detector-modal/new-detector-modal.component';
+import { CombineDetectorsModalComponent } from './combine-detectors-modal/combine-detectors-modal.component';
 import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
@@ -37,11 +36,11 @@ import { IconComponent } from '../icon/icon.component';
     ProgressBarComponent,
     AutoDetectResultsModalComponent,
     DatasetCardComponent,
-    ModelCardComponent,
+    DetectorCardComponent,
     DatasetImporterModalComponent,
     CombineDatasetsModalComponent,
-    NewModelModalComponent,
-    CombineModelsModalComponent,
+    NewDetectorModalComponent,
+    CombineDetectorsModalComponent,
     LabelExporterModalComponent,
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
@@ -52,49 +51,49 @@ import { IconComponent } from '../icon/icon.component';
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   selectedDatasetIds: Set<string> = new Set();
-  selectedModelIds: Set<string> = new Set();
+  selectedDetectorIds: Set<string> = new Set();
 
   // Animation flags for the right-side bulk-action column.
   // Spin flags fire a one-shot 90° rotation on the symmetric select-all/none
   // squares; the animationend handler clears them so the icon snaps back.
   spinSelectAllDatasets = false;
   spinSelectNoneDatasets = false;
-  spinSelectAllModels = false;
-  spinSelectNoneModels = false;
+  spinSelectAllDetectors = false;
+  spinSelectNoneDetectors = false;
   // Confirm flags hold the trash icon at 90° while the confirm dialog is up,
   // and play a reverse animation back to 0° once the dialog resolves.
   deletingSelectedDatasetsConfirm = false;
   wasDeletingSelectedDatasetsConfirm = false;
-  deletingSelectedModelsConfirm = false;
-  wasDeletingSelectedModelsConfirm = false;
+  deletingSelectedDetectorsConfirm = false;
+  wasDeletingSelectedDetectorsConfirm = false;
 
   progressValue = 0;
   progressTotal = 0;
   progressIndeterminate = false;
 
   loadingTasks: LoadingTask[] = [];
-  modelLoadingTasks: LoadingTask[] = [];
+  detectorLoadingTasks: LoadingTask[] = [];
 
   importerModalOpen = false;
   importerClosing = false;
   combineModalOpen = false;
   /** Datasets passed into the Combine modal when it opens. */
   combineModalDatasets: DatasetRegistryEntry[] = [];
-  newModelModalOpen = false;
-  newModelClosing = false;
-  combineModelsModalOpen = false;
+  newDetectorModalOpen = false;
+  newDetectorClosing = false;
+  combineDetectorsModalOpen = false;
   exportModalOpen = false;
-  exportModelName = '';
+  exportDetectorName = '';
   addLabelsModalOpen = false;
-  addLabelsModelName = '';
+  addLabelsDetectorName = '';
   findResultsOpen = false;
   findResultsData: AutoDetectResultsData = { results: {} };
   statsModalOpen = false;
   statsDatasetId = '';
   statsDatasetName = '';
   deletingDatasetId = '';
-  deletingModelId = '';
-  addLabelsModelId = '';
+  deletingDetectorId = '';
+  addLabelsDetectorId = '';
   trainLoading = false;
   findLoading = false;
   trainAfterModelCreation = false;
@@ -104,12 +103,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   static readonly DATASET_COLUMNS_DEFAULT = [
     'media_type', 'num_items', 'created_at', 'created_by', 'readers', 'loaded',
   ];
-  static readonly MODEL_COLUMNS_DEFAULT = [
-    'media_type', 'num_training', 'trainable', 'autodetect', 'last_trained_at',
+  static readonly DETECTOR_COLUMNS_DEFAULT = [
+    'media_type', 'num_training', 'autodetect', 'last_trained_at',
     'created_at', 'detector_loaded',
   ];
   private static readonly DATASET_COL_ORDER_KEY = 'vtsearch.dashboard.datasetColumnOrder';
-  private static readonly MODEL_COL_ORDER_KEY = 'vtsearch.dashboard.modelColumnOrder';
+  private static readonly DETECTOR_COL_ORDER_KEY = 'vtsearch.dashboard.detectorColumnOrder';
 
   // Per-column display metadata. Keyed by `data-col` value; used both by the
   // header template and by card components when rendering body cells in order.
@@ -123,16 +122,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },
     actions: { label: 'Actions', title: 'Available operations for this dataset', sortable: false },
   };
-  static readonly MODEL_COL_META: Record<string, ColMeta> = {
-    name: { label: 'Name', title: 'Model display name (click to sort)', sortable: true },
-    media_type: { label: 'Type', title: 'Media type this model operates on (click to sort)', sortable: true },
+  static readonly DETECTOR_COL_META: Record<string, ColMeta> = {
+    name: { label: 'Name', title: 'Detector display name (click to sort)', sortable: true },
+    media_type: { label: 'Type', title: 'Media type this detector operates on (click to sort)', sortable: true },
     num_training: { label: '# Training', title: 'Number of labeled training examples (click to sort)', sortable: true },
-    trainable: { label: 'Trainable?', title: 'Is this Model one we can load into Train Mode and improve?', sortable: false },
-    autodetect: { label: 'Autorun?', title: 'Include this model in CLI autorun (click to sort)', sortable: true },
-    last_trained_at: { label: 'Last Trained', title: 'When the model was last trained (click to sort)', sortable: true },
-    created_at: { label: 'Created', title: 'When the model was created (click to sort)', sortable: true },
-    detector_loaded: { label: 'Loaded?', title: "Whether the model's inference data is cached in memory", sortable: false },
-    actions: { label: 'Actions', title: 'Available operations for this model', sortable: false },
+    autodetect: { label: 'Autorun?', title: 'Include this detector in CLI autorun (click to sort)', sortable: true },
+    last_trained_at: { label: 'Last Trained', title: 'When the detector was last trained (click to sort)', sortable: true },
+    created_at: { label: 'Created', title: 'When the detector was created (click to sort)', sortable: true },
+    detector_loaded: { label: 'Loaded?', title: "Whether the detector's inference data is cached in memory", sortable: false },
+    actions: { label: 'Actions', title: 'Available operations for this detector', sortable: false },
   };
 
   datasetCols = new ManagedColumns(
@@ -140,10 +138,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     DashboardComponent.DATASET_COL_META,
     { initialSort: 'name', storageKey: DashboardComponent.DATASET_COL_ORDER_KEY },
   );
-  modelCols = new ManagedColumns(
-    DashboardComponent.MODEL_COLUMNS_DEFAULT,
-    DashboardComponent.MODEL_COL_META,
-    { initialSort: 'name', storageKey: DashboardComponent.MODEL_COL_ORDER_KEY },
+  detectorCols = new ManagedColumns(
+    DashboardComponent.DETECTOR_COLUMNS_DEFAULT,
+    DashboardComponent.DETECTOR_COL_META,
+    { initialSort: 'name', storageKey: DashboardComponent.DETECTOR_COL_ORDER_KEY },
   );
 
   get visibleDatasetColumns(): string[] {
@@ -153,37 +151,38 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.datasetCols.columnOrder;
   }
 
-  get visibleModelColumns(): string[] {
-    return this.modelCols.columnOrder;
+  get visibleDetectorColumns(): string[] {
+    return this.detectorCols.columnOrder;
   }
 
   onDatasetHeaderClick(col: string): void {
     if (this.datasetCols.meta(col).sortable) this.datasetCols.sortBy(col);
   }
 
-  onModelHeaderClick(col: string): void {
-    if (this.modelCols.meta(col).sortable) this.modelCols.sortBy(col);
+  onDetectorHeaderClick(col: string): void {
+    if (this.detectorCols.meta(col).sortable) this.detectorCols.sortBy(col);
   }
 
   private destroy$ = new Subject<void>();
   private polling$ = new Subject<void>();
-  private modelPolling$ = new Subject<void>();
+  private detectorPolling$ = new Subject<void>();
   private findPolling$ = new Subject<void>();
   private knownDatasetIds = new Set<string>();
-  private knownModelIds = new Set<string>();
+  private knownDetectorIds = new Set<string>();
   private completedTaskIds = new Set<string>();
   private completedModelTaskIds = new Set<string>();
   private datasetPollingActive = false;
-  private modelPollingActive = false;
+  private detectorPollingActive = false;
 
   currentUser = '';
   isDefaultLogin = true;
+
+  diskUsage: { total: number; used: number; free: number } | null = null;
 
   constructor(
     private router: Router,
     private datasetsApi: DatasetsApiService,
     private detectorsApi: DetectorsApiService,
-    private modelsApi: TrainableModelsApiService,
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
     private findSession: FindSessionService,
@@ -223,44 +222,84 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.knownDatasetIds = currentIds;
         this.pushTopBarLabels();
       });
-    this.datasetState.models$
+    this.datasetState.detectors$
       .pipe(takeUntil(this.destroy$))
       .subscribe((models) => {
         const currentIds = new Set(models.map((m) => m.id));
         // Prune selections that no longer exist in the registry
-        for (const id of this.selectedModelIds) {
-          if (!currentIds.has(id)) this.selectedModelIds.delete(id);
+        for (const id of this.selectedDetectorIds) {
+          if (!currentIds.has(id)) this.selectedDetectorIds.delete(id);
         }
-        const newIds = [...currentIds].filter((id) => !this.knownModelIds.has(id));
-        if (newIds.length > 0 && this.knownModelIds.size > 0) {
+        const newIds = [...currentIds].filter((id) => !this.knownDetectorIds.has(id));
+        if (newIds.length > 0 && this.knownDetectorIds.size > 0) {
           // Items were added after initial load — select only the new ones
-          this.selectedModelIds.clear();
+          this.selectedDetectorIds.clear();
           for (const id of newIds) {
-            this.selectedModelIds.add(id);
+            this.selectedDetectorIds.add(id);
           }
-        } else if (models.length === 1 && this.selectedModelIds.size === 0) {
+        } else if (models.length === 1 && this.selectedDetectorIds.size === 0) {
           // First load with exactly one item — auto-select it
-          this.selectedModelIds.add(models[0].id);
+          this.selectedDetectorIds.add(models[0].id);
         }
-        this.knownModelIds = currentIds;
+        this.knownDetectorIds = currentIds;
         this.pushTopBarLabels();
       });
     this.refresh();
     this.resumeActivePolling();
+    this.startDiskUsagePolling();
+  }
+
+  private startDiskUsagePolling(): void {
+    timer(0, 10000)
+      .pipe(
+        takeUntil(this.destroy$),
+        switchMap(() => this.datasetsApi.getDiskUsage().pipe(catchError(() => EMPTY))),
+      )
+      .subscribe((usage) => {
+        this.diskUsage = { total: usage.total, used: usage.used, free: usage.free };
+      });
+  }
+
+  get diskUsedPct(): number {
+    if (!this.diskUsage || this.diskUsage.total <= 0) return 0;
+    return (this.diskUsage.used / this.diskUsage.total) * 100;
+  }
+
+  get diskFreeText(): string {
+    if (!this.diskUsage) return '';
+    return `${this.formatBytes(this.diskUsage.free)} free of ${this.formatBytes(this.diskUsage.total)}`;
+  }
+
+  private formatBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    const units = ['KB', 'MB', 'GB', 'TB', 'PB'];
+    let v = n / 1024;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i++;
+    }
+    return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
   }
 
   /** Check for in-progress loading tasks (e.g. after a page reload) and resume polling. */
   private resumeActivePolling(): void {
-    this.datasetsApi.getLoadingTasks().subscribe((tasks) => {
-      if (tasks.some((t) => t.status !== 'idle')) {
-        this.startProgressPolling();
-      }
-    });
-    this.modelsApi.getModelLoadingTasks().subscribe((resp) => {
-      if ((resp.tasks ?? []).some((t: LoadingTask) => t.status !== 'idle')) {
-        this.startModelProgressPolling();
-      }
-    });
+    this.datasetsApi
+      .getLoadingTasks()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((tasks) => {
+        if (tasks.some((t) => t.status !== 'idle')) {
+          this.startProgressPolling();
+        }
+      });
+    this.detectorsApi
+      .getDetectorLoadingTasks()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((resp) => {
+        if ((resp.tasks ?? []).some((t: LoadingTask) => t.status !== 'idle')) {
+          this.startDetectorProgressPolling();
+        }
+      });
   }
 
   // --- Column resize / drag-reorder ---
@@ -273,13 +312,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   @HostListener('document:mousemove', ['$event'])
   onColResizeMove(event: MouseEvent): void {
     this.datasetCols.onResizeMove(event);
-    this.modelCols.onResizeMove(event);
+    this.detectorCols.onResizeMove(event);
   }
 
   @HostListener('document:mouseup')
   onColResizeEnd(): void {
     this.datasetCols.onResizeEnd();
-    this.modelCols.onResizeEnd();
+    this.detectorCols.onResizeEnd();
   }
 
   ngOnDestroy(): void {
@@ -287,8 +326,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
     this.polling$.next();
     this.polling$.complete();
-    this.modelPolling$.next();
-    this.modelPolling$.complete();
+    this.detectorPolling$.next();
+    this.detectorPolling$.complete();
     this.findPolling$.next();
     this.findPolling$.complete();
   }
@@ -297,8 +336,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.datasetState.datasets;
   }
 
-  get models(): ModelRegistryEntry[] {
-    return this.datasetState.models;
+  get detectors(): DetectorRegistryEntry[] {
+    return this.datasetState.detectors;
   }
 
   get loading(): boolean {
@@ -351,7 +390,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     else if (selDatasets.length === 1) this.topBarState.setDatasetLabel(selDatasets[0].name);
     else this.topBarState.setDatasetLabel('Multiple');
 
-    const selModels = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    const selModels = this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
     if (selModels.length === 0) this.topBarState.setModelLabel('None');
     else if (selModels.length === 1) this.topBarState.setModelLabel(selModels[0].name);
     else this.topBarState.setModelLabel('Multiple');
@@ -495,58 +534,58 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Model selection ---
 
-  toggleModelSelection(id: string, event: MouseEvent): void {
+  toggleDetectorSelection(id: string, event: MouseEvent): void {
     if (event.ctrlKey || event.metaKey) {
-      if (this.selectedModelIds.has(id)) {
-        this.selectedModelIds.delete(id);
+      if (this.selectedDetectorIds.has(id)) {
+        this.selectedDetectorIds.delete(id);
       } else {
-        this.selectedModelIds.add(id);
+        this.selectedDetectorIds.add(id);
       }
     } else {
-      if (this.selectedModelIds.has(id) && this.selectedModelIds.size === 1) {
-        this.selectedModelIds.clear();
+      if (this.selectedDetectorIds.has(id) && this.selectedDetectorIds.size === 1) {
+        this.selectedDetectorIds.clear();
       } else {
-        this.selectedModelIds.clear();
-        this.selectedModelIds.add(id);
+        this.selectedDetectorIds.clear();
+        this.selectedDetectorIds.add(id);
       }
     }
     this.pushTopBarLabels();
   }
 
-  isModelSelected(id: string): boolean {
-    return this.selectedModelIds.has(id);
+  isDetectorSelected(id: string): boolean {
+    return this.selectedDetectorIds.has(id);
   }
 
-  toggleModelCheckbox(id: string): void {
-    if (this.selectedModelIds.has(id)) {
-      this.selectedModelIds.delete(id);
+  toggleDetectorCheckbox(id: string): void {
+    if (this.selectedDetectorIds.has(id)) {
+      this.selectedDetectorIds.delete(id);
     } else {
-      this.selectedModelIds.add(id);
+      this.selectedDetectorIds.add(id);
     }
     this.pushTopBarLabels();
   }
 
-  selectAllModels(): void {
-    this.spinSelectAllModels = true;
-    for (const m of this.models) {
-      this.selectedModelIds.add(m.id);
+  selectAllDetectors(): void {
+    this.spinSelectAllDetectors = true;
+    for (const m of this.detectors) {
+      this.selectedDetectorIds.add(m.id);
     }
     this.pushTopBarLabels();
   }
 
-  selectNoneModels(): void {
-    this.spinSelectNoneModels = true;
-    this.selectedModelIds.clear();
+  selectNoneDetectors(): void {
+    this.spinSelectNoneDetectors = true;
+    this.selectedDetectorIds.clear();
     this.pushTopBarLabels();
   }
 
-  async deleteSelectedModels(): Promise<void> {
-    const ids = [...this.selectedModelIds];
+  async deleteSelectedDetectors(): Promise<void> {
+    const ids = [...this.selectedDetectorIds];
     if (ids.length === 0) return;
-    const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
+    const targets = this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
     if (targets.length === 0) return;
     const names = targets.map((m) => `"${m.name}"`).join(', ');
-    this.deletingSelectedModelsConfirm = true;
+    this.deletingSelectedDetectorsConfirm = true;
     let ok = false;
     try {
       ok = await this.dialog.confirm(
@@ -555,14 +594,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
           : `Delete ${targets.length} models: ${names}?`,
       );
     } finally {
-      this.deletingSelectedModelsConfirm = false;
-      this.wasDeletingSelectedModelsConfirm = true;
+      this.deletingSelectedDetectorsConfirm = false;
+      this.wasDeletingSelectedDetectorsConfirm = true;
     }
     if (!ok) return;
     for (const model of targets) {
-      this.modelsApi.deleteFromRegistry(model.id).subscribe({
+      this.detectorsApi.deleteFromRegistry(model.id).subscribe({
         next: () => {
-          this.selectedModelIds.delete(model.id);
+          this.selectedDetectorIds.delete(model.id);
           this.datasetState.refresh();
         },
         error: () => {
@@ -576,23 +615,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
    * True when the "Combine Selected Models" button should be enabled:
    * at least two trainable models selected AND all of them share a media type.
    */
-  get combineSelectedModelsEnabled(): boolean {
-    if (this.selectedModelIds.size < 2) return false;
-    const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
+  get combineSelectedDetectorsEnabled(): boolean {
+    if (this.selectedDetectorIds.size < 2) return false;
+    const targets = this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
     if (targets.length < 2) return false;
-    if (!targets.every((m) => m.trainable)) return false;
     const types = new Set(targets.map((m) => m.media_type));
     return types.size === 1;
   }
 
-  get combineSelectedModelsHint(): string {
-    if (this.selectedModelIds.size < 2) {
+  get combineSelectedDetectorsHint(): string {
+    if (this.selectedDetectorIds.size < 2) {
       return 'Select two or more trainable models to combine';
     }
-    const targets = this.models.filter((m) => this.selectedModelIds.has(m.id));
-    if (!targets.every((m) => m.trainable)) {
-      return 'Only trainable models can be combined';
-    }
+    const targets = this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
     const types = new Set(targets.map((m) => m.media_type));
     if (types.size !== 1) {
       return 'All selected models must be of the same media type';
@@ -600,42 +635,42 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return 'Combine selected models into a new one';
   }
 
-  get combineSelectedModelSources(): ModelRegistryEntry[] {
-    return this.models.filter((m) => this.selectedModelIds.has(m.id));
+  get combineSelectedDetectorSources(): DetectorRegistryEntry[] {
+    return this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
   }
 
-  get allModelNames(): string[] {
-    return this.models.map((m) => m.name);
+  get allDetectorNames(): string[] {
+    return this.detectors.map((m) => m.name);
   }
 
-  openCombineModelsModal(): void {
-    if (!this.combineSelectedModelsEnabled) return;
-    this.combineModelsModalOpen = true;
+  openCombineDetectorsModal(): void {
+    if (!this.combineSelectedDetectorsEnabled) return;
+    this.combineDetectorsModalOpen = true;
   }
 
-  closeCombineModelsModal(): void {
-    this.combineModelsModalOpen = false;
+  closeCombineDetectorsModal(): void {
+    this.combineDetectorsModalOpen = false;
   }
 
-  onModelsCombined(newName: string): void {
-    this.combineModelsModalOpen = false;
-    // The new model will appear via the datasets$/models$ subscription's
+  onDetectorsCombined(newName: string): void {
+    this.combineDetectorsModalOpen = false;
+    // The new model will appear via the datasets$/detectors$ subscription's
     // new-id auto-select logic; nothing more to do besides refreshing.
     this.datasetState.refresh();
     void newName;
   }
 
-  onSpinSelectAllModelsEnd(): void {
-    this.spinSelectAllModels = false;
+  onSpinSelectAllDetectorsEnd(): void {
+    this.spinSelectAllDetectors = false;
   }
 
-  onSpinSelectNoneModelsEnd(): void {
-    this.spinSelectNoneModels = false;
+  onSpinSelectNoneDetectorsEnd(): void {
+    this.spinSelectNoneDetectors = false;
   }
 
-  onDeleteSelectedModelsAnimationEnd(): void {
-    if (!this.deletingSelectedModelsConfirm) {
-      this.wasDeletingSelectedModelsConfirm = false;
+  onDeleteSelectedDetectorsAnimationEnd(): void {
+    if (!this.deletingSelectedDetectorsConfirm) {
+      this.wasDeletingSelectedDetectorsConfirm = false;
     }
   }
 
@@ -690,20 +725,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Model actions ---
 
-  renameModel(model: ModelRegistryEntry, newName: string): void {
-    this.modelsApi.renameInRegistry(model.id, newName).subscribe({
+  renameDetector(model: DetectorRegistryEntry, newName: string): void {
+    this.detectorsApi.renameInRegistry(model.id, newName).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
 
-  async deleteModel(model: ModelRegistryEntry): Promise<void> {
-    this.deletingModelId = model.id;
+  async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
+    this.deletingDetectorId = model.id;
     const ok = await this.dialog.confirm(`Delete model "${model.name}"?`);
-    this.deletingModelId = '';
+    this.deletingDetectorId = '';
     if (!ok) return;
-    this.modelsApi.deleteFromRegistry(model.id).subscribe({
+    this.detectorsApi.deleteFromRegistry(model.id).subscribe({
       next: () => {
-        this.selectedModelIds.delete(model.id);
+        this.selectedDetectorIds.delete(model.id);
         this.datasetState.refresh();
       },
       error: () => {
@@ -718,53 +753,52 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  loadModel(model: ModelRegistryEntry): void {
-    this.modelsApi.loadModel(model.id).subscribe({
-      next: () => this.startModelProgressPolling(),
+  loadDetector(model: DetectorRegistryEntry): void {
+    this.detectorsApi.loadDetector(model.id).subscribe({
+      next: () => this.startDetectorProgressPolling(),
     });
   }
 
-  unloadModel(model: ModelRegistryEntry): void {
-    this.modelsApi.unloadModel(model.id).subscribe({
+  unloadDetector(model: DetectorRegistryEntry): void {
+    this.detectorsApi.unloadDetector(model.id).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
 
-  getInlineModelTask(modelId: string): LoadingTask | undefined {
-    return this.modelLoadingTasks.find((t) => t.model_id === modelId);
+  getInlineDetectorTask(modelId: string): LoadingTask | undefined {
+    return this.detectorLoadingTasks.find((t) => t.detector_id === modelId);
   }
 
-  toggleAutorun(model: ModelRegistryEntry, autorun: boolean): void {
-    const detectorName = model.detector_name || model.name;
-    this.detectorsApi.setAutodetect(detectorName, autorun).subscribe({
+  toggleAutorun(model: DetectorRegistryEntry, autorun: boolean): void {
+    this.detectorsApi.setAutorun(model.id, autorun).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
 
   // --- Export modal ---
 
-  openExportModal(model: ModelRegistryEntry): void {
-    this.exportModelName = model.detector_name || model.name;
+  openExportModal(model: DetectorRegistryEntry): void {
+    this.exportDetectorName = model.name;
     this.exportModalOpen = true;
   }
 
   closeExportModal(): void {
     this.exportModalOpen = false;
-    this.exportModelName = '';
+    this.exportDetectorName = '';
   }
 
   // --- Add Labels modal ---
 
-  openAddLabelsModal(model: ModelRegistryEntry): void {
-    this.addLabelsModelId = model.id;
-    this.addLabelsModelName = (model['trainable_model_name'] as string) || model.name;
+  openAddLabelsModal(model: DetectorRegistryEntry): void {
+    this.addLabelsDetectorId = model.id;
+    this.addLabelsDetectorName = model.name;
     this.addLabelsModalOpen = true;
   }
 
   closeAddLabelsModal(): void {
     this.addLabelsModalOpen = false;
-    this.addLabelsModelId = '';
-    this.addLabelsModelName = '';
+    this.addLabelsDetectorId = '';
+    this.addLabelsDetectorName = '';
   }
 
   onAddLabelsImported(): void {
@@ -779,7 +813,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     for (const d of this.datasets) {
       if (d.media_type) types.add(d.media_type);
     }
-    for (const m of this.models) {
+    for (const m of this.detectors) {
       if (m.media_type) types.add(m.media_type);
     }
     for (const t of this.loadingTasks) {
@@ -821,7 +855,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.startProgressPolling();
   }
 
-  onDemoSelected(demo: { label: string; name: string; embedder?: string; clipper?: string }): void {
+  onDemoSelected(demo: { label: string; name: string; embedder?: string; clipper?: string; dataset_name?: string }): void {
     this.importerModalOpen = false;
     this.importerClosing = true;
     const params: Record<string, string> = {};
@@ -830,6 +864,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     if (demo.clipper) {
       params['clipper'] = demo.clipper;
+    }
+    const userName = (demo.dataset_name || '').trim();
+    if (userName) {
+      params['dataset_name'] = userName;
     }
     this.datasetsApi.loadDemo(demo.name, params).subscribe({
       next: () => {
@@ -856,33 +894,33 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return loadingTypes.size === 1 ? [...loadingTypes][0] : '';
   }
 
-  openNewModelModal(): void {
-    this.newModelClosing = false;
-    this.newModelModalOpen = true;
+  openNewDetectorModal(): void {
+    this.newDetectorClosing = false;
+    this.newDetectorModalOpen = true;
   }
 
-  closeNewModelModal(): void {
-    this.newModelModalOpen = false;
-    this.newModelClosing = true;
+  closeNewDetectorModal(): void {
+    this.newDetectorModalOpen = false;
+    this.newDetectorClosing = true;
     this.trainAfterModelCreation = false;
   }
 
-  onNewModelAnimationEnd(): void {
-    this.newModelClosing = false;
+  onNewDetectorAnimationEnd(): void {
+    this.newDetectorClosing = false;
   }
 
-  onModelCreated(modelId?: string): void {
-    this.newModelModalOpen = false;
-    this.newModelClosing = true;
+  onDetectorCreated(modelId?: string): void {
+    this.newDetectorModalOpen = false;
+    this.newDetectorClosing = true;
     this.datasetState.refresh();
 
     if (this.trainAfterModelCreation && modelId) {
       this.trainAfterModelCreation = false;
       // Select the newly created model and proceed to training once models list is refreshed
-      this.selectedModelIds.clear();
-      this.selectedModelIds.add(modelId);
-      this.knownModelIds.add(modelId);
-      this.datasetState.models$
+      this.selectedDetectorIds.clear();
+      this.selectedDetectorIds.add(modelId);
+      this.knownDetectorIds.add(modelId);
+      this.datasetState.detectors$
         .pipe(
           filter((models) => models.some((m) => m.id === modelId)),
           take(1),
@@ -906,12 +944,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadingTasks = this.loadingTasks.filter((t) => t.task_id !== taskId);
   }
 
-  cancelModelLoadingTask(taskId: string): void {
-    this.modelsApi.cancelModelLoadingTask(taskId).subscribe();
+  cancelDetectorLoadingTask(taskId: string): void {
+    this.detectorsApi.cancelDetectorLoadingTask(taskId).subscribe();
   }
 
-  dismissModelLoadingTask(taskId: string): void {
-    this.modelLoadingTasks = this.modelLoadingTasks.filter((t) => t.task_id !== taskId);
+  dismissDetectorLoadingTask(taskId: string): void {
+    this.detectorLoadingTasks = this.detectorLoadingTasks.filter((t) => t.task_id !== taskId);
   }
 
   // --- Progress polling ---
@@ -983,18 +1021,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
   }
 
-  startModelProgressPolling(onComplete?: () => void): void {
-    if (this.modelPollingActive) {
+  startDetectorProgressPolling(onComplete?: () => void): void {
+    if (this.detectorPollingActive) {
       return;
     }
-    this.modelPollingActive = true;
+    this.detectorPollingActive = true;
     this.completedModelTaskIds.clear();
 
     timer(0, 1000)
       .pipe(
-        takeUntil(this.modelPolling$),
+        takeUntil(this.detectorPolling$),
         takeUntil(this.destroy$),
-        switchMap(() => this.modelsApi.getModelLoadingTasks().pipe(
+        switchMap(() => this.detectorsApi.getDetectorLoadingTasks().pipe(
           catchError(() => EMPTY),
         )),
       )
@@ -1005,7 +1043,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
           const failed = errored.filter((t) => t.error !== 'Cancelled');
 
-          this.modelLoadingTasks = [...active, ...failed];
+          this.detectorLoadingTasks = [...active, ...failed];
 
           // Detect tasks that just completed successfully
           const justFinished = tasks.filter(
@@ -1023,8 +1061,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
 
           if (active.length === 0) {
-            this.modelPolling$.next();
-            this.modelPollingActive = false;
+            this.detectorPolling$.next();
+            this.detectorPollingActive = false;
             if (justFinished.length === 0) {
               this.datasetState.refresh();
             }
@@ -1049,10 +1087,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  get sortedModels(): ModelRegistryEntry[] {
-    const col = this.modelCols.sortColumn;
-    const asc = this.modelCols.sortAsc ? 1 : -1;
-    return [...this.models].sort((a, b) => {
+  get sortedDetectors(): DetectorRegistryEntry[] {
+    const col = this.detectorCols.sortColumn;
+    const asc = this.detectorCols.sortAsc ? 1 : -1;
+    return [...this.detectors].sort((a, b) => {
       const va = a[col] ?? '';
       const vb = b[col] ?? '';
       if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * asc;
@@ -1073,7 +1111,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (selectedModels.length === 0) return true; // will prompt to create a model
     if (selectedModels.length !== 1) return false;
     const model = selectedModels[0];
-    if (!model.trainable) return false;
     if (model.media_type !== selectedDatasets[0].media_type) return false;
     return true;
   }
@@ -1087,15 +1124,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private hasUntrainedModel(): boolean {
-    return this.resolvedSelectedModels.some((m) => m.trainable && (m.num_training ?? 0) === 0);
+    return this.resolvedSelectedModels.some((m) => (m.num_training ?? 0) === 0);
   }
 
   private get resolvedSelectedDatasets(): DatasetRegistryEntry[] {
     return this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
   }
 
-  private get resolvedSelectedModels(): ModelRegistryEntry[] {
-    return this.models.filter((m) => this.selectedModelIds.has(m.id));
+  private get resolvedSelectedModels(): DetectorRegistryEntry[] {
+    return this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
   }
 
   get findEnabled(): boolean {
@@ -1124,7 +1161,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (nModels === 0) return 'Create a new model and start training';
     if (nModels > 1) return 'Select exactly 1 model';
     const model = this.resolvedSelectedModels[0];
-    if (model && !model.trainable) return 'Model is not trainable';
     const dataset = this.resolvedSelectedDatasets[0];
     if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';
@@ -1133,7 +1169,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private storeSelectedModelTextQuery(): void {
-    const model = this.models.find((m) => this.selectedModelIds.has(m.id));
+    const model = this.detectors.find((m) => this.selectedDetectorIds.has(m.id));
     this.labelSession.textQuery = model?.text_query || '';
     this.labelSession.mediaExample = model?.media_example || '';
     this.labelSession.examples = (model?.['examples'] as { type: string; value: string }[]) || [];
@@ -1144,14 +1180,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const dataset = this.datasets.find((d) => this.selectedDatasetIds.has(d.id));
     if (!dataset) return;
 
-    const modelId = [...this.selectedModelIds][0] || null;
+    const modelId = [...this.selectedDetectorIds][0] || null;
     if (!modelId) {
       // No model selected — open the New Model modal; on creation we'll proceed to training
       this.trainAfterModelCreation = true;
-      this.openNewModelModal();
+      this.openNewDetectorModal();
       return;
     }
-    const model = modelId ? this.models.find((m) => m.id === modelId) : null;
+    const model = modelId ? this.detectors.find((m) => m.id === modelId) : null;
 
     this.storeSelectedModelTextQuery();
     this.trainLoading = true;
@@ -1172,8 +1208,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     // --- Model loading (parallel) ---
     if (model && !model.detector_loaded) {
-      this.modelsApi.loadModel(modelId).subscribe({
-        next: () => this.startModelProgressPolling(() => gate()),
+      this.detectorsApi.loadDetector(modelId).subscribe({
+        next: () => this.startDetectorProgressPolling(() => gate()),
         error: () => gate(),
       });
     } else {
@@ -1196,7 +1232,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const dataset = this.datasets.find((d) => this.selectedDatasetIds.has(d.id));
     if (!dataset) return;
 
-    const model = this.models.find((m) => this.selectedModelIds.has(m.id));
+    const model = this.detectors.find((m) => this.selectedDetectorIds.has(m.id));
     if (!model) return;
 
     // Store model and dataset info in the find session service
@@ -1221,8 +1257,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     // --- Model loading (parallel) ---
     if (!model.detector_loaded) {
-      this.modelsApi.loadModel(model.id).subscribe({
-        next: () => this.startModelProgressPolling(() => gate()),
+      this.detectorsApi.loadDetector(model.id).subscribe({
+        next: () => this.startDetectorProgressPolling(() => gate()),
         error: () => gate(),
       });
     } else {
@@ -1241,11 +1277,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Old Find window — runs multi-dataset multi-model find and shows results modal. */
+  /** Old Find window — runs multi-dataset multi-detector find and shows results modal. */
   onOldFind(): void {
     const datasetIds = [...this.selectedDatasetIds];
-    const modelIds = [...this.selectedModelIds];
-    const findParams = { dataset_ids: datasetIds, model_ids: modelIds };
+    const detectorIds = [...this.selectedDetectorIds];
+    const findParams = { dataset_ids: datasetIds, detector_ids: detectorIds };
 
     this.datasetState.setLoading(true);
     this.datasetState.setProgressMessage('Checking labels...');
@@ -1258,7 +1294,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         if (warnings.length > 0) {
           // Build warning message
           const lines = warnings.map(
-            (w) => `${w.failed_labels} of ${w.total_labels} labels failed to resolve for "${w.model_name}".`,
+            (w) => `${w.failed_labels} of ${w.total_labels} labels failed to resolve for "${w.detector_name}".`,
           );
           const message = lines.join('\n') + '\n\nDo you want to continue?';
           const ok = await this.dialog.confirm(message, 'warning');
@@ -1338,18 +1374,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
           origin_name: r.origin_name || '',
           origin: r.origin,
           dataset_name: r.dataset_name || '',
-          model_verdicts: r.model_verdicts || {},
+          detector_verdicts: r.detector_verdicts || {},
         });
 
         const hits = (response.results || []).map(mapHit);
         const negativeHits = (response.negative_results || []).map(mapHit);
 
-        const modelNames: string[] = response.models || [];
+        const detectorNames: string[] = response.detectors || [];
         const detectorResults: Record<string, any> = {};
 
-        if (modelNames.length <= 1) {
-          // Single model: one result group
-          const label = modelNames[0] || 'Find';
+        if (detectorNames.length <= 1) {
+          // Single detector: one result group
+          const label = detectorNames[0] || 'Find';
           detectorResults[label] = {
             detector_name: label,
             total_hits: hits.length,
@@ -1357,31 +1393,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
             negative_hits: negativeHits,
           };
         } else {
-          // Multiple models: group hits by model
-          for (const name of modelNames) {
-            const modelHits = hits.filter(
-              (h: any) => h.model_verdicts?.[name]?.verdict === 'Good',
+          // Multiple detectors: group hits by detector
+          for (const name of detectorNames) {
+            const detectorHits = hits.filter(
+              (h: any) => h.detector_verdicts?.[name]?.verdict === 'Good',
             );
-            const modelNegHits = negativeHits.filter(
-              (h: any) => h.model_verdicts?.[name]?.verdict !== 'Good',
+            const detectorNegHits = negativeHits.filter(
+              (h: any) => h.detector_verdicts?.[name]?.verdict !== 'Good',
             );
             detectorResults[name] = {
               detector_name: name,
-              total_hits: modelHits.length,
-              hits: modelHits,
-              negative_hits: modelNegHits,
+              total_hits: detectorHits.length,
+              hits: detectorHits,
+              negative_hits: detectorNegHits,
             };
           }
         }
 
         this.findResultsData = {
           media_type: response.media_type || 'unknown',
-          detectors_run: modelNames.length,
+          detectors_run: detectorNames.length,
           results: detectorResults,
-          models: modelNames,
+          detectors: detectorNames,
           datasets: response.datasets || [],
           multiple_datasets: response.multiple_datasets || false,
-          multiple_models: response.multiple_models || false,
+          multiple_detectors: response.multiple_detectors || false,
         } as AutoDetectResultsData;
 
         this.findResultsOpen = true;

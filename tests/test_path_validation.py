@@ -214,23 +214,6 @@ class TestMultiUserFileRestriction:
 
             set_login_provider(original)
 
-    def test_processor_importer_rejects_path_outside_user_dir(self, client, tmp_path):
-        """Processor importer filepath outside user data dir is rejected in multi-user mode."""
-        user_dir = tmp_path / "testuser"
-        user_dir.mkdir()
-        original = self._setup_multi_user(client, user_dir)
-        try:
-            resp = client.post(
-                "/api/processor-importers/import/server_detector_file",
-                json={"filepath": "/etc/shadow", "name": "evil"},
-            )
-            assert resp.status_code == 400
-            assert "must be within" in resp.get_json()["error"]
-        finally:
-            from vtsearch.auth import set_login_provider
-
-            set_login_provider(original)
-
     def test_load_folder_rejects_path_outside_user_dir(self, client, tmp_path):
         """Load folder path outside user data dir is rejected in multi-user mode."""
         user_dir = tmp_path / "testuser"

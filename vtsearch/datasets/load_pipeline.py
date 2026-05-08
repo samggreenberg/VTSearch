@@ -873,13 +873,33 @@ def consume_chunks_into(
             next_id += 1
 
 
-def _run_importer_in_background(importer, field_values: dict, *, chunk_size: int = 0) -> str:
+_CHUNK_SIZE_BY_MEDIA_TYPE: dict[str, int] = {
+    "text": 5000,
+    "image": 500,
+    "audio": 100,
+    "video": 25,
+    "document": 50,
+}
+
+
+def auto_chunk_size(media_type: str) -> int:
+    """Pick a chunk size for *media_type* that bounds peak memory.
+
+    Tuned roughly so a single in-flight chunk's raw bytes + embeddings stay
+    below ~1 GB on typical inputs.  Returns a positive int.  Importers that
+    do not support chunked loading silently ignore the value.
+    """
+    return _CHUNK_SIZE_BY_MEDIA_TYPE.get(_normalize_media_type(media_type), 100)
+
+
+def _run_importer_in_background(importer, field_values: dict) -> str:
     """Start *importer*.run() in a daemon thread.
 
-    When *chunk_size* is positive and the importer reports
-    ``supports_chunked``, ``run_chunked`` is used instead and the yielded
-    chunks are merged into the target medias dict.  This bounds peak
-    memory during the import/embedding phase for large datasets.
+    When the importer reports ``supports_chunked``, the loader streams
+    medias in via ``run_chunked`` to bound peak memory during the
+    import/embedding phase.  The chunk size is auto-selected from the
+    field's ``media_type`` (see :func:`auto_chunk_size`); there is no
+    user-facing knob.
 
     Returns the task_id for progress tracking.
     """
@@ -904,7 +924,8 @@ def _run_importer_in_background(importer, field_values: dict, *, chunk_size: int
     # to the frontend (used for guessing the type in subsequent add dialogs).
     media_type_hint = _normalize_media_type(field_values.get("media_type", ""))
 
-    use_chunked = chunk_size > 0 and getattr(importer, "supports_chunked", False)
+    use_chunked = getattr(importer, "supports_chunked", False)
+    chunk_size = auto_chunk_size(media_type_hint) if use_chunked else 0
 
     def _load(target_medias):
         if use_chunked:

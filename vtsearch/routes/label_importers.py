@@ -156,11 +156,12 @@ def run_label_import(importer_name: str):
         ingested = ingest_missing_medias(missing, medias)
 
         if ingested > 0:
-            # Re-apply labels now that new medias are available
+            # Re-apply labels now that new medias are available.  These entries
+            # were already removed from `skipped` above when we subtracted
+            # `len(missing)`, so we only need to bump `applied` here.
             origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
             resolved_applied, _ = _apply_labels(missing, origin_lookup, md5_lookup, name_lookup)
             applied += resolved_applied
-            skipped -= resolved_applied
 
         # Check which entries still couldn't be resolved
         if ingested < len(missing):
@@ -170,9 +171,9 @@ def run_label_import(importer_name: str):
     # Sync updated votes into the loaded model so the dashboard reflects
     # the new label count (num_training) immediately.
     if applied > 0:
-        from vtsearch.models.label_sync import sync_labels_to_loaded_model
+        from vtsearch.models.label_sync import sync_labels_to_loaded_detector
 
-        sync_labels_to_loaded_model()
+        sync_labels_to_loaded_detector()
 
         from vtsearch.labels.sync import sync_to_labelset_source
 
@@ -234,9 +235,9 @@ def ingest_missing():
     # Sync updated votes into the loaded model so the dashboard reflects
     # the new label count immediately.
     if applied > 0:
-        from vtsearch.models.label_sync import sync_labels_to_loaded_model
+        from vtsearch.models.label_sync import sync_labels_to_loaded_detector
 
-        sync_labels_to_loaded_model()
+        sync_labels_to_loaded_detector()
 
         from vtsearch.labels.sync import sync_to_labelset_source
 

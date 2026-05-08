@@ -36,9 +36,9 @@ _state_lock = threading.RLock()
 # Request-scoped context helpers
 # ---------------------------------------------------------------------------
 # When running inside a Flask request that carries ``X-Dataset-Id`` or
-# ``X-Model-Id`` headers, the proxy objects should resolve to the context
+# ``X-Detector-Id`` headers, the proxy objects should resolve to the context
 # specified by the request rather than the global "active" pointer.  This
-# allows the frontend to declare which dataset/model it is operating on
+# allows the frontend to declare which dataset/detector it is operating on
 # per-request, eliminating the need for a persistent "active" flag.
 #
 # Outside a Flask request (background threads, CLI, tests) the proxies
@@ -124,8 +124,22 @@ class DetectorContext:
         "inclusion",
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
+        "label_embeddings",  # str → np.ndarray, keyed by stable_element_id
         "model",  # nn.Sequential | None — current trained MLP
         "threshold",  # decision threshold
+        # Cross-dataset training-corpus counts (from on-disk labelset).  These
+        # are independent of ``good_votes``/``bad_votes``, which only count
+        # labels for media in the *currently loaded* dataset.  They drive the
+        # frontend's "Sort by Learned" gating so a detector trained on dataset
+        # A stays trainable when the user switches to dataset B.
+        "labelset_good_count",
+        "labelset_bad_count",
+        # Dataset ID for which the cid-keyed vote state above is valid.
+        # Media IDs are only meaningful within a single dataset, so when the
+        # active dataset changes for a loaded detector we must clear the cid
+        # dicts and re-derive them from the on-disk labelset against the new
+        # dataset's medias.  See ``ensure_votes_match_active_dataset``.
+        "votes_dataset_id",
         # Sync source
         "labelset_source",  # dict | None — {"source_name": "...", "field_values": {...}}
     )
@@ -148,8 +162,17 @@ class DetectorContext:
         self.inclusion: int | None = None
         # Cached in-memory data (never exported)
         self.training_medias: dict[int, dict[str, Any]] = {}
+        # Embeddings for every saved labelset element, keyed by
+        # stable_element_id.  Populated at detector load (resolve_file +
+        # embed_file) and topped up when new votes come in.  Lets MLP
+        # training and learned-sort use *all* saved labels — including
+        # those whose underlying media isn't part of the active dataset.
+        self.label_embeddings: dict[str, Any] = {}
         self.model: Any = None  # nn.Sequential | None
         self.threshold: float = 0.5
+        self.labelset_good_count: int = 0
+        self.labelset_bad_count: int = 0
+        self.votes_dataset_id: str = ""
         # Sync source
         self.labelset_source: dict[str, Any] | None = None
 
@@ -262,7 +285,7 @@ def get_active_detector_context() -> DetectorContext:
     """Return the ``DetectorContext`` for the current execution context.
 
     Resolution order:
-    1. Request-scoped context (set by ``before_request`` from ``X-Model-Id`` header)
+    1. Request-scoped context (set by ``before_request`` from ``X-Detector-Id`` header)
     2. Thread-local context (set by ``set_thread_detector_context``)
     3. Empty fallback context
     """
@@ -674,7 +697,6 @@ class with_detector_context:
         set_thread_detector_context(self._previous_ctx)
 
 
-# Autorun detectors/extractors/localizers are GLOBAL (not per-dataset).
-autorun_detectors: dict[str, dict[str, Any]] = {}
+# Autorun extractors/localizers are GLOBAL (not per-dataset).
 autorun_extractors: dict[str, dict[str, Any]] = {}
 autorun_localizers: dict[str, dict[str, Any]] = {}

@@ -288,6 +288,7 @@ def load_dataset_from_pickle_chunked(
                 media_data: dict[str, Any] = {
                     "id": new_id,
                     "type": media_type,
+                    "embedder": media_info.get("embedder", ""),
                     "duration": media_info.get("duration", 0),
                     "file_size": media_info.get("file_size", 0),
                     "md5": media_info.get("md5", ""),
@@ -343,6 +344,7 @@ def load_dataset_from_pickle_chunked(
                 media_data = {
                     "id": new_id,
                     "type": media_type,
+                    "embedder": media_info.get("embedder", ""),
                     "duration": media_info.get("duration", 0),
                     "file_size": media_info.get("file_size", len(media_bytes)),
                     "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),

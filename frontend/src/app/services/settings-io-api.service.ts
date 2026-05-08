@@ -41,12 +41,12 @@ export class SettingsIoApiService {
         }
       }
       return this.http.post<SettingsImportResponse>(
-        `/api/settings-importers/import/${importerName}`,
+        `/api/settings-importers/import/${encodeURIComponent(importerName)}`,
         formData,
       );
     }
     return this.http.post<SettingsImportResponse>(
-      `/api/settings-importers/import/${importerName}`,
+      `/api/settings-importers/import/${encodeURIComponent(importerName)}`,
       params,
     );
   }

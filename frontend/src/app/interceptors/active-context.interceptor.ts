@@ -3,7 +3,7 @@ import { inject } from '@angular/core';
 import { ActiveContextService } from '../services/active-context.service';
 
 /**
- * Attaches `X-Dataset-Id` and `X-Model-Id` headers to every outgoing
+ * Attaches `X-Dataset-Id` and `X-Detector-Id` headers to every outgoing
  * HTTP request so the backend resolves the correct dataset/model
  * context per-request.
  *
@@ -24,7 +24,7 @@ export const activeContextInterceptor: HttpInterceptorFn = (req, next) => {
     headers = headers.set('X-Dataset-Id', datasetId);
   }
   if (modelId) {
-    headers = headers.set('X-Model-Id', modelId);
+    headers = headers.set('X-Detector-Id', modelId);
   }
 
   return next(req.clone({ headers }));

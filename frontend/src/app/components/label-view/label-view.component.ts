@@ -15,6 +15,8 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { ActiveContextService } from '../../services/active-context.service';
+import { DetectorRegistryEntry } from '../../models/api.models';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import { LabelingStatusResponse } from '../../models/api.models';
@@ -32,6 +34,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
   datasetName = '';
+  /** Name of the trainable model owning the labels shown on the right pane.
+   *  Empty when no trainable model is active — the right pane then falls
+   *  back to cid-based vote display. */
+  trainableModelName: string | null = null;
   labelingStatus: LabelingStatusResponse | null = null;
   viewModeLeft: 'grid' | 'list' = 'list';
   gridGoalWidthLeft: number = 80;
@@ -93,6 +99,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     public sortState: SortStateService,
     private settingsState: SettingsStateService,
     private autopilotStateService: AutopilotStateService,
+    private activeContext: ActiveContextService,
   ) {}
 
   ngOnInit(): void {
@@ -107,6 +114,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
+
+    this.activeContext.modelId$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((modelId) => this.refreshTrainableModelName(modelId));
+    this.refreshTrainableModelName(this.activeContext.modelId);
 
     this.mediaState.medias$
       .pipe(takeUntil(this.destroy$))
@@ -366,7 +378,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onLearnedSort(autoSelect = true): void {
-    if (this.voteState.goodVotes.size === 0 || this.voteState.badVotes.size === 0) return;
+    if (!this.voteState.learnedSortAvailable) return;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Training...');
     this.sortingApi.learnedSort().pipe(takeUntil(this.destroy$)).subscribe({
@@ -417,24 +429,28 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  onDetectorLoaded(data: unknown): void {
-    const detector = data as Record<string, unknown>;
-    const name = (detector['name'] as string) || 'Detector';
+  onModelSelected(modelId: string): void {
+    if (!modelId) return;
     this.sortState.setSortMode('load');
     this.sortState.setSortBusy(true);
-    this.sortState.setSortStatus('Scoring with detector…');
+    this.sortState.setSortStatus('Scoring with model…');
     this.sortState.setSortProgress(0, 0);
 
     this.startScoringProgressPoll();
 
-    this.detectorsApi.detectorSort({ detector }).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (response) => {
+    this.detectorsApi.findLabel({ detector_id: modelId }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (raw) => {
+        const response = raw as {
+          results: { id: number; score: number }[];
+          threshold: number;
+          detector_name?: string;
+        };
         this.stopScoringProgressPoll();
         this.sortState.setSortResults(
           response.results.map((r) => ({ id: r.id, score: r.score })),
           response.threshold,
         );
-        this.sortState.setLoadSortLabel(name);
+        this.sortState.setLoadSortLabel(response.detector_name || 'Detector');
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
         this.sortState.setSortProgress(0, 0);
@@ -443,7 +459,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       error: () => {
         this.stopScoringProgressPoll();
         this.sortState.setSortBusy(false);
-        this.sortState.setSortStatus('Detector sort failed');
+        this.sortState.setSortStatus('Model sort failed');
         this.sortState.setSortProgress(0, 0);
       },
     });
@@ -482,6 +498,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           if (response.id !== null) {
             this.mediaState.selectMedia(response.id);
           }
+          if (typeof response.diversity_level === 'number') {
+            this.autopilotStateService.updateDiversityLevel(response.diversity_level);
+          }
         },
       });
   }
@@ -492,7 +511,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setInclusion(value);
     this.sortingApi.setInclusion(value).pipe(takeUntil(this.destroy$)).subscribe();
     this.autoSelectNext();
-    if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
+    if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
       this.scheduleLearnedSort(false);
     }
   }
@@ -512,6 +531,22 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mediaState.selectMedia(id);
   }
 
+  private refreshTrainableModelName(modelId: string): void {
+    if (!modelId) {
+      this.trainableModelName = null;
+      return;
+    }
+    this.detectorsApi.getRegistry().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (resp) => {
+        const entry = resp.detectors.find((m: DetectorRegistryEntry) => m.id === modelId);
+        this.trainableModelName = entry?.name || null;
+      },
+      error: () => {
+        this.trainableModelName = null;
+      },
+    });
+  }
+
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
     this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
@@ -524,7 +559,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.applyOptimisticVote(event.id, event.vote);
     this.voteState.loadVotes();
     this.autoSelectNext(event.id);
-    if (this.sortState.sortMode === 'learned' && this.voteState.goodVotes.size > 0 && this.voteState.badVotes.size > 0) {
+    if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
       this.scheduleLearnedSort(false);
     }
     this.checkResortPrompt();

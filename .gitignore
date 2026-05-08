@@ -33,3 +33,6 @@ frontend/.angular/
 
 /venv/
 *symbolic_link
+
+# Build-baked version stamp (Docker build arg writes this; never commit it).
+vtsearch/_version.txt

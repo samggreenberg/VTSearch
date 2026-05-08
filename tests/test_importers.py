@@ -330,6 +330,167 @@ class TestFolderImporterMetadata:
 
 
 # ---------------------------------------------------------------------------
+# DatasetImporter base class — user-typed dataset name
+# ---------------------------------------------------------------------------
+
+
+class TestImporterDatasetName:
+    """The base DatasetImporter exposes a user-typeable ``dataset_name``
+    field that overrides the per-importer default name."""
+
+    def _make_importer(self):
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        class Imp(DatasetImporter):
+            name = "named"
+            display_name = "Named"
+            description = "Has a default name."
+            fields = []
+
+            def default_display_name(self, field_values):
+                return field_values.get("flavour") or self.display_name
+
+            def run(self, field_values, medias):
+                pass
+
+        return Imp()
+
+    def test_to_dict_prepends_dataset_name_field(self):
+        from vtsearch.datasets.importers.base import (
+            DATASET_NAME_FIELD_KEY,
+            DatasetImporter,
+            ImporterField,
+        )
+
+        class Imp(DatasetImporter):
+            name = "imp"
+            display_name = "Imp"
+            description = "."
+            fields = [ImporterField("path", "Path", "text")]
+
+            def run(self, field_values, medias):
+                pass
+
+        d = Imp().to_dict()
+        assert d["fields"][0]["key"] == DATASET_NAME_FIELD_KEY
+        assert d["fields"][0]["required"] is False
+        assert d["fields"][0]["field_type"] == "text"
+        assert d["fields"][1]["key"] == "path"
+
+    def test_class_fields_attribute_unchanged_by_to_dict(self):
+        """to_dict() prepends dataset_name only on the serialised payload —
+        the class-level ``fields`` attribute remains as the developer wrote it."""
+        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+
+        class Imp(DatasetImporter):
+            name = "imp2"
+            display_name = "Imp"
+            description = "."
+            fields = [ImporterField("path", "Path", "text")]
+
+            def run(self, field_values, medias):
+                pass
+
+        imp = Imp()
+        # to_dict shouldn't mutate the class attribute.
+        imp.to_dict()
+        keys = [f.key for f in Imp.fields]
+        assert keys == ["path"]
+        assert "dataset_name" not in keys
+
+    def test_resolve_display_name_prefers_user_value(self):
+        imp = self._make_importer()
+        assert (
+            imp.resolve_display_name({"dataset_name": "My Pictures", "flavour": "blue"})
+            == "My Pictures"
+        )
+
+    def test_resolve_display_name_falls_back_to_default(self):
+        imp = self._make_importer()
+        assert imp.resolve_display_name({"flavour": "blue"}) == "blue"
+
+    def test_resolve_display_name_strips_whitespace(self):
+        imp = self._make_importer()
+        # An all-whitespace name is treated as empty — the default wins.
+        assert imp.resolve_display_name({"dataset_name": "   "}) == imp.display_name
+
+    def test_resolve_display_name_empty_field_values(self):
+        imp = self._make_importer()
+        # Defensive: still returns *something* for empty input.
+        assert imp.resolve_display_name({}) == imp.display_name
+        assert imp.resolve_display_name(None) == imp.display_name
+
+
+class TestImporterDefaultDisplayName:
+    """Each importer derives a sensible default name from its field values."""
+
+    def test_demo_uses_entry_label(self):
+        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtsearch.datasets.importers.demo import IMPORTER
+
+        first_name = next(iter(DEMO_DATASETS.keys()))
+        first_label = DEMO_DATASETS[first_name].get("label", first_name)
+        assert IMPORTER.default_display_name({"name": first_name}) == first_label
+
+    def test_demo_user_typed_name_wins(self):
+        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtsearch.datasets.importers.demo import IMPORTER
+
+        first_name = next(iter(DEMO_DATASETS.keys()))
+        assert (
+            IMPORTER.resolve_display_name({"name": first_name, "dataset_name": "Override"})
+            == "Override"
+        )
+
+    def test_synthetic_default_name_matches_size_and_type(self):
+        from vtsearch.datasets.importers.synthetic import IMPORTER
+
+        out = IMPORTER.default_display_name({"media_type": "audio", "size": "12"})
+        assert "audio" in out
+        assert "12" in out
+
+    def test_server_folder_uses_leaf_path(self):
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        assert IMPORTER.default_display_name({"path": "/data/sounds/sirens"}) == "sirens"
+        assert IMPORTER.default_display_name({}) == IMPORTER.display_name
+
+    def test_http_archive_strips_archive_extension(self):
+        from vtsearch.datasets.importers.http_archive import IMPORTER
+
+        assert (
+            IMPORTER.default_display_name({"url": "https://example.org/data/genres.tar.gz"})
+            == "genres"
+        )
+        assert (
+            IMPORTER.default_display_name({"url": "https://example.org/data/photos.zip"})
+            == "photos"
+        )
+        # No URL → falls back to display_name
+        assert IMPORTER.default_display_name({}) == IMPORTER.display_name
+
+    def test_pickle_default_name_strips_extension(self):
+        from vtsearch.datasets.importers.pickle import IMPORTER
+
+        assert IMPORTER.default_display_name({"file": "/tmp/genres.pkl"}) == "genres"
+
+    def test_server_files_default_name_uses_paths_file_stem(self):
+        from vtsearch.datasets.importers.server_files import IMPORTER
+
+        assert IMPORTER.default_display_name({"paths_file": "/tmp/audio_list.txt"}) == "audio_list"
+
+    def test_origin_does_not_include_dataset_name(self):
+        """The user-typed display name is UI metadata, not provenance —
+        it must NOT leak into origin params (which feed Detector reload)."""
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        origin = IMPORTER.build_origin(
+            {"path": "/data/x", "media_type": "audio", "dataset_name": "My Set"}
+        )
+        assert "dataset_name" not in origin["params"]
+
+
+# ---------------------------------------------------------------------------
 # Folder importer not in builtin names
 # ---------------------------------------------------------------------------
 
@@ -449,6 +610,198 @@ class TestExtractArchive:
         extract_dir.mkdir()
         _extract_archive(zip_path, extract_dir)
         assert len(list(extract_dir.glob("*.wav"))) == 3
+
+
+# ---------------------------------------------------------------------------
+# DatasetImporter bulk-record hooks (list_records / fetch_record /
+# fetch_records_bulk).
+# ---------------------------------------------------------------------------
+
+
+class TestImporterBulkHooks:
+    """Verify the per-record / bulk-record split mirrors the embedder pattern."""
+
+    def _make_importer(self, *, fetch_one=None, fetch_bulk=None, records=None):
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        class _BulkTestImporter(DatasetImporter):
+            name = "bulk_test"
+            display_name = "Bulk Test"
+            description = "Test importer for bulk hooks."
+            fields = []
+
+            def list_records(self, field_values):
+                return list(records or [])
+
+            if fetch_one is not None:
+
+                def fetch_record(self, record, field_values, thin=False):
+                    return fetch_one(record, field_values, thin)
+
+            if fetch_bulk is not None:
+
+                def _fetch_records_bulk_impl(self, recs, field_values, thin=False):
+                    return fetch_bulk(recs, field_values, thin)
+
+        return _BulkTestImporter()
+
+    def test_default_run_uses_list_and_fetch_record(self):
+        records = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
+
+        def fetch_one(record, _fv, _thin):
+            return {"type": "audio", "filename": record["name"], "embedding": None}
+
+        imp = self._make_importer(records=records, fetch_one=fetch_one)
+        medias: dict = {}
+        imp.run({}, medias)
+
+        assert list(medias.keys()) == [1, 2, 3]
+        assert [medias[i]["filename"] for i in (1, 2, 3)] == ["a", "b", "c"]
+        # ID is assigned by the framework even though fetch_record didn't set one.
+        assert medias[1]["id"] == 1
+
+    def test_default_run_fills_origin_from_build_origin(self):
+        records = [{"name": "x"}]
+
+        def fetch_one(record, _fv, _thin):
+            # fetch_record may omit origin / origin_name — run() fills them in.
+            return {"type": "audio", "filename": record["name"], "embedding": None}
+
+        imp = self._make_importer(records=records, fetch_one=fetch_one)
+        medias: dict = {}
+        imp.run({"foo": "bar"}, medias)
+
+        assert medias[1]["origin"] == imp.build_origin({"foo": "bar"})
+        assert medias[1]["origin_name"] == "x"
+
+    def test_default_run_skips_none_records(self):
+        records = ["a", "skip", "b"]
+
+        def fetch_one(record, _fv, _thin):
+            if record == "skip":
+                return None
+            return {"type": "audio", "filename": record, "embedding": None}
+
+        imp = self._make_importer(records=records, fetch_one=fetch_one)
+        medias: dict = {}
+        imp.run({}, medias)
+
+        assert list(medias.keys()) == [1, 2]
+        assert [medias[i]["filename"] for i in (1, 2)] == ["a", "b"]
+
+    def test_default_bulk_impl_loops_fetch_record(self):
+        # If a subclass implements fetch_record but NOT _fetch_records_bulk_impl,
+        # the default bulk impl loops fetch_record once per record.
+        seen: list = []
+
+        def fetch_one(record, _fv, _thin):
+            seen.append(record)
+            return {"type": "audio", "filename": record, "embedding": None}
+
+        imp = self._make_importer(records=["x", "y"], fetch_one=fetch_one)
+        out = imp.fetch_records_bulk(["x", "y"], {})
+
+        assert seen == ["x", "y"]
+        assert [m["filename"] for m in out] == ["x", "y"]
+
+    def test_bulk_override_used_when_implemented(self):
+        # When a subclass overrides _fetch_records_bulk_impl, fetch_record must
+        # NOT be called — the bulk path takes over completely.
+        per_item_calls: list = []
+
+        def fetch_one(record, _fv, _thin):
+            per_item_calls.append(record)
+            return {"type": "audio", "filename": record, "embedding": None}
+
+        def fetch_bulk(records, _fv, _thin):
+            # Pretend we did one batched call.
+            return [
+                {"type": "audio", "filename": f"bulk:{r}", "embedding": None}
+                for r in records
+            ]
+
+        imp = self._make_importer(
+            records=["a", "b"], fetch_one=fetch_one, fetch_bulk=fetch_bulk
+        )
+        medias: dict = {}
+        imp.run({}, medias)
+
+        assert per_item_calls == []  # bulk override replaced the per-item loop
+        assert [medias[i]["filename"] for i in (1, 2)] == ["bulk:a", "bulk:b"]
+
+    def test_fetch_records_bulk_empty_returns_empty(self):
+        imp = self._make_importer(records=[], fetch_one=lambda *a: None)
+        assert imp.fetch_records_bulk([], {}) == []
+
+    def test_run_raises_when_neither_run_nor_hooks_implemented(self):
+        from vtsearch.datasets.importers.base import DatasetImporter
+
+        class _BareImporter(DatasetImporter):
+            name = "bare"
+            display_name = "Bare"
+            description = ""
+            fields = []
+
+        imp = _BareImporter()
+        with pytest.raises(NotImplementedError, match="list_records"):
+            imp.run({}, {})
+
+
+class TestReCallerBulkOverride:
+    """ReCaller is the worked example — verify its hooks return the same
+    media dicts whether the per-item or bulk path is used."""
+
+    def _stub_apis(self, monkeypatch):
+        import numpy as np
+
+        from vtsearch.datasets.importers import recaller as rc
+
+        results = [
+            {"contentID": f"C{i}", "mediaID": f"M{i}", "media_url": f"http://pw/{i}",
+             "media_type": "audio", "md5": f"md5_{i}"}
+            for i in range(3)
+        ]
+        monkeypatch.setattr(rc, "_rc_fetch_results", lambda _q: list(results))
+
+        rng = np.random.default_rng(42)
+        embeddings = {f"M{i}": rng.standard_normal(8).astype(np.float32) for i in range(3)}
+        monkeypatch.setattr(
+            rc,
+            "_dw_get_embedding",
+            lambda mid: {"embedding": embeddings[mid], "embedder": "fake-embedder"},
+        )
+        monkeypatch.setattr(rc, "_pw_fetch_media", lambda url: f"bytes-for-{url}".encode())
+        return results
+
+    def test_per_item_and_bulk_paths_agree(self, monkeypatch):
+        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+
+        records = self._stub_apis(monkeypatch)
+        field_values = {"query_id": "Q1", "media_type": "audio"}
+
+        imp = ReCallerDatasetImporter()
+        per_item = [imp.fetch_record(r, field_values, thin=True) for r in records]
+        bulk = imp._fetch_records_bulk_impl(records, field_values, thin=True)
+
+        assert len(per_item) == len(bulk) == 3
+        for a, b in zip(per_item, bulk):
+            assert a["filename"] == b["filename"]
+            assert a["origin"] == b["origin"]
+            assert a["custom_metadata"] == b["custom_metadata"]
+            assert (a["embedding"] == b["embedding"]).all()
+
+    def test_run_uses_bulk_override(self, monkeypatch):
+        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+
+        self._stub_apis(monkeypatch)
+        imp = ReCallerDatasetImporter()
+        medias: dict = {}
+        imp.run({"query_id": "Q1", "media_type": "audio"}, medias, thin=True)
+
+        assert list(medias.keys()) == [1, 2, 3]
+        for i in (1, 2, 3):
+            assert medias[i]["origin"]["params"]["contentID"] == f"C{i - 1}"
+            assert medias[i]["origin"]["params"]["mediaID"] == f"M{i - 1}"
 
 
 # ---------------------------------------------------------------------------

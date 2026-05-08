@@ -22,10 +22,10 @@ describe('SettingsApiService', () => {
   });
 
   it('getSettings should GET', () => {
-    service.getSettings().subscribe(data => expect(data.volume).toBe(0.8));
+    service.getSettings().subscribe((data) => expect(data.volume).toBe(0.8));
     const req = httpMock.expectOne('/api/settings');
     expect(req.request.method).toBe('GET');
-    req.flush({ volume: 0.8, autorun_processors: [] });
+    req.flush({ volume: 0.8 });
   });
 
   it('updateSettings should PUT', () => {
@@ -37,23 +37,9 @@ describe('SettingsApiService', () => {
   });
 
   it('getDefaults should GET', () => {
-    service.getDefaults().subscribe(data => expect(data.volume).toBeDefined());
+    service.getDefaults().subscribe((data) => expect(data.volume).toBeDefined());
     const req = httpMock.expectOne('/api/settings/defaults');
     expect(req.request.method).toBe('GET');
     req.flush({ volume: 1.0 });
-  });
-
-  it('getAutorunProcessors should GET', () => {
-    service.getAutorunProcessors().subscribe(data => expect(data.autorun_processors).toBeDefined());
-    const req = httpMock.expectOne('/api/settings/autorun-processors');
-    expect(req.request.method).toBe('GET');
-    req.flush({ autorun_processors: [] });
-  });
-
-  it('deleteAutorunProcessor should DELETE', () => {
-    service.deleteAutorunProcessor('proc1').subscribe();
-    const req = httpMock.expectOne('/api/settings/autorun-processors/proc1');
-    expect(req.request.method).toBe('DELETE');
-    req.flush({});
   });
 });

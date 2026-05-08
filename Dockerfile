@@ -35,6 +35,13 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # ---------- application layer ----------
 COPY . .
 
+# Bake the version into the image. The host computes it from git
+# (e.g. `TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ`)
+# and passes it as a build arg, since .git is excluded from the build context.
+# Without this, vtsearch.__version__ falls back to "0.0.0-unknown".
+ARG VTSEARCH_VERSION=
+RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
+
 # Runtime data directory (models, embeddings, settings, media files).
 # Mount a volume here to persist data across container restarts.
 VOLUME /app/data

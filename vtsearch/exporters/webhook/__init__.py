@@ -53,7 +53,7 @@ class WebhookLabelsetExporter(LabelsetExporter):
         if auth_header:
             headers["Authorization"] = auth_header
 
-        resp = requests.post(url, json=results, headers=headers, timeout=30)
+        resp = requests.post(url, json=results, headers=headers, timeout=30, allow_redirects=False)
         resp.raise_for_status()
 
         if "labels" in results:

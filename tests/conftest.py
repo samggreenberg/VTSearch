@@ -72,20 +72,17 @@ _TEST_GROUPS = {
         "test_label_import_endpoint",
         "test_label_import_ingestion",
         "test_labels",
-        "test_processor_importers",
         "test_pdf_import",
         "test_corrections_export",
         "test_settings_io",
         "test_sync_sources",
         "test_bulk_embedding",
     ],
-    "models": [
-        "test_detectors",
-        "test_detector_find",
-        "test_detector_export",
+    "detectors": [
+        "test_find_label",
         "test_extractors",
         "test_processors",
-        "test_trainable_models",
+        "test_detectors",
         "test_multi_detector",
         "test_clippers",
         "test_clipper_workflow",
@@ -94,6 +91,7 @@ _TEST_GROUPS = {
         "test_eval_voting_iterations",
         "test_resolver",
         "test_new_embedders",
+        "test_labelset_elements_api",
     ],
     "downloads": [
         "test_ag_news_download",
@@ -106,13 +104,11 @@ _TEST_GROUPS = {
         "test_video_datasets_download",
     ],
     "integration": [
-        "test_integration",
-        "test_slow_integration",
         "test_thread_safety",
         "test_multi_media_coverage",
     ],
     "cli": [
-        "test_cli_autodetect",
+        "test_cli_detectors",
         "test_load_sort_window",
         "test_preload_progress",
         "test_tqdm_progress",
@@ -318,12 +314,12 @@ from vtsearch.utils.progress import (
     eval_progress as _eval_progress,
     find_progress as _find_progress,
     loading_tasks as _loading_tasks,
-    model_loading_tasks as _model_loading_tasks,
+    detector_loading_tasks as _model_loading_tasks,
     sort_progress as _sort_progress,
 )
 from vtsearch.auth import DefaultLoginProvider as _DefaultLoginProvider, set_login_provider as _set_login_provider
 from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg
-from vtsearch.models.registry import reset_for_tests as _reset_model_reg
+from vtsearch.models.detector_registry import reset_for_tests as _reset_model_reg
 
 
 @pytest.fixture(autouse=True)
@@ -341,7 +337,6 @@ def reset_state():
 
     medias.update({k: dict(v) for k, v in _test_medias_snapshot.items()})
 
-    _core.autorun_detectors.clear()
     _core.autorun_extractors.clear()
     _core.autorun_localizers.clear()
     clear_progress_cache()
@@ -373,25 +368,24 @@ def isolated_settings(tmp_path, monkeypatch):
     monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
     settings_mod.reset()
 
-    # Also redirect dataset and model registries to temp paths
+    # Also redirect dataset and detector registries to temp paths
     from vtsearch.datasets import registry as ds_reg_mod
-    from vtsearch.models import registry as model_reg_mod
+    from vtsearch.models import detector_registry as det_reg_mod
 
     monkeypatch.setattr(ds_reg_mod, "REGISTRY_PATH", tmp_path / "dataset_registry.json")
-    monkeypatch.setattr(model_reg_mod, "REGISTRY_PATH", tmp_path / "model_registry.json")
+    monkeypatch.setattr(det_reg_mod, "REGISTRY_PATH", tmp_path / "detector_registry.json")
 
     # Redirect storage directories to temp paths via settings
     settings_mod.set_saved_datasets_dir(str(tmp_path / "saved_datasets"))
     settings_mod.set_detectors_dir(str(tmp_path / "detectors"))
-    settings_mod.set_trainable_models_dir(str(tmp_path / "trainable_models"))
 
     ds_reg_mod.reset_for_tests()
-    model_reg_mod.reset_for_tests()
+    det_reg_mod.reset_for_tests()
 
     yield test_settings_path
     settings_mod.reset()
     ds_reg_mod.reset_for_tests()
-    model_reg_mod.reset_for_tests()
+    det_reg_mod.reset_for_tests()
 
 
 @pytest.fixture

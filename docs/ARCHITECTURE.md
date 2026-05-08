@@ -27,7 +27,7 @@ documents.  It combines:
 
 - **Semantic sorting** — LAION-CLAP (audio), SigLIP (images), X-CLIP
   (video), E5-base-v2 (text) for embedding-based similarity search,
-  with alternative embedders available (CLAP Music, OpenAI CLIP, BGE).
+  with alternative embedders available (CLAP Music, BGE).
 - **Learned sorting** — a small MLP trained on user votes to predict
   good/bad labels.
 - **Flask web UI** — Angular SPA frontend with a REST API.
@@ -55,23 +55,23 @@ VTSearch/
 │   │   ├── base.py                 MediaType, MediaEmbedder, MediaClipper, Processor, Detector, Localizer, Extractor ABCs
 │   │   ├── __init__.py             Three registries: register/register_embedder/register_clipper
 │   │   ├── audio/media_type.py     Audio media type (WAV serving, folder import)
-│   │   ├── audio/embedder.py       AudioClapEmbedder (LAION CLAP, 512-d)
+│   │   ├── audio/embedder_clap.py  AudioClapEmbedder (LAION CLAP, 512-d, default)
 │   │   ├── audio/embedder_clap_music.py  AudioClapMusicEmbedder (CLAP Music, 512-d)
 │   │   ├── audio/clipper.py        SoundDefaultClipper, SoundTilingClipper
 │   │   ├── audio/speech_extractor.py  SpeechExtractor processor
 │   │   ├── image/media_type.py     Image media type (JPEG/PNG serving)
-│   │   ├── image/embedder.py       ImageClipEmbedder (OpenAI CLIP, 768-d)
 │   │   ├── image/embedder_siglip.py  ImageSiglipEmbedder (SigLIP, 768-d, default)
 │   │   ├── image/clipper.py        ImageDefaultClipper, ImageTilingClipper
 │   │   ├── image/extractor.py      ImageClassExtractor (YOLO-based)
 │   │   ├── image/face_localizer.py FaceLocalizer (MediaPipe-based)
 │   │   ├── image/ocr_extractor.py  OCRExtractor
 │   │   ├── text/media_type.py      Text media type (JSON serving, type_id="text")
-│   │   ├── text/embedder.py        TextE5Embedder (E5-base-v2, 768-d)
 │   │   ├── text/embedder_bge.py    TextBGEEmbedder (BGE-base-en-v1.5, 768-d)
+│   │   ├── text/embedder_e5.py     TextE5Embedder (E5-base-v2, 768-d, default)
 │   │   ├── text/clipper.py         TextDefaultClipper, TextSentenceClipper
 │   │   ├── video/media_type.py     Video media type (MP4/WebM serving)
-│   │   ├── video/embedder.py       VideoXClipEmbedder (X-CLIP, 768-d)
+│   │   ├── video/embedder_languagebind.py  VideoLanguageBindEmbedder (LanguageBind, 768-d)
+│   │   ├── video/embedder_xclip.py VideoXClipEmbedder (X-CLIP, 768-d, default)
 │   │   ├── video/clipper.py        VideoDefaultClipper, VideoTilingClipper
 │   │   ├── document/media_type.py  Document handling (no embedder; convert first)
 │   │   └── document/clipper.py     DocumentDefaultClipper
@@ -167,10 +167,6 @@ VTSearch/
 │   │   │   └── server_json_file/   Sync labels with server JSON file
 │   │   └── sync.py                 sync_to/from_labelset_source utilities
 │   │
-│   ├── processors/importers/       Plugin system for processor sources
-│   │   ├── base.py                 ProcessorImporter ABC + ProcessorImporterField
-│   │   └── server_detector_file/   Import detector from server JSON file
-│   │
 │   ├── eval/                       Evaluation framework
 │   │   ├── __main__.py             CLI entry point (python -m vtsearch.eval)
 │   │   ├── config.py               Eval dataset catalogue
@@ -185,11 +181,11 @@ VTSearch/
 │   │   ├── main.py                 Root route, favicon, logo
 │   │   ├── medias.py               Media listing, serving, voting
 │   │   ├── sorting.py              Text/learned/example sort, labels, diversity
-│   │   ├── detectors.py            Detector/extractor/localizer management, autodetect
-│   │   ├── detectors_crud.py       Detector CRUD operations (create, rename, delete)
-│   │   ├── detectors_scoring.py    Detector scoring and autodetect execution
-│   │   ├── detectors_training.py   Detector training from votes
-│   │   ├── detectors_find.py       Multi-dataset / multi-model Find subsystem
+│   │   ├── processors.py           Extractor/localizer/pregen-processor blueprint
+│   │   ├── processors_crud.py      Extractor/localizer CRUD + pregen processors
+│   │   ├── processors_scoring.py   /api/extract, /api/auto-extract, /api/localize, /api/auto-localize
+│   │   ├── detector_scoring.py        /api/auto-detect, /api/find-label (detectors)
+│   │   ├── detector_find.py           Multi-dataset / multi-model Find subsystem
 │   │   ├── datasets.py             Media-type/clipper/converter listings, import, demos
 │   │   ├── datasets_ui.py          Dataset UI helpers and demo listing
 │   │   ├── datasets_registry.py    Dataset registry CRUD (/api/datasets/registry/*)
@@ -203,8 +199,8 @@ VTSearch/
 │   │   ├── settings_io.py          Settings import/export plugin routes
 │   │   ├── sync_sources.py         Sync source management (settings + labelset sources)
 │   │   ├── file_browser.py         File browser API for directory navigation
-│   │   ├── trainable_models.py     Persistent trainable model store (/api/trainable-models/*)
-│   │   └── models_registry.py      In-memory model registry (/api/models/registry/*)
+│   │   ├── detectors.py     Persistent detector store (/api/detectors/*)
+│   │   └── detectors_registry.py      In-memory model registry (/api/detectors/registry/*)
 │   │
 │   ├── settings_factory.py         Accessor factories used by settings.py
 │   │
@@ -266,17 +262,17 @@ modules on the right.
 │ (NO Flask)   │ │ (NO Flask) │
 └──────────────┘ └────────────┘
 
-┌──────────────────────────┐  ┌────────────────────────┐  ┌──────────────────────────┐
-│ exporters/*              │  │ labels/importers/*     │  │ processors/importers/*   │
-│                          │  │                        │  │                          │
-│ base.py (ABC)            │  │ base.py (ABC)          │  │ base.py (ABC)            │
-│ server_json, server_csv  │  │ server_json, server_csv│  │ server_detector_file     │
-│ email_smtp, webhook, gui │  │                        │  │                          │
-│                          │  │ (NO Flask, NO state,   │  │ (NO Flask, NO state,     │
-│ (NO Flask, NO state,     │  │  pure data processing) │  │  pure data processing)   │
-│  pure data in/out)       │  │                        │  │                          │
-│                          │  │                        │  │                          │
-└──────────────────────────┘  └────────────────────────┘  └──────────────────────────┘
+┌──────────────────────────┐  ┌────────────────────────┐
+│ exporters/*              │  │ labels/importers/*     │
+│                          │  │                        │
+│ base.py (ABC)            │  │ base.py (ABC)          │
+│ server_json, server_csv  │  │ server_json, server_csv│
+│ email_smtp, webhook, gui │  │                        │
+│                          │  │ (NO Flask, NO state,   │
+│ (NO Flask, NO state,     │  │  pure data processing) │
+│  pure data in/out)       │  │                        │
+│                          │  │                        │
+└──────────────────────────┘  └────────────────────────┘
 
                           ┌──────────────────────────┐
                           │ utils/sync_source.py     │
@@ -390,7 +386,7 @@ Instantiate it, call `load_models()`, then use `embed_media()` /
 dataset loader builds); for ad-hoc files, use the `media_from_path` helper:
 
 ```python
-from vtsearch.media.audio.embedder import AudioClapEmbedder
+from vtsearch.media.audio.embedder_clap import AudioClapEmbedder
 from vtsearch.media.embedder import media_from_path
 
 embedder = AudioClapEmbedder()
@@ -536,18 +532,17 @@ protected by `_state_lock` (a `threading.RLock`):
 | `last_learned_scores` | `dict[int, float]` | Media ID → score from the most recent learned sort |
 | `inclusion` | `int \| None` | FPR/FNR trade-off parameter; lazy-loaded from settings |
 | `textsort_suggestions` | `list[str]` | Text queries that received a Good vote (MRU order) |
-| `autorun_detectors` | `dict` | Saved detector configurations (with `autodetect` flag, `examples`, `num_labels`) |
 | `autorun_extractors` | `dict` | Saved extractor configurations |
 | `autorun_localizers` | `dict` | Saved localizer configurations |
 | `_diversity_tree` | `DiversityTree \| None` | Hierarchical k-means tree for diverse sampling |
 | `_dataset_display_name` | `str \| None` | Custom display name for the loaded dataset |
 
-Of these, only `autorun_detectors`, `autorun_extractors`, and
-`autorun_localizers` are truly global (shared across all loaded
-datasets). The rest are per-dataset (`medias`, `_diversity_tree`,
-`_dataset_display_name`) or per-detector (votes, label history, click
-times, learned scores, inclusion, textsort suggestions) and resolve via
-the active `DatasetContext` / `DetectorContext`.
+Of these, only `autorun_extractors` and `autorun_localizers` are truly
+global (shared across all loaded datasets). The rest are per-dataset
+(`medias`, `_diversity_tree`, `_dataset_display_name`) or per-detector
+(votes, label history, click times, learned scores, inclusion, textsort
+suggestions) and resolve via the active `DatasetContext` /
+`DetectorContext`.
 
 Persistent settings live separately in `vtsearch/settings.py` and are
 auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
@@ -555,15 +550,15 @@ auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
 `calibration_fraction`, `audio_playing`, `swipe_animation`,
 `show_metadata`, `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`,
 `panel_pct_*` (per-media-type layout), `autoload_media_embedders`,
-`autopilot_enabled`, `hide_autopilot`,
-`autopilot_top_greens`, `autopilot_hard_reds`, `autopilot_goal_diversity`,
-autorun processor recipes, and infrastructure directories
-`saved_datasets_dir`, `detectors_dir`, `trainable_models_dir`.
+`autopilot_enabled`, `hide_autopilot`, `autopilot_top_greens`,
+`autopilot_hard_reds`, `autopilot_goal_diversity`,
+`autorun_detectors`, and infrastructure directories
+`saved_datasets_dir`, `detectors_dir`.
 See `_DEFAULTS` in `settings.py` for the full list.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
 
-Trainable models are persisted as JSON files in `data/trainable_models/`
-via the `trainable_models_bp` route blueprint.  Each stores a name,
+Trainable models are persisted as JSON files in `data/detectors/`
+via the `detectors_bp` route blueprint.  Each stores a name,
 text query, media type, examples list, and labelset.
 
 **Primarily Flask routes mutate this state.**  Most ML and dataset
@@ -604,7 +599,7 @@ objects** (`_ProxyDict` / `_ProxyList`) that delegate to the context
 resolved per-request:
 
 1. **Inside a Flask request** — the `before_request` handler reads
-   `X-Dataset-Id` and `X-Model-Id` headers, resolves the matching
+   `X-Dataset-Id` and `X-Detector-Id` headers, resolves the matching
    contexts, and stashes them on Flask's `g`. Proxies check `g` first.
 2. **Outside a request** (background threads, CLI, tests) — proxies
    fall back to a thread-local context set via
@@ -623,7 +618,7 @@ API endpoints: `POST /api/datasets/registry/<id>/load` (load from pkl),
 
 The Angular frontend's `ActiveContextService` tracks which dataset/model
 the user selected, and `activeContextInterceptor` attaches
-`X-Dataset-Id` / `X-Model-Id` headers to every API request.
+`X-Dataset-Id` / `X-Detector-Id` headers to every API request.
 
 ---
 
@@ -657,7 +652,7 @@ background threads) it falls back to `"default"`.
 
 ### Ownership tracking
 
-Routes that create detectors, datasets, or trainable models record
+Routes that create detectors, datasets, or detectors record
 `created_by = get_current_user()` for provenance. The auth endpoint
 `GET /api/auth/status` returns the provider name, current user,
 authentication state, and login-required flag.

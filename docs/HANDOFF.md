@@ -326,7 +326,7 @@ ownership, and `get_user_data_dir()` supports per-user data directories.
 via `DatasetContext` and `DetectorContext` proxy objects (see
 [ARCHITECTURE.md](ARCHITECTURE.md#multi-dataset-support)). Each user
 can work with different datasets/models simultaneously via
-`X-Dataset-Id`/`X-Model-Id` headers. Settings remain global (shared
+`X-Dataset-Id`/`X-Detector-Id` headers. Settings remain global (shared
 across all users).
 
 ### Memory usage

@@ -139,13 +139,12 @@ settings).
 
 #### Alternative embedders
 
-Three additional embedder models are available as alternatives to the defaults.
+Two additional embedder models are available as alternatives to the defaults.
 These are only downloaded if explicitly selected:
 
 | Model | Media type | HuggingFace ID | Approx. size |
 |-------|-----------|----------------|-------------|
 | CLAP Music & Speech | Audio | `laion/larger_clap_music_and_speech` | ~1.3 GB |
-| CLIP | Image | `openai/clip-vit-base-patch32` | ~350 MB |
 | BGE | Text | `BAAI/bge-base-en-v1.5` | ~440 MB |
 
 All model downloads use `token=False` — no HuggingFace account or API
@@ -281,7 +280,7 @@ data/
 │   ├── models--microsoft--xclip-base-patch32/
 │   └── models--intfloat--e5-base-v2/
 ├── embeddings/                       # Cached dataset embeddings (.pkl files)
-├── trainable_models/                 # Persistent trainable model definitions (.json)
+├── detectors/                 # Persistent detector definitions (.json)
 ├── settings.json                     # User preferences, autorun config, thresholds
 ├── audio/                            # Audio media files
 ├── video/                            # Video media files
@@ -297,7 +296,7 @@ data/
 | `data/models/` | **Yes** | Re-downloading is slow (~3.2 GB) |
 | `data/embeddings/` | **Yes** | Contains cached embeddings; losing them means recomputing |
 | `data/settings.json` | **Yes** | User preferences, trained detectors, autorun processors |
-| `data/trainable_models/` | **Yes** | Persistent trainable model definitions with labelsets |
+| `data/detectors/` | **Yes** | Persistent detector definitions with labelsets |
 | `data/audio/`, `video/`, `images/`, `paragraphs/`, `documents/` | Depends | Media files from imported datasets; re-import if lost |
 | Demo dataset archives (`.zip`, `.tar.gz`) | Safe to delete | Can be re-downloaded |
 | Extracted demo folders (`ESC-50-master/`, etc.) | Safe to delete | Can be re-extracted from archives |
@@ -328,17 +327,15 @@ and auto-saved on every change. Schema:
   "panel_pct_left": {},
   "panel_pct_right": {},
   "autoload_media_embedders": [],
-  "autorun_processors": [],
+  "autorun_detectors": [],
   "autopilot_enabled": true,
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
   "autopilot_resort_interval": 10,
   "autopilot_goal_diversity": 40,
-  "autorun_detector_names": [],
   "saved_datasets_dir": "data/saved_datasets",
   "detectors_dir": "data/detectors",
-  "trainable_models_dir": "data/trainable_models",
   "max_concurrent_dataset_downloads": 1,
   "max_concurrent_dataset_embeddings": 1
 }
@@ -349,9 +346,11 @@ Notable fields:
 - `autoload_media_embedders` — embedders to preload at startup (e.g.
   `["clap", "siglip"]`); triggers model downloads if not yet cached.
   Leave empty to defer loading until each media type is first used.
-- `autorun_processors` — saved detector/extractor configurations with
-  importer name, processor name, and field values
-- `saved_datasets_dir`, `detectors_dir`, `trainable_models_dir` —
+- `autorun_detectors` — list of registered detector names
+  to run during `/api/auto-detect` and the CLI `--autodetect` flow.
+  Toggle a model's flag through the UI or
+  `PUT /api/detectors/registry/<id>/autorun`.
+- `saved_datasets_dir`, `detectors_dir` —
   infrastructure directories (overridable for custom data layouts)
 - `max_concurrent_dataset_downloads` /
   `max_concurrent_dataset_embeddings` — concurrency gates for dataset

@@ -1,16 +1,17 @@
 """Tests for chunked dataset loading via the web (modal) flow.
 
-Two pieces:
+Three pieces:
 
 1. ``consume_chunks_into`` — the helper that drains an importer's
    ``run_chunked()`` iterator into a target medias dict, renumbering IDs
    so chunks (which each restart at 1) don't collide.
-2. The two web import routes —
+2. ``auto_chunk_size`` — picks a chunk size from the media type so the
+   user is never asked for one.
+3. The two web import routes —
    ``POST /api/dataset/import/<importer_name>`` and
-   ``POST /api/dataset/import-local-folder`` — must pass an optional
-   ``chunk_size`` form/JSON value through to the load pipeline, and the
-   pipeline must use ``run_chunked`` over ``run`` when chunked is
-   supported and the value is positive.
+   ``POST /api/dataset/import-local-folder`` — must dispatch to
+   ``run_chunked`` automatically when the importer supports it, with the
+   chunk size derived from the field's ``media_type``.
 """
 
 import io
@@ -20,7 +21,7 @@ from unittest.mock import patch
 import numpy as np
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.datasets.load_pipeline import consume_chunks_into
+from vtsearch.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
 
 
 # ===========================================================================
@@ -55,6 +56,26 @@ class TestConsumeChunksInto:
         target: dict[int, dict[str, Any]] = {}
         consume_chunks_into(target, iter([]))
         assert target == {}
+
+
+# ===========================================================================
+# auto_chunk_size
+# ===========================================================================
+
+
+class TestAutoChunkSize:
+    def test_returns_positive_int_for_each_known_media_type(self):
+        for mt in ("audio", "image", "text", "video", "document"):
+            assert auto_chunk_size(mt) > 0
+
+    def test_text_chunks_larger_than_video(self):
+        # Text embeddings are tiny; videos are heavy.  The auto sizer
+        # should give text far more headroom per chunk.
+        assert auto_chunk_size("text") > auto_chunk_size("video")
+
+    def test_unknown_media_type_falls_back_to_default(self):
+        assert auto_chunk_size("") > 0
+        assert auto_chunk_size("not-a-real-type") > 0
 
 
 # ===========================================================================
@@ -120,7 +141,7 @@ class _DummyNonChunkedImporter(DatasetImporter):
     ) -> Iterator[dict[int, dict[str, Any]]]:
         # The base class default delegates to run().  Track whether we
         # were called so the test can assert the pipeline did *not* call
-        # us when chunk_size was supplied for an unsupporting importer.
+        # us when the importer doesn't advertise chunked support.
         self.run_chunked_called = True
         yield from super().run_chunked(field_values, chunk_size, thin=thin)
 
@@ -132,15 +153,15 @@ class _DummyNonChunkedImporter(DatasetImporter):
 
 class TestRunImporterChunkedDispatch:
     """Verify the load_fn produced by ``_run_importer_in_background``
-    routes to ``run_chunked`` only when chunk_size > 0 and the importer
-    supports it.
+    routes to ``run_chunked`` whenever the importer supports it, with a
+    chunk size derived from the field's ``media_type``.
 
     We patch ``_run_origin_load_in_background`` so the load_fn is invoked
     synchronously against a throwaway dict instead of being scheduled on
     a background thread.
     """
 
-    def _invoke(self, importer, *, chunk_size: int) -> dict[int, dict[str, Any]]:
+    def _invoke(self, importer, field_values: dict | None = None) -> dict[int, dict[str, Any]]:
         from vtsearch.datasets import load_pipeline
 
         captured: dict[str, Any] = {}
@@ -156,29 +177,35 @@ class TestRunImporterChunkedDispatch:
             "_run_origin_load_in_background",
             side_effect=_fake_origin_load,
         ):
-            load_pipeline._run_importer_in_background(importer, {}, chunk_size=chunk_size)
+            load_pipeline._run_importer_in_background(importer, dict(field_values or {}))
 
         return captured["target"]
 
-    def test_uses_run_chunked_when_supported_and_positive(self):
+    def test_uses_run_chunked_when_supported(self):
         imp = _DummyChunkedImporter()
-        target = self._invoke(imp, chunk_size=1)
+        target = self._invoke(imp, {"media_type": "audio"})
         assert imp.run_chunked_called is True
         assert imp.run_called is False
-        assert imp.last_chunk_size == 1
+        # Chunk size was auto-picked for audio.
+        assert imp.last_chunk_size == auto_chunk_size("audio")
         # Two single-media chunks (each with id=1) renumbered to 1,2.
         assert sorted(target.keys()) == [1, 2]
 
-    def test_falls_back_to_run_when_chunk_size_zero(self):
-        imp = _DummyChunkedImporter()
-        target = self._invoke(imp, chunk_size=0)
-        assert imp.run_chunked_called is False
-        assert imp.run_called is True
-        assert sorted(target.keys()) == [1, 2]
+    def test_chunk_size_varies_with_media_type(self):
+        imp_audio = _DummyChunkedImporter()
+        self._invoke(imp_audio, {"media_type": "audio"})
+
+        imp_text = _DummyChunkedImporter()
+        self._invoke(imp_text, {"media_type": "text"})
+
+        # Text gets a much larger chunk than audio.
+        assert imp_text.last_chunk_size is not None
+        assert imp_audio.last_chunk_size is not None
+        assert imp_text.last_chunk_size > imp_audio.last_chunk_size
 
     def test_falls_back_to_run_when_importer_unsupported(self):
         imp = _DummyNonChunkedImporter()
-        target = self._invoke(imp, chunk_size=10)
+        target = self._invoke(imp, {"media_type": "audio"})
         assert imp.run_chunked_called is False
         assert imp.run_called is True
         assert sorted(target.keys()) == [1]
@@ -189,42 +216,83 @@ class TestRunImporterChunkedDispatch:
 # ===========================================================================
 
 
-class TestImportRouteChunkSize:
-    def test_chunk_size_passed_via_json_body(self, client):
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
-            resp = client.post(
-                "/api/dataset/import/server_folder",
-                json={"path": "/tmp/test", "media_type": "image", "chunk_size": 25},
-            )
-            assert resp.status_code == 200
-            assert mock_run.call_args.kwargs["chunk_size"] == 25
+class TestImportRouteAutoChunked:
+    """The public API no longer accepts a user-supplied ``chunk_size`` —
+    the load pipeline picks one from the media type.  These tests verify
+    the route still wires through to the pipeline correctly.
+    """
 
-    def test_missing_chunk_size_defaults_to_zero(self, client):
+    def test_route_invokes_pipeline(self, client):
         with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={"path": "/tmp/test", "media_type": "image"},
             )
             assert resp.status_code == 200
-            assert mock_run.call_args.kwargs["chunk_size"] == 0
+            mock_run.assert_called_once()
+            # The pipeline takes (importer, field_values) — no chunk_size kwarg.
+            assert "chunk_size" not in mock_run.call_args.kwargs
 
-    def test_invalid_chunk_size_treated_as_zero(self, client):
+    def test_user_supplied_chunk_size_is_ignored(self, client):
         with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
-                json={"path": "/tmp/test", "media_type": "image", "chunk_size": "not-a-number"},
+                json={"path": "/tmp/test", "media_type": "image", "chunk_size": 99},
             )
             assert resp.status_code == 200
-            assert mock_run.call_args.kwargs["chunk_size"] == 0
+            assert "chunk_size" not in mock_run.call_args.kwargs
+            field_values = mock_run.call_args.args[1]
+            # The bogus client-supplied chunk_size doesn't bleed into the
+            # field_values dict either.
+            assert "chunk_size" not in field_values
 
-    def test_negative_chunk_size_clamped_to_zero(self, client):
+
+class TestImportRouteClipperParams:
+    """``clipper_params`` from the modal must reach the load pipeline so
+    user-tuned values (e.g. tiling duration) override the clipper's
+    registry default.  Regression: the route used to drop them silently,
+    leaving e.g. a 1s tiling clip selection running with the registered
+    default of 2s — a no-op for 2s synthetic videos.
+    """
+
+    def test_clipper_params_passed_through_json(self, client):
         with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
-                json={"path": "/tmp/test", "media_type": "image", "chunk_size": -10},
+                json={
+                    "path": "/tmp/test",
+                    "media_type": "video",
+                    "clipper": "video_tiling",
+                    "clipper_params": {"duration": 1.0, "min_overlap": 0.0},
+                },
             )
             assert resp.status_code == 200
-            assert mock_run.call_args.kwargs["chunk_size"] == 0
+            field_values = mock_run.call_args.args[1]
+            assert field_values["clipper"] == "video_tiling"
+            assert field_values["clipper_params"] == {"duration": 1.0, "min_overlap": 0.0}
+
+    def test_no_clipper_params_when_omitted(self, client):
+        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+            resp = client.post(
+                "/api/dataset/import/server_folder",
+                json={"path": "/tmp/test", "media_type": "image"},
+            )
+            assert resp.status_code == 200
+            field_values = mock_run.call_args.args[1]
+            assert "clipper_params" not in field_values
+
+    def test_invalid_clipper_params_returns_400(self, client):
+        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+            resp = client.post(
+                "/api/dataset/import/server_folder",
+                json={
+                    "path": "/tmp/test",
+                    "media_type": "image",
+                    "clipper_params": "not-a-dict",
+                },
+            )
+            assert resp.status_code == 400
+            mock_run.assert_not_called()
 
 
 # ===========================================================================
@@ -233,10 +301,12 @@ class TestImportRouteChunkSize:
 
 
 class TestLocalFolderRouteChunked:
-    """The browser-upload route must accept ``chunk_size`` as a form field
-    and route through ``run_chunked`` when set."""
+    """The browser-upload route must auto-pick a chunk size from the
+    declared media type and route through ``run_chunked`` whenever the
+    underlying importer supports it.
+    """
 
-    def test_chunk_size_form_field_routes_to_run_chunked(self, client, tmp_path, monkeypatch):
+    def test_auto_chunked_dispatch_for_audio(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr("vtsearch.routes.datasets.LOCAL_UPLOADS_DIR", tmp_path / "uploads")
 
         captured: dict[str, Any] = {}
@@ -275,55 +345,14 @@ class TestLocalFolderRouteChunked:
                 "/api/dataset/import-local-folder",
                 data={
                     "media_type": "audio",
-                    "chunk_size": "7",
                     "files": [(io.BytesIO(b"AAA"), "myfolder/one.wav")],
                 },
                 content_type="multipart/form-data",
             )
 
         assert resp.status_code == 200, resp.get_data(as_text=True)
-        assert chunked_calls == [7]
+        # Chunk size auto-picked from media_type=audio, not from any
+        # client-supplied value.
+        assert chunked_calls == [auto_chunk_size("audio")]
         assert "run_called" not in captured
         assert sorted(captured["target"].keys()) == [1]
-
-    def test_no_chunk_size_uses_run(self, client, tmp_path, monkeypatch):
-        monkeypatch.setattr("vtsearch.routes.datasets.LOCAL_UPLOADS_DIR", tmp_path / "uploads")
-
-        from vtsearch.datasets.importers import get_importer
-
-        real_importer = get_importer("server_folder")
-        assert real_importer is not None
-
-        chunked_calls: list[int] = []
-        run_calls: list[None] = []
-
-        def _stub_run_chunked(field_values, chunk_size, thin=False):
-            chunked_calls.append(chunk_size)
-            yield {}
-
-        def _stub_run(field_values, medias, thin=False):
-            run_calls.append(None)
-
-        monkeypatch.setattr(real_importer, "run_chunked", _stub_run_chunked)
-        monkeypatch.setattr(real_importer, "run", _stub_run)
-
-        def _fake_origin_load(load_fn, origin, **kwargs):
-            load_fn({})
-            return "task-fake-whole"
-
-        with patch(
-            "vtsearch.routes.datasets._run_origin_load_in_background",
-            side_effect=_fake_origin_load,
-        ):
-            resp = client.post(
-                "/api/dataset/import-local-folder",
-                data={
-                    "media_type": "audio",
-                    "files": [(io.BytesIO(b"AAA"), "myfolder/one.wav")],
-                },
-                content_type="multipart/form-data",
-            )
-
-        assert resp.status_code == 200, resp.get_data(as_text=True)
-        assert chunked_calls == []
-        assert len(run_calls) == 1

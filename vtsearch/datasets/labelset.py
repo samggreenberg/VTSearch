@@ -128,7 +128,7 @@ class LabelSet:
                 are expanded into one element per member so that an exported
                 labelset records full provenance.  Set to ``False`` when the
                 labelset will be re-imported into the same system (e.g.
-                trainable-model persistence) to avoid inflating the label
+                detector persistence) to avoid inflating the label
                 count.
 
         Returns:
@@ -257,7 +257,7 @@ class LabelSet:
         labels_by_key: dict[Any, set[str]] = {}
         for ls in (self, *others):
             for el in ls.elements:
-                key = _element_key(el)
+                key = element_key(el)
                 if key is None:
                     continue
                 labels_by_key.setdefault(key, set()).add(el.label)
@@ -270,7 +270,7 @@ class LabelSet:
         seen: dict[Any, int] = {}
         for ls in (self, *others):
             for el in ls.elements:
-                key = _element_key(el)
+                key = element_key(el)
                 if key is None or key in conflicting_keys:
                     continue
                 if key in seen:
@@ -295,7 +295,7 @@ class LabelSet:
         return LabelSet(merged)
 
 
-def _element_key(el: LabeledElement) -> Any:
+def element_key(el: LabeledElement) -> Any:
     """Return a hashable identity key for an element, or ``None`` if it has none.
 
     Prefers the element's ``Origin`` (importer + params) so that the same
@@ -316,6 +316,20 @@ def _element_key(el: LabeledElement) -> Any:
     return None
 
 
+def media_element_key(media: dict[str, Any]) -> Any:
+    """Return the element-identity key for a media dict (origin-keyed when possible).
+
+    Mirrors :func:`element_key` so that callers can match media items in a
+    dataset against entries in a :class:`LabelSet` without first converting
+    them to :class:`LabeledElement`.
+    """
+    origin = media.get("origin")
+    origin_name = media.get("origin_name", media.get("filename", ""))
+    md5 = media.get("md5", "")
+    fake = LabeledElement(md5=md5, label="", origin=origin, origin_name=origin_name)
+    return element_key(fake)
+
+
 def _clip_to_elements(media: dict[str, Any], label: str, *, expand_dupes: bool = True) -> list[LabeledElement]:
     """Convert a media dict into one or more :class:`LabeledElement` instances.
 
@@ -324,7 +338,7 @@ def _clip_to_elements(media: dict[str, Any], label: str, *, expand_dupes: bool =
     produced for each original member so that an exported labelset reflects
     the full duplicate set.  When ``False``, a single element is emitted
     using the representative's own MD5 and origin, which avoids inflating
-    the label count for internal round-trip use cases (e.g. trainable-model
+    the label count for internal round-trip use cases (e.g. detector
     persistence).
     """
     origin = media.get("origin")

@@ -341,6 +341,19 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             base += f" --converters {converters}"
         return base
 
+    def default_display_name(self, field_values: dict[str, Any]) -> str:
+        url = (field_values.get("url") or "").strip()
+        if url:
+            url_path = url.split("?")[0].rstrip("/")
+            tail = url_path.split("/")[-1]
+            if tail:
+                # Strip a few common archive extensions for a tidier label.
+                for suffix in (".tar.gz", ".tar.bz2", ".tar.xz", ".tar", ".zip", ".rar"):
+                    if tail.lower().endswith(suffix):
+                        return tail[: -len(suffix)] or self.display_name
+                return tail
+        return self.display_name
+
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         origin = super().build_origin(field_values)
         converters = field_values.get("converters", "")

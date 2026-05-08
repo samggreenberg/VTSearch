@@ -34,7 +34,7 @@ markers = [
     "sorting: text sort, learned sort, diversity, safe thresholds",
     "datasets: dataset loading, splitting, combining, origins, dedup",
     "io: importers, exporters, labels, processors",
-    "models: detectors, extractors, processors, clippers, eval",
+    "detectors: detectors, extractors, processors, clippers, eval",
     "downloads: demo dataset download tests (network-dependent)",
     "integration: end-to-end workflows, thread safety",
     "cli: CLI autodetect, load sort window, progress",

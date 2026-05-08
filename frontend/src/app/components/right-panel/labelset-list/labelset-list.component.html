@@ -1,0 +1,33 @@
+<div class="vote-section">
+  <h3 [class]="label" [title]="label === 'good' ? 'Items you have marked as positive examples (' + elements.length + ')' : 'Items you have marked as negative examples (' + elements.length + ')'">
+    {{ label === 'good' ? 'Goods' : 'Bads' }} ({{ elements.length | number }})
+  </h3>
+  <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth + 'px'" #voteListContainer>
+    @for (entry of sortedEntries; track trackById($index, entry)) {
+      <div
+        class="vote-entry"
+        [class.vote-entry-grid]="isGrid"
+        [class.vote-entry-missing]="isMissing(entry)"
+        [attr.title]="isMissing(entry) ? entry.name + ' — not in the current dataset' : null"
+        role="button"
+        tabindex="0"
+        [attr.aria-label]="(label === 'good' ? 'Good' : 'Bad') + ': ' + entry.name + (isMissing(entry) ? ' (not in current dataset)' : '')"
+        (click)="onEntryClick(entry)"
+        (contextmenu)="onEntryContextMenu($event, entry)"
+        (mouseenter)="onEntryMouseEnter(entry)"
+        (keydown)="onEntryKeydown($event, entry)"
+      >
+        @if (hasThumbnailUrl(entry)) {
+          <img class="vote-thumbnail" [src]="thumbnailUrl(entry)" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(entry.id)" />
+        } @else if (placeholderIcon(entry)) {
+          <span class="vote-placeholder">{{ placeholderIcon(entry) }}</span>
+        }
+        @if (isGrid) {
+          <span class="vote-name-grid">{{ entry.name }}</span>
+        } @else {
+          <span class="vote-name">{{ entry.name }}</span>
+        }
+      </div>
+    }
+  </div>
+</div>

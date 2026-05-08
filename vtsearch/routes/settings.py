@@ -3,22 +3,13 @@
 Endpoints
 ---------
 GET  /api/settings
-    Return all persisted settings (volume, autorun_processors).
+    Return all persisted settings.
 
 PUT  /api/settings
     Update one or more settings fields.  Only supplied keys are changed.
 
 GET  /api/settings/defaults
-    Return the default values for all settings (excluding autorun_processors).
-
-GET  /api/settings/autorun-processors
-    List all autorun processor recipes.
-
-POST /api/settings/autorun-processors
-    Add (or overwrite) an autorun processor recipe.
-
-DELETE /api/settings/autorun-processors/<name>
-    Remove an autorun processor recipe by name.
+    Return the default values for all settings.
 """
 
 from __future__ import annotations
@@ -33,14 +24,7 @@ settings_bp = Blueprint("settings", __name__)
 @settings_bp.route("/api/settings", methods=["GET"])
 def get_settings():
     """Return all settings."""
-    data = settings.get_all()
-    # Include settings JSON snippets for each autorun processor.
-    # Copy each proc dict to avoid mutating the live in-memory settings.
-    procs = [dict(p) for p in data.get("autorun_processors", [])]
-    for proc in procs:
-        proc["settings_json"] = settings.to_settings_json(proc)
-    data["autorun_processors"] = procs
-    return jsonify(data)
+    return jsonify(settings.get_all())
 
 
 @settings_bp.route("/api/settings", methods=["PUT"])
@@ -207,6 +191,12 @@ def update_settings():
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
+    if "autorun_detectors" in body:
+        val = body["autorun_detectors"]
+        if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
+            return jsonify({"error": "autorun_detectors must be a list of strings"}), 400
+        settings.set_autorun_detectors(val)
+
     # Directory path settings
     import vtsearch.utils.paths as _paths
 
@@ -214,7 +204,6 @@ def update_settings():
     for dir_key, setter in (
         ("saved_datasets_dir", settings.set_saved_datasets_dir),
         ("detectors_dir", settings.set_detectors_dir),
-        ("trainable_models_dir", settings.set_trainable_models_dir),
     ):
         if dir_key in body:
             val = body[dir_key]
@@ -233,50 +222,5 @@ def update_settings():
 
 @settings_bp.route("/api/settings/defaults", methods=["GET"])
 def get_defaults():
-    """Return the default values for all settings (excluding autorun_processors)."""
+    """Return the default values for all settings."""
     return jsonify(settings.get_defaults())
-
-
-@settings_bp.route("/api/settings/autorun-processors", methods=["GET"])
-def get_autorun_processors():
-    """List all autorun processor recipes."""
-    procs = [dict(p) for p in settings.get_autorun_processors()]
-    for proc in procs:
-        proc["settings_json"] = settings.to_settings_json(proc)
-    return jsonify({"autorun_processors": procs})
-
-
-@settings_bp.route("/api/settings/autorun-processors", methods=["POST"])
-def add_autorun_processor():
-    """Add or overwrite an autorun processor recipe."""
-    body = request.get_json(force=True, silent=True)
-    if not body or not isinstance(body, dict):
-        return jsonify({"error": "Invalid request body"}), 400
-
-    processor_name = (body.get("processor_name") or "").strip()
-    processor_importer = (body.get("processor_importer") or "").strip()
-    field_values = body.get("field_values", {})
-    if not isinstance(field_values, dict):
-        return jsonify({"error": "field_values must be an object"}), 400
-
-    if not processor_name:
-        return jsonify({"error": "processor_name is required"}), 400
-    if not processor_importer:
-        return jsonify({"error": "processor_importer is required"}), 400
-
-    settings.add_autorun_processor(processor_name, processor_importer, field_values)
-    entry = {
-        "processor_name": processor_name,
-        "processor_importer": processor_importer,
-        "field_values": field_values,
-    }
-    entry["settings_json"] = settings.to_settings_json(entry)
-    return jsonify({"success": True, **entry})
-
-
-@settings_bp.route("/api/settings/autorun-processors/<name>", methods=["DELETE"])
-def delete_autorun_processor(name: str):
-    """Remove an autorun processor recipe by name."""
-    if settings.remove_autorun_processor(name):
-        return jsonify({"success": True})
-    return jsonify({"error": "Autorun processor not found"}), 404

@@ -2,58 +2,155 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
-  AutorunDetectorsResponse,
-  DetectorCreateResponse,
-  DetectorDeleteResponse,
-  DetectorRenameResponse,
-  DetectorSortResponse,
   AutoDetectResponse,
-  DetectorServerFilesResponse,
+  CombineDetectorsResult,
+  DetectorsRegistryResponse,
+  DetectorsResponse,
+  LabelsDetailResponse,
+  LoadingTasksResponse,
 } from '../models/api.models';
+import { ActiveContextService } from './active-context.service';
 
 export interface FindLabelWarning {
-  model_name: string;
+  detector_name: string;
   total_labels: number;
   resolved_labels: number;
   failed_labels: number;
 }
 
+/**
+ * API surface for detector CRUD, the detector registry, and detector-driven
+ * scoring (auto-detect, find, find-label).  Also covers the autorun
+ * extractor / localizer / pregen-processor endpoints, which share the
+ * detector lifecycle from the dashboard's perspective.
+ */
 @Injectable({ providedIn: 'root' })
 export class DetectorsApiService {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private activeContext: ActiveContextService) {}
 
-  // --- CRUD ---
+  // --- Detector CRUD ---
 
-  getAutorunDetectors(): Observable<AutorunDetectorsResponse> {
-    return this.http.get<AutorunDetectorsResponse>('/api/autorun-detectors');
+  list(): Observable<DetectorsResponse> {
+    return this.http.get<DetectorsResponse>('/api/detectors');
   }
 
-  createDetector(params: { name: string; media_type: string }): Observable<DetectorCreateResponse> {
-    return this.http.post<DetectorCreateResponse>('/api/autorun-detectors', params);
+  create(params: Record<string, unknown>): Observable<unknown> {
+    return this.http.post('/api/detectors', params);
   }
 
-  deleteDetector(name: string): Observable<DetectorDeleteResponse> {
-    return this.http.delete<DetectorDeleteResponse>(`/api/autorun-detectors/${name}`);
+  get(name: string): Observable<unknown> {
+    return this.http.get(`/api/detectors/${encodeURIComponent(name)}`);
   }
 
-  renameDetector(name: string, newName: string): Observable<DetectorRenameResponse> {
-    return this.http.put<DetectorRenameResponse>(`/api/autorun-detectors/${name}/rename`, { new_name: newName });
+  delete(name: string): Observable<unknown> {
+    return this.http.delete(`/api/detectors/${encodeURIComponent(name)}`);
   }
 
-  setAutodetect(name: string, autodetect: boolean): Observable<unknown> {
-    return this.http.put(`/api/autorun-detectors/${name}/autodetect`, { autodetect });
+  rename(name: string, newName: string): Observable<unknown> {
+    return this.http.put(`/api/detectors/${encodeURIComponent(name)}/rename`, { new_name: newName });
   }
 
-  exportDetector(name: string): Observable<unknown> {
-    return this.http.get(`/api/autorun-detectors/${name}/export`);
+  setExamples(name: string, examples: unknown[]): Observable<unknown> {
+    return this.http.put(`/api/detectors/${encodeURIComponent(name)}/examples`, { examples });
   }
 
-  getServerFiles(): Observable<DetectorServerFilesResponse> {
-    return this.http.get<DetectorServerFilesResponse>('/api/detector/server-files');
+  saveLabels(name: string): Observable<unknown> {
+    return this.http.post(`/api/detectors/${encodeURIComponent(name)}/labels`, {});
   }
 
-  getServerFile(name: string): Observable<unknown> {
-    return this.http.get(`/api/detector/server-files/${name}`);
+  getLabelsDetail(name: string): Observable<LabelsDetailResponse> {
+    return this.http.get<LabelsDetailResponse>(
+      `/api/detectors/${encodeURIComponent(name)}/labels-detail`,
+    );
+  }
+
+  voteLabelElement(name: string, elementId: string, vote: 'good' | 'bad'): Observable<unknown> {
+    return this.http.post(
+      `/api/detectors/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/vote`,
+      { vote },
+    );
+  }
+
+  labelPreviewUrl(name: string, elementId: string): string {
+    return this.activeContext.mediaUrl(
+      `/api/detectors/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/preview`,
+    );
+  }
+
+  labelThumbnailUrl(name: string, elementId: string): string {
+    return this.activeContext.mediaUrl(
+      `/api/detectors/${encodeURIComponent(name)}/labels/${encodeURIComponent(elementId)}/thumbnail`,
+    );
+  }
+
+  combine(
+    names: string[],
+    newName: string,
+    conflictPolicy: 'drop' = 'drop',
+  ): Observable<CombineDetectorsResult> {
+    return this.http.post<CombineDetectorsResult>('/api/detectors/combine', {
+      names,
+      new_name: newName,
+      conflict_policy: conflictPolicy,
+    });
+  }
+
+  // --- Detector Registry ---
+
+  getRegistry(): Observable<DetectorsRegistryResponse> {
+    return this.http.get<DetectorsRegistryResponse>('/api/detectors/registry');
+  }
+
+  registerDetector(params: Record<string, unknown>): Observable<unknown> {
+    return this.http.post('/api/detectors/registry', params);
+  }
+
+  registerDetectorFromLabelset(
+    importerName: string,
+    params: Record<string, unknown>,
+    file?: File,
+    fileFieldKey?: string,
+  ): Observable<unknown> {
+    const url = `/api/detectors/registry/from-labelset/${encodeURIComponent(importerName)}`;
+    if (file && fileFieldKey) {
+      const formData = new FormData();
+      formData.append(fileFieldKey, file, file.name);
+      for (const [key, value] of Object.entries(params)) {
+        if (key !== fileFieldKey) {
+          formData.append(key, String(value ?? ''));
+        }
+      }
+      return this.http.post(url, formData);
+    }
+    return this.http.post(url, params);
+  }
+
+  deleteFromRegistry(detectorId: string): Observable<unknown> {
+    return this.http.delete(`/api/detectors/registry/${encodeURIComponent(detectorId)}`);
+  }
+
+  renameInRegistry(detectorId: string, newName: string): Observable<unknown> {
+    return this.http.put(`/api/detectors/registry/${encodeURIComponent(detectorId)}/rename`, { name: newName });
+  }
+
+  loadDetector(detectorId: string | null): Observable<unknown> {
+    return this.http.post('/api/detectors/registry/load', { detector_id: detectorId });
+  }
+
+  unloadDetector(detectorId: string): Observable<unknown> {
+    return this.http.post(`/api/detectors/registry/${encodeURIComponent(detectorId)}/unload`, {});
+  }
+
+  getDetectorLoadingTasks(): Observable<LoadingTasksResponse> {
+    return this.http.get<LoadingTasksResponse>('/api/detectors/loading-tasks');
+  }
+
+  cancelDetectorLoadingTask(taskId: string): Observable<unknown> {
+    return this.http.post(`/api/detectors/cancel/${encodeURIComponent(taskId)}`, {});
+  }
+
+  setAutorun(detectorId: string, autorun: boolean): Observable<unknown> {
+    return this.http.put(`/api/detectors/registry/${encodeURIComponent(detectorId)}/autorun`, { autorun });
   }
 
   // --- Extractors ---
@@ -67,11 +164,11 @@ export class DetectorsApiService {
   }
 
   deleteExtractor(name: string): Observable<unknown> {
-    return this.http.delete(`/api/autorun-extractors/${name}`);
+    return this.http.delete(`/api/autorun-extractors/${encodeURIComponent(name)}`);
   }
 
   renameExtractor(name: string, newName: string): Observable<unknown> {
-    return this.http.put(`/api/autorun-extractors/${name}/rename`, { new_name: newName });
+    return this.http.put(`/api/autorun-extractors/${encodeURIComponent(name)}/rename`, { new_name: newName });
   }
 
   // --- Localizers ---
@@ -85,18 +182,14 @@ export class DetectorsApiService {
   }
 
   deleteLocalizer(name: string): Observable<unknown> {
-    return this.http.delete(`/api/autorun-localizers/${name}`);
+    return this.http.delete(`/api/autorun-localizers/${encodeURIComponent(name)}`);
   }
 
   renameLocalizer(name: string, newName: string): Observable<unknown> {
-    return this.http.put(`/api/autorun-localizers/${name}/rename`, { new_name: newName });
+    return this.http.put(`/api/autorun-localizers/${encodeURIComponent(name)}/rename`, { new_name: newName });
   }
 
   // --- Scoring ---
-
-  detectorSort(params: Record<string, unknown>): Observable<DetectorSortResponse> {
-    return this.http.post<DetectorSortResponse>('/api/detector-sort', params);
-  }
 
   autoDetect(params: Record<string, unknown>): Observable<AutoDetectResponse> {
     return this.http.post<AutoDetectResponse>('/api/auto-detect', params);
@@ -118,15 +211,7 @@ export class DetectorsApiService {
     return this.http.post('/api/auto-localize', {});
   }
 
-  // --- Training ---
-
-  importFromLabels(params: Record<string, unknown>): Observable<unknown> {
-    return this.http.post('/api/autorun-detectors/import-labels', params);
-  }
-
-  importFromLabelImporter(importerName: string, params: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`/api/autorun-detectors/from-label-import/${importerName}`, params);
-  }
+  // --- Find ---
 
   findCheckLabels(params: Record<string, unknown>): Observable<{ warnings: FindLabelWarning[] }> {
     return this.http.post<{ warnings: FindLabelWarning[] }>('/api/find/check-labels', params);

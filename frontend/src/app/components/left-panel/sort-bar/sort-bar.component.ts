@@ -17,14 +17,18 @@ export class SortBarComponent implements OnInit, OnDestroy {
   @Input() sortMode: SortMode = 'text';
   @Input() loadSortLabel = '';
   @Input() initialTextQuery = '';
-  @Input() hasGoodVotes = false;
-  @Input() hasBadVotes = false;
+  /**
+   * True when the active detector (or active votes, when no detector is
+   * loaded) has at least one good and one bad label available for training.
+   * Drives the gating of the "Learned" sort mode.
+   */
+  @Input() learnedSortAvailable = false;
 
   @Output() sortModeChange = new EventEmitter<SortMode>();
   @Output() textSort = new EventEmitter<string>();
   @Output() learnedSort = new EventEmitter<void>();
   @Output() loadSort = new EventEmitter<void>();
-  @Output() detectorLoaded = new EventEmitter<unknown>();
+  @Output() modelSelected = new EventEmitter<string>();
   @Output() exampleSortStarted = new EventEmitter<unknown>();
 
   textQuery = '';
@@ -69,16 +73,16 @@ export class SortBarComponent implements OnInit, OnDestroy {
   }
 
   get learnedDisabled(): boolean {
-    return !this.hasGoodVotes || !this.hasBadVotes;
+    return !this.learnedSortAvailable;
   }
 
   onAddLoadSort(): void {
     this.showLoadSortModal = true;
   }
 
-  onDetectorLoaded(data: unknown): void {
+  onModelSelected(modelId: string): void {
     this.showLoadSortModal = false;
-    this.detectorLoaded.emit(data);
+    this.modelSelected.emit(modelId);
   }
 
   onExampleSortStarted(data: unknown): void {

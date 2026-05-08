@@ -56,7 +56,7 @@ export class AppComponent {
       this.datasetDisplayName = ds?.name || '';
 
       const mId = this.activeContext.modelId;
-      const m = this.datasetState.models.find((mod) => mod.id === mId);
+      const m = this.datasetState.detectors.find((mod) => mod.id === mId);
       this.modelDisplayName = m?.name || '';
     } else {
       this.datasetDisplayName = this.topBarState.datasetLabel;
@@ -148,7 +148,7 @@ export class AppComponent {
     }
     // From dashboard: if all datasets and models share a single media type, use it
     const datasets = this.datasetState.datasets;
-    const models = this.datasetState.models;
+    const models = this.datasetState.detectors;
     const types = new Set<string>();
     for (const d of datasets) {
       if (d.media_type) types.add(d.media_type);

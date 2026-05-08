@@ -2,14 +2,16 @@ import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, S
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { TrainableModelsApiService } from '../../services/trainable-models-api.service';
-import { MediaItem } from '../../models/api.models';
+import { DetectorsApiService } from '../../services/detectors-api.service';
+import { LabelElement, MediaItem } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
+import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { LabelSortComponent, LabelSortMode } from './label-sort/label-sort.component';
 import { LabelListComponent } from './label-list/label-list.component';
+import { LabelsetListComponent } from './labelset-list/labelset-list.component';
 import { DetectorContextBarComponent } from './detector-context-bar/detector-context-bar.component';
 import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
@@ -26,6 +28,7 @@ export interface TrainModeContext {
     CommonModule,
     LabelSortComponent,
     LabelListComponent,
+    LabelsetListComponent,
     DetectorContextBarComponent,
     ExportModalComponent,
     LabelImporterModalComponent,
@@ -40,6 +43,13 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Input() focusMode: 'click' | 'hover' = 'click';
   /** 'label' = Labeling mode (detector export allowed), 'find' = Finding mode (no detector export). */
   @Input() mode: 'label' | 'find' = 'label';
+  /**
+   * Trainable model name that owns the labels shown in the right pane.
+   * When set in label mode, the pane is sourced from the on-disk labelset
+   * (so detector labels survive across dataset switches).  When empty, the
+   * pane falls back to cid-based vote display.
+   */
+  @Input() trainableModelName: string | null = null;
   /** Disable interactive buttons (used during Find scoring). */
   @Input() disabled = false;
   @Output() mediaSelected = new EventEmitter<number>();
@@ -49,6 +59,8 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   badIds: number[] = [];
   clickTimes: Record<string, number> = {};
   learnedScores: Record<string, number> = {};
+  goodElements: LabelElement[] = [];
+  badElements: LabelElement[] = [];
   sortMode: LabelSortMode = 'time-desc';
   viewMode: 'grid' | 'list' = 'grid';
   gridGoalWidth: number = 80;
@@ -61,16 +73,27 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   private destroy$ = new Subject<void>();
 
   constructor(
-    private modelsApi: TrainableModelsApiService,
+    private detectorsApi: DetectorsApiService,
     public voteState: VoteStateService,
+    public labelsetState: LabelsetStateService,
     private settingsState: SettingsStateService,
   ) {}
+
+  /** True when the right pane should be sourced from the labelset (not /api/votes). */
+  get useLabelset(): boolean {
+    return this.mode === 'label' && !!this.trainableModelName;
+  }
 
   ngOnInit(): void {
     this.settingsState.load();
     this.loadSettings();
     this.voteState.startPolling();
     this.subscribeToVotes();
+    if (this.useLabelset) {
+      this.labelsetState.setModel(this.trainableModelName);
+      this.labelsetState.startPolling();
+    }
+    this.subscribeToLabelset();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -82,10 +105,20 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
         this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[newType] ?? 'M');
       }
     }
+    if (changes['trainableModelName'] || changes['mode']) {
+      if (this.useLabelset) {
+        this.labelsetState.setModel(this.trainableModelName);
+        this.labelsetState.startPolling();
+      } else {
+        this.labelsetState.stopPolling();
+        this.labelsetState.setModel(null);
+      }
+    }
   }
 
   ngOnDestroy(): void {
     this.voteState.stopPolling();
+    this.labelsetState.stopPolling();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -102,6 +135,20 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     this.mediaVoted.emit(event);
   }
 
+  /** Right-pane element click in labelset mode.  Focus the matching cid
+   *  on the left when the element resolves into the active dataset;
+   *  otherwise the element exists only in the labelset (e.g. trained on a
+   *  different dataset) and there's nothing to focus. */
+  onLabelsetElementSelected(elem: LabelElement): void {
+    if (elem.cid !== null && elem.cid !== undefined) {
+      this.mediaSelected.emit(elem.cid);
+    }
+  }
+
+  onLabelsetElementVote(event: { id: string; vote: 'good' | 'bad' }): void {
+    this.labelsetState.vote(event.id, event.vote);
+  }
+
   onImportLabels(): void {
     this.showLabelImport = true;
   }
@@ -112,7 +159,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   onDetectorRenamed(newName: string): void {
     if (!this.trainMode?.model?.registry_id) return;
-    this.modelsApi.renameInRegistry(this.trainMode.model.registry_id, newName).subscribe({
+    this.detectorsApi.renameInRegistry(this.trainMode.model.registry_id, newName).subscribe({
       next: () => {
         if (this.trainMode?.model) {
           this.trainMode.model.name = newName;
@@ -165,6 +212,28 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((scores) => {
         this.learnedScores = scores;
+      });
+  }
+
+  private subscribeToLabelset(): void {
+    this.labelsetState.good$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((elements) => {
+        this.goodElements = elements;
+      });
+    this.labelsetState.bad$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((elements) => {
+        this.badElements = elements;
+      });
+    this.labelsetState.mediaType$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((mt) => {
+        if (this.useLabelset && mt && mt !== this.currentMediaType) {
+          this.currentMediaType = mt;
+          this.viewMode = this.viewModeRightDict[mt] ?? 'grid';
+          this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[mt] ?? 'M');
+        }
       });
   }
 }

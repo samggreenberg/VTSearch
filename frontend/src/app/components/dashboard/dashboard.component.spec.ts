@@ -27,11 +27,11 @@ describe('DashboardComponent', () => {
 
   function flushInitialRequests(
     datasets: any[] = [],
-    models: any[] = [],
+    detectors: any[] = [],
   ): void {
     fixture.detectChanges();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets });
-    httpMock.expectOne('/api/models/registry').flush({ models });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors });
   }
 
   it('should create', () => {
@@ -39,12 +39,12 @@ describe('DashboardComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should fetch datasets and models on init', () => {
+  it('should fetch datasets and detectors on init', () => {
     const datasets = [{ id: 'd1', name: 'Test Dataset', media_type: 'audio', num_items: 10 }];
-    const models = [{ id: 'm1', name: 'Test Model', trainable: true }];
-    flushInitialRequests(datasets, models);
+    const detectors = [{ id: 'm1', name: 'Test Detector' }];
+    flushInitialRequests(datasets, detectors);
     expect(component.datasets.length).toBe(1);
-    expect(component.models.length).toBe(1);
+    expect(component.detectors.length).toBe(1);
   });
 
   it('should auto-select single dataset', () => {
@@ -56,7 +56,7 @@ describe('DashboardComponent', () => {
   it('should auto-select single model', () => {
     const models = [{ id: 'm1', name: 'Only One' }];
     flushInitialRequests([], models);
-    expect(component.selectedModelIds.has('m1')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
   });
 
   it('should not auto-select when multiple datasets on initial load', () => {
@@ -81,7 +81,7 @@ describe('DashboardComponent', () => {
         { id: 'd2', name: 'Second' },
       ],
     });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
 
     expect(component.selectedDatasetIds.has('d1')).toBeFalse();
     expect(component.selectedDatasetIds.has('d2')).toBeTrue();
@@ -90,20 +90,20 @@ describe('DashboardComponent', () => {
   it('should auto-select newly added model', () => {
     const models = [{ id: 'm1', name: 'First' }];
     flushInitialRequests([], models);
-    expect(component.selectedModelIds.has('m1')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
 
     // Simulate adding a second model via refresh
     component.refresh();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({
-      models: [
+    httpMock.expectOne('/api/detectors/registry').flush({
+      detectors: [
         { id: 'm1', name: 'First' },
         { id: 'm2', name: 'Second' },
       ],
     });
 
-    expect(component.selectedModelIds.has('m1')).toBeTrue();
-    expect(component.selectedModelIds.has('m2')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m2')).toBeTrue();
   });
 
   it('should toggle dataset selection on click', () => {
@@ -153,8 +153,8 @@ describe('DashboardComponent', () => {
     ];
     flushInitialRequests([], models);
 
-    component.modelCols.sortBy('name');
-    expect(component.sortedModels[0].name).toBe('Alpha');
+    component.detectorCols.sortBy('name');
+    expect(component.sortedDetectors[0].name).toBe('Alpha');
   });
 
   it('should show sort indicators', () => {
@@ -171,35 +171,28 @@ describe('DashboardComponent', () => {
     it('should disable Label when nothing selected', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      component.selectedModelIds.clear();
+      component.selectedDetectorIds.clear();
       expect(component.labelEnabled).toBeFalse();
     });
 
-    it('should enable Label with 1 dataset + 1 trainable model', () => {
+    it('should enable Label with 1 dataset + 1 model', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
       // Auto-selected since only 1 each
       expect(component.labelEnabled).toBeTrue();
     });
 
-    it('should disable Label when model is not trainable', () => {
-      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', trainable: false, media_type: 'audio' }];
-      flushInitialRequests(datasets, models);
-      expect(component.labelEnabled).toBeFalse();
-    });
-
     it('should disable Label on media type mismatch', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'image' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
       flushInitialRequests(datasets, models);
       expect(component.labelEnabled).toBeFalse();
     });
 
     it('should disable Label when model media_type is "any" (not a valid type)', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'any' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'any' }];
       flushInitialRequests(datasets, models);
       expect(component.labelEnabled).toBeFalse();
     });
@@ -207,7 +200,7 @@ describe('DashboardComponent', () => {
     it('should disable Find with no selections', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      component.selectedModelIds.clear();
+      component.selectedDetectorIds.clear();
       expect(component.findEnabled).toBeFalse();
     });
 
@@ -247,27 +240,20 @@ describe('DashboardComponent', () => {
       ];
       flushInitialRequests(datasets, models);
       component.selectedDatasetIds.add('d2');
-      component.selectedModelIds.add('m2');
+      component.selectedDetectorIds.add('m2');
       expect(component.findEnabled).toBeTrue();
     });
 
-    it('should disable Find when a trainable model has 0 training', () => {
+    it('should disable Find when the selected model has 0 training', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', media_type: 'audio', trainable: true, num_training: 0 }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0 }];
       flushInitialRequests(datasets, models);
       expect(component.findEnabled).toBeFalse();
     });
 
-    it('should enable Find for a trainable model with training', () => {
+    it('should enable Find for a model with training', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', media_type: 'audio', trainable: true, num_training: 5 }];
-      flushInitialRequests(datasets, models);
-      expect(component.findEnabled).toBeTrue();
-    });
-
-    it('should enable Find for a non-trainable model with 0 training', () => {
-      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', media_type: 'audio', trainable: false, num_training: 0 }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
       expect(component.findEnabled).toBeTrue();
     });
@@ -283,7 +269,7 @@ describe('DashboardComponent', () => {
     it('should hint about missing model', () => {
       flushInitialRequests();
       component.selectedDatasetIds.add('d1');
-      component.selectedModelIds.clear();
+      component.selectedDetectorIds.clear();
       expect(component.labelHint).toBe('Select a model');
     });
 
@@ -297,30 +283,23 @@ describe('DashboardComponent', () => {
     it('should hint about multiple models', () => {
       flushInitialRequests();
       component.selectedDatasetIds.add('d1');
-      component.selectedModelIds.add('m1');
-      component.selectedModelIds.add('m2');
+      component.selectedDetectorIds.add('m1');
+      component.selectedDetectorIds.add('m2');
       expect(component.labelHint).toBe('Select exactly 1 model');
-    });
-
-    it('should hint about non-trainable model', () => {
-      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', trainable: false, media_type: 'audio' }];
-      flushInitialRequests(datasets, models);
-      expect(component.labelHint).toBe('Model is not trainable');
     });
 
     it('should hint about media type mismatch', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'image' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
       flushInitialRequests(datasets, models);
       expect(component.labelHint).toBe('Media type mismatch');
     });
 
     it('should return empty hint when label is enabled', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
-      expect(component.labelHint).toBe('');
+      expect(component.labelHint).toBe('Open Train Mode with the selected dataset and model');
     });
   });
 
@@ -328,21 +307,21 @@ describe('DashboardComponent', () => {
     it('should hint about missing dataset and model', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      component.selectedModelIds.clear();
+      component.selectedDetectorIds.clear();
       expect(component.findHint).toBe('Select a dataset and a model');
     });
 
     it('should hint about missing dataset', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      component.selectedModelIds.add('m1');
+      component.selectedDetectorIds.add('m1');
       expect(component.findHint).toBe('Select a dataset');
     });
 
     it('should hint about missing model', () => {
       flushInitialRequests();
       component.selectedDatasetIds.add('d1');
-      component.selectedModelIds.clear();
+      component.selectedDetectorIds.clear();
       expect(component.findHint).toBe('Select a model');
     });
 
@@ -362,7 +341,7 @@ describe('DashboardComponent', () => {
 
     it('should hint about untrained model', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', media_type: 'audio', trainable: true, num_training: 0 }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0 }];
       flushInitialRequests(datasets, models);
       expect(component.findHint).toBe('Selected model has no training labels');
     });
@@ -380,7 +359,7 @@ describe('DashboardComponent', () => {
 
     // Refresh calls
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   });
 
   it('should delete a dataset after confirmation', fakeAsync(() => {
@@ -401,7 +380,7 @@ describe('DashboardComponent', () => {
     expect(component.selectedDatasetIds.has('d1')).toBeFalse();
 
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   }));
 
   it('should open and close importer modal', () => {
@@ -431,16 +410,16 @@ describe('DashboardComponent', () => {
   describe('onLabel', () => {
     it('should navigate directly when dataset is already loaded', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true }];
-      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
 
       const routerSpy = spyOn(component['router'], 'navigate');
       component.onLabel();
 
-      // Flush the loadModel call
-      const loadModelReq = httpMock.expectOne('/api/models/registry/load');
+      // Flush the loadDetector call
+      const loadModelReq = httpMock.expectOne('/api/detectors/registry/load');
       expect(loadModelReq.request.method).toBe('POST');
-      expect(loadModelReq.request.body).toEqual({ model_id: 'm1' });
+      expect(loadModelReq.request.body).toEqual({ detector_id: 'm1' });
       loadModelReq.flush({ ok: true });
 
       expect(routerSpy).toHaveBeenCalledWith(['/label']);
@@ -449,14 +428,14 @@ describe('DashboardComponent', () => {
 
     it('should store selected model text_query in session before navigating', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true }];
-      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio', text_query: 'dog barking' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', text_query: 'dog barking' }];
       flushInitialRequests(datasets, models);
 
       const session = TestBed.inject(LabelSessionService);
       spyOn(component['router'], 'navigate');
       component.onLabel();
 
-      const loadModelReq = httpMock.expectOne('/api/models/registry/load');
+      const loadModelReq = httpMock.expectOne('/api/detectors/registry/load');
       loadModelReq.flush({ ok: true });
 
       expect(session.textQuery).toBe('dog barking');
@@ -464,7 +443,7 @@ describe('DashboardComponent', () => {
 
     it('should load dataset first when not loaded, then navigate', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: false }];
-      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
 
       const routerSpy = spyOn(component['router'], 'navigate');
@@ -483,20 +462,20 @@ describe('DashboardComponent', () => {
       const progressReq = httpMock.expectOne('/api/dataset/progress');
       progressReq.flush({ status: 'idle' });
 
-      // Flush the loadModel call triggered after progress completes
-      const loadModelReq = httpMock.expectOne('/api/models/registry/load');
+      // Flush the loadDetector call triggered after progress completes
+      const loadModelReq = httpMock.expectOne('/api/detectors/registry/load');
       loadModelReq.flush({ ok: true });
 
       expect(routerSpy).toHaveBeenCalledWith(['/label']);
 
       // Refresh after completion
       httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-      httpMock.expectOne('/api/models/registry').flush({ models: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
     });
 
     it('should not navigate on load error progress', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: false }];
-      const models = [{ id: 'm1', name: 'M', trainable: true, media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
 
       const routerSpy = spyOn(component['router'], 'navigate');
@@ -513,7 +492,7 @@ describe('DashboardComponent', () => {
 
       // Refresh after error
       httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-      httpMock.expectOne('/api/models/registry').flush({ models: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
     });
 
     it('should do nothing when no dataset is selected', () => {
@@ -548,7 +527,7 @@ describe('DashboardComponent', () => {
 
     // Refresh after completion
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   }));
 
   it('should load demo dataset on demoSelected', () => {
@@ -572,6 +551,6 @@ describe('DashboardComponent', () => {
 
     // After idle, it should refresh
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/models/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   });
 });

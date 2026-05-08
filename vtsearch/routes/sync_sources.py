@@ -113,13 +113,7 @@ def list_labelset_sources_route():
 
 @sync_sources_bp.route("/api/detectors/<detector_name>/labelset-source", methods=["GET"])
 def get_detector_labelset_source(detector_name: str):
-    """Return the labelset source config for a detector, or null."""
-    from vtsearch.utils import get_autorun_detectors
-
-    detectors = get_autorun_detectors()
-    if detector_name not in detectors:
-        return jsonify({"error": f"Detector not found: {detector_name!r}"}), 404
-
+    """Return the labelset source config for a loaded detector, or null."""
     from vtsearch.utils.state_core import get_detector_context
 
     ctx = get_detector_context(detector_name)

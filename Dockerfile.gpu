@@ -49,6 +49,10 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # ---------- application layer ----------
 COPY . .
 
+# Bake the version into the image. See Dockerfile for the pattern.
+ARG VTSEARCH_VERSION=
+RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
+
 VOLUME /app/data
 
 EXPOSE 5000

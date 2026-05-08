@@ -218,16 +218,18 @@ IMPORTER = S3Importer()
 
 ### DatasetImporter class reference
 
-**Required to implement:**
+**Required to implement (pick one approach):**
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `run()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | Populate `medias` in-place with loaded data |
+| `list_records()` + `fetch_record()` | see [Bulk-record hooks](#bulk-record-hooks) | Per-record / bulk-record split that mirrors `MediaEmbedder`. The default `run()` lists records, hands them all to `fetch_records_bulk()`, and assigns IDs |
 
 **Optional overrides:**
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
+| `_fetch_records_bulk_impl()` | `(records: list, field_values: dict, thin: bool) -> list[dict | None]` | Batched fetch hook. Default loops `fetch_record`. Override to issue concurrent / batched I/O |
 | `run_cli()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | CLI variant; default delegates to `run()`. Override when `run()` expects FileStorage objects |
 | `get_field_options()` | `(field_key: str, current_values: dict) -> list[str]` | Compute dropdown options for fields declared with `dynamic_options=True`. See [Dynamic field options](#dynamic-field-options) |
 | `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Set `supports_chunked = True` |
@@ -327,6 +329,69 @@ implementation captures dataset-level field values like query IDs that
 are not useful per-media).  The post-processing step only backfills
 `origin` on media that have `origin=None`, so per-media origins set
 in `run()` are preserved.
+
+### Bulk-record hooks
+
+For service-style importers — those that fetch records from a remote
+source rather than scanning a local folder — override the per-record /
+bulk-record hooks instead of writing `run()` from scratch.  The split
+mirrors the embedder's `embed_media` / `embed_media_bulk` pattern: a
+working baseline comes from the per-item method, and you can opt into
+batched / concurrent I/O by overriding the bulk hook.
+
+```python
+class MyServiceImporter(DatasetImporter):
+    def list_records(self, field_values):
+        # Return whatever shape you want — opaque to the framework.
+        return _api.list(query=field_values["query"])
+
+    def fetch_record(self, record, field_values, thin=False):
+        # Default per-item path. The framework loops this when no
+        # bulk override is provided. Return None to skip a record.
+        return {
+            "type": "audio",
+            "filename": record["id"],
+            "embedding": _api.get_embedding(record["id"]),
+            "media_bytes": None if thin else _api.fetch_bytes(record["url"]),
+            "media_url": record["url"],
+            # origin / origin_name auto-filled from build_origin if omitted
+        }
+
+    def _fetch_records_bulk_impl(self, records, field_values, thin=False):
+        # Optional: replace the per-item loop with a single bulk request,
+        # a thread/async pool, or whatever the source supports.
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            embeddings = list(pool.map(lambda r: _api.get_embedding(r["id"]), records))
+            blobs = ([] if thin else
+                     list(pool.map(lambda r: _api.fetch_bytes(r["url"]), records)))
+        return [
+            {"type": "audio", "filename": r["id"], "embedding": e,
+             "media_bytes": (None if thin else b), "media_url": r["url"]}
+            for r, e, b in zip(records, embeddings, blobs or [None] * len(records))
+        ]
+```
+
+The default `run()`:
+
+1. Calls `list_records(field_values)` to get the work list.
+2. Calls `fetch_records_bulk(records, field_values, thin)` once with all
+   records (which dispatches to `_fetch_records_bulk_impl`; the default
+   impl loops `fetch_record` and emits per-item progress).
+3. Assigns sequential integer IDs starting at 1 and stores the resulting
+   media dicts in *medias*.
+4. Backfills `media["origin"]` from `build_origin(field_values)` and
+   `media["origin_name"]` from `media["filename"]` for any record that
+   didn't set them.
+
+Records returning `None` are skipped (gaps are squeezed out, IDs stay
+sequential).
+
+For an end-to-end example see
+`vtsearch/datasets/importers/recaller/__init__.py`, which overrides the
+bulk hook to issue DataWrest embedding lookups and PullWrest downloads
+concurrently via a thread pool.
 
 ### Dynamic field options
 
@@ -542,7 +607,7 @@ endpoints:
 |--------------------------------|--------|-------------------------------------------|-----------------|
 | `/api/dataset/export`          | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
 | `/api/labels/export`           | GET    | LabelSet — labels with per-element origin  | JSON            |
-| `/api/detector/export-server`  | POST   | Detector origins + inclusion to server file| JSON            |
+| `/api/detectors/{name}` | GET    | Trainable model labelset + examples        | JSON            |
 
 ### Wiring up dependencies
 
@@ -637,125 +702,23 @@ LABEL_IMPORTER = PostgresLabelImporter()
 
 ---
 
-## Adding a Processor Importer
+## Adding a detector from external labels
 
-Processor importers let users import processors (detectors/extractors) from
-external sources. A processor importer takes input (a JSON detector file,
-etc.) and returns a dict containing model weights and a threshold — which
-is then saved as an autorun detector.
+The detector and processor-importer plugin systems were removed.  To
+publish or share a classifier:
 
-### File structure
+1. Use `POST /api/detectors` (or
+   `POST /api/detectors/registry/from-labelset/<importer>`) to create a
+   detector file under `data/detectors/<name>.json`.
+2. Toggle its autorun flag with
+   `PUT /api/detectors/registry/<id>/autorun` so it runs from
+   `/api/auto-detect` and the CLI's `--autodetect` flow.
+3. The MLP itself lives only in RAM — it's trained on demand from the
+   labelset's origins each time the model is loaded or scored.
 
-```
-vtsearch/processors/importers/<your_importer>/
-└── __init__.py       # Importer class + PROCESSOR_IMPORTER instance (required)
-```
-
-### What to implement
-
-Subclass `ProcessorImporter` from `vtsearch.processors.importers.base`.
-The `run()` method must return a dict with model data.
-
-```python
-# vtsearch/processors/importers/s3/__init__.py
-
-from vtsearch.processors.importers.base import ProcessorImporter, ProcessorImporterField
-
-
-class S3ProcessorImporter(ProcessorImporter):
-    name = "s3"
-    display_name = "S3 Detector File"
-    description = "Download a detector JSON file from an S3 bucket."
-    icon = "☁️"
-    fields = [
-        ProcessorImporterField("bucket", "S3 Bucket", "text"),
-        ProcessorImporterField("key", "Object Key", "text"),
-    ]
-
-    def run(self, field_values: dict) -> dict:
-        """Download and parse a detector JSON from S3.
-
-        Must return a dict with at minimum:
-            - "good_origins" (list): origin dicts for Good-labeled media
-            - "bad_origins" (list): origin dicts for Bad-labeled media
-            - "media_type" (str): e.g. "audio", "image"
-        May also include:
-            - "inclusion" (int): inclusion bias from training
-            - "weights" (dict): pre-computed MLP weights (fallback)
-            - "threshold" (float): decision boundary in [0, 1]
-            - "name" (str): suggested default name
-        """
-        import json
-        import boto3
-
-        s3 = boto3.client("s3")
-        obj = s3.get_object(Bucket=field_values["bucket"], Key=field_values["key"])
-        data = json.loads(obj["Body"].read())
-
-        from vtsearch.models.weights_compat import normalize_detector_weights
-
-        nw = normalize_detector_weights(data)
-        return {
-            "media_type": data.get("media_type", "audio"),
-            "good_origins": nw.good_origins,
-            "bad_origins": nw.bad_origins,
-            "inclusion": nw.inclusion,
-            "weights": nw.weights,
-            "threshold": nw.threshold,
-        }
-
-
-PROCESSOR_IMPORTER = S3ProcessorImporter()
-```
-
-### ProcessorImporter class reference
-
-**Required to implement:**
-
-| Member | Signature | Description |
-|--------|-----------|-------------|
-| `run()` | `(field_values: dict) -> dict` | Return dict with `good_origins`, `bad_origins`, `media_type`, `weights`, `threshold` |
-
-**Optional overrides:**
-
-| Member | Signature | Description |
-|--------|-----------|-------------|
-| `run_cli()` | `(field_values: dict) -> dict` | CLI variant; default delegates to `run()` |
-
-**Default class attributes:**
-
-| Attribute | Default | Description |
-|-----------|---------|-------------|
-| `icon` | `"🧩"` | Emoji shown in the UI |
-
-### How it gets invoked
-
-1. `GET /api/processor-importers` returns available importers.
-2. `POST /api/processor-importers/import/<name>` invokes `run()`, combines
-   with user-supplied name, and saves as an autorun detector.
-
-### CLI usage
-
-Processor importers are used from the CLI via the settings file. Add a
-processor recipe to `autorun_processors` in `settings.json`:
-
-```json
-{
-    "autorun_processors": [
-        {
-            "processor_name": "my detector",
-            "processor_importer": "server_detector_file",
-            "field_values": {"filepath": "/path/to/detector.json"}
-        }
-    ]
-}
-```
-
-Then run autodetect:
-
-```bash
-python app.py --autodetect --dataset data.pkl --settings settings.json
-```
+For ready-made classifiers without labels (e.g. an OCR or face-detector
+heuristic), build an Extractor or Localizer plugin instead — see
+[EXTENDING-processors.md](EXTENDING-processors.md).
 
 ---
 

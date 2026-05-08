@@ -13,7 +13,6 @@ import tempfile
 from pathlib import Path
 
 import app as app_module
-from helpers import train_detector_from_votes
 
 SAMPLE_RESULTS = {
     "media_type": "audio",
@@ -260,20 +259,32 @@ class TestFillFromSortConfirm:
 
 
 class TestCliScoringNegativeHits:
-    def test_score_medias_with_detectors_returns_negative_hits(self, client):
-        """The multi-detector CLI scorer should include negative_hits."""
-        from vtsearch.utils import medias
-
-        # Train a detector to get valid weights
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        detector = train_detector_from_votes()
-
-        detectors = {"test": {"weights": detector["weights"], "threshold": detector["threshold"]}}
+    def test_trainable_model_scoring_returns_negative_hits(self, client):
+        """The detector CLI scorer should include negative_hits."""
+        import torch
 
         from vtsearch.cli import _score_medias_with_detectors
+        from vtsearch.models import build_model_from_weights
+        from vtsearch.models.detector_training import serialize_weights, train_and_threshold
+        from vtsearch.utils import medias, snapshot_medias
 
-        det_results = _score_medias_with_detectors(medias, detectors)
+        snap = snapshot_medias()
+        good_ids = [1, 2, 3]
+        bad_ids = [18, 19, 20]
+        X = [snap[i]["embedding"] for i in good_ids + bad_ids]
+        y = [1.0] * len(good_ids) + [0.0] * len(bad_ids)
+        mlp, threshold = train_and_threshold(X, y, snap=snap)
+        # Round-trip through serialize_weights to mirror the production path.
+        weights = serialize_weights(mlp)
+        rebuilt = build_model_from_weights(weights)
+        assert rebuilt is not None
+        # Sanity check: torch tensor coverage matches
+        with torch.no_grad():
+            out = rebuilt(torch.zeros((1, weights["0.weight"][0].__len__()), dtype=torch.float32))
+        assert out is not None
+
+        detector_mlps = {"test": {"mlp": mlp, "threshold": threshold}}
+        det_results = _score_medias_with_detectors(medias, detector_mlps)
         for det_result in det_results.values():
             assert "negative_hits" in det_result
             assert isinstance(det_result["negative_hits"], list)

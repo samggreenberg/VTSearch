@@ -14,8 +14,11 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import Callable, Optional
 
 import numpy as np
+
+ProgressCallback = Callable[[str, str, int, int], None]
 
 CANVAS_SIZE = 256
 
@@ -134,28 +137,50 @@ def _draw_shapes(rng: np.random.Generator, draw, size: int) -> tuple[str, dict]:
 _GENERATORS = [_draw_smiley, _draw_shapes]
 
 
-def generate_image_dataset(output_dir: Path, count: int, seed: int = 42) -> list[Path]:
+def generate_image_dataset(
+    output_dir: Path,
+    count: int,
+    seed: int = 42,
+    on_progress: Optional[ProgressCallback] = None,
+) -> list[Path]:
     """Generate ``count`` synthetic images into ``output_dir``.
 
     Existing files matching the deterministic naming scheme are kept (the
     importer caches its output dir across reloads). Returns the list of
     image paths in generation order.
+
+    If *on_progress* is supplied, it is called as
+    ``on_progress(status, message, current, total)`` once per file (and
+    once at the start and end) so the caller can drive a progress bar.
     """
     from PIL import Image, ImageDraw  # noqa: PLC0415
 
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
     width = max(4, len(str(count)))
+    if on_progress is not None:
+        on_progress("downloading", f"Generating {count} synthetic images…", 0, count)
     for i in range(count):
         gen = _GENERATORS[i % len(_GENERATORS)]
         idea = "smiley" if gen is _draw_smiley else "shapes"
         path = output_dir / f"{idea}_{i:0{width}d}.png"
         paths.append(path)
-        if path.exists():
+        cached = path.exists()
+        if on_progress is not None:
+            verb = "Reusing cached" if cached else "Rendering"
+            on_progress(
+                "downloading",
+                f"{verb} synthetic image {i + 1}/{count} ({idea})…",
+                i,
+                count,
+            )
+        if cached:
             continue
         rng = np.random.default_rng(seed + i)
         img = Image.new("RGB", (CANVAS_SIZE, CANVAS_SIZE), (255, 255, 255))
         draw = ImageDraw.Draw(img)
         gen(rng, draw, CANVAS_SIZE)
         img.save(path, format="PNG")
+    if on_progress is not None:
+        on_progress("downloading", f"Generated {count} synthetic images", count, count)
     return paths

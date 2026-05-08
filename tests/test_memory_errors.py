@@ -219,6 +219,7 @@ class TestBackgroundImportMemoryError:
         from vtsearch.routes.datasets import _run_importer_in_background
 
         mock_importer = mock.MagicMock()
+        mock_importer.supports_chunked = False
         mock_importer.run.side_effect = MemoryError("simulated")
 
         # Reset progress

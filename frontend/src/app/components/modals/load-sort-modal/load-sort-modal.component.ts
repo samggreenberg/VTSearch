@@ -2,11 +2,10 @@ import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
-import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { TrainableModelsApiService } from '../../../services/trainable-models-api.service';
-import { ServerFileEntry, ModelRegistryEntry, ImporterInfo } from '../../../models/api.models';
+import { DetectorsApiService } from '../../../services/detectors-api.service';
+import { ServerFileEntry, DetectorRegistryEntry, ImporterInfo } from '../../../models/api.models';
 import {
   MediaCropModalComponent,
   MediaCropResult,
@@ -36,12 +35,11 @@ type MediaPickerView = 'sources' | 'browse-items' | 'file-browser';
 })
 export class LoadSortModalComponent implements OnInit {
   @Output() closed = new EventEmitter<void>();
-  @Output() detectorLoaded = new EventEmitter<unknown>();
+  @Output() modelSelected = new EventEmitter<string>();
   @Output() exampleSortStarted = new EventEmitter<unknown>();
 
-  serverDetectors: ServerFileEntry[] = [];
   serverMediaFiles: ServerFileEntry[] = [];
-  registryModels: ModelRegistryEntry[] = [];
+  registryModels: DetectorRegistryEntry[] = [];
   loading = true;
   status = '';
   error = '';
@@ -67,72 +65,37 @@ export class LoadSortModalComponent implements OnInit {
   pendingOrigin: { origin: Record<string, unknown>; key: string } | null = null;
 
   constructor(
-    private detectorsApi: DetectorsApiService,
     private sortingApi: SortingApiService,
     private datasetsApi: DatasetsApiService,
-    private modelsApi: TrainableModelsApiService,
+    private detectorsApi: DetectorsApiService,
   ) {}
 
   ngOnInit(): void {
-    this.detectorsApi.getServerFiles().subscribe({
-      next: (res) => {
-        this.serverDetectors = res.files || [];
-        this.loading = false;
-      },
-      error: () => {
-        this.loading = false;
-      },
-    });
     this.sortingApi.getServerMediaFiles().subscribe({
       next: (res) => {
         this.serverMediaFiles = res.files || [];
       },
     });
-    this.modelsApi.getRegistry().subscribe({
+    this.detectorsApi.getRegistry().subscribe({
       next: (res) => {
-        // Show models that have been trained (have a detector with weights)
-        this.registryModels = (res.models || []).filter(
-          (m) => m.detector_name && (m.num_training ?? 0) > 0,
+        // Show detectors that have at least one training label.
+        this.registryModels = (res.detectors || []).filter(
+          (m) => (m.num_training ?? 0) > 0,
         );
+        this.loading = false;
+      },
+      error: () => {
+        this.loading = false;
       },
     });
   }
 
-  // --- Detector loading ---
+  // --- Model loading ---
 
-  loadServerDetector(name: string): void {
-    this.status = 'Loading server detector...';
-    this.detectorsApi.getServerFile(name).subscribe({
-      next: (data) => {
-        this.status = '';
-        this.detectorLoaded.emit(data);
-        this.closed.emit();
-      },
-      error: () => {
-        this.status = '';
-        this.error = 'Failed to load detector';
-      },
-    });
-  }
-
-  loadRegistryModel(model: ModelRegistryEntry): void {
-    if (!model.detector_name) return;
-    this.status = 'Loading model detector...';
-    this.detectorsApi.exportDetector(model.detector_name).subscribe({
-      next: (data) => {
-        this.status = '';
-        const detector = data as Record<string, unknown>;
-        if (!detector['name']) {
-          detector['name'] = model.name;
-        }
-        this.detectorLoaded.emit(detector);
-        this.closed.emit();
-      },
-      error: () => {
-        this.status = '';
-        this.error = 'Failed to load model detector';
-      },
-    });
+  loadRegistryModel(model: DetectorRegistryEntry): void {
+    this.status = 'Loading model…';
+    this.modelSelected.emit(model.id);
+    this.closed.emit();
   }
 
   // --- Example media loading ---

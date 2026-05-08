@@ -75,6 +75,24 @@ def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) ->
     return resolved
 
 
+def sanitize_template_value(value: str) -> str:
+    """Make *value* safe to splice into a filesystem-path template.
+
+    Server-side sync sources accept admin-defined templates like
+    ``data/labels/{detector_name}.json`` and substitute user-controlled
+    fields (``{detector_name}``, ``{username}``, …) at runtime.  Without
+    sanitization, a value containing ``../`` would let the substitution
+    escape the intended directory.
+
+    Returns a value with path separators and parent-directory tokens
+    replaced by ``_``.  Empty / ``.`` / ``..`` collapse to ``_``.
+    """
+    sanitized = value.replace("/", "_").replace("\\", "_").replace("\0", "_")
+    if sanitized in ("", ".", ".."):
+        return "_"
+    return sanitized
+
+
 def rglob_follow_symlinks(root: Path, pattern: str) -> list[Path]:
     """Like ``Path.rglob(pattern)`` but follows symlinks into directories.
 

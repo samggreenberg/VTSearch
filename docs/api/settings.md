@@ -31,17 +31,15 @@ GET /api/settings
   "panel_pct_left": {},
   "panel_pct_right": {},
   "autoload_media_embedders": [],
-  "autorun_processors": [],
+  "autorun_detectors": [],
   "autopilot_enabled": true,
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
   "autopilot_resort_interval": 10,
   "autopilot_goal_diversity": 40,
-  "autorun_detector_names": [],
   "saved_datasets_dir": "data/saved_datasets",
-  "detectors_dir": "data/detectors",
-  "trainable_models_dir": "data/trainable_models"
+  "detectors_dir": "data/detectors"
 }
 ```
 
@@ -73,9 +71,8 @@ Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `autopilot_enabled` (bool),
 `hide_autopilot` (bool), `autopilot_top_greens` (int),
 `autopilot_hard_reds` (int), `autopilot_resort_interval` (int),
-`autopilot_goal_diversity` (int), `autorun_detector_names` (list of strings),
-`saved_datasets_dir` (string path), `detectors_dir` (string path),
-`trainable_models_dir` (string path).
+`autopilot_goal_diversity` (int), `autorun_detectors` (list of detector names),
+`saved_datasets_dir` (string path), `detectors_dir` (string path).
 
 ### Get default settings
 
@@ -83,29 +80,17 @@ Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 GET /api/settings/defaults
 ```
 
-→ Default values for all settings (excluding `autorun_processors`).
+→ Default values for all settings (excluding infrastructure keys like
+`autorun_detectors`, `saved_datasets_dir`, `detectors_dir`,
+and `settings_source`).
 
-### Autorun processors
+### Trainable-model autorun
 
-```
-GET /api/settings/autorun-processors
-```
-
-→ `{"autorun_processors": [{"processor_name": "...", "processor_importer": "...", "field_values": {...}, "settings_json": "..."}]}`
-
-```
-POST /api/settings/autorun-processors
-```
-
-**Body:** `{"processor_name": "my_detector", "processor_importer": "server_detector_file", "field_values": {"filepath": "/path/to/detector.json"}}`
-
-→ `{"success": true, "processor_name": "...", "processor_importer": "...", "field_values": {...}, "settings_json": "..."}`
-
-```
-DELETE /api/settings/autorun-processors/{name}
-```
-
-→ `{"success": true}` or 404.
+`autorun_detectors` is a flat list of registered model names that
+should run during `/api/auto-detect` and the CLI's `--autodetect` flow.
+Toggle a model via `PUT /api/detectors/registry/{model_id}/autorun` (see
+`docs/api/models.md`) — the registry endpoint is the source of truth and
+writes through to this settings list.
 
 ---
 

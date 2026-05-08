@@ -1,12 +1,11 @@
 """Settings API route tests.
 
 Covers Flask API routes: GET/PUT /api/settings,
-GET/POST/DELETE /api/settings/autorun-processors.
+including autorun_detectors persistence.
 """
 
 from __future__ import annotations
 
-import json
 
 import pytest
 
@@ -22,7 +21,7 @@ class TestSettingsAPI:
         assert res.status_code == 200
         data = res.get_json()
         assert "volume" in data
-        assert "autorun_processors" in data
+        assert "autorun_detectors" in data
 
     def test_update_volume(self, client):
         res = client.put(
@@ -96,90 +95,21 @@ class TestSettingsAPI:
         )
         assert res.status_code == 400
 
-    def test_add_autorun_processor(self, client):
-        res = client.post(
-            "/api/settings/autorun-processors",
-            json={
-                "processor_name": "api_test",
-                "processor_importer": "server_detector_file",
-                "field_values": {"filepath": "/tmp/det.json"},
-            },
+    def test_update_autorun_detectors(self, client):
+        res = client.put(
+            "/api/settings",
+            json={"autorun_detectors": ["model-a", "model-b"]},
         )
         assert res.status_code == 200
         data = res.get_json()
-        assert data["success"] is True
-        assert data["processor_name"] == "api_test"
-        assert "settings_json" in data
+        assert data["autorun_detectors"] == ["model-a", "model-b"]
 
-    def test_add_autorun_processor_missing_name(self, client):
-        res = client.post(
-            "/api/settings/autorun-processors",
-            json={"processor_importer": "server_detector_file", "field_values": {}},
+    def test_update_autorun_detectors_invalid(self, client):
+        res = client.put(
+            "/api/settings",
+            json={"autorun_detectors": "not a list"},
         )
         assert res.status_code == 400
-
-    def test_add_autorun_processor_missing_importer(self, client):
-        res = client.post(
-            "/api/settings/autorun-processors",
-            json={"processor_name": "x", "field_values": {}},
-        )
-        assert res.status_code == 400
-
-    def test_list_autorun_processors(self, client):
-        # Add one first
-        client.post(
-            "/api/settings/autorun-processors",
-            json={
-                "processor_name": "list_test",
-                "processor_importer": "server_detector_file",
-                "field_values": {"filepath": "x.json"},
-            },
-        )
-
-        res = client.get("/api/settings/autorun-processors")
-        assert res.status_code == 200
-        data = res.get_json()
-        assert any(p["processor_name"] == "list_test" for p in data["autorun_processors"])
-
-    def test_delete_autorun_processor(self, client):
-        client.post(
-            "/api/settings/autorun-processors",
-            json={
-                "processor_name": "del_test",
-                "processor_importer": "server_detector_file",
-                "field_values": {"filepath": "x.json"},
-            },
-        )
-
-        res = client.delete("/api/settings/autorun-processors/del_test")
-        assert res.status_code == 200
-
-        # Verify it's gone
-        res2 = client.get("/api/settings/autorun-processors")
-        data = res2.get_json()
-        assert not any(p["processor_name"] == "del_test" for p in data["autorun_processors"])
-
-    def test_delete_nonexistent(self, client):
-        res = client.delete("/api/settings/autorun-processors/nope")
-        assert res.status_code == 404
-
-    def test_get_settings_includes_settings_json(self, client):
-        client.post(
-            "/api/settings/autorun-processors",
-            json={
-                "processor_name": "cmd_test",
-                "processor_importer": "server_detector_file",
-                "field_values": {"filepath": "det.json"},
-            },
-        )
-
-        res = client.get("/api/settings")
-        data = res.get_json()
-        proc = next(p for p in data["autorun_processors"] if p["processor_name"] == "cmd_test")
-
-        parsed = json.loads(proc["settings_json"])
-        assert parsed["processor_name"] == "cmd_test"
-        assert parsed["processor_importer"] == "server_detector_file"
 
     def test_get_defaults(self, client):
         res = client.get("/api/settings/defaults")
@@ -196,10 +126,9 @@ class TestSettingsAPI:
         assert isinstance(data["focus_mode_right"], dict)
         for v in data["focus_mode_right"].values():
             assert v == "click"
-        assert "autorun_processors" not in data
+        assert "autorun_detectors" not in data
         assert "saved_datasets_dir" not in data
         assert "detectors_dir" not in data
-        assert "trainable_models_dir" not in data
 
     def test_update_safe_thresholds(self, client):
         res = client.put("/api/settings", json={"safe_thresholds": True})
@@ -525,4 +454,4 @@ class TestSettingsAPI:
         data = res.get_json()
         assert "saved_datasets_dir" not in data
         assert "detectors_dir" not in data
-        assert "trainable_models_dir" not in data
+        assert "detectors_dir" not in data

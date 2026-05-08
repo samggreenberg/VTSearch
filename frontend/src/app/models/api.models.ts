@@ -53,6 +53,8 @@ export interface VotesResponse {
   bad: number[];
   click_times: Record<string, number>;
   learned_scores: Record<string, number>;
+  labelset_good_count?: number;
+  labelset_bad_count?: number;
 }
 
 export interface InclusionResponse {
@@ -168,7 +170,7 @@ export interface LoadingTask {
   error?: string;
   created_at: number;
   dataset_id?: string;
-  model_id?: string;
+  detector_id?: string;
   media_type?: string;
   embedder?: string;
 }
@@ -283,37 +285,7 @@ export interface DatasetRegistryResponse {
   datasets: DatasetRegistryEntry[];
 }
 
-// --- Detectors ---
-
-export interface DetectorInfo {
-  name: string;
-  media_type?: string;
-  autodetect?: boolean;
-  [key: string]: unknown;
-}
-
-export interface AutorunDetectorsResponse {
-  detectors: DetectorInfo[];
-}
-
-export interface DetectorCreateResponse {
-  success: boolean;
-  name: string;
-}
-
-export interface DetectorDeleteResponse {
-  success: boolean;
-}
-
-export interface DetectorRenameResponse {
-  success: boolean;
-  new_name: string;
-}
-
-export interface DetectorSortResponse {
-  results: { id: number; score: number }[];
-  threshold: number;
-}
+// --- Detector scoring ---
 
 export interface AutoDetectResponse {
   [key: string]: unknown;
@@ -342,18 +314,13 @@ export interface AppSettings {
   panel_pct_right?: Record<string, number>;
   autoload_media_types?: string[];
   autoload_media_embedders?: string[];
-  autorun_processors?: AutorunProcessor[];
+  autorun_detectors?: string[];
   autopilot_enabled?: boolean;
   hide_autopilot?: boolean;
   autopilot_top_greens?: number;
   autopilot_hard_reds?: number;
   autopilot_resort_interval?: number;
   autopilot_goal_diversity?: number;
-  [key: string]: unknown;
-}
-
-export interface AutorunProcessor {
-  name: string;
   [key: string]: unknown;
 }
 
@@ -370,36 +337,55 @@ export interface ExporterInfo {
   [key: string]: unknown;
 }
 
-// --- Trainable Models ---
+// --- Detectors ---
 
-export interface TrainableModel {
+export interface Detector {
   name: string;
   [key: string]: unknown;
 }
 
-export interface TrainableModelsResponse {
-  models: TrainableModel[];
+export interface DetectorsResponse {
+  detectors: Detector[];
 }
 
-export interface ModelRegistryEntry {
+export interface LabelElement {
+  id: string;
+  label: 'good' | 'bad';
+  media_type: string;
+  name: string;
+  filename: string;
+  origin_name: string;
+  md5: string;
+  cid: number | null;
+  time: number;
+  score: number;
+}
+
+export interface LabelsDetailResponse {
+  good: LabelElement[];
+  bad: LabelElement[];
+  media_type: string;
+}
+
+export interface DetectorRegistryEntry {
   id: string;
   name: string;
   media_type: string;
-  trainable?: boolean;
   num_training?: number;
   text_query?: string;
   media_example?: string;
-  detector_name?: string;
   loaded?: boolean;
   detector_loaded?: boolean;
+  autorun?: boolean;
+  last_trained_at?: number | null;
   [key: string]: unknown;
 }
 
-export interface ModelsRegistryResponse {
-  models: ModelRegistryEntry[];
+export interface DetectorsRegistryResponse {
+  detectors: DetectorRegistryEntry[];
 }
 
-export interface CombineModelsResult {
+export interface CombineDetectorsResult {
   success: boolean;
   name: string;
   media_type: string;
@@ -485,10 +471,6 @@ export interface ServerMediaFilesResponse {
   files: ServerFileEntry[];
 }
 
-export interface DetectorServerFilesResponse {
-  files: ServerFileEntry[];
-}
-
 // --- Eval / Progress Charts ---
 
 export interface ErrorCostDataPoint {
@@ -552,10 +534,10 @@ export interface AutoDetectResultsData {
   detectors_run?: string | number;
   results: Record<string, AutoDetectDetectorResult>;
   // Find mode fields
-  models?: string[];
+  detectors?: string[];
   datasets?: string[];
   multiple_datasets?: boolean;
-  multiple_models?: boolean;
+  multiple_detectors?: boolean;
   [key: string]: unknown;
 }
 

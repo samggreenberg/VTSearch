@@ -4,9 +4,7 @@ Covers:
 - /api/example-sort (generic, media-type-aware)
 - /api/server-media-files (listing)
 - /api/example-sort-server (server-side example sort)
-- /api/detector/server-files/<name> (individual server detector fetch)
-- /api/models/registry (dashboard models for detector loading)
-- /api/autorun-detectors/<name>/export (export detector weights for load sort)
+- /api/detectors/registry (dashboard models for model loading)
 - /api/example-sort-origin (sort by origin-based media file)
 """
 
@@ -314,103 +312,29 @@ class TestExampleSortServer:
         assert saved_duration == pytest.approx(0.3, abs=0.01)
 
 
-class TestServerDetectorFileGet:
-    """Tests for GET /api/detector/server-files/<name> (fetch individual detector)."""
+class TestRegistryDetectorsForLoadSort:
+    """Tests for the detector registry surface used by the Load Sort window."""
 
-    @pytest.fixture(autouse=True)
-    def _setup_det_dir(self, tmp_path):
-        from vtsearch import settings
-
-        self._det_dir = tmp_path / "detectors"
-        self._det_dir.mkdir(parents=True, exist_ok=True)
-        settings.set_detectors_dir(str(self._det_dir))
-
-    def _create_detector(self, name="test_detector"):
-        data = {"weights": {"0.weight": [[1.0]], "0.bias": [0.0]}, "threshold": 0.5, "media_type": "audio"}
-        (self._det_dir / f"{name}.json").write_text(json.dumps(data))
-        return data
-
-    def test_get_existing_detector(self, client):
-        expected = self._create_detector("my_det")
-        resp = client.get("/api/detector/server-files/my_det")
+    def test_registry_lists_detectors(self, client):
+        """GET /api/detectors/registry returns detectors list."""
+        resp = client.get("/api/detectors/registry")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["weights"] == expected["weights"]
-        assert data["threshold"] == expected["threshold"]
+        assert "detectors" in data
+        assert isinstance(data["detectors"], list)
 
-    def test_get_nonexistent_returns_404(self, client):
-        resp = client.get("/api/detector/server-files/nonexistent")
-        assert resp.status_code == 404
-
-    def test_invalid_name_returns_400(self, client):
-        resp = client.get("/api/detector/server-files/%%%")
-        assert resp.status_code == 400
-
-
-class TestRegistryModelsForLoadSort:
-    """Tests for using dashboard registry models as detector sources in Load Sort.
-
-    The Load Sort window lists trained registry models so users can pick one
-    and run detector-sort with its exported weights.
-    """
-
-    def test_registry_lists_models(self, client):
-        """GET /api/models/registry returns models list."""
-        resp = client.get("/api/models/registry")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "models" in data
-        assert isinstance(data["models"], list)
-
-    def test_create_and_list_registry_model(self, client):
-        """A registered model appears in the registry listing."""
+    def test_create_and_list_registry_detector(self, client):
+        """A registered detector appears in the registry listing."""
         resp = client.post(
-            "/api/models/registry",
-            json={"name": "Test LoadSort Model", "media_type": "audio", "trainable": True},
+            "/api/detectors/registry",
+            json={"name": "Test LoadSort Detector", "media_type": "audio"},
         )
         assert resp.status_code == 201
 
-        resp = client.get("/api/models/registry")
-        models = resp.get_json()["models"]
-        names = [m["name"] for m in models]
-        assert "Test LoadSort Model" in names
-
-    def test_export_trained_detector_weights(self, client):
-        """An autorun detector with weights can export them for detector-sort."""
-        from vtsearch.utils.state import autorun_detectors
-
-        autorun_detectors["test_det"] = {
-            "name": "test_det",
-            "media_type": "audio",
-            "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.0]},
-            "threshold": 0.5,
-        }
-
-        resp = client.get("/api/autorun-detectors/test_det/export")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "weights" in data
-        assert data["name"] == "test_det"
-        assert data["threshold"] == 0.5
-
-    def test_export_untrained_detector_returns_400(self, client):
-        """An autorun detector without weights cannot be exported."""
-        from vtsearch.utils.state import autorun_detectors
-
-        autorun_detectors["no_weights"] = {
-            "name": "no_weights",
-            "media_type": "audio",
-            "weights": None,
-            "threshold": 0.5,
-        }
-
-        resp = client.get("/api/autorun-detectors/no_weights/export")
-        assert resp.status_code == 400
-
-    def test_export_nonexistent_detector_returns_404(self, client):
-        """Exporting a non-existent detector returns 404."""
-        resp = client.get("/api/autorun-detectors/does_not_exist/export")
-        assert resp.status_code == 404
+        resp = client.get("/api/detectors/registry")
+        detectors = resp.get_json()["detectors"]
+        names = [d["name"] for d in detectors]
+        assert "Test LoadSort Detector" in names
 
 
 class TestExampleSortOrigin:

@@ -381,12 +381,17 @@ def _extract_importer_fields(importer):
         for f in importer.fields:
             if f.field_type != "file":
                 field_values[f.key] = request.form.get(f.key, f.default)
+        dataset_name = (request.form.get("dataset_name") or "").strip()
     else:
         body = request.get_json(force=True) or {}
         for f in importer.fields:
             if f.key not in body and f.required:
                 return None, (jsonify({"error": f"Missing required field: {f.key!r}"}), 400)
             field_values[f.key] = body.get(f.key, f.default)
+        dataset_name = str(body.get("dataset_name") or "").strip()
+
+    if dataset_name:
+        field_values["dataset_name"] = dataset_name
 
     return field_values, None
 
@@ -425,12 +430,15 @@ def stage_demo(name: str):
 
     body = request.get_json(force=True, silent=True) or {}
     converter_name = body.get("converter", "")
+    dataset_name = str(body.get("dataset_name") or "").strip()
 
     field_values: dict = {"name": name}
     if converter_name:
         field_values["converter"] = converter_name
+    if dataset_name:
+        field_values["dataset_name"] = dataset_name
 
-    label = DEMO_DATASETS[name].get("label", name)
+    label = dataset_name or DEMO_DATASETS[name].get("label", name)
     _stage_importer_in_background(importer, field_values, label=label)
     return jsonify({"ok": True, "message": "Staging demo dataset..."})
 
@@ -512,9 +520,13 @@ def import_dataset(importer_name: str):
         if val:
             field_values[key] = val
 
-    chunk_size = _parse_chunk_size(get_request_field("chunk_size", bool(file_keys)))
+    clipper_params, params_err = _extract_clipper_params(bool(file_keys))
+    if params_err:
+        return params_err
+    if clipper_params is not None:
+        field_values["clipper_params"] = clipper_params
 
-    task_id = _run_importer_in_background(importer, field_values, chunk_size=chunk_size)
+    task_id = _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
 
 
@@ -525,19 +537,30 @@ def import_dataset(importer_name: str):
 LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
 
 
-def _parse_chunk_size(value: Any) -> int:
-    """Parse an optional ``chunk_size`` form/JSON value into a non-negative int.
+def _extract_clipper_params(has_file_fields: bool) -> tuple[dict | None, Any]:
+    """Read optional ``clipper_params`` from form/JSON, returning (params, error_response).
 
-    Returns ``0`` when the value is missing, blank, or non-numeric — which
-    means "no chunking, load everything in one pass".
+    JSON requests carry the value as a dict directly.  Multipart form
+    requests carry it as a JSON-encoded string (since form fields are
+    flat).  Either form is accepted; anything else is a 400 error.
+    Returns ``(None, None)`` when no value is present.
     """
-    if value is None or value == "":
-        return 0
-    try:
-        n = int(value)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, n)
+    if has_file_fields:
+        raw = request.form.get("clipper_params") or ""
+        if not raw:
+            return None, None
+        try:
+            parsed = json.loads(raw)
+        except (ValueError, TypeError) as exc:
+            return None, (jsonify({"error": f"Invalid clipper_params: {exc}"}), 400)
+    else:
+        parsed = get_json_safe().get("clipper_params")
+        if parsed is None or parsed == "":
+            return None, None
+
+    if not isinstance(parsed, dict):
+        return None, (jsonify({"error": "clipper_params must be a JSON object"}), 400)
+    return parsed, None
 
 
 def _safe_relative_upload_path(filename: str) -> PurePosixPath | None:
@@ -595,7 +618,7 @@ def import_local_folder():
     converters = (request.form.get("converters") or "").strip()
     recursive_raw = (request.form.get("recursive") or "true").strip().lower()
     recursive = recursive_raw not in ("false", "0", "no", "off")
-    chunk_size = _parse_chunk_size(request.form.get("chunk_size"))
+    user_dataset_name = (request.form.get("dataset_name") or "").strip()
     clipper_params_raw = request.form.get("clipper_params") or ""
     clipper_params: dict | None = None
     if clipper_params_raw:
@@ -656,9 +679,14 @@ def import_local_folder():
         field_values["skip_embedding"] = True
 
     from vtsearch.auth import get_current_user
-    from vtsearch.datasets.load_pipeline import _normalize_media_type, consume_chunks_into
+    from vtsearch.datasets.load_pipeline import (
+        _normalize_media_type,
+        auto_chunk_size,
+        consume_chunks_into,
+    )
 
-    use_chunked = chunk_size > 0 and getattr(importer, "supports_chunked", False)
+    use_chunked = getattr(importer, "supports_chunked", False)
+    chunk_size = auto_chunk_size(media_type) if use_chunked else 0
 
     def _load(target_medias):
         try:
@@ -672,7 +700,7 @@ def import_local_folder():
     task_id = _run_origin_load_in_background(
         _load,
         origin,
-        name="Local folder upload",
+        name=user_dataset_name or "Local folder upload",
         clipper=clipper_name,
         clipper_params=inner_clipper_params,
         embedder=embedder,
@@ -704,6 +732,7 @@ def load_demo_dataset_route():
     embedder_name = data.get("embedder", "")
     clipper_name = data.get("clipper", "")
     converter_name = data.get("converter", "")
+    user_dataset_name = str(data.get("dataset_name") or "").strip()
 
     if not dataset_name or dataset_name not in DEMO_DATASETS:
         return jsonify({"error": "Invalid dataset name"}), 400
@@ -714,6 +743,8 @@ def load_demo_dataset_route():
 
     demo_info = DEMO_DATASETS[dataset_name]
     field_values: dict = {"name": dataset_name}
+    if user_dataset_name:
+        field_values["dataset_name"] = user_dataset_name
     # Inject media_type so the loading task exposes it to the frontend,
     # allowing the "guessed type" logic to consider in-progress loads.
     if converter_name:

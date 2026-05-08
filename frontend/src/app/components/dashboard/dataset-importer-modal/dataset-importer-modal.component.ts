@@ -54,6 +54,9 @@ export class DatasetImporterModalComponent implements OnInit {
   demoEmbedder = '';
   demoClippers: ClipperInfo[] = [];
   selectedDemoClipper = '';
+  /** Optional user-supplied dataset name for demo imports.  Empty means
+   *  "use the demo entry's label". */
+  demoDatasetName = '';
 
   // Demo table column metadata + controller. Mirrors the Dashboard datagrid:
   // percentage widths summing to 100, draggable column reorder, click-to-sort
@@ -91,8 +94,11 @@ export class DatasetImporterModalComponent implements OnInit {
   lfPickerKind: 'folder' | 'files' = 'folder';
   /** Whether subfolders inside the picked local folder are included. */
   lfRecursive = true;
-  /** Maximum medias per chunk during embedding; 0 means "no chunking". */
-  lfChunkSize = 0;
+  /** Optional user-supplied dataset name for local-folder uploads. */
+  lfDatasetName = '';
+  /** Whether the user has manually edited :prop:`lfDatasetName` (so we stop
+   *  auto-overwriting it from the picked folder name). */
+  private lfDatasetNameDirty = false;
 
   // Server folder browser state
   sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
@@ -111,11 +117,10 @@ export class DatasetImporterModalComponent implements OnInit {
   sfSubmitting = false;
   /** Whether subdirectories of the picked server folder are scanned. */
   sfRecursive = true;
-  /** Maximum medias per chunk during embedding; 0 means "no chunking". */
-  sfChunkSize = 0;
-
-  /** Maximum medias per chunk during embedding for the generic form view; 0 means "no chunking". */
-  chunkSize = 0;
+  /** Optional user-supplied dataset name for server-folder imports. */
+  sfDatasetName = '';
+  /** Whether the user has manually edited :prop:`sfDatasetName`. */
+  private sfDatasetNameDirty = false;
 
   // Dynamic-options cache for the generic form view.  Keyed by ImporterField.key.
   /** Options last fetched from the backend for dynamic-options fields. */
@@ -438,6 +443,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.demos = [];
     this.demoTabs = [];
     this.activeTab = '';
+    this.demoDatasetName = '';
 
     this.datasetsApi.getMediaTypes().subscribe({
       next: (res) => {
@@ -671,7 +677,13 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   selectDemo(demo: DemoDataset): void {
-    this.demoSelected.emit({ ...demo, embedder: this.selectedDemoEmbedder, clipper: this.selectedDemoClipper } as any);
+    const userName = (this.demoDatasetName || '').trim();
+    this.demoSelected.emit({
+      ...demo,
+      embedder: this.selectedDemoEmbedder,
+      clipper: this.selectedDemoClipper,
+      dataset_name: userName,
+    } as any);
     this.closed.emit();
   }
 
@@ -703,6 +715,8 @@ export class DatasetImporterModalComponent implements OnInit {
     this.lfError = '';
     this.lfSubmitting = false;
     this.lfRecursive = this.readRecursiveDefault(resolved);
+    this.lfDatasetName = '';
+    this.lfDatasetNameDirty = false;
 
     // Reuse the server_folder importer's media_type options for consistency.
     const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
@@ -728,6 +742,28 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     this.lfFiles = Array.from(input.files);
     this.lfError = '';
+    if (!this.lfDatasetNameDirty) {
+      this.lfDatasetName = this.lfDerivedDatasetName();
+    }
+  }
+
+  /** Derive a default dataset name from the currently picked files / folder.
+   *  Used to pre-fill the Dataset Name input until the user edits it. */
+  private lfDerivedDatasetName(): string {
+    if (this.lfPickerKind === 'folder' && this.lfFolderName) {
+      return this.lfFolderName;
+    }
+    if (this.lfFiles.length === 1) {
+      const name = this.lfFiles[0].name || '';
+      const dot = name.lastIndexOf('.');
+      return dot > 0 ? name.slice(0, dot) : name;
+    }
+    return '';
+  }
+
+  lfOnDatasetNameInput(value: string): void {
+    this.lfDatasetName = value;
+    this.lfDatasetNameDirty = true;
   }
 
   lfOnMediaTypeChange(mediaType: string): void {
@@ -819,8 +855,9 @@ export class DatasetImporterModalComponent implements OnInit {
     const formData = new FormData();
     formData.append('media_type', this.lfMediaType);
     formData.append('recursive', this.lfRecursive ? 'true' : 'false');
-    if (this.lfChunkSize && this.lfChunkSize > 0) {
-      formData.append('chunk_size', String(Math.floor(this.lfChunkSize)));
+    const lfName = (this.lfDatasetName || '').trim();
+    if (lfName) {
+      formData.append('dataset_name', lfName);
     }
     if (this.lfSelectedEmbedder) {
       formData.append('embedder', this.lfSelectedEmbedder);
@@ -860,6 +897,8 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfBrowseError = '';
     this.sfSubmitting = false;
     this.sfRecursive = this.readRecursiveDefault(this.selectedImporter);
+    this.sfDatasetName = '';
+    this.sfDatasetNameDirty = false;
 
     // Load media type options from the folder importer's fields
     const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
@@ -888,12 +927,28 @@ export class DatasetImporterModalComponent implements OnInit {
         this.sfBrowsePath = path;
         this.sfBrowseRootPath = res.root_path;
         this.sfBrowseLoading = false;
+        if (!this.sfDatasetNameDirty) {
+          this.sfDatasetName = this.sfDerivedDatasetName();
+        }
       },
       error: (err) => {
         this.sfBrowseError = err.error?.error || 'Could not browse server folders. Is saved_datasets_dir configured?';
         this.sfBrowseLoading = false;
       },
     });
+  }
+
+  /** Derive a default dataset name from the currently selected server folder.
+   *  Returns the leaf path component, or empty string when at the root. */
+  private sfDerivedDatasetName(): string {
+    if (!this.sfBrowsePath) return '';
+    const parts = this.sfBrowsePath.split('/').filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : '';
+  }
+
+  sfOnDatasetNameInput(value: string): void {
+    this.sfDatasetName = value;
+    this.sfDatasetNameDirty = true;
   }
 
   sfEnterDirectory(dir: { name: string; path: string }): void {
@@ -1066,8 +1121,9 @@ export class DatasetImporterModalComponent implements OnInit {
       media_type: this.sfMediaType,
       recursive: this.sfRecursive,
     };
-    if (this.sfChunkSize && this.sfChunkSize > 0) {
-      params['chunk_size'] = Math.floor(this.sfChunkSize);
+    const sfName = (this.sfDatasetName || '').trim();
+    if (sfName) {
+      params['dataset_name'] = sfName;
     }
     if (this.sfSelectedEmbedder) {
       params['embedder'] = this.sfSelectedEmbedder;
@@ -1114,9 +1170,6 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.selectedEmbedder) {
       submitValues['embedder'] = this.selectedEmbedder;
-    }
-    if (this.chunkSize && this.chunkSize > 0) {
-      submitValues['chunk_size'] = Math.floor(this.chunkSize);
     }
 
     // If there's a file field, use loadFile; otherwise runImporter

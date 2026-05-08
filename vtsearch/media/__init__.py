@@ -232,8 +232,14 @@ def get_embedder(name: str) -> "MediaEmbedder":
 
 
 def embedders_for_type(type_id: str) -> list["MediaEmbedder"]:
-    """Return all embedders registered for a given media type."""
-    return [e for e in _embedder_registry.values() if e.media_type_id == type_id]
+    """Return all embedders registered for a given media type.
+
+    The default embedder (``is_default == True``) is sorted first so callers
+    using ``embedders_for_type(t)[0]`` receive the default.  Remaining order
+    follows registry insertion (which is alphabetical filename order).
+    """
+    matches = [e for e in _embedder_registry.values() if e.media_type_id == type_id]
+    return sorted(matches, key=lambda e: not e.is_default)
 
 
 def all_embedders() -> list["MediaEmbedder"]:

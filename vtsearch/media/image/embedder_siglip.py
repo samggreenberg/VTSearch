@@ -50,6 +50,10 @@ class ImageSiglipEmbedder(MediaEmbedder):
     def media_type_id(self) -> str:
         return "image"
 
+    @property
+    def is_default(self) -> bool:
+        return True
+
     # ------------------------------------------------------------------
     # Model lifecycle
     # ------------------------------------------------------------------

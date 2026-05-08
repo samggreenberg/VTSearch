@@ -3,10 +3,8 @@
 Covers:
 - Settings file read/write (vtsearch.settings)
 - Volume persistence
-- Autorun processor recipes: add, remove, list, CLI command generation
-- ensure_autorun_processors_imported (lazy import on autodetect)
-- Flask API routes: GET/PUT /api/settings,
-  GET/POST/DELETE /api/settings/autorun-processors
+- autorun_detectors list management
+- Flask API routes: GET/PUT /api/settings
 """
 
 from __future__ import annotations
@@ -28,7 +26,7 @@ class TestSettingsModule:
     def test_defaults_when_no_file(self):
         data = settings_mod.get_all()
         assert data["volume"] == 1.0
-        assert data["autorun_processors"] == []
+        assert data["autorun_detectors"] == []
 
     def test_get_set_volume(self, isolated_settings):
         settings_mod.set_volume(0.42)
@@ -68,105 +66,54 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_inclusion() == 7
 
-    def test_add_autorun_processor(self, isolated_settings):
-        settings_mod.add_autorun_processor("my det", "server_detector_file", {"filepath": "/tmp/det.json"})
-        procs = settings_mod.get_autorun_processors()
-        assert len(procs) == 1
-        assert procs[0]["processor_name"] == "my det"
-        assert procs[0]["processor_importer"] == "server_detector_file"
-        assert procs[0]["field_values"]["filepath"] == "/tmp/det.json"
+    def test_autorun_detectors_default_empty(self):
+        assert settings_mod.get_autorun_detectors() == []
 
-    def test_add_overwrites_same_name(self):
-        settings_mod.add_autorun_processor("a", "server_detector_file", {"filepath": "1.json"})
-        settings_mod.add_autorun_processor("a", "server_detector_file", {"filepath": "2.json"})
-        procs = settings_mod.get_autorun_processors()
-        assert len(procs) == 1
-        assert procs[0]["field_values"]["filepath"] == "2.json"
+    def test_add_autorun_trainable_model(self, isolated_settings):
+        settings_mod.add_autorun_detector("model-a")
+        assert settings_mod.get_autorun_detectors() == ["model-a"]
 
-    def test_remove_autorun_processor(self):
-        settings_mod.add_autorun_processor("x", "server_detector_file", {"filepath": "x.json"})
-        assert settings_mod.remove_autorun_processor("x") is True
-        assert settings_mod.get_autorun_processors() == []
+    def test_add_autorun_trainable_model_idempotent(self, isolated_settings):
+        settings_mod.add_autorun_detector("model-a")
+        settings_mod.add_autorun_detector("model-a")
+        assert settings_mod.get_autorun_detectors() == ["model-a"]
 
-    def test_remove_nonexistent(self):
-        assert settings_mod.remove_autorun_processor("nope") is False
+    def test_remove_autorun_trainable_model(self, isolated_settings):
+        settings_mod.add_autorun_detector("model-a")
+        assert settings_mod.remove_autorun_detector("model-a") is True
+        assert settings_mod.get_autorun_detectors() == []
 
-    def test_to_settings_json(self):
-        entry = {
-            "processor_name": "my detector",
-            "processor_importer": "server_detector_file",
-            "field_values": {"filepath": "/path/to/det.json"},
-        }
-        snippet = settings_mod.to_settings_json(entry)
-        import json
+    def test_remove_autorun_trainable_model_nonexistent(self):
+        assert settings_mod.remove_autorun_detector("nope") is False
 
-        parsed = json.loads(snippet)
-        assert parsed["processor_name"] == "my detector"
-        assert parsed["processor_importer"] == "server_detector_file"
-        assert parsed["field_values"]["filepath"] == "/path/to/det.json"
+    def test_is_autorun_trainable_model(self, isolated_settings):
+        settings_mod.add_autorun_detector("model-a")
+        assert settings_mod.is_autorun_detector("model-a") is True
+        assert settings_mod.is_autorun_detector("model-b") is False
 
-    def test_to_settings_json_with_spaces(self):
-        entry = {
-            "processor_name": "det",
-            "processor_importer": "server_detector_file",
-            "field_values": {"filepath": "/my path/det.json"},
-        }
-        snippet = settings_mod.to_settings_json(entry)
-        import json
-
-        parsed = json.loads(snippet)
-        assert parsed["field_values"]["filepath"] == "/my path/det.json"
-
-    def test_autorun_detector_names_default_empty(self):
-        assert settings_mod.get_autorun_detector_names() == []
-
-    def test_add_autorun_detector_name(self, isolated_settings):
-        settings_mod.add_autorun_detector_name("det-a")
-        assert settings_mod.get_autorun_detector_names() == ["det-a"]
-
-    def test_add_autorun_detector_name_idempotent(self, isolated_settings):
-        settings_mod.add_autorun_detector_name("det-a")
-        settings_mod.add_autorun_detector_name("det-a")
-        assert settings_mod.get_autorun_detector_names() == ["det-a"]
-
-    def test_remove_autorun_detector_name(self, isolated_settings):
-        settings_mod.add_autorun_detector_name("det-a")
-        assert settings_mod.remove_autorun_detector_name("det-a") is True
-        assert settings_mod.get_autorun_detector_names() == []
-
-    def test_remove_autorun_detector_name_nonexistent(self):
-        assert settings_mod.remove_autorun_detector_name("nope") is False
-
-    def test_is_autorun_detector(self, isolated_settings):
-        settings_mod.add_autorun_detector_name("det-a")
-        assert settings_mod.is_autorun_detector("det-a") is True
-        assert settings_mod.is_autorun_detector("det-b") is False
-
-    def test_autorun_detector_names_persists_across_reset(self, isolated_settings):
-        settings_mod.add_autorun_detector_name("det-a")
-        settings_mod.add_autorun_detector_name("det-b")
+    def test_autorun_detectors_persists_across_reset(self, isolated_settings):
+        settings_mod.add_autorun_detector("model-a")
+        settings_mod.add_autorun_detector("model-b")
         settings_mod.reset()
-        assert settings_mod.get_autorun_detector_names() == ["det-a", "det-b"]
+        assert settings_mod.get_autorun_detectors() == ["model-a", "model-b"]
 
-    def test_set_autorun_detector_names(self, isolated_settings):
-        settings_mod.set_autorun_detector_names(["x", "y", "z"])
-        assert settings_mod.get_autorun_detector_names() == ["x", "y", "z"]
+    def test_set_autorun_detectors(self, isolated_settings):
+        settings_mod.set_autorun_detectors(["x", "y", "z"])
+        assert settings_mod.get_autorun_detectors() == ["x", "y", "z"]
 
-    def test_set_autorun_detector_names_deduplicates(self, isolated_settings):
-        settings_mod.set_autorun_detector_names(["x", "y", "x"])
-        assert settings_mod.get_autorun_detector_names() == ["x", "y"]
+    def test_set_autorun_detectors_deduplicates(self, isolated_settings):
+        settings_mod.set_autorun_detectors(["x", "y", "x"])
+        assert settings_mod.get_autorun_detectors() == ["x", "y"]
 
     def test_persistence_survives_reset(self, isolated_settings):
         settings_mod.set_volume(0.7)
-        settings_mod.add_autorun_processor("p", "server_detector_file", {"filepath": "p.json"})
+        settings_mod.add_autorun_detector("p")
 
         # Simulate restart
         settings_mod.reset()
 
         assert settings_mod.get_volume() == pytest.approx(0.7)
-        procs = settings_mod.get_autorun_processors()
-        assert len(procs) == 1
-        assert procs[0]["processor_name"] == "p"
+        assert settings_mod.get_autorun_detectors() == ["p"]
 
     def test_get_set_calibrate_count(self, isolated_settings):
         settings_mod.set_calibrate_count(5)
@@ -552,11 +499,10 @@ class TestSettingsModule:
         assert defaults["autopilot_top_greens"] == 3
         assert defaults["autopilot_hard_reds"] == 4
         assert defaults["autopilot_goal_diversity"] == 40
-        assert "autorun_processors" not in defaults
+        assert "autorun_detectors" not in defaults
         # Directory settings excluded from defaults (not reset by Default button)
         assert "saved_datasets_dir" not in defaults
         assert "detectors_dir" not in defaults
-        assert "trainable_models_dir" not in defaults
 
     def test_get_set_autopilot_top_greens(self, isolated_settings):
         settings_mod.set_autopilot_top_greens(20)
@@ -644,60 +590,4 @@ class TestSettingsModule:
         settings_mod.reset()
         # Should fall back to defaults
         assert settings_mod.get_volume() == 1.0
-        assert settings_mod.get_autorun_processors() == []
-
-
-# ---------------------------------------------------------------------------
-# ensure_autorun_processors_imported
-# ---------------------------------------------------------------------------
-
-
-class TestEnsureAutorunProcessorsImported:
-    def test_imports_detector_file_processor(self, tmp_path):
-        """An autorun processor recipe with detector_file should be imported."""
-        from vtsearch.utils import autorun_detectors
-
-        # Create a fake detector JSON (origin-based with weight fallback)
-        fake_o = [{"origin": {"importer": "test"}, "origin_name": "t.wav", "filename": "t.wav", "md5": "abc"}]
-        det_weights = {
-            "0.weight": [[0.1] * 512],
-            "0.bias": [0.0],
-            "2.weight": [[0.2]],
-            "2.bias": [0.1],
-        }
-        det_path = tmp_path / "test_det.json"
-        det_path.write_text(
-            json.dumps(
-                {
-                    "media_type": "audio",
-                    "good_origins": fake_o,
-                    "bad_origins": fake_o,
-                    "weights": det_weights,
-                    "threshold": 0.5,
-                }
-            )
-        )
-
-        settings_mod.add_autorun_processor("settings_test_det", "server_detector_file", {"filepath": str(det_path)})
-
-        imported = settings_mod.ensure_autorun_processors_imported()
-        assert "settings_test_det" in imported
-        assert "settings_test_det" in autorun_detectors
-
-    def test_skips_already_imported(self, tmp_path):
-        """If a detector with the same name already exists, skip it."""
-        from vtsearch.utils import add_autorun_detector
-
-        add_autorun_detector("existing", "audio", {"0.weight": [[0.1]], "0.bias": [0.0]}, 0.5)
-
-        settings_mod.add_autorun_processor("existing", "server_detector_file", {"filepath": "/nonexistent.json"})
-
-        imported = settings_mod.ensure_autorun_processors_imported()
-        assert imported == []
-
-    def test_handles_bad_importer_gracefully(self):
-        """Unknown importer name should not crash."""
-        settings_mod.add_autorun_processor("bad_proc", "totally_fake_importer", {"filepath": "x.json"})
-
-        imported = settings_mod.ensure_autorun_processors_imported()
-        assert imported == []
+        assert settings_mod.get_autorun_detectors() == []

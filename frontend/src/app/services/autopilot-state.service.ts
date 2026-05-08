@@ -68,6 +68,12 @@ export class AutopilotStateService {
     });
   }
 
+  updateDiversityLevel(level: number): void {
+    const current = this.stateSubject.value;
+    if (current.fracDiversity === level) return;
+    this.stateSubject.next({ ...current, fracDiversity: level });
+  }
+
   checkPhaseTransition(goodCount: number, badCount: number): void {
     const st = this.stateSubject.value;
     if (st.phase === 'idle') return;

@@ -57,6 +57,19 @@
           <p class="tab-bar-hint">Select the media type to demonstrate.</p>
         }
 
+        @if (activeTab) {
+          <div class="form-group">
+            <label class="form-label" for="demo-dataset-name" title="Optional name for the new dataset. Leave blank to use the demo's name.">Dataset Name</label>
+            <input
+              id="demo-dataset-name"
+              type="text"
+              class="form-input"
+              [(ngModel)]="demoDatasetName"
+              placeholder="Leave blank to use the demo's name"
+            />
+          </div>
+        }
+
         @if (activeTab && (demoEmbedders.length > 1 || demoClippers.length > 1)) {
           <div class="demo-embedder-row">
             @if (demoEmbedders.length > 1) {
@@ -244,20 +257,6 @@
         </div>
       }
 
-      <div class="form-group">
-        <label class="form-label" for="field-chunk-size" title="Embed at most this many medias at once to bound peak memory. 0 means load everything in one pass.">
-          Chunk size (advanced — 0 = no chunking)
-        </label>
-        <input
-          id="field-chunk-size"
-          type="number"
-          min="0"
-          step="1"
-          class="form-input"
-          [(ngModel)]="chunkSize"
-        />
-      </div>
-
       @if (error) {
         <p class="error-text">{{ error }}</p>
       }
@@ -284,6 +283,18 @@
       } @else {
         <p class="info-text">Pick one or more files on <strong>this computer</strong> (the machine your browser is running on). They will be uploaded to the server and embedded into a new dataset.</p>
       }
+
+      <div class="form-group">
+        <label class="form-label" for="lf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder/file name.">Dataset Name</label>
+        <input
+          id="lf-dataset-name"
+          type="text"
+          class="form-input"
+          [ngModel]="lfDatasetName"
+          (ngModelChange)="lfOnDatasetNameInput($event)"
+          placeholder="Leave blank to use a default name"
+        />
+      </div>
 
       <div class="form-group">
         <label class="form-label" for="lf-media-type" title="The type of media files (audio, image, text, video, or document)">Media Type</label>
@@ -342,20 +353,6 @@
         </div>
       }
 
-      <div class="form-group form-group--section">
-        <label class="form-label" for="lf-chunk-size" title="Embed at most this many medias at once to bound peak memory. 0 means load everything in one pass.">
-          Chunk size (advanced — 0 = no chunking)
-        </label>
-        <input
-          id="lf-chunk-size"
-          type="number"
-          min="0"
-          step="1"
-          class="form-input"
-          [(ngModel)]="lfChunkSize"
-        />
-      </div>
-
       @if (lfEmbedders.length > 1) {
         <div class="form-group form-group--section">
           <label class="form-label" for="lf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
@@ -401,6 +398,18 @@
 
   @if (activePickerView === 'server_folder' && selectedImporter) {
     <div class="server-folder-browser">
+      <div class="form-group">
+        <label class="form-label" for="sf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder name.">Dataset Name</label>
+        <input
+          id="sf-dataset-name"
+          type="text"
+          class="form-input"
+          [ngModel]="sfDatasetName"
+          (ngModelChange)="sfOnDatasetNameInput($event)"
+          placeholder="Leave blank to use a default name"
+        />
+      </div>
+
       <div class="form-group">
         <label class="form-label" for="sf-media-type" title="The type of media files in the folder (audio, image, text, video, or document)">Media Type</label>
         <select
@@ -465,20 +474,6 @@
           />
           Include subfolders
         </label>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="sf-chunk-size" title="Embed at most this many medias at once to bound peak memory. 0 means load everything in one pass.">
-          Chunk size (advanced — 0 = no chunking)
-        </label>
-        <input
-          id="sf-chunk-size"
-          type="number"
-          min="0"
-          step="1"
-          class="form-input"
-          [(ngModel)]="sfChunkSize"
-        />
       </div>
 
       @if (sfEmbedders.length > 1) {

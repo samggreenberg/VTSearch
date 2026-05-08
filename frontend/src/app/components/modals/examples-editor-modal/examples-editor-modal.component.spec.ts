@@ -32,7 +32,7 @@ describe('ExamplesEditorModalComponent', () => {
 
   function flushInit(): void {
     fixture.detectChanges();
-    httpMock.expectOne('/api/trainable-models/test-model').flush({ examples: mockExamples });
+    httpMock.expectOne('/api/detectors/test-model').flush({ examples: mockExamples });
   }
 
   it('should create', () => {
@@ -63,7 +63,7 @@ describe('ExamplesEditorModalComponent', () => {
     spyOn(component.saved, 'emit');
     component.save();
 
-    const req = httpMock.expectOne('/api/trainable-models/test-model/examples');
+    const req = httpMock.expectOne('/api/detectors/test-model/examples');
     expect(req.request.method).toBe('PUT');
     req.flush({});
 
@@ -75,7 +75,7 @@ describe('ExamplesEditorModalComponent', () => {
     flushInit();
     component.save();
     httpMock
-      .expectOne('/api/trainable-models/test-model/examples')
+      .expectOne('/api/detectors/test-model/examples')
       .flush({ error: 'Save failed' }, { status: 500, statusText: 'Error' });
     expect(component.error).toBe('Save failed');
   });
@@ -89,7 +89,7 @@ describe('ExamplesEditorModalComponent', () => {
   it('should handle load error', () => {
     fixture.detectChanges();
     httpMock
-      .expectOne('/api/trainable-models/test-model')
+      .expectOne('/api/detectors/test-model')
       .flush({}, { status: 500, statusText: 'Error' });
     expect(component.loading).toBeFalse();
     expect(component.error).toBe('Failed to load examples');

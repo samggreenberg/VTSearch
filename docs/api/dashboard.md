@@ -45,7 +45,7 @@ POST /api/find/check-labels
 
 **Body:** `{"dataset_ids": ["id1", "id2"], "model_ids": ["m1"]}`
 
-Pre-flight check that reports how many trainable-model labels can be resolved
+Pre-flight check that reports how many detector labels can be resolved
 for the given models and datasets. Call this before starting a Find to warn
 the user about unresolved labels.
 
@@ -119,7 +119,7 @@ override the request-scoped dataset context.
 Resolves the model from the registry, scores every loaded media using the
 model's weights, and applies Good/Bad labels for **all** elements based on
 the threshold. If no pre-trained weights are available, trains on-the-fly
-from the trainable model's labelset (resolving label origins as needed).
+from the detector's labelset (resolving label origins as needed).
 
 → ```json
 {

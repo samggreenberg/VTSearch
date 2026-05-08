@@ -9,22 +9,22 @@ from __future__ import annotations
 
 
 def apply_and_retrain(
-    model_id: str,
+    detector_id: str,
     det_ctx: object,
     new_entries: list[dict],
-    tm_name: str,
+    detector_name: str,
 ) -> tuple[int, bool]:
     """Resolve new label entries into a loaded detector and retrain its MLP.
 
-    Temporarily overrides the request-scoped detector context so vote
-    proxies resolve to *det_ctx* for the duration of this call, then
-    restores the previous context.
+    Temporarily overrides the request-scoped detector context so vote proxies
+    resolve to *det_ctx* for the duration of this call, then restores the
+    previous context.
 
     Returns ``(resolved_count, trained_bool)``.
     """
     from flask import g
 
-    from vtsearch.models.label_sync import sync_labels_to_loaded_model
+    from vtsearch.models.label_sync import sync_labels_to_loaded_detector
     from vtsearch.utils import (
         apply_label,
         build_media_lookup,
@@ -32,8 +32,8 @@ def apply_and_retrain(
         snapshot_medias,
     )
 
-    # Override the request-scoped detector context so vote proxies
-    # resolve to this model's context for the duration of this call.
+    # Override the request-scoped detector context so vote proxies resolve to
+    # this detector's context for the duration of this call.
     prev_det_ctx = getattr(g, "_detector_context", None)
 
     try:
@@ -56,9 +56,9 @@ def apply_and_retrain(
             if cids:
                 resolved += 1
 
-        # Persist the updated votes back to the trainable-model file so the
+        # Persist the updated votes back to the detector file so the
         # labelset reflects any newly-resolved medias.
-        sync_labels_to_loaded_model()
+        sync_labels_to_loaded_detector()
 
         # Retrain MLP if we have at least one good and one bad vote.
         from vtsearch.utils import bad_votes, good_votes

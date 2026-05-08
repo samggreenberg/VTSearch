@@ -81,13 +81,12 @@
           [sortMode]="sortMode"
           [loadSortLabel]="loadSortLabel"
           [initialTextQuery]="textQuery"
-          [hasGoodVotes]="goodVotes.size > 0"
-          [hasBadVotes]="badVotes.size > 0"
+          [learnedSortAvailable]="learnedSortAvailable"
           (sortModeChange)="sortModeChange.emit($event)"
           (textSort)="textSort.emit($event)"
           (learnedSort)="learnedSort.emit()"
           (loadSort)="loadSort.emit()"
-          (detectorLoaded)="detectorLoaded.emit($event)"
+          (modelSelected)="modelSelected.emit($event)"
           (exampleSortStarted)="exampleSortStarted.emit($event)"
         />
 

@@ -53,9 +53,11 @@ describe('SettingsModalComponent', () => {
     const settingsReq = httpMock.expectOne('/api/settings');
     const embeddersReq = httpMock.expectOne('/api/embedders');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
+    const versionReq = httpMock.expectOne('/api/version');
     settingsReq.flush(mockSettings);
     embeddersReq.flush({ embedders: [{ name: 'audio', media_type_id: 'audio' }, { name: 'images', media_type_id: 'image' }, { name: 'text', media_type_id: 'text' }] });
     mediaTypesReq.flush(mockMediaTypes);
+    versionReq.flush({ version: '2026-05-07T00:00:00Z' });
   }
 
   it('should create', () => {
@@ -141,6 +143,7 @@ describe('SettingsModalComponent', () => {
     const settingsReq = httpMock.expectOne('/api/settings');
     const embeddersReq = httpMock.expectOne('/api/embedders');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
+    const versionReq = httpMock.expectOne('/api/version');
     settingsReq.flush(mockSettings);
     embeddersReq.flush({
       embedders: [
@@ -152,6 +155,7 @@ describe('SettingsModalComponent', () => {
       ],
     });
     mediaTypesReq.flush(mockMediaTypes);
+    versionReq.flush({ version: '2026-05-07T00:00:00Z' });
     expect(component.embedders.map((e) => `${e.media_type_id}:${e.name}`)).toEqual([
       'audio:alpha',
       'audio:beta',
@@ -199,9 +203,11 @@ describe('SettingsModalComponent', () => {
     const settingsReq = httpMock.expectOne('/api/settings');
     const embeddersReq = httpMock.expectOne('/api/embedders');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
+    const versionReq = httpMock.expectOne('/api/version');
     settingsReq.flush({}, { status: 500, statusText: 'Error' });
     embeddersReq.flush({ embedders: [] });
     mediaTypesReq.flush({ media_types: [] });
+    versionReq.flush({ version: '2026-05-07T00:00:00Z' });
     expect(component.loading).toBeFalse();
     expect(component.error).toBe('Failed to load settings');
   });

@@ -10,6 +10,8 @@ export class VoteStateService implements OnDestroy {
   private readonly badVotesSubject = new BehaviorSubject<Set<number>>(new Set());
   private readonly clickTimesSubject = new BehaviorSubject<Record<string, number>>({});
   private readonly learnedScoresSubject = new BehaviorSubject<Record<string, number>>({});
+  private readonly labelsetGoodCountSubject = new BehaviorSubject<number>(0);
+  private readonly labelsetBadCountSubject = new BehaviorSubject<number>(0);
   private readonly destroy$ = new Subject<void>();
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
@@ -20,6 +22,8 @@ export class VoteStateService implements OnDestroy {
   readonly badVotes$ = this.badVotesSubject.asObservable();
   readonly clickTimes$ = this.clickTimesSubject.asObservable();
   readonly learnedScores$ = this.learnedScoresSubject.asObservable();
+  readonly labelsetGoodCount$ = this.labelsetGoodCountSubject.asObservable();
+  readonly labelsetBadCount$ = this.labelsetBadCountSubject.asObservable();
 
   constructor(private sortingApi: SortingApiService) {}
 
@@ -44,6 +48,28 @@ export class VoteStateService implements OnDestroy {
 
   get learnedScores(): Record<string, number> {
     return this.learnedScoresSubject.value;
+  }
+
+  /**
+   * Number of "good" labels in the active detector's saved labelset (across
+   * all datasets the detector has been used with).  Falls back to current
+   * dataset's good vote count when no detector is loaded.
+   */
+  get labelsetGoodCount(): number {
+    return this.labelsetGoodCountSubject.value;
+  }
+
+  /** Bad-label counterpart of {@link labelsetGoodCount}. */
+  get labelsetBadCount(): number {
+    return this.labelsetBadCountSubject.value;
+  }
+
+  /**
+   * True when the active detector has at least one good and one bad label
+   * available for training — i.e. `/api/learned-sort` would succeed.
+   */
+  get learnedSortAvailable(): boolean {
+    return this.labelsetGoodCount > 0 && this.labelsetBadCount > 0;
   }
 
   /**
@@ -122,6 +148,8 @@ export class VoteStateService implements OnDestroy {
     this.badVotesSubject.next(new Set());
     this.clickTimesSubject.next({});
     this.learnedScoresSubject.next({});
+    this.labelsetGoodCountSubject.next(0);
+    this.labelsetBadCountSubject.next(0);
     this.pendingOptimistic.clear();
   }
 
@@ -156,5 +184,7 @@ export class VoteStateService implements OnDestroy {
     this.badVotesSubject.next(bad);
     this.clickTimesSubject.next(times);
     this.learnedScoresSubject.next(votes.learned_scores);
+    this.labelsetGoodCountSubject.next(votes.labelset_good_count ?? good.size);
+    this.labelsetBadCountSubject.next(votes.labelset_bad_count ?? bad.size);
   }
 }

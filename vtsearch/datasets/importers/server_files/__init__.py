@@ -257,6 +257,14 @@ class ServerFilesDatasetImporter(DatasetImporter):
             raise IsADirectoryError(f"Paths file must be a file: {paths_file}")
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
 
+    def default_display_name(self, field_values: dict[str, Any]) -> str:
+        paths_file = (field_values.get("paths_file") or "").strip()
+        if paths_file:
+            stem = Path(paths_file).stem
+            if stem:
+                return stem
+        return self.display_name
+
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         params: dict[str, str] = {}
         paths_file = field_values.get("paths_file", "")

@@ -150,14 +150,6 @@ def get_xclip_model():
     return emb._get_model_and_processor()
 
 
-def get_clip_model():
-    """Return ``(clip_model, clip_processor)`` from the CLIP embedder."""
-    from vtsearch.media import get_embedder
-
-    emb = get_embedder("clip")
-    return emb._get_model_and_processor()
-
-
 def get_e5_model():
     """Return the E5 ``SentenceTransformer`` from the E5 embedder."""
     from vtsearch.media import get_embedder

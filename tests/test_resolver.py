@@ -457,16 +457,16 @@ class TestMultiFindCrossDatasetFallback:
     """Test that multi_find uses the resolver when labels don't match the target dataset."""
 
     def test_trainable_model_falls_back_to_resolver(self, client, tmp_path):
-        """When a trainable model's labels don't match the target dataset,
+        """When a detector's labels don't match the target dataset,
         multi_find should fall back to resolving labels from their origins."""
         import json
         import pickle
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.registry import register_model
+        from vtsearch.models.detector_registry import register_detector
 
-        # Create a folder with media files for the trainable model's labels
+        # Create a folder with media files for the detector's labels
         label_folder = tmp_path / "label_audio"
         label_folder.mkdir()
         (label_folder / "good.wav").write_bytes(b"good_audio_content")
@@ -498,12 +498,12 @@ class TestMultiFindCrossDatasetFallback:
             pkl_path=str(pkl_path),
         )
 
-        # Create a trainable model with labels from label_folder
+        # Create a detector with labels from label_folder
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder), "media_type": "audio"}}
-        from vtsearch.models.trainable_model_store import _model_path, _write_model
+        from vtsearch.models.detector_store import _detector_path, _write_detector
 
-        tm_name = "test_cross_detector"
-        tm_path = _model_path(tm_name)
+        tm_name = "Test Cross Detector"
+        tm_path = _detector_path(tm_name)
         tm_data = {
             "name": "Test Cross Detector",
             "text_query": "",
@@ -529,15 +529,13 @@ class TestMultiFindCrossDatasetFallback:
                 ]
             },
         }
-        _write_model(tm_path, tm_data)
+        _write_detector(tm_path, tm_data)
 
         # Register the model
-        model_entry = register_model(
+        model_entry = register_detector(
             name="Test Cross Detector",
             media_type="audio",
-            trainable=True,
             num_training=2,
-            trainable_model_name=tm_name,
         )
 
         # Mock the embedder to return deterministic vectors
@@ -556,7 +554,7 @@ class TestMultiFindCrossDatasetFallback:
                 data=json.dumps(
                     {
                         "dataset_ids": [ds["id"]],
-                        "model_ids": [model_entry["id"]],
+                        "detector_ids": [model_entry["id"]],
                     }
                 ),
                 content_type="application/json",
@@ -569,7 +567,7 @@ class TestMultiFindCrossDatasetFallback:
         # Every media should have a verdict from the model
         # (either Good or Bad, not N/A since resolver found the files)
         for r in data["results"]:
-            verdicts = r["model_verdicts"]
+            verdicts = r["detector_verdicts"]
             assert "Test Cross Detector" in verdicts
             assert verdicts["Test Cross Detector"]["verdict"] in ("Good", "Bad")
 
@@ -580,7 +578,7 @@ class TestMultiFindCrossDatasetFallback:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.registry import register_model
+        from vtsearch.models.detector_registry import register_detector
 
         # Create a target dataset pkl
         target_medias = {}
@@ -602,18 +600,18 @@ class TestMultiFindCrossDatasetFallback:
 
         ds = register_dataset(name="mt_ds", media_type="audio", num_items=5, pkl_path=str(pkl_path))
 
-        # Create a trainable model with labels
+        # Create a detector with labels
         label_folder = tmp_path / "mt_label_audio"
         label_folder.mkdir()
         (label_folder / "good.wav").write_bytes(b"good_content")
         (label_folder / "bad.wav").write_bytes(b"bad_content")
 
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder)}}
-        from vtsearch.models.trainable_model_store import _model_path, _write_model
+        from vtsearch.models.detector_store import _detector_path, _write_detector
 
-        tm_name = "test_mt_detector"
+        tm_name = "Test MT Detector"
         tm_data = {
-            "name": "Test MT Detector",
+            "name": tm_name,
             "text_query": "",
             "media_type": "audio",
             "examples": [],
@@ -637,14 +635,12 @@ class TestMultiFindCrossDatasetFallback:
                 ]
             },
         }
-        _write_model(_model_path(tm_name), tm_data)
+        _write_detector(_detector_path(tm_name), tm_data)
 
-        model_entry = register_model(
+        model_entry = register_detector(
             name="Test MT Detector",
             media_type="audio",
-            trainable=True,
             num_training=2,
-            trainable_model_name=tm_name,
         )
 
         good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
@@ -656,7 +652,7 @@ class TestMultiFindCrossDatasetFallback:
         with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find",
-                data=json.dumps({"dataset_ids": [ds["id"]], "model_ids": [model_entry["id"]]}),
+                data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
                 content_type="application/json",
             )
 
@@ -671,7 +667,7 @@ class TestMultiFindCrossDatasetFallback:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.registry import register_model
+        from vtsearch.models.detector_registry import register_detector
 
         # Create a target dataset pkl
         target_medias = {}
@@ -693,18 +689,18 @@ class TestMultiFindCrossDatasetFallback:
 
         ds = register_dataset(name="nr_ds", media_type="image", num_items=5, pkl_path=str(pkl_path))
 
-        # Create a trainable model with labels
+        # Create a detector with labels
         label_folder = tmp_path / "nr_label"
         label_folder.mkdir()
         (label_folder / "good.jpg").write_bytes(b"good_content")
         (label_folder / "bad.jpg").write_bytes(b"bad_content")
 
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder)}}
-        from vtsearch.models.trainable_model_store import _model_path, _write_model
+        from vtsearch.models.detector_store import _detector_path, _write_detector
 
-        tm_name = "test_nr_detector"
+        tm_name = "Test NR Detector"
         tm_data = {
-            "name": "Test NR Detector",
+            "name": tm_name,
             "text_query": "",
             "media_type": "image",
             "examples": [],
@@ -728,14 +724,12 @@ class TestMultiFindCrossDatasetFallback:
                 ]
             },
         }
-        _write_model(_model_path(tm_name), tm_data)
+        _write_detector(_detector_path(tm_name), tm_data)
 
-        model_entry = register_model(
+        model_entry = register_detector(
             name="Test NR Detector",
             media_type="image",
-            trainable=True,
             num_training=2,
-            trainable_model_name=tm_name,
         )
 
         good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
@@ -747,7 +741,7 @@ class TestMultiFindCrossDatasetFallback:
         with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find",
-                data=json.dumps({"dataset_ids": [ds["id"]], "model_ids": [model_entry["id"]]}),
+                data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
                 content_type="application/json",
             )
 
@@ -785,8 +779,8 @@ class TestFindCheckLabels:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.registry import register_model
-        from vtsearch.models.trainable_model_store import _model_path, _write_model
+        from vtsearch.models.detector_registry import register_detector
+        from vtsearch.models.detector_store import _detector_path, _write_detector
 
         # Create a dataset where labels match by md5
         medias = {}
@@ -807,7 +801,7 @@ class TestFindCheckLabels:
         ds = register_dataset(name="cl_match_ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
 
         # Trainable model with labels that match by md5
-        tm_name = "test_cl_match"
+        tm_name = "Match Model"
         tm_data = {
             "name": "Match Model",
             "text_query": "",
@@ -821,19 +815,17 @@ class TestFindCheckLabels:
                 ]
             },
         }
-        _write_model(_model_path(tm_name), tm_data)
+        _write_detector(_detector_path(tm_name), tm_data)
 
-        model_entry = register_model(
+        model_entry = register_detector(
             name="Match Model",
             media_type="audio",
-            trainable=True,
             num_training=2,
-            trainable_model_name=tm_name,
         )
 
         resp = client.post(
             "/api/find/check-labels",
-            data=json.dumps({"dataset_ids": [ds["id"]], "model_ids": [model_entry["id"]]}),
+            data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
             content_type="application/json",
         )
         assert resp.status_code == 200
@@ -846,8 +838,8 @@ class TestFindCheckLabels:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.registry import register_model
-        from vtsearch.models.trainable_model_store import _model_path, _write_model
+        from vtsearch.models.detector_registry import register_detector
+        from vtsearch.models.detector_store import _detector_path, _write_detector
 
         # Create a target dataset (no overlap with labels)
         medias = {}
@@ -869,9 +861,9 @@ class TestFindCheckLabels:
 
         # Trainable model with labels from a nonexistent folder
         label_origin = {"importer": "server_folder", "params": {"path": "/nonexistent/folder"}}
-        tm_name = "test_cl_diff"
+        tm_name = "Diff Model"
         tm_data = {
-            "name": "Diff Model",
+            "name": tm_name,
             "text_query": "",
             "media_type": "audio",
             "examples": [],
@@ -902,19 +894,17 @@ class TestFindCheckLabels:
                 ]
             },
         }
-        _write_model(_model_path(tm_name), tm_data)
+        _write_detector(_detector_path(tm_name), tm_data)
 
-        model_entry = register_model(
-            name="Diff Model",
+        model_entry = register_detector(
+            name=tm_name,
             media_type="audio",
-            trainable=True,
             num_training=3,
-            trainable_model_name=tm_name,
         )
 
         resp = client.post(
             "/api/find/check-labels",
-            data=json.dumps({"dataset_ids": [ds["id"]], "model_ids": [model_entry["id"]]}),
+            data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
             content_type="application/json",
         )
         assert resp.status_code == 200
@@ -922,7 +912,7 @@ class TestFindCheckLabels:
         assert len(data["warnings"]) == 1
 
         w = data["warnings"][0]
-        assert w["model_name"] == "Diff Model"
+        assert w["detector_name"] == "Diff Model"
         assert w["total_labels"] == 3
         assert w["failed_labels"] == 3
         assert w["resolved_labels"] == 0
@@ -934,8 +924,8 @@ class TestFindCheckLabels:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.registry import register_model
-        from vtsearch.models.trainable_model_store import _model_path, _write_model
+        from vtsearch.models.detector_registry import register_detector
+        from vtsearch.models.detector_store import _detector_path, _write_detector
 
         # Create a target dataset (no overlap with labels)
         medias = {}
@@ -962,9 +952,9 @@ class TestFindCheckLabels:
         # bad.wav does NOT exist
 
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder), "media_type": "audio"}}
-        tm_name = "test_cl_part"
+        tm_name = "Part Model"
         tm_data = {
-            "name": "Part Model",
+            "name": tm_name,
             "text_query": "",
             "media_type": "audio",
             "examples": [],
@@ -988,14 +978,12 @@ class TestFindCheckLabels:
                 ]
             },
         }
-        _write_model(_model_path(tm_name), tm_data)
+        _write_detector(_detector_path(tm_name), tm_data)
 
-        model_entry = register_model(
-            name="Part Model",
+        model_entry = register_detector(
+            name=tm_name,
             media_type="audio",
-            trainable=True,
             num_training=2,
-            trainable_model_name=tm_name,
         )
 
         good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
@@ -1006,7 +994,7 @@ class TestFindCheckLabels:
         with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find/check-labels",
-                data=json.dumps({"dataset_ids": [ds["id"]], "model_ids": [model_entry["id"]]}),
+                data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
                 content_type="application/json",
             )
 
@@ -1015,7 +1003,7 @@ class TestFindCheckLabels:
         assert len(data["warnings"]) == 1
 
         w = data["warnings"][0]
-        assert w["model_name"] == "Part Model"
+        assert w["detector_name"] == "Part Model"
         assert w["total_labels"] == 2
         assert w["resolved_labels"] == 1
         assert w["failed_labels"] == 1

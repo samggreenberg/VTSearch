@@ -48,19 +48,19 @@ src/app/
 ├── services/                  # State management and API communication
 │   ├── *-api.service.ts       # API services (one per backend module)
 │   ├── *-state.service.ts     # Client-side state services
-│   ├── active-context.service.ts  # Tracks selected dataset/model
+│   ├── active-context.service.ts  # Tracks selected dataset/detector
 │   ├── dialog.service.ts      # Modal management
 │   ├── keyboard.service.ts    # Keyboard shortcuts
 │   └── theme.service.ts       # Theme (light/dark) switching
 ├── interceptors/
-│   └── active-context.interceptor.ts  # Attaches X-Dataset-Id/X-Model-Id headers
+│   └── active-context.interceptor.ts  # Attaches X-Dataset-Id/X-Detector-Id headers
 └── models/
     └── api.models.ts          # TypeScript interfaces for API responses
 ```
 
 ### Key architecture patterns
 
-- **ActiveContextService** tracks which dataset and model the user has selected. The `activeContextInterceptor` attaches `X-Dataset-Id` and `X-Model-Id` headers to every API request so the backend resolves the correct per-dataset state.
+- **ActiveContextService** tracks which dataset and detector the user has selected. The `activeContextInterceptor` attaches `X-Dataset-Id` and `X-Detector-Id` headers to every API request so the backend resolves the correct per-dataset state.
 - **State services** (`media-state`, `dataset-state`, `detector-state`, `vote-state`, `sort-state`, `settings-state`) hold client-side state and expose observables for reactive UI updates.
 - **API services** (`medias-api`, `datasets-api`, `detectors-api`, etc.) wrap HTTP calls to the Flask backend. Each maps to a backend route module.
 

@@ -12,6 +12,6 @@ export class ProcessorImportersApiService {
   }
 
   runImport(importerName: string, params: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`/api/processor-importers/import/${importerName}`, params);
+    return this.http.post(`/api/processor-importers/import/${encodeURIComponent(importerName)}`, params);
   }
 }

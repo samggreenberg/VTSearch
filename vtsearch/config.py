@@ -25,7 +25,6 @@ MLP_DROPOUT = 0.5
 CLAP_MODEL_ID = "laion/clap-htsat-unfused"
 CLAP_SAMPLE_RATE = 48000  # CLAP model expected input sample rate
 XCLIP_MODEL_ID = "microsoft/xclip-base-patch32"
-CLIP_MODEL_ID = "openai/clip-vit-base-patch32"
 E5_MODEL_ID = "intfloat/e5-base-v2"
 SIGLIP_MODEL_ID = "google/siglip-base-patch16-224"
 CLAP_MUSIC_MODEL_ID = "laion/larger_clap_music_and_speech"

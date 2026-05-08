@@ -76,12 +76,12 @@ Per-dataset runtime state (`medias`, diversity tree, display name) is
 isolated in `DatasetContext` objects, and per-detector state (votes,
 label history, click times, learned scores, inclusion, labelset source)
 is isolated in `DetectorContext` objects. The frontend sends
-`X-Dataset-Id` / `X-Model-Id` headers, and a `before_request`
+`X-Dataset-Id` / `X-Detector-Id` headers, and a `before_request`
 middleware resolves the active contexts per request — so multiple users
 can work with different datasets/models simultaneously.
 
 The auth infrastructure supports ownership tracking (`created_by` on
-detectors, datasets, and trainable models) and per-user data
+detectors, datasets, and detectors) and per-user data
 directories via `get_user_data_dir(username, base)`. **Settings remain
 globally shared** across all users — there is no per-user settings
 isolation yet.
@@ -262,14 +262,20 @@ See [EXTENDING-media.md § Adding a Media Converter](EXTENDING-media.md#adding-a
 - [ ] Expose `CONVERTER = YourConverter()` at module level
 - [ ] Test: convert a source-type media and verify output dicts are valid
 
-### New Detector / Localizer / Extractor Checklist
+### New Localizer / Extractor Checklist
 
 See [EXTENDING-processors.md](EXTENDING-processors.md).
 
-- [ ] Subclass `Detector`, `Localizer`, or `Extractor` from `vtsearch.media.base`
-- [ ] Implement `name`, `media_type`, and the type-specific method (`detect`, `localize`, or `extract`)
+- [ ] Subclass `Localizer` or `Extractor` from `vtsearch.media.base`
+- [ ] Implement `name`, `media_type`, and the type-specific method
+      (`localize` or `extract`)
 - [ ] Optionally override `load_model()` for one-time resource loading
-- [ ] Register as autorun via `POST /api/autorun-detectors` (or extractors/localizers)
+- [ ] Register as autorun via `POST /api/autorun-extractors` or
+      `POST /api/autorun-localizers`
+
+For ML classifiers, create a detector instead — register it via
+`POST /api/detectors/registry`, label items in the right pane, and toggle
+its autorun flag with `PUT /api/detectors/registry/<id>/autorun`.
 
 ### New Login Provider Checklist
 

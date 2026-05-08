@@ -1,699 +1,1197 @@
-import io
+"""Tests for detector CRUD and label persistence."""
+
 import json
+import shutil
 
-import numpy as np
+import pytest
 
-import app as app_module
-from helpers import train_detector_from_votes
-
-
-class TestDetectorSort:
-    def test_sort_with_valid_detector(self, client):
-        # Train a detector
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
-        detector = train_detector_from_votes()
-
-        # Now use it to sort
-        resp = client.post("/api/detector-sort", json={"detector": detector})
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "results" in data
-        assert "threshold" in data
-        assert len(data["results"]) == app_module.NUM_MEDIAS
-
-    def test_sort_results_sorted_descending(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
-        detector = train_detector_from_votes()
-
-        resp = client.post("/api/detector-sort", json={"detector": detector})
-        data = resp.get_json()
-        scores = [e["score"] for e in data["results"]]
-        assert scores == sorted(scores, reverse=True)
-
-    def test_sort_scores_in_valid_range(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
-        detector = train_detector_from_votes()
-
-        resp = client.post("/api/detector-sort", json={"detector": detector})
-        data = resp.get_json()
-        for entry in data["results"]:
-            assert 0.0 <= entry["score"] <= 1.0
-
-    def test_sort_missing_detector(self, client):
-        resp = client.post("/api/detector-sort", json={})
-        assert resp.status_code == 400
-
-    def test_sort_missing_weights(self, client):
-        resp = client.post("/api/detector-sort", json={"detector": {"threshold": 0.5}})
-        assert resp.status_code == 400
-
-    def test_detector_roundtrip(self, client):
-        """Export a detector and verify it produces reasonable scores."""
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-
-        # Export detector
-        detector = train_detector_from_votes()
-
-        # Use detector to sort
-        resp = client.post("/api/detector-sort", json={"detector": detector})
-        data = resp.get_json()
-        score_map = {e["id"]: e["score"] for e in data["results"]}
-
-        # Good medias should score higher than bad medias on average
-        avg_good = np.mean([score_map[i] for i in app_module.good_votes])
-        avg_bad = np.mean([score_map[i] for i in app_module.bad_votes])
-        assert avg_good > avg_bad
+from tests import load_detector_and_wait as _load_detector_and_wait
+from vtsearch.settings import get_detectors_dir
 
 
-class TestAutorunDetectors:
-    """Tests for the autorun-detectors management endpoints."""
+@pytest.fixture(autouse=True)
+def clean_detectors_dir():
+    """Remove the detectors directory before and after each test."""
+    tm_dir = get_detectors_dir()
+    if tm_dir.is_dir():
+        shutil.rmtree(tm_dir)
+    yield
+    tm_dir = get_detectors_dir()
+    if tm_dir.is_dir():
+        shutil.rmtree(tm_dir)
 
-    def _export_detector(self, client):
-        """Helper: vote on some medias and train a valid detector payload."""
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        return train_detector_from_votes()
 
-    def _post_autorun(self, client, name, detector):
-        return client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": name,
-                "media_type": "audio",
-                "weights": detector["weights"],
-                "threshold": detector["threshold"],
-            },
+class TestCreateDetector:
+    def test_create_success(self, client):
+        res = client.post(
+            "/api/detectors",
+            json={"name": "Dog Barks", "media_type": "audio", "text_query": "sounds of dogs barking"},
         )
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["success"] is True
+        assert data["name"] == "Dog Barks"
+        assert data["text_query"] == "sounds of dogs barking"
+        assert data["num_labels"] == 0
 
-    # -- GET list --
-
-    def test_get_empty_list(self, client):
-        resp = client.get("/api/autorun-detectors")
-        assert resp.status_code == 200
-        assert resp.get_json()["detectors"] == []
-
-    def test_get_list_after_add(self, client):
-        det = self._export_detector(client)
-        self._post_autorun(client, "my-detector", det)
-
-        resp = client.get("/api/autorun-detectors")
-        data = resp.get_json()
-        assert len(data["detectors"]) == 1
-        d = data["detectors"][0]
-        assert d["name"] == "my-detector"
-        assert d["media_type"] == "audio"
-        assert "threshold" in d
-
-    # -- POST add --
-
-    def test_add_detector_returns_success(self, client):
-        det = self._export_detector(client)
-        resp = self._post_autorun(client, "test-det", det)
-        assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
-
-    def test_add_missing_name_returns_400(self, client):
-        det = self._export_detector(client)
-        resp = client.post(
-            "/api/autorun-detectors",
-            json={"media_type": "audio", "weights": det["weights"]},
+    def test_create_missing_name(self, client):
+        res = client.post(
+            "/api/detectors",
+            json={"text_query": "sounds"},
         )
-        assert resp.status_code == 400
+        assert res.status_code == 400
+        assert "name" in res.get_json()["error"]
 
-    def test_add_missing_media_type_returns_400(self, client):
-        det = self._export_detector(client)
-        resp = client.post(
-            "/api/autorun-detectors",
-            json={"name": "test", "weights": det["weights"]},
+    def test_create_missing_text_query(self, client):
+        res = client.post(
+            "/api/detectors",
+            json={"name": "Test", "media_type": "audio"},
         )
-        assert resp.status_code == 400
+        assert res.status_code == 400
+        assert "text_query" in res.get_json()["error"]
 
-    def test_add_without_weights_creates_untrained(self, client):
-        resp = client.post(
-            "/api/autorun-detectors",
-            json={"name": "test", "media_type": "audio"},
+    def test_create_missing_media_type(self, client):
+        res = client.post(
+            "/api/detectors",
+            json={"name": "Test", "text_query": "sounds"},
         )
-        assert resp.status_code == 200
+        assert res.status_code == 400
+        assert "media_type" in res.get_json()["error"]
 
-        detectors = client.get("/api/autorun-detectors").get_json()["detectors"]
-        det = [d for d in detectors if d["name"] == "test"][0]
-        assert det["weights"] is None
-        assert det["autodetect"] is False
-
-    def test_add_multiple_detectors(self, client):
-        det = self._export_detector(client)
-        self._post_autorun(client, "det-a", det)
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
-        self._post_autorun(client, "det-b", det)
-
-        resp = client.get("/api/autorun-detectors")
-        names = {d["name"] for d in resp.get_json()["detectors"]}
-        assert names == {"det-a", "det-b"}
-
-    def test_add_overwrites_existing_name(self, client):
-        det = self._export_detector(client)
-        self._post_autorun(client, "dup", det)
-        self._post_autorun(client, "dup", det)
-
-        resp = client.get("/api/autorun-detectors")
-        assert len(resp.get_json()["detectors"]) == 1
-
-    # -- DELETE --
-
-    def test_delete_detector(self, client):
-        det = self._export_detector(client)
-        self._post_autorun(client, "to-delete", det)
-
-        resp = client.delete("/api/autorun-detectors/to-delete")
-        assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
-
-        resp = client.get("/api/autorun-detectors")
-        assert resp.get_json()["detectors"] == []
-
-    def test_delete_nonexistent_returns_404(self, client):
-        resp = client.delete("/api/autorun-detectors/does-not-exist")
-        assert resp.status_code == 404
-
-    # -- RENAME --
-
-    def test_rename_detector(self, client):
-        det = self._export_detector(client)
-        self._post_autorun(client, "old-name", det)
-
-        resp = client.put(
-            "/api/autorun-detectors/old-name/rename",
-            json={"new_name": "new-name"},
+    def test_create_rejects_any_media_type(self, client):
+        res = client.post(
+            "/api/detectors",
+            json={"name": "Test", "media_type": "any", "text_query": "sounds"},
         )
-        assert resp.status_code == 200
-        assert resp.get_json()["new_name"] == "new-name"
+        assert res.status_code == 400
+        assert "media_type" in res.get_json()["error"]
 
-        names = [d["name"] for d in client.get("/api/autorun-detectors").get_json()["detectors"]]
-        assert "new-name" in names
-        assert "old-name" not in names
-
-    def test_rename_nonexistent_returns_400(self, client):
-        resp = client.put(
-            "/api/autorun-detectors/ghost/rename",
-            json={"new_name": "anything"},
+    def test_create_duplicate(self, client):
+        client.post(
+            "/api/detectors",
+            json={"name": "Dog Barks", "media_type": "audio", "text_query": "dogs"},
         )
-        assert resp.status_code == 400
-
-    def test_rename_to_existing_name_returns_400(self, client):
-        det = self._export_detector(client)
-        self._post_autorun(client, "det-a", det)
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
-        self._post_autorun(client, "det-b", det)
-
-        resp = client.put(
-            "/api/autorun-detectors/det-a/rename",
-            json={"new_name": "det-b"},
+        res = client.post(
+            "/api/detectors",
+            json={"name": "Dog Barks", "media_type": "audio", "text_query": "dogs again"},
         )
-        assert resp.status_code == 400
+        assert res.status_code == 409
 
-    def test_rename_missing_new_name_returns_400(self, client):
-        det = self._export_detector(client)
-        self._post_autorun(client, "some-det", det)
+    def test_file_created_on_disk(self, client):
+        client.post(
+            "/api/detectors",
+            json={"name": "Test Model", "media_type": "audio", "text_query": "test"},
+        )
+        files = list(get_detectors_dir().glob("*.json"))
+        assert len(files) == 1
+        data = json.loads(files[0].read_text())
+        assert data["name"] == "Test Model"
+        assert data["text_query"] == "test"
+        assert data["labelset"] == {"labels": []}
 
-        resp = client.put(
-            "/api/autorun-detectors/some-det/rename",
+
+class TestListDetectors:
+    def test_empty_list(self, client):
+        res = client.get("/api/detectors")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["detectors"] == []
+
+    def test_list_after_create(self, client):
+        client.post(
+            "/api/detectors",
+            json={"name": "Model A", "media_type": "audio", "text_query": "a"},
+        )
+        client.post(
+            "/api/detectors",
+            json={"name": "Model B", "media_type": "audio", "text_query": "b"},
+        )
+        res = client.get("/api/detectors")
+        data = res.get_json()
+        names = [m["name"] for m in data["detectors"]]
+        assert "Model A" in names
+        assert "Model B" in names
+
+
+class TestGetDetector:
+    def test_get_existing(self, client):
+        client.post(
+            "/api/detectors",
+            json={"name": "My Model", "media_type": "audio", "text_query": "test query"},
+        )
+        res = client.get("/api/detectors/My%20Model")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["name"] == "My Model"
+        assert data["text_query"] == "test query"
+        assert "labelset" in data
+
+    def test_get_nonexistent(self, client):
+        res = client.get("/api/detectors/nonexistent")
+        assert res.status_code == 404
+
+
+class TestDeleteDetector:
+    def test_delete_existing(self, client):
+        client.post(
+            "/api/detectors",
+            json={"name": "To Delete", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.delete("/api/detectors/To%20Delete")
+        assert res.status_code == 200
+        assert res.get_json()["success"] is True
+
+        # Verify it's gone
+        res = client.get("/api/detectors/To%20Delete")
+        assert res.status_code == 404
+
+    def test_delete_nonexistent(self, client):
+        res = client.delete("/api/detectors/nonexistent")
+        assert res.status_code == 404
+
+
+class TestRenameDetector:
+    def test_rename_success(self, client):
+        client.post(
+            "/api/detectors",
+            json={"name": "Old Name", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.put(
+            "/api/detectors/Old%20Name/rename",
+            json={"new_name": "New Name"},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["success"] is True
+        assert data["new_name"] == "New Name"
+
+        # Old name should be gone
+        res = client.get("/api/detectors/Old%20Name")
+        assert res.status_code == 404
+
+        # New name should exist
+        res = client.get("/api/detectors/New%20Name")
+        assert res.status_code == 200
+        assert res.get_json()["name"] == "New Name"
+
+    def test_rename_nonexistent(self, client):
+        res = client.put(
+            "/api/detectors/nonexistent/rename",
+            json={"new_name": "Foo"},
+        )
+        assert res.status_code == 404
+
+    def test_rename_missing_new_name(self, client):
+        client.post(
+            "/api/detectors",
+            json={"name": "Test", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.put(
+            "/api/detectors/Test/rename",
             json={},
         )
-        assert resp.status_code == 400
+        assert res.status_code == 400
 
-    # -- autodetect toggle --
+    def test_rename_updates_model_registry(self, client):
+        """Renaming a detector should update registry references."""
+        from vtsearch.models.detector_registry import find_by_name, get_detector
 
-    def test_set_autodetect_on_existing_detector(self, client):
-        det = self._export_detector(client)
-        self._post_autorun(client, "tog-det", det)
-
-        resp = client.put("/api/autorun-detectors/tog-det/autodetect", json={"autodetect": True})
-        assert resp.status_code == 200
-        assert resp.get_json()["autodetect"] is True
-
-        detectors = client.get("/api/autorun-detectors").get_json()["detectors"]
-        d = next(d for d in detectors if d["name"] == "tog-det")
-        assert d["autodetect"] is True
-
-    def test_set_autodetect_true_on_nonexistent_detector_persists_to_settings(self, client, isolated_settings):
-        """Enabling autorun for a model-registry entry not yet in autorun_detectors must succeed."""
-        from vtsearch.settings import get_autorun_detector_names
-
-        resp = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": True})
-        assert resp.status_code == 200
-        assert resp.get_json()["autodetect"] is True
-        assert "ghost-model" in get_autorun_detector_names()
-
-    def test_set_autodetect_false_on_unknown_detector_returns_404(self, client):
-        resp = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": False})
-        assert resp.status_code == 404
-
-    def test_set_autodetect_false_clears_settings_only_entry(self, client, isolated_settings):
-        """A model-registry entry persisted only in settings must be removable via the toggle."""
-        from vtsearch.settings import get_autorun_detector_names
-
-        on = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": True})
-        assert on.status_code == 200
-        assert "ghost-model" in get_autorun_detector_names()
-
-        off = client.put("/api/autorun-detectors/ghost-model/autodetect", json={"autodetect": False})
-        assert off.status_code == 200
-        assert off.get_json()["autodetect"] is False
-        assert "ghost-model" not in get_autorun_detector_names()
-
-    def test_set_autodetect_missing_field_returns_400(self, client):
-        resp = client.put("/api/autorun-detectors/any/autodetect", json={})
-        assert resp.status_code == 400
-
-    # -- import-pkl (detector JSON file) --
-
-    def test_import_pkl_from_detector_json(self, client):
-        det = self._export_detector(client)
-        json_bytes = json.dumps(det).encode("utf-8")
-        data = {
-            "file": (io.BytesIO(json_bytes), "detector.json"),
-            "name": "imported",
-        }
-        resp = client.post(
-            "/api/autorun-detectors/import-pkl",
-            data=data,
-            content_type="multipart/form-data",
+        # Create a detector and register it in the model registry
+        client.post(
+            "/api/detectors",
+            json={"name": "Original", "media_type": "audio", "text_query": "test"},
         )
-        assert resp.status_code == 200
-        result = resp.get_json()
-        assert result["success"] is True
-        assert result["name"] == "imported"
-
-    def test_import_pkl_uses_filename_stem_as_default_name(self, client):
-        det = self._export_detector(client)
-        json_bytes = json.dumps(det).encode("utf-8")
-        data = {"file": (io.BytesIO(json_bytes), "my_detector.json")}
-        resp = client.post(
-            "/api/autorun-detectors/import-pkl",
-            data=data,
-            content_type="multipart/form-data",
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "Original", "media_type": "audio", "text_query": "test"},
         )
-        assert resp.status_code == 200
-        assert resp.get_json()["name"] == "my_detector"
+        assert res.status_code == 201
+        detector_id = res.get_json()["detector"]["id"]
 
-    def test_import_pkl_preserves_media_type_from_file(self, client):
-        det = self._export_detector(client)
-        # Embed explicit media_type in the "file" payload
-        det["media_type"] = "image"
-        json_bytes = json.dumps(det).encode("utf-8")
-        data = {
-            "file": (io.BytesIO(json_bytes), "image_detector.json"),
-            "name": "img-det",
-        }
-        resp = client.post(
-            "/api/autorun-detectors/import-pkl",
-            data=data,
-            content_type="multipart/form-data",
+        # Rename the detector directly (not through the registry endpoint)
+        res = client.put(
+            "/api/detectors/Original/rename",
+            json={"new_name": "Renamed"},
         )
-        assert resp.status_code == 200
-        assert resp.get_json()["media_type"] == "image"
+        assert res.status_code == 200
 
-    def test_import_pkl_no_file_returns_400(self, client):
-        resp = client.post("/api/autorun-detectors/import-pkl", data={})
-        assert resp.status_code == 400
+        # Registry entry should now reference the new name
+        entry = get_detector(detector_id)
+        assert entry is not None
+        assert entry["name"] == "Renamed"
 
-    def test_import_pkl_invalid_format_returns_400(self, client):
-        data = {"file": (io.BytesIO(b'{"not_a_detector": true}'), "bad.json")}
-        resp = client.post(
-            "/api/autorun-detectors/import-pkl",
-            data=data,
-            content_type="multipart/form-data",
+        # Look up by old name should fail
+        assert find_by_name("Original") is None
+
+        # Look up by new name should succeed
+        assert find_by_name("Renamed") is not None
+
+    def test_rename_conflict(self, client):
+        client.post(
+            "/api/detectors",
+            json={"name": "Model A", "media_type": "audio", "text_query": "a"},
         )
-        assert resp.status_code == 400
-
-    # -- Detector data is stored correctly --
-
-    def test_stored_detector_has_correct_fields(self, client):
-        det = self._export_detector(client)
-        self._post_autorun(client, "field-check", det)
-
-        from vtsearch.utils.state import autorun_detectors
-
-        assert "field-check" in autorun_detectors
-        stored = autorun_detectors["field-check"]
-        assert stored["name"] == "field-check"
-        assert stored["media_type"] == "audio"
-        assert "weights" in stored
-        assert "threshold" in stored
-        assert "created_at" in stored
-        assert "good_origins" in stored
-        assert "bad_origins" in stored
-        assert "inclusion" in stored
-
-
-class TestFindLabel:
-    """Tests for POST /api/find-label — score all medias and apply Good/Bad labels."""
-
-    def _create_model_with_detector(self, client):
-        """Helper: train a detector, register it as autorun, register in model registry."""
-        from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.utils import add_autorun_detector
-
-        reset_for_tests()
-
-        # Train a detector from votes
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        detector = train_detector_from_votes()
-
-        # Register as autorun detector
-        det_name = "find-label-det"
-        add_autorun_detector(
-            det_name,
-            "audio",
-            weights=detector["weights"],
-            threshold=detector["threshold"],
+        client.post(
+            "/api/detectors",
+            json={"name": "Model B", "media_type": "audio", "text_query": "b"},
         )
-
-        # Register in model registry
-        entry = register_model(
-            name="Find Label Test Model",
-            media_type="audio",
-            trainable=False,
-            detector_name=det_name,
+        res = client.put(
+            "/api/detectors/Model%20A/rename",
+            json={"new_name": "Model B"},
         )
+        assert res.status_code == 409
 
-        # Clear the training votes
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
-        return entry["id"]
 
-    def test_find_label_marks_all_items(self, client):
-        """find-label should mark every loaded media as good or bad."""
-        model_id = self._create_model_with_detector(client)
-        resp = client.post("/api/find-label", json={"model_id": model_id})
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["ok"] is True
-        total = data["good_count"] + data["bad_count"]
-        assert total == app_module.NUM_MEDIAS
-
-    def test_find_label_activates_selected_dataset(self, client):
-        """find-label with dataset_id should score against that dataset, not the active one.
-
-        Reproduces the bug: user selects Dataset A + Detector 1 on the dashboard
-        and clicks Find, but scoring runs against Dataset B because it was the
-        most recently loaded into the labeling interface.
-        """
-        from vtsearch.utils import (
-            DatasetContext,
-            get_thread_dataset_context,
-            register_context,
-            set_thread_dataset_context,
-            snapshot_medias,
-            unregister_context,
+class TestSaveLabels:
+    def test_save_labels_empty(self, client):
+        """Save labels when there are no votes — should produce empty labelset."""
+        client.post(
+            "/api/detectors",
+            json={"name": "Labeler", "media_type": "audio", "text_query": "test"},
         )
+        res = client.post("/api/detectors/Labeler/labels")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["success"] is True
+        assert data["num_labels"] == 0
 
-        model_id = self._create_model_with_detector(client)
-
-        # Remember the default dataset (has test medias)
-        original_ctx = get_thread_dataset_context()
-        original_id = original_ctx.dataset_id if original_ctx else None
-        original_count = len(snapshot_medias())
-
-        # Create a second dataset with different (fewer) items
-        rng = np.random.default_rng(99)
-        ctx_b = DatasetContext("dataset_b")
-        for i in range(1, 4):
-            ctx_b.medias[i] = {
-                "id": i,
-                "md5": f"dataset_b_{i}",
-                "embedding": rng.standard_normal(512).astype(np.float32),
-            }
-        register_context(ctx_b)
-
-        try:
-            # Switch active to dataset_b — simulates user browsing Dataset B
-            set_thread_dataset_context(ctx_b)
-            assert get_thread_dataset_context().dataset_id == "dataset_b"
-
-            # Call find-label with dataset_id pointing to the ORIGINAL dataset
-            resp = client.post(
-                "/api/find-label",
-                json={"model_id": model_id, "dataset_id": original_id},
-            )
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert data["ok"] is True
-            # Should have scored the original dataset's items, not dataset_b's 3 items
-            total = data["good_count"] + data["bad_count"]
-            assert total == original_count
-        finally:
-            set_thread_dataset_context(original_ctx)
-            unregister_context("dataset_b")
-
-    def test_find_label_overwrites_existing_votes(self, client):
-        """find-label must mark ALL items even when votes already exist.
-
-        Reproduces the bug: train on Dataset A, load Dataset B (which reuses
-        integer IDs), run Find — previously, items whose IDs matched stale
-        votes were skipped and never marked.
-        """
-        model_id = self._create_model_with_detector(client)
-
-        # Simulate stale votes from a previous dataset (all IDs overlap)
-        app_module.good_votes.update({k: None for k in range(1, 11)})
-        app_module.bad_votes.update({k: None for k in range(11, 21)})
-
-        resp = client.post("/api/find-label", json={"model_id": model_id})
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["ok"] is True
-        total = data["good_count"] + data["bad_count"]
-        assert total == app_module.NUM_MEDIAS
-
-    def test_find_label_trainable_model_with_labelset(self, client, tmp_path):
-        """find-label should train on-the-fly from a trainable model's labelset.
-
-        Reproduces the core bug: user creates a trainable model, labels items
-        on Dataset A (labelset auto-saved), loads Dataset B, runs Find.
-        Previously returned 400 because no pre-trained weights existed.
-        """
-        from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.models.trainable_model_store import _write_model
-        from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.utils import bad_votes, good_votes, snapshot_medias
-
-        reset_for_tests()
-
-        # Simulate labeling: vote on some items
-        good_votes.update({k: None for k in [1, 2, 3]})
-        bad_votes.update({k: None for k in [18, 19, 20]})
-
-        # Build a labelset from the current votes (as sync_labels_to_loaded_model does)
-        snap = snapshot_medias()
-        labelset = LabelSet.from_clips_and_votes(snap, good_votes, bad_votes, expand_dupes=False)
-
-        # Write a trainable model file with the labelset but NO weights
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-
-        original_dir = get_trainable_models_dir()
-        set_trainable_models_dir(tmp_path)
-        try:
-            tm_name = "test-find-trainable"
-            tm_path = tmp_path / f"{tm_name}.json"
-            _write_model(
-                tm_path,
-                {
-                    "name": tm_name,
-                    "text_query": "",
-                    "examples": [],
-                    "labelset": labelset.to_dict(),
-                },
-            )
-
-            # Register in model registry as a trainable model (no detector_name weights)
-            entry = register_model(
-                name="Trainable Find Test",
-                media_type="audio",
-                trainable=True,
-                trainable_model_name=tm_name,
-            )
-            model_id = entry["id"]
-
-            # Clear training votes (simulates loading a new dataset)
-            good_votes.clear()
-            bad_votes.clear()
-
-            # Run find-label — should train on-the-fly from the labelset
-            resp = client.post("/api/find-label", json={"model_id": model_id})
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert data["ok"] is True
-            total = data["good_count"] + data["bad_count"]
-            assert total == app_module.NUM_MEDIAS
-        finally:
-            set_trainable_models_dir(original_dir)
-
-    def test_find_label_cross_dataset_resolves_from_origin(self, client, tmp_path):
-        """find-label should resolve labels from origin when MD5s don't match.
-
-        Simulates the true cross-dataset scenario: train on Dataset A (labels
-        saved with origins pointing to files on disk), load completely
-        different Dataset B (no MD5 overlap), click Find.  The resolver must
-        follow each label's origin trail to the original file, embed it, and
-        train an MLP on-the-fly.
-        """
-        from unittest.mock import patch
-
-        from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.models.trainable_model_store import _write_model
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
+    def test_save_labels_with_votes(self, client):
+        """Save labels after casting votes — labelset should contain the voted medias."""
         from vtsearch.utils import medias
 
+        if not medias:
+            pytest.skip("No medias loaded for this test")
+
+        # Cast a good vote on the first media
+        first_id = next(iter(medias))
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+
+        # Cast a bad vote on the second media
+        media_ids = list(medias.keys())
+        if len(media_ids) < 2:
+            pytest.skip("Need at least 2 medias")
+        second_id = media_ids[1]
+        client.post(f"/api/medias/{second_id}/vote", json={"vote": "bad"})
+
+        client.post(
+            "/api/detectors",
+            json={"name": "Voted Model", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post("/api/detectors/Voted%20Model/labels")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["num_labels"] == 2
+
+        # Verify the labels are persisted on disk
+        model_res = client.get("/api/detectors/Voted%20Model")
+        model_data = model_res.get_json()
+        labels = model_data["labelset"]["labels"]
+        assert len(labels) == 2
+        label_values = {lbl["label"] for lbl in labels}
+        assert "good" in label_values
+        assert "bad" in label_values
+
+    def test_save_labels_nonexistent_model(self, client):
+        res = client.post("/api/detectors/nonexistent/labels")
+        assert res.status_code == 404
+
+    def test_save_labels_does_not_expand_dupes(self, client):
+        """Saving labels for a dupe-set representative should NOT expand members.
+
+        Regression test: previously, a vote on a dupe-set representative
+        with N members produced N label entries, inflating the stored
+        label count.  Trainable model persistence should store one entry
+        per vote, not one per duplicate.
+        """
+        import copy
+
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded for this test")
+
+        first_id = next(iter(medias))
+        original = copy.deepcopy(medias[first_id])
+
+        # Turn the first media into a dupe-set representative with 5 members
+        medias[first_id]["origin"] = {
+            "importer": "dupe_set",
+            "params": {"name": original.get("filename", "a.wav")},
+            "members": [
+                {
+                    "origin": {"importer": "test", "params": {}},
+                    "origin_name": f"dup_{i}.wav",
+                    "filename": f"dup_{i}.wav",
+                    "category": "c",
+                }
+                for i in range(5)
+            ],
+        }
+        try:
+            client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+            client.post("/api/detectors", json={"name": "DupeTest", "media_type": "audio", "text_query": "test"})
+
+            res = client.post("/api/detectors/DupeTest/labels")
+            assert res.status_code == 200
+            data = res.get_json()
+            # Should be 1 label (the vote), NOT 5 (the dupe members)
+            assert data["num_labels"] == 1
+
+            model_res = client.get("/api/detectors/DupeTest")
+            labels = model_res.get_json()["labelset"]["labels"]
+            assert len(labels) == 1
+        finally:
+            medias[first_id] = original
+
+
+class TestLabelVoteIsolation:
+    """Clearing votes before importing a model's labels prevents cross-contamination."""
+
+    def test_clear_votes_before_import_prevents_leakage(self, client):
+        """Votes from Model A must not persist into a Model B label session.
+
+        Simulates the Label-button flow: clear votes, then import a model's
+        labels.  Without the clear, votes from a prior session leak in.
+        """
+        from vtsearch.utils import good_votes, bad_votes, medias
+
+        ids = list(medias.keys())
+        if len(ids) < 4:
+            pytest.skip("Need at least 4 medias")
+
+        # Create two detectors
+        client.post("/api/detectors", json={"name": "Model A", "media_type": "audio", "text_query": "a"})
+        client.post("/api/detectors", json={"name": "Model B", "media_type": "audio", "text_query": "b"})
+
+        # Simulate labeling with Model A: vote on ids[0] and ids[1]
+        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        client.post("/api/detectors/Model%20A/labels")  # save 2 labels
+
+        # Now clear votes (as the Label button should do) and import Model B's labels
+        client.post("/api/votes/clear")
+        assert len(good_votes) == 0
+        assert len(bad_votes) == 0
+
+        # Model B has no labels, so import is a no-op — votes should remain empty
+        model_b = client.get("/api/detectors/Model%20B").get_json()
+        assert len(model_b["labelset"]["labels"]) == 0
+
+        client.post("/api/labels/import", json={"labels": model_b["labelset"]["labels"]})
+        assert len(good_votes) == 0, "Model A's votes should not leak into Model B's session"
+        assert len(bad_votes) == 0
+
+    def test_import_after_clear_only_has_model_labels(self, client):
+        """After clearing + importing, only the target model's labels are active."""
+        from vtsearch.utils import good_votes, bad_votes, medias
+
+        ids = list(medias.keys())
+        if len(ids) < 4:
+            pytest.skip("Need at least 4 medias")
+
+        # Create model and label 2 items
+        client.post("/api/detectors", json={"name": "Target", "media_type": "audio", "text_query": "t"})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        client.post("/api/detectors/Target/labels")
+
+        # Add extra votes that DON'T belong to the model (simulating stale state)
+        client.post(f"/api/medias/{ids[2]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[3]}/vote", json={"vote": "bad"})
+        assert len(good_votes) == 2  # ids[0] + ids[2]
+        assert len(bad_votes) == 2  # ids[1] + ids[3]
+
+        # Clear votes, then import only Target's labels
+        client.post("/api/votes/clear")
+        target_data = client.get("/api/detectors/Target").get_json()
+        client.post("/api/labels/import", json={"labels": target_data["labelset"]["labels"]})
+
+        # Should only have the 2 labels from Target, not the 4 from before
+        assert len(good_votes) + len(bad_votes) == 2
+        assert ids[2] not in good_votes, "Stale vote should be gone after clear+import"
+        assert ids[3] not in bad_votes, "Stale vote should be gone after clear+import"
+
+
+class TestDeleteRegisteredModel:
+    """Tests for DELETE /api/detectors/registry/<detector_id>."""
+
+    def test_delete_registered_model(self, client):
+        """Deleting a registered model removes it from the registry."""
+        from vtsearch.models.detector_registry import get_detector
+
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "DelMe", "media_type": "audio", "text_query": "test"},
+        )
+        assert res.status_code == 201
+        detector_id = res.get_json()["detector"]["id"]
+
+        res = client.delete(f"/api/detectors/registry/{detector_id}")
+        assert res.status_code == 200
+        assert res.get_json()["ok"] is True
+        assert get_detector(detector_id) is None
+
+    def test_delete_nonexistent(self, client):
+        res = client.delete("/api/detectors/registry/nonexistent_id")
+        assert res.status_code == 404
+
+    def test_delete_loaded_model(self, client):
+        """Deleting a loaded model should also unload it."""
+        from vtsearch.models.detector_registry import get_detector, is_detector_loaded
+
+        client.post(
+            "/api/detectors",
+            json={"name": "LoadDel", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "LoadDel", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
+        assert is_detector_loaded(detector_id)
+
+        res = client.delete(f"/api/detectors/registry/{detector_id}")
+        assert res.status_code == 200
+        assert get_detector(detector_id) is None
+        assert not is_detector_loaded(detector_id)
+
+    def test_delete_removes_autorun_flag(self, client):
+        """Deleting a model that is flagged for autorun clears it from settings."""
+        from vtsearch.models.detector_registry import get_detector
+        from vtsearch.settings import add_autorun_detector, get_autorun_detectors
+
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "DetDel", "media_type": "audio"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+        add_autorun_detector("DetDel")
+
+        res = client.delete(f"/api/detectors/registry/{detector_id}")
+        assert res.status_code == 200
+        assert "DetDel" not in get_autorun_detectors()
+        assert get_detector(detector_id) is None
+
+
+class TestLoadModelEndpoint:
+    """Tests for POST /api/detectors/registry/load."""
+
+    def test_load_model(self, client):
+        from vtsearch.models.detector_registry import is_detector_loaded
+
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "M", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+
+        res = _load_detector_and_wait(client, detector_id)
+        assert res.status_code == 200
+        assert is_detector_loaded(detector_id)
+
+    def test_unload_model(self, client):
+        from vtsearch.models.detector_registry import add_loaded_detector_id, is_detector_loaded
+
+        add_loaded_detector_id("fake")
+        assert is_detector_loaded("fake")
+        res = client.post("/api/detectors/registry/load", json={"detector_id": None})
+        assert res.status_code == 200
+
+    def test_load_nonexistent(self, client):
+        res = client.post("/api/detectors/registry/load", json={"detector_id": "nope"})
+        assert res.status_code == 404
+
+    def test_load_clears_previous_labels(self, client):
+        """Loading model B must not carry over labels from model A."""
+        from vtsearch.utils import bad_votes, good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        ids = list(medias.keys())
+
+        # Create two detectors + registry entries.
+        for name in ("ModelA", "ModelB"):
+            client.post(
+                "/api/detectors",
+                json={"name": name, "media_type": "audio", "text_query": "test"},
+            )
+        res_a = client.post(
+            "/api/detectors/registry",
+            json={"name": "ModelA", "media_type": "audio", "text_query": "test"},
+        )
+        mid_a = res_a.get_json()["detector"]["id"]
+        res_b = client.post(
+            "/api/detectors/registry",
+            json={"name": "ModelB", "media_type": "audio", "text_query": "test"},
+        )
+        mid_b = res_b.get_json()["detector"]["id"]
+
+        # Load model A and cast some votes.
+        _load_detector_and_wait(client, mid_a)
+        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        assert ids[0] in good_votes
+        assert ids[1] in bad_votes
+
+        # Now load model B — votes from A must be gone.
+        _load_detector_and_wait(client, mid_b)
+        assert ids[0] not in good_votes, "good vote from model A leaked into model B"
+        assert ids[1] not in bad_votes, "bad vote from model A leaked into model B"
+
+    def test_load_restores_saved_labels(self, client):
+        """Loading a model that has a saved labelset should restore its labels."""
+        from vtsearch.utils import good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        ids = list(medias.keys())
+
+        # Create model, load it, vote, then save labels.
+        client.post(
+            "/api/detectors",
+            json={"name": "Persist", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "Persist", "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, mid)
+        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        # Labels auto-sync on vote, so the detector file now has 1 label.
+
+        # Unload to clear votes, then reload — label should be restored.
+        client.post("/api/detectors/registry/load", json={"detector_id": None})
+        assert ids[0] not in good_votes
+
+        res = _load_detector_and_wait(client, mid)
+        assert res.status_code == 200
+        assert ids[0] in good_votes, "saved label was not restored on model load"
+
+    def test_dataset_switch_clears_cross_dataset_cids(self, client):
+        """Switching the active dataset must rehydrate the loaded detector's
+        cid-keyed vote dicts from the on-disk labelset against the new dataset's
+        medias.  Without this, ids voted in dataset A leak into dataset B's
+        id-space and unrelated B-medias whose ids happen to coincide with
+        A's voted ids appear as voted in B's labeling UI.
+        """
+        import hashlib
+
+        import numpy as np
+
+        from vtsearch.models.detector_dataset_sync import ensure_votes_match_active_dataset
+        from vtsearch.utils import (
+            DatasetContext,
+            bad_votes,
+            good_votes,
+            medias,
+            register_context,
+            set_thread_dataset_context,
+        )
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        a_ids = list(medias.keys())
+        if len(a_ids) < 2:
+            pytest.skip("Need at least 2 medias")
+        a_good = a_ids[0]
+        a_bad = a_ids[1]
+
+        # Create + load a detector while dataset A is active.
+        client.post(
+            "/api/detectors",
+            json={"name": "CrossDS", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "CrossDS", "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, mid)
+
+        # Vote in dataset A.  Persists to good_votes/bad_votes and to the
+        # detector's on-disk labelset via sync_labels_to_loaded_detector.
+        client.post(f"/api/medias/{a_good}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{a_bad}/vote", json={"vote": "bad"})
+        assert a_good in good_votes
+        assert a_bad in bad_votes
+
+        # Build dataset B with DIFFERENT media (different md5/origin) reusing
+        # the same cids, exactly the situation that produced the bug: the
+        # voted A ids would otherwise show up as votes in B's id-space.
+        ctx_b = DatasetContext("ds_b_for_switch_test")
+        for cid in (a_good, a_bad):
+            ctx_b.medias[cid] = {
+                "id": cid,
+                "type": "audio",
+                "embedder": "clap",
+                "md5": hashlib.md5(f"ds_b_{cid}".encode()).hexdigest(),
+                "embedding": np.zeros(512, dtype=np.float32),
+                "media_bytes": b"fake-b",
+                "filename": f"ds_b_{cid}.wav",
+                "category": "test",
+                "origin": {"importer": "test_b", "params": {"id": cid}},
+                "origin_name": f"ds_b_{cid}.wav",
+            }
+        register_context(ctx_b)
+        set_thread_dataset_context(ctx_b)
+
+        # Simulate the before_request hook firing for a request whose active
+        # dataset is now B.
+        ensure_votes_match_active_dataset()
+
+        assert a_good not in good_votes, (
+            "good cid from dataset A leaked into dataset B's id-space"
+        )
+        assert a_bad not in bad_votes, (
+            "bad cid from dataset A leaked into dataset B's id-space"
+        )
+
+
+class TestVoteSyncsToLoadedModel:
+    """Voting while a detector is loaded should auto-update the model's labelset."""
+
+    def test_vote_updates_model_labels(self, client):
+        """Casting a vote with a loaded model should persist labels and update registry stats."""
+        from vtsearch.models.detector_registry import get_detector
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        # Create and register a detector
+        client.post(
+            "/api/detectors",
+            json={"name": "AutoSync", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "AutoSync", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+
+        # Load the model
+        _load_detector_and_wait(client, detector_id)
+
+        # Cast a vote
+        first_id = next(iter(medias))
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+
+        # Check that the model's labelset was updated
+        model_data = client.get("/api/detectors/AutoSync").get_json()
+        labels = model_data["labelset"]["labels"]
+        assert len(labels) == 1
+        assert labels[0]["label"] == "good"
+
+        # Check that the registry entry was updated
+        entry = get_detector(detector_id)
+        assert entry["num_training"] == 1
+        assert entry.get("last_trained_at") is not None
+
+    def test_vote_toggle_off_updates_model(self, client):
+        """Toggling a vote off should update the model labelset to reflect removal."""
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        client.post(
+            "/api/detectors",
+            json={"name": "ToggleSync", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "ToggleSync", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
+
+        first_id = next(iter(medias))
+        # Vote good
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        model_data = client.get("/api/detectors/ToggleSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 1
+
+        # Toggle off (vote good again)
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        model_data = client.get("/api/detectors/ToggleSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 0
+
+    def test_no_sync_without_loaded_model(self, client):
+        """Voting with no loaded model should not create/update any model files."""
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        client.post(
+            "/api/detectors",
+            json={"name": "NoSync", "media_type": "audio", "text_query": "test"},
+        )
+
+        first_id = next(iter(medias))
+        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+
+        # Model should still have empty labelset
+        model_data = client.get("/api/detectors/NoSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 0
+
+    def test_label_import_syncs_to_loaded_model(self, client):
+        """Importing labels with a loaded model should persist to the model."""
+        from vtsearch.models.detector_registry import get_detector
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        client.post(
+            "/api/detectors",
+            json={"name": "ImportSync", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "ImportSync", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
+
+        # Get an MD5 from the first media
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        md5 = media.get("md5", "")
+
+        # Import a label
+        client.post("/api/labels/import", json={"labels": [{"md5": md5, "label": "good"}]})
+
+        # Model should have the imported label
+        model_data = client.get("/api/detectors/ImportSync").get_json()
+        assert len(model_data["labelset"]["labels"]) == 1
+
+        entry = get_detector(detector_id)
+        assert entry["num_training"] == 1
+
+
+class TestSeedVotesFromExamples:
+    """When loading a model with media examples, matching medias get auto-labeled Good."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_medias(self):
+        """Remove any media items inserted by seeding after each test."""
+        from vtsearch.utils import medias
+
+        saved = dict(medias)
+        yield
+        # Remove items that were added, restore any that were modified
+        medias.clear()
+        medias.update(saved)
+
+    def _create_example_file(self, media_bytes: bytes, filename: str = "ex.wav") -> str:
+        """Write *media_bytes* into data/example_media/<filename> and return the filename."""
+        from vtsearch.config import DATA_DIR
+
+        example_dir = DATA_DIR / "example_media"
+        example_dir.mkdir(parents=True, exist_ok=True)
+        dest = example_dir / filename
+        dest.write_bytes(media_bytes)
+        return filename
+
+    # ---- POST /api/votes/seed-from-examples ----
+
+    def test_seed_endpoint_adds_good_votes(self, client):
+        """Media examples whose MD5 matches a loaded media should become good votes."""
+        from vtsearch.utils import good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        media_bytes = media["media_bytes"]
+
+        fname = self._create_example_file(media_bytes, "seed_test.wav")
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 1
+        assert data["skipped"] == 0
+        assert first_id in good_votes
+
+    def test_seed_skips_text_examples(self, client):
+        """Text examples should be skipped (only media examples are seeded)."""
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "text", "value": "dog barking"}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 0
+        assert data["skipped"] == 1
+
+    def test_seed_skips_nonexistent_file(self, client):
+        """A media example whose file doesn't exist should be skipped."""
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": "no_such_file.wav"}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 0
+        assert data["skipped"] == 1
+
+    def test_seed_unmatched_inserts_new_media(self, client):
+        """A media example not in the dataset should be embedded and inserted as a new media."""
+        from vtsearch.utils import good_votes, medias
+
+        original_count = len(medias)
+
+        # Create a file whose content differs from all loaded medias
+        fname = self._create_example_file(b"novel-example-content", "novel.wav")
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 1
+
+        # A new media should have been inserted
+        assert len(medias) == original_count + 1
+
+        # The new media should be in good_votes
+        new_id = max(medias.keys())
+        assert new_id in good_votes
+
+        # The new media should have the example_media origin (not a dataset origin)
+        new_media = medias[new_id]
+        assert new_media["origin"]["importer"] == "example_media"
+        assert new_media["origin"]["params"]["filename"] == fname
+        assert new_media["filename"] == fname
+        assert new_media["embedding"] is not None
+
+    def test_seed_preserves_original_origins(self, client):
+        """Seeded medias should keep their original dataset origins."""
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        original_origin = media.get("origin")
+        original_origin_name = media.get("origin_name", "")
+
+        fname = self._create_example_file(media["media_bytes"], "origin_test.wav")
+        client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+
+        # Origin should be unchanged
+        assert medias[first_id].get("origin") == original_origin
+        assert medias[first_id].get("origin_name", "") == original_origin_name
+
+    def test_seed_appears_in_label_export(self, client):
+        """Seeded good votes should appear in the label export."""
+        from vtsearch.utils import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        fname = self._create_example_file(media["media_bytes"], "export_test.wav")
+
+        client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+
+        res = client.get("/api/labels/export")
+        assert res.status_code == 200
+        labels = res.get_json()["labels"]
+        assert len(labels) >= 1
+        assert any(lbl["label"] == "good" for lbl in labels)
+
+    def test_new_example_appears_in_label_export(self, client):
+        """A non-dataset example inserted by seeding should appear in label export."""
+        fname = self._create_example_file(b"export-novel-bytes", "export_novel.wav")
+
+        client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+
+        res = client.get("/api/labels/export")
+        assert res.status_code == 200
+        labels = res.get_json()["labels"]
+        example_labels = [
+            lbl
+            for lbl in labels
+            if isinstance(lbl.get("origin"), dict) and lbl["origin"].get("importer") == "example_media"
+        ]
+        assert len(example_labels) == 1
+        assert example_labels[0]["label"] == "good"
+        assert example_labels[0]["origin"]["params"]["filename"] == fname
+
+    def test_new_example_usable_in_training(self, client):
+        """Inserted examples should have embeddings usable by learned-sort."""
+        from vtsearch.utils import good_votes, bad_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        # Seed a novel example as good
+        fname = self._create_example_file(b"training-novel-bytes", "train_novel.wav")
+        client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+        assert len(good_votes) >= 1
+
+        # Add a bad vote on the first dataset media so we have both good+bad
+        first_id = next(iter(medias))
+        # Make sure we don't vote bad on the newly inserted item
+        new_id = max(medias.keys())
+        target_id = first_id if first_id != new_id else list(medias.keys())[1]
+        client.post(f"/api/medias/{target_id}/vote", json={"vote": "bad"})
+        assert len(bad_votes) >= 1
+
+        # Learned sort should work — it accesses the embedding from the inserted media
+        res = client.post("/api/learned-sort")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "results" in data
+        assert len(data["results"]) > 0
+
+    # ---- Model load auto-seeding ----
+
+    def test_load_model_seeds_from_media_examples(self, client):
+        """Loading a model with media examples should auto-seed good votes."""
+        from vtsearch.utils import good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        fname = self._create_example_file(media["media_bytes"], "autoload.wav")
+
+        # Create model with a media example
+        client.post(
+            "/api/detectors",
+            json={
+                "name": "AutoSeed",
+                "media_type": "audio",
+                "examples": [{"type": "media", "value": fname}],
+            },
+        )
+        # Register in model registry
+        res = client.post(
+            "/api/detectors/registry",
+            json={
+                "name": "AutoSeed",
+                "media_type": "audio",
+
+                "text_query": "",
+                "media_example": fname,
+            },
+        )
+        detector_id = res.get_json()["detector"]["id"]
+
+        # Clear any prior votes
+        client.post("/api/votes/clear")
+        assert len(good_votes) == 0
+
+        # Load model — should auto-seed
+        res = _load_detector_and_wait(client, detector_id)
+        assert res.status_code == 200
+        assert first_id in good_votes, "example media should be seeded as good vote"
+
+    def test_load_model_without_examples_seeds_nothing(self, client):
+        """Loading a text-only model should seed 0 examples."""
+        from vtsearch.utils import good_votes
+
+        client.post(
+            "/api/detectors",
+            json={"name": "TextOnly", "media_type": "audio", "text_query": "dogs"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={
+                "name": "TextOnly",
+                "media_type": "audio",
+
+                "text_query": "dogs",
+            },
+        )
+        detector_id = res.get_json()["detector"]["id"]
+
+        client.post("/api/votes/clear")
+        res = _load_detector_and_wait(client, detector_id)
+        assert res.status_code == 200
+        assert len(good_votes) == 0
+
+    def test_seeded_examples_enable_autopilot_skip(self, client):
+        """If seeded examples meet the autopilot threshold, Good phase can be skipped.
+
+        This tests the backend side: enough media examples seed enough
+        good_votes that ``goodCount >= autopilot_top_greens``.
+        """
+        from vtsearch.utils import good_votes, medias
+
+        ids = list(medias.keys())
+        if len(ids) < 4:
+            pytest.skip("Need at least 4 medias")
+
+        # Create example files for 4 medias
+        fnames = []
+        for i, cid in enumerate(ids[:4]):
+            fname = self._create_example_file(medias[cid]["media_bytes"], f"skip_{i}.wav")
+            fnames.append(fname)
+
+        examples = [{"type": "media", "value": fn} for fn in fnames]
+        client.post(
+            "/api/detectors",
+            json={"name": "SkipGood", "media_type": "audio", "examples": examples},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={
+                "name": "SkipGood",
+                "media_type": "audio",
+
+                "text_query": "",
+            },
+        )
+        detector_id = res.get_json()["detector"]["id"]
+
+        client.post("/api/votes/clear")
+        _load_detector_and_wait(client, detector_id)
+
+        # With default autopilot_top_greens=3, 4 good votes is enough to skip Good phase
+        assert len(good_votes) >= 4
+
+    def test_load_model_seeds_novel_example(self, client):
+        """Loading a model with a non-dataset example should embed and insert it."""
+        from vtsearch.utils import good_votes, medias
+
+        original_count = len(medias)
+        fname = self._create_example_file(b"novel-load-bytes", "novel_load.wav")
+
+        client.post(
+            "/api/detectors",
+            json={
+                "name": "NovelSeed",
+                "media_type": "audio",
+                "examples": [{"type": "media", "value": fname}],
+            },
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={
+                "name": "NovelSeed",
+                "media_type": "audio",
+
+                "text_query": "",
+            },
+        )
+        detector_id = res.get_json()["detector"]["id"]
+
+        client.post("/api/votes/clear")
+        res = _load_detector_and_wait(client, detector_id)
+        assert res.status_code == 200
+
+        # A new media should have been inserted
+        assert len(medias) == original_count + 1
+        new_id = max(medias.keys())
+        assert new_id in good_votes
+        assert medias[new_id]["origin"]["importer"] == "example_media"
+
+    def test_seed_directory_traversal_blocked(self, client):
+        """Path traversal attempts in example filenames should be rejected."""
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": "../../etc/passwd"}]},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["seeded"] == 0
+        assert data["skipped"] == 1
+
+
+class TestLoadModelCrossDatasetResolution:
+    """Loading a model trained on Dataset A while Dataset B is loaded should
+    still resolve labels when the underlying files are the same."""
+
+    def test_load_model_resolves_labels_via_origin(self, client, tmp_path):
+        """Labels from Dataset A should resolve by origin→MD5 on Dataset B.
+
+        Simulates: train detector on Dataset A (labels with folder origins),
+        switch to Dataset B (same files, different origin keys), open Train
+        mode.  The label restore should follow origin trails, compute MD5s,
+        and match against loaded medias.
+        """
+        import hashlib
+
+        import numpy as np
+
+        from vtsearch.models.detector_registry import register_detector, reset_for_tests
+        from vtsearch.models.detector_store import _write_detector
+        from vtsearch.settings import get_detectors_dir, set_detectors_dir
+        from vtsearch.utils import good_votes, bad_votes, medias
+
         reset_for_tests()
 
-        # --- Phase 1: build label folder on disk (simulates Dataset A files) ---
+        # --- Build files on disk (shared content between both datasets) ---
         label_folder = tmp_path / "dataset_a"
         label_folder.mkdir()
-        for i in range(3):
-            (label_folder / f"good_{i}.wav").write_bytes(f"good_audio_{i}".encode())
-        for i in range(3):
-            (label_folder / f"bad_{i}.wav").write_bytes(f"bad_audio_{i}".encode())
+        good_file = label_folder / "good_0.wav"
+        bad_file = label_folder / "bad_0.wav"
+        good_file.write_bytes(b"shared_good_content")
+        bad_file.write_bytes(b"shared_bad_content")
+
+        good_md5 = hashlib.md5(b"shared_good_content").hexdigest()
+        bad_md5 = hashlib.md5(b"shared_bad_content").hexdigest()
 
         label_origin = {
             "importer": "server_folder",
             "params": {"path": str(label_folder), "media_type": "audio"},
         }
 
-        # Build labelset entries with origins pointing to the folder
-        label_entries = []
-        for i in range(3):
-            label_entries.append(
-                {
-                    "md5": f"dataset_a_good_{i}",
-                    "label": "good",
-                    "origin": label_origin,
-                    "origin_name": f"good_{i}.wav",
-                    "filename": f"good_{i}.wav",
-                }
-            )
-        for i in range(3):
-            label_entries.append(
-                {
-                    "md5": f"dataset_a_bad_{i}",
-                    "label": "bad",
-                    "origin": label_origin,
-                    "origin_name": f"bad_{i}.wav",
-                    "filename": f"bad_{i}.wav",
-                }
-            )
-
-        # --- Phase 2: write trainable model with these labels ---
-        original_dir = get_trainable_models_dir()
-        set_trainable_models_dir(tmp_path)
-        try:
-            tm_name = "test-cross-dataset"
-            tm_path = tmp_path / f"{tm_name}.json"
-            _write_model(
-                tm_path,
-                {
-                    "name": tm_name,
-                    "text_query": "",
-                    "media_type": "audio",
-                    "examples": [],
-                    "labelset": {"labels": label_entries},
-                },
-            )
-
-            entry = register_model(
-                name="Cross Dataset Test",
-                media_type="audio",
-                trainable=True,
-                trainable_model_name=tm_name,
-            )
-            model_id = entry["id"]
-
-            # --- Phase 3: replace medias with completely different Dataset B ---
-            # (no MD5 overlap, forcing origin resolution)
-            saved = dict(medias)
-            medias.clear()
-            rng = np.random.default_rng(42)
-            for i in range(1, 21):
-                medias[i] = {
-                    "id": i,
-                    "type": "audio",
-                    "embedding": rng.standard_normal(512).astype(np.float32),
-                    "md5": f"dataset_b_md5_{i}",
-                    "filename": f"dataset_b_{i}.wav",
-                    "origin": {"importer": "server_folder", "params": {"path": "/other"}},
-                    "origin_name": f"dataset_b_{i}.wav",
-                }
-
-            # Mock embed_file to return deterministic vectors
-            good_emb = rng.standard_normal(512).astype(np.float32)
-            bad_emb = rng.standard_normal(512).astype(np.float32)
-
-            def fake_embed(path, media_type):
-                from pathlib import Path
-
-                name = Path(path).name
-                if "good" in name:
-                    return good_emb.copy()
-                return bad_emb.copy()
-
-            try:
-                with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
-                    resp = client.post("/api/find-label", json={"model_id": model_id})
-
-                assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.get_json()}"
-                data = resp.get_json()
-                assert data["ok"] is True
-                total = data["good_count"] + data["bad_count"]
-                assert total == 20  # all Dataset B items scored
-            finally:
-                medias.clear()
-                medias.update(saved)
-        finally:
-            set_trainable_models_dir(original_dir)
-
-    def test_find_label_cross_dataset_error_includes_diagnostics(self, client, tmp_path):
-        """When origin resolution fails, the error response should include diagnostics."""
-        from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.models.trainable_model_store import _write_model
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import medias
-
-        reset_for_tests()
-
-        # Labels point to a nonexistent folder — resolution will fail
-        bad_origin = {
-            "importer": "server_folder",
-            "params": {"path": "/nonexistent/dataset_a"},
-        }
+        # Labelset entries with Dataset A origin info and DIFFERENT MD5s
+        # (simulating that the labelset was saved with old/different hashes)
         label_entries = [
             {
-                "md5": "no_match_g",
+                "md5": "dataset_a_good_old_hash",
                 "label": "good",
-                "origin": bad_origin,
-                "origin_name": "good.wav",
-                "filename": "good.wav",
+                "origin": label_origin,
+                "origin_name": "good_0.wav",
+                "filename": "good_0.wav",
             },
             {
-                "md5": "no_match_b",
+                "md5": "dataset_a_bad_old_hash",
                 "label": "bad",
-                "origin": bad_origin,
-                "origin_name": "bad.wav",
-                "filename": "bad.wav",
+                "origin": label_origin,
+                "origin_name": "bad_0.wav",
+                "filename": "bad_0.wav",
             },
         ]
 
-        original_dir = get_trainable_models_dir()
-        set_trainable_models_dir(tmp_path)
+        # --- Write detector ---
+        original_dir = get_detectors_dir()
+        set_detectors_dir(tmp_path)
         try:
-            tm_name = "test-diag"
-            _write_model(
+            tm_name = "cross-dataset-load"
+            _write_detector(
                 tmp_path / f"{tm_name}.json",
                 {
                     "name": tm_name,
@@ -704,690 +1202,322 @@ class TestFindLabel:
                 },
             )
 
-            entry = register_model(
-                name="Diag Test",
+            entry = register_detector(
+                name=tm_name,
                 media_type="audio",
-                trainable=True,
-                trainable_model_name=tm_name,
             )
+            detector_id = entry["id"]
 
-            # Ensure medias have no MD5 overlap
+            # --- Replace medias with Dataset B (same file content, different origins) ---
             saved = dict(medias)
             medias.clear()
             rng = np.random.default_rng(99)
-            for i in range(1, 6):
-                medias[i] = {
-                    "id": i,
-                    "type": "audio",
-                    "embedding": rng.standard_normal(512).astype(np.float32),
-                    "md5": f"other_{i}",
-                    "filename": f"other_{i}.wav",
-                    "origin": {"importer": "test", "params": {}},
-                    "origin_name": f"other_{i}.wav",
-                }
+            medias[1] = {
+                "id": 1,
+                "type": "audio",
+                "embedding": rng.standard_normal(512).astype(np.float32),
+                "md5": good_md5,  # same content as good_0.wav
+                "filename": "completely_different_name.wav",
+                "origin": {"importer": "server_folder", "params": {"path": "/other/place"}},
+                "origin_name": "completely_different_name.wav",
+            }
+            medias[2] = {
+                "id": 2,
+                "type": "audio",
+                "embedding": rng.standard_normal(512).astype(np.float32),
+                "md5": bad_md5,  # same content as bad_0.wav
+                "filename": "another_file.wav",
+                "origin": {"importer": "server_folder", "params": {"path": "/other/place"}},
+                "origin_name": "another_file.wav",
+            }
 
             try:
-                resp = client.post("/api/find-label", json={"model_id": entry["id"]})
-                assert resp.status_code == 400
-                data = resp.get_json()
-
-                # Error message should describe the resolution failure
-                assert "could not be trained" in data["error"]
-                assert "failed to resolve" in data["error"]
-
-                # Should include structured diagnostics
-                diag = data["resolution_diagnostic"]
-                assert diag["total_labels"] == 2
-                assert diag["md5_matched"] == 0
-                assert diag["needed_resolution"] == 2
-                assert diag["resolved_from_origin"] == 0
-                assert diag["failed_resolution"] == 2
-                assert "sample_failures" in diag
-                assert len(diag["sample_failures"]) > 0
-                assert diag["sample_failures"][0]["origin"]["importer"] == "server_folder"
+                res = _load_detector_and_wait(client, detector_id)
+                assert res.status_code == 200
+                assert 1 in good_votes, "good label should be applied to media 1"
+                assert 2 in bad_votes, "bad label should be applied to media 2"
             finally:
                 medias.clear()
                 medias.update(saved)
         finally:
-            set_trainable_models_dir(original_dir)
+            set_detectors_dir(original_dir)
 
-    def test_find_label_does_not_overwrite_training_labels(self, client, tmp_path):
-        """Running Find must NOT overwrite the model's saved training labels.
+    def test_load_model_does_not_silently_match_on_basename_collision(self, client, tmp_path):
+        """Loading a detector trained on dataset B against dataset C must NOT
+        silently apply labels to C's media when only the basename matches.
 
-        Reproduces the bug: train on Dataset A (6 labels), load Dataset B,
-        run Find → the model's labelset on disk should still have exactly 6
-        training labels, not the N scoring labels from Dataset B.
+        Concretely: a labelset entry with origin+md5 that don't exist in the
+        current dataset must NOT be applied to a media just because they
+        share an ``origin_name``.  Different datasets routinely contain
+        files with identical basenames (e.g. ``track1.wav``) but different
+        underlying content; matching by basename alone produces silent
+        mislabels.
         """
-        from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.registry import add_loaded_model_id, register_model, reset_for_tests
-        from vtsearch.models.label_sync import sync_labels_to_loaded_model
-        from vtsearch.models.trainable_model_store import _read_model, _write_model
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
-        from vtsearch.utils.state_core import DetectorContext, register_detector_context
+        import numpy as np
+
+        from vtsearch.models.detector_registry import register_detector, reset_for_tests
+        from vtsearch.models.detector_store import _write_detector
+        from vtsearch.settings import get_detectors_dir, set_detectors_dir
+        from vtsearch.utils import good_votes, medias
 
         reset_for_tests()
 
-        # --- Phase 1: simulate training on "Dataset A" (6 labels) ---
-        good_votes.update({k: None for k in [1, 2, 3]})
-        bad_votes.update({k: None for k in [18, 19, 20]})
-
-        snap = snapshot_medias()
-        labelset = LabelSet.from_clips_and_votes(snap, good_votes, bad_votes, expand_dupes=False)
-        original_label_count = len(labelset)
-        assert original_label_count == 6
-
-        original_dir = get_trainable_models_dir()
-        set_trainable_models_dir(tmp_path)
-        try:
-            tm_name = "persist-test"
-            tm_path = tmp_path / f"{tm_name}.json"
-            _write_model(
-                tm_path,
-                {
-                    "name": tm_name,
-                    "text_query": "",
-                    "examples": [],
-                    "labelset": labelset.to_dict(),
-                },
-            )
-
-            entry = register_model(
-                name="Persist Test",
-                media_type="audio",
-                trainable=True,
-                trainable_model_name=tm_name,
-            )
-            model_id = entry["id"]
-            add_loaded_model_id(model_id)
-            det_ctx = DetectorContext(model_id)
-            register_detector_context(det_ctx)
-            set_thread_detector_context(det_ctx)
-
-            # --- Phase 2: simulate loading Dataset B (clear votes) ---
-            good_votes.clear()
-            bad_votes.clear()
-
-            # --- Phase 3: run Find → scores all N medias, applies labels ---
-            resp = client.post("/api/find-label", json={"model_id": model_id})
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert data["ok"] is True
-            total_scored = data["good_count"] + data["bad_count"]
-            assert total_scored == app_module.NUM_MEDIAS
-
-            # --- Phase 4: trigger sync (as a subsequent vote would) ---
-            sync_labels_to_loaded_model()
-
-            # --- Assert: the saved labelset must still have 6 labels ---
-            saved = _read_model(tm_path)
-            saved_labels = saved["labelset"]["labels"]
-            assert len(saved_labels) == original_label_count, (
-                f"Expected {original_label_count} training labels but got "
-                f"{len(saved_labels)} — find-label scoring overwrote training data"
-            )
-        finally:
-            set_trainable_models_dir(original_dir)
-
-    def test_find_mode_cleared_on_model_load(self, client):
-        """Loading a new model should clear find mode so training syncs resume."""
-        from vtsearch.models.registry import is_find_mode, reset_for_tests, set_find_mode
-
-        reset_for_tests()
-        set_find_mode(True)
-        assert is_find_mode()
-
-        # Loading null model via endpoint clears find mode
-        client.post("/api/models/registry/load", json={"model_id": None})
-        assert not is_find_mode()
-
-    def test_find_label_missing_model_id(self, client):
-        resp = client.post("/api/find-label", json={})
-        assert resp.status_code == 400
-
-    def test_find_label_unknown_model_id(self, client):
-        resp = client.post("/api/find-label", json={"model_id": "nonexistent"})
-        assert resp.status_code == 404
-
-    def test_find_label_reports_progress(self, client):
-        """find-label should update find_progress with discrete steps."""
-        from vtsearch.utils.progress import find_progress
-
-        model_id = self._create_model_with_detector(client)
-
-        # Capture progress snapshots by monkey-patching update
-        snapshots = []
-        original_update = find_progress.update
-
-        def capturing_update(*args, **kwargs):
-            original_update(*args, **kwargs)
-            snapshots.append(find_progress.get())
-
-        find_progress.update = capturing_update
-        try:
-            resp = client.post("/api/find-label", json={"model_id": model_id})
-        finally:
-            find_progress.update = original_update
-
-        assert resp.status_code == 200
-
-        # Should have progress snapshots from each phase
-        assert len(snapshots) >= 3
-
-        # Step 1: resolving model
-        step1 = [s for s in snapshots if s.get("step") == 1]
-        assert len(step1) >= 1
-        assert step1[0]["status"] == "running"
-        assert step1[0]["total_steps"] == 4
-
-        # Step 3: scoring (step 2 skipped when weights exist)
-        step3 = [s for s in snapshots if s.get("step") == 3]
-        assert len(step3) >= 1
-        assert "Scoring" in step3[0]["message"]
-        assert step3[0]["total"] == app_module.NUM_MEDIAS
-
-        # Step 4: applying labels
-        step4 = [s for s in snapshots if s.get("step") == 4]
-        assert len(step4) >= 1
-        assert "Applying labels" in step4[0]["message"]
-
-        # Final state should be idle
-        final = find_progress.get()
-        assert final["status"] == "idle"
-
-    def test_find_label_progress_resets_on_error(self, client):
-        """find_progress should reset to idle when find-label returns an error."""
-        from vtsearch.models.registry import reset_for_tests
-        from vtsearch.utils.progress import find_progress
-
-        reset_for_tests()
-        resp = client.post("/api/find-label", json={})
-        assert resp.status_code == 400
-        data = find_progress.get()
-        assert data["status"] == "idle"
-
-    def test_find_label_progress_resets_on_not_found(self, client):
-        """find_progress should reset to idle when model is not found."""
-        from vtsearch.utils.progress import find_progress
-
-        resp = client.post("/api/find-label", json={"model_id": "nonexistent"})
-        assert resp.status_code == 404
-        data = find_progress.get()
-        assert data["status"] == "idle"
-
-    def test_find_label_progress_visible_via_endpoint(self, client):
-        """GET /api/find/progress should reflect find-label progress."""
-        resp = client.get("/api/find/progress")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        # Should be idle when nothing is running
-        assert data["status"] == "idle"
-
-
-class TestFindLabelDemoOrigin:
-    """Tests for find-label with demo dataset origins — cross-dataset resolution."""
-
-    def test_find_label_demo_origin_resolves(self, client, tmp_path):
-        """find-label should resolve labels from demo origins when MD5s don't match.
-
-        Simulates: train on demo dataset A, load dataset B, click Find.
-        The resolver follows the demo origin to find files on disk.
-        """
-        from unittest.mock import patch
-
-        from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.models.trainable_model_store import _write_model
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import medias
-
-        reset_for_tests()
-
-        # --- Phase 1: set up demo-like files on disk ---
-        img_dir = tmp_path / "caltech-101" / "101_ObjectCategories"
-        (img_dir / "kangaroo").mkdir(parents=True)
-        for i in range(3):
-            (img_dir / "kangaroo" / f"image_{i:04d}.jpg").write_bytes(f"good_img_{i}".encode())
-        (img_dir / "butterfly").mkdir(parents=True)
-        for i in range(3):
-            (img_dir / "butterfly" / f"image_{i:04d}.jpg").write_bytes(f"bad_img_{i}".encode())
-
-        # Build labelset with demo origins
-        demo_origin = {"importer": "demo", "params": {"name": "caltech101_s"}}
-        label_entries = []
-        for i in range(3):
-            label_entries.append(
-                {
-                    "md5": f"demo_a_good_{i}",
-                    "label": "good",
-                    "origin": demo_origin,
-                    "origin_name": f"kangaroo/image_{i:04d}.jpg",
-                    "filename": f"kangaroo/image_{i:04d}.jpg",
-                }
-            )
-        for i in range(3):
-            label_entries.append(
-                {
-                    "md5": f"demo_a_bad_{i}",
-                    "label": "bad",
-                    "origin": demo_origin,
-                    "origin_name": f"butterfly/image_{i:04d}.jpg",
-                    "filename": f"butterfly/image_{i:04d}.jpg",
-                }
-            )
-
-        # --- Phase 2: write trainable model ---
-        original_dir = get_trainable_models_dir()
-        set_trainable_models_dir(tmp_path)
-
-        import vtsearch.datasets.importers.demo as demo_mod
-
-        old_source_dirs = demo_mod._SOURCE_DIRS
-        demo_mod._SOURCE_DIRS = {"caltech101": img_dir}
-
-        try:
-            tm_name = "test-demo-cross"
-            _write_model(
-                tmp_path / f"{tm_name}.json",
-                {
-                    "name": tm_name,
-                    "text_query": "",
-                    "media_type": "image",
-                    "examples": [],
-                    "labelset": {"labels": label_entries},
-                },
-            )
-
-            entry = register_model(
-                name="Demo Cross Dataset Test",
-                media_type="image",
-                trainable=True,
-                trainable_model_name=tm_name,
-            )
-            model_id = entry["id"]
-
-            # --- Phase 3: load completely different dataset B ---
-            saved = dict(medias)
-            medias.clear()
-            rng = np.random.default_rng(42)
-            for i in range(1, 11):
-                medias[i] = {
-                    "id": i,
-                    "type": "image",
-                    "embedding": rng.standard_normal(512).astype(np.float32),
-                    "md5": f"dataset_b_md5_{i}",
-                    "filename": f"dataset_b_{i}.jpg",
-                    "origin": {"importer": "demo", "params": {"name": "food101_a"}},
-                    "origin_name": f"dataset_b_{i}.jpg",
-                }
-
-            # Mock embed_file to return deterministic vectors
-            good_emb = rng.standard_normal(512).astype(np.float32)
-            bad_emb = rng.standard_normal(512).astype(np.float32)
-
-            def fake_embed(path, media_type):
-                if "kangaroo" in str(path):
-                    return good_emb.copy()
-                return bad_emb.copy()
-
-            try:
-                with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
-                    resp = client.post("/api/find-label", json={"model_id": model_id})
-
-                assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.get_json()}"
-                data = resp.get_json()
-                assert data["ok"] is True
-                total = data["good_count"] + data["bad_count"]
-                assert total == 10  # all Dataset B items scored
-            finally:
-                medias.clear()
-                medias.update(saved)
-        finally:
-            demo_mod._SOURCE_DIRS = old_source_dirs
-            set_trainable_models_dir(original_dir)
-
-    def test_find_label_demo_origin_empty_params_fails_with_warning(self, client, tmp_path):
-        """Demo labels with empty origin params should produce a user-friendly warning.
-
-        Simulates old pickles that stored demo origins without the dataset name.
-        """
-        from vtsearch.models.registry import register_model, reset_for_tests
-        from vtsearch.models.trainable_model_store import _write_model
-        from vtsearch.settings import get_trainable_models_dir, set_trainable_models_dir
-        from vtsearch.utils import medias
-
-        reset_for_tests()
-
-        # Origin with empty params (simulates old pickle bug)
-        bad_origin = {"importer": "demo", "params": {}}
         label_entries = [
             {
-                "md5": "old_good",
+                "md5": "nonexistent_hash",
                 "label": "good",
-                "origin": bad_origin,
-                "origin_name": "cat/img_001.jpg",
-                "filename": "cat/img_001.jpg",
-            },
-            {
-                "md5": "old_bad",
-                "label": "bad",
-                "origin": bad_origin,
-                "origin_name": "dog/img_002.jpg",
-                "filename": "dog/img_002.jpg",
+                "origin": {"importer": "server_folder", "params": {"path": "/gone"}},
+                "origin_name": "shared_name.wav",
+                "filename": "shared_name.wav",
             },
         ]
 
-        original_dir = get_trainable_models_dir()
-        set_trainable_models_dir(tmp_path)
+        original_dir = get_detectors_dir()
+        set_detectors_dir(tmp_path)
         try:
-            tm_name = "test-empty-demo"
-            _write_model(
+            tm_name = "name-fallback"
+            _write_detector(
                 tmp_path / f"{tm_name}.json",
                 {
                     "name": tm_name,
                     "text_query": "",
-                    "media_type": "image",
+                    "media_type": "audio",
                     "examples": [],
                     "labelset": {"labels": label_entries},
                 },
             )
 
-            entry = register_model(
-                name="Empty Demo Test",
-                media_type="image",
-                trainable=True,
-                trainable_model_name=tm_name,
+            entry = register_detector(
+                name=tm_name,
+                media_type="audio",
             )
+            detector_id = entry["id"]
 
             saved = dict(medias)
             medias.clear()
-            rng = np.random.default_rng(99)
-            for i in range(1, 6):
-                medias[i] = {
-                    "id": i,
-                    "type": "image",
-                    "embedding": rng.standard_normal(512).astype(np.float32),
-                    "md5": f"other_{i}",
-                    "filename": f"other_{i}.jpg",
-                    "origin": {"importer": "demo", "params": {"name": "eurosat_a"}},
-                    "origin_name": f"other_{i}.jpg",
-                }
+            rng = np.random.default_rng(42)
+            medias[1] = {
+                "id": 1,
+                "type": "audio",
+                "embedding": rng.standard_normal(512).astype(np.float32),
+                "md5": "totally_different_md5",
+                "filename": "shared_name.wav",
+                "origin": {"importer": "server_folder", "params": {"path": "/different"}},
+                "origin_name": "shared_name.wav",
+            }
 
             try:
-                resp = client.post("/api/find-label", json={"model_id": entry["id"]})
-                assert resp.status_code == 400
-                data = resp.get_json()
-
-                # Should have a user-friendly warning field
-                assert "warning" in data
-                assert "could not be resolved" in data["warning"]
-                assert "2" in data["warning"]  # total labels
-
-                # Error message should mention resolution failure
-                assert "failed to resolve" in data["error"]
+                res = _load_detector_and_wait(client, detector_id)
+                assert res.status_code == 200
+                assert 1 not in good_votes, (
+                    "label must NOT be applied: only the basename matches; the md5 "
+                    "and origin disagree, so the underlying content is different"
+                )
             finally:
                 medias.clear()
                 medias.update(saved)
         finally:
-            set_trainable_models_dir(original_dir)
+            set_detectors_dir(original_dir)
 
 
-class TestStampDemoOrigin:
-    """Tests for _stamp_demo_origin ensuring pickle-cached loads get correct origins."""
+class TestRegisterModelFromLabelset:
+    """Tests for POST /api/detectors/registry/from-labelset/<importer_name>.
 
-    def test_stamps_origin_with_dataset_name(self):
-        from vtsearch.datasets.loader import _stamp_demo_origin
+    This endpoint creates a detector seeded with labels produced by
+    a label importer in a single call: the importer runs, the trainable
+    model JSON is written with the full labelset, and a registry entry is
+    created.  The frontend then calls the load endpoint to resolve origins
+    and train the MLP.
 
-        medias = {
-            1: {"id": 1, "origin": {"importer": "demo", "params": {}}},
-            2: {"id": 2, "origin": None},
-        }
-        _stamp_demo_origin(medias, "caltech101_s")
-        for media in medias.values():
-            assert media["origin"]["importer"] == "demo"
-            assert media["origin"]["params"]["name"] == "caltech101_s"
+    Media type is inferred from the labels' origins — no ``media_type``
+    request field is accepted.
+    """
 
-    def test_stamps_converter_when_provided(self):
-        from vtsearch.datasets.loader import _stamp_demo_origin
+    @staticmethod
+    def _audio_origin(path: str = "/tmp/audio_clips"):
+        return {"importer": "server_folder", "params": {"path": path, "media_type": "audio"}}
 
-        medias = {1: {"id": 1, "origin": None}}
-        _stamp_demo_origin(medias, "caltech101_s", converter_name="image2text")
-        assert medias[1]["origin"]["params"]["converter"] == "image2text"
+    @staticmethod
+    def _image_origin(path: str = "/tmp/image_clips"):
+        return {"importer": "server_folder", "params": {"path": path, "media_type": "image"}}
 
-    def test_each_media_gets_independent_dict(self):
-        from vtsearch.datasets.loader import _stamp_demo_origin
+    def test_creates_model_with_imported_labels(self, client, tmp_path):
+        import app as app_module
 
-        medias = {1: {"id": 1, "origin": None}, 2: {"id": 2, "origin": None}}
-        _stamp_demo_origin(medias, "caltech101_s")
-        # Mutating one should not affect the other
-        medias[1]["origin"]["params"]["extra"] = "test"
-        assert "extra" not in medias[2]["origin"]["params"]
-
-
-class TestDetectorSortProgress:
-    """Tests for progress reporting during POST /api/detector-sort."""
-
-    def test_detector_sort_reports_progress(self, client):
-        """detector-sort should update find_progress while scoring."""
-        from vtsearch.utils.progress import find_progress
-
-        # Train a detector
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        detector = train_detector_from_votes()
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
-
-        # Capture progress snapshots
-        snapshots = []
-        original_update = find_progress.update
-
-        def capturing_update(*args, **kwargs):
-            original_update(*args, **kwargs)
-            snapshots.append(find_progress.get())
-
-        find_progress.update = capturing_update
-        try:
-            resp = client.post("/api/detector-sort", json={"detector": detector})
-        finally:
-            find_progress.update = original_update
-
-        assert resp.status_code == 200
-
-        # Should have scoring progress snapshots
-        scoring = [s for s in snapshots if s.get("step") == 1 and s["status"] == "running"]
-        assert len(scoring) >= 1
-        assert "Scoring" in scoring[0]["message"]
-        assert scoring[0]["total"] == app_module.NUM_MEDIAS
-
-        # Should end with complete progress
-        final_running = [s for s in snapshots if s["current"] == app_module.NUM_MEDIAS and s["status"] == "running"]
-        assert len(final_running) >= 1
-
-        # Final state should be idle
-        final = find_progress.get()
-        assert final["status"] == "idle"
-
-
-class TestAutoDetect:
-    """Tests for POST /api/auto-detect."""
-
-    def _add_audio_detector(self, client, name="test-detector"):
-        """Helper: create and save an audio detector with autodetect enabled."""
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        detector = train_detector_from_votes()
-
-        save_resp = client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": name,
-                "media_type": "audio",
-                "weights": detector["weights"],
-                "threshold": detector["threshold"],
-                "autodetect": True,
-            },
+        md5_good = app_module.medias[1]["md5"]
+        md5_bad = app_module.medias[2]["md5"]
+        origin = self._audio_origin()
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": md5_good, "label": "good", "origin": origin, "origin_name": "a.wav"},
+                    {"md5": md5_bad, "label": "bad", "origin": origin, "origin_name": "b.wav"},
+                ]
+            }
         )
-        assert save_resp.status_code == 200
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
 
-    # -- no matching detectors --
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "From LS", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 201, res.get_json()
+        data = res.get_json()
+        assert data["ok"] is True
+        assert data["applied"] == 2
+        assert data["skipped"] == 0
+        assert data["num_labels"] == 2
+        # Media type inferred from the origin metadata.
+        assert data["detector"]["media_type"] == "audio"
+        assert data["detector"]["num_training"] == 2
 
-    def test_no_autorun_detectors_returns_400(self, client):
-        resp = client.post("/api/auto-detect")
-        assert resp.status_code == 400
-        assert "No autorun detectors" in resp.get_json()["error"]
+        # Registry now has the model
+        reg_res = client.get("/api/detectors/registry")
+        names = [m["name"] for m in reg_res.get_json()["detectors"]]
+        assert "From LS" in names
 
-    def test_no_matching_media_type_returns_400(self, client):
-        """A detector for a different media type should not match audio medias."""
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        detector = train_detector_from_votes()
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
+        # Trainable-model file has the labelset baked in
+        tm_res = client.get("/api/detectors/From%20LS")
+        tm_data = tm_res.get_json()
+        assert len(tm_data["labelset"]["labels"]) == 2
+        assert tm_data["text_query"] == ""
+        assert tm_data["media_example"] == ""
+        assert tm_data["examples"] == []
 
-        # Save as "image" type with autodetect — medias are audio, so it won't match
+    def test_missing_name_returns_400(self, client, tmp_path):
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text('{"labels": []}')
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"filepath": str(labels_path)},
+        )
+        assert res.status_code == 400
+        assert "name" in res.get_json()["error"]
+
+    def test_md5_only_labelset_returns_400(self, client, tmp_path):
+        """Legacy md5-only labels have no origin — media type cannot be inferred."""
+        import app as app_module
+
+        md5 = app_module.medias[1]["md5"]
+        payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]})
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "NoOrigin", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 400
+        assert "media type" in res.get_json()["error"].lower()
+
+    def test_mixed_media_types_returns_400(self, client, tmp_path):
+        """Labels with conflicting origin media types are rejected."""
+        import app as app_module
+
+        md5_a = app_module.medias[1]["md5"]
+        md5_b = app_module.medias[2]["md5"]
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": md5_a, "label": "good", "origin": self._audio_origin(), "origin_name": "a.wav"},
+                    {"md5": md5_b, "label": "good", "origin": self._image_origin(), "origin_name": "b.jpg"},
+                ]
+            }
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "Mixed", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 400
+        err = res.get_json()["error"]
+        assert "audio" in err and "image" in err
+
+    def test_unknown_importer_returns_404(self, client):
+        res = client.post(
+            "/api/detectors/registry/from-labelset/no_such_importer",
+            json={"name": "X"},
+        )
+        assert res.status_code == 404
+        assert "no_such_importer" in res.get_json()["error"]
+
+    def test_duplicate_name_returns_409(self, client, tmp_path):
+        """Name collision with an existing detector file."""
+        import app as app_module
+
+        md5 = app_module.medias[1]["md5"]
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": md5, "label": "good", "origin": self._audio_origin(), "origin_name": "a.wav"},
+                ]
+            }
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
         client.post(
-            "/api/autorun-detectors",
-            json={
-                "name": "image-detector",
-                "media_type": "image",
-                "weights": detector["weights"],
-                "threshold": detector["threshold"],
-                "autodetect": True,
-            },
+            "/api/detectors",
+            json={"name": "Dup", "media_type": "audio", "text_query": "dup"},
         )
-        resp = client.post("/api/auto-detect")
-        assert resp.status_code == 400
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "Dup", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 409
 
-    # -- basic success --
+    def test_skips_invalid_label_values(self, client, tmp_path):
+        import app as app_module
 
-    def test_returns_200_with_matching_detector(self, client):
-        self._add_audio_detector(client)
-        resp = client.post("/api/auto-detect")
-        assert resp.status_code == 200
+        md5 = app_module.medias[1]["md5"]
+        origin = self._audio_origin()
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": md5, "label": "good", "origin": origin, "origin_name": "a.wav"},
+                    {"md5": md5, "label": "maybe", "origin": origin, "origin_name": "a.wav"},
+                ]
+            }
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "SkipInvalid", "filepath": str(labels_path)},
+        )
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["applied"] == 1
+        assert data["skipped"] == 1
+        assert data["num_labels"] == 1
+        assert data["detector"]["media_type"] == "audio"
 
-    def test_response_has_required_top_level_fields(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        assert "media_type" in data
-        assert "detectors_run" in data
-        assert "results" in data
+    def test_loading_after_creation_restores_labels(self, client, tmp_path):
+        """Loading the newly-created model resolves labels into the active dataset."""
+        import app as app_module
+        from vtsearch.utils import bad_votes, good_votes
 
-    def test_media_type_matches_clips(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        assert data["media_type"] == "audio"
+        md5_good = app_module.medias[1]["md5"]
+        md5_bad = app_module.medias[2]["md5"]
+        origin = self._audio_origin()
+        payload = json.dumps(
+            {
+                "labels": [
+                    {"md5": md5_good, "label": "good", "origin": origin, "origin_name": "a.wav"},
+                    {"md5": md5_bad, "label": "bad", "origin": origin, "origin_name": "b.wav"},
+                ]
+            }
+        )
+        labels_path = tmp_path / "labels.json"
+        labels_path.write_text(payload)
 
-    def test_detectors_run_count(self, client):
-        self._add_audio_detector(client, name="det-1")
-        self._add_audio_detector(client, name="det-2")
-        data = client.post("/api/auto-detect").get_json()
-        assert data["detectors_run"] == 2
+        res = client.post(
+            "/api/detectors/registry/from-labelset/server_json_file",
+            json={"name": "Loadable", "filepath": str(labels_path)},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
 
-    # -- per-detector result structure --
-
-    def test_each_result_has_required_fields(self, client):
-        self._add_audio_detector(client, name="struct-check")
-        data = client.post("/api/auto-detect").get_json()
-        result = data["results"]["struct-check"]
-        assert "detector_name" in result
-        assert "threshold" in result
-        assert "total_hits" in result
-        assert "hits" in result
-
-    def test_detector_name_matches_key(self, client):
-        self._add_audio_detector(client, name="named-detector")
-        data = client.post("/api/auto-detect").get_json()
-        result = data["results"]["named-detector"]
-        assert result["detector_name"] == "named-detector"
-
-    def test_total_hits_matches_hits_length(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        for result in data["results"].values():
-            assert result["total_hits"] == len(result["hits"])
-
-    # -- hit data safety --
-
-    def test_hits_do_not_contain_embeddings(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        for result in data["results"].values():
-            for hit in result["hits"]:
-                assert "embedding" not in hit
-
-    def test_hits_do_not_contain_media_bytes(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        for result in data["results"].values():
-            for hit in result["hits"]:
-                assert "media_bytes" not in hit
-
-    def test_hits_contain_score(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        for result in data["results"].values():
-            for hit in result["hits"]:
-                assert "score" in hit
-                assert 0.0 <= hit["score"] <= 1.0
-
-    def test_hits_sorted_descending_by_score(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        for result in data["results"].values():
-            scores = [h["score"] for h in result["hits"]]
-            assert scores == sorted(scores, reverse=True)
-
-    # -- threshold correctness --
-
-    def test_all_hits_score_at_or_above_threshold(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        for result in data["results"].values():
-            threshold = result["threshold"]
-            for hit in result["hits"]:
-                assert hit["score"] >= threshold - 1e-6  # float tolerance
-
-    # -- negative_hits --
-
-    def test_each_result_has_negative_hits(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        for result in data["results"].values():
-            assert "negative_hits" in result
-            assert isinstance(result["negative_hits"], list)
-
-    def test_negative_hits_score_below_threshold(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        for result in data["results"].values():
-            threshold = result["threshold"]
-            for hit in result["negative_hits"]:
-                assert hit["score"] < threshold + 1e-6
-
-    def test_negative_hits_do_not_contain_embeddings(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        for result in data["results"].values():
-            for hit in result["negative_hits"]:
-                assert "embedding" not in hit
-                assert "media_bytes" not in hit
-
-    def test_hits_and_negative_hits_cover_all_clips(self, client):
-        """Positive + negative hits should cover every media in the dataset."""
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        from vtsearch.utils import medias
-
-        total_clips = len(medias)
-        for result in data["results"].values():
-            total_returned = len(result["hits"]) + len(result["negative_hits"])
-            assert total_returned == total_clips
-
-    def test_negative_hits_sorted_descending_by_score(self, client):
-        self._add_audio_detector(client)
-        data = client.post("/api/auto-detect").get_json()
-        for result in data["results"].values():
-            scores = [h["score"] for h in result["negative_hits"]]
-            assert scores == sorted(scores, reverse=True)
+        # Labels resolved into the loaded detector's votes (matched by md5).
+        assert 1 in good_votes
+        assert 2 in bad_votes

@@ -76,6 +76,13 @@ class TestSyntheticImporterValidation:
         assert "audio" in imp.resolve_display_name({"media_type": "audio", "size": "7"})
         assert "7" in imp.resolve_display_name({"media_type": "audio", "size": "7"})
 
+    def test_user_dataset_name_overrides_default(self):
+        imp = SyntheticDatasetImporter()
+        out = imp.resolve_display_name(
+            {"media_type": "audio", "size": "7", "dataset_name": "My Tones"}
+        )
+        assert out == "My Tones"
+
 
 class TestOriginRoundTrip:
     def test_build_and_reload_origin(self):
@@ -125,6 +132,43 @@ class TestAudioGenerator:
         # Second call must not rewrite the cached files.
         generate_audio_dataset(tmp_path, 6, seed=1)
         assert paths[0].stat().st_mtime_ns == first_mtime
+
+    def test_emits_per_file_progress(self, tmp_path):
+        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+
+        events: list[tuple[str, str, int, int]] = []
+
+        def on_progress(status, message, current, total):
+            events.append((status, message, current, total))
+
+        generate_audio_dataset(tmp_path, 4, seed=1, on_progress=on_progress)
+
+        # Status is "downloading" so it maps to step 1 in the load pipeline.
+        assert all(ev[0] == "downloading" for ev in events)
+        # Total is reported correctly on every event.
+        assert all(ev[3] == 4 for ev in events)
+        # Per-file events count up 0..3 (with start at 0 and final at 4).
+        per_file_currents = [ev[2] for ev in events[1:-1]]
+        assert per_file_currents == [0, 1, 2, 3]
+        # Final event marks completion.
+        assert events[-1][2] == 4
+        # Messages mention "Synthesising" the first time around.
+        assert any("Synthesising" in ev[1] for ev in events)
+
+    def test_progress_marks_cached_runs(self, tmp_path):
+        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+
+        generate_audio_dataset(tmp_path, 3, seed=1)
+
+        events: list[str] = []
+        generate_audio_dataset(
+            tmp_path,
+            3,
+            seed=1,
+            on_progress=lambda status, message, current, total: events.append(message),
+        )
+        # On the second run all files are cached, so messages should say so.
+        assert any("Reusing cached" in m for m in events)
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +275,36 @@ class TestRunEndToEnd:
             assert m["type"] == "audio"
             assert isinstance(m["filename"], str)
             assert Path(m["filename"]).suffix == ".wav"
+
+    def test_importer_forwards_thread_progress_to_generator(self, tmp_path, monkeypatch):
+        """The importer must hand the per-thread progress callback to the
+        generator so the loading-task progress bar updates while files are
+        being synthesised, instead of stalling on "Preparing new dataset…".
+        """
+        from vtsearch.datasets.importers import synthetic as syn  # noqa: PLC0415
+        from vtsearch.utils.progress import (  # noqa: PLC0415
+            clear_thread_progress,
+            set_thread_progress,
+        )
+
+        monkeypatch.setattr(syn, "DATA_DIR", tmp_path)
+        events: list[tuple[str, int, int]] = []
+
+        def cb(status, message="", current=0, total=0, **_kw):
+            events.append((status, current, total))
+
+        set_thread_progress(cb)
+        try:
+            imp = SyntheticDatasetImporter()
+            imp.run({"media_type": "audio", "size": "4"}, {})
+        finally:
+            clear_thread_progress()
+
+        per_file = [(s, c, t) for (s, c, t) in events if s == "downloading" and t == 4]
+        # We expect a start event (current=0), 4 per-file events (0..3), and a final event (current=4).
+        assert any(c == 0 for _, c, _ in per_file)
+        assert any(c == 3 for _, c, _ in per_file)
+        assert any(c == 4 for _, c, _ in per_file)
 
     def test_run_then_resolve_file_round_trip(self, tmp_path, monkeypatch):
         """Origin produced by run() must resolve back to a real file via resolve_file."""

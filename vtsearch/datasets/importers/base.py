@@ -63,6 +63,26 @@ __all__ = ["DatasetImporter", "ImporterField"]
 PickerView = str  # one of: "form", "demo", "server_folder", "local_folder"
 
 
+# Synthetic per-importer field that lets the user pick a name for the new
+# dataset.  Injected at the front of every importer's serialised field list
+# in :meth:`DatasetImporter.to_dict`, so the frontend renders it generically
+# without each subclass having to duplicate the declaration.  The field is
+# extracted out of band by the import route handler — see
+# :func:`vtsearch.routes.datasets._extract_importer_fields`.
+DATASET_NAME_FIELD_KEY = "dataset_name"
+
+
+def _dataset_name_field() -> PluginField:
+    return PluginField(
+        key=DATASET_NAME_FIELD_KEY,
+        label="Dataset Name",
+        field_type="text",
+        description="Leave blank to use a default name",
+        required=False,
+        placeholder="Leave blank to use a default name",
+    )
+
+
 class DatasetImporter(PluginBase):
     """Abstract base class for dataset importers.
 
@@ -146,7 +166,32 @@ class DatasetImporter(PluginBase):
         d = super().to_dict()
         d["picker_view"] = self.picker_view
         d["category"] = self.category
+        d["fields"] = [_dataset_name_field().to_dict()] + d["fields"]
         return d
+
+    def default_display_name(self, field_values: dict[str, Any]) -> str:
+        """Return the importer-computed default name for a dataset.
+
+        Subclasses override this to derive a sensible default from
+        *field_values* (e.g. the demo importer reads the demo entry's
+        label).  The base implementation just returns :attr:`display_name`.
+        The user-typed ``dataset_name`` (when present) takes priority over
+        whatever this method returns — see :meth:`resolve_display_name`.
+        """
+        return self.display_name
+
+    def resolve_display_name(self, field_values: dict[str, Any]) -> str:
+        """Return the human-readable name to use for a dataset loaded with *field_values*.
+
+        Importer subclasses should override :meth:`default_display_name`
+        rather than this method.  ``resolve_display_name`` first honours
+        the user-typed ``dataset_name`` field (when non-empty) and falls
+        back to :meth:`default_display_name` otherwise.
+        """
+        user_name = (field_values.get("dataset_name") or "").strip() if field_values else ""
+        if user_name:
+            return user_name
+        return self.default_display_name(field_values or {})
 
     def __init__(self) -> None:
         #: Mapping of filename to pre-computed embedding vector.  Importers
@@ -177,6 +222,18 @@ class DatasetImporter(PluginBase):
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         """Perform the import, populating *medias* in-place.
 
+        Subclasses can override either this method directly (full control over
+        the import flow) **or** the per-record / bulk-record hooks:
+        :meth:`list_records`, :meth:`fetch_record`, and optionally
+        :meth:`_fetch_records_bulk_impl` for batched fetches.  When the hooks
+        are implemented, the default :meth:`run` here lists the records, hands
+        them all to :meth:`fetch_records_bulk` in one call (so subclasses that
+        override the bulk impl can issue concurrent / batched I/O), and stores
+        each returned media dict in *medias* with sequential integer IDs
+        starting at 1.  The default per-media origin is filled in from
+        :meth:`build_origin` when the importer's :meth:`fetch_record` did not
+        set its own.
+
         Args:
             field_values: Mapping of :attr:`ImporterField.key` → value.
                 Fields with ``field_type="file"`` receive a Werkzeug
@@ -189,11 +246,119 @@ class DatasetImporter(PluginBase):
                 saves memory for CLI workflows that only need embeddings.
 
         Raises:
-            NotImplementedError: If the subclass has not implemented this.
+            NotImplementedError: If neither :meth:`run` nor the
+                :meth:`list_records` + :meth:`fetch_record` hooks are
+                implemented by the subclass.
             Exception: Any exception propagates to the route handler, which
                 stores it in the progress tracker as an error message.
         """
-        raise NotImplementedError(f"{type(self).__name__}.run() is not implemented")
+        records = self.list_records(field_values)
+        fetched = self.fetch_records_bulk(records, field_values, thin=thin)
+        default_origin = self.build_origin(field_values)
+        next_id = 1
+        for media in fetched:
+            if media is None:
+                continue
+            media["id"] = next_id
+            media.setdefault("origin", default_origin)
+            media.setdefault("origin_name", media.get("filename") or str(next_id))
+            medias[next_id] = media
+            next_id += 1
+
+    # ------------------------------------------------------------------
+    # Per-record / bulk-record hooks
+    # ------------------------------------------------------------------
+    #
+    # Subclasses implementing a service-style importer (one that fetches
+    # records from a remote source) can override these instead of writing
+    # ``run()`` from scratch.  The split mirrors :class:`MediaEmbedder`:
+    # implement the per-item method and you get a working importer; override
+    # the bulk hook to batch the I/O when the source supports it.
+
+    def list_records(self, field_values: dict[str, Any]) -> list[Any]:
+        """Return the opaque list of records to import.
+
+        Each "record" is whatever shape the importer wants — typically a
+        dict with the identifiers and URLs needed by :meth:`fetch_record`.
+        The framework only cares about the count (for progress) and order
+        (preserved into *medias*).
+
+        Override this together with :meth:`fetch_record` to use the default
+        :meth:`run` implementation.  Importers that override :meth:`run`
+        directly do not need to implement this.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__}.list_records() is not implemented "
+            "(override this and fetch_record(), or override run() directly)"
+        )
+
+    def fetch_record(
+        self,
+        record: Any,
+        field_values: dict[str, Any],
+        thin: bool = False,
+    ) -> dict[str, Any] | None:
+        """Convert a single *record* into a media dict.
+
+        The returned dict should contain the standard media fields
+        (``type``, ``filename``, ``embedding``, ``md5``, ``media_bytes`` /
+        ``media_path``, etc.).  ``id`` is assigned by the framework and may
+        be omitted.  ``origin`` and ``origin_name`` may also be omitted —
+        :meth:`run` falls back to :meth:`build_origin` and the filename.
+
+        Return ``None`` to skip the record (e.g. unsupported media type).
+
+        Override together with :meth:`list_records`.  For batched fetching,
+        override :meth:`_fetch_records_bulk_impl` instead — the default
+        bulk impl loops over this method.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__}.fetch_record() is not implemented"
+        )
+
+    def fetch_records_bulk(
+        self,
+        records: list[Any],
+        field_values: dict[str, Any],
+        thin: bool = False,
+    ) -> list[dict[str, Any] | None]:
+        """Fetch every record in *records* and return a same-length list of
+        media dicts (or ``None`` for skipped records).
+
+        Default dispatches to :meth:`_fetch_records_bulk_impl`, which loops
+        over :meth:`fetch_record` one record at a time.  Subclasses backed
+        by a service that natively accepts many items per request — or that
+        can pipeline downloads concurrently — should override
+        :meth:`_fetch_records_bulk_impl`.
+
+        The order of the returned list matches the order of *records*.
+        """
+        if not records:
+            return []
+        return self._fetch_records_bulk_impl(records, field_values, thin=thin)
+
+    def _fetch_records_bulk_impl(
+        self,
+        records: list[Any],
+        field_values: dict[str, Any],
+        thin: bool = False,
+    ) -> list[dict[str, Any] | None]:
+        """Subclass hook: fetch a list of records.
+
+        Default loops over :meth:`fetch_record`, emitting per-item progress
+        via :func:`vtsearch.utils.update_progress` so long imports stay
+        visible in the UI.  Override to replace the per-item loop with a
+        single bulk request, batched HTTP, or a thread/async pool.  Bulk
+        overrides are responsible for emitting their own progress updates.
+        """
+        from vtsearch.utils import update_progress
+
+        total = len(records)
+        results: list[dict[str, Any] | None] = []
+        for i, record in enumerate(records):
+            update_progress("loading", f"Importing {i + 1} of {total}…", i + 1, total)
+            results.append(self.fetch_record(record, field_values, thin=thin))
+        return results
 
     # ------------------------------------------------------------------
     # Dynamic field options

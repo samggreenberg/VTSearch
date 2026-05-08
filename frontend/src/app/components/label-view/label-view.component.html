@@ -7,6 +7,7 @@
       [selectedId]="mediaState.selectedId"
       [goodVotes]="voteState.goodVotes"
       [badVotes]="voteState.badVotes"
+      [learnedSortAvailable]="voteState.learnedSortAvailable"
       [sortMode]="sortState.sortMode"
       [selectMode]="sortState.selectMode"
       [inclusion]="sortState.inclusion"
@@ -26,7 +27,7 @@
       (textSort)="onTextSort($event)"
       (learnedSort)="onLearnedSort(false)"
       (loadSort)="onLoadSort()"
-      (detectorLoaded)="onDetectorLoaded($event)"
+      (modelSelected)="onModelSelected($event)"
       (exampleSortStarted)="onExampleSortStarted($event)"
       (mediaSelect)="onMediaSelect($event)"
       (mediaVote)="onHoverVote($event)"
@@ -59,6 +60,7 @@
     <vt-right-panel
       [medias]="mediaState.medias"
       [focusMode]="focusModeRight"
+      [trainableModelName]="trainableModelName"
       (mediaSelected)="onMediaSelect($event)"
       (mediaVoted)="onHoverVote($event)"
     />

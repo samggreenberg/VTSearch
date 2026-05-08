@@ -18,11 +18,11 @@ import pytest
 
 from vtsearch.eval.config import EvalQuery
 from vtsearch.eval.runner import eval_text_sort
-from vtsearch.media.audio.embedder import AudioClapEmbedder
+from vtsearch.media.audio.embedder_clap import AudioClapEmbedder
 from vtsearch.media.embedder import MediaEmbedder
-from vtsearch.media.image.embedder import ImageClipEmbedder
-from vtsearch.media.text.embedder import TextE5Embedder
-from vtsearch.media.video.embedder import VideoXClipEmbedder
+from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+from vtsearch.media.text.embedder_e5 import TextE5Embedder
+from vtsearch.media.video.embedder_xclip import VideoXClipEmbedder
 from vtsearch.models.embeddings import embed_text_query
 
 
@@ -40,7 +40,7 @@ class TestDescriptionWrappers:
             assert "{text}" in w
 
     def test_image_has_wrappers(self):
-        emb = ImageClipEmbedder()
+        emb = ImageSiglipEmbedder()
         wrappers = emb.description_wrappers
         assert len(wrappers) >= 3
         for w in wrappers:
@@ -62,13 +62,13 @@ class TestDescriptionWrappers:
 
     def test_wrappers_include_bare_text(self):
         """Each embedder should include a plain '{text}' wrapper."""
-        for emb_cls in (AudioClapEmbedder, ImageClipEmbedder, TextE5Embedder, VideoXClipEmbedder):
+        for emb_cls in (AudioClapEmbedder, ImageSiglipEmbedder, TextE5Embedder, VideoXClipEmbedder):
             emb = emb_cls()
             assert "{text}" in emb.description_wrappers, f"{emb_cls.__name__} missing bare '{{text}}' wrapper"
 
     def test_wrappers_format_correctly(self):
         """All wrappers should format without errors."""
-        for emb_cls in (AudioClapEmbedder, ImageClipEmbedder, TextE5Embedder, VideoXClipEmbedder):
+        for emb_cls in (AudioClapEmbedder, ImageSiglipEmbedder, TextE5Embedder, VideoXClipEmbedder):
             emb = emb_cls()
             for wrapper in emb.description_wrappers:
                 result = wrapper.format(text="test query")
