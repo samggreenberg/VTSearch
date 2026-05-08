@@ -27,7 +27,7 @@ documents.  It combines:
 
 - **Semantic sorting** — LAION-CLAP (audio), SigLIP (images), X-CLIP
   (video), E5-base-v2 (text) for embedding-based similarity search,
-  with alternative embedders available (CLAP Music, OpenAI CLIP, BGE).
+  with alternative embedders available (CLAP Music, BGE).
 - **Learned sorting** — a small MLP trained on user votes to predict
   good/bad labels.
 - **Flask web UI** — Angular SPA frontend with a REST API.
@@ -60,8 +60,7 @@ VTSearch/
 │   │   ├── audio/clipper.py        SoundDefaultClipper, SoundTilingClipper
 │   │   ├── audio/speech_extractor.py  SpeechExtractor processor
 │   │   ├── image/media_type.py     Image media type (JPEG/PNG serving)
-│   │   ├── image/embedder.py       ImageClipEmbedder (OpenAI CLIP, 768-d)
-│   │   ├── image/embedder_siglip.py  ImageSiglipEmbedder (SigLIP, 768-d, default)
+│   │   ├── image/embedder_siglip.py  ImageSiglipEmbedder (SigLIP, 768-d)
 │   │   ├── image/clipper.py        ImageDefaultClipper, ImageTilingClipper
 │   │   ├── image/extractor.py      ImageClassExtractor (YOLO-based)
 │   │   ├── image/face_localizer.py FaceLocalizer (MediaPipe-based)

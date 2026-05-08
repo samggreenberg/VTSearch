@@ -143,7 +143,7 @@ def make_image_media(media_id: int, embedding_dim: int = 512) -> dict:
     return {
         "id": media_id,
         "type": "image",
-        "embedder": "clip",
+        "embedder": "siglip",
         "width": 16,
         "height": 16,
         "file_size": len(img),
@@ -217,7 +217,7 @@ def make_document_media(media_id: int, embedding_dim: int = 512) -> dict:
     return {
         "id": media_id,
         "type": "document",
-        "embedder": "clip",  # via document→image converter
+        "embedder": "siglip",  # via document→image converter
         "file_size": len(pdf),
         "md5": hashlib.md5(pdf).hexdigest(),
         "embedding": rng.randn(embedding_dim).astype("float32"),

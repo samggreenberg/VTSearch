@@ -410,7 +410,7 @@ class MediaEmbedder(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Unique identifier for this embedder, e.g. ``"clap"``, ``"clip"``."""
+        """Unique identifier for this embedder, e.g. ``"clap"``, ``"siglip"``."""
 
     @property
     @abstractmethod

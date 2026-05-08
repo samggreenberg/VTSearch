@@ -75,14 +75,13 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 |------------------------|----------|-------|--------------|
 | Audio (`audio`) | `clap` (default) | LAION CLAP (`laion/clap-htsat-unfused`) | 512 |
 | Audio (`audio`) | `clap_music` | CLAP Music & Speech (`laion/larger_clap_music_and_speech`) | 512 |
-| Image (`image`) | `siglip` (default) | SigLIP (`google/siglip-base-patch16-224`) | 768 |
-| Image (`image`) | `clip` | OpenAI CLIP (`openai/clip-vit-base-patch32`) | 768 |
+| Image (`image`) | `siglip` | SigLIP (`google/siglip-base-patch16-224`) | 768 |
 | Video (`video`) | `xclip` (default) | Microsoft X-CLIP (`microsoft/xclip-base-patch32`) | 768 |
 | Text (`text`) | `e5` (default) | E5 (`intfloat/e5-base-v2`) | 768 |
 | Text (`text`) | `bge` | BGE (`BAAI/bge-base-en-v1.5`) | 768 |
 | Document (`document`) | — | None (no embedder) | N/A |
 
-Audio, image, and text media types each have an **alternative embedder** in addition to the default. Each embedder lives in its own `embedder*.py` file inside the media-type package and exposes a module-level `EMBEDDER` sentinel; the default for a given media type is the one whose file sorts first (plain `embedder.py` ahead of `embedder_<variant>.py`).
+Audio and text media types each have an **alternative embedder** in addition to the default. Each embedder lives in its own `embedder*.py` file inside the media-type package and exposes a module-level `EMBEDDER` sentinel; the default for a given media type is the one whose file sorts first (plain `embedder.py` ahead of `embedder_<variant>.py`).
 
 The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtsearch/converters/` before embedding.
 

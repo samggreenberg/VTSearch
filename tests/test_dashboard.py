@@ -253,14 +253,14 @@ class TestGuessMediaType:
 
     def test_autoload_single_embedder_from_settings(self, client):
         """When autoload_media_embedders has exactly one entry, settings returns it."""
-        client.put("/api/settings", json={"autoload_media_embedders": ["clip"]})
+        client.put("/api/settings", json={"autoload_media_embedders": ["siglip"]})
         resp = client.get("/api/settings")
         data = resp.get_json()
-        assert data["autoload_media_embedders"] == ["clip"]
+        assert data["autoload_media_embedders"] == ["siglip"]
 
     def test_autoload_multiple_embedders_no_single_guess(self, client):
         """When autoload_media_embedders has multiple entries, no single guess."""
-        client.put("/api/settings", json={"autoload_media_embedders": ["clap", "clip"]})
+        client.put("/api/settings", json={"autoload_media_embedders": ["clap", "siglip"]})
         resp = client.get("/api/settings")
         data = resp.get_json()
         assert len(data["autoload_media_embedders"]) > 1
@@ -462,7 +462,7 @@ class TestEmbeddersApiEndpoint:
         assert "embedders" in data
         names = [e["name"] for e in data["embedders"]]
         assert "clap" in names
-        assert "clip" in names
+        assert "siglip" in names
         assert "e5" in names
         assert "xclip" in names
 
@@ -475,7 +475,7 @@ class TestEmbeddersApiEndpoint:
         assert all(e["media_type_id"] == "audio" for e in embedders)
         names = [e["name"] for e in embedders]
         assert "clap" in names
-        assert "clip" not in names
+        assert "siglip" not in names
 
     def test_filter_by_folder_name(self, client):
         """GET /api/embedders?media_type=image returns image embedders."""
@@ -485,7 +485,7 @@ class TestEmbeddersApiEndpoint:
         embedders = data["embedders"]
         assert all(e["media_type_id"] == "image" for e in embedders)
         names = [e["name"] for e in embedders]
-        assert "clip" in names
+        assert "siglip" in names
 
     def test_filter_unknown_type_returns_empty(self, client):
         """GET /api/embedders?media_type=nonexistent returns empty list."""

@@ -415,13 +415,13 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import all_embedders
 
         embedders = all_embedders()
-        assert len(embedders) == 8
+        assert len(embedders) == 7
 
     def test_all_expected_names_present(self):
         from vtsearch.media import all_embedders
 
         names = {e.name for e in all_embedders()}
-        expected = {"clap", "clap_music", "clip", "siglip", "e5", "bge", "xclip", "languagebind"}
+        expected = {"clap", "clap_music", "siglip", "e5", "bge", "xclip", "languagebind"}
         assert names == expected
 
     def test_embedders_for_audio(self):
@@ -434,7 +434,7 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("image")}
-        assert names == {"clip", "siglip"}
+        assert names == {"siglip"}
 
     def test_embedders_for_text(self):
         from vtsearch.media import embedders_for_type
@@ -452,7 +452,7 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import all_embedders_dict
 
         dicts = all_embedders_dict()
-        assert len(dicts) == 8
+        assert len(dicts) == 7
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
@@ -469,7 +469,6 @@ class TestEmbedderSentinelDiscovery:
     def test_every_builtin_embedder_module_has_sentinel(self):
         from vtsearch.media.audio import embedder as audio_clap
         from vtsearch.media.audio import embedder_clap_music
-        from vtsearch.media.image import embedder as image_clip
         from vtsearch.media.image import embedder_siglip
         from vtsearch.media.text import embedder as text_e5
         from vtsearch.media.text import embedder_bge
@@ -481,7 +480,6 @@ class TestEmbedderSentinelDiscovery:
         modules = [
             audio_clap,
             embedder_clap_music,
-            image_clip,
             embedder_siglip,
             text_e5,
             embedder_bge,

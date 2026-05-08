@@ -523,63 +523,6 @@ class TestCLAPEmbeddingGPU:
         assert np.isfinite(vec).all()
 
 
-class TestCLIPEmbeddingGPU:
-    """Test CLIP (image) embedding model on GPU."""
-
-    def test_clip_model_loads_on_gpu(self, device):
-        from vtsearch.media.image.media_type import ImageMediaType
-
-        mt = ImageMediaType()
-        mt.load_models()
-        assert mt._model is not None
-        mt._model = mt._model.to(device)
-        param = next(mt._model.parameters())
-        assert param.device.type == "cuda"
-
-    def test_clip_text_embedding_on_gpu(self, device):
-        from transformers import CLIPModel, CLIPProcessor
-
-        from vtsearch.config import CLIP_MODEL_ID, MODELS_CACHE_DIR
-
-        cache_dir = str(MODELS_CACHE_DIR)
-        CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
-        model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir).to(device)
-        processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True)
-
-        inputs = processor(text=["a photo of a cat"], return_tensors="pt")
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
-            from vtsearch.media.embedder import extract_tensor as _extract_tensor
-
-            vec = _extract_tensor(model.get_text_features(**inputs)).detach().cpu().numpy()[0]
-
-        assert vec.ndim == 1
-        assert np.isfinite(vec).all()
-
-    def test_clip_image_embedding_on_gpu(self, device):
-        from PIL import Image
-        from transformers import CLIPModel, CLIPProcessor
-
-        from vtsearch.config import CLIP_MODEL_ID, MODELS_CACHE_DIR
-
-        cache_dir = str(MODELS_CACHE_DIR)
-        CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
-        model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir).to(device)
-        processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True)
-
-        # Create a simple test image
-        img = Image.new("RGB", (224, 224), color=(128, 64, 32))
-        inputs = processor(images=img, return_tensors="pt")
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
-            from vtsearch.media.embedder import extract_tensor as _extract_tensor
-
-            vec = _extract_tensor(model.get_image_features(**inputs)).detach().cpu().numpy()[0]
-
-        assert vec.ndim == 1
-        assert np.isfinite(vec).all()
-
-
 class TestXCLIPEmbeddingGPU:
     """Test X-CLIP (video) embedding model on GPU."""
 
@@ -680,34 +623,6 @@ class TestE5EmbeddingGPU:
 
 class TestEmbeddingEquivalence:
     """Verify that GPU embeddings match CPU embeddings within tolerance."""
-
-    def test_clip_text_cpu_gpu_match(self, device):
-        from transformers import CLIPModel, CLIPProcessor
-
-        from vtsearch.config import CLIP_MODEL_ID, MODELS_CACHE_DIR
-
-        cache_dir = str(MODELS_CACHE_DIR)
-        CLIPModel._keys_to_ignore_on_load_unexpected = [r".*position_ids.*"]
-        model = CLIPModel.from_pretrained(CLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir)
-        processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache_dir, use_fast=True)
-
-        text = "a red sports car"
-        inputs = processor(text=[text], return_tensors="pt")
-
-        # CPU
-        model.eval()
-        with torch.no_grad():
-            from vtsearch.media.embedder import extract_tensor as _extract_tensor
-
-            cpu_vec = _extract_tensor(model.get_text_features(**inputs)).numpy()[0]
-
-        # GPU
-        gpu_model = model.to(device)
-        gpu_inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
-            gpu_vec = _extract_tensor(gpu_model.get_text_features(**gpu_inputs)).detach().cpu().numpy()[0]
-
-        np.testing.assert_allclose(cpu_vec, gpu_vec, atol=1e-4)
 
     def test_e5_cpu_gpu_match(self, device):
         from sentence_transformers import SentenceTransformer

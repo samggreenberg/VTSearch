@@ -37,7 +37,7 @@ GET /api/embedders
 **Query:** `?media_type=image` — optional, filter by `type_id` or
 `folder_import_name`.
 
-→ `{"embedders": [{"name": "clip", "display_name": "CLIP", "media_type_id": "image", ...}]}`
+→ `{"embedders": [{"name": "siglip", "display_name": "SigLIP", "media_type_id": "image", ...}]}`
 
 ### Clippers
 
