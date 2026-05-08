@@ -23,24 +23,24 @@ describe('DatasetStateService', () => {
 
   it('should start with empty state', () => {
     expect(service.datasets).toEqual([]);
-    expect(service.models).toEqual([]);
+    expect(service.detectors).toEqual([]);
     expect(service.loading).toBeFalse();
     expect(service.progressMessage).toBe('');
   });
 
-  it('refresh should fetch datasets and models', () => {
+  it('refresh should fetch datasets and detectors', () => {
     service.refresh();
 
     const datasetsReq = httpMock.expectOne('/api/datasets/registry');
-    const modelsReq = httpMock.expectOne('/api/detectors/registry');
+    const detectorsReq = httpMock.expectOne('/api/detectors/registry');
 
     datasetsReq.flush({ datasets: [{ id: '1', name: 'test' }] });
-    modelsReq.flush({ models: [{ id: 'm1', name: 'model1' }] });
+    detectorsReq.flush({ detectors: [{ id: 'm1', name: 'detector1' }] });
 
     expect(service.datasets.length).toBe(1);
     expect(service.datasets[0].name).toBe('test');
-    expect(service.models.length).toBe(1);
-    expect(service.models[0].name).toBe('model1');
+    expect(service.detectors.length).toBe(1);
+    expect(service.detectors[0].name).toBe('detector1');
   });
 
   it('rapid refresh should cancel stale in-flight requests', fakeAsync(() => {
@@ -48,21 +48,21 @@ describe('DatasetStateService', () => {
     service.refresh();
     tick();
     const staleDs = httpMock.expectOne('/api/datasets/registry');
-    const staleModels = httpMock.expectOne('/api/detectors/registry');
+    const staleDetectors = httpMock.expectOne('/api/detectors/registry');
 
     // Second refresh — this one should win
     service.refresh();
     tick();
     const freshDs = httpMock.expectOne('/api/datasets/registry');
-    const freshModels = httpMock.expectOne('/api/detectors/registry');
+    const freshDetectors = httpMock.expectOne('/api/detectors/registry');
 
     // The first (stale) requests were cancelled by switchMap
     expect(staleDs.cancelled).toBeTrue();
-    expect(staleModels.cancelled).toBeTrue();
+    expect(staleDetectors.cancelled).toBeTrue();
 
     // Flush the fresh responses
     freshDs.flush({ datasets: [{ id: '1', name: 'fresh' }] });
-    freshModels.flush({ models: [] });
+    freshDetectors.flush({ detectors: [] });
 
     expect(service.datasets.length).toBe(1);
     expect(service.datasets[0].name).toBe('fresh');
@@ -82,7 +82,7 @@ describe('DatasetStateService', () => {
     service.clear();
 
     expect(service.datasets).toEqual([]);
-    expect(service.models).toEqual([]);
+    expect(service.detectors).toEqual([]);
     expect(service.loading).toBeFalse();
     expect(service.progressMessage).toBe('');
   });

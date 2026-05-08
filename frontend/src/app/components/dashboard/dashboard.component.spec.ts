@@ -27,11 +27,11 @@ describe('DashboardComponent', () => {
 
   function flushInitialRequests(
     datasets: any[] = [],
-    models: any[] = [],
+    detectors: any[] = [],
   ): void {
     fixture.detectChanges();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets });
-    httpMock.expectOne('/api/detectors/registry').flush({ models });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors });
   }
 
   it('should create', () => {
@@ -39,12 +39,12 @@ describe('DashboardComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should fetch datasets and models on init', () => {
+  it('should fetch datasets and detectors on init', () => {
     const datasets = [{ id: 'd1', name: 'Test Dataset', media_type: 'audio', num_items: 10 }];
-    const models = [{ id: 'm1', name: 'Test Model' }];
-    flushInitialRequests(datasets, models);
+    const detectors = [{ id: 'm1', name: 'Test Detector' }];
+    flushInitialRequests(datasets, detectors);
     expect(component.datasets.length).toBe(1);
-    expect(component.models.length).toBe(1);
+    expect(component.detectors.length).toBe(1);
   });
 
   it('should auto-select single dataset', () => {
@@ -81,7 +81,7 @@ describe('DashboardComponent', () => {
         { id: 'd2', name: 'Second' },
       ],
     });
-    httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
 
     expect(component.selectedDatasetIds.has('d1')).toBeFalse();
     expect(component.selectedDatasetIds.has('d2')).toBeTrue();
@@ -96,7 +96,7 @@ describe('DashboardComponent', () => {
     component.refresh();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
     httpMock.expectOne('/api/detectors/registry').flush({
-      models: [
+      detectors: [
         { id: 'm1', name: 'First' },
         { id: 'm2', name: 'Second' },
       ],
@@ -359,7 +359,7 @@ describe('DashboardComponent', () => {
 
     // Refresh calls
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   });
 
   it('should delete a dataset after confirmation', fakeAsync(() => {
@@ -380,7 +380,7 @@ describe('DashboardComponent', () => {
     expect(component.selectedDatasetIds.has('d1')).toBeFalse();
 
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   }));
 
   it('should open and close importer modal', () => {
@@ -470,7 +470,7 @@ describe('DashboardComponent', () => {
 
       // Refresh after completion
       httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-      httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
     });
 
     it('should not navigate on load error progress', () => {
@@ -492,7 +492,7 @@ describe('DashboardComponent', () => {
 
       // Refresh after error
       httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-      httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
     });
 
     it('should do nothing when no dataset is selected', () => {
@@ -527,7 +527,7 @@ describe('DashboardComponent', () => {
 
     // Refresh after completion
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   }));
 
   it('should load demo dataset on demoSelected', () => {
@@ -551,6 +551,6 @@ describe('DashboardComponent', () => {
 
     // After idle, it should refresh
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/detectors/registry').flush({ models: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   });
 });

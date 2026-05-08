@@ -39,10 +39,10 @@ describe('LeftPanelComponent', () => {
     expect(component.activeTab).toBe('manual');
   });
 
-  it('should default to manual tab when alreadyTrained is true', () => {
+  it('should default to manual tab when autopilotEnabled is false', () => {
     const fresh = TestBed.createComponent(LeftPanelComponent);
     const comp = fresh.componentInstance;
-    comp.alreadyTrained = true;
+    comp.autopilotEnabled = false;
     spyOn(comp.autopilotStart, 'emit');
     fresh.detectChanges();
     expect(comp.activeTab).toBe('manual');
