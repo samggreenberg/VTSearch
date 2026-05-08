@@ -105,7 +105,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     'media_type', 'num_items', 'created_at', 'created_by', 'readers', 'loaded',
   ];
   static readonly MODEL_COLUMNS_DEFAULT = [
-    'media_type', 'num_training', 'trainable', 'autodetect', 'last_trained_at',
+    'media_type', 'num_training', 'autodetect', 'last_trained_at',
     'created_at', 'detector_loaded',
   ];
   private static readonly DATASET_COL_ORDER_KEY = 'vtsearch.dashboard.datasetColumnOrder';
@@ -127,7 +127,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     name: { label: 'Name', title: 'Model display name (click to sort)', sortable: true },
     media_type: { label: 'Type', title: 'Media type this model operates on (click to sort)', sortable: true },
     num_training: { label: '# Training', title: 'Number of labeled training examples (click to sort)', sortable: true },
-    trainable: { label: 'Trainable?', title: 'Is this Model one we can load into Train Mode and improve?', sortable: false },
     autodetect: { label: 'Autorun?', title: 'Include this model in CLI autorun (click to sort)', sortable: true },
     last_trained_at: { label: 'Last Trained', title: 'When the model was last trained (click to sort)', sortable: true },
     created_at: { label: 'Created', title: 'When the model was created (click to sort)', sortable: true },
