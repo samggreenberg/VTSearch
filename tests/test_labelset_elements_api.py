@@ -204,6 +204,37 @@ class TestLabelElementVote:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/detectors/<name>/labels/<id>/thumbnail
+# ---------------------------------------------------------------------------
+
+
+class TestLabelElementThumbnail:
+    """The thumbnail endpoint is what the right-pane labelset list uses for
+    every entry, so it must stay much smaller than ``/preview`` (which serves
+    the full original file)."""
+
+    def test_returns_404_for_unknown_model(self, client):
+        res = client.get("/api/detectors/does-not-exist/labels/abc123/thumbnail")
+        assert res.status_code == 404
+
+    def test_returns_404_for_unknown_element(self, client):
+        _seed_cross_dataset_model()
+        res = client.get("/api/detectors/cross-ds-model/labels/deadbeef/thumbnail")
+        assert res.status_code == 404
+
+    def test_returns_404_when_file_unavailable_cross_dataset(self, client):
+        """Cross-dataset elements with a fake importer can't be resolved on
+        disk — the route should 404 cleanly, not 500."""
+        _seed_cross_dataset_model()
+        detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
+        target = detail["good"][0]
+        res = client.get(
+            f"/api/detectors/cross-ds-model/labels/{target['id']}/thumbnail"
+        )
+        assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # Cross-dataset: voting in dataset B preserves dataset A's labels on disk
 # ---------------------------------------------------------------------------
 

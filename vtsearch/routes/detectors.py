@@ -30,6 +30,7 @@ from __future__ import annotations
 import io
 import logging
 import time
+from pathlib import Path
 
 from flask import Blueprint, jsonify, request, send_file
 
@@ -677,6 +678,140 @@ _DEFAULT_MIMETYPE_BY_TYPE = {
     "document": "application/pdf",
     "text": "text/plain",
 }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/detectors/<name>/labels/<element_id>/thumbnail
+# ---------------------------------------------------------------------------
+
+
+def _in_memory_thumbnail_response(media: dict, media_type: str):
+    """Build a small thumbnail send_file from an in-memory media dict.
+
+    Images: serves the cached ``media_bytes``. Audio/video/document: defers
+    to the media-type's ``image_response`` (cached waveform / midframe PNG).
+    Returns ``None`` if no thumbnail can be produced from memory.
+    """
+    if media_type == "image":
+        media_bytes = media.get("media_bytes")
+        if not media_bytes:
+            return None
+        filename = media.get("filename", "") or ""
+        suffix = Path(filename).suffix.lower()
+        mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or "image/jpeg"
+        return send_file(
+            io.BytesIO(media_bytes),
+            mimetype=mimetype,
+            download_name=f"media_{media.get('id', 0)}{suffix or '.jpg'}",
+        )
+
+    from vtsearch.media import get as get_media_type  # noqa: PLC0415
+
+    try:
+        mt = get_media_type(media_type)
+    except KeyError:
+        return None
+    if not hasattr(mt, "image_response"):
+        return None
+    resp = mt.image_response(media)
+    if resp is None:
+        return None
+    return send_file(
+        io.BytesIO(resp.data),
+        mimetype=resp.mimetype,
+        download_name=resp.download_name,
+    )
+
+
+def _origin_thumbnail_response(file_path: Path, media_type: str, elem):
+    """Build a thumbnail response from an on-disk file resolved via origin."""
+    if media_type == "image":
+        suffix = file_path.suffix.lower()
+        mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or "image/jpeg"
+        try:
+            return send_file(
+                io.BytesIO(file_path.read_bytes()),
+                mimetype=mimetype,
+                download_name=elem.origin_name or elem.filename or f"label{suffix}",
+            )
+        except OSError:
+            return jsonify({"error": "Element media file unreadable"}), 404
+
+    if media_type == "audio":
+        from vtsearch.media.audio.media_type import generate_waveform_thumbnail_from_file  # noqa: PLC0415
+
+        thumb = generate_waveform_thumbnail_from_file(file_path)
+        if thumb is None:
+            return jsonify({"error": "Could not generate audio thumbnail"}), 500
+        return send_file(
+            io.BytesIO(thumb),
+            mimetype="image/png",
+            download_name=f"{file_path.stem}_waveform.png",
+        )
+
+    if media_type == "video":
+        from vtsearch.media.video.media_type import generate_video_thumbnail_from_file  # noqa: PLC0415
+
+        thumb = generate_video_thumbnail_from_file(file_path)
+        if thumb is None:
+            return jsonify({"error": "Could not generate video thumbnail"}), 500
+        return send_file(
+            io.BytesIO(thumb),
+            mimetype="image/png",
+            download_name=f"{file_path.stem}_frame.png",
+        )
+
+    return jsonify({"error": f"No thumbnail for media type '{media_type}'"}), 404
+
+
+@detectors_bp.route(
+    "/api/detectors/<name>/labels/<element_id>/thumbnail",
+    methods=["GET"],
+)
+def thumbnail_detector_label(name: str, element_id: str):
+    """Stream a small thumbnail image for a saved labelset element.
+
+    Mirrors :func:`vtsearch.routes.medias.media_image` for the right pane:
+    audio elements get a waveform PNG, video elements a mid-frame PNG, image
+    elements get the file bytes. When the element resolves into the active
+    dataset we serve the cached in-memory ``thumbnail_bytes`` (fast path);
+    otherwise we resolve the underlying file via the importer and generate
+    on the fly. Much smaller than ``/preview`` (which serves the full file).
+    """
+    from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.models.labelset_elements import (
+        find_element_by_id,
+        resolve_current_dataset_cid,
+        resolve_element_to_path,
+    )
+    from vtsearch.utils import get_media
+
+    path = _detector_path(name)
+    data = _read_detector(path)
+    if data is None:
+        return jsonify({"error": f"Detector '{name}' not found"}), 404
+
+    labelset = LabelSet.from_dict(data.get("labelset") or {})
+    found = find_element_by_id(labelset.elements, element_id)
+    if found is None:
+        return jsonify({"error": "Label element not found"}), 404
+
+    _, elem = found
+    media_type = data.get("media_type", "") or ""
+
+    cid = resolve_current_dataset_cid(elem)
+    if cid is not None:
+        media = get_media(cid)
+        if media:
+            resp = _in_memory_thumbnail_response(media, media_type)
+            if resp is not None:
+                return resp
+
+    file_path = resolve_element_to_path(elem)
+    if file_path is None or not file_path.is_file():
+        return jsonify({"error": "Element media file unavailable"}), 404
+
+    return _origin_thumbnail_response(file_path, media_type, elem)
 
 
 # ---------------------------------------------------------------------------
