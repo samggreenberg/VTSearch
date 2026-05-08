@@ -134,6 +134,12 @@ class DetectorContext:
         # A stays trainable when the user switches to dataset B.
         "labelset_good_count",
         "labelset_bad_count",
+        # Dataset ID for which the cid-keyed vote state above is valid.
+        # Media IDs are only meaningful within a single dataset, so when the
+        # active dataset changes for a loaded detector we must clear the cid
+        # dicts and re-derive them from the on-disk labelset against the new
+        # dataset's medias.  See ``ensure_votes_match_active_dataset``.
+        "votes_dataset_id",
         # Sync source
         "labelset_source",  # dict | None — {"source_name": "...", "field_values": {...}}
     )
@@ -166,6 +172,7 @@ class DetectorContext:
         self.threshold: float = 0.5
         self.labelset_good_count: int = 0
         self.labelset_bad_count: int = 0
+        self.votes_dataset_id: str = ""
         # Sync source
         self.labelset_source: dict[str, Any] | None = None
 

@@ -373,6 +373,11 @@ def load_detector_route():
                         on_progress=_embed_progress,
                     )
 
+            # Stamp the dataset whose medias the cid-keyed vote dicts were
+            # derived against, so before_request's rehydrate hook can detect
+            # subsequent dataset switches and re-derive against the new
+            # dataset's medias.
+            det_ctx.votes_dataset_id = _thread_ds_ctx.dataset_id
             add_loaded_detector_id(detector_id)
             tracker.update("idle", "", 0, 0, step=None, total_steps=None)
         except CancelledError:

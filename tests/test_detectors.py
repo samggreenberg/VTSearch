@@ -571,6 +571,86 @@ class TestLoadModelEndpoint:
         assert res.status_code == 200
         assert ids[0] in good_votes, "saved label was not restored on model load"
 
+    def test_dataset_switch_clears_cross_dataset_cids(self, client):
+        """Switching the active dataset must rehydrate the loaded detector's
+        cid-keyed vote dicts from the on-disk labelset against the new dataset's
+        medias.  Without this, ids voted in dataset A leak into dataset B's
+        id-space and unrelated B-medias whose ids happen to coincide with
+        A's voted ids appear as voted in B's labeling UI.
+        """
+        import hashlib
+
+        import numpy as np
+
+        from vtsearch.models.detector_dataset_sync import ensure_votes_match_active_dataset
+        from vtsearch.utils import (
+            DatasetContext,
+            bad_votes,
+            good_votes,
+            medias,
+            register_context,
+            set_thread_dataset_context,
+        )
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        a_ids = list(medias.keys())
+        if len(a_ids) < 2:
+            pytest.skip("Need at least 2 medias")
+        a_good = a_ids[0]
+        a_bad = a_ids[1]
+
+        # Create + load a detector while dataset A is active.
+        client.post(
+            "/api/detectors",
+            json={"name": "CrossDS", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "CrossDS", "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, mid)
+
+        # Vote in dataset A.  Persists to good_votes/bad_votes and to the
+        # detector's on-disk labelset via sync_labels_to_loaded_detector.
+        client.post(f"/api/medias/{a_good}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{a_bad}/vote", json={"vote": "bad"})
+        assert a_good in good_votes
+        assert a_bad in bad_votes
+
+        # Build dataset B with DIFFERENT media (different md5/origin) reusing
+        # the same cids, exactly the situation that produced the bug: the
+        # voted A ids would otherwise show up as votes in B's id-space.
+        ctx_b = DatasetContext("ds_b_for_switch_test")
+        for cid in (a_good, a_bad):
+            ctx_b.medias[cid] = {
+                "id": cid,
+                "type": "audio",
+                "embedder": "clap",
+                "md5": hashlib.md5(f"ds_b_{cid}".encode()).hexdigest(),
+                "embedding": np.zeros(512, dtype=np.float32),
+                "media_bytes": b"fake-b",
+                "filename": f"ds_b_{cid}.wav",
+                "category": "test",
+                "origin": {"importer": "test_b", "params": {"id": cid}},
+                "origin_name": f"ds_b_{cid}.wav",
+            }
+        register_context(ctx_b)
+        set_thread_dataset_context(ctx_b)
+
+        # Simulate the before_request hook firing for a request whose active
+        # dataset is now B.
+        ensure_votes_match_active_dataset()
+
+        assert a_good not in good_votes, (
+            "good cid from dataset A leaked into dataset B's id-space"
+        )
+        assert a_bad not in bad_votes, (
+            "bad cid from dataset A leaked into dataset B's id-space"
+        )
+
 
 class TestVoteSyncsToLoadedModel:
     """Voting while a detector is loaded should auto-update the model's labelset."""
