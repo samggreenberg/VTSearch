@@ -177,26 +177,37 @@ def toggle_vote(media_id: int, vote: str) -> None:
                     invalidate_progress_cache_from(media_id)
 
 
-def apply_label(media_id: int, label: str) -> None:
+def apply_label(media_id: int, label: str, *, silent: bool = False) -> None:
     """Atomically apply a label to a media (for imports).
 
     Unlike :func:`toggle_vote`, this always sets the label without toggling.
     No click-time is assigned (imported labels have no click-time).
 
+    When *silent* is True, the label is recorded in ``good_votes``/``bad_votes``
+    only — ``label_history`` is not appended and the diversity tree is not
+    marked.  This is used when restoring a detector's saved labels into a new
+    dataset: those labels are seeded so autopilot's good/bad-count gates are
+    satisfied, but they should not contaminate the per-session Smart/Stable
+    trends or pre-fill diversity coverage in the new dataset.
+
     Args:
         media_id: Integer ID of the media to label.
         label: ``"good"`` or ``"bad"``.
+        silent: If True, skip history append and diversity-tree marking.
     """
     with _state_lock:
         if label == "good":
             bad_votes.pop(media_id, None)
             good_votes[media_id] = None
-            add_label_to_history(media_id, "good")
+            if not silent:
+                add_label_to_history(media_id, "good")
         else:
             good_votes.pop(media_id, None)
             bad_votes[media_id] = None
-            add_label_to_history(media_id, "bad")
-        diversity_tree_label(media_id)
+            if not silent:
+                add_label_to_history(media_id, "bad")
+        if not silent:
+            diversity_tree_label(media_id)
 
 
 def apply_label_with_click_time(media_id: int, label: str) -> None:

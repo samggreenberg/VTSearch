@@ -1,13 +1,13 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { ModelCardComponent } from './model-card.component';
+import { DetectorCardComponent } from './detector-card.component';
 
-describe('ModelCardComponent', () => {
-  let component: ModelCardComponent;
-  let fixture: ComponentFixture<ModelCardComponent>;
+describe('DetectorCardComponent', () => {
+  let component: DetectorCardComponent;
+  let fixture: ComponentFixture<DetectorCardComponent>;
 
-  const mockModel = {
+  const mockDetector = {
     id: 'm1',
-    name: 'Test Model',
+    name: 'Test Detector',
     media_type: 'audio',
     num_training: 50,
     last_trained_at: 1700000000,
@@ -17,12 +17,12 @@ describe('ModelCardComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ModelCardComponent],
+      imports: [DetectorCardComponent],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(ModelCardComponent);
+    fixture = TestBed.createComponent(DetectorCardComponent);
     component = fixture.componentInstance;
-    component.model = { ...mockModel };
+    component.detector = { ...mockDetector };
     fixture.detectChanges();
   });
 
@@ -30,9 +30,9 @@ describe('ModelCardComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should display model name', () => {
+  it('should display detector name', () => {
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.textContent).toContain('Test Model');
+    expect(el.textContent).toContain('Test Detector');
   });
 
   it('should display capitalized media type with icon', () => {

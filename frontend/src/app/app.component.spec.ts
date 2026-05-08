@@ -185,7 +185,7 @@ describe('AppComponent', () => {
       { id: 'd1', name: 'DS1', media_type: 'audio' },
       { id: 'd2', name: 'DS2', media_type: 'audio' },
     ]);
-    spyOnProperty(datasetState, 'models', 'get').and.returnValue([
+    spyOnProperty(datasetState, 'detectors', 'get').and.returnValue([
       { id: 'm1', name: 'M1', media_type: 'audio' },
     ]);
     fixture.componentInstance.isOnLabelView = false;
@@ -200,7 +200,7 @@ describe('AppComponent', () => {
       { id: 'd1', name: 'DS1', media_type: 'audio' },
       { id: 'd2', name: 'DS2', media_type: 'image' },
     ]);
-    spyOnProperty(datasetState, 'models', 'get').and.returnValue([]);
+    spyOnProperty(datasetState, 'detectors', 'get').and.returnValue([]);
     fixture.componentInstance.isOnLabelView = false;
     fixture.componentInstance.onSettings();
     expect(fixture.componentInstance.settingsViewTab).toBe('');

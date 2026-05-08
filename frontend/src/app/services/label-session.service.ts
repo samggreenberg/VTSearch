@@ -17,8 +17,6 @@ export class LabelSessionService {
   mediaExample = '';
   examples: ModelExample[] = [];
   modelName = '';
-  /** True when the selected model already has training labels — start in Manual mode rather than Autopilot. */
-  alreadyTrained = false;
 
   /** Total votes cast since the last re-sort prompt. */
   resortVoteCount = 0;

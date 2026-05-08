@@ -16,6 +16,12 @@ def restore_labels_from_detector(det_data: dict) -> int:
     scenario), resolves the original file from its origin trail, computes its
     MD5, and checks for a match in the loaded dataset.
 
+    Restored labels are applied silently: ``label_history`` is not appended
+    and the diversity tree is not pre-marked, so per-dataset Smart/Stable
+    trends and span/diversity coverage start fresh from the user's session
+    votes.  The good/bad counts still reflect restored labels, so autopilot's
+    initial Find Goods / Find Bads gates can skip ahead.
+
     Returns the number of labels successfully restored.
     """
     from vtsearch.datasets.labelset import LabelSet
@@ -48,7 +54,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
         cids = resolve_media_ids(elem.to_dict(), origin_lookup, md5_lookup, name_lookup)
         if cids:
             for cid in cids:
-                apply_label(cid, elem.label)
+                apply_label(cid, elem.label, silent=True)
             restored += 1
         else:
             unresolved.append(elem)
@@ -89,7 +95,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
             cids = md5_lookup.get(resolved_md5, [])
             if cids:
                 for cid in cids:
-                    apply_label(cid, elem.label)
+                    apply_label(cid, elem.label, silent=True)
                 restored += 1
             else:
                 _log.debug(
