@@ -141,6 +141,18 @@ def _set_request_context():
     except Exception:
         logging.getLogger(__name__).exception("Request context resolution failed")
 
+    # If the active (dataset, detector) pair has changed since the detector's
+    # cid-keyed vote dicts were last derived, rehydrate them from the on-disk
+    # labelset against the active dataset's medias.  Media ids are dataset-
+    # specific, so without this the left-pane shows stale cids from the
+    # previous dataset as if they were votes in the current one.
+    try:
+        from vtsearch.models.detector_dataset_sync import ensure_votes_match_active_dataset
+
+        ensure_votes_match_active_dataset()
+    except Exception:
+        logging.getLogger(__name__).exception("Vote rehydrate failed")
+
 
 # ---------------------------------------------------------------------------
 # Prevent browser caching of API responses
