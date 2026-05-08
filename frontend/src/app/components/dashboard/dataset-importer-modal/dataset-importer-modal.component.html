@@ -257,19 +257,21 @@
         </div>
       }
 
-      <div class="form-group">
-        <label class="form-label" for="field-chunk-size" title="Embed at most this many medias at once to bound peak memory. 0 means load everything in one pass.">
-          Chunk size (advanced — 0 = no chunking)
-        </label>
-        <input
-          id="field-chunk-size"
-          type="number"
-          min="0"
-          step="1"
-          class="form-input"
-          [(ngModel)]="chunkSize"
-        />
-      </div>
+      @if (selectedImporter.supports_chunked) {
+        <div class="form-group">
+          <label class="form-label" for="field-chunk-size" title="Embed at most this many medias at once to bound peak memory. 0 means load everything in one pass.">
+            Chunk size (advanced — 0 = no chunking)
+          </label>
+          <input
+            id="field-chunk-size"
+            type="number"
+            min="0"
+            step="1"
+            class="form-input"
+            [(ngModel)]="chunkSize"
+          />
+        </div>
+      }
 
       @if (error) {
         <p class="error-text">{{ error }}</p>

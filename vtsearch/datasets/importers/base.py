@@ -166,6 +166,7 @@ class DatasetImporter(PluginBase):
         d = super().to_dict()
         d["picker_view"] = self.picker_view
         d["category"] = self.category
+        d["supports_chunked"] = self.supports_chunked
         d["fields"] = [_dataset_name_field().to_dict()] + d["fields"]
         return d
 

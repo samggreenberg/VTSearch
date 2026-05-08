@@ -188,6 +188,10 @@ export interface ImporterInfo {
    *  ``"form"`` (default), ``"demo"``, ``"server_folder"``, ``"local_folder"``. */
   picker_view?: string;
   hidden_from_picker?: boolean;
+  /** Whether this importer can yield medias in chunks for memory-bounded
+   *  loading.  When false, the chunk-size form field is hidden because
+   *  the value would be ignored. */
+  supports_chunked?: boolean;
   /** Picker tab this importer belongs to.  One of ``"services"``,
    *  ``"server"``, ``"local"``, ``"demo"``, or ``""`` (uncategorised). */
   category?: string;
