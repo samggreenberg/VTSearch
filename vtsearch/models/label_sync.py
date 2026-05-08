@@ -87,6 +87,9 @@ def sync_labels_to_loaded_detector() -> None:
     data["labelset"] = merged.to_dict()
     _write_detector(path, data)
 
+    det_ctx.labelset_good_count = sum(1 for el in merged.elements if el.label == "good")
+    det_ctx.labelset_bad_count = sum(1 for el in merged.elements if el.label == "bad")
+
     import time as _time
 
     update_detector(entry["id"], num_training=len(merged), last_trained_at=_time.time())

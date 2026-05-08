@@ -351,6 +351,9 @@ def load_detector_route():
                     media_type = det_data.get("media_type", "") or ""
                     snap = _snap_medias()
 
+                    det_ctx.labelset_good_count = sum(1 for el in labelset.elements if el.label == "good")
+                    det_ctx.labelset_bad_count = sum(1 for el in labelset.elements if el.label == "bad")
+
                     def _embed_progress(name: str, done: int, total: int) -> None:
                         tracker.check_cancelled()
                         tracker.update(

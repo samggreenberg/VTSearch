@@ -235,14 +235,25 @@ def learned_sort():
 
 @sorting_bp.route("/api/votes")
 def get_votes():
+    from vtsearch.utils.state_core import _empty_detector_context, get_active_detector_context
+
     click_times = get_vote_click_times()
     learned_scores = get_learned_scores()
+    det_ctx = get_active_detector_context()
+    if det_ctx is not _empty_detector_context and det_ctx.detector_id:
+        labelset_good_count = det_ctx.labelset_good_count
+        labelset_bad_count = det_ctx.labelset_bad_count
+    else:
+        labelset_good_count = len(good_votes)
+        labelset_bad_count = len(bad_votes)
     return jsonify(
         {
             "good": sorted(good_votes),
             "bad": sorted(bad_votes),
             "click_times": {str(k): v for k, v in click_times.items()},
             "learned_scores": {str(k): round(v, 4) for k, v in learned_scores.items()},
+            "labelset_good_count": labelset_good_count,
+            "labelset_bad_count": labelset_bad_count,
         }
     )
 

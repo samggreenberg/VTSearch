@@ -38,6 +38,13 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Input() selectedId: number | null = null;
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
+  /**
+   * True when the active detector (or active votes, when no detector is
+   * loaded) has at least one good and one bad label.  Used to gate "Sort by
+   * Learned" — distinct from ``goodVotes`` / ``badVotes`` because those Sets
+   * only contain media IDs in the *currently loaded* dataset.
+   */
+  @Input() learnedSortAvailable = false;
   @Input() sortMode: SortMode = 'text';
   @Input() selectMode: SelectMode = 'top';
   @Input() inclusion: number = 0;
