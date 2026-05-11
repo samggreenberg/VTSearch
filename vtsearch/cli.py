@@ -133,6 +133,12 @@ def _score_medias_with_detectors(
             "hits": positive_hits,
             "negative_hits": negative_hits,
         }
+
+    if results:
+        from vtsearch.achievements import record_find
+
+        record_find(len(medias) * len(results))
+
     return results
 
 

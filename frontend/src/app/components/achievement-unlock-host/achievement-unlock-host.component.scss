@@ -1,0 +1,24 @@
+.unlock-body {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.5rem 0 1rem;
+}
+
+.unlock-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.unlock-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.unlock-message {
+  margin: 0;
+  color: var(--text-muted, #888);
+  font-size: 0.9rem;
+}

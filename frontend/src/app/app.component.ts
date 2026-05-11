@@ -3,6 +3,7 @@ import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
+import { AchievementUnlockHostComponent } from './components/achievement-unlock-host/achievement-unlock-host.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
 import { LoginComponent } from './components/login/login.component';
 import { MediaStateService } from './services/media-state.service';
@@ -10,9 +11,10 @@ import { DatasetStateService } from './services/dataset-state.service';
 import { ActiveContextService } from './services/active-context.service';
 import { TopBarStateService } from './services/top-bar-state.service';
 import { AuthService } from './services/auth.service';
+import { AchievementsService } from './services/achievements.service';
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterOutlet, DialogHostComponent, SettingsModalComponent, LoginComponent],
+  imports: [CommonModule, RouterOutlet, DialogHostComponent, AchievementUnlockHostComponent, SettingsModalComponent, LoginComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
@@ -33,8 +35,10 @@ export class AppComponent {
     private activeContext: ActiveContextService,
     public topBarState: TopBarStateService,
     public auth: AuthService,
+    private achievements: AchievementsService,
   ) {
     this.auth.checkStatus();
+    this.achievements.refresh();
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
