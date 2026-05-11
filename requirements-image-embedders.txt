@@ -5,7 +5,7 @@
 #   * SigLIP 2 (google/siglip2-base-patch16-224)        — text-capable
 #   * CLIP     (openai/clip-vit-base-patch32)           — text-capable
 #   * DINOv3   (facebook/dinov3-vitb16-pretrain-lvd1689m) — image-only
-#   * PE       (facebook/PE-Core-B16-224)               — image-only
+#   * EUPE     (facebook/PE-Core-B16-224)               — image-only
 #
 # Used by Dockerfile.image-embedders. Skips audio / video / text / document
 # stacks so we still produce a slim image (only image-side deps are pulled in).
@@ -42,8 +42,8 @@ protobuf
 # to the slow Python path.
 tokenizers
 
-# ── Perception Encoder ───────────────────────────────────────────────
-# PE ships custom modeling code on the Hub; loading uses
+# ── EUPE (Perception Encoder) ────────────────────────────────────────
+# EUPE ships custom modeling code on the Hub; loading uses
 # trust_remote_code=True. einops is the only extra runtime dep its
 # custom code typically pulls in.
 einops

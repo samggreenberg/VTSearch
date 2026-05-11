@@ -429,7 +429,7 @@ class TestAllEmbeddersRegistration:
         for name in ("siglip", "siglip2", "clip", "clap", "xclip"):
             assert by_name[name]["supports_text"] is True, name
         # Vision-only / patch-based embedders do not.
-        for name in ("dinov3", "pe"):
+        for name in ("dinov3", "eupe"):
             assert by_name[name]["supports_text"] is False, name
 
     def test_all_expected_names_present(self):
@@ -443,7 +443,7 @@ class TestAllEmbeddersRegistration:
             "siglip2",
             "clip",
             "dinov3",
-            "pe",
+            "eupe",
             "e5",
             "bge",
             "xclip",
@@ -461,7 +461,7 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("image")}
-        assert names == {"siglip", "siglip2", "clip", "dinov3", "pe"}
+        assert names == {"siglip", "siglip2", "clip", "dinov3", "eupe"}
 
     def test_siglip_is_still_default_image_embedder(self):
         """SigLIP must remain the first (default) image embedder so callers

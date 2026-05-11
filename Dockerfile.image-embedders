@@ -2,8 +2,8 @@
 # VTSearch — All-image-embedders CPU image
 #
 # Bundles every supported image embedder (SigLIP, SigLIP 2, CLIP, DINOv3,
-# Meta Perception Encoder) and bakes their weights into the image at build
-# time so the container is ready to serve immediately on first run.
+# EUPE [Meta Perception Encoder]) and bakes their weights into the image
+# at build time so the container is ready to serve immediately on first run.
 #
 # SigLIP remains the default — it's marked is_default=True on the
 # embedder class and is the only entry in `autoload_media_embedders`
@@ -11,9 +11,9 @@
 # *available* (selectable from the importer UI / dataset registry) but
 # do not warm at startup, keeping cold-start RAM low.
 #
-# DINOv3 and Perception Encoder are vision-only — they do not embed
-# text, so the UI hides the "Text sort" affordance for datasets
-# embedded with them (see MediaEmbedder.supports_text).
+# DINOv3 and EUPE are vision-only — they do not embed text, so the UI
+# hides the "Text sort" affordance for datasets embedded with them
+# (see MediaEmbedder.supports_text).
 #
 # Build:  docker build -f Dockerfile.image-embedders -t vtsearch:image-embedders .
 # Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:image-embedders
@@ -21,7 +21,7 @@
 # Build args:
 #   * VTSEARCH_VERSION  — bake a version string into the image
 #   * HF_TOKEN          — optional; required to pre-download gated models
-#                         (DINOv3 and PE are gated on Hugging Face). Pass with
+#                         (DINOv3 and EUPE are gated on Hugging Face). Pass with
 #                         --secret id=hf_token,env=HF_TOKEN and BuildKit.
 # -----------------------------------------------------------------
 
@@ -104,19 +104,19 @@ AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, token=token); \
 AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, token=token); \
 print('DINOv3 weights cached.', flush=True)"
 
-# Meta Perception Encoder (Core B/16-224). Ships custom modeling code
+# EUPE (Meta Perception Encoder Core B/16-224). Ships custom modeling code
 # on the Hub; loading requires trust_remote_code=True.
 RUN --mount=type=secret,id=hf_token,required=false \
     python -u -c "import os; \
-from vtsearch.config import PE_MODEL_ID; \
+from vtsearch.config import EUPE_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
 token=None; \
 exec('try:\n  token=open(\"/run/secrets/hf_token\").read().strip()\nexcept Exception:\n  pass'); \
-print(f'Pre-downloading {PE_MODEL_ID} to {cache}', flush=True); \
+print(f'Pre-downloading {EUPE_MODEL_ID} to {cache}', flush=True); \
 from transformers import AutoModel, AutoImageProcessor; \
-AutoModel.from_pretrained(PE_MODEL_ID, cache_dir=cache, token=token, trust_remote_code=True); \
-AutoImageProcessor.from_pretrained(PE_MODEL_ID, cache_dir=cache, token=token, trust_remote_code=True); \
-print('Perception Encoder weights cached.', flush=True)"
+AutoModel.from_pretrained(EUPE_MODEL_ID, cache_dir=cache, token=token, trust_remote_code=True); \
+AutoImageProcessor.from_pretrained(EUPE_MODEL_ID, cache_dir=cache, token=token, trust_remote_code=True); \
+print('EUPE weights cached.', flush=True)"
 
 # ---------- application layer ----------
 COPY . .

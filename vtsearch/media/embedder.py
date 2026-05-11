@@ -433,9 +433,9 @@ class MediaEmbedder(ABC):
 
         Cross-modal embedders (CLIP, SigLIP, CLAP, X-CLIP) return ``True`` so
         features like text search and description-enrichment are offered.
-        Vision-only or patch-based encoders (DINOv3, Perception Encoder) return
-        ``False`` — :meth:`embed_text` will not produce meaningful vectors and
-        the UI should hide text-search affordances for datasets using them.
+        Vision-only or patch-based encoders (DINOv3, EUPE) return ``False`` —
+        :meth:`embed_text` will not produce meaningful vectors and the UI
+        should hide text-search affordances for datasets using them.
         """
         return True
 

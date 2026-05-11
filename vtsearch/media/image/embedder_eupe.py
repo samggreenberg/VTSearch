@@ -1,15 +1,17 @@
-"""Image embedder — Meta Perception Encoder (facebook/PE-Core-B16-224).
+"""Image embedder — EUPE / Meta Perception Encoder (facebook/PE-Core-B16-224).
 
-Meta's Perception Encoder ("PE") is a vision encoder trained on large-scale
-image data. The Core-B/16-224 variant is comparable in size to SigLIP-base.
+We expose this model under the slug ``eupe`` (rather than the bare ``pe``)
+so the registry key is a distinct, unambiguous proper noun. The underlying
+weights are Meta's Perception Encoder Core B/16-224 — a vision encoder
+trained on large-scale image data, comparable in size to SigLIP-base.
 
 This embedder uses **only** the vision tower and pools the CLS token from
 ``last_hidden_state[:, 0]`` to produce a single fixed-size vector per image.
 We do not expose a text encoder here — :attr:`supports_text` is ``False`` and
-the UI hides text-search affordances for datasets embedded with PE.
+the UI hides text-search affordances for datasets embedded with EUPE.
 
-Meta publishes PE with custom modeling code on the Hugging Face Hub, so we
-load with ``trust_remote_code=True``.
+Meta publishes Perception Encoder with custom modeling code on the Hugging
+Face Hub, so we load with ``trust_remote_code=True``.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from vtsearch.config import PE_MODEL_ID
+from vtsearch.config import EUPE_MODEL_ID
 from vtsearch.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
@@ -34,8 +36,8 @@ if TYPE_CHECKING:
     from PIL import Image
 
 
-class ImagePerceptionEncoderEmbedder(MediaEmbedder):
-    """Embeds images using Meta Perception Encoder Core B/16-224 (vision tower, CLS-pooled)."""
+class ImageEupeEmbedder(MediaEmbedder):
+    """Embeds images using EUPE (Meta Perception Encoder Core B/16-224, CLS-pooled)."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -44,7 +46,7 @@ class ImagePerceptionEncoderEmbedder(MediaEmbedder):
 
     @property
     def name(self) -> str:
-        return "pe"
+        return "eupe"
 
     @property
     def media_type_id(self) -> str:
@@ -64,14 +66,14 @@ class ImagePerceptionEncoderEmbedder(MediaEmbedder):
         with timed_progress(self._on_progress, "loading", "Importing transformers…", 2, 2):
             from transformers import AutoImageProcessor, AutoModel  # noqa: PLC0415
 
-        cache_dir = embedder_load_setup(self._on_progress, "Loading Perception Encoder weights…")
+        cache_dir = embedder_load_setup(self._on_progress, "Loading EUPE weights…")
         with (
             intercept_tqdm_progress(self._on_progress),
-            intercept_weight_loading_progress(self._on_progress, "Loading Perception Encoder weights…"),
+            intercept_weight_loading_progress(self._on_progress, "Loading EUPE weights…"),
         ):
             self._model = load_pretrained_local_first(
                 AutoModel.from_pretrained,
-                PE_MODEL_ID,
+                EUPE_MODEL_ID,
                 low_cpu_mem_usage=True,
                 cache_dir=cache_dir,
                 token=False,
@@ -79,11 +81,11 @@ class ImagePerceptionEncoderEmbedder(MediaEmbedder):
             )
         self._model = self._model.to("cpu")
         self._model.eval()
-        self._on_progress("loading", "Loading Perception Encoder image processor…", 0, 0)
+        self._on_progress("loading", "Loading EUPE image processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(
                 AutoImageProcessor.from_pretrained,
-                PE_MODEL_ID,
+                EUPE_MODEL_ID,
                 cache_dir=cache_dir,
                 token=False,
                 trust_remote_code=True,
@@ -119,8 +121,9 @@ class ImagePerceptionEncoderEmbedder(MediaEmbedder):
             with torch.no_grad():
                 outputs = self._model(**inputs)
                 # Prefer get_image_features when the loaded class exposes it
-                # (PE's HF wrapper often does); fall back to CLS-token pooling
-                # of last_hidden_state for vision-tower-only variants.
+                # (Perception Encoder's HF wrapper often does); fall back to
+                # CLS-token pooling of last_hidden_state for vision-tower-only
+                # variants.
                 if hasattr(self._model, "get_image_features"):
                     feats = self._model.get_image_features(**inputs)
                     embedding = feats.detach().cpu().numpy()
@@ -129,8 +132,8 @@ class ImagePerceptionEncoderEmbedder(MediaEmbedder):
                     embedding = cls_token.detach().cpu().numpy()
             return embedding[0]
         except Exception:
-            logging.getLogger(__name__).exception("Error embedding PIL image (Perception Encoder)")
+            logging.getLogger(__name__).exception("Error embedding PIL image (EUPE)")
             return None
 
 
-EMBEDDER = ImagePerceptionEncoderEmbedder()
+EMBEDDER = ImageEupeEmbedder()

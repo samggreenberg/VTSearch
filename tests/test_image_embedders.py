@@ -199,57 +199,57 @@ class TestImageDinov3Embedder:
         assert result is None
 
 
-class TestImagePerceptionEncoderEmbedder:
+class TestImageEupeEmbedder:
     def test_name(self):
-        from vtsearch.media.image.embedder_pe import ImagePerceptionEncoderEmbedder
+        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
 
-        assert ImagePerceptionEncoderEmbedder().name == "pe"
+        assert ImageEupeEmbedder().name == "eupe"
 
     def test_media_type_id(self):
-        from vtsearch.media.image.embedder_pe import ImagePerceptionEncoderEmbedder
+        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
 
-        assert ImagePerceptionEncoderEmbedder().media_type_id == "image"
+        assert ImageEupeEmbedder().media_type_id == "image"
 
     def test_is_not_default(self):
-        from vtsearch.media.image.embedder_pe import ImagePerceptionEncoderEmbedder
+        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
 
-        assert ImagePerceptionEncoderEmbedder().is_default is False
+        assert ImageEupeEmbedder().is_default is False
 
     def test_supports_text_false(self):
-        from vtsearch.media.image.embedder_pe import ImagePerceptionEncoderEmbedder
+        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
 
-        assert ImagePerceptionEncoderEmbedder().supports_text is False
+        assert ImageEupeEmbedder().supports_text is False
 
     def test_to_dict(self):
-        from vtsearch.media.image.embedder_pe import ImagePerceptionEncoderEmbedder
+        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
 
-        assert ImagePerceptionEncoderEmbedder().to_dict() == {
-            "name": "pe",
+        assert ImageEupeEmbedder().to_dict() == {
+            "name": "eupe",
             "media_type_id": "image",
             "supports_text": False,
         }
 
     def test_embed_text_returns_none(self):
-        from vtsearch.media.image.embedder_pe import ImagePerceptionEncoderEmbedder
+        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
 
-        emb = ImagePerceptionEncoderEmbedder()
+        emb = ImageEupeEmbedder()
         assert emb.embed_text("anything") is None
 
     def test_registered_in_registry(self):
         from vtsearch.media import get_embedder
 
-        emb = get_embedder("pe")
-        assert emb.name == "pe"
+        emb = get_embedder("eupe")
+        assert emb.name == "eupe"
 
     def test_uses_correct_model_id(self):
-        from vtsearch.config import PE_MODEL_ID
+        from vtsearch.config import EUPE_MODEL_ID
 
-        assert PE_MODEL_ID == "facebook/PE-Core-B16-224"
+        assert EUPE_MODEL_ID == "facebook/PE-Core-B16-224"
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtsearch.media.image.embedder_pe import ImagePerceptionEncoderEmbedder
+        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
 
-        emb = ImagePerceptionEncoderEmbedder()
+        emb = ImageEupeEmbedder()
         with patch.object(emb, "load_models"):
             result = emb.embed_media({"media_path": "/nonexistent.jpg"})
         assert result is None
@@ -265,14 +265,14 @@ class TestApiEmbeddersResponseShape:
         body = resp.get_json()
         entries = {e["name"]: e for e in body["embedders"]}
         # All five image embedders must be present.
-        assert set(entries) == {"siglip", "siglip2", "clip", "dinov3", "pe"}
+        assert set(entries) == {"siglip", "siglip2", "clip", "dinov3", "eupe"}
         # supports_text must be a bool on every entry.
         for entry in entries.values():
             assert isinstance(entry["supports_text"], bool)
         # Specific expectations.
         assert entries["siglip"]["supports_text"] is True
         assert entries["dinov3"]["supports_text"] is False
-        assert entries["pe"]["supports_text"] is False
+        assert entries["eupe"]["supports_text"] is False
 
 
 class TestSortRouteRejectsTextWhenUnsupported:
