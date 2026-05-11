@@ -16,11 +16,40 @@ This document plans the first patch-based embedder for image media. The same mac
 - **No persisted vectors outside dataset pickles.** Patch vectors live in the dataset pickle (which is the sanctioned snapshot store for embeddings) and in RAM. They are never written to `settings.json`, detector JSON, or any new on-disk artifact. The "No Persisted Vectors or MLPs" rule in `CLAUDE.md` still binds.
 - **No support for >1 patch backbone in v1.** Start with DINOv3. EUPE is interesting but the goal is one well-shaped patch embedder, not a zoo.
 
-## Backbone choice — DINOv3 only for v1
+## Backbone choice — DINOv3 first, but design fits EUPE too
 
-DINOv3 was chosen over EUPE for v1 for one reason: it exposes a usable attention map directly (`[CLS] → patch` attention from the final block), which means we get region proposals for free from the same forward pass we already need for embeddings. No second model, no separate RPN.
+### Structural comparison
 
-For EUPE, attention-map availability is less clear in the public release. Until we verify EUPE exposes equivalent attention (or we decide we're willing to ship a separate region proposer), defer it. **Recommendation**: ship DINOv3 first as `ImageDinov3PatchEmbedder`. Re-evaluate EUPE only if a concrete need arises that DINOv3 cannot serve.
+| Property | DINOv3 (ViT-B/14, +reg) | EUPE ViT-B/16 | EUPE ConvNeXt-B |
+|---|---|---|---|
+| Per-patch token output | Yes (256 tokens at 224²) | Yes (196 tokens at 224²) | No tokens — produces a 2D feature *map* |
+| CLS token | Yes | Yes | None |
+| CLS→patch attention available | Yes; published as a usable saliency signal, with the paper noting attention heads self-segregate into face / object / background classes (Gram-anchored, register-stabilised) | Yes (standard ViT attention) | None — there's no CLS, so there is no CLS-attention |
+| Built-in region/object head | No | No | No |
+| Embedding dim | 768 (ViT-B) | 768 (ViT-B/16) | similar feature-channel dim from the final ConvNeXt stage |
+
+So EUPE's ViT family is structurally interchangeable with DINOv3 — same protocol works. EUPE's **ConvNeXt** family is the case that genuinely needs a different structure: there is no CLS-attention to drive region proposals, so any region builder that hard-codes "use CLS attention as saliency" breaks. That's the real fork.
+
+### Resolving the fork — decouple region proposal from the embedder
+
+The embedder contract returns two things, and the second is allowed to be missing:
+
+```python
+class PatchEmbedOutput(NamedTuple):
+    cls_vec: np.ndarray                       # (D,) — pooled / CLS vector
+    patch_grid: np.ndarray                    # (H, W, D) — per-patch / per-cell vectors
+    patch_saliency: Optional[np.ndarray]      # (H, W) or None
+```
+
+- **DINOv3** populates `patch_saliency` from CLS→patch attention (averaged over heads, optionally filtered to the face/object head classes from the paper).
+- **EUPE-ViT** populates it the same way.
+- **EUPE-ConvNeXt** sets it to `None`. The region builder falls back to **patch self-affinity** clustering — group cells whose vectors are mutually similar (cosine) and spatially connected, then rank clusters by size × average inter-cluster contrast. No learned saliency required.
+
+The `RegionTree` builder is therefore one piece of code that handles both shapes. Whichever backbone we add later just has to fit `PatchEmbedOutput`.
+
+### v1 recommendation
+
+Ship `ImageDinov3PatchEmbedder` first because (a) DINOv3 has the strongest published patch-feature consistency story (Gram anchoring, register tokens — both directly relevant to the quality of the region vectors), and (b) its CLS-attention is documented and usable out of the box. EUPE is a credible second target — particularly the on-device ViT variants if a user wants a smaller footprint — and the protocol above ensures we are not painting ourselves into a DINOv3-shaped corner.
 
 ## Data model: hierarchical regions, not raw patches
 
@@ -29,25 +58,50 @@ A naive design stores all N patches (256+ per image). Two problems:
 1. Storage and similarity cost grow ~250×. The diversity tree, MLP scoring, and label-export paths all assume a small handful of vectors per media.
 2. Raw patches are *too small*. A single patch is "left ear of a dog", which is rarely what you want to match against.
 
-Instead, ingest produces a **hierarchical region set per image**:
+Instead, ingest produces a **strict agglomerative tree** of regions per image:
 
 ```
-RegionTree:
-  - full_image:      vec, box=(0,0,1,1)
-  - top_K_regions:   [(vec, box), ...]          # K ≈ 8–16, from attention peaks
-  - merged_regions:  [(vec, box, child_idxs)]   # spatially-adjacent siblings fused
+RegionTree (HAC binary tree over K leaves → 2K−1 nodes total):
+  - K leaves:        proposed object regions   (K ≈ 8–16)
+  - K−1 internals:   each is the merge of two children along the agglomeration path
+  - root:            the single top-level merge (usually approximates the full image)
+  - full_image:      always present as its own node (CLS-pooled), even if the root
+                     differs — gives us an unambiguous global vector
 ```
+
+You raised the right worry: an unconstrained "merge spatially adjacent regions" rule has no stopping condition and produces a combinatorial set ({head+body}, {body+legs}, {head+body+legs}, {body+legs+chair}, …). The fix is **HAC (hierarchical agglomerative clustering)**:
+
+1. Start with the K leaf regions.
+2. Repeatedly merge the **single closest pair** under a fixed affinity (e.g. `α · cosine(child_vecs) + (1−α) · spatial_adjacency`).
+3. Stop when one node remains.
+
+This produces a strict binary tree with exactly `2K − 1` nodes. Each internal node *is* the merge of its two children — no other merges exist. Bounded by construction (K = 16 leaves → 31 nodes total), no combinatorial blow-up.
+
+What this gives you and what it doesn't:
+
+- **You get** `{head, body, legs}` whenever the agglomeration order is `head ↔ body` then `{head+body} ↔ legs`. Because chair is visually dissimilar from a human body, HAC won't fuse it in until later — so `{head+body+legs}` exists as a node *before* `{head+body+legs+chair}` enters. Both can exist; they sit at different depths in the tree.
+- **You don't get** arbitrary subsets like `{head+legs}` (skipping body). That's fine: if head and legs match the query but body doesn't, max-similarity over individual leaves still picks one of them, and the whole-image vector backs up the "the query really is about the entire scene" case. The cases HAC misses are the ones where the *combined* head-and-legs vector is meaningfully different from either child alone *and* skipping the body is semantically meaningful. Empirically those are rare for natural images.
+- **Worked example.** Leaves = `{head, body, legs, chair}`. Affinities (cosine + adjacency) typically rank: `head ↔ body` highest, then `{head+body} ↔ legs`, then `{head+body+legs} ↔ chair`. Nodes in the tree:
+  ```
+  L0: head
+  L1: body
+  L2: legs
+  L3: chair
+  L4 = L0+L1           (head+body)
+  L5 = L4+L2           (head+body+legs)             ← the "full person" merge
+  L6 = L5+L3           (full person + chair)        ← the root
+  full_image           (CLS-pooled, may be ≈ L6)
+  ```
+  Seven region nodes + the CLS-pooled full image = 8 vectors. That's well under the cap.
 
 Construction at embed time:
 
-1. Run DINOv3 once → patch grid + CLS attention + CLS vector.
-2. **Full image**: pooled CLS vector → `full_image`.
-3. **Region proposals**: cluster patches by spatial connectivity weighted by CLS attention, then keep the top-K clusters by total attention mass. Each region's vector is the attention-weighted mean of its constituent patch vectors, L2-normalised.
-4. **Merge candidates**: greedily fuse spatially adjacent regions whose merged bounding box is "compact" (low background coverage) and whose merged-vector cosine distance to each child is below a threshold. Emit a small number (≤8) of merged regions. The full image is implicitly the all-the-way-merged region.
+1. Run the patch backbone once → `PatchEmbedOutput(cls_vec, patch_grid, patch_saliency)`.
+2. **Full image**: `cls_vec` → `full_image` node.
+3. **Leaf proposals**: if `patch_saliency` is present, cluster cells by spatial connectivity weighted by saliency, take top-K clusters by saliency mass. Otherwise, cluster by patch self-affinity and take top-K clusters by size × inter-cluster contrast. Each leaf vector is the saliency-weighted (or uniform) mean of its constituent patch vectors, L2-normalised.
+4. **HAC**: build the binary merge tree as above. Each internal node's vector is the mass-weighted mean of its two children, L2-normalised.
 
-The total per-image vector count is bounded — concretely a target of **≤32 vectors per image** including the full image, leaves, and merges. That keeps dataset pickle size within ~30× of today's and keeps similarity inner loops tractable.
-
-This shape is what makes voting and MLP scoring tractable too — see below.
+The total per-image vector count is bounded by `2K − 1 + 1` (HAC nodes plus the CLS full-image node). With K = 16 that's **33 vectors**; cap K = 12 for a softer **24-vector** ceiling. Pick the K on a small sweep before locking it in (Open Question below).
 
 Open question: do we keep `box` coordinates in normalised `(x0, y0, x1, y1)` or as pixel indices into the original image? Normalised is robust to resize; pixel indices are easier to debug. **Default: normalised.** Decided in implementation.
 
@@ -60,11 +114,14 @@ A new `media["patch_regions"]` field, populated by the patch embedder, of shape:
 class RegionVector:
     box: tuple[float, float, float, float]   # normalised (x0, y0, x1, y1)
     vec: np.ndarray                           # L2-normalised float32, shape (D,)
-    parents: tuple[int, ...] = ()             # child idxs if this is a merged region
+    children: tuple[int, int] | None = None   # child idxs in the same list,
+                                              # or None for leaves and full_image
 ```
 
 ```python
-media["patch_regions"] = [RegionVector, ...]   # index 0 is always full_image
+media["patch_regions"] = [RegionVector, ...]   # index 0 is always full_image (CLS-pooled)
+                                               # indices 1..K   are HAC leaves
+                                               # indices K+1..  are HAC internals (in build order)
 media["embedding"]      = media["patch_regions"][0].vec   # legacy: full image vector
 ```
 
@@ -88,26 +145,28 @@ Because the haystack has `full_image` + `top_K` + merges all in the same flat li
 - Highlight the matched region in the gallery card (visual debug + the user immediately sees *why* this image was surfaced).
 - Use it for **vote attribution** (next section).
 
-## Vote attribution — the heart of #3
+## Vote attribution — whole image until region voting ships
 
-The user's correct point: if we *find* with a region but *record* with the full-image vector, we throw away the localisation signal we just earned. The plan:
+You're right that the "triggering region" framing was overreaching. Two failure modes:
 
-### Good votes
+1. **Many sort modes have no triggering region.** Random shuffle, diversity sort, autopilot exploration, even a fresh dataset before any query — there's no `best_region` to attribute to.
+2. **Discovery is real.** A user can vote Good on an image because they liked something the sort *didn't* surface for. Recording against the region the algorithm happened to score highest would baldly misattribute the signal.
 
-Record against the **triggering region** (`best_region`), not the full image. The user voted Good because that region got them to look — that region is what we want the detector to learn to surface. Concretely:
+So **v1 records both Good and Bad against the full image.** The `LabeledElement` schema doesn't change yet. The patch-embedder still produces the rich region set, and similarity / MLP scoring still use it on the search side — but the *vote* is image-level until we ship a UI that lets the user designate the region themselves.
 
-- `LabeledElement` gains an optional `region_box: tuple[float, float, float, float]` and the trainer pulls the region vector by `box` lookup at training time. (`region_box` is the persisted form; the vector is rederived from the pickled `patch_regions`, in keeping with the "no persisted vectors" rule — boxes are coordinates, not embeddings.)
-- If the image was surfaced via a global sort that had no "triggering region" (e.g. random shuffle, diversity sort), we fall back to the full-image vector and stamp `region_box = (0,0,1,1)`.
+### Why this is fine
 
-### Bad votes
+The MLP still benefits from regions on the **scoring** side (it scans every region per image and max-pools), so it can still localise even when trained on image-level labels. Image-level training with region-level scoring is the standard weakly-supervised setup; we get most of the upside without forcing the user to do extra work.
 
-Record against the **full image**. The semantic of Bad is "I never want anything like this on screen again" — narrowing to the trigger region would let near-duplicates of the rest of the image slip past. (If a user wants to say "*just* this region is bad", they can use the region-vote UI; see "Optional UX" below.)
+### When region voting lands (phase 2)
 
-This asymmetry — Good narrows, Bad broadens — falls out of the question "what does the user actually mean?" and is the right default. We expose it as a setting later if anyone disagrees.
+Adding a click-two-corners gesture on the focus pane unlocks the richer signal:
 
-### Optional UX (deferred): region voting
+- `LabeledElement` gains an optional `region_box: (x0, y0, x1, y1)`. Absent → image-level (the v1 default and the legacy fallback forever).
+- The trainer rederives the matching region vector from `media["patch_regions"]` at training time (no persisted vectors).
+- Both Good and Bad can target a region. We deliberately don't make the rule asymmetric until we have user feedback — the asymmetric "narrow Good / broad Bad" idea was speculation; revisit once we have actual region votes to study.
 
-Phase 2: add a click-two-corners gesture on the focus pane that lets the user explicitly mark a bounding box and vote Good/Bad against that box. The trainer accepts the explicit box exactly the same way; only the source of the box differs. Keep this strictly post-v1 — it's a frontend project and we want backend signal first.
+This phase is post-v1 and lives in the frontend. Backend work in v1 is limited to: produce regions, score with regions, train with image-level labels. The data shape is forward-compatible — when `region_box` shows up later, nothing in the v1 schema has to change.
 
 ## Detector MLP
 
@@ -120,9 +179,9 @@ def score_media(mlp, media):
     return max(region_scores), regions[argmax(region_scores)].box
 ```
 
-The MLP itself is unchanged in shape — same input dim, same output. The change is purely "feed every region through the MLP and max-pool". Because merged regions and full image are both in the region list, the failure case the user raised (head/body/legs each miss but full-body hits) is handled — the full-body merge gets its own MLP pass and wins.
+The MLP itself is unchanged in shape — same input dim, same output. The change is purely "feed every region through the MLP and max-pool". Because the HAC merges and the full image are both in the region list, the failure case you raised (head/body/legs each miss but full-body hits) is handled — the full-body merge gets its own MLP pass and wins.
 
-Training: examples become `(region_vec, label)` instead of `(full_image_vec, label)`. For Good votes that's the triggering region; for Bad votes the trainer expands the example to *all* regions on that image being negative (mild data augmentation, all bearing the same `media_id`). This matches the asymmetric recording rule above.
+Training in v1 stays **image-level** (matches the vote rule above): examples are `(full_image_vec, label)`. Region-aware scoring with image-level training is the standard weakly-supervised setup — the MLP learns "what makes an image good" and the max-pool at scoring time picks the region that best satisfies the learned function. We add region-level training examples in phase 2 when region voting lands; until then they would be misattributed and noisy.
 
 Calibration / thresholding works unchanged: it uses the same scoring function above, which already returns a single scalar per media.
 
@@ -137,13 +196,13 @@ The diversity tree clusters by full-image vector and that's the right behaviour 
 - **Loader hook**: `vtsearch/datasets/loader_pickle.py` and `loader_folder.py` already call `embedder.embed_media`/`embed_media_bulk`. We add a sibling call (after embedding) that, *only if the embedder advertises patch support*, also populates `media["patch_regions"]`. Embedders without patch support (SigLIP, etc.) are unaffected.
 - **Capability flag**: `MediaEmbedder` gains `produces_patch_regions: bool = False`. Patch embedders set it `True`; the loader checks it before requesting regions. Avoids type-sniffing.
 - **Similarity paths**: `vtsearch/routes/sorting.py` and the example-sort / find-label routes pick up the max-region scoring helper. Single helper function in `vtsearch/models/region_similarity.py` so there is one place that knows the rule.
-- **MLP training & scoring**: `vtsearch/models/detector_training.py` and `vtsearch/models/training_workflow.py` adopt the region-aware path. Region-vote storage lives on `LabeledElement` (`region_box` only — vectors stay derived).
-- **Vote recording**: `vtsearch/routes/sorting.py` (or wherever the vote endpoint lives) passes through the `best_region` returned with the result list and records it on the `LabeledElement`. Bad votes ignore region info by default.
+- **MLP training & scoring**: `vtsearch/models/detector_training.py` and `vtsearch/models/training_workflow.py` adopt the region-aware *scoring* path (max-pool over regions). Training stays image-level in v1; `LabeledElement` is unchanged. `region_box` lands in phase 2.
+- **Vote recording**: unchanged in v1 — votes attach to the whole image as today. The patch-region pipeline is purely additive on the search side.
 
 ## Frontend integration points (v1 only)
 
-- Score result objects include `region_box` so the gallery card can draw a faint outline over the matched region.
-- No vote-UX change for v1. The "narrow Good, broad Bad" rule is invisible to the user. Region-vote UI is phase 2.
+- Score result objects include `best_region.box` so the gallery card can draw a faint outline over the matched region — purely informational, no vote semantics attached.
+- No vote-UX change for v1. Votes stay image-level. Region-vote UI is phase 2.
 
 ## Tests
 
@@ -151,11 +210,13 @@ New: `tests/test_patch_embedder.py`:
 
 - DINOv3 module is mocked / skipped at the GPU level — same convention as `test_new_embedders.py` (test class properties and registration without downloading model weights).
 - `RegionVector` round-trips through dataset pickle.
+- HAC builder over a hand-crafted `PatchEmbedOutput`: produces exactly `2K − 1` region nodes plus the CLS full-image node; each internal node's children are present and indices are well-formed.
+- HAC builder when `patch_saliency=None` (ConvNeXt-style): falls back to patch self-affinity and still produces a well-formed tree.
 - `score_media` returns `max(region_scores)` and the right `best_region`.
-- Voting Good on a region-keyed result writes the box onto the `LabeledElement`; voting Bad writes the full image and expands to negatives for every region.
-- Merge logic: given a hand-crafted region tree where leaves miss the MLP but the merge hits, `score_media` returns the merge.
+- Merge logic: given a hand-crafted region tree where individual leaves miss the MLP but an internal merge node hits, `score_media` returns the merge.
+- Votes in v1: image-level recording is unchanged; no `region_box` is written.
 
-`tests/test_gpu.py` gets a thin patch-embedder integration that runs a real DINOv3 forward pass and asserts shape/normalisation invariants. Marked `@pytest.mark.gpu`.
+`tests/test_gpu.py` gets a thin patch-embedder integration that runs a real DINOv3 forward pass and asserts shape/normalisation invariants on `PatchEmbedOutput`. Marked `@pytest.mark.gpu`.
 
 ## Migration
 
@@ -167,13 +228,17 @@ This counts as a feature addition, not a breaking change — per `CLAUDE.md`'s b
 
 ## Open questions
 
-1. **Region count target** — is ≤32 the right cap? Too few hurts recall on busy scenes; too many bloats pickles. Pick after a small empirical sweep (a dozen test images, eyeball the bounding boxes).
-2. **Merge metric** — "compact bounding box + low intra-region cosine spread" is a heuristic. Worth comparing against (a) connected-components of attention thresholded at the 90th percentile and (b) graph-cut on the patch-affinity matrix. Start with the heuristic; treat alternatives as a follow-up if the regions look bad.
-3. **Text-query embedding** — DINOv3 is image-only. To do text→image search we need a text encoder that lives in the same space. SigLIP-aligned DINOv3 variants exist; alternative is to keep SigLIP as the *query* encoder and DINOv3 as the *haystack* encoder, with a learned linear projection. **Recommendation**: ship the haystack-only path first (example-image search and detector MLP scoring work without any text encoder), defer the text-query story to a phase 1.5 once we know we like the regions.
-4. **Bad-vote broadening** — recording Bad against every region of an image gives the MLP up to ~32 negative examples per Bad vote. Does that overweight Bad relative to Good (which records 1 example)? Probably yes; the trainer should down-weight per-region negatives by `1/num_regions` so the *vote* carries the same total weight regardless of how many regions the image was decomposed into. Worth verifying with the eval framework before locking in.
+1. **Leaf count K** — is 8–16 the right range? Too few hurts recall on busy scenes; too many bloats pickles (since the HAC tree is `2K−1`). Pick after a small empirical sweep (a dozen test images at K = 8, 12, 16; eyeball the bounding boxes).
+2. **HAC affinity weighting** — `α · cosine(child_vecs) + (1−α) · spatial_adjacency`. Pick α on the same sweep. Pure-cosine (α = 1) tends to merge visually similar but spatially distant regions (two faces in the same crowd shot); pure-adjacency (α = 0) merges anything that touches. The right answer is somewhere in the middle and we should look at the tree before locking it in.
+3. **Text-query story — and the SigLIP-vs-DINOv3 tradeoff.** DINOv3 is image-only; it has no text encoder. Three options:
+   - **Patch-embedder only (DINOv3):** text sort goes dark (the UI grays out the text-sort entry when the active embedder doesn't expose `embed_text`). Example-image search and detector training still work. Users on this configuration vote and sort by example, which is fine for a focused workflow but loses the "type some words" affordance.
+   - **Bimodal embedder only (SigLIP):** text sort works, but region votes (when they land in phase 2) get ignored because there are no patch regions to attribute them to. The MLP and similarity paths fall back to whole-image vectors exactly as today.
+   - **Run both at once (later):** SigLIP for text queries, DINOv3 for region similarity and region voting. This is a real architectural change — today datasets carry one embedding per media, not a dict — and it's the right destination but not the right v1. Cost: ~2× embedding-time work at ingest and roughly double the per-media storage. The payoff is that nothing has to be grayed out and both feature sets work in the same dataset. Add as phase 3.
+4. **MLP saturation when scoring N regions per media** — feeding 30-ish region vectors through the MLP per image at score time is cheap, but the max over many independent draws is biased upward (more chances to score high). May need a small calibration adjustment relative to the single-vector path. Validate on the eval framework before declaring v1 done.
 
 ## Phasing
 
-- **v1 (this plan):** DINOv3 patch embedder, hierarchical regions in pickle, max-region similarity, region-aware MLP scoring + training, asymmetric vote attribution, gallery-card region highlight. No region-vote UI, no EUPE, no text-encoder change.
-- **v1.5:** text-query encoder aligned to DINOv3 space.
-- **v2:** explicit region-vote UI (click two corners), per-region label export, possibly EUPE if a need surfaces.
+- **v1 (this plan):** `ImageDinov3PatchEmbedder`, `PatchEmbedOutput` protocol, HAC region tree in dataset pickle, max-region similarity, region-aware MLP scoring (image-level training and image-level voting unchanged), gallery-card region highlight. No region-vote UI, no EUPE, no text-encoder change. Text sort is grayed out when the active embedder is patch-only.
+- **v1.5:** `ImageEupePatchEmbedder` (ViT variant first; ConvNeXt variant via the `patch_saliency=None` self-affinity fallback). Possibly a text encoder aligned to DINOv3's space if a clean public option exists.
+- **v2:** explicit region-vote UI (click two corners on the focus pane), `region_box` on `LabeledElement`, region-level training examples, per-region label export.
+- **v3:** multi-embedder-per-dataset (run SigLIP and DINOv3 side-by-side; route text queries to SigLIP, region similarity / votes to DINOv3). Requires changes to the dataset pickle schema (one `embedding` field today → an `embeddings` dict keyed by embedder name) and to the activation flow. Big enough to deserve its own design doc when we get there.
