@@ -68,7 +68,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
         import hashlib
         import logging
 
-        from vtsearch.models.resolver import resolve_file_from_origin
+        from vtsearch.models.resolver import resolve_file_context
 
         _log = logging.getLogger(__name__)
 
@@ -77,31 +77,31 @@ def restore_labels_from_detector(det_data: dict) -> int:
             origin = entry.get("origin")
             origin_name = entry.get("origin_name", "")
             filename = entry.get("filename", "")
-            resolved_path = resolve_file_from_origin(origin, origin_name, filename)
-            if resolved_path is None:
-                continue
+            with resolve_file_context(origin, origin_name, filename) as resolved_path:
+                if resolved_path is None:
+                    continue
 
-            # Compute MD5 of the resolved file and check against loaded medias
-            try:
-                h = hashlib.md5()
-                with open(resolved_path, "rb") as f:
-                    for chunk in iter(lambda: f.read(8192), b""):
-                        h.update(chunk)
-                resolved_md5 = h.hexdigest()
-            except OSError:
-                _log.debug("restore-labels: could not read resolved file %s", resolved_path)
-                continue
+                # Compute MD5 of the resolved file and check against loaded medias
+                try:
+                    h = hashlib.md5()
+                    with open(resolved_path, "rb") as f:
+                        for chunk in iter(lambda: f.read(8192), b""):
+                            h.update(chunk)
+                    resolved_md5 = h.hexdigest()
+                except OSError:
+                    _log.debug("restore-labels: could not read resolved file %s", resolved_path)
+                    continue
 
-            cids = md5_lookup.get(resolved_md5, [])
-            if cids:
-                for cid in cids:
-                    apply_label(cid, elem.label, silent=True)
-                restored += 1
-            else:
-                _log.debug(
-                    "restore-labels: resolved %s but MD5 %s not in loaded dataset",
-                    resolved_path,
-                    resolved_md5,
-                )
+                cids = md5_lookup.get(resolved_md5, [])
+                if cids:
+                    for cid in cids:
+                        apply_label(cid, elem.label, silent=True)
+                    restored += 1
+                else:
+                    _log.debug(
+                        "restore-labels: resolved %s but MD5 %s not in loaded dataset",
+                        resolved_path,
+                        resolved_md5,
+                    )
 
     return restored

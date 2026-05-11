@@ -42,17 +42,17 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
     from vtsearch.models.resolver import (
         _apply_clip_and_embed,
         embed_file,
-        resolve_file_from_origin,
+        resolve_file_context,
     )
 
-    file_path = resolve_file_from_origin(elem.origin, elem.origin_name, elem.filename)
-    if file_path is None:
-        return None
+    with resolve_file_context(elem.origin, elem.origin_name, elem.filename) as file_path:
+        if file_path is None:
+            return None
 
-    params = (elem.origin or {}).get("params", {}) if elem.origin else {}
-    if isinstance(params, dict) and params.get("clipper"):
-        return _apply_clip_and_embed(file_path, media_type, elem.origin, embedder_name)
-    return embed_file(file_path, media_type, embedder_name)
+        params = (elem.origin or {}).get("params", {}) if elem.origin else {}
+        if isinstance(params, dict) and params.get("clipper"):
+            return _apply_clip_and_embed(file_path, media_type, elem.origin, embedder_name)
+        return embed_file(file_path, media_type, embedder_name)
 
 
 def populate_label_embeddings(
