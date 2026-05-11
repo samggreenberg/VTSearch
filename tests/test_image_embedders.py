@@ -168,7 +168,7 @@ class TestImageDinov2Embedder:
             "name": "dinov2",
             "media_type_id": "image",
             "supports_text": False,
-            "supports_patch_regions": False,
+            "supports_patch_regions": True,
             "license_notice": None,
         }
 
@@ -235,7 +235,7 @@ class TestImageDinov3Embedder:
             "name": "dinov3",
             "media_type_id": "image",
             "supports_text": False,
-            "supports_patch_regions": False,
+            "supports_patch_regions": True,
             "license_notice": None,
         }
 
@@ -352,10 +352,13 @@ class TestApiEmbeddersResponseShape:
         assert entries["dinov2"]["supports_text"] is False
         assert entries["dinov3"]["supports_text"] is False
         assert entries["eupe"]["supports_text"] is False
-        # No image embedder currently produces patch regions (will flip True
-        # for the patch embedders once their _patch_forward path lands).
-        for entry in entries.values():
-            assert entry["supports_patch_regions"] is False
+        # DINOv2 and DINOv3 produce patch regions; the others don't.
+        # (EUPE will flip True once its loader is reworked off the broken
+        # AutoModel path onto real facebookresearch/EUPE.)
+        assert entries["dinov2"]["supports_patch_regions"] is True
+        assert entries["dinov3"]["supports_patch_regions"] is True
+        for name in ("siglip", "siglip2", "clip", "eupe"):
+            assert entries[name]["supports_patch_regions"] is False
         # No embedder currently carries a license notice (real-EUPE will set
         # one once its loader is reworked off the broken AutoModel path).
         for entry in entries.values():

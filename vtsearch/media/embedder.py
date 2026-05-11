@@ -591,6 +591,36 @@ class MediaEmbedder(ABC):
         """
         return None
 
+    def patch_forward(self, media: dict) -> Optional["PatchEmbedOutput"]:  # noqa: F821
+        """Return per-patch features for one image.
+
+        Patch-based image encoders (DINOv2, DINOv3, EUPE) override this to
+        return a :class:`~vtsearch.models.patch_regions.PatchEmbedOutput`
+        carrying the CLS vector, the per-patch grid, and a per-patch saliency
+        map.  Single-vector embedders leave the default in place and the
+        loader pipeline skips the patch-region step for their datasets.
+
+        The dataset loader gates calls on :attr:`supports_patch_regions`:
+        if you set that flag ``True``, you must override this method.
+
+        Acquires :attr:`_embed_lock` so the patch forward pass interleaves
+        with single-vector embedders' forward passes on the same lock.
+        Subclasses override :meth:`_patch_forward_impl` (not this method).
+
+        Returns ``None`` if the media can't be loaded.
+        """
+        from vtsearch.models.patch_regions import PatchEmbedOutput  # noqa: F401, PLC0415
+
+        with self._embed_lock:
+            return self._patch_forward_impl(media)
+
+    def _patch_forward_impl(self, media: dict) -> Optional["PatchEmbedOutput"]:  # noqa: F821
+        """Subclass hook for :meth:`patch_forward`.
+
+        Default returns ``None``.  Patch-capable embedders override this.
+        """
+        return None
+
     @property
     def description_wrappers(self) -> list[str]:
         """Wrapper templates for enriching sort descriptions.

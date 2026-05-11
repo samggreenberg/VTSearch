@@ -30,9 +30,12 @@ and in :mod:`vtsearch.models.region_similarity`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import NamedTuple, Optional
+from typing import TYPE_CHECKING, NamedTuple, Optional
 
 import numpy as np
+
+if TYPE_CHECKING:
+    import torch
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +114,57 @@ def _l2_normalize(v: np.ndarray, axis: int = -1, eps: float = 1e-12) -> np.ndarr
     """Return *v* L2-normalised along *axis*."""
     norm = np.linalg.norm(v, axis=axis, keepdims=True)
     return v / np.maximum(norm, eps)
+
+
+# ---------------------------------------------------------------------------
+# Embedder-output adapters
+# ---------------------------------------------------------------------------
+
+
+def hf_vit_to_patch_output(
+    outputs,
+    *,
+    num_register_tokens: int = 0,
+) -> Optional[PatchEmbedOutput]:
+    """Turn a HuggingFace ViT ``ModelOutput`` into a :class:`PatchEmbedOutput`.
+
+    Shared adapter for DINOv2 (``num_register_tokens=0``) and DINOv3
+    (``num_register_tokens=4``).  Expects the token layout
+    ``[CLS, R1..R_k, P1..P_N]`` and a square spatial patch grid.
+
+    ``outputs`` must have ``last_hidden_state`` and ``attentions`` set —
+    pass ``output_attentions=True`` to the model forward call.
+
+    Returns ``None`` if the patch grid isn't square (the loader treats
+    that as "no regions for this image", same as a forward-pass failure).
+    """
+    import torch  # noqa: PLC0415
+
+    hidden = outputs.last_hidden_state[0]  # (T, D)
+    attn = outputs.attentions[-1][0]  # (heads, T, T) — last block
+    skip = 1 + num_register_tokens
+    cls_vec = hidden[0]
+    patch_tokens = hidden[skip:]
+    num_patches = patch_tokens.shape[0]
+    side = int(round(num_patches**0.5))
+    if side * side != num_patches:
+        return None
+    patch_grid = patch_tokens.reshape(side, side, -1)
+    cls_to_patches = attn[:, 0, skip:].mean(dim=0)
+    saliency = cls_to_patches.reshape(side, side)
+    saliency = saliency / torch.clamp(saliency.sum(), min=1e-8)
+    return PatchEmbedOutput(
+        cls_vec=_norm_torch(cls_vec).astype(np.float32),
+        patch_grid=_norm_torch(patch_grid).astype(np.float32),
+        patch_saliency=saliency.detach().cpu().float().numpy().astype(np.float32),
+    )
+
+
+def _norm_torch(t: "torch.Tensor") -> np.ndarray:
+    """L2-normalise a torch tensor along its last axis and return numpy."""
+    v = t.detach().cpu().float().numpy()
+    n = np.linalg.norm(v, axis=-1, keepdims=True)
+    return v / np.maximum(n, 1e-12)
 
 
 @dataclass
