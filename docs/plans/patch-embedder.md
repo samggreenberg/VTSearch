@@ -115,10 +115,18 @@ class RegionVector:
 media["patch_regions"] = [RegionVector, ...]   # index 0 is always full_image (CLS-pooled)
                                                # indices 1..K   are HAC leaves
                                                # indices K+1..  are HAC internals (in build order)
-media["embedding"]      = media["patch_regions"][0].vec.astype(np.float32)   # legacy: full image vector
+media["patch_grid"]    = np.ndarray            # (14, 14, 768) fp16, L2-normalised — pickled
+media["embedding"]     = media["patch_regions"][0].vec.astype(np.float32)   # legacy: full image vector
 ```
 
-Vectors are stored as **float16** in the pickle to keep the dataset size budget tight. With `D = 768`, `~24 vectors/image × 768 × 2 bytes = ~36 KB extra per image` — a 100k-image dataset adds ~3.6 GB. (FP32 storage would have been ~7 GB on the same dataset.) Vectors are cast to float32 when read into RAM and at score time; cosine similarity stays in float32 throughout.
+Vectors are stored as **float16** in the pickle to keep the dataset size budget tight. Two pieces of patch-derived state:
+
+- `patch_regions`: ~24 vectors × 768 dims × 2 bytes ≈ **36 KB / image**.
+- `patch_grid`: 14 × 14 × 768 × 2 bytes ≈ **300 KB / image**.
+
+Total ≈ **336 KB / image**. On a 100k-image dataset that's ~34 GB of extra pickle storage (vs. ~3 GB for `patch_regions` alone). We pay this cost in v1 so that v2 region voting can re-pool the user's box on-the-fly without forcing users to re-import.
+
+Vectors are cast to float32 when read into RAM and at score time; cosine similarity stays in float32 throughout.
 
 Critically, `media["embedding"]` continues to be a single float32 vector and continues to be what the diversity tree, the legacy MLP, sorting, and the existing similarity paths consume. The new field is **additive** — anything that doesn't know about regions just sees the full-image vector and behaves exactly as before.
 
@@ -149,8 +157,8 @@ This is deliberate. "Use the region that triggered the result" misattributes in 
 
 When the user explicitly marks a box on the focus pane and votes against it:
 
-1. **Compute the vote vector on the fly from the patch grid.** Not from any tree node. Take the set of patch cells whose centers fall inside the user's box, attention-weighted-mean their `patch_grid[i, j]` vectors, L2-normalise. That's the vote vector for this vote. We persist the *box* (4 floats), not the vector — the trainer rederives the vector at train time from the pickled `patch_grid`. (We keep the patch grid in the pickle for this exact reason; see "Storage" — concretely, we add `media["patch_grid"]` as a fp16 `(14, 14, 768)` array alongside `patch_regions`. ~590 KB per image at fp16, so ~60 GB on 100k images. Acceptable for v2 if not for v1; see Open Questions.)
-2. **Don't snap to tree nodes.** The HAC tree exists to give *search* a finite set of regions to scan in O(N log N). Voting is a one-off, so on-the-fly computation is fine and gives the user pixel-precision (well, patch-precision) without the "slightly-too-big box jumps to the full-image node" failure mode.
+1. **Compute the vote vector on the fly from the patch grid.** Not from any tree node. Take the set of patch cells whose centers fall inside the user's box, attention-weighted-mean their `media["patch_grid"][i, j]` vectors, L2-normalise. That's the vote vector for this vote. We persist the *box* (4 floats), not the vector — the trainer rederives the vector at train time from the already-pickled `patch_grid` (stored from v1, see "Storage"). No re-import required when v2 ships.
+2. **Don't snap to tree nodes.** The HAC tree exists to give *search* a finite set of regions to scan in O(N log N). Voting is a one-off, so on-the-fly computation is fine and gives the user patch-precision without the "slightly-too-big box jumps to the full-image node" failure mode.
 3. **Display-time snapping is different.** When we draw the matched-region outline on a search-result card, we *do* snap to the best-IoU tree node, because the user isn't designating anything there — we're just showing them which scale won.
 
 V2 adds an optional `region_box: (x0, y0, x1, y1)` to `LabeledElement`. Absent → image-level (the v1 default and the forever-legacy fallback).
@@ -236,16 +244,22 @@ New: `tests/test_patch_embedder.py`:
 
 This is a feature addition, not a breaking change.
 
+## Pre-implementation experiments
+
+Run these **before** we ship v1, on the `caltech101_s` demo dataset (a sensible mix of single-object and multi-object scenes). Keep the experiment code generic so we can re-run any of them on a different dataset later — none of these bake in caltech101_s as a magic string in production code.
+
+1. **PE-Core (EUPE) attention extraction probe.** Verify that calling `ImageEupeEmbedder._model(**inputs, output_attentions=True)` actually returns final-block attentions with the expected `(batch, heads, tokens, tokens)` shape, with token 0 being the CLS. Meta's PE-Core uses `trust_remote_code=True` with custom modeling code that may not honour the HF attention contract. If it doesn't expose attention cleanly: patch the custom modeling locally, OR fall back to a self-affinity saliency for EUPE only. Resolve before committing to `PatchEmbedOutput.patch_saliency` as a hard requirement for both backbones.
+2. **K and HAC affinity α sweep.** On caltech101_s, build region trees at `K ∈ {8, 12, 16}` and `α ∈ {0.3, 0.5, 0.7}` (nine configs). Eyeball overlays of leaf and internal-node boxes on a sampled ~30 images, looking for: leaves that cleanly capture distinct objects/parts, internals that correspond to meaningful unions (whole animal, whole face, etc.), and merges that aren't dominated by background. Pick the best `(K, α)` and lock it in. Done by hand — no need for an automated metric in v1.
+3. **Diversity-tree sanity check.** On caltech101_s, build the diversity tree using CLS-pooled DINOv3 vectors (vs. CLS-pooled SigLIP today) and verify the top-level clusters look semantically sensible (e.g. animals vs. vehicles vs. faces). Pass/fail is "look at the cluster previews and the top-level groupings look right" — not a hard metric.
+
+These all run in a single throwaway script (or notebook), check results visually, then we delete the script.
+
 ## Open questions
 
-1. **Leaf count K** — 8, 12, or 16? Picks the per-image vector budget (`2K−1+1` plus optional patch grid). Decide on a small empirical sweep on a representative dataset before locking it in.
-2. **HAC affinity α** — `α · cosine + (1−α) · spatial_adjacency`. Same sweep as K. Pure-cosine merges visually-similar but spatially-distant regions (two faces in a crowd); pure-adjacency merges anything that touches; right answer is somewhere in between.
-3. **Store the raw patch grid?** Required for v2 region voting (we re-pool the user's box at training time). At fp16 it's ~590 KB per image. **Recommendation**: don't store it in v1 (saves ~60 GB on a 100k dataset); start storing it in v2 alongside the region-vote UI. Image embedding is reproducible, so a v2 user with a v1 pickle can re-import to get the grid.
-4. **PE-Core attention extraction** — EUPE / Perception Encoder uses `trust_remote_code=True` with custom modeling. We need to verify `output_attentions=True` actually returns final-block attentions in the expected layout, since custom code can deviate from the HF convention. **Verify on first implementation; if it doesn't, we either patch the custom modeling locally or fall back to a self-affinity saliency for EUPE only.** Worth a 30-minute probe before we commit to the protocol.
-5. **FP16 ↔ FP32 numerical effect** — cosine similarity at fp16 storage / fp32 compute is fine for retrieval, but cross-check that the max-over-region rule doesn't flip rank vs. fp32-storage on a held-out batch. Cheap, low-risk; just don't skip it.
+1. **FP16 ↔ FP32 numerical effect** — cosine similarity at fp16 storage / fp32 compute is fine for retrieval, but cross-check that the max-over-region rule doesn't flip rank vs. fp32-storage on a held-out batch. Cheap, low-risk; just don't skip it.
 
 ## Phasing
 
-- **v1 (this plan):** `supports_patch_regions` flag on `MediaEmbedder`; DINOv3 and EUPE both upgraded to populate `patch_regions` (HAC tree, fp16 in pickle); `PatchEmbedOutput` protocol; max-region similarity; region-aware MLP scoring (image-level training and image-level voting unchanged); gallery-card region highlight. Text sort stays grey via the already-shipped `supports_text` gate.
-- **v2:** region voting (click two corners on the focus pane); store `media["patch_grid"]` in the pickle for new datasets to support on-the-fly vote-vector computation; optional `LabeledElement.region_box`; region-level training examples; per-region label export.
+- **v1 (this plan):** `supports_patch_regions` flag on `MediaEmbedder`; DINOv3 and EUPE both upgraded to populate `patch_regions` and `patch_grid` (HAC tree + raw 14×14 patch grid, fp16 in pickle); `PatchEmbedOutput` protocol; max-region similarity; region-aware MLP scoring (image-level training and image-level voting unchanged); gallery-card region highlight. Text sort stays grey via the already-shipped `supports_text` gate. Pre-implementation experiments run on `caltech101_s` and inform `K`, `α`, and the EUPE attention path.
+- **v2:** region voting (click two corners on the focus pane); on-the-fly vote-vector computation from the v1-pickled `patch_grid` (no re-import needed); optional `LabeledElement.region_box`; region-level training examples; per-region label export.
 - **v3:** one text embedder + one patch embedder per dataset (text queries → text embedder; region similarity / votes → patch embedder). Requires a real schema change (`media["embeddings"]` dict, `media["patch_regions"]` dict). Gets its own design doc when we get there.
