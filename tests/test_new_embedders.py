@@ -52,7 +52,7 @@ class TestImageSiglipEmbedderProperties:
 
         emb = ImageSiglipEmbedder()
         d = emb.to_dict()
-        assert d == {"name": "siglip", "media_type_id": "image"}
+        assert d == {"name": "siglip", "media_type_id": "image", "supports_text": True}
 
     def test_load_models_idempotent(self):
         from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
@@ -140,7 +140,7 @@ class TestAudioClapMusicEmbedderProperties:
 
         emb = AudioClapMusicEmbedder()
         d = emb.to_dict()
-        assert d == {"name": "clap_music", "media_type_id": "audio"}
+        assert d == {"name": "clap_music", "media_type_id": "audio", "supports_text": True}
 
     def test_load_models_idempotent(self):
         from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
@@ -215,7 +215,7 @@ class TestTextBGEEmbedderProperties:
 
         emb = TextBGEEmbedder()
         d = emb.to_dict()
-        assert d == {"name": "bge", "media_type_id": "text"}
+        assert d == {"name": "bge", "media_type_id": "text", "supports_text": True}
 
     def test_load_models_idempotent(self):
         from vtsearch.media.text.embedder_bge import TextBGEEmbedder
@@ -337,7 +337,7 @@ class TestVideoLanguageBindEmbedderProperties:
 
         emb = VideoLanguageBindEmbedder()
         d = emb.to_dict()
-        assert d == {"name": "languagebind", "media_type_id": "video"}
+        assert d == {"name": "languagebind", "media_type_id": "video", "supports_text": True}
 
     def test_load_models_idempotent(self):
         from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
@@ -489,10 +489,12 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import all_embedders_dict
 
         dicts = all_embedders_dict()
-        assert len(dicts) == 7
+        # 7 original + 4 new image embedders.
+        assert len(dicts) == 11
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
+            assert "supports_text" in d
 
 
 class TestEmbedderSentinelDiscovery:
