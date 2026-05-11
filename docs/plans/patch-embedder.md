@@ -2,13 +2,29 @@
 
 ## Status of related work
 
-A sibling branch (`claude/add-image-embedders-tgQ6m`) is landing **CLS-pooled** DINOv3 and EUPE (Meta Perception Encoder) as plain image embedders in the existing registry, plus the `MediaEmbedder.supports_text` capability flag and a `POST /api/sort` short-circuit that returns 400 + `supports_text: false` when the active embedder can't embed text. The frontend's sort bar already greys the text-sort affordance using that signal.
+CLS-pooled DINOv3 and EUPE (Meta Perception Encoder) landed in dev via PR #1250 as plain image embedders in the existing registry, alongside the `MediaEmbedder.supports_text` capability flag and a `POST /api/sort` short-circuit that returns 400 + `supports_text: false` when the active embedder can't embed text. The frontend's sort bar already greys the text-sort affordance using that signal.
 
 **This plan upgrades those two embedders from single-CLS-vector to producing a hierarchical region set per image.** Everything below assumes:
 
-- `vtsearch/media/image/embedder_dinov3.py::ImageDinov3Embedder` (slug `dinov3`) — backbone `facebook/dinov3-vitb16-pretrain-lvd1689m` (ViT-B/16, 224² input, 14×14 = 196 patches, 768-dim).
-- `vtsearch/media/image/embedder_eupe.py::ImageEupeEmbedder` (slug `eupe`) — backbone `facebook/PE-Core-B16-224` (ViT-B/16, 224² input, 14×14 patches, 768-dim, loaded with `trust_remote_code=True`).
+- `vtsearch/media/image/embedder_dinov3.py::ImageDinov3Embedder` (slug `dinov3`) — backbone `facebook/dinov3-vitb16-pretrain-lvd1689m` (ViT-B/16, 224² input, 14×14 = 196 patches, 768-dim). Standard HF transformers ViT; attention extraction via `output_attentions=True`.
+- `vtsearch/media/image/embedder_eupe.py::ImageEupeEmbedder` (slug `eupe`) — backbone needs to change. **See "EUPE loader rework" below.** Target architecture: PE-Core-B/16-224 (ViT-B/16, 224² input, 14×14 patches, 768-dim).
 - `MediaEmbedder.supports_text` already exists. We add `MediaEmbedder.supports_patch_regions: bool = False` as a sibling capability flag; DINOv3 and EUPE flip it to `True`.
+
+### EUPE loader rework (required before patch features land)
+
+The current dev EUPE embedder calls `AutoModel.from_pretrained("facebook/PE-Core-B16-224", trust_remote_code=True)`. **This load path is broken end-to-end** — verified by static probe (see "Pre-implementation experiments"). The HF repo contains only the raw `.pt` weights, a README, and an empty `config.yaml`; there is no `config.json`, no `auto_map`, no modeling code, so `AutoModel.from_pretrained` fails immediately with `ValueError: Unrecognized model in facebook/PE-Core-B16-224`. The dev tests only check class properties (`name`, `media_type_id`, `supports_text`, `to_dict`, registry-presence); nothing exercises the real load. So EUPE is unused dead-code in dev today, and we have to fix it before patch features can land on top.
+
+**Switch to `open_clip_torch` for EUPE.** open_clip 3.3.0 ships PE-Core in its registry under provider "meta" (`PE-Core-B-16`, `PE-Core-L-14-336`, etc.). The `timm/PE-Core-B-16` HF mirror is ungated (Apache-2.0) and is in `open_clip`'s default lookup list, so the loader becomes:
+
+```python
+import open_clip
+self._model, _, self._preprocess = open_clip.create_model_and_transforms(
+    "PE-Core-B-16",
+    pretrained=None,   # or "hf-hub:timm/PE-Core-B-16" when we want a pinned source
+)
+```
+
+`open_clip_torch` joins `requirements-image-embedders.txt`. The fix lands as part of this PR — we're already touching `embedder_eupe.py`, and there's no value shipping patch features on top of an embedder that doesn't load.
 
 ## Motivation
 
@@ -37,7 +53,7 @@ This document covers the first patch-based embedders for image media. The same m
 | Input resolution | 224² | 224² |
 | Per-patch token output | Yes — 14×14 grid | Yes — 14×14 grid |
 | CLS token | Yes | Yes |
-| CLS→patch attention available | Yes (standard ViT attention) | Yes (custom modeling, `trust_remote_code=True`; attentions exposed via `output_attentions=True` — verify in implementation) |
+| CLS→patch attention available | Yes (standard HF ViT — pass `output_attentions=True`, take `outputs.attentions[-1][0, :, 0, 1:].mean(0).reshape(14, 14)`) | Yes (open_clip `nn.MultiheadAttention` on `model.visual.transformer.resblocks[-1].attn` — monkey-patch with `need_weights=True, average_attn_weights=False`, then `attn[0, :, 0, 1:].mean(0).reshape(14, 14)`. Pattern verified on a small-CLIP proxy.) |
 | Embedding dim | 768 | 768 |
 | `supports_text` | False | False |
 
@@ -209,7 +225,10 @@ This is a real schema change with implications for every loader/exporter and for
 
 ## Backend integration points
 
-- **Embedder upgrades**: `vtsearch/media/image/embedder_dinov3.py` and `vtsearch/media/image/embedder_eupe.py` gain `supports_patch_regions = True` and a `_patch_forward(image) -> PatchEmbedOutput` method that runs one forward pass with `output_attentions=True` and returns CLS / patch grid / saliency.
+- **Embedder upgrades**:
+  - `vtsearch/media/image/embedder_dinov3.py` gains `supports_patch_regions = True` and a `_patch_forward(image) -> PatchEmbedOutput` method that runs one forward pass with `output_attentions=True` and returns CLS / patch grid / saliency. Already loads via standard HF transformers, so no loader rework.
+  - `vtsearch/media/image/embedder_eupe.py` is **rewritten** to use `open_clip_torch` (replaces the broken `AutoModel + trust_remote_code` path; see "EUPE loader rework"). The new loader uses `open_clip.create_model_and_transforms("PE-Core-B-16")`. The new `_patch_forward` monkey-patches the last resblock's `attn.forward` to capture attention weights and reads patch tokens from `model.visual.forward_features` (or its open_clip equivalent on the loaded class — to confirm at implementation time). Gains `supports_patch_regions = True`.
+  - `requirements-image-embedders.txt` gains `open_clip_torch>=3.3.0`. `EUPE_MODEL_ID` in `vtsearch/config.py` changes from `"facebook/PE-Core-B16-224"` to `"PE-Core-B-16"` (the open_clip registry name) — or we drop the constant entirely and inline the registry name in `embedder_eupe.py` since it's no longer a HF repo path.
 - **Capability flag**: `MediaEmbedder.supports_patch_regions: bool = False` lives next to `supports_text` in `vtsearch/media/embedder.py`. The metadata dict returned by `MediaEmbedder.to_dict()` surfaces it under `supports_patch_regions`, matching the `supports_text` convention already in place.
 - **Region builder**: new module `vtsearch/models/patch_regions.py` — pure functions `propose_leaves(patch_grid, saliency, k) -> list[Leaf]` and `build_hac_tree(leaves, alpha) -> list[RegionVector]`. No torch dependency; takes numpy arrays.
 - **Loader hook**: `vtsearch/datasets/loader_pickle.py` and `loader_folder.py` already call `embedder.embed_media`/`embed_media_bulk`. We add a sibling pass that, *only if `embedder.supports_patch_regions`*, runs `_patch_forward` and `build_hac_tree`, then stores `media["patch_regions"]` (and in v2, also `media["patch_grid"]`).
@@ -248,7 +267,9 @@ This is a feature addition, not a breaking change.
 
 Run these **before** we ship v1, on the `caltech101_s` demo dataset (a sensible mix of single-object and multi-object scenes). Keep the experiment code generic so we can re-run any of them on a different dataset later — none of these bake in caltech101_s as a magic string in production code.
 
-1. **PE-Core (EUPE) attention extraction probe.** Verify that calling `ImageEupeEmbedder._model(**inputs, output_attentions=True)` actually returns final-block attentions with the expected `(batch, heads, tokens, tokens)` shape, with token 0 being the CLS. Meta's PE-Core uses `trust_remote_code=True` with custom modeling code that may not honour the HF attention contract. If it doesn't expose attention cleanly: patch the custom modeling locally, OR fall back to a self-affinity saliency for EUPE only. Resolve before committing to `PatchEmbedOutput.patch_saliency` as a hard requirement for both backbones.
+1. **PE-Core (EUPE) attention extraction probe — DONE (results below).**
+   - **Static finding**: `AutoModel.from_pretrained("facebook/PE-Core-B16-224", ...)` fails with `ValueError: Unrecognized model … Should have a 'model_type' key in its config.json`. The HF repo has no `config.json`, no modeling code. The dev embedder's load path is dead code; tests don't exercise it. Fix this in the same PR — see "EUPE loader rework".
+   - **Runtime finding (proxy)**: open_clip 3.3.0 ships PE-Core in its registry under provider "meta" (5 PE-Core variants visible via `open_clip.list_pretrained()`). Verified on a smaller open_clip ViT-B-32 standard CLIP (~150 MB, downloaded fast) that the CLIP-arch attention extraction pattern works: monkey-patching `model.visual.transformer.resblocks[-1].attn.forward` with `need_weights=True, average_attn_weights=False` returns a `(1, heads, tokens, tokens)` tensor. Token 0 is CLS; the remaining tokens are patches in row-major order. CLS→patch saliency on a centered-bright-square test image peaked at the centered cell `(3, 3)` of the 7×7 grid — exactly correct. The same pattern will work on `PE-Core-B-16` and yield `(1, 12, 197, 197)` at 224². No need to download the full 1.8 GB PE-Core weights to validate further; we have the API contract.
 2. **K and HAC affinity α sweep.** On caltech101_s, build region trees at `K ∈ {8, 12, 16}` and `α ∈ {0.3, 0.5, 0.7}` (nine configs). Eyeball overlays of leaf and internal-node boxes on a sampled ~30 images, looking for: leaves that cleanly capture distinct objects/parts, internals that correspond to meaningful unions (whole animal, whole face, etc.), and merges that aren't dominated by background. Pick the best `(K, α)` and lock it in. Done by hand — no need for an automated metric in v1.
 3. **Diversity-tree sanity check.** On caltech101_s, build the diversity tree using CLS-pooled DINOv3 vectors (vs. CLS-pooled SigLIP today) and verify the top-level clusters look semantically sensible (e.g. animals vs. vehicles vs. faces). Pass/fail is "look at the cluster previews and the top-level groupings look right" — not a hard metric.
 
