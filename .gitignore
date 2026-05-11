@@ -43,3 +43,7 @@ vtsearch/_version.txt
 # (model_cache/.gitkeep is tracked so the dir exists for the Dockerfile COPY.)
 model_cache/*
 !model_cache/.gitkeep
+
+# Per-user Claude Code settings overlay — holds secrets like HF_TOKEN.
+# Must never be committed.
+.claude/settings.local.json
