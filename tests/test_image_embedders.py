@@ -39,6 +39,7 @@ class TestImageClipEmbedder:
             "media_type_id": "image",
             "supports_text": True,
             "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_registered_in_registry(self):
@@ -108,6 +109,7 @@ class TestImageSiglip2Embedder:
             "media_type_id": "image",
             "supports_text": True,
             "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_registered_in_registry(self):
@@ -167,6 +169,7 @@ class TestImageDinov2Embedder:
             "media_type_id": "image",
             "supports_text": False,
             "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_embed_text_returns_none(self):
@@ -233,6 +236,7 @@ class TestImageDinov3Embedder:
             "media_type_id": "image",
             "supports_text": False,
             "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_embed_text_returns_none(self):
@@ -297,6 +301,7 @@ class TestImageEupeEmbedder:
             "media_type_id": "image",
             "supports_text": False,
             "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_embed_text_returns_none(self):
@@ -336,19 +341,25 @@ class TestApiEmbeddersResponseShape:
         entries = {e["name"]: e for e in body["embedders"]}
         # All six image embedders must be present.
         assert set(entries) == {"siglip", "siglip2", "clip", "dinov2", "dinov3", "eupe"}
-        # supports_text and supports_patch_regions must be bool on every entry.
+        # Shape: every entry has the three capability fields, with bool /
+        # Optional[str] types.
         for entry in entries.values():
             assert isinstance(entry["supports_text"], bool)
             assert isinstance(entry["supports_patch_regions"], bool)
+            assert entry["license_notice"] is None or isinstance(entry["license_notice"], str)
         # Specific expectations.
         assert entries["siglip"]["supports_text"] is True
         assert entries["dinov2"]["supports_text"] is False
         assert entries["dinov3"]["supports_text"] is False
         assert entries["eupe"]["supports_text"] is False
         # No image embedder currently produces patch regions (will flip True
-        # for dinov3 / eupe once their _patch_forward path lands).
+        # for the patch embedders once their _patch_forward path lands).
         for entry in entries.values():
             assert entry["supports_patch_regions"] is False
+        # No embedder currently carries a license notice (real-EUPE will set
+        # one once its loader is reworked off the broken AutoModel path).
+        for entry in entries.values():
+            assert entry["license_notice"] is None
 
 
 class TestSortRouteRejectsTextWhenUnsupported:

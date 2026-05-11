@@ -443,13 +443,27 @@ class MediaEmbedder(ABC):
     def supports_patch_regions(self) -> bool:
         """Whether this embedder produces patch-level vectors and a region tree.
 
-        Patch-based image encoders (DINOv3, EUPE) return ``True``; the dataset
-        loader then asks them for a :class:`PatchEmbedOutput` per image and
-        stores a hierarchical region set plus the raw patch grid alongside the
-        usual ``media["embedding"]``.  Single-vector embedders return
+        Patch-based image encoders (DINOv2, DINOv3, EUPE) return ``True``; the
+        dataset loader then asks them for a :class:`PatchEmbedOutput` per image
+        and stores a hierarchical region set plus the raw patch grid alongside
+        the usual ``media["embedding"]``.  Single-vector embedders return
         ``False`` and the patch-region pipeline is skipped entirely.
         """
         return False
+
+    @property
+    def license_notice(self) -> Optional[str]:
+        """User-facing licence warning shown before a user selects this embedder.
+
+        ``None`` (the default) means the embedder has no special licensing
+        constraints worth surfacing.  Embedders distributed under a research-
+        only or otherwise-restrictive licence (e.g. facebookresearch/EUPE under
+        the FAIR Noncommercial Research Licence) return a short human-readable
+        string the UI shows on the embedder picker so users know before they
+        produce any outputs.  This is *advisory* — there is no acceptance
+        click; users who object pick a different embedder.
+        """
+        return None
 
     # ------------------------------------------------------------------
     # Model lifecycle
@@ -622,4 +636,5 @@ class MediaEmbedder(ABC):
             "media_type_id": self.media_type_id,
             "supports_text": self.supports_text,
             "supports_patch_regions": self.supports_patch_regions,
+            "license_notice": self.license_notice,
         }

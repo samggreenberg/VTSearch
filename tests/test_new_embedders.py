@@ -57,6 +57,7 @@ class TestImageSiglipEmbedderProperties:
             "media_type_id": "image",
             "supports_text": True,
             "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_load_models_idempotent(self):
@@ -150,6 +151,7 @@ class TestAudioClapMusicEmbedderProperties:
             "media_type_id": "audio",
             "supports_text": True,
             "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_load_models_idempotent(self):
@@ -230,6 +232,7 @@ class TestTextBGEEmbedderProperties:
             "media_type_id": "text",
             "supports_text": True,
             "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_load_models_idempotent(self):
@@ -357,6 +360,7 @@ class TestVideoLanguageBindEmbedderProperties:
             "media_type_id": "video",
             "supports_text": True,
             "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_load_models_idempotent(self):
@@ -517,6 +521,7 @@ class TestAllEmbeddersRegistration:
             assert "media_type_id" in d
             assert "supports_text" in d
             assert "supports_patch_regions" in d
+            assert "license_notice" in d
 
 
 class TestEmbedderSentinelDiscovery:
