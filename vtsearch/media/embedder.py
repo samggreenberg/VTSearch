@@ -439,6 +439,18 @@ class MediaEmbedder(ABC):
         """
         return True
 
+    @property
+    def supports_patch_regions(self) -> bool:
+        """Whether this embedder produces patch-level vectors and a region tree.
+
+        Patch-based image encoders (DINOv3, EUPE) return ``True``; the dataset
+        loader then asks them for a :class:`PatchEmbedOutput` per image and
+        stores a hierarchical region set plus the raw patch grid alongside the
+        usual ``media["embedding"]``.  Single-vector embedders return
+        ``False`` and the patch-region pipeline is skipped entirely.
+        """
+        return False
+
     # ------------------------------------------------------------------
     # Model lifecycle
     # ------------------------------------------------------------------
@@ -609,4 +621,5 @@ class MediaEmbedder(ABC):
             "name": self.name,
             "media_type_id": self.media_type_id,
             "supports_text": self.supports_text,
+            "supports_patch_regions": self.supports_patch_regions,
         }

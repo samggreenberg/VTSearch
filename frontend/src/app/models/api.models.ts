@@ -554,6 +554,13 @@ export interface EmbedderInfo {
    * — the UI hides text-search affordances for datasets using them.
    */
   supports_text?: boolean;
+  /**
+   * Whether this embedder produces patch-level vectors and a hierarchical
+   * region tree per image. ``true`` for patch-based encoders (DINOv3, EUPE)
+   * once their patch pipeline lands; the gallery card draws a faint outline
+   * over the matched region for datasets using them.
+   */
+  supports_patch_regions?: boolean;
 }
 
 export interface EmbeddersResponse {

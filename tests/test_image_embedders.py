@@ -38,6 +38,7 @@ class TestImageClipEmbedder:
             "name": "clip",
             "media_type_id": "image",
             "supports_text": True,
+            "supports_patch_regions": False,
         }
 
     def test_registered_in_registry(self):
@@ -106,6 +107,7 @@ class TestImageSiglip2Embedder:
             "name": "siglip2",
             "media_type_id": "image",
             "supports_text": True,
+            "supports_patch_regions": False,
         }
 
     def test_registered_in_registry(self):
@@ -164,6 +166,7 @@ class TestImageDinov2Embedder:
             "name": "dinov2",
             "media_type_id": "image",
             "supports_text": False,
+            "supports_patch_regions": False,
         }
 
     def test_embed_text_returns_none(self):
@@ -229,6 +232,7 @@ class TestImageDinov3Embedder:
             "name": "dinov3",
             "media_type_id": "image",
             "supports_text": False,
+            "supports_patch_regions": False,
         }
 
     def test_embed_text_returns_none(self):
@@ -292,6 +296,7 @@ class TestImageEupeEmbedder:
             "name": "eupe",
             "media_type_id": "image",
             "supports_text": False,
+            "supports_patch_regions": False,
         }
 
     def test_embed_text_returns_none(self):
@@ -331,14 +336,19 @@ class TestApiEmbeddersResponseShape:
         entries = {e["name"]: e for e in body["embedders"]}
         # All six image embedders must be present.
         assert set(entries) == {"siglip", "siglip2", "clip", "dinov2", "dinov3", "eupe"}
-        # supports_text must be a bool on every entry.
+        # supports_text and supports_patch_regions must be bool on every entry.
         for entry in entries.values():
             assert isinstance(entry["supports_text"], bool)
+            assert isinstance(entry["supports_patch_regions"], bool)
         # Specific expectations.
         assert entries["siglip"]["supports_text"] is True
         assert entries["dinov2"]["supports_text"] is False
         assert entries["dinov3"]["supports_text"] is False
         assert entries["eupe"]["supports_text"] is False
+        # No image embedder currently produces patch regions (will flip True
+        # for dinov3 / eupe once their _patch_forward path lands).
+        for entry in entries.values():
+            assert entry["supports_patch_regions"] is False
 
 
 class TestSortRouteRejectsTextWhenUnsupported:
