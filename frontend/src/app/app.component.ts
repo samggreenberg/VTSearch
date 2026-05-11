@@ -12,6 +12,7 @@ import { ActiveContextService } from './services/active-context.service';
 import { TopBarStateService } from './services/top-bar-state.service';
 import { AuthService } from './services/auth.service';
 import { AchievementsService } from './services/achievements.service';
+import { ThemeService } from './services/theme.service';
 @Component({
   selector: 'app-root',
   imports: [CommonModule, RouterOutlet, DialogHostComponent, AchievementUnlockHostComponent, SettingsModalComponent, LoginComponent],
@@ -36,9 +37,11 @@ export class AppComponent {
     public topBarState: TopBarStateService,
     public auth: AuthService,
     private achievements: AchievementsService,
+    private themeService: ThemeService,
   ) {
     this.auth.checkStatus();
     this.achievements.refresh();
+    this.themeService.loadFromSettings();
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
