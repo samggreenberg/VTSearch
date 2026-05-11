@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AchievementBadgeComponent } from '../achievement-badge/achievement-badge.component';
-import { IconComponent } from '../icon/icon.component';
 import {
   AchievementInfo,
   AchievementsService,
@@ -22,7 +21,7 @@ interface AchievementRow extends AchievementInfo {
 @Component({
   selector: 'vt-achievements-tab',
   standalone: true,
-  imports: [CommonModule, AchievementBadgeComponent, IconComponent],
+  imports: [CommonModule, AchievementBadgeComponent],
   templateUrl: './achievements-tab.component.html',
   styleUrl: './achievements-tab.component.scss',
 })
