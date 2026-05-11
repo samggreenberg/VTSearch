@@ -415,13 +415,40 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import all_embedders
 
         embedders = all_embedders()
-        assert len(embedders) == 7
+        # 7 original + 4 new image embedders (clip, siglip2, dinov3, pe).
+        assert len(embedders) == 11
+
+    def test_all_embedders_dict_includes_supports_text(self):
+        """The new ``supports_text`` flag must round-trip through ``to_dict``
+        so the frontend can hide text-search UI for vision-only embedders."""
+        from vtsearch.media import all_embedders_dict
+
+        dicts = all_embedders_dict()
+        by_name = {d["name"]: d for d in dicts}
+        # Cross-modal embedders advertise text support.
+        for name in ("siglip", "siglip2", "clip", "clap", "xclip"):
+            assert by_name[name]["supports_text"] is True, name
+        # Vision-only / patch-based embedders do not.
+        for name in ("dinov3", "pe"):
+            assert by_name[name]["supports_text"] is False, name
 
     def test_all_expected_names_present(self):
         from vtsearch.media import all_embedders
 
         names = {e.name for e in all_embedders()}
-        expected = {"clap", "clap_music", "siglip", "e5", "bge", "xclip", "languagebind"}
+        expected = {
+            "clap",
+            "clap_music",
+            "siglip",
+            "siglip2",
+            "clip",
+            "dinov3",
+            "pe",
+            "e5",
+            "bge",
+            "xclip",
+            "languagebind",
+        }
         assert names == expected
 
     def test_embedders_for_audio(self):
@@ -434,7 +461,17 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("image")}
-        assert names == {"siglip"}
+        assert names == {"siglip", "siglip2", "clip", "dinov3", "pe"}
+
+    def test_siglip_is_still_default_image_embedder(self):
+        """SigLIP must remain the first (default) image embedder so callers
+        using ``embedders_for_type('image')[0]`` keep the historical default
+        even after the new image embedders land."""
+        from vtsearch.media import embedders_for_type
+
+        ordered = embedders_for_type("image")
+        assert ordered[0].name == "siglip"
+        assert ordered[0].is_default is True
 
     def test_embedders_for_text(self):
         from vtsearch.media import embedders_for_type

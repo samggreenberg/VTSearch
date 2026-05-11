@@ -137,6 +137,29 @@ def sort_clips():
         text_vec = embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder_name)
         if text_vec is None:
             update_sort_progress("idle")
+            # Distinguish "embedder lacks text support" (a permanent property of
+            # the active embedder, e.g. DINOv3 / Perception Encoder) from
+            # "text embedding failed at runtime" — the former is what the
+            # frontend uses to hide text-search UI affordances.
+            try:
+                from vtsearch.media import get_embedder  # noqa: PLC0415
+
+                emb = get_embedder(embedder_name) if embedder_name else None
+            except KeyError:
+                emb = None
+            if emb is not None and not emb.supports_text:
+                return (
+                    jsonify(
+                        {
+                            "error": (
+                                f"Embedder '{emb.name}' does not support text queries. "
+                                "Use learned sort or load a saved sort instead."
+                            ),
+                            "supports_text": False,
+                        }
+                    ),
+                    400,
+                )
             return jsonify({"error": f"Could not embed text for media type {media_type}"}), 500
 
         update_sort_progress("sorting", "Computing similarities…", 2, total_steps)

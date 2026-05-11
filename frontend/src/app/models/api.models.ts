@@ -14,6 +14,8 @@ export interface MediaItem {
   clip_end?: number;
   clip_index?: number;
   clip_box?: number[];
+  /** Name of the embedder that produced this media's vector. */
+  embedder?: string;
 }
 
 export interface TextResponse {
@@ -546,6 +548,12 @@ export interface AutoDetectResultsData {
 export interface EmbedderInfo {
   name: string;
   media_type_id: string;
+  /**
+   * Whether this embedder can embed text queries into the same vector space as
+   * its media. ``false`` for vision-only encoders (DINOv3, Perception Encoder)
+   * — the UI hides text-search affordances for datasets using them.
+   */
+  supports_text?: boolean;
 }
 
 export interface EmbeddersResponse {

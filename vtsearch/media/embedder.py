@@ -427,6 +427,18 @@ class MediaEmbedder(ABC):
         """
         return False
 
+    @property
+    def supports_text(self) -> bool:
+        """Whether this embedder can embed text queries into the same vector space.
+
+        Cross-modal embedders (CLIP, SigLIP, CLAP, X-CLIP) return ``True`` so
+        features like text search and description-enrichment are offered.
+        Vision-only or patch-based encoders (DINOv3, Perception Encoder) return
+        ``False`` — :meth:`embed_text` will not produce meaningful vectors and
+        the UI should hide text-search affordances for datasets using them.
+        """
+        return True
+
     # ------------------------------------------------------------------
     # Model lifecycle
     # ------------------------------------------------------------------
@@ -596,4 +608,5 @@ class MediaEmbedder(ABC):
         return {
             "name": self.name,
             "media_type_id": self.media_type_id,
+            "supports_text": self.supports_text,
         }

@@ -241,6 +241,8 @@ def list_medias() -> Response:
             media_data["origin_name"] = c["origin_name"]
         if "description" in c:
             media_data["description"] = c["description"]
+        if c.get("embedder"):
+            media_data["embedder"] = c["embedder"]
         # Include clip metadata so the frontend can trim playback / display.
         for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
             if clip_key in c:
@@ -303,6 +305,8 @@ def batch_medias() -> tuple[Response, int] | Response:
             media_data["origin_name"] = c["origin_name"]
         if "description" in c:
             media_data["description"] = c["description"]
+        if c.get("embedder"):
+            media_data["embedder"] = c["embedder"]
         for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
             if clip_key in c:
                 media_data[clip_key] = c[clip_key]

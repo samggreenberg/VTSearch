@@ -1,0 +1,146 @@
+# -----------------------------------------------------------------
+# VTSearch — All-image-embedders CPU image
+#
+# Bundles every supported image embedder (SigLIP, SigLIP 2, CLIP, DINOv3,
+# Meta Perception Encoder) and bakes their weights into the image at build
+# time so the container is ready to serve immediately on first run.
+#
+# SigLIP remains the default — it's marked is_default=True on the
+# embedder class and is the only entry in `autoload_media_embedders`
+# seeded into the default settings below. The other four are
+# *available* (selectable from the importer UI / dataset registry) but
+# do not warm at startup, keeping cold-start RAM low.
+#
+# DINOv3 and Perception Encoder are vision-only — they do not embed
+# text, so the UI hides the "Text sort" affordance for datasets
+# embedded with them (see MediaEmbedder.supports_text).
+#
+# Build:  docker build -f Dockerfile.image-embedders -t vtsearch:image-embedders .
+# Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:image-embedders
+#
+# Build args:
+#   * VTSEARCH_VERSION  — bake a version string into the image
+#   * HF_TOKEN          — optional; required to pre-download gated models
+#                         (DINOv3 and PE are gated on Hugging Face). Pass with
+#                         --secret id=hf_token,env=HF_TOKEN and BuildKit.
+# -----------------------------------------------------------------
+
+FROM python:3.10-slim AS base
+
+WORKDIR /app
+
+# ---------- dependency layer (cached unless requirements*.txt change) ------
+COPY requirements-image-embedders.txt ./
+COPY pyproject.toml ./
+COPY vtsearch/__init__.py vtsearch/__init__.py
+
+# Copy package source so `pip install -e .` finds it.
+COPY vtsearch/ vtsearch/
+
+RUN pip install --no-cache-dir --upgrade pip setuptools && \
+    pip install --no-cache-dir \
+        --prefer-binary \
+        -r requirements-image-embedders.txt && \
+    pip install --no-cache-dir --no-deps -e .
+
+# ---------- pre-download every image embedder's weights ------------------
+# Bake weights into a non-volume path so they survive volume mounts on
+# /app/data. The app reads MODELS_CACHE_DIR from VTSEARCH_MODELS_DIR.
+#
+# Each block is a separate RUN so a transient HF outage on one model
+# doesn't invalidate the layers above it. PYTHONUNBUFFERED + python -u +
+# flushed prints surface progress in BuildKit's UI.
+# HF_HUB_DOWNLOAD_TIMEOUT makes a stalled connection error out (and
+# huggingface_hub auto-retry) instead of blocking the build forever.
+ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models \
+    HF_HUB_DOWNLOAD_TIMEOUT=120 \
+    PYTHONUNBUFFERED=1
+RUN mkdir -p "$VTSEARCH_MODELS_DIR"
+
+# SigLIP (default).
+RUN python -u -c "import os; \
+from vtsearch.config import SIGLIP_MODEL_ID; \
+cache=os.environ['VTSEARCH_MODELS_DIR']; \
+print(f'Pre-downloading {SIGLIP_MODEL_ID} to {cache}', flush=True); \
+from transformers import SiglipModel, SiglipImageProcessor, SiglipTokenizer; \
+SiglipModel.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache); \
+SiglipImageProcessor.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache); \
+SiglipTokenizer.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache); \
+print('SigLIP weights cached.', flush=True)"
+
+# SigLIP 2.
+RUN python -u -c "import os; \
+from vtsearch.config import SIGLIP2_MODEL_ID; \
+cache=os.environ['VTSEARCH_MODELS_DIR']; \
+print(f'Pre-downloading {SIGLIP2_MODEL_ID} to {cache}', flush=True); \
+from transformers import AutoModel, AutoProcessor; \
+AutoModel.from_pretrained(SIGLIP2_MODEL_ID, cache_dir=cache); \
+AutoProcessor.from_pretrained(SIGLIP2_MODEL_ID, cache_dir=cache); \
+print('SigLIP 2 weights cached.', flush=True)"
+
+# OpenAI CLIP.
+RUN python -u -c "import os; \
+from vtsearch.config import CLIP_MODEL_ID; \
+cache=os.environ['VTSEARCH_MODELS_DIR']; \
+print(f'Pre-downloading {CLIP_MODEL_ID} to {cache}', flush=True); \
+from transformers import CLIPModel, CLIPProcessor; \
+CLIPModel.from_pretrained(CLIP_MODEL_ID, cache_dir=cache); \
+CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache); \
+print('CLIP weights cached.', flush=True)"
+
+# DINOv3 (gated on Hugging Face — pass HF_TOKEN as a build secret to
+# accept the gating agreement at build time). The token=False default
+# on our embedder loaders is only used at *runtime*, where local-files-
+# first kicks in and the gating no longer matters.
+RUN --mount=type=secret,id=hf_token,required=false \
+    python -u -c "import os; \
+from vtsearch.config import DINOV3_MODEL_ID; \
+cache=os.environ['VTSEARCH_MODELS_DIR']; \
+token=None; \
+exec('try:\n  token=open(\"/run/secrets/hf_token\").read().strip()\nexcept Exception:\n  pass'); \
+print(f'Pre-downloading {DINOV3_MODEL_ID} to {cache}', flush=True); \
+from transformers import AutoModel, AutoImageProcessor; \
+AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, token=token); \
+AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, token=token); \
+print('DINOv3 weights cached.', flush=True)"
+
+# Meta Perception Encoder (Core B/16-224). Ships custom modeling code
+# on the Hub; loading requires trust_remote_code=True.
+RUN --mount=type=secret,id=hf_token,required=false \
+    python -u -c "import os; \
+from vtsearch.config import PE_MODEL_ID; \
+cache=os.environ['VTSEARCH_MODELS_DIR']; \
+token=None; \
+exec('try:\n  token=open(\"/run/secrets/hf_token\").read().strip()\nexcept Exception:\n  pass'); \
+print(f'Pre-downloading {PE_MODEL_ID} to {cache}', flush=True); \
+from transformers import AutoModel, AutoImageProcessor; \
+AutoModel.from_pretrained(PE_MODEL_ID, cache_dir=cache, token=token, trust_remote_code=True); \
+AutoImageProcessor.from_pretrained(PE_MODEL_ID, cache_dir=cache, token=token, trust_remote_code=True); \
+print('Perception Encoder weights cached.', flush=True)"
+
+# ---------- application layer ----------
+COPY . .
+
+# Bake the version into the image. See Dockerfile for the pattern.
+ARG VTSEARCH_VERSION=
+RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
+
+# Seed default settings so SigLIP is preloaded at startup (the other
+# four image embedders stay cold until explicitly selected — they all
+# live on disk thanks to the RUNs above, so first selection is a
+# from-cache load rather than a HF download).
+RUN mkdir -p /app/data && \
+    printf '{\n  "autoload_media_embedders": ["siglip"]\n}\n' > /app/data/settings.json
+
+# Runtime data directory (settings, embeddings, datasets, media files).
+# Mount a volume here to persist user data across container restarts.
+# Note: model weights live under /opt/vtsearch/models, NOT this volume.
+VOLUME /app/data
+
+EXPOSE 5000
+
+ENV OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    VTSEARCH_SERVER_INIT=1
+
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
