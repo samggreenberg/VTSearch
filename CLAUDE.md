@@ -30,6 +30,14 @@ Never ask the user whether to subscribe to PR activity, and never call `subscrib
 
 Breaking backwards compatibility is acceptable — do not add shims, feature flags, legacy re-exports, or other compatibility layers to preserve old behavior. Just make the clean change. When a change does break backwards compatibility, mention it to the user so they're aware.
 
+## Ask Questions (use the Question tool)
+
+When you have a question for the user — to disambiguate requirements, choose between approaches, confirm scope, or surface a non-obvious tradeoff — **ask it**. Do not guess silently and hope the choice was right. A 10-second clarification beats a 10-minute wrong-direction implementation.
+
+**Always ask via the `AskUserQuestion` tool when the question fits its shape** (a discrete choice with a small number of options). Do not leave dangling questions like "Want me to go with approach A or approach B?" at the end of a prose response — those are easy to miss and force the user to type out an answer that could have been a single click. The tool also captures the choice cleanly in the transcript.
+
+Use plain prose questions only when the answer is genuinely open-ended (e.g. "What should this field be named?") and a multiple-choice list would be artificial.
+
 ## No Persisted Vectors or MLPs (CRITICAL)
 
 **Embeddings and trained MLP weights are in-memory artifacts only.** Never serialize them to disk, to `data/settings.json`, to detector / detector JSON files, or to any other persistent store. Origins are the canonical persisted form: the system rederives `origin → file → embedding → MLP` on demand.
