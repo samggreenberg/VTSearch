@@ -23,6 +23,12 @@ export class SortBarComponent implements OnInit, OnDestroy {
    * Drives the gating of the "Learned" sort mode.
    */
   @Input() learnedSortAvailable = false;
+  /**
+   * True when the active dataset's embedder supports text queries. ``false``
+   * for vision-only encoders (DINOv3, Perception Encoder) — disables the
+   * "Text" sort radio so users can't try a search that will always fail.
+   */
+  @Input() textSortAvailable = true;
 
   @Output() sortModeChange = new EventEmitter<SortMode>();
   @Output() textSort = new EventEmitter<string>();
@@ -74,6 +80,10 @@ export class SortBarComponent implements OnInit, OnDestroy {
 
   get learnedDisabled(): boolean {
     return !this.learnedSortAvailable;
+  }
+
+  get textDisabled(): boolean {
+    return !this.textSortAvailable;
   }
 
   onAddLoadSort(): void {

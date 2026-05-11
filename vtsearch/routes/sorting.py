@@ -127,6 +127,33 @@ def sort_clips():
     embedder_name = first.get("embedder", "")
     total_steps = 3  # load embedder, embed query, compute similarities
 
+    # Reject the request up-front when the active embedder is vision-only
+    # (e.g. DINOv3, Perception Encoder). Without this short-circuit we'd
+    # waste time loading the model into RAM just to discover it can't embed
+    # text — and the frontend wouldn't get a clean ``supports_text=False``
+    # signal to hide its text-search UI.
+    if embedder_name:
+        try:
+            from vtsearch.media import get_embedder  # noqa: PLC0415
+
+            _active_emb = get_embedder(embedder_name)
+        except KeyError:
+            _active_emb = None
+        if _active_emb is not None and not _active_emb.supports_text:
+            update_sort_progress("idle")
+            return (
+                jsonify(
+                    {
+                        "error": (
+                            f"Embedder '{_active_emb.name}' does not support text queries. "
+                            "Use learned sort or load a saved sort instead."
+                        ),
+                        "supports_text": False,
+                    }
+                ),
+                400,
+            )
+
     try:
         _load_embedder_with_progress(media_type, total_steps)
         update_sort_progress("sorting", "Embedding text query…", 1, total_steps)
