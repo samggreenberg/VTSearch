@@ -620,30 +620,32 @@ def preview_detector_label(name: str, element_id: str):
         return jsonify({"error": "Label element not found"}), 404
 
     _, elem = found
-    file_path = resolve_element_to_path(elem)
-    if file_path is None or not file_path.is_file():
-        return jsonify({"error": "Element media file unavailable"}), 404
-
     media_type = data.get("media_type", "")
-    if media_type == "text":
+
+    with resolve_element_to_path(elem) as file_path:
+        if file_path is None or not file_path.is_file():
+            return jsonify({"error": "Element media file unavailable"}), 404
+
+        if media_type == "text":
+            try:
+                content = file_path.read_text(encoding="utf-8", errors="replace").strip()
+            except OSError:
+                return jsonify({"error": "Element media file unreadable"}), 404
+            return jsonify(
+                {
+                    "content": content,
+                    "word_count": len(content.split()),
+                    "character_count": len(content),
+                }
+            )
+
         try:
-            content = file_path.read_text(encoding="utf-8", errors="replace").strip()
+            file_bytes = file_path.read_bytes()
         except OSError:
             return jsonify({"error": "Element media file unreadable"}), 404
-        return jsonify(
-            {
-                "content": content,
-                "word_count": len(content.split()),
-                "character_count": len(content),
-            }
-        )
 
-    try:
-        file_bytes = file_path.read_bytes()
-    except OSError:
-        return jsonify({"error": "Element media file unreadable"}), 404
+        suffix = file_path.suffix.lower()
 
-    suffix = file_path.suffix.lower()
     mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or _DEFAULT_MIMETYPE_BY_TYPE.get(media_type, "application/octet-stream")
     return send_file(
         io.BytesIO(file_bytes),
@@ -807,11 +809,11 @@ def thumbnail_detector_label(name: str, element_id: str):
             if resp is not None:
                 return resp
 
-    file_path = resolve_element_to_path(elem)
-    if file_path is None or not file_path.is_file():
-        return jsonify({"error": "Element media file unavailable"}), 404
+    with resolve_element_to_path(elem) as file_path:
+        if file_path is None or not file_path.is_file():
+            return jsonify({"error": "Element media file unavailable"}), 404
 
-    return _origin_thumbnail_response(file_path, media_type, elem)
+        return _origin_thumbnail_response(file_path, media_type, elem)
 
 
 # ---------------------------------------------------------------------------

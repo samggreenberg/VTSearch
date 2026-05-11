@@ -287,10 +287,11 @@ class TestCrossDatasetMLPTraining:
     def _seed_with_resolvable_labelset(self, tmp_path, monkeypatch):
         """Seed a model whose labelset elements are all resolvable.
 
-        Stubs ``resolve_file_from_origin`` to return a unique temp WAV file
+        Stubs ``resolve_file_context`` to yield a unique temp WAV file
         per element, so that ``embed_file`` (already stubbed in conftest to
         fake_embed_audio) yields deterministic, distinct vectors.
         """
+        from contextlib import contextmanager
         from pathlib import Path
 
         from vtsearch.utils.audio_generator import generate_wav
@@ -301,21 +302,21 @@ class TestCrossDatasetMLPTraining:
             path.write_bytes(generate_wav(freq, 0.1))
             files[name] = path
 
-        def _fake_resolve(origin, origin_name="", filename=""):
-            return files.get(origin_name) or files.get(filename)
+        @contextmanager
+        def _fake_resolve_ctx(origin, origin_name="", filename=""):
+            yield files.get(origin_name) or files.get(filename)
 
-        # Patch in both modules that import resolve_file_from_origin via "from ... import"
+        # labelset_training imports resolve_file_context inside _embed_one,
+        # so patching the resolver symbol is enough — the function-level
+        # import picks the patched value.
         import vtsearch.models.labelset_training as lt_mod
         import vtsearch.models.resolver as resolver_mod
 
-        # The labelset_training module imports inside the function body, so
-        # we just patch the resolver's symbol — the function-level import
-        # picks the patched value.
-        monkeypatch.setattr(resolver_mod, "resolve_file_from_origin", _fake_resolve)
+        monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_resolve_ctx)
         # Defensive: patch the binding inside labelset_training too in case
         # it ever moves to a top-level import.
-        if hasattr(lt_mod, "resolve_file_from_origin"):
-            monkeypatch.setattr(lt_mod, "resolve_file_from_origin", _fake_resolve)
+        if hasattr(lt_mod, "resolve_file_context"):
+            monkeypatch.setattr(lt_mod, "resolve_file_context", _fake_resolve_ctx)
 
         return _seed_cross_dataset_model(mark_loaded=False)
 

@@ -149,15 +149,20 @@ class TestIngestMissingClips:
 
         fake_embedding = rng.standard_normal(512).astype(np.float32)
 
-        # Patch resolve_file_from_origin to return our test file,
-        # embed_file to return a fake embedding, and _media_type_from_origin
-        # to return "image".  The resolver imports are lazy (inside the
-        # function), so patch at the source module.
+        # Patch resolve_file_context to yield our test file, embed_file to
+        # return a fake embedding, and _media_type_from_origin to return
+        # "image".  The resolver imports are lazy (inside the function), so
+        # patch at the source module.
+        from contextlib import contextmanager
         from unittest.mock import patch
+
+        @contextmanager
+        def _fake_resolve_ctx(*_args, **_kwargs):
+            yield img_path
 
         with (
             patch("vtsearch.datasets.ingest._media_type_from_origin", return_value="image"),
-            patch("vtsearch.models.resolver.resolve_file_from_origin", return_value=img_path),
+            patch("vtsearch.models.resolver.resolve_file_context", _fake_resolve_ctx),
             patch("vtsearch.models.resolver.embed_file", return_value=fake_embedding),
         ):
             result = _ingest_via_resolver(origin, entries, existing, noop_progress)

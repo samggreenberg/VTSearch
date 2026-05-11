@@ -625,34 +625,34 @@ def train_detector_from_origins(
     """
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.resolver import embed_file, resolve_file_from_origin
+    from vtsearch.models.resolver import embed_file, resolve_file_context
 
     X_list: list = []
     y_list: list[float] = []
 
     for entry in good_origins:
-        file_path = resolve_file_from_origin(
+        with resolve_file_context(
             entry.get("origin"),
             entry.get("origin_name", ""),
             entry.get("filename", ""),
-        )
-        if file_path is None:
-            continue
-        emb = embed_file(file_path, media_type)
+        ) as file_path:
+            if file_path is None:
+                continue
+            emb = embed_file(file_path, media_type)
         if emb is None:
             continue
         X_list.append(emb)
         y_list.append(1.0)
 
     for entry in bad_origins:
-        file_path = resolve_file_from_origin(
+        with resolve_file_context(
             entry.get("origin"),
             entry.get("origin_name", ""),
             entry.get("filename", ""),
-        )
-        if file_path is None:
-            continue
-        emb = embed_file(file_path, media_type)
+        ) as file_path:
+            if file_path is None:
+                continue
+            emb = embed_file(file_path, media_type)
         if emb is None:
             continue
         X_list.append(emb)
