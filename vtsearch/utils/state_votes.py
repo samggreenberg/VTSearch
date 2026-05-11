@@ -142,6 +142,7 @@ def toggle_vote(media_id: int, vote: str) -> None:
     """
     from vtsearch.models.progress import invalidate_progress_cache_from
 
+    added = False
     with _state_lock:
         if vote == "good":
             if media_id in good_votes:
@@ -159,6 +160,7 @@ def toggle_vote(media_id: int, vote: str) -> None:
                 diversity_tree_label(media_id)
                 if was_opposite:
                     invalidate_progress_cache_from(media_id)
+                added = True
         else:
             if media_id in bad_votes:
                 bad_votes.pop(media_id, None)
@@ -175,6 +177,13 @@ def toggle_vote(media_id: int, vote: str) -> None:
                 diversity_tree_label(media_id)
                 if was_opposite:
                     invalidate_progress_cache_from(media_id)
+                added = True
+
+    if added:
+        from vtsearch.achievements import record_vote
+
+        detector_id = get_active_detector_context().detector_id
+        record_vote(detector_id)
 
 
 def apply_label(media_id: int, label: str, *, silent: bool = False) -> None:

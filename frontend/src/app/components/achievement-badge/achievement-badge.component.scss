@@ -1,0 +1,44 @@
+.achievement-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 0;
+}
+
+.achievement-decoration {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.achievement-symbol {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// Color themes — currentColor is consumed by both the ring SVG and the inner icon.
+.tier-bronze {
+  color: #cd7f32;
+}
+
+.tier-silver {
+  color: #d9d9d9;
+}
+
+.tier-gold {
+  color: #f0c419;
+}
+
+.tier-platinum {
+  color: #f5f6fa;
+  filter: drop-shadow(0 0 4px rgba(245, 246, 250, 0.45));
+}
+
+.tier-locked {
+  color: var(--text-muted, #666);
+  opacity: 0.55;
+}

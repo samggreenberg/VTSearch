@@ -23,6 +23,7 @@ _TEST_GROUPS = {
         "test_settings_directories",
         "test_frontend",
         "test_resize_handle_centering",
+        "test_achievements",
     ],
     "api": [
         "test_api_contracts",

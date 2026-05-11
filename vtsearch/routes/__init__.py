@@ -1,5 +1,6 @@
 """Flask blueprints for organizing application routes."""
 
+from vtsearch.routes.achievements import achievements_bp
 from vtsearch.routes.auth import auth_bp
 from vtsearch.routes.detector_find import detector_find_bp
 from vtsearch.routes.detector_scoring import detector_scoring_bp
@@ -22,6 +23,7 @@ from vtsearch.routes.sorting import sorting_bp
 from vtsearch.routes.sync_sources import sync_sources_bp
 
 __all__ = [
+    "achievements_bp",
     "auth_bp",
     "detector_find_bp",
     "detector_scoring_bp",

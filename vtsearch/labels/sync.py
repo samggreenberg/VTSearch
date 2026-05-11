@@ -114,6 +114,7 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
     # re-entry from this same thread) instead of pushing the pre-import
     # state back to the source.
     global _syncing
+    applied_any = False
     with _sync_lock:
         _syncing = True
         try:
@@ -131,8 +132,14 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
                 for mid, media in medias.items():
                     if media.get("md5") == md5:
                         apply_label(mid, label)
+                        applied_any = True
                         break
         finally:
             _syncing = False
+
+    if applied_any:
+        from vtsearch.achievements import record_detector_import
+
+        record_detector_import(ctx.detector_id)
 
     return labels

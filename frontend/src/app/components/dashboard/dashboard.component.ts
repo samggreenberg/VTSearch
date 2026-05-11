@@ -12,6 +12,7 @@ import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
+import { AchievementsService } from '../../services/achievements.service';
 import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, DetectorRegistryEntry } from '../../models/api.models';
 import { formatProgressFraction } from '../../utils/format-progress';
 import { ColMeta, ManagedColumns } from '../../utils/managed-columns';
@@ -190,6 +191,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private activeContext: ActiveContextService,
     private authService: AuthService,
     private topBarState: TopBarStateService,
+    private achievements: AchievementsService,
   ) {}
 
   ngOnInit(): void {
@@ -996,6 +998,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
           if (justFinished.length > 0) {
             this.datasetState.refresh();
+            this.achievements.refresh();
           }
 
           // Also set the top-level error banner for failed tasks
@@ -1054,6 +1057,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
           if (justFinished.length > 0) {
             this.datasetState.refresh();
+            this.achievements.refresh();
           }
 
           for (const t of failed) {

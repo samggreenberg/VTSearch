@@ -179,6 +179,11 @@ def run_label_import(importer_name: str):
 
         sync_to_labelset_source()
 
+        from vtsearch.achievements import record_detector_import
+        from vtsearch.utils.state_core import get_active_detector_context
+
+        record_detector_import(get_active_detector_context().detector_id)
+
     msg = f"Applied {applied} label(s), skipped {skipped}."
     if ingested > 0:
         msg += f" Auto-resolved {ingested} missing element(s) from their sources."

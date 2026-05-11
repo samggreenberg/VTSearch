@@ -43,6 +43,7 @@ from vtsearch.auth import get_login_provider  # noqa: E402
 from vtsearch.medias import init_medias  # noqa: E402, F401 — used by tests via app_module.init_medias()
 from vtsearch.models import initialize_models, preload_autoload_media_types  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
+    achievements_bp,
     auth_bp,
     detector_find_bp,
     detector_scoring_bp,
@@ -178,6 +179,7 @@ def _no_cache_api(response):
 # Register Blueprints
 # ---------------------------------------------------------------------------
 
+app.register_blueprint(achievements_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(eval_bp)
 app.register_blueprint(file_browser_bp)
