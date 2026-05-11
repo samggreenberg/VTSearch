@@ -1,28 +1,52 @@
 # -----------------------------------------------------------------
 # VTSearch — All-image-embedders CPU image
 #
-# Bundles every supported image embedder (SigLIP, SigLIP 2, CLIP, DINOv3,
-# EUPE [Meta Perception Encoder]) and bakes their weights into the image
-# at build time so the container is ready to serve immediately on first run.
+# Bundles every supported image embedder and bakes their weights into the
+# image at build time so the container is ready to serve immediately on
+# first run:
 #
-# SigLIP remains the default — it's marked is_default=True on the
-# embedder class and is the only entry in `autoload_media_embedders`
-# seeded into the default settings below. The other four are
-# *available* (selectable from the importer UI / dataset registry) but
-# do not warm at startup, keeping cold-start RAM low.
+#   * SigLIP   (google/siglip-base-patch16-224)         — default, text-capable
+#   * SigLIP 2 (google/siglip2-base-patch16-224)        — text-capable
+#   * CLIP     (openai/clip-vit-base-patch32)           — text-capable
+#   * DINOv2   (facebook/dinov2-base)                   — image-only, ungated
+#   * DINOv3   (facebook/dinov3-vitb16-pretrain-lvd1689m) — image-only, gated
+#   * EUPE     (facebook/PE-Core-B16-224)               — image-only, gated
 #
-# DINOv3 and EUPE are vision-only — they do not embed text, so the UI
-# hides the "Text sort" affordance for datasets embedded with them
-# (see MediaEmbedder.supports_text).
+# The first four are ungated on Hugging Face and download during the build
+# with no credentials. DINOv3 and EUPE are gated under Meta's research
+# licence; rather than passing an HF token through ``docker build``, we
+# expect the user to run ``scripts/cache_gated_models.sh`` **once** on the
+# host (with their HF credentials), which populates ``./model_cache/``.
+# This Dockerfile then COPYs that local cache into the image — no token
+# ever touches the build, the codebase, or any image layer.
 #
-# Build:  docker build -f Dockerfile.image-embedders -t vtsearch:image-embedders .
+# If ``./model_cache/`` is empty (the cache script wasn't run), the build
+# still succeeds; DINOv3 and EUPE simply remain unavailable until the
+# user runs the cache script and rebuilds, or sets an HF_TOKEN at
+# container runtime to download them lazily into the persistent
+# /app/data volume on first use.
+#
+# SigLIP stays the default — it's marked is_default=True on the embedder
+# class and is the only entry in `autoload_media_embedders` seeded into
+# the default settings below. The other five sit on disk and only warm
+# when explicitly selected.
+#
+# DINOv2 / DINOv3 / EUPE are vision-only — they do not embed text, so
+# the UI hides the "Text sort" affordance for datasets embedded with
+# them (see MediaEmbedder.supports_text).
+#
+# Build:
+#   # 1. ONE-TIME setup for the gated weights (skip if you only want
+#   #    SigLIP / SigLIP 2 / CLIP / DINOv2):
+#   HF_TOKEN=hf_xxx ./scripts/cache_gated_models.sh
+#
+#   # 2. Build the image — no token, no secrets:
+#   docker build -f Dockerfile.image-embedders -t vtsearch:image-embedders .
+#
 # Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:image-embedders
 #
 # Build args:
 #   * VTSEARCH_VERSION  — bake a version string into the image
-#   * HF_TOKEN          — optional; required to pre-download gated models
-#                         (DINOv3 and EUPE are gated on Hugging Face). Pass with
-#                         --secret id=hf_token,env=HF_TOKEN and BuildKit.
 # -----------------------------------------------------------------
 
 FROM python:3.10-slim AS base
@@ -57,7 +81,13 @@ ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models \
     PYTHONUNBUFFERED=1
 RUN mkdir -p "$VTSEARCH_MODELS_DIR"
 
-# SigLIP (default).
+# Copy any host-side cached gated weights into the image cache, if the
+# user ran scripts/cache_gated_models.sh. We seed an empty
+# model_cache/.gitkeep in the repo so this COPY succeeds even when the
+# cache is empty (docker COPY needs at least one matching source).
+COPY model_cache/ "$VTSEARCH_MODELS_DIR/"
+
+# SigLIP (default, ungated).
 RUN python -u -c "import os; \
 from vtsearch.config import SIGLIP_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
@@ -68,7 +98,7 @@ SiglipImageProcessor.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache); \
 SiglipTokenizer.from_pretrained(SIGLIP_MODEL_ID, cache_dir=cache); \
 print('SigLIP weights cached.', flush=True)"
 
-# SigLIP 2.
+# SigLIP 2 (ungated).
 RUN python -u -c "import os; \
 from vtsearch.config import SIGLIP2_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
@@ -78,7 +108,7 @@ AutoModel.from_pretrained(SIGLIP2_MODEL_ID, cache_dir=cache); \
 AutoProcessor.from_pretrained(SIGLIP2_MODEL_ID, cache_dir=cache); \
 print('SigLIP 2 weights cached.', flush=True)"
 
-# OpenAI CLIP.
+# OpenAI CLIP (ungated).
 RUN python -u -c "import os; \
 from vtsearch.config import CLIP_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
@@ -88,35 +118,46 @@ CLIPModel.from_pretrained(CLIP_MODEL_ID, cache_dir=cache); \
 CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache); \
 print('CLIP weights cached.', flush=True)"
 
-# DINOv3 (gated on Hugging Face — pass HF_TOKEN as a build secret to
-# accept the gating agreement at build time). The token=False default
-# on our embedder loaders is only used at *runtime*, where local-files-
-# first kicks in and the gating no longer matters.
-RUN --mount=type=secret,id=hf_token,required=false \
-    python -u -c "import os; \
+# DINOv2 (ungated — anyone can download these).
+RUN python -u -c "import os; \
+from vtsearch.config import DINOV2_MODEL_ID; \
+cache=os.environ['VTSEARCH_MODELS_DIR']; \
+print(f'Pre-downloading {DINOV2_MODEL_ID} to {cache}', flush=True); \
+from transformers import AutoModel, AutoImageProcessor; \
+AutoModel.from_pretrained(DINOV2_MODEL_ID, cache_dir=cache); \
+AutoImageProcessor.from_pretrained(DINOV2_MODEL_ID, cache_dir=cache); \
+print('DINOv2 weights cached.', flush=True)"
+
+# DINOv3 (gated). The COPY above seeded $VTSEARCH_MODELS_DIR from the
+# host's ./model_cache/. ``local_files_only=True`` makes this RUN succeed
+# whenever the cache script populated the weights, and fail loudly only
+# when the user did neither ran the cache script nor accepted that
+# DINOv3 will be unavailable. We swallow the failure so the build still
+# produces a usable image with the other five embedders.
+RUN python -u -c "import os; \
 from vtsearch.config import DINOV3_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
-token=None; \
-exec('try:\n  token=open(\"/run/secrets/hf_token\").read().strip()\nexcept Exception:\n  pass'); \
-print(f'Pre-downloading {DINOV3_MODEL_ID} to {cache}', flush=True); \
-from transformers import AutoModel, AutoImageProcessor; \
-AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, token=token); \
-AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, token=token); \
-print('DINOv3 weights cached.', flush=True)"
+try: \
+    from transformers import AutoModel, AutoImageProcessor; \
+    AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
+    AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
+    print('DINOv3 weights loaded from local cache.', flush=True); \
+except Exception as exc: \
+    print(f'DINOv3 not in local cache ({exc.__class__.__name__}); skipping. ' \
+          'Run scripts/cache_gated_models.sh on the host to enable DINOv3.', flush=True)"
 
-# EUPE (Meta Perception Encoder Core B/16-224). Ships custom modeling code
-# on the Hub; loading requires trust_remote_code=True.
-RUN --mount=type=secret,id=hf_token,required=false \
-    python -u -c "import os; \
+# EUPE (gated; Meta Perception Encoder). Same fallback as DINOv3.
+RUN python -u -c "import os; \
 from vtsearch.config import EUPE_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
-token=None; \
-exec('try:\n  token=open(\"/run/secrets/hf_token\").read().strip()\nexcept Exception:\n  pass'); \
-print(f'Pre-downloading {EUPE_MODEL_ID} to {cache}', flush=True); \
-from transformers import AutoModel, AutoImageProcessor; \
-AutoModel.from_pretrained(EUPE_MODEL_ID, cache_dir=cache, token=token, trust_remote_code=True); \
-AutoImageProcessor.from_pretrained(EUPE_MODEL_ID, cache_dir=cache, token=token, trust_remote_code=True); \
-print('EUPE weights cached.', flush=True)"
+try: \
+    from transformers import AutoModel, AutoImageProcessor; \
+    AutoModel.from_pretrained(EUPE_MODEL_ID, cache_dir=cache, local_files_only=True, trust_remote_code=True); \
+    AutoImageProcessor.from_pretrained(EUPE_MODEL_ID, cache_dir=cache, local_files_only=True, trust_remote_code=True); \
+    print('EUPE weights loaded from local cache.', flush=True); \
+except Exception as exc: \
+    print(f'EUPE not in local cache ({exc.__class__.__name__}); skipping. ' \
+          'Run scripts/cache_gated_models.sh on the host to enable EUPE.', flush=True)"
 
 # ---------- application layer ----------
 COPY . .
@@ -126,9 +167,9 @@ ARG VTSEARCH_VERSION=
 RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
 
 # Seed default settings so SigLIP is preloaded at startup (the other
-# four image embedders stay cold until explicitly selected — they all
-# live on disk thanks to the RUNs above, so first selection is a
-# from-cache load rather than a HF download).
+# embedders stay cold until explicitly selected — they all live on
+# disk thanks to the RUNs above, so first selection is a from-cache
+# load rather than a HF download).
 RUN mkdir -p /app/data && \
     printf '{\n  "autoload_media_embedders": ["siglip"]\n}\n' > /app/data/settings.json
 

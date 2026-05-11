@@ -135,6 +135,71 @@ class TestImageSiglip2Embedder:
         assert result is None
 
 
+class TestImageDinov2Embedder:
+    def test_name(self):
+        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+
+        assert ImageDinov2Embedder().name == "dinov2"
+
+    def test_media_type_id(self):
+        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+
+        assert ImageDinov2Embedder().media_type_id == "image"
+
+    def test_is_not_default(self):
+        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+
+        assert ImageDinov2Embedder().is_default is False
+
+    def test_supports_text_false(self):
+        """DINOv2 has no text encoder."""
+        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+
+        assert ImageDinov2Embedder().supports_text is False
+
+    def test_to_dict(self):
+        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+
+        assert ImageDinov2Embedder().to_dict() == {
+            "name": "dinov2",
+            "media_type_id": "image",
+            "supports_text": False,
+        }
+
+    def test_embed_text_returns_none(self):
+        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+
+        emb = ImageDinov2Embedder()
+        assert emb.embed_text("anything") is None
+
+    def test_no_description_wrappers(self):
+        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+
+        assert ImageDinov2Embedder().description_wrappers == []
+
+    def test_registered_in_registry(self):
+        from vtsearch.media import get_embedder
+
+        emb = get_embedder("dinov2")
+        assert emb.name == "dinov2"
+
+    def test_uses_correct_model_id(self):
+        """DINOv2's HF repo is ungated — any builder can download it without
+        an account, which is the whole reason it's bundled in the Docker
+        image alongside the gated DINOv3."""
+        from vtsearch.config import DINOV2_MODEL_ID
+
+        assert DINOV2_MODEL_ID == "facebook/dinov2-base"
+
+    def test_embed_media_returns_none_when_not_loaded(self):
+        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+
+        emb = ImageDinov2Embedder()
+        with patch.object(emb, "load_models"):
+            result = emb.embed_media({"media_path": "/nonexistent.jpg"})
+        assert result is None
+
+
 class TestImageDinov3Embedder:
     def test_name(self):
         from vtsearch.media.image.embedder_dinov3 import ImageDinov3Embedder
@@ -264,13 +329,14 @@ class TestApiEmbeddersResponseShape:
         assert resp.status_code == 200
         body = resp.get_json()
         entries = {e["name"]: e for e in body["embedders"]}
-        # All five image embedders must be present.
-        assert set(entries) == {"siglip", "siglip2", "clip", "dinov3", "eupe"}
+        # All six image embedders must be present.
+        assert set(entries) == {"siglip", "siglip2", "clip", "dinov2", "dinov3", "eupe"}
         # supports_text must be a bool on every entry.
         for entry in entries.values():
             assert isinstance(entry["supports_text"], bool)
         # Specific expectations.
         assert entries["siglip"]["supports_text"] is True
+        assert entries["dinov2"]["supports_text"] is False
         assert entries["dinov3"]["supports_text"] is False
         assert entries["eupe"]["supports_text"] is False
 

@@ -1,11 +1,12 @@
 # VTSearch — All image embedders (CPU)
 #
 # Image-only deployment that ships every supported image embedder:
-#   * SigLIP   (google/siglip-base-patch16-224)         — default, text-capable
-#   * SigLIP 2 (google/siglip2-base-patch16-224)        — text-capable
-#   * CLIP     (openai/clip-vit-base-patch32)           — text-capable
-#   * DINOv3   (facebook/dinov3-vitb16-pretrain-lvd1689m) — image-only
-#   * EUPE     (facebook/PE-Core-B16-224)               — image-only
+#   * SigLIP   (google/siglip-base-patch16-224)         — default, text-capable, ungated
+#   * SigLIP 2 (google/siglip2-base-patch16-224)        — text-capable, ungated
+#   * CLIP     (openai/clip-vit-base-patch32)           — text-capable, ungated
+#   * DINOv2   (facebook/dinov2-base)                   — image-only, ungated
+#   * DINOv3   (facebook/dinov3-vitb16-pretrain-lvd1689m) — image-only, gated
+#   * EUPE     (facebook/PE-Core-B16-224)               — image-only, gated
 #
 # Used by Dockerfile.image-embedders. Skips audio / video / text / document
 # stacks so we still produce a slim image (only image-side deps are pulled in).
