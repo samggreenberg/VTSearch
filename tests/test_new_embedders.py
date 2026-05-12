@@ -535,8 +535,9 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import all_embedders_dict
 
         dicts = all_embedders_dict()
-        # 7 original + 5 new image embedders.
-        assert len(dicts) == 12
+        # 7 original + 8 image embedders (clip, siglip2, plus single/patch
+        # variants for dinov2, dinov3, eupe).
+        assert len(dicts) == 15
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
