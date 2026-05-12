@@ -85,6 +85,9 @@
                 }
               </select>
             }
+            @if (licenseNoticeFor(selectedDemoEmbedder, demoEmbedders); as notice) {
+              <div class="license-warning" role="note">⚠ {{ notice }}</div>
+            }
             @if (demoClippers.length > 1) {
               <button class="btn btn--secondary btn--sm clipper-btn" (click)="openClipperChooser('demo')" title="Choose a MediaClipper to segment or trim media before embedding">
                 Clipper: {{ clipperDisplayName('demo') }}
@@ -245,6 +248,9 @@
               <option [value]="embedder.name">{{ embedder.name }}</option>
             }
           </select>
+          @if (licenseNoticeFor(selectedEmbedder, availableEmbedders); as notice) {
+            <div class="license-warning" role="note">⚠ {{ notice }}</div>
+          }
         </div>
       }
 
@@ -365,6 +371,9 @@
               <option [value]="embedder.name">{{ embedder.name }}</option>
             }
           </select>
+          @if (licenseNoticeFor(lfSelectedEmbedder, lfEmbedders); as notice) {
+            <div class="license-warning" role="note">⚠ {{ notice }}</div>
+          }
         </div>
       }
 
@@ -488,6 +497,9 @@
               <option [value]="embedder.name">{{ embedder.name }}</option>
             }
           </select>
+          @if (licenseNoticeFor(sfSelectedEmbedder, sfEmbedders); as notice) {
+            <div class="license-warning" role="note">⚠ {{ notice }}</div>
+          }
         </div>
       }
 

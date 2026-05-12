@@ -9,6 +9,15 @@ the bundled-image Docker build.
 We pool the CLS token from ``last_hidden_state[:, 0]`` for a single
 fixed-size vector per image, mirroring how DINOv3 is exposed here.
 There is no text encoder, so :attr:`supports_text` is ``False``.
+
+DINOv2 also produces high-quality **per-patch tokens**.  Setting
+:attr:`supports_patch_regions` to ``True`` opts the embedder into the
+patch-region pipeline — the dataset loader asks for a
+:class:`~vtsearch.models.patch_regions.PatchEmbedOutput` (CLS + patch
+grid + CLS→patch attention saliency) which is turned into a
+hierarchical region set per image.  Image input is the HF default
+(224² for the standard processor) with patch size 14 → 16 × 16 = 256
+patch tokens.
 """
 
 from __future__ import annotations
@@ -28,6 +37,7 @@ from vtsearch.media.embedder import (
     load_pretrained_local_first,
     timed_progress,
 )
+from vtsearch.models.patch_regions import PatchEmbedOutput, hf_vit_to_patch_output
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -55,6 +65,10 @@ class ImageDinov2Embedder(MediaEmbedder):
     @property
     def supports_text(self) -> bool:
         return False
+
+    @property
+    def supports_patch_regions(self) -> bool:
+        return True
 
     def _load_models_impl(self) -> None:
         if self._model is not None:
@@ -118,6 +132,34 @@ class ImageDinov2Embedder(MediaEmbedder):
             return embedding[0]
         except Exception:
             logging.getLogger(__name__).exception("Error embedding PIL image (DINOv2)")
+            return None
+
+    def _patch_forward_impl(self, media: dict) -> Optional[PatchEmbedOutput]:
+        """Return CLS + per-patch grid + CLS→patch attention saliency.
+
+        Runs one forward pass with ``output_attentions=True`` and reshapes
+        ``last_hidden_state[:, 1:]`` into the spatial patch grid.  DINOv2
+        has no register tokens, so the token layout is ``[CLS, P1..P_N]``
+        and we slice the patch portion at index 1.
+        """
+        if self._model is None:
+            self.load_models()
+        if self._model is None or self._processor is None:
+            return None
+        file_path = Path(media["media_path"])
+        try:
+            import torch  # noqa: PLC0415
+            from PIL import Image  # noqa: PLC0415
+
+            image = Image.open(file_path).convert("RGB")
+            inputs = self._processor(images=image, return_tensors="pt")
+            device = next(self._model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            with torch.no_grad():
+                outputs = self._model(**inputs, output_attentions=True)
+            return hf_vit_to_patch_output(outputs, num_register_tokens=0)
+        except Exception:
+            logging.getLogger(__name__).exception("Error patch-embedding %s (DINOv2)", file_path)
             return None
 
 

@@ -676,6 +676,19 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.allEmbedders.filter((e) => e.media_type_id === this.activeTab);
   }
 
+  /**
+   * Look up the licence-warning string for an embedder, if any.  Returns
+   * null when the embedder has no special licensing constraints worth
+   * surfacing (the common case).  Embedders with restrictive licences
+   * (e.g. EUPE under FAIR Noncommercial) return a short string the
+   * picker shows as a warning chip — see EmbedderInfo.license_notice.
+   */
+  licenseNoticeFor(name: string, list: EmbedderInfo[]): string | null {
+    if (!name) return null;
+    const found = list.find((e) => e.name === name);
+    return found?.license_notice ?? null;
+  }
+
   selectDemo(demo: DemoDataset): void {
     const userName = (this.demoDatasetName || '').trim();
     this.demoSelected.emit({

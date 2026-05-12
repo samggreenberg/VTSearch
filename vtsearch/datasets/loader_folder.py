@@ -131,6 +131,79 @@ def _bulk_embed_files(
     return {fp: vec for fp, vec in zip(pending_paths, vectors) if vec is not None}
 
 
+def _bulk_patch_forward_files(
+    emb: Any,
+    media_files: list[Path],
+    folder_path: Path,
+    on_progress: ProgressCallback,
+    media_type: str,
+    origin: dict[str, Any] | None = None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None = None,
+) -> dict[Path, Any]:
+    """Run :meth:`MediaEmbedder.patch_forward` on every file in *media_files*.
+
+    Only called when the active embedder reports
+    ``supports_patch_regions == True``.  Returns a ``Path → PatchEmbedOutput``
+    mapping; files whose patch forward returned ``None`` are omitted.
+
+    Per-image, not bulk-batched — there is no patch-forward batch API on
+    the embedder yet.  For v1 this means patch-capable embedders run two
+    forward passes per image (one in ``embed_media_bulk`` for the CLS
+    vector, one here for the full patch grid).  Acceptable for v1; a
+    follow-up can fuse the two passes when latency matters.
+    """
+    pending: list[tuple[Path, dict[str, Any]]] = []
+    for file_path in media_files:
+        pending.append((file_path, _make_embed_input(file_path, folder_path, origin, custom_metadata_map)))
+
+    if not pending:
+        return {}
+
+    on_progress("embedding", f"Patch-embedding {len(pending)} {media_type} files...", 0, len(pending))
+
+    out: dict[Path, Any] = {}
+    original_cb = emb._on_progress
+    emb._on_progress = on_progress
+    try:
+        for i, (file_path, media_dict) in enumerate(pending):
+            patch_out = emb.patch_forward(media_dict)
+            if patch_out is not None:
+                out[file_path] = patch_out
+            on_progress(
+                "embedding",
+                f"Patch-embedding {i + 1}/{len(pending)} {media_type} files...",
+                i + 1,
+                len(pending),
+            )
+    finally:
+        emb._on_progress = original_cb
+
+    return out
+
+
+def _attach_patch_regions(media_data: dict[str, Any], patch_out: Any) -> None:
+    """Build the HAC region tree from *patch_out* and attach it to *media_data*.
+
+    Converts the float32 region vectors and patch grid to **float16**
+    for pickling — vectors are rehydrated to float32 on read by callers
+    that score them.  Sets ``media_data["patch_regions"]`` (the
+    ``2K - 1 + 1`` region nodes including the CLS full-image node) and
+    ``media_data["patch_grid"]`` (the raw H × W × 768 patch tokens
+    needed by phase-2 region voting).
+
+    Both ``K`` and the HAC affinity ``alpha`` are pinned to the design
+    doc's defaults; the caltech101_s sweep is the prescribed way to
+    revisit them.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtsearch.models.patch_regions import build_region_tree, to_fp16  # noqa: PLC0415
+
+    regions = build_region_tree(patch_out, k=12, alpha=0.5)
+    media_data["patch_regions"] = to_fp16(regions)
+    media_data["patch_grid"] = patch_out.patch_grid.astype(np.float16, copy=False)
+
+
 # ---------------------------------------------------------------------------
 # Public folder loaders
 # ---------------------------------------------------------------------------
@@ -271,6 +344,7 @@ def load_dataset_from_folder(
     # per-item progress so the UI stays responsive.
     try:
         bulk_embeddings: dict[Path, Any] = {}
+        bulk_patch_outputs: dict[Path, Any] = {}
         if emb is not None and not skip_embedding:
             bulk_embeddings = _bulk_embed_files(
                 emb,
@@ -282,6 +356,21 @@ def load_dataset_from_folder(
                 media_type,
                 origin=origin,
             )
+            # If the active embedder produces patch regions (DINOv2,
+            # DINOv3, EUPE), run a second per-image pass to harvest the
+            # CLS / patch grid / saliency for each file. Skipped entirely
+            # for single-vector embedders (SigLIP etc.) so legacy
+            # datasets are byte-identical to the pre-patch behaviour.
+            if getattr(emb, "supports_patch_regions", False) is True:
+                bulk_patch_outputs = _bulk_patch_forward_files(
+                    emb,
+                    media_files,
+                    folder_path,
+                    on_progress,
+                    media_type,
+                    origin=origin,
+                    custom_metadata_map=custom_metadata_map,
+                )
 
         for i, file_path in enumerate(media_files):
             # Preserve relative path from the import root so that files in
@@ -392,6 +481,10 @@ def load_dataset_from_folder(
 
             if file_cm:
                 media_data["custom_metadata"] = file_cm
+
+            patch_out = bulk_patch_outputs.get(file_path)
+            if patch_out is not None:
+                _attach_patch_regions(media_data, patch_out)
 
             medias[media_id] = media_data
             media_id += 1
@@ -540,6 +633,7 @@ def load_dataset_from_folder_chunked(
         # memory story — only one chunk's worth of embeddings lives in
         # memory at a time.
         chunk_bulk_embeddings: dict[Path, Any] = {}
+        chunk_bulk_patch_outputs: dict[Path, Any] = {}
         if emb is not None and not skip_embedding:
             chunk_bulk_embeddings = _bulk_embed_files(
                 emb,
@@ -551,6 +645,16 @@ def load_dataset_from_folder_chunked(
                 media_type,
                 origin=origin,
             )
+            if getattr(emb, "supports_patch_regions", False) is True:
+                chunk_bulk_patch_outputs = _bulk_patch_forward_files(
+                    emb,
+                    batch,
+                    folder_path,
+                    on_progress,
+                    media_type,
+                    origin=origin,
+                    custom_metadata_map=custom_metadata_map,
+                )
 
         for i, file_path in enumerate(batch):
             global_idx = start + i
@@ -649,6 +753,10 @@ def load_dataset_from_folder_chunked(
 
             if file_cm:
                 media_data["custom_metadata"] = file_cm
+
+            patch_out = chunk_bulk_patch_outputs.get(file_path)
+            if patch_out is not None:
+                _attach_patch_regions(media_data, patch_out)
 
             chunk_medias[media_id] = media_data
             media_id += 1

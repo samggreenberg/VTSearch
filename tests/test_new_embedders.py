@@ -52,7 +52,13 @@ class TestImageSiglipEmbedderProperties:
 
         emb = ImageSiglipEmbedder()
         d = emb.to_dict()
-        assert d == {"name": "siglip", "media_type_id": "image", "supports_text": True}
+        assert d == {
+            "name": "siglip",
+            "media_type_id": "image",
+            "supports_text": True,
+            "supports_patch_regions": False,
+            "license_notice": None,
+        }
 
     def test_load_models_idempotent(self):
         from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
@@ -140,7 +146,13 @@ class TestAudioClapMusicEmbedderProperties:
 
         emb = AudioClapMusicEmbedder()
         d = emb.to_dict()
-        assert d == {"name": "clap_music", "media_type_id": "audio", "supports_text": True}
+        assert d == {
+            "name": "clap_music",
+            "media_type_id": "audio",
+            "supports_text": True,
+            "supports_patch_regions": False,
+            "license_notice": None,
+        }
 
     def test_load_models_idempotent(self):
         from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
@@ -215,7 +227,13 @@ class TestTextBGEEmbedderProperties:
 
         emb = TextBGEEmbedder()
         d = emb.to_dict()
-        assert d == {"name": "bge", "media_type_id": "text", "supports_text": True}
+        assert d == {
+            "name": "bge",
+            "media_type_id": "text",
+            "supports_text": True,
+            "supports_patch_regions": False,
+            "license_notice": None,
+        }
 
     def test_load_models_idempotent(self):
         from vtsearch.media.text.embedder_bge import TextBGEEmbedder
@@ -337,7 +355,13 @@ class TestVideoLanguageBindEmbedderProperties:
 
         emb = VideoLanguageBindEmbedder()
         d = emb.to_dict()
-        assert d == {"name": "languagebind", "media_type_id": "video", "supports_text": True}
+        assert d == {
+            "name": "languagebind",
+            "media_type_id": "video",
+            "supports_text": True,
+            "supports_patch_regions": False,
+            "license_notice": None,
+        }
 
     def test_load_models_idempotent(self):
         from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
@@ -496,6 +520,8 @@ class TestAllEmbeddersRegistration:
             assert "name" in d
             assert "media_type_id" in d
             assert "supports_text" in d
+            assert "supports_patch_regions" in d
+            assert "license_notice" in d
 
 
 class TestEmbedderSentinelDiscovery:

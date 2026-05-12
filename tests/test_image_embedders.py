@@ -38,6 +38,8 @@ class TestImageClipEmbedder:
             "name": "clip",
             "media_type_id": "image",
             "supports_text": True,
+            "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_registered_in_registry(self):
@@ -106,6 +108,8 @@ class TestImageSiglip2Embedder:
             "name": "siglip2",
             "media_type_id": "image",
             "supports_text": True,
+            "supports_patch_regions": False,
+            "license_notice": None,
         }
 
     def test_registered_in_registry(self):
@@ -164,6 +168,8 @@ class TestImageDinov2Embedder:
             "name": "dinov2",
             "media_type_id": "image",
             "supports_text": False,
+            "supports_patch_regions": True,
+            "license_notice": None,
         }
 
     def test_embed_text_returns_none(self):
@@ -229,6 +235,8 @@ class TestImageDinov3Embedder:
             "name": "dinov3",
             "media_type_id": "image",
             "supports_text": False,
+            "supports_patch_regions": True,
+            "license_notice": None,
         }
 
     def test_embed_text_returns_none(self):
@@ -285,14 +293,30 @@ class TestImageEupeEmbedder:
 
         assert ImageEupeEmbedder().supports_text is False
 
+    def test_supports_patch_regions_true(self):
+        """EUPE produces patch tokens; patch_regions is True."""
+        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
+
+        assert ImageEupeEmbedder().supports_patch_regions is True
+
+    def test_license_notice_set(self):
+        """EUPE outputs are bound by FAIR Noncommercial — surface that."""
+        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
+
+        notice = ImageEupeEmbedder().license_notice
+        assert isinstance(notice, str)
+        assert "Noncommercial" in notice or "noncommercial" in notice.lower()
+
     def test_to_dict(self):
         from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
 
-        assert ImageEupeEmbedder().to_dict() == {
-            "name": "eupe",
-            "media_type_id": "image",
-            "supports_text": False,
-        }
+        d = ImageEupeEmbedder().to_dict()
+        assert d["name"] == "eupe"
+        assert d["media_type_id"] == "image"
+        assert d["supports_text"] is False
+        assert d["supports_patch_regions"] is True
+        assert isinstance(d["license_notice"], str)
+        assert "noncommercial" in d["license_notice"].lower()
 
     def test_embed_text_returns_none(self):
         from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
@@ -307,9 +331,19 @@ class TestImageEupeEmbedder:
         assert emb.name == "eupe"
 
     def test_uses_correct_model_id(self):
+        """EUPE_MODEL_ID is the HF weight URL torch.hub fetches.
+
+        The previous "eupe" slug pointed at facebook/PE-Core-B16-224 via a
+        broken AutoModel.from_pretrained path; this PR replaces it with the
+        real facebookresearch/EUPE model whose ungated weights live at
+        the URL below.
+        """
         from vtsearch.config import EUPE_MODEL_ID
 
-        assert EUPE_MODEL_ID == "facebook/PE-Core-B16-224"
+        assert (
+            EUPE_MODEL_ID
+            == "https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt"
+        )
 
     def test_embed_media_returns_none_when_not_loaded(self):
         from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
@@ -331,14 +365,29 @@ class TestApiEmbeddersResponseShape:
         entries = {e["name"]: e for e in body["embedders"]}
         # All six image embedders must be present.
         assert set(entries) == {"siglip", "siglip2", "clip", "dinov2", "dinov3", "eupe"}
-        # supports_text must be a bool on every entry.
+        # Shape: every entry has the three capability fields, with bool /
+        # Optional[str] types.
         for entry in entries.values():
             assert isinstance(entry["supports_text"], bool)
+            assert isinstance(entry["supports_patch_regions"], bool)
+            assert entry["license_notice"] is None or isinstance(entry["license_notice"], str)
         # Specific expectations.
         assert entries["siglip"]["supports_text"] is True
         assert entries["dinov2"]["supports_text"] is False
         assert entries["dinov3"]["supports_text"] is False
         assert entries["eupe"]["supports_text"] is False
+        # DINOv2, DINOv3 and EUPE all produce patch regions; the bimodal
+        # CLIP-style embedders don't.
+        for name in ("dinov2", "dinov3", "eupe"):
+            assert entries[name]["supports_patch_regions"] is True
+        for name in ("siglip", "siglip2", "clip"):
+            assert entries[name]["supports_patch_regions"] is False
+        # Only EUPE carries a licence warning today (FAIR Noncommercial).
+        for name in ("siglip", "siglip2", "clip", "dinov2", "dinov3"):
+            assert entries[name]["license_notice"] is None
+        eupe_notice = entries["eupe"]["license_notice"]
+        assert isinstance(eupe_notice, str)
+        assert "noncommercial" in eupe_notice.lower()
 
 
 class TestSortRouteRejectsTextWhenUnsupported:

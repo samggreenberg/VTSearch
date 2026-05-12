@@ -554,6 +554,22 @@ export interface EmbedderInfo {
    * — the UI hides text-search affordances for datasets using them.
    */
   supports_text?: boolean;
+  /**
+   * Whether this embedder produces patch-level vectors and a hierarchical
+   * region tree per image. ``true`` for patch-based encoders (DINOv2,
+   * DINOv3, EUPE) once their patch pipeline lands; the gallery card draws
+   * a faint outline over the matched region for datasets using them.
+   */
+  supports_patch_regions?: boolean;
+  /**
+   * User-facing licence warning to show before the user picks this embedder.
+   * ``null`` for embedders with no special licensing constraints; a short
+   * human-readable string for embedders with restrictive licences (e.g.
+   * facebookresearch/EUPE under the FAIR Noncommercial Research Licence).
+   * Advisory only — the picker shows a warning chip, it does not gate
+   * selection behind an acceptance click.
+   */
+  license_notice?: string | null;
 }
 
 export interface EmbeddersResponse {

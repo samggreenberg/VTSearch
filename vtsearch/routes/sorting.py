@@ -54,20 +54,20 @@ def _cosine_sort(query_vec):
     Returns ``(results, threshold)`` where *results* is a list of
     ``{"id": …, "similarity": …}`` dicts sorted descending, and
     *threshold* is the GMM-based boundary (rounded to 4 decimals).
-    """
-    snap = snapshot_medias()
-    all_ids = list(snap.keys())
-    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-    query_norm = np.linalg.norm(query_vec)
-    emb_norms = np.linalg.norm(all_embs, axis=1)
-    norm_products = emb_norms * query_norm
-    safe_norms = np.where(norm_products == 0, 1.0, norm_products)
-    similarities = np.dot(all_embs, query_vec) / safe_norms
-    similarities = np.where(norm_products == 0, 0.0, similarities)
 
-    results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
-    threshold = calculate_gmm_threshold(similarities.tolist())
-    results.sort(key=lambda x: x["similarity"], reverse=True)
+    For datasets embedded with a patch-aware embedder (DINOv2, DINOv3,
+    EUPE), each result also carries a ``best_region`` field — the
+    bounding box of the region that scored highest, in normalised
+    image coordinates ``[x0, y0, x1, y1]``.  Single-vector embedders
+    take a fast vectorised numpy path with no per-result box.
+
+    Both paths live in :mod:`vtsearch.models.region_similarity`.
+    """
+    from vtsearch.models.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
+
+    snap = snapshot_medias()
+    results, sims_list = cosine_sort_with_boxes(snap, query_vec)
+    threshold = calculate_gmm_threshold(sims_list)
     return results, round(threshold, 4)
 
 
