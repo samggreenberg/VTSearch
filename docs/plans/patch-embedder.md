@@ -299,19 +299,24 @@ session that landed the backend so it could close on a logical
 boundary.  Pick any of them up independently — they don't depend on
 each other.
 
-1. **Gallery-card `best_region.box` outline overlay.**
-   - Backend already returns `best_region` (4-tuple `[x0, y0, x1, y1]`
-     in normalised image coordinates) on every result dict when the
+1. **Gallery-card `best_region.box` outline overlay — DONE.**
+   - Backend returns `best_region` (4-tuple `[x0, y0, x1, y1]` in
+     normalised image coordinates) on every result dict when the
      loaded dataset is patch-region-aware — both from `_cosine_sort`
      in `vtsearch/routes/sorting.py` and from `train_and_score` in
      `vtsearch/models/training.py`.  See "Similarity (search & sort)"
      and "Detector MLP" sections above.
-   - Frontend TODO: locate the gallery-card / result-thumbnail
-     component (probably under `frontend/src/app/components/center-panel/`
-     or its children), plumb the `best_region` field through the
-     result type → component prop → template, and render an
-     absolute-positioned outline div sized to the percent box.
-     Purely informational; no vote semantics attached.
+   - Frontend wiring: `SortResult.best_region` /
+     `LearnedSortResult.best_region` (api models) →
+     `SortedItem.bestRegion` (sort-state service) → each
+     `setSortResults` call site (`label-view`, `find-view`) →
+     `MediaListComponent.cachedOrderedItems[i].bestRegion` →
+     `MediaItemComponent.bestRegion` input.  The component renders a
+     faint yellow outline div positioned by percent inside a
+     `.thumbnail-wrap` container, in both grid and list view.  Boxes
+     that cover ~the entire image (the legacy single-vector fallback
+     of `(0, 0, 1, 1)`) are suppressed.  Purely informational; no
+     vote semantics attached.
 
 2. **`Dockerfile.image-embedders` + `scripts/cache_gated_models.sh`
    off the broken PE-Core AutoModel path.**
