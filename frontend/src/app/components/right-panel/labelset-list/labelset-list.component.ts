@@ -40,7 +40,7 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
 
   sortedEntries: SortedElement[] = [];
   private pendingScrollPct: number | null = null;
-  private thumbnailFailedIds = new Set<string>();
+  private thumbnailFailedUrls = new Set<string>();
 
   constructor(private detectorsApi: DetectorsApiService) {}
 
@@ -105,7 +105,8 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
   }
 
   hasThumbnailUrl(entry: LabelElement): boolean {
-    if (this.thumbnailFailedIds.has(entry.id)) return false;
+    const url = this.thumbnailUrl(entry);
+    if (url && this.thumbnailFailedUrls.has(url)) return false;
     return (
       entry.media_type === 'image' ||
       entry.media_type === 'video' ||
@@ -119,8 +120,8 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
     return this.detectorsApi.labelThumbnailUrl(this.modelName, entry.id);
   }
 
-  onThumbnailError(id: string): void {
-    this.thumbnailFailedIds.add(id);
+  onThumbnailError(url: string): void {
+    if (url) this.thumbnailFailedUrls.add(url);
   }
 
   placeholderIcon(entry: LabelElement): string | null {
