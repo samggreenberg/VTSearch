@@ -291,6 +291,67 @@ Run these **before** we ship v1, on the `caltech101_s` demo dataset (a sensible 
 
 These all run in a single throwaway script (or notebook), check results visually, then we delete the script.
 
+## Remaining v1 work
+
+V1 backend shipped across PR #1248; UI surface is partial.  These three
+items finish the v1 scope but were deliberately deferred from the
+session that landed the backend so it could close on a logical
+boundary.  Pick any of them up independently — they don't depend on
+each other.
+
+1. **Gallery-card `best_region.box` outline overlay.**
+   - Backend already returns `best_region` (4-tuple `[x0, y0, x1, y1]`
+     in normalised image coordinates) on every result dict when the
+     loaded dataset is patch-region-aware — both from `_cosine_sort`
+     in `vtsearch/routes/sorting.py` and from `train_and_score` in
+     `vtsearch/models/training.py`.  See "Similarity (search & sort)"
+     and "Detector MLP" sections above.
+   - Frontend TODO: locate the gallery-card / result-thumbnail
+     component (probably under `frontend/src/app/components/center-panel/`
+     or its children), plumb the `best_region` field through the
+     result type → component prop → template, and render an
+     absolute-positioned outline div sized to the percent box.
+     Purely informational; no vote semantics attached.
+
+2. **`Dockerfile.image-embedders` + `scripts/cache_gated_models.sh`
+   off the broken PE-Core AutoModel path.**
+   - Both files still call `AutoModel.from_pretrained(EUPE_MODEL_ID,
+     ..., trust_remote_code=True)`, which no longer matches the
+     embedder's actual load path (now `torch.hub.load` against
+     `facebookresearch/EUPE` with a HF weights URL).  At runtime the
+     embedder fetches its own weights via torch hub, so the bake
+     step in Docker is now ineffective (and the `trust_remote_code`
+     call would also have failed had it ever run for real).
+   - Fix: switch both files to a torch-hub-based pre-cache.  Set
+     `TORCH_HOME` to the shared `model_cache/` dir and run
+     `torch.hub.load("facebookresearch/EUPE", "eupe_vitb16",
+     source="github", pretrained=True, weights=EUPE_MODEL_ID,
+     trust_repo=True)` once at build / host-cache time so the
+     EUPE repo clone + weights file are baked in.  No HF token
+     needed (the EUPE-ViT-B HF repo is ungated).  See "EUPE backbone
+     & licence" section for the constants.
+   - Build-time concern only; runtime works without it.
+
+3. **caltech101_s pre-implementation experiments.**
+   - The design pins `K = 12` and `α = 0.5` as v1 defaults; the
+     intent was to confirm both on caltech101_s before shipping.
+     Backend is live without the sweep, so the experiments are now
+     "tune the defaults that already work" rather than "unblock the
+     ship".
+   - Spec lives in "Pre-implementation experiments" above:
+     - `K ∈ {8, 12, 16}` and `α ∈ {0.3, 0.5, 0.7}` sweep — eyeball
+       leaf and HAC-internal bounding-box overlays on ~30 sampled
+       caltech101_s images.  Pick the best `(K, α)` and update the
+       defaults baked into `_attach_patch_regions` in
+       `vtsearch/datasets/loader_folder.py`.
+     - Diversity-tree sanity check: build the tree on a
+       DINOv3-embedded caltech101_s and verify top-level clusters
+       look semantically sensible (animals / vehicles / faces).
+   - Both run in a single throwaway script.  Code under
+     `vtsearch/models/patch_regions.py` is parameterised on `K` and
+     `α` so a future patch-embedder iteration can re-run the sweep
+     on a different dataset without touching production code.
+
 ## Open questions
 
 1. **FP16 ↔ FP32 numerical effect** — cosine similarity at fp16 storage / fp32 compute is fine for retrieval, but cross-check that the max-over-region rule doesn't flip rank vs. fp32-storage on a held-out batch. Cheap, low-risk; just don't skip it.
