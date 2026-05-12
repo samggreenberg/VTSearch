@@ -413,6 +413,19 @@ def build_hac_tree(
 # ---------------------------------------------------------------------------
 
 
+def to_fp16(regions: list[RegionVector]) -> list[RegionVector]:
+    """Cast every region vector to float16 for pickling.
+
+    Used by the loader pipeline to compress ``media["patch_regions"]``
+    before it lands in the dataset pickle.  Vectors are rehydrated to
+    float32 by callers that score them (similarity, MLP).
+    """
+    return [
+        RegionVector(box=r.box, vec=r.vec.astype(np.float16, copy=False), children=r.children)
+        for r in regions
+    ]
+
+
 def build_region_tree(
     output: PatchEmbedOutput,
     *,
