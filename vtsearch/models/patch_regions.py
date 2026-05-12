@@ -167,6 +167,50 @@ def _norm_torch(t: "torch.Tensor") -> np.ndarray:
     return v / np.maximum(n, 1e-12)
 
 
+def eupe_features_to_patch_output(features: dict) -> Optional[PatchEmbedOutput]:
+    """Turn a :func:`facebookresearch/EUPE`-style ``forward_features`` dict
+    into a :class:`PatchEmbedOutput`.
+
+    EUPE's forward already separates CLS, storage tokens, and patch tokens
+    into named keys (``x_norm_clstoken``, ``x_storage_tokens``,
+    ``x_norm_patchtokens``), so we don't need a register-token slice — the
+    storage tokens are already absent from ``x_norm_patchtokens``.
+
+    Saliency is the **CLS-cosine-similarity proxy**: each patch's softmaxed
+    cosine similarity to the CLS vector.  EUPE's attention path uses
+    ``torch.nn.functional.scaled_dot_product_attention`` which does not
+    return weights, so the standard CLS→patch attention map isn't available
+    without monkey-patching SDPA.  This proxy gives us a meaningful "how
+    much does each patch contribute to the global representation" signal at
+    no model-internals cost.
+
+    Returns ``None`` if the patch grid isn't square.
+    """
+    import torch  # noqa: PLC0415
+
+    cls = features["x_norm_clstoken"][0]  # (D,)
+    patches = features["x_norm_patchtokens"][0]  # (N, D)
+    num_patches = patches.shape[0]
+    side = int(round(num_patches**0.5))
+    if side * side != num_patches:
+        return None
+    patch_grid = patches.reshape(side, side, -1)
+
+    cls_n = cls / torch.clamp(cls.norm(), min=1e-8)
+    patches_n = patches / torch.clamp(patches.norm(dim=-1, keepdim=True), min=1e-8)
+    sims = patches_n @ cls_n  # (N,) cosine similarity per patch to CLS
+    # Softmax with a moderate temperature so a few cells dominate without
+    # collapsing to a one-hot. Empirically tunable in the caltech101_s
+    # sweep alongside K and α.
+    saliency = torch.softmax(sims * 4.0, dim=-1).reshape(side, side)
+
+    return PatchEmbedOutput(
+        cls_vec=_norm_torch(cls).astype(np.float32),
+        patch_grid=_norm_torch(patch_grid).astype(np.float32),
+        patch_saliency=saliency.detach().cpu().float().numpy().astype(np.float32),
+    )
+
+
 @dataclass
 class _ProtoLeaf:
     """Intermediate leaf representation during clustering.
