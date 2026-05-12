@@ -230,6 +230,30 @@ describe('AutopilotPanelComponent', () => {
     expect(component.refocus.emit).not.toHaveBeenCalled();
   });
 
+  it('activate without labelset labels should not enter retrain mode', () => {
+    autopilotState.clear();
+    const fresh = TestBed.createComponent(AutopilotPanelComponent);
+    fresh.componentInstance.labelsetGoodCount = 0;
+    fresh.componentInstance.labelsetBadCount = 0;
+    fresh.detectChanges();
+    expect(fresh.componentInstance.state.retrainMode).toBeFalse();
+  });
+
+  it('activate with detector labels from another dataset should enter retrain mode', () => {
+    autopilotState.clear();
+    const fresh = TestBed.createComponent(AutopilotPanelComponent);
+    // Simulate "trained on DatasetA, switched to DatasetB with 0 votes here":
+    // current-dataset goodVotes/badVotes empty, but labelset counts positive.
+    fresh.componentInstance.labelsetGoodCount = 5;
+    fresh.componentInstance.labelsetBadCount = 4;
+    fresh.componentInstance.goodVotes = new Set();
+    fresh.componentInstance.badVotes = new Set();
+    fresh.detectChanges();
+    expect(fresh.componentInstance.state.retrainMode).toBeTrue();
+    // Still in 'good' phase since current-dataset votes are below threshold.
+    expect(fresh.componentInstance.state.phase).toBe('good');
+  });
+
   it('should mark current step as active and future steps as future', () => {
     const steps = component.steps;
     expect(steps[0].state).toBe('active');
