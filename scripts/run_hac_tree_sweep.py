@@ -138,48 +138,99 @@ def _crop_to_box(
     image: Image.Image,
     box: tuple[float, float, float, float],
     size: tuple[int, int],
+    *,
+    pad: tuple[int, int, int] = (250, 250, 250),
 ) -> Image.Image:
-    """Crop *image* to *box* (normalised coords) and resize to *size*."""
+    """Crop *image* to *box* and fit (preserving aspect ratio) inside *size*.
+
+    The crop is resized to the largest dimensions that fit inside ``size``
+    while keeping its native aspect ratio, then pasted centred onto a
+    *size*-shaped canvas filled with *pad*.  This avoids the squashing
+    that happens when a tall or wide crop is forced into a square
+    thumbnail — important here because the leaves and internal merges
+    have very different shapes from the underlying images.
+    """
     w, h = image.size
     x0, y0, x1, y1 = box
     px0 = max(0, int(round(x0 * w)))
     py0 = max(0, int(round(y0 * h)))
     px1 = min(w, max(px0 + 1, int(round(x1 * w))))
     py1 = min(h, max(py0 + 1, int(round(y1 * h))))
-    return image.crop((px0, py0, px1, py1)).resize(size, Image.LANCZOS)
+    crop = image.crop((px0, py0, px1, py1))
+
+    target_w, target_h = size
+    cw, ch = crop.size
+    scale = min(target_w / cw, target_h / ch)
+    new_w = max(1, int(round(cw * scale)))
+    new_h = max(1, int(round(ch * scale)))
+    crop = crop.resize((new_w, new_h), Image.LANCZOS)
+
+    cell = Image.new("RGB", size, pad)
+    ox = (target_w - new_w) // 2
+    oy = (target_h - new_h) // 2
+    cell.paste(crop, (ox, oy))
+    return cell
 
 
 def _layout_tree(
     regions: list[RegionVector], k: int
 ) -> tuple[list[float], list[int], int]:
-    """Assign each HAC node a (column, row) position.
+    """Assign each HAC node a (column, row) position — planar.
 
-    Leaves sit at row 0 in left-to-right box-centroid order; each internal
-    node sits one row above the *deeper* of its two children, at the
-    column-midpoint between them.  Returns ``(col_per_node, depth_per_node,
-    max_depth)`` indexed over ``regions[1:]`` (i.e. leaves first, then
-    internals in HAC build order).
+    Strategy: in-order DFS from the root.  Every binary tree admits a
+    planar embedding via in-order traversal — each subtree occupies a
+    contiguous range of leaf columns, so siblings never cross.  At each
+    merge we visit the child whose subtree contains the *leftmost-x* leaf
+    (by box centroid) first; that makes the global left-to-right leaf
+    order roughly match image left-to-right while still respecting the
+    tree structure.
+
+    Returns ``(col_per_node, depth_per_node, max_depth)`` indexed over
+    ``regions[1:]``.
     """
     hac = regions[1:]
     n = len(hac)
 
-    depth = [0] * n
-    for i, r in enumerate(hac):
-        if r.children is not None:
-            l = r.children[0] - 1  # 1-based into `regions` → 0-based into `hac`
-            rr = r.children[1] - 1
-            depth[i] = max(depth[l], depth[rr]) + 1
-    max_depth = max(depth)
-
-    # Leaves left-to-right by box centroid x.
-    leaf_order = sorted(range(k), key=lambda i: (hac[i].box[0] + hac[i].box[2]) / 2.0)
-    col: list[float] = [0.0] * n
-    for slot, idx in enumerate(leaf_order):
-        col[idx] = float(slot)
+    # Leaf centroid x (image coords) — used only to decide left vs right
+    # at each merge, never to override the tree structure.
+    leaf_cx: dict[int, float] = {
+        i: (hac[i].box[0] + hac[i].box[2]) / 2.0 for i in range(k)
+    }
+    # min(leaf_cx) over each subtree, computed bottom-up over the HAC build
+    # order (children always precede their parent).
+    min_cx: dict[int, float] = dict(leaf_cx)
     for i in range(k, n):
         l = hac[i].children[0] - 1  # type: ignore[index]
         rr = hac[i].children[1] - 1  # type: ignore[index]
-        col[i] = (col[l] + col[rr]) / 2.0
+        min_cx[i] = min(min_cx[l], min_cx[rr])
+
+    col: list[float] = [0.0] * n
+    next_slot = 0
+
+    def visit(i: int) -> None:
+        nonlocal next_slot
+        if hac[i].children is None:
+            col[i] = float(next_slot)
+            next_slot += 1
+            return
+        l = hac[i].children[0] - 1  # type: ignore[index]
+        rr = hac[i].children[1] - 1  # type: ignore[index]
+        first, second = (l, rr) if min_cx[l] <= min_cx[rr] else (rr, l)
+        visit(first)
+        visit(second)
+        col[i] = (col[first] + col[second]) / 2.0
+
+    # The root is the last internal node in HAC build order.
+    visit(n - 1)
+    assert next_slot == k, f"in-order DFS placed {next_slot} leaves, expected {k}"
+
+    depth = [0] * n
+    for i, r in enumerate(hac):
+        if r.children is not None:
+            l = r.children[0] - 1
+            rr = r.children[1] - 1
+            depth[i] = max(depth[l], depth[rr]) + 1
+    max_depth = max(depth)
 
     return col, depth, max_depth
 
