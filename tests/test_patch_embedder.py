@@ -326,28 +326,48 @@ class TestEupeAdapter:
 
 
 class TestEmbedderCapabilities:
-    def test_dinov2_supports_patch_regions(self):
-        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+    def test_dinov2_patch_supports_patch_regions(self):
+        from vtsearch.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
 
-        e = ImageDinov2Embedder()
+        e = ImageDinov2PatchEmbedder()
         assert e.supports_patch_regions is True
         assert e.supports_text is False
         assert e.license_notice is None
 
-    def test_dinov3_supports_patch_regions(self):
-        from vtsearch.media.image.embedder_dinov3 import ImageDinov3Embedder
+    def test_dinov2_single_does_not_support_patch_regions(self):
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
-        e = ImageDinov3Embedder()
+        e = ImageDinov2SingleEmbedder()
+        assert e.supports_patch_regions is False
+
+    def test_dinov3_patch_supports_patch_regions(self):
+        from vtsearch.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
+
+        e = ImageDinov3PatchEmbedder()
         assert e.supports_patch_regions is True
         assert e.supports_text is False
         assert e.license_notice is None
 
-    def test_eupe_supports_patch_regions_and_carries_license_notice(self):
-        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
+    def test_dinov3_single_does_not_support_patch_regions(self):
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
-        e = ImageEupeEmbedder()
+        e = ImageDinov3SingleEmbedder()
+        assert e.supports_patch_regions is False
+
+    def test_eupe_patch_supports_patch_regions_and_carries_license_notice(self):
+        from vtsearch.media.image.embedder_eupe_patch import ImageEupePatchEmbedder
+
+        e = ImageEupePatchEmbedder()
         assert e.supports_patch_regions is True
         assert e.supports_text is False
+        assert isinstance(e.license_notice, str)
+        assert "noncommercial" in e.license_notice.lower()
+
+    def test_eupe_single_carries_license_notice(self):
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+
+        e = ImageEupeSingleEmbedder()
+        assert e.supports_patch_regions is False
         assert isinstance(e.license_notice, str)
         assert "noncommercial" in e.license_notice.lower()
 
