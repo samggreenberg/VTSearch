@@ -337,25 +337,35 @@ each other.
      & licence" section for the constants.
    - Build-time concern only; runtime works without it.
 
-3. **caltech101_s pre-implementation experiments.**
-   - The design pins `K = 12` and `α = 0.5` as v1 defaults; the
-     intent was to confirm both on caltech101_s before shipping.
-     Backend is live without the sweep, so the experiments are now
-     "tune the defaults that already work" rather than "unblock the
-     ship".
-   - Spec lives in "Pre-implementation experiments" above:
-     - `K ∈ {8, 12, 16}` and `α ∈ {0.3, 0.5, 0.7}` sweep — eyeball
-       leaf and HAC-internal bounding-box overlays on ~30 sampled
-       caltech101_s images.  Pick the best `(K, α)` and update the
-       defaults baked into `_attach_patch_regions` in
-       `vtsearch/datasets/loader_folder.py`.
-     - Diversity-tree sanity check: build the tree on a
-       DINOv3-embedded caltech101_s and verify top-level clusters
-       look semantically sensible (animals / vehicles / faces).
-   - Both run in a single throwaway script.  Code under
+3. **caltech101_s pre-implementation experiments — DONE.**
+   - The design pinned `K = 12` and `α = 0.5` as v1 defaults; the
+     intent was to confirm both on caltech-101 before shipping the
+     production embedders.  Sweep results live under
+     [`docs/experiments/hac-tree-sweep/`](../experiments/hac-tree-sweep/README.md)
+     with per-image overlay PNGs and aggregate metrics.
+   - **`K ∈ {8, 12, 16}` and `α ∈ {0.3, 0.5, 0.7}` sweep on 30
+     caltech-101 images (DINOv2 backbone).**  Conclusion: K=12 is the
+     smallest K where multi-subject images (faces, animals on grass)
+     cleanly separate subject parts from background in the leaf set,
+     while keeping HAC merges balanced.  α controls how chain-like
+     the merges get — α=0.3 produces tighter spatially-coherent
+     internals (mean area-growth ≈ 1.0), α=0.7 lets internals form
+     L-shapes over background patches.  The α=0.5 design pin sits in
+     between; geometric metrics differ by single-digit percent across
+     the sweep, so the production defaults stand and
+     `_attach_patch_regions` in `vtsearch/datasets/loader_folder.py`
+     was not changed.
+   - **Diversity-tree sanity check** on CLS-pooled DINOv2 vectors for
+     the same 30 images: multiple semantically-coherent clusters
+     (mammals on grass; side-profile fauna; tall complex silhouettes;
+     single-object-on-simple-background), no random-looking clusters
+     → the diversity tree continues to behave reasonably once the
+     patch-aware embedder takes over from SigLIP.
+   - Sweep ran via `scripts/run_hac_tree_sweep.py` (kept in-tree so
+     the same sweep can be re-run on a different dataset without
+     having to reconstruct the harness).  Code under
      `vtsearch/models/patch_regions.py` is parameterised on `K` and
-     `α` so a future patch-embedder iteration can re-run the sweep
-     on a different dataset without touching production code.
+     `α` per the same goal.
 
 ## Open questions
 
