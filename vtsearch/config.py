@@ -27,6 +27,24 @@ CLAP_SAMPLE_RATE = 48000  # CLAP model expected input sample rate
 XCLIP_MODEL_ID = "microsoft/xclip-base-patch32"
 E5_MODEL_ID = "intfloat/e5-base-v2"
 SIGLIP_MODEL_ID = "google/siglip-base-patch16-224"
+SIGLIP2_MODEL_ID = "google/siglip2-base-patch16-224"
+CLIP_MODEL_ID = "openai/clip-vit-base-patch32"
+DINOV2_MODEL_ID = "facebook/dinov2-base"
+DINOV3_MODEL_ID = "facebook/dinov3-vitb16-pretrain-lvd1689m"
+EUPE_MODEL_ID = "https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt"
+"""Direct URL to the real EUPE ViT-B/16 weights on Hugging Face.
+
+Loaded via :func:`torch.hub.load` from the ``facebookresearch/EUPE`` GitHub
+repo with this URL passed as the ``weights`` kwarg.  The HF repo
+``facebook/EUPE-ViT-B`` is ungated; the underlying weights are released
+under Meta's FAIR Noncommercial Research Licence (surfaced to users via
+``MediaEmbedder.license_notice`` on the EUPE embedder).
+
+Not the same model as ``facebook/PE-Core-B16-224`` — that was Meta's
+Perception Encoder Core, which the dev "eupe" slug was confusingly
+aliased to via a broken ``AutoModel.from_pretrained`` path (the PE-Core
+HF repo has no ``config.json`` so ``AutoModel`` could never load it).
+"""
 CLAP_MUSIC_MODEL_ID = "laion/larger_clap_music_and_speech"
 BGE_MODEL_ID = "BAAI/bge-base-en-v1.5"
 LANGUAGEBIND_VIDEO_MODEL_ID = "LanguageBind/LanguageBind_Video_V1.5_FT"

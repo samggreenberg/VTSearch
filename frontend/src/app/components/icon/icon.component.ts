@@ -14,7 +14,8 @@ const KNOWN_TYPES = new Set([
   'list', 'grid', 'cursor-click', 'cursor-hover',
   'palette', 'sort-descending', 'steering-wheel', 'cloud-upload',
   'thumbs-up', 'thumbs-down', 'factory',
-  'house', 'lightning', 'flask', 'cubes',
+  'house', 'lightning', 'flask', 'cubes', 'database',
+  'checkbox-checked', 'search', 'trophy',
 ]);
 
 function emojiToType(icon: string): string {
@@ -178,6 +179,15 @@ function emojiToType(icon: string): string {
       }
       @case ('cubes') {
         <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h18v18H2z"/><path d="M2 4l2-2h18v18l-2 2"/><path d="M20 4l2-2"/><path d="M11 4v18M2 13h18"/><path d="M11 4l2-2"/><path d="M20 13l2-2"/></svg>
+      }
+      @case ('checkbox-checked') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" ry="3"/><polyline points="8 12 11 15 16 9"/></svg>
+      }
+      @case ('search') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15.2" y2="15.2"/></svg>
+      }
+      @case ('trophy') {
+        <svg xmlns="http://www.w3.org/2000/svg" [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v4a6 6 0 0 1-12 0z"/><path d="M6 6H3a2 2 0 0 0 0 4h3"/><path d="M18 6h3a2 2 0 0 1 0 4h-3"/><line x1="10" y1="14" x2="10" y2="18"/><line x1="14" y1="14" x2="14" y2="18"/><rect x="7" y="18" width="10" height="3" rx="1"/></svg>
       }
     } }
   `,

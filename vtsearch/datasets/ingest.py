@@ -244,7 +244,7 @@ def _ingest_via_resolver(
 
     embedder_name = _embedder_name_for_type(medias, media_type_id)
 
-    from vtsearch.models.resolver import embed_file, resolve_file_from_origin
+    from vtsearch.models.resolver import embed_file, resolve_file_context
 
     ingested = 0
 
@@ -252,35 +252,40 @@ def _ingest_via_resolver(
         origin_name = entry.get("origin_name", "")
         filename = entry.get("filename", "")
 
-        file_path = resolve_file_from_origin(origin_dict, origin_name, filename)
-        if file_path is None:
-            continue
+        # Hold the source alive through both embed and read_bytes — some
+        # MediaSources materialise the file inside a TemporaryDirectory
+        # they own, and dropping the source before we touch the path
+        # finalises that temp dir under GC and leaves us with a stale path.
+        with resolve_file_context(origin_dict, origin_name, filename) as file_path:
+            if file_path is None:
+                continue
 
-        # Use clip-aware embedding when the origin has clip params, so that
-        # re-ingested clipped media gets the correct (clipped) embedding.
-        if origin_dict.get("params", {}).get("clipper"):
-            from vtsearch.models.resolver import _apply_clip_and_embed
+            # Use clip-aware embedding when the origin has clip params, so
+            # that re-ingested clipped media gets the correct (clipped)
+            # embedding.
+            if origin_dict.get("params", {}).get("clipper"):
+                from vtsearch.models.resolver import _apply_clip_and_embed
 
-            embedding = _apply_clip_and_embed(file_path, media_type_id, origin_dict, embedder_name)
-        else:
-            embedding = embed_file(file_path, media_type_id, embedder_name)
-        if embedding is None:
-            continue
+                embedding = _apply_clip_and_embed(file_path, media_type_id, origin_dict, embedder_name)
+            else:
+                embedding = embed_file(file_path, media_type_id, embedder_name)
+            if embedding is None:
+                continue
 
-        file_bytes = file_path.read_bytes()
-        md5 = hashlib.md5(file_bytes).hexdigest()
+            file_bytes = file_path.read_bytes()
+            md5 = hashlib.md5(file_bytes).hexdigest()
 
-        media_data = _build_media_data(
-            origin_dict=origin_dict,
-            entry=entry,
-            media_type_id=media_type_id,
-            origin_name=origin_name,
-            file_path=file_path,
-            file_bytes=file_bytes,
-            md5=md5,
-            embedding=embedding,
-            embedder_name=embedder_name,
-        )
+            media_data = _build_media_data(
+                origin_dict=origin_dict,
+                entry=entry,
+                media_type_id=media_type_id,
+                origin_name=origin_name,
+                file_path=file_path,
+                file_bytes=file_bytes,
+                md5=md5,
+                embedding=embedding,
+                embedder_name=embedder_name,
+            )
 
         # Atomic id allocation + insert, see _ingest_via_source above.
         with _state_lock:

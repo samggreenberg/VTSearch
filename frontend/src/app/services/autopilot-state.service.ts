@@ -12,6 +12,14 @@ export interface AutopilotState {
   stableStatus: string;
   spanStatus: string;
   fracDiversity: number;
+  /**
+   * True when autopilot started against a detector that already has labels
+   * (e.g. trained on DatasetA, now continuing on DatasetB).  In retrain mode
+   * every phase uses learned sort — the initial "good"/"bad" phases use
+   * Learned-Good and Learned-Hard against the existing model instead of
+   * falling back to text/example sort.
+   */
+  retrainMode: boolean;
 }
 
 const INITIAL_STATE: AutopilotState = {
@@ -22,6 +30,7 @@ const INITIAL_STATE: AutopilotState = {
   stableStatus: '',
   spanStatus: '',
   fracDiversity: 0,
+  retrainMode: false,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -38,7 +47,7 @@ export class AutopilotStateService {
     return this.stateSubject.value.phase !== 'idle';
   }
 
-  activate(): void {
+  activate(retrainMode = false): void {
     if (this.running) return;
     this.stateSubject.next({
       ...this.stateSubject.value,
@@ -47,6 +56,7 @@ export class AutopilotStateService {
       stableStatus: '',
       spanStatus: '',
       fracDiversity: 0,
+      retrainMode,
     });
   }
 

@@ -7,6 +7,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { SettingsImporterModalComponent } from '../settings-importer-modal/settings-importer-modal.component';
 import { SettingsExporterModalComponent } from '../settings-exporter-modal/settings-exporter-modal.component';
+import { AchievementsTabComponent } from '../../achievements-tab/achievements-tab.component';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
@@ -16,7 +17,7 @@ import { Theme, ThemeService } from '../../../services/theme.service';
 @Component({
   selector: 'vt-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent, AchievementsTabComponent],
   templateUrl: './settings-modal.component.html',
   styleUrl: './settings-modal.component.scss',
 })

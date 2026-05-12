@@ -782,6 +782,11 @@ def _run_origin_load_in_background(
                 tracker.update(status, message, current, total, **kw)
 
             _load_embedder_with_progress(ctx.medias, _task_progress)
+
+            # Achievement: dataset load succeeded (demos/synthetic excluded).
+            from vtsearch.achievements import record_dataset_load
+
+            record_dataset_load(str(origin.get("importer", "")))
         except CancelledError:
             from vtsearch.utils.state_core import unregister_context
 

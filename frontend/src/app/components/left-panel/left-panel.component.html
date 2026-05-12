@@ -82,6 +82,7 @@
           [loadSortLabel]="loadSortLabel"
           [initialTextQuery]="textQuery"
           [learnedSortAvailable]="learnedSortAvailable"
+          [textSortAvailable]="textSortAvailable"
           (sortModeChange)="sortModeChange.emit($event)"
           (textSort)="textSort.emit($event)"
           (learnedSort)="learnedSort.emit()"
@@ -152,6 +153,8 @@
         <vt-autopilot-panel
           [goodVotes]="goodVotes"
           [badVotes]="badVotes"
+          [labelsetGoodCount]="labelsetGoodCount"
+          [labelsetBadCount]="labelsetBadCount"
           [labelingStatus]="labelingStatus"
           [collapsed]="autopilotCollapsed"
           (started)="autopilotStart.emit()"

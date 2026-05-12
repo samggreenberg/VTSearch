@@ -8,12 +8,16 @@ embeddings for training.  This module handles that resolution:
 2. Embed the file using the appropriate embedder for the media type.
 3. Return resolved embeddings with availability stats.
 
-File resolution uses a pluggable :class:`FileResolver` protocol.  Two
-resolver implementations are auto-wired on first use:
+File resolution is split into two pluggable resolvers, auto-wired on
+first use:
 
 - **Source resolver** — delegates to
   :func:`~vtsearch.datasets.sources.get_source_for_origin` and calls
-  :meth:`~MediaSource.resolve_path`.
+  :meth:`~MediaSource.resolve_path`.  Registers the source's
+  :meth:`~MediaSource.cleanup` on the caller's :class:`ExitStack` so
+  per-call temp storage is held alive for the duration of the
+  :func:`resolve_file_context` block (otherwise GC of the source can
+  delete the path before the caller embeds the file).
 - **Importer resolver** — delegates to
   :func:`~vtsearch.datasets.importers.get_importer` and calls
   :meth:`~DatasetImporter.resolve_file`.
@@ -29,9 +33,10 @@ importers.
 from __future__ import annotations
 
 import logging
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Iterator, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -44,12 +49,32 @@ log = logging.getLogger(__name__)
 
 
 @runtime_checkable
-class FileResolver(Protocol):
-    """Callable that resolves a media file from origin metadata.
+class SourceResolver(Protocol):
+    """Callable that resolves an origin to a file via a :class:`MediaSource`.
 
-    Implementations receive the origin dict, origin_name, and filename,
-    and return a :class:`~pathlib.Path` to the resolved file on disk
-    (or ``None`` if resolution fails).
+    Implementations receive an :class:`~contextlib.ExitStack` (so they can
+    register :meth:`~MediaSource.cleanup` to fire when the caller's
+    :func:`resolve_file_context` exits) plus the origin dict,
+    ``origin_name``, and ``filename``.
+    """
+
+    def __call__(
+        self,
+        stack: ExitStack,
+        origin: dict[str, Any],
+        origin_name: str,
+        filename: str,
+    ) -> Path | None: ...
+
+
+@runtime_checkable
+class ImporterResolver(Protocol):
+    """Callable that resolves an origin via its dataset importer.
+
+    Importer-based dispatch does not allocate a per-call source — importers
+    that need to cache materialised content (e.g. ``http_archive``) are
+    expected to write to a stable directory and never call ``cleanup()``,
+    so no :class:`ExitStack` is threaded through.
     """
 
     def __call__(
@@ -64,22 +89,24 @@ class FileResolver(Protocol):
 # Pluggable resolver registry
 # ---------------------------------------------------------------------------
 
-_source_resolver: FileResolver | None = None
-_importer_resolver: FileResolver | None = None
+_source_resolver: SourceResolver | None = None
+_importer_resolver: ImporterResolver | None = None
 _auto_wired = False
 
 
-def register_source_resolver(fn: FileResolver) -> None:
+def register_source_resolver(fn: SourceResolver) -> None:
     """Register a source-based file resolver.
 
-    The resolver is called with ``(origin, origin_name, filename)`` and
-    should return a :class:`~pathlib.Path` or ``None``.
+    The resolver is called with ``(stack, origin, origin_name, filename)``
+    and should return a :class:`~pathlib.Path` or ``None``.  Register the
+    backing source's :meth:`~MediaSource.cleanup` on *stack* so its temp
+    storage is only released once the caller is done with the path.
     """
     global _source_resolver
     _source_resolver = fn
 
 
-def register_importer_resolver(fn: FileResolver) -> None:
+def register_importer_resolver(fn: ImporterResolver) -> None:
     """Register an importer-based file resolver.
 
     The resolver is called with ``(origin, origin_name, filename)`` and
@@ -108,14 +135,18 @@ def _auto_wire_resolvers() -> None:
             from vtsearch.datasets.sources import get_source_for_origin
 
             def _default_source_resolver(
+                stack: ExitStack,
                 origin: dict[str, Any],
                 origin_name: str,
                 filename: str,
             ) -> Path | None:
                 source = get_source_for_origin(origin)
-                if source is not None:
-                    return source.resolve_path(origin_name, filename)
-                return None
+                if source is None:
+                    return None
+                # Keep the source alive — and its temp dir, if any — until
+                # the caller's resolve_file_context exits.
+                stack.callback(source.cleanup)
+                return source.resolve_path(origin_name, filename)
 
             register_source_resolver(_default_source_resolver)
         except ImportError:
@@ -161,6 +192,34 @@ class ResolvedLabels:
         return any(v == 1.0 for v in self.labels) and any(v == 0.0 for v in self.labels)
 
 
+@contextmanager
+def resolve_file_context(
+    origin: dict[str, Any] | None,
+    origin_name: str = "",
+    filename: str = "",
+) -> Iterator[Path | None]:
+    """Resolve a media file from its origin and keep the backing source alive.
+
+    Some :class:`~vtsearch.datasets.sources.base.MediaSource` implementations
+    (e.g. PullWrest) materialise the file inside a
+    :class:`tempfile.TemporaryDirectory` they own.  If the source is dropped
+    before the caller accesses the file, the temp dir is finalized by GC and
+    the path goes stale — ``embed_file`` then crashes with
+    ``FileNotFoundError``.
+
+    This context manager owns the source for the duration of the ``with``
+    block and only invokes :meth:`~MediaSource.cleanup` on exit, so the path
+    is guaranteed to remain valid while the caller embeds or reads bytes
+    from it.
+
+    Yields the resolved :class:`~pathlib.Path`, or ``None`` if no resolver
+    could locate the file.
+    """
+    with ExitStack() as stack:
+        path = _resolve_with_stack(stack, origin, origin_name, filename)
+        yield path
+
+
 def resolve_file_from_origin(
     origin: dict[str, Any] | None,
     origin_name: str = "",
@@ -168,14 +227,34 @@ def resolve_file_from_origin(
 ) -> Path | None:
     """Resolve a media file from its origin information.
 
-    Looks up the importer named in ``origin["importer"]`` from the
-    auto-discovered importer registry and calls its ``resolve_file()``
-    method.  Two synthetic origin types are handled inline:
+    Returns the file path if found, or ``None``.  Convenience wrapper over
+    :func:`resolve_file_context` for callers that only need to test
+    existence or read the file immediately (synchronously, in the same
+    expression).  Callers that hold the returned path across an operation
+    that re-enters Python — embedding, opening with PIL, etc. — must use
+    :func:`resolve_file_context` instead, because some media sources own
+    temporary directories that are garbage-collected as soon as this
+    function returns.
+    """
+    with resolve_file_context(origin, origin_name, filename) as p:
+        return p
+
+
+def _resolve_with_stack(
+    stack: ExitStack,
+    origin: dict[str, Any] | None,
+    origin_name: str = "",
+    filename: str = "",
+) -> Path | None:
+    """Resolve *origin* to a :class:`Path` while registering any source's
+    :meth:`~MediaSource.cleanup` on *stack*.
+
+    Shared core for :func:`resolve_file_context` and (transitively)
+    :func:`resolve_file_from_origin`.  The two synthetic origin types are
+    handled inline because they delegate to real importers:
 
     - ``dupe_set``: tries each member until one resolves.
     - ``converter``: reconstructs the parent origin and delegates.
-
-    Returns the file path if found, or ``None``.
     """
     if origin is None:
         log.debug("resolve_file: origin is None — cannot resolve")
@@ -195,14 +274,14 @@ def resolve_file_from_origin(
     # -- Synthetic origins that delegate to real importers --
 
     if importer_name == "dupe_set":
-        result = _resolve_dupe_set(origin)
+        result = _resolve_dupe_set(stack, origin)
         if result is None:
             members = origin.get("members", [])
             log.debug("resolve_file: dupe_set with %d members — none resolved", len(members))
         return result
 
     if importer_name == "converter":
-        result = _resolve_converter(params)
+        result = _resolve_converter(stack, params)
         if result is None:
             log.debug(
                 "resolve_file: converter origin failed — source_file=%r, parent_importer=%r",
@@ -216,7 +295,7 @@ def resolve_file_from_origin(
     _auto_wire_resolvers()
 
     if _source_resolver is not None:
-        result = _source_resolver(origin, origin_name, filename)
+        result = _source_resolver(stack, origin, origin_name, filename)
         if result is not None:
             log.debug("resolve_file: source-based dispatch succeeded → %s", result)
             return result
@@ -262,10 +341,11 @@ def resolve_file_from_origin(
     return None
 
 
-def _resolve_dupe_set(origin: dict[str, Any]) -> Path | None:
+def _resolve_dupe_set(stack: ExitStack, origin: dict[str, Any]) -> Path | None:
     """Try each member of a dupe_set until one resolves."""
     for m in origin.get("members", []):
-        result = resolve_file_from_origin(
+        result = _resolve_with_stack(
+            stack,
             m.get("origin"),
             m.get("origin_name", ""),
             m.get("filename", ""),
@@ -275,7 +355,7 @@ def _resolve_dupe_set(origin: dict[str, Any]) -> Path | None:
     return None
 
 
-def _resolve_converter(params: dict[str, str]) -> Path | None:
+def _resolve_converter(stack: ExitStack, params: dict[str, str]) -> Path | None:
     """Resolve a converter origin by rebuilding its parent origin."""
     source_file = params.get("source_file", "")
     parent_importer = params.get("parent_importer", "")
@@ -290,7 +370,7 @@ def _resolve_converter(params: dict[str, str]) -> Path | None:
         parent_params["url"] = params["parent_url"]
 
     parent_origin = {"importer": parent_importer, "params": parent_params}
-    return resolve_file_from_origin(parent_origin, origin_name=source_file)
+    return _resolve_with_stack(stack, parent_origin, origin_name=source_file)
 
 
 def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.ndarray | None:
@@ -504,66 +584,66 @@ def resolve_label_embeddings(
         origin_name = entry.get("origin_name", "")
         filename = entry.get("filename", "")
 
-        file_path = resolve_file_from_origin(origin, origin_name, filename)
-        if file_path is None:
-            result.missing_entries.append(entry)
-            if origin is None:
-                _no_origin += 1
-                log.info(
-                    "  label[%d] FAILED (no origin): md5=%s, origin_name=%r, "
-                    "filename=%r — this label has no origin trail and cannot "
-                    "be resolved to a file",
-                    i,
-                    entry.get("md5", "?")[:12],
-                    origin_name,
-                    filename,
-                )
-            else:
-                _file_not_found += 1
-                log.info(
-                    "  label[%d] FAILED (file not found): importer=%r, origin_name=%r, filename=%r, params=%r",
-                    i,
-                    origin.get("importer", "?"),
-                    origin_name,
-                    filename,
-                    origin.get("params", {}),
-                )
-            if progress_callback is not None:
-                progress_callback(current=i + 1, total=_total_entries)
-            continue
+        with resolve_file_context(origin, origin_name, filename) as file_path:
+            if file_path is None:
+                result.missing_entries.append(entry)
+                if origin is None:
+                    _no_origin += 1
+                    log.info(
+                        "  label[%d] FAILED (no origin): md5=%s, origin_name=%r, "
+                        "filename=%r — this label has no origin trail and cannot "
+                        "be resolved to a file",
+                        i,
+                        entry.get("md5", "?")[:12],
+                        origin_name,
+                        filename,
+                    )
+                else:
+                    _file_not_found += 1
+                    log.info(
+                        "  label[%d] FAILED (file not found): importer=%r, origin_name=%r, filename=%r, params=%r",
+                        i,
+                        origin.get("importer", "?"),
+                        origin_name,
+                        filename,
+                        origin.get("params", {}),
+                    )
+                if progress_callback is not None:
+                    progress_callback(current=i + 1, total=_total_entries)
+                continue
 
-        # Use clip-aware embedding when the label has clip params in its
-        # origin (e.g. from a clipped dataset).  This ensures cross-dataset
-        # resolution embeds the clipped content, not the whole parent file.
-        if origin is not None and origin.get("params", {}).get("clipper"):
-            embedding = _apply_clip_and_embed(file_path, media_type, origin)
-        else:
-            embedding = embed_file(file_path, media_type)
-        if embedding is None:
-            result.missing_entries.append(entry)
-            _embed_failed += 1
-            log.info(
-                "  label[%d] FAILED (embed): file resolved to %s but embedding returned None for media_type=%r",
+            # Use clip-aware embedding when the label has clip params in its
+            # origin (e.g. from a clipped dataset).  This ensures cross-dataset
+            # resolution embeds the clipped content, not the whole parent file.
+            if origin is not None and origin.get("params", {}).get("clipper"):
+                embedding = _apply_clip_and_embed(file_path, media_type, origin)
+            else:
+                embedding = embed_file(file_path, media_type)
+            if embedding is None:
+                result.missing_entries.append(entry)
+                _embed_failed += 1
+                log.info(
+                    "  label[%d] FAILED (embed): file resolved to %s but embedding returned None for media_type=%r",
+                    i,
+                    file_path,
+                    media_type,
+                )
+                if progress_callback is not None:
+                    progress_callback(current=i + 1, total=_total_entries)
+                continue
+
+            result.embeddings.append(embedding)
+            result.labels.append(1.0 if label_val == "good" else 0.0)
+            result.resolved_count += 1
+            log.debug(
+                "  label[%d] OK: %s → %s (label=%s)",
                 i,
-                file_path,
-                media_type,
+                origin_name or filename,
+                file_path.name,
+                label_val,
             )
             if progress_callback is not None:
                 progress_callback(current=i + 1, total=_total_entries)
-            continue
-
-        result.embeddings.append(embedding)
-        result.labels.append(1.0 if label_val == "good" else 0.0)
-        result.resolved_count += 1
-        log.debug(
-            "  label[%d] OK: %s → %s (label=%s)",
-            i,
-            origin_name or filename,
-            file_path.name,
-            label_val,
-        )
-        if progress_callback is not None:
-            progress_callback(current=i + 1, total=_total_entries)
 
     # --- Summary ---
     n_good = sum(1 for v in result.labels if v == 1.0)

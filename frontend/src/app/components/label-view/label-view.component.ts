@@ -148,8 +148,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(pairwise(), takeUntil(this.destroy$))
       .subscribe(([prev, curr]) => {
         if (prev.phase === curr.phase) return;
-        if (curr.phase === 'good') this.sortState.setSelectMode('top');
-        else if (curr.phase === 'bad') this.sortState.setSelectMode('hard');
+        if (curr.phase === 'good') {
+          this.sortState.setSelectMode('top');
+          if (curr.retrainMode) {
+            this.sortState.setSortMode('learned');
+            this.onLearnedSort(false);
+          }
+        }
+        else if (curr.phase === 'bad') {
+          this.sortState.setSelectMode('hard');
+          if (curr.retrainMode) {
+            this.sortState.setSortMode('learned');
+            this.onLearnedSort(false);
+          }
+        }
         else if (curr.phase === 'hard') {
           this.sortState.setSelectMode('hard');
           this.sortState.setSortMode('learned');
@@ -590,13 +602,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.resortVoteCount = 0;
     this.resortNextThreshold = this.resortInterval;
 
-    const phase = this.autopilotStateService.state.phase;
+    const state = this.autopilotStateService.state;
+    const phase = state.phase;
 
     // For phases beyond 'good', the phase-transition subscription already set
     // the correct selectMode and (for 'hard') triggered a learned sort.
     // Only override selectMode for the initial 'good' phase.
     if (phase === 'good') {
       this.sortState.setSelectMode('top');
+    }
+
+    // Retrain mode: the subscription already set sortMode='learned' and
+    // kicked off learned sort for whatever phase we're in.  Nothing more to do.
+    if (state.retrainMode) {
+      return;
     }
 
     // For 'hard' and later phases the subscription already triggered learned
@@ -660,6 +679,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private checkResortPrompt(): void {
     // Only show during autopilot's "good" phase (sorting by example in top mode)
     if (!this.autopilotStateService.running) return;
+    // Retrain mode uses learned sort instead of text/example; there is no
+    // example to swap, so the resort prompt is irrelevant.
+    if (this.autopilotStateService.state.retrainMode) return;
     // Eagerly check phase transition so we don't show the prompt after the user
     // has already found enough greens (the panel's ngOnChanges may not have run yet).
     this.autopilotStateService.checkPhaseTransition(
@@ -742,15 +764,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onAutopilotStop(): void {
-    const phase = this.autopilotStateService.state.phase;
+    const state = this.autopilotStateService.state;
+    const phase = state.phase;
     const isMediaBased = !!this.labelSession.mediaExample && !this.labelSession.textQuery;
+    // Retrain mode never used text/example sort, so stopping shouldn't switch
+    // the UI back to it — keep learned sort selected for every phase.
+    const earlySortMode: SortMode = state.retrainMode
+      ? 'learned'
+      : (isMediaBased ? 'load' : 'text');
 
     // Map autopilot phase to the same Sort + Select that autopilot was using.
     if (phase === 'good') {
-      this.sortState.setSortMode(isMediaBased ? 'load' : 'text');
+      this.sortState.setSortMode(earlySortMode);
       this.sortState.setSelectMode('top');
     } else if (phase === 'bad') {
-      this.sortState.setSortMode(isMediaBased ? 'load' : 'text');
+      this.sortState.setSortMode(earlySortMode);
       this.sortState.setSelectMode('hard');
     } else if (phase === 'hard') {
       this.sortState.setSortMode('learned');

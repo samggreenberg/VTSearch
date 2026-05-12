@@ -1070,3 +1070,98 @@ class TestResolutionWarningLogs:
         assert result.resolved_count == 1
         assert result.total_count == 2
         assert any("1 of 2 labels resolved" in m for m in caplog.messages)
+
+
+class TestResolveFileContextLifetime:
+    """Regression: temp-backed MediaSources must stay alive across
+    resolve + embed inside a single ``resolve_file_context`` block.
+
+    Before the fix, ``_default_source_resolver`` created the source,
+    asked for the path, and let the source go out of scope.  Sources
+    that owned a ``tempfile.TemporaryDirectory`` (e.g. PullWrest) got
+    finalised by GC and the path went stale before ``embed_file``
+    opened it, raising ``FileNotFoundError`` deep inside the embedder.
+    """
+
+    def test_source_cleanup_deferred_to_context_exit(self, tmp_path, monkeypatch):
+        from contextlib import ExitStack
+
+        from vtsearch.models import resolver as resolver_mod
+
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        media = staging / "thing.txt"
+        media.write_bytes(b"payload")
+
+        cleaned: list[bool] = []
+
+        class _FakeSource:
+            name = "fake"
+
+            def resolve_path(self, origin_name: str = "", filename: str = ""):
+                return media if media.exists() else None
+
+            def cleanup(self) -> None:
+                cleaned.append(True)
+                if media.exists():
+                    media.unlink()
+
+        def _custom_source_resolver(
+            stack: ExitStack,
+            origin: dict,
+            origin_name: str,
+            filename: str,
+        ):
+            src = _FakeSource()
+            stack.callback(src.cleanup)
+            return src.resolve_path(origin_name, filename)
+
+        monkeypatch.setattr(resolver_mod, "_source_resolver", _custom_source_resolver)
+        monkeypatch.setattr(resolver_mod, "_auto_wired", True)
+
+        origin = {"importer": "fake", "params": {}}
+        with resolver_mod.resolve_file_context(origin, origin_name="thing.txt") as path:
+            assert path is not None
+            assert path.exists(), "file must be alive inside the with-block"
+            assert path.read_bytes() == b"payload"
+            assert cleaned == [], "cleanup() must not fire while context is open"
+
+        assert cleaned == [True], "cleanup() must fire exactly once on exit"
+        assert not media.exists(), "temp file gone after context exit"
+
+    def test_legacy_wrapper_runs_cleanup_immediately(self, tmp_path, monkeypatch):
+        """``resolve_file_from_origin`` is the non-CM wrapper — by design the
+        source is dropped (and its temp dir cleaned) as soon as the call
+        returns.  Callers that hold the returned path past that point are
+        responsible for using ``resolve_file_context`` instead.
+        """
+        from contextlib import ExitStack
+
+        from vtsearch.models import resolver as resolver_mod
+
+        cleaned: list[bool] = []
+
+        class _FakeSource:
+            name = "fake"
+
+            def resolve_path(self, origin_name: str = "", filename: str = ""):
+                return tmp_path / "x.txt"
+
+            def cleanup(self) -> None:
+                cleaned.append(True)
+
+        def _custom_source_resolver(
+            stack: ExitStack,
+            origin: dict,
+            origin_name: str,
+            filename: str,
+        ):
+            src = _FakeSource()
+            stack.callback(src.cleanup)
+            return src.resolve_path(origin_name, filename)
+
+        monkeypatch.setattr(resolver_mod, "_source_resolver", _custom_source_resolver)
+        monkeypatch.setattr(resolver_mod, "_auto_wired", True)
+
+        _ = resolver_mod.resolve_file_from_origin({"importer": "fake"}, "x.txt")
+        assert cleaned == [True], "wrapper exits its context immediately"

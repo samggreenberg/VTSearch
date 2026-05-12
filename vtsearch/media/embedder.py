@@ -427,6 +427,44 @@ class MediaEmbedder(ABC):
         """
         return False
 
+    @property
+    def supports_text(self) -> bool:
+        """Whether this embedder can embed text queries into the same vector space.
+
+        Cross-modal embedders (CLIP, SigLIP, CLAP, X-CLIP) return ``True`` so
+        features like text search and description-enrichment are offered.
+        Vision-only or patch-based encoders (DINOv3, EUPE) return ``False`` —
+        :meth:`embed_text` will not produce meaningful vectors and the UI
+        should hide text-search affordances for datasets using them.
+        """
+        return True
+
+    @property
+    def supports_patch_regions(self) -> bool:
+        """Whether this embedder produces patch-level vectors and a region tree.
+
+        Patch-based image encoders (DINOv2, DINOv3, EUPE) return ``True``; the
+        dataset loader then asks them for a :class:`PatchEmbedOutput` per image
+        and stores a hierarchical region set plus the raw patch grid alongside
+        the usual ``media["embedding"]``.  Single-vector embedders return
+        ``False`` and the patch-region pipeline is skipped entirely.
+        """
+        return False
+
+    @property
+    def license_notice(self) -> Optional[str]:
+        """User-facing licence warning shown before a user selects this embedder.
+
+        ``None`` (the default) means the embedder has no special licensing
+        constraints worth surfacing.  Embedders distributed under a research-
+        only or otherwise-restrictive licence (e.g. facebookresearch/EUPE under
+        the FAIR Noncommercial Research Licence) return a short human-readable
+        string the UI shows on the embedder picker so users know before they
+        produce any outputs.  This is *advisory* — there is no acceptance
+        click; users who object pick a different embedder.
+        """
+        return None
+
     # ------------------------------------------------------------------
     # Model lifecycle
     # ------------------------------------------------------------------
@@ -553,6 +591,36 @@ class MediaEmbedder(ABC):
         """
         return None
 
+    def patch_forward(self, media: dict) -> Optional["PatchEmbedOutput"]:  # noqa: F821
+        """Return per-patch features for one image.
+
+        Patch-based image encoders (DINOv2, DINOv3, EUPE) override this to
+        return a :class:`~vtsearch.models.patch_regions.PatchEmbedOutput`
+        carrying the CLS vector, the per-patch grid, and a per-patch saliency
+        map.  Single-vector embedders leave the default in place and the
+        loader pipeline skips the patch-region step for their datasets.
+
+        The dataset loader gates calls on :attr:`supports_patch_regions`:
+        if you set that flag ``True``, you must override this method.
+
+        Acquires :attr:`_embed_lock` so the patch forward pass interleaves
+        with single-vector embedders' forward passes on the same lock.
+        Subclasses override :meth:`_patch_forward_impl` (not this method).
+
+        Returns ``None`` if the media can't be loaded.
+        """
+        from vtsearch.models.patch_regions import PatchEmbedOutput  # noqa: F401, PLC0415
+
+        with self._embed_lock:
+            return self._patch_forward_impl(media)
+
+    def _patch_forward_impl(self, media: dict) -> Optional["PatchEmbedOutput"]:  # noqa: F821
+        """Subclass hook for :meth:`patch_forward`.
+
+        Default returns ``None``.  Patch-capable embedders override this.
+        """
+        return None
+
     @property
     def description_wrappers(self) -> list[str]:
         """Wrapper templates for enriching sort descriptions.
@@ -596,4 +664,7 @@ class MediaEmbedder(ABC):
         return {
             "name": self.name,
             "media_type_id": self.media_type_id,
+            "supports_text": self.supports_text,
+            "supports_patch_regions": self.supports_patch_regions,
+            "license_notice": self.license_notice,
         }

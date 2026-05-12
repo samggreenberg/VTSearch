@@ -36,6 +36,14 @@ export interface StepDisplay {
 export class AutopilotPanelComponent implements OnInit, OnChanges {
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
+  /**
+   * Total "good" labels in the active detector's saved labelset, across all
+   * datasets it has been used with.  When both this and ``labelsetBadCount``
+   * are positive at activation time, autopilot enters retrain mode and uses
+   * learned sort throughout instead of starting with text/example sort.
+   */
+  @Input() labelsetGoodCount = 0;
+  @Input() labelsetBadCount = 0;
   @Input() labelingStatus: LabelingStatusResponse | null = null;
   @Input() collapsed = false;
 
@@ -109,7 +117,11 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   activate(): void {
     if (this.running) return;
     this.completionAlerted = false;
-    this.autopilotState.activate();
+    // Retrain mode: the detector already has good+bad labels (carried over
+    // from a previous dataset), so learned sort is available immediately and
+    // autopilot should skip the initial text-mode phase.
+    const retrainMode = this.labelsetGoodCount > 0 && this.labelsetBadCount > 0;
+    this.autopilotState.activate(retrainMode);
     // Immediately check whether existing votes already satisfy early phases
     // (e.g. user labeled 23 goods in Manual mode before switching to Autopilot).
     // ngOnChanges ran before ngOnInit so `running` was false and the check was

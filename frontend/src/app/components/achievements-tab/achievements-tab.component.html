@@ -1,0 +1,33 @@
+<h3>Achievements</h3>
+<p class="achievements-intro">
+  Milestones tracked as you use VTSearch. Counters live in your settings —
+  if you have a settings source configured they round-trip between sessions.
+</p>
+@if (loading) {
+  <p class="empty-state">Loading achievements…</p>
+} @else {
+  <ul class="achievements-list">
+    @for (row of rows; track row.id) {
+      <li class="achievement-row" [class.achievement-row--locked]="row.tier_idx === -1">
+        <vt-achievement-badge
+          [iconType]="row.icon"
+          [tierIdx]="row.tier_idx"
+          [size]="64">
+        </vt-achievement-badge>
+        <div class="achievement-info">
+          <div class="achievement-head">
+            <span class="achievement-name">{{ row.name }}</span>
+            <span class="achievement-tier" [attr.data-tier-idx]="row.tier_idx">{{ row.tierName }}</span>
+          </div>
+          <p class="achievement-desc">{{ row.description }}</p>
+          <div class="achievement-progress" [title]="row.progressLabel">
+            <div class="achievement-progress-track">
+              <div class="achievement-progress-fill" [style.width.%]="row.progressPct"></div>
+            </div>
+            <span class="achievement-progress-label">{{ row.progressLabel }}</span>
+          </div>
+        </div>
+      </li>
+    }
+  </ul>
+}

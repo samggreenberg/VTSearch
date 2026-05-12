@@ -8,7 +8,7 @@ import { MediaListComponent } from './media-list/media-list.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
-import { MediaItem, LabelingStatusResponse, MediaTypeInfo } from '../../models/api.models';
+import { MediaItem, LabelingStatusResponse, MediaTypeInfo, EmbedderInfo } from '../../models/api.models';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 
@@ -45,6 +45,9 @@ export class LeftPanelComponent implements OnInit, OnChanges {
    * only contain media IDs in the *currently loaded* dataset.
    */
   @Input() learnedSortAvailable = false;
+  /** Active detector's saved labelset counts (across all datasets). */
+  @Input() labelsetGoodCount = 0;
+  @Input() labelsetBadCount = 0;
   @Input() sortMode: SortMode = 'text';
   @Input() selectMode: SelectMode = 'top';
   @Input() inclusion: number = 0;
@@ -88,8 +91,10 @@ export class LeftPanelComponent implements OnInit, OnChanges {
 
   activeTab: 'manual' | 'autopilot' = 'autopilot';
   mediaTypeName = 'Media';
+  textSortAvailable = true;
   private mediaTypeInfos: MediaTypeInfo[] = [];
   private currentTypeId = '';
+  private embedderInfos: EmbedderInfo[] = [];
 
   constructor(private datasetsApi: DatasetsApiService) {}
 
@@ -98,6 +103,12 @@ export class LeftPanelComponent implements OnInit, OnChanges {
       next: (resp) => {
         this.mediaTypeInfos = resp.media_types;
         this.updateMediaTypeName();
+      },
+    });
+    this.datasetsApi.getEmbedders().subscribe({
+      next: (embedders) => {
+        this.embedderInfos = embedders;
+        this.updateTextSortAvailable();
       },
     });
     if (this.panelMode === 'find') {
@@ -114,6 +125,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['medias']) {
       this.updateMediaTypeName();
+      this.updateTextSortAvailable();
     }
   }
 
@@ -124,6 +136,22 @@ export class LeftPanelComponent implements OnInit, OnChanges {
       const info = this.mediaTypeInfos.find((mt) => mt.type_id === typeId);
       this.mediaTypeName = info?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1);
     }
+  }
+
+  /**
+   * Resolve whether the active dataset's embedder can embed text queries.
+   * If the embedder is unknown (e.g. embedders haven't loaded yet, or the
+   * media doesn't carry an embedder field), default to ``true`` so we never
+   * hide a working feature.
+   */
+  private updateTextSortAvailable(): void {
+    const embedderName = this.medias.length > 0 ? this.medias[0].embedder : '';
+    if (!embedderName || this.embedderInfos.length === 0) {
+      this.textSortAvailable = true;
+      return;
+    }
+    const info = this.embedderInfos.find((e) => e.name === embedderName);
+    this.textSortAvailable = info ? info.supports_text !== false : true;
   }
 
   onStripeClick(index: number): void {

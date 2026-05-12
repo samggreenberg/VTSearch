@@ -67,3 +67,18 @@
 
 .server-folder-browser { gap: 12px; }
 .sf-browse-section { gap: 6px; }
+
+// Embedder licence warning shown under the picker when the chosen
+// embedder reports a license_notice (today: real-EUPE under FAIR
+// Noncommercial). Subtle yellow chip, no acceptance click — users
+// who object pick a different embedder.
+.license-warning {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(255, 196, 0, 0.12);
+  border: 1px solid rgba(255, 196, 0, 0.4);
+  color: #b87b00;
+  font-size: .82rem;
+  line-height: 1.35;
+}

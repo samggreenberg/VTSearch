@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import hashlib
 import json as _json
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from vtsearch.datasets.labelset import LabeledElement, LabelSet, element_key
 
@@ -58,17 +59,25 @@ def resolve_current_dataset_cid(elem: LabeledElement) -> int | None:
     return cids[0] if cids else None
 
 
-def resolve_element_to_path(elem: LabeledElement) -> Path | None:
+@contextmanager
+def resolve_element_to_path(elem: LabeledElement) -> Iterator[Path | None]:
     """Resolve the underlying media file for *elem* via its origin.
 
-    Returns the path on disk if the importer's
+    Yields the path on disk if the importer's
     :meth:`~vtsearch.datasets.importers.base.DatasetImporter.resolve_file`
+    (or the corresponding :class:`~vtsearch.datasets.sources.base.MediaSource`)
     can locate it (e.g. demo, folder, synthetic, server-folder importers
     with a stable cache directory), otherwise ``None``.
-    """
-    from vtsearch.models.resolver import resolve_file_from_origin
 
-    return resolve_file_from_origin(elem.origin, elem.origin_name, elem.filename)
+    Must be used as a ``with`` block: some media sources materialise the
+    file inside a temp dir they own, and the dir is finalised on exit.
+    Callers must read bytes (or otherwise finish with the file) inside
+    the block.
+    """
+    from vtsearch.models.resolver import resolve_file_context
+
+    with resolve_file_context(elem.origin, elem.origin_name, elem.filename) as p:
+        yield p
 
 
 def build_element_view(

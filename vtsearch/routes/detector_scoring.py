@@ -342,6 +342,10 @@ def find_label():
         total_steps=_FIND_LABEL_STEPS,
     )
 
+    from vtsearch.achievements import record_find
+
+    record_find(n_total)
+
     return jsonify(
         {
             "ok": True,
@@ -464,6 +468,11 @@ def auto_detect():
             if outcome is not None:
                 name, result = outcome
                 results[name] = result
+
+    if results:
+        from vtsearch.achievements import record_find
+
+        record_find(len(all_ids) * len(results))
 
     return jsonify(
         {

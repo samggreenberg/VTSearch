@@ -48,13 +48,16 @@ def _write_trainable_model(name: str, labelset: dict) -> Path:
 
 
 def _stub_resolve(monkeypatch, file_map: dict[str, Path]) -> None:
-    """Patch ``resolve_file_from_origin`` to look up *file_map* by origin name."""
+    """Patch ``resolve_file_context`` to look up *file_map* by origin name."""
+    from contextlib import contextmanager
+
     import vtsearch.models.resolver as resolver_mod
 
-    def _fake(origin, origin_name="", filename=""):
-        return file_map.get(origin_name) or file_map.get(filename)
+    @contextmanager
+    def _fake_ctx(origin, origin_name="", filename=""):
+        yield file_map.get(origin_name) or file_map.get(filename)
 
-    monkeypatch.setattr(resolver_mod, "resolve_file_from_origin", _fake)
+    monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_ctx)
 
 
 def _make_audio_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
@@ -139,10 +142,16 @@ class TestAutorunDetectorsCLI:
 
     def test_clear_error_when_origins_unresolvable(self, client, tmp_path, monkeypatch):
         """No origins resolve → ValueError with a CLI-friendly explanation."""
-        # Stub returns None for everything (simulates labels from local_folder).
+        # Stub yields None for everything (simulates labels from local_folder).
+        from contextlib import contextmanager
+
         import vtsearch.models.resolver as resolver_mod
 
-        monkeypatch.setattr(resolver_mod, "resolve_file_from_origin", lambda *a, **kw: None)
+        @contextmanager
+        def _fake_ctx(*_a, **_kw):
+            yield None
+
+        monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_ctx)
 
         labelset = {
             "labels": [

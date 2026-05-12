@@ -1,0 +1,4 @@
+# Run ./scripts/cache_gated_models.sh to populate this directory with
+# DINOv3 + EUPE weights before building Dockerfile.image-embedders.
+# Contents are gitignored; only this .gitkeep is tracked so the COPY in
+# Dockerfile.image-embedders has at least one matching source.

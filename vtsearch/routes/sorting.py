@@ -54,20 +54,20 @@ def _cosine_sort(query_vec):
     Returns ``(results, threshold)`` where *results* is a list of
     ``{"id": …, "similarity": …}`` dicts sorted descending, and
     *threshold* is the GMM-based boundary (rounded to 4 decimals).
-    """
-    snap = snapshot_medias()
-    all_ids = list(snap.keys())
-    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-    query_norm = np.linalg.norm(query_vec)
-    emb_norms = np.linalg.norm(all_embs, axis=1)
-    norm_products = emb_norms * query_norm
-    safe_norms = np.where(norm_products == 0, 1.0, norm_products)
-    similarities = np.dot(all_embs, query_vec) / safe_norms
-    similarities = np.where(norm_products == 0, 0.0, similarities)
 
-    results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
-    threshold = calculate_gmm_threshold(similarities.tolist())
-    results.sort(key=lambda x: x["similarity"], reverse=True)
+    For datasets embedded with a patch-aware embedder (DINOv2, DINOv3,
+    EUPE), each result also carries a ``best_region`` field — the
+    bounding box of the region that scored highest, in normalised
+    image coordinates ``[x0, y0, x1, y1]``.  Single-vector embedders
+    take a fast vectorised numpy path with no per-result box.
+
+    Both paths live in :mod:`vtsearch.models.region_similarity`.
+    """
+    from vtsearch.models.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
+
+    snap = snapshot_medias()
+    results, sims_list = cosine_sort_with_boxes(snap, query_vec)
+    threshold = calculate_gmm_threshold(sims_list)
     return results, round(threshold, 4)
 
 
@@ -126,6 +126,33 @@ def sort_clips():
     media_type = first.get("type", "audio")
     embedder_name = first.get("embedder", "")
     total_steps = 3  # load embedder, embed query, compute similarities
+
+    # Reject the request up-front when the active embedder is vision-only
+    # (e.g. DINOv3, Perception Encoder). Without this short-circuit we'd
+    # waste time loading the model into RAM just to discover it can't embed
+    # text — and the frontend wouldn't get a clean ``supports_text=False``
+    # signal to hide its text-search UI.
+    if embedder_name:
+        try:
+            from vtsearch.media import get_embedder  # noqa: PLC0415
+
+            _active_emb = get_embedder(embedder_name)
+        except KeyError:
+            _active_emb = None
+        if _active_emb is not None and not _active_emb.supports_text:
+            update_sort_progress("idle")
+            return (
+                jsonify(
+                    {
+                        "error": (
+                            f"Embedder '{_active_emb.name}' does not support text queries. "
+                            "Use learned sort or load a saved sort instead."
+                        ),
+                        "supports_text": False,
+                    }
+                ),
+                400,
+            )
 
     try:
         _load_embedder_with_progress(media_type, total_steps)

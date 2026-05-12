@@ -225,6 +225,29 @@ describe('AutopilotStateService', () => {
     expect(service.state.smartStatus).toBe('');
   });
 
+  it('activate without retrainMode should default to false', () => {
+    service.activate();
+    expect(service.state.retrainMode).toBeFalse();
+  });
+
+  it('activate with retrainMode=true should set the flag on state', () => {
+    service.activate(true);
+    expect(service.state.retrainMode).toBeTrue();
+    expect(service.state.phase).toBe('good');
+  });
+
+  it('retrainMode should persist through phase transitions until cleared', () => {
+    service.activate(true);
+    service.checkPhaseTransition(3, 4);
+    expect(service.state.phase).toBe('hard');
+    expect(service.state.retrainMode).toBeTrue();
+
+    service.deactivate();
+    expect(service.state.retrainMode).toBeTrue(); // deactivate only flips phase
+    service.clear();
+    expect(service.state.retrainMode).toBeFalse();
+  });
+
   it('state$ should emit on changes', (done) => {
     const phases: string[] = [];
     service.state$.subscribe((s) => phases.push(s.phase));

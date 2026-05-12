@@ -1,12 +1,13 @@
 <div class="sort-bar">
   <div class="sort-mode-group">
     <span class="sort-label" title="Choose how items are ranked. Text uses a search query, Learned trains on your votes, Load applies a saved model.">Sort:</span>
-    <label class="sort-radio" [class.active]="sortMode === 'text'" title="Rank items by similarity to a text query using semantic embeddings (e.g. CLIP, CLAP, E5).">
+    <label class="sort-radio" [class.active]="sortMode === 'text'" [title]="textDisabled ? 'This dataset’s embedder does not support text queries.' : 'Rank items by similarity to a text query using semantic embeddings (e.g. CLIP, CLAP, E5).'">
       <input
         type="radio"
         name="sortMode"
         value="text"
         [checked]="sortMode === 'text'"
+        [disabled]="textDisabled"
         (change)="onSortModeChange('text')"
       />
       Text
@@ -36,17 +37,23 @@
 
   <div class="sort-mode-content">
     @if (sortMode === 'text') {
-      <div class="text-sort-wrap">
-        <input
-          class="form-input text-sort-input"
-          type="text"
-          placeholder="Describe what you're looking for..."
-          [value]="textQuery"
-          (input)="onTextInput($any($event.target).value)"
-          title="Enter a text description to rank items by semantic similarity"
-          aria-label="Text sort query"
-        />
-      </div>
+      @if (textDisabled) {
+        <div class="text-sort-wrap">
+          <span class="sort-hint">This dataset’s embedder does not support text queries.</span>
+        </div>
+      } @else {
+        <div class="text-sort-wrap">
+          <input
+            class="form-input text-sort-input"
+            type="text"
+            placeholder="Describe what you're looking for..."
+            [value]="textQuery"
+            (input)="onTextInput($any($event.target).value)"
+            title="Enter a text description to rank items by semantic similarity"
+            aria-label="Text sort query"
+          />
+        </div>
+      }
     }
 
     @if (sortMode === 'learned') {
