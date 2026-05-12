@@ -1,23 +1,17 @@
-"""Image embedder — DINOv2 (facebook/dinov2-base).
+"""Shared base class for the two DINOv2 embedder variants.
 
-DINOv2 is the predecessor to DINOv3 and shares its self-supervised
-vision-transformer architecture. Unlike DINOv3, the DINOv2 weights are
-**ungated** on Hugging Face — anyone can download them without an HF
-account, which makes this embedder a friendly out-of-the-box option for
-the bundled-image Docker build.
+DINOv2 is exposed as two embedders that share the same backbone but differ
+in what they expose:
 
-We pool the CLS token from ``last_hidden_state[:, 0]`` for a single
-fixed-size vector per image, mirroring how DINOv3 is exposed here.
-There is no text encoder, so :attr:`supports_text` is ``False``.
+- ``dinov2_single`` — CLS-pooled single vector per image; fast, small
+  storage, no region search.
+- ``dinov2_patch``  — same CLS vector plus a per-patch grid + HAC region
+  tree; ~30× slower per image and ~100× more storage, but enables region
+  similarity and region-aware MLP scoring.
 
-DINOv2 also produces high-quality **per-patch tokens**.  Setting
-:attr:`supports_patch_regions` to ``True`` opts the embedder into the
-patch-region pipeline — the dataset loader asks for a
-:class:`~vtsearch.models.patch_regions.PatchEmbedOutput` (CLS + patch
-grid + CLS→patch attention saliency) which is turned into a
-hierarchical region set per image.  Image input is the HF default
-(224² for the standard processor) with patch size 14 → 16 × 16 = 256
-patch tokens.
+Both share this base.  The underscore-prefixed filename keeps it out of
+the auto-discovery scan in :mod:`vtsearch.media` (only ``embedder*.py``
+files are imported as plugins) — the variant modules import from here.
 """
 
 from __future__ import annotations
@@ -43,10 +37,10 @@ if TYPE_CHECKING:
     from PIL import Image
 
 
-class ImageDinov2Embedder(MediaEmbedder):
-    """Embeds images using DINOv2 ViT-B/14 with CLS-token pooling.
+class _Dinov2Base(MediaEmbedder):
+    """Backbone loader + CLS / patch forward passes for DINOv2.
 
-    Output dimension: 768 (ViT-B hidden size).
+    Subclasses set :attr:`name` and :attr:`supports_patch_regions`.
     """
 
     def __init__(self) -> None:
@@ -55,20 +49,12 @@ class ImageDinov2Embedder(MediaEmbedder):
         self._processor = None
 
     @property
-    def name(self) -> str:
-        return "dinov2"
-
-    @property
     def media_type_id(self) -> str:
         return "image"
 
     @property
     def supports_text(self) -> bool:
         return False
-
-    @property
-    def supports_patch_regions(self) -> bool:
-        return True
 
     def _load_models_impl(self) -> None:
         if self._model is not None:
@@ -111,7 +97,7 @@ class ImageDinov2Embedder(MediaEmbedder):
             logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
-    def embed_pil_image(self, image: Image.Image) -> Optional[np.ndarray]:
+    def embed_pil_image(self, image: "Image.Image") -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
         if self._model is None or self._processor is None:
@@ -134,7 +120,7 @@ class ImageDinov2Embedder(MediaEmbedder):
             logging.getLogger(__name__).exception("Error embedding PIL image (DINOv2)")
             return None
 
-    def _patch_forward_impl(self, media: dict) -> Optional[PatchEmbedOutput]:
+    def _compute_patch_output(self, media: dict) -> Optional[PatchEmbedOutput]:
         """Return CLS + per-patch grid + CLS→patch attention saliency.
 
         Runs one forward pass with ``output_attentions=True`` and reshapes
@@ -161,6 +147,3 @@ class ImageDinov2Embedder(MediaEmbedder):
         except Exception:
             logging.getLogger(__name__).exception("Error patch-embedding %s (DINOv2)", file_path)
             return None
-
-
-EMBEDDER = ImageDinov2Embedder()

@@ -1,26 +1,17 @@
-"""Image embedder — DINOv3 (facebook/dinov3-vitb16-pretrain-lvd1689m).
+"""Shared base class for the two DINOv3 embedder variants.
 
-DINOv3 is a self-supervised vision transformer that produces dense patch
-embeddings.  We adapt it for whole-image retrieval by pooling the **CLS
-token** from ``last_hidden_state[:, 0]`` — the same global representation
-used by the DINOv3 paper for linear-probe classification benchmarks.
+DINOv3 is exposed as two embedders that share the same backbone but differ
+in what they expose:
 
-DINOv3 also produces high-quality **per-patch tokens** and exposes a clean
-CLS→patch attention map (cleaner than DINOv2's thanks to Gram-anchored
-"storage" / register tokens that absorb high-norm artifacts).  Setting
-:attr:`supports_patch_regions` to ``True`` opts the embedder into the
-patch-region pipeline — the dataset loader asks for a
-:class:`~vtsearch.models.patch_regions.PatchEmbedOutput` (CLS + patch grid
-+ CLS→patch attention saliency) which is turned into a hierarchical region
-set per image.  DINOv3 has **4 register tokens** between the CLS and
-patches; we slice them out before reshaping to the 14 × 14 patch grid.
+- ``dinov3_single`` — CLS-pooled single vector per image; fast, small
+  storage, no region search.
+- ``dinov3_patch``  — same CLS vector plus a per-patch grid + HAC region
+  tree; ~30× slower per image and ~100× more storage, but enables region
+  similarity and region-aware MLP scoring.
 
-No text encoder exists, so :attr:`supports_text` is ``False`` and the UI
-will hide text-search affordances for datasets embedded with DINOv3.
-
-Weights are gated on Hugging Face — running this embedder requires the
-``HF_TOKEN`` env var to be set to a user token that has accepted the
-DINOv3 licence at
+DINOv3 weights are **gated** on Hugging Face — running either variant
+requires the ``HF_TOKEN`` env var to be set to a user token that has
+accepted the DINOv3 licence at
 ``https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m``.
 """
 
@@ -57,10 +48,10 @@ if TYPE_CHECKING:
 _DINOV3_NUM_REGISTER_TOKENS = 4
 
 
-class ImageDinov3Embedder(MediaEmbedder):
-    """Embeds images using DINOv3 ViT-B/16 with CLS-token pooling.
+class _Dinov3Base(MediaEmbedder):
+    """Backbone loader + CLS / patch forward passes for DINOv3.
 
-    Output dimension: 768 (ViT-B hidden size).
+    Subclasses set :attr:`name` and :attr:`supports_patch_regions`.
     """
 
     def __init__(self) -> None:
@@ -69,20 +60,12 @@ class ImageDinov3Embedder(MediaEmbedder):
         self._processor = None
 
     @property
-    def name(self) -> str:
-        return "dinov3"
-
-    @property
     def media_type_id(self) -> str:
         return "image"
 
     @property
     def supports_text(self) -> bool:
         return False
-
-    @property
-    def supports_patch_regions(self) -> bool:
-        return True
 
     def _load_models_impl(self) -> None:
         if self._model is not None:
@@ -125,7 +108,7 @@ class ImageDinov3Embedder(MediaEmbedder):
             logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
-    def embed_pil_image(self, image: Image.Image) -> Optional[np.ndarray]:
+    def embed_pil_image(self, image: "Image.Image") -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
         if self._model is None or self._processor is None:
@@ -149,7 +132,7 @@ class ImageDinov3Embedder(MediaEmbedder):
             logging.getLogger(__name__).exception("Error embedding PIL image (DINOv3)")
             return None
 
-    def _patch_forward_impl(self, media: dict) -> Optional[PatchEmbedOutput]:
+    def _compute_patch_output(self, media: dict) -> Optional[PatchEmbedOutput]:
         """Return CLS + per-patch grid + CLS→patch attention saliency.
 
         Runs one forward pass with ``output_attentions=True`` and slices out
@@ -177,6 +160,3 @@ class ImageDinov3Embedder(MediaEmbedder):
         except Exception:
             logging.getLogger(__name__).exception("Error patch-embedding %s (DINOv3)", file_path)
             return None
-
-
-EMBEDDER = ImageDinov3Embedder()

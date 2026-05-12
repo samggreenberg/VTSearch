@@ -1,48 +1,28 @@
-"""Image embedder — EUPE / Efficient Universal Perception Encoder.
+"""Shared base class for the two EUPE embedder variants.
 
-EUPE (`facebookresearch/EUPE`) is Meta's distillation-based "universal"
-vision encoder: a ViT-B/16 backbone trained to balance multiple downstream
-tasks (classification, segmentation, depth, vision-language).  We expose
-the ViT-B/16 LVD-1689M variant — 768-dim outputs, 14 × 14 patch grid at
-224 ², four "storage" / register tokens between CLS and patches.
+EUPE (Efficient Universal Perception Encoder, `facebookresearch/EUPE`)
+is Meta's distillation-based "universal" ViT-B/16.  It's exposed as two
+embedders that share the same backbone but differ in what they expose:
 
-This embedder is not the same as ``facebook/PE-Core-B16-224`` (Meta's
-Perception Encoder Core) — that was the previous, misleading "eupe" slug,
-which never actually loaded because PE-Core's HF repo has no ``config.json``
-and the dev embedder relied on ``AutoModel.from_pretrained``.  This file is
-a complete rewrite onto the real EUPE model the slug claims to be.
+- ``eupe_single`` — CLS-pooled single vector per image; fast, small
+  storage, no region search.
+- ``eupe_patch``  — same CLS vector plus a per-patch grid + HAC region
+  tree; ~30× slower per image and ~100× more storage, but enables region
+  similarity and region-aware MLP scoring.
 
-Loading goes through :func:`torch.hub.load`:
-
-    model = torch.hub.load(
-        "facebookresearch/EUPE", "eupe_vitb16",
-        source="github",
-        pretrained=True,
-        weights=EUPE_MODEL_ID,   # HF mirror URL, see vtsearch/config.py
-    )
-
-The weights URL on `facebook/EUPE-ViT-B` is ungated, so users don't need an
-HF token to fetch them — but the **outputs** are bound by the FAIR
-Noncommercial Research Licence (no commercial use of any embedding /
-dataset / detector produced via EUPE).  We surface that via
+EUPE's weights mirror at ``facebook/EUPE-ViT-B`` are **ungated** (no HF
+token needed), but the **outputs** are bound by Meta's FAIR Noncommercial
+Research Licence — embeddings, datasets and detectors produced via EUPE
+inherit that restriction.  Both variants surface that via
 :attr:`license_notice` so the embedder picker shows a warning chip
 before users opt in.
 
-Image preprocessing is bog-standard ImageNet (resize-256-bicubic →
-center-crop-224 → ImageNet mean/std normalisation), matching the
-``make_classification_eval_transform`` recipe in EUPE's own training code.
-
-Per-patch features and the patch_grid come straight from
-``model.forward_features(x)``.  EUPE's attention path uses
-``torch.nn.functional.scaled_dot_product_attention`` which **does not
-return weights**, so we don't have a real CLS→patch attention map —
-:attr:`patch_saliency` falls back to a CLS-cosine-similarity proxy
-(softmax of each patch's cosine similarity to the CLS vector).  See
-:func:`vtsearch.models.patch_regions.eupe_features_to_patch_output` for the
-adapter.
-
-There is no text encoder, so :attr:`supports_text` is ``False`` and the UI
-greys text-search affordances for datasets embedded with EUPE.
+EUPE's attention path uses ``torch.nn.functional.scaled_dot_product_attention``
+which **does not return weights**, so we don't have a real CLS→patch
+attention map — :attr:`patch_saliency` falls back to a CLS-cosine-similarity
+proxy (softmax of each patch's cosine similarity to the CLS vector).
+See :func:`vtsearch.models.patch_regions.eupe_features_to_patch_output`
+for the adapter.
 """
 
 from __future__ import annotations
@@ -69,7 +49,7 @@ _IMAGENET_MEAN = (0.485, 0.456, 0.406)
 _IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
-_LICENSE_NOTICE = (
+LICENSE_NOTICE = (
     "EUPE is released under Meta's FAIR Noncommercial Research Licence. "
     "Embeddings, datasets, and detectors produced with EUPE inherit that "
     "restriction — they may only be used for noncommercial research. "
@@ -77,20 +57,16 @@ _LICENSE_NOTICE = (
 )
 
 
-class ImageEupeEmbedder(MediaEmbedder):
-    """Embeds images using facebookresearch/EUPE ViT-B/16.
+class _EupeBase(MediaEmbedder):
+    """Backbone loader + CLS / patch forward passes for EUPE.
 
-    Output dimension: 768.  Patch grid: 14 × 14 at 224 ² input.
+    Subclasses set :attr:`name` and :attr:`supports_patch_regions`.
     """
 
     def __init__(self) -> None:
         super().__init__()
         self._model = None
         self._preprocess = None
-
-    @property
-    def name(self) -> str:
-        return "eupe"
 
     @property
     def media_type_id(self) -> str:
@@ -101,12 +77,8 @@ class ImageEupeEmbedder(MediaEmbedder):
         return False
 
     @property
-    def supports_patch_regions(self) -> bool:
-        return True
-
-    @property
     def license_notice(self) -> Optional[str]:
-        return _LICENSE_NOTICE
+        return LICENSE_NOTICE
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -170,7 +142,7 @@ class ImageEupeEmbedder(MediaEmbedder):
             cls = cls / norm
         return cls.astype(np.float32)
 
-    def _patch_forward_impl(self, media: dict) -> Optional[PatchEmbedOutput]:
+    def _compute_patch_output(self, media: dict) -> Optional[PatchEmbedOutput]:
         features = self._forward_features(media)
         if features is None:
             return None
@@ -181,7 +153,7 @@ class ImageEupeEmbedder(MediaEmbedder):
 
         Returns the raw EUPE feature dict (CLS / storage / patch tokens)
         or ``None`` on any failure.  Both :meth:`_embed_media_impl` and
-        :meth:`_patch_forward_impl` go through here so the model is never
+        the patch-region path go through here so the model is never
         evaluated twice for the same image.
         """
         if self._model is None:
@@ -203,6 +175,3 @@ class ImageEupeEmbedder(MediaEmbedder):
         except Exception:
             logging.getLogger(__name__).exception("Error running EUPE on %s", file_path)
             return None
-
-
-EMBEDDER = ImageEupeEmbedder()
