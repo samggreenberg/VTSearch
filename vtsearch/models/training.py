@@ -538,15 +538,46 @@ def train_and_score(
         hidden_dim=hidden_dim,
     )
 
-    # Train final model on all data
+    # Train final model on all data.  Training is image-level in v1 — the
+    # MLP only ever sees one vector per voted media (``media["embedding"]``,
+    # which equals the patch-region full-image vector for patch datasets),
+    # mirroring the v1 vote rule of "vote on whole images".  Region-level
+    # training examples are a phase-2 concern.
     model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
 
-    # Score every media
+    # Score every media — region-aware max-pool over regions when the
+    # dataset is patch-region-aware, plain single-vector scoring when not.
+    # We build one flat tensor of (media, region) rows so the MLP runs
+    # in a single forward pass; the per-media max is computed after.
     all_ids = sorted(clips_dict.keys())
-    all_embs = np.array([clips_dict[cid]["embedding"] for cid in all_ids])
-    X_all = torch.tensor(all_embs, dtype=torch.float32)
+    flat_vecs: list[np.ndarray] = []
+    media_index_per_row: list[int] = []
+    region_index_per_row: list[int] = []
+    for mi, cid in enumerate(all_ids):
+        media = clips_dict[cid]
+        regions = media.get("patch_regions")
+        if regions:
+            for ri, r in enumerate(regions):
+                flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
+                media_index_per_row.append(mi)
+                region_index_per_row.append(ri)
+        else:
+            flat_vecs.append(np.asarray(media["embedding"], dtype=np.float32))
+            media_index_per_row.append(mi)
+            region_index_per_row.append(0)
+
+    X_all = torch.tensor(np.array(flat_vecs), dtype=torch.float32)
     with torch.no_grad():
-        scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+        flat_scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().numpy()
+
+    # Max-pool per media; remember the winning region index so we can
+    # surface ``best_region.box`` to the UI for patch-region media.
+    scores: list[float] = [-1.0] * len(all_ids)
+    best_region: list[int] = [0] * len(all_ids)
+    for s, mi, ri in zip(flat_scores, media_index_per_row, region_index_per_row):
+        if s > scores[mi]:
+            scores[mi] = float(s)
+            best_region[mi] = ri
 
     if safe_thresholds:
         n_labels = len(X_list)
@@ -554,8 +585,19 @@ def train_and_score(
 
     # Sort by raw scores (full precision) so that tiny differences still
     # affect ordering.  Round only for the JSON response values.
-    paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
-    results = [{"id": cid, "score": round(s, 4)} for cid, s in paired]
+    paired = sorted(
+        zip(all_ids, scores, best_region),
+        key=lambda t: t[1],
+        reverse=True,
+    )
+    results: list[dict[str, Any]] = []
+    for cid, s, bri in paired:
+        entry: dict[str, Any] = {"id": cid, "score": round(s, 4)}
+        media = clips_dict[cid]
+        regions = media.get("patch_regions")
+        if regions and 0 <= bri < len(regions):
+            entry["best_region"] = list(regions[bri].box)
+        results.append(entry)
     return results, threshold, model
 
 
