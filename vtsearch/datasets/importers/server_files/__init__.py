@@ -1,17 +1,26 @@
-"""Server-files importer — embed media files listed in a server-side text file.
+"""Server-files importer — embed media files listed in a server-side file.
 
-The user supplies the absolute path of a UTF-8 text file on the server.
-Each non-empty, non-comment line of that file is treated as the
-absolute path (or path relative to the text file's directory) of a
-media file or directory to embed.  Symlinks (to either files or
-directories) are followed, and directory entries are walked recursively
-for media files.  The importer symlinks every resulting file into a
-temporary directory and then delegates to :mod:`server_folder` for the
-actual scanning/embedding.  After the import each media's origin is
-rewritten to point at this importer so that
-:meth:`resolve_file` can find the original file on disk.
+The user supplies the absolute path of a file on the server that
+identifies the media files to import.  Two file formats are accepted:
 
-Lines beginning with ``#`` are treated as comments and skipped.
+- **Text** (``.txt`` / ``.list``) — a UTF-8 text file with one media
+  path per non-empty, non-comment line.  Lines beginning with ``#`` are
+  comments.  The listed files are embedded by the server.
+- **NumPy archive** (``.npz``) — a ``.npz`` file holding both the media
+  paths and their pre-computed embedding vectors.  See
+  :mod:`vtsearch.datasets.importers._npz_vectors` for the supported
+  array layouts.  When supplied, the importer **skips re-embedding** for
+  every listed file and uses the vector from the archive instead.  This
+  lets users import media that they have already embedded offline
+  without paying for embedding twice.
+
+Each listed entry may be the path of a file or a directory.  Symlinks
+(to either files or directories) are followed, and directory entries
+are walked recursively for media files.  The importer symlinks every
+resulting file into a temporary directory and then delegates to
+:mod:`server_folder` for the actual scanning/embedding.  After the
+import each media's origin is rewritten to point at this importer so
+that :meth:`resolve_file` can find the original file on disk.
 """
 
 from __future__ import annotations
@@ -23,15 +32,13 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from vtsearch.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 
 
-def _read_paths_file(paths_file: Path) -> list[Path]:
-    """Read media file paths from *paths_file*, one per line."""
-    if not paths_file.is_file():
-        raise FileNotFoundError(f"Paths file not found: {paths_file}")
-
+def _read_text_paths_file(paths_file: Path) -> list[Path]:
+    """Read media file paths from a UTF-8 text file, one per line."""
     base_dir = paths_file.resolve().parent
     paths: list[Path] = []
     for raw in paths_file.read_text(encoding="utf-8").splitlines():
@@ -43,6 +50,59 @@ def _read_paths_file(paths_file: Path) -> list[Path]:
             candidate = (base_dir / candidate).resolve()
         paths.append(candidate)
     return paths
+
+
+def _read_npz_paths_file(paths_file: Path) -> tuple[list[Path], dict[str, Any]]:
+    """Read media paths + pre-computed vectors from a ``.npz`` archive.
+
+    Returns ``(paths, path_to_vector)`` where keys of *path_to_vector*
+    are the absolute path strings of the resolved entries (the same
+    strings that appear in *paths*).
+    """
+    name_to_vector = read_npz_filenames_and_vectors(paths_file)
+    base_dir = paths_file.resolve().parent
+    paths: list[Path] = []
+    path_to_vector: dict[str, Any] = {}
+    for raw_name, vec in name_to_vector.items():
+        line = raw_name.strip()
+        if not line:
+            continue
+        candidate = Path(line)
+        if not candidate.is_absolute():
+            candidate = (base_dir / candidate).resolve()
+        paths.append(candidate)
+        path_to_vector[str(candidate)] = vec
+    return paths, path_to_vector
+
+
+def _read_paths_file(paths_file: Path) -> list[Path]:
+    """Read media file paths from *paths_file*.
+
+    Both ``.txt``/``.list`` (one path per line) and ``.npz`` (paths +
+    pre-computed vectors) formats are supported.  This helper returns
+    only the path list; callers that also want the NPZ vectors should
+    use :func:`_read_paths_and_vectors`.
+    """
+    if not paths_file.is_file():
+        raise FileNotFoundError(f"Paths file not found: {paths_file}")
+    if paths_file.suffix.lower() == ".npz":
+        paths, _ = _read_npz_paths_file(paths_file)
+        return paths
+    return _read_text_paths_file(paths_file)
+
+
+def _read_paths_and_vectors(paths_file: Path) -> tuple[list[Path], dict[str, Any]]:
+    """Like :func:`_read_paths_file` but also returns pre-computed vectors.
+
+    For ``.txt`` / ``.list`` inputs the second tuple element is an empty
+    dict.  For ``.npz`` inputs it maps each resolved path string to its
+    pre-computed embedding vector.
+    """
+    if not paths_file.is_file():
+        raise FileNotFoundError(f"Paths file not found: {paths_file}")
+    if paths_file.suffix.lower() == ".npz":
+        return _read_npz_paths_file(paths_file)
+    return _read_text_paths_file(paths_file), {}
 
 
 def _expand_paths(paths: list[Path]) -> list[Path]:
@@ -112,7 +172,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
     name = "server_files"
     display_name = "Files"
     description = (
-        "Read a text file on the server containing media-file paths (one per line) and embed every listed file"
+        "Read a server-side file listing media paths (text file, one per line, "
+        "OR a .npz archive that also supplies pre-computed embedding vectors) "
+        "and embed every listed file"
     )
     icon = "\U0001f5c2"  # 🗂 — falls back to a generic file icon
     picker_view = "form"
@@ -130,11 +192,16 @@ class ServerFilesDatasetImporter(DatasetImporter):
             label="Paths File",
             field_type="server_path",
             description=(
-                "Absolute server path to a text file containing one media-file or "
-                "directory path per line.  Symlinks are followed; directory entries "
-                "are scanned recursively for media files."
+                "Absolute server path to a file listing the media to import.  Either:\n"
+                " • a UTF-8 text file (.txt / .list) with one media-file or directory "
+                "path per line (lines starting with # are comments), or\n"
+                " • a NumPy archive (.npz) that holds both the media paths AND "
+                "their pre-computed embedding vectors — when provided, listed "
+                "files skip re-embedding and use the supplied vectors instead.\n"
+                "Symlinks are followed; directory entries are scanned recursively "
+                "for media files."
             ),
-            accept=".txt,.list",
+            accept=".txt,.list,.npz",
         ),
     ]
 
@@ -147,14 +214,23 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 f.options = all_folder_names()
                 break
 
-    def _stage_paths(self, field_values: dict[str, Any]) -> tuple[Path, dict[str, Path]]:
+    def _stage_paths(
+        self, field_values: dict[str, Any]
+    ) -> tuple[Path, dict[str, Path], dict[str, Any]]:
         """Read the paths file and symlink each entry into a fresh temp dir.
 
-        Returns the staging directory and a name→source-path mapping.  The
-        caller is responsible for ``rmtree``-ing the staging directory.
+        Returns ``(staging_dir, name_to_source, content_vectors)`` where:
+
+        - ``staging_dir`` is the freshly created temp directory holding
+          one symlink per imported file (caller must ``rmtree`` it).
+        - ``name_to_source`` maps each staged symlink basename to the
+          original absolute path it points at.
+        - ``content_vectors`` maps each staged symlink basename to a
+          pre-computed embedding vector when the paths file is a
+          ``.npz`` archive; empty for plain text paths files.
         """
         paths_file = Path(field_values["paths_file"])
-        paths = _read_paths_file(paths_file)
+        paths, path_to_vector = _read_paths_and_vectors(paths_file)
         if not paths:
             raise ValueError(f"No paths found in {paths_file}")
 
@@ -163,7 +239,17 @@ class ServerFilesDatasetImporter(DatasetImporter):
         if not name_to_source:
             shutil.rmtree(staging, ignore_errors=True)
             raise ValueError(f"None of the paths in {paths_file} resolved to existing files")
-        return staging, name_to_source
+
+        # Rekey npz vectors from the original absolute path to the
+        # staged symlink basename, which is what ``server_folder``'s
+        # loader uses as the ``content_vectors`` key.
+        content_vectors: dict[str, Any] = {}
+        if path_to_vector:
+            for name, source in name_to_source.items():
+                vec = path_to_vector.get(str(source))
+                if vec is not None:
+                    content_vectors[name] = vec
+        return staging, name_to_source, content_vectors
 
     def _rewrite_origins(
         self,
@@ -185,7 +271,12 @@ class ServerFilesDatasetImporter(DatasetImporter):
         embedder = field_values.get("embedder", "")
         skip_emb = bool(field_values.get("skip_embedding"))
 
-        staging, name_to_source = self._stage_paths(field_values)
+        staging, name_to_source, npz_vectors = self._stage_paths(field_values)
+        # Merge npz-supplied vectors with any vectors set externally on
+        # ``self.content_vectors``.  NPZ vectors take priority for keys
+        # that overlap.
+        merged_vectors: dict[str, Any] = dict(self.content_vectors or {})
+        merged_vectors.update(npz_vectors)
         try:
             load_dataset_from_folder(
                 staging,
@@ -193,7 +284,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 medias,
                 thin=thin,
                 embedder_name=embedder,
-                content_vectors=self.content_vectors or None,
+                content_vectors=merged_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
                 skip_embedding=skip_emb,
@@ -225,8 +316,10 @@ class ServerFilesDatasetImporter(DatasetImporter):
         embedder = field_values.get("embedder", "")
         skip_emb = bool(field_values.get("skip_embedding"))
 
-        staging, name_to_source = self._stage_paths(field_values)
+        staging, name_to_source, npz_vectors = self._stage_paths(field_values)
         origin = self.build_origin(field_values)
+        merged_vectors: dict[str, Any] = dict(self.content_vectors or {})
+        merged_vectors.update(npz_vectors)
         try:
             for chunk in load_dataset_from_folder_chunked(
                 staging,
@@ -234,7 +327,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 chunk_size,
                 thin=thin,
                 embedder_name=embedder,
-                content_vectors=self.content_vectors or None,
+                content_vectors=merged_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
                 skip_embedding=skip_emb,
