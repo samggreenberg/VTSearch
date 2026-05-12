@@ -1,22 +1,33 @@
 #!/usr/bin/env bash
-# Cache gated Hugging Face model weights to a local directory **once**, so that
+# Cache image-embedder model weights to a local directory **once**, so that
 # Dockerfile.image-embedders can bake them into the image without ever needing
 # an HF token during ``docker build``.
 #
-# The gated models are:
-#   * DINOv3  (facebook/dinov3-vitb16-pretrain-lvd1689m) — Meta research licence
-#   * EUPE    (facebook/PE-Core-B16-224)                 — Meta research licence
+# Two embedders need a host-side cache step:
 #
-# Both require you to:
+#   * DINOv3  (facebook/dinov3-vitb16-pretrain-lvd1689m) — gated under Meta's
+#     research licence; you must accept it on HF and provide an HF token here.
+#   * EUPE    (facebookresearch/EUPE, ViT-B/16 LVD-1689M weights mirrored on
+#     facebook/EUPE-ViT-B) — the HF mirror is ungated and needs no token, but
+#     loading still requires cloning the EUPE repo via ``torch.hub`` and
+#     downloading the .pt weights file. Doing that once on the host means
+#     ``docker build`` can run fully offline.
+#
+# For DINOv3 only, you must:
 #   1. Have a Hugging Face account.
-#   2. Visit each model page and click "Agree and access" to accept the licence.
+#   2. Visit https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m
+#      and click "Agree and access" to accept the licence.
 #   3. Create a User Access Token at https://huggingface.co/settings/tokens
 #      (a read-only token is enough).
 #
-# Run this script **once** on the host, with your token available either as an
-# env var or via a prior ``huggingface-cli login``. The script downloads
-# everything into ``./model_cache/`` (or any directory you pass as $1). After
-# that, ``docker build`` reads from the cache and never needs your token again.
+# Run this script **once** on the host. The script downloads everything into
+# ``./model_cache/`` (or any directory you pass as $1):
+#   * DINOv3 lands under ``$CACHE/models--facebook--dinov3-...``
+#     (the standard HuggingFace cache layout).
+#   * EUPE lands under ``$CACHE/hub/`` (torch.hub layout: cloned repo +
+#     ``checkpoints/EUPE-ViT-B.pt``).
+# After that, ``docker build`` reads from the cache and never needs your
+# token (or the network) again.
 #
 # Usage:
 #   HF_TOKEN=hf_xxx ./scripts/cache_gated_models.sh
@@ -24,6 +35,10 @@
 #   ./scripts/cache_gated_models.sh
 #   # or, custom output dir:
 #   ./scripts/cache_gated_models.sh /path/to/cache
+#
+# If you only want EUPE (no HF token, no licence acceptance), run with
+# ``SKIP_DINOV3=1``:
+#   SKIP_DINOV3=1 ./scripts/cache_gated_models.sh
 #
 # The cache directory is ``./model_cache/`` by default and is gitignored —
 # weights never end up in the repo or in a Docker image layer except via the
@@ -34,19 +49,22 @@ set -euo pipefail
 CACHE_DIR="${1:-./model_cache}"
 mkdir -p "$CACHE_DIR"
 
-echo "Caching gated VTSearch image-embedder weights to: $CACHE_DIR"
+echo "Caching VTSearch image-embedder weights to: $CACHE_DIR"
 echo
 
-# Resolve a token from the env, but don't echo it. If HF_TOKEN isn't set,
-# huggingface_hub falls back to the credential saved by ``huggingface-cli
-# login`` — both paths use the same underlying loader.
-if [[ -n "${HF_TOKEN:-}" ]]; then
-    echo "Using HF token from \$HF_TOKEN env var."
-elif [[ -f "$HOME/.cache/huggingface/token" ]] || [[ -f "$HOME/.huggingface/token" ]]; then
-    echo "Using HF token from cached huggingface-cli login."
-else
-    cat <<'EOF' >&2
-ERROR: No Hugging Face credentials found.
+SKIP_DINOV3="${SKIP_DINOV3:-0}"
+
+if [[ "$SKIP_DINOV3" != "1" ]]; then
+    # Resolve a token from the env, but don't echo it. If HF_TOKEN isn't
+    # set, huggingface_hub falls back to the credential saved by
+    # ``huggingface-cli login`` — both paths use the same underlying loader.
+    if [[ -n "${HF_TOKEN:-}" ]]; then
+        echo "Using HF token from \$HF_TOKEN env var (DINOv3)."
+    elif [[ -f "$HOME/.cache/huggingface/token" ]] || [[ -f "$HOME/.huggingface/token" ]]; then
+        echo "Using HF token from cached huggingface-cli login (DINOv3)."
+    else
+        cat <<'EOF' >&2
+ERROR: No Hugging Face credentials found (needed for DINOv3).
 
 Either set HF_TOKEN in your environment, e.g.:
     export HF_TOKEN=hf_xxx
@@ -56,41 +74,73 @@ Or log in interactively first:
     huggingface-cli login
     ./scripts/cache_gated_models.sh
 
-You also need to visit each model page once and click "Agree and access":
+You also need to visit the DINOv3 model page once and click "Agree and access":
     https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m
-    https://huggingface.co/facebook/PE-Core-B16-224
-EOF
-    exit 1
-fi
-echo
 
-python3 - "$CACHE_DIR" <<'PYEOF'
+If you don't want DINOv3, re-run with SKIP_DINOV3=1 to cache only EUPE:
+    SKIP_DINOV3=1 ./scripts/cache_gated_models.sh
+EOF
+        exit 1
+    fi
+    echo
+fi
+
+export VTSEARCH_CACHE_DIR="$CACHE_DIR"
+export VTSEARCH_SKIP_DINOV3="$SKIP_DINOV3"
+
+python3 - <<'PYEOF'
 import os
 import sys
 
-cache_dir = sys.argv[1]
-# ``token=True`` tells huggingface_hub to use whichever token the user
-# previously set (HF_TOKEN env var or ``huggingface-cli login``), without
-# us having to splice it into a string anywhere.
-token = os.environ.get("HF_TOKEN") or True
+cache_dir = os.environ["VTSEARCH_CACHE_DIR"]
+skip_dinov3 = os.environ.get("VTSEARCH_SKIP_DINOV3", "0") == "1"
 
-print("[1/2] Downloading DINOv3 (facebook/dinov3-vitb16-pretrain-lvd1689m)...", flush=True)
-from transformers import AutoImageProcessor, AutoModel
+steps = []
+if not skip_dinov3:
+    steps.append("DINOv3")
+steps.append("EUPE")
+total = len(steps)
+step_no = 0
 
-from vtsearch.config import DINOV3_MODEL_ID
+if not skip_dinov3:
+    step_no += 1
+    print(
+        f"[{step_no}/{total}] Downloading DINOv3 (facebook/dinov3-vitb16-pretrain-lvd1689m)...",
+        flush=True,
+    )
+    # ``token=True`` tells huggingface_hub to use whichever token the user
+    # previously set (HF_TOKEN env var or ``huggingface-cli login``),
+    # without us having to splice it into a string anywhere.
+    token = os.environ.get("HF_TOKEN") or True
+    from transformers import AutoImageProcessor, AutoModel
 
-AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache_dir, token=token)
-AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache_dir, token=token)
-print("  DINOv3 cached.", flush=True)
+    from vtsearch.config import DINOV3_MODEL_ID
 
-print("[2/2] Downloading EUPE (facebook/PE-Core-B16-224)...", flush=True)
-from vtsearch.config import EUPE_MODEL_ID
+    AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache_dir, token=token)
+    AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache_dir, token=token)
+    print("  DINOv3 cached.", flush=True)
 
-AutoModel.from_pretrained(
-    EUPE_MODEL_ID, cache_dir=cache_dir, token=token, trust_remote_code=True
+step_no += 1
+print(
+    f"[{step_no}/{total}] Downloading EUPE (facebookresearch/EUPE, ViT-B/16)...",
+    flush=True,
 )
-AutoImageProcessor.from_pretrained(
-    EUPE_MODEL_ID, cache_dir=cache_dir, token=token, trust_remote_code=True
+# EUPE loads via torch.hub: a cloned GitHub repo plus a downloaded .pt
+# weights file. Both land under $TORCH_HOME/hub/, so we point TORCH_HOME
+# at the same directory the Dockerfile will COPY into the image.
+os.environ["TORCH_HOME"] = cache_dir
+
+import torch  # noqa: E402
+
+from vtsearch.config import EUPE_MODEL_ID  # noqa: E402
+
+torch.hub.load(
+    "facebookresearch/EUPE",
+    "eupe_vitb16",
+    source="github",
+    pretrained=True,
+    weights=EUPE_MODEL_ID,
+    trust_repo=True,
 )
 print("  EUPE cached.", flush=True)
 PYEOF
