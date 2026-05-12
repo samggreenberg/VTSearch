@@ -7,6 +7,10 @@ export type SelectMode = 'top' | 'bottom' | 'hard' | 'new';
 export interface SortedItem {
   id: number;
   score: number;
+  /** Normalised [x0, y0, x1, y1] of the region the embedder/MLP matched best.
+   *  Only set when the active dataset's embedder reports
+   *  ``supports_patch_regions``. */
+  bestRegion?: number[];
 }
 
 @Injectable({ providedIn: 'root' })
