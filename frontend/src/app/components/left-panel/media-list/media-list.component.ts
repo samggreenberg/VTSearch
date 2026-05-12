@@ -52,7 +52,7 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
   @ViewChild(CdkVirtualScrollViewport) virtualViewport?: CdkVirtualScrollViewport;
 
   /** Cached ordered items — rebuilt only when inputs change, not on every CD cycle. */
-  cachedOrderedItems: { media: MediaItem; score: number | null; showThreshold: boolean }[] = [];
+  cachedOrderedItems: { media: MediaItem; score: number | null; showThreshold: boolean; bestRegion: number[] | null }[] = [];
 
   readonly listItemHeight = LIST_ITEM_HEIGHT;
 
@@ -99,7 +99,7 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
 
   private rebuildOrderedItems(): void {
     const mediaMap = new Map(this.medias.map((m) => [m.id, m]));
-    const items: { media: MediaItem; score: number | null; showThreshold: boolean }[] = [];
+    const items: { media: MediaItem; score: number | null; showThreshold: boolean; bestRegion: number[] | null }[] = [];
 
     if (this.sortOrder && this.sortOrder.length > 0) {
       let thresholdInserted = false;
@@ -113,11 +113,16 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
           thresholdInserted = true;
         }
 
-        items.push({ media, score: this.showScores ? sorted.score : null, showThreshold });
+        items.push({
+          media,
+          score: this.showScores ? sorted.score : null,
+          showThreshold,
+          bestRegion: sorted.bestRegion ?? null,
+        });
       }
     } else {
       for (const media of this.medias) {
-        items.push({ media, score: null, showThreshold: false });
+        items.push({ media, score: null, showThreshold: false, bestRegion: null });
       }
     }
 

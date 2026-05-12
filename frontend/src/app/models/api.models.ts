@@ -33,6 +33,9 @@ export interface VoteResponse {
 export interface SortResult {
   id: number;
   similarity: number;
+  /** Patch-region-aware embedders only: normalised [x0, y0, x1, y1] of the
+   *  region that scored highest against the query. */
+  best_region?: number[];
 }
 
 export interface SortResponse {
@@ -43,6 +46,9 @@ export interface SortResponse {
 export interface LearnedSortResult {
   id: number;
   score: number;
+  /** Patch-region-aware embedders only: normalised [x0, y0, x1, y1] of the
+   *  region that scored highest under the MLP. */
+  best_region?: number[];
 }
 
 export interface LearnedSortResponse {

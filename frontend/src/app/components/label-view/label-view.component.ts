@@ -375,7 +375,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortingApi.sort({ text }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
         this.sortState.setSortResults(
-          response.results.map((r) => ({ id: r.id, score: r.similarity })),
+          response.results.map((r) => ({ id: r.id, score: r.similarity, bestRegion: r.best_region })),
           response.threshold,
         );
         this.sortState.setSortBusy(false);
@@ -396,7 +396,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortingApi.learnedSort().pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
         this.sortState.setSortResults(
-          response.results.map((r) => ({ id: r.id, score: r.score })),
+          response.results.map((r) => ({ id: r.id, score: r.score, bestRegion: r.best_region })),
           response.threshold,
         );
         this.sortState.setSortBusy(false);
@@ -453,13 +453,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.detectorsApi.findLabel({ detector_id: modelId }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (raw) => {
         const response = raw as {
-          results: { id: number; score: number }[];
+          results: { id: number; score: number; best_region?: number[] }[];
           threshold: number;
           detector_name?: string;
         };
         this.stopScoringProgressPoll();
         this.sortState.setSortResults(
-          response.results.map((r) => ({ id: r.id, score: r.score })),
+          response.results.map((r) => ({ id: r.id, score: r.score, bestRegion: r.best_region })),
           response.threshold,
         );
         this.sortState.setLoadSortLabel(response.detector_name || 'Detector');
@@ -478,10 +478,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onExampleSortStarted(data: unknown): void {
-    const response = data as { results: { id: number; similarity: number }[]; threshold: number };
+    const response = data as {
+      results: { id: number; similarity: number; best_region?: number[] }[];
+      threshold: number;
+    };
     this.sortState.setSortMode('load');
     this.sortState.setSortResults(
-      response.results.map((r) => ({ id: r.id, score: r.similarity })),
+      response.results.map((r) => ({ id: r.id, score: r.similarity, bestRegion: r.best_region })),
       response.threshold,
     );
     this.sortState.setLoadSortLabel('Example media');
@@ -658,7 +661,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.sortingApi.exampleSortServer({ filename: mediaExample }).pipe(takeUntil(this.destroy$)).subscribe({
         next: (response) => {
           this.sortState.setSortResults(
-            response.results.map((r) => ({ id: r.id, score: r.similarity })),
+            response.results.map((r) => ({ id: r.id, score: r.similarity, bestRegion: r.best_region })),
             response.threshold,
           );
           this.sortState.setSortBusy(false);

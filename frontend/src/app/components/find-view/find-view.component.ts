@@ -162,7 +162,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: (response: any) => {
-          const sorted = response.results.map((r: any) => ({ id: r.id, score: r.score }));
+          const sorted = response.results.map((r: any) => ({ id: r.id, score: r.score, bestRegion: r.best_region }));
           const threshold = response.threshold;
           // Set sort results for stripe display
           this.sortState.setSortResults(sorted, threshold);

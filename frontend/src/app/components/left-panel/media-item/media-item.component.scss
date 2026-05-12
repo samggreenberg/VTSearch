@@ -60,6 +60,22 @@
   }
 }
 
+.thumbnail-wrap {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  line-height: 0;
+
+  .grid-mode & {
+    width: 100%;
+  }
+}
+
+.thumbnail-wrap-list {
+  width: 28px;
+  height: 28px;
+}
+
 .media-thumbnail {
   width: 28px;
   height: 28px;
@@ -73,6 +89,16 @@
     aspect-ratio: 1;
     border-radius: var(--radius-sm);
   }
+}
+
+.best-region-outline {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 224, 102, 0.9);
+  border-radius: 2px;
+  pointer-events: none;
+  // Inner dark halo keeps the yellow stroke readable on light thumbnails.
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
 }
 
 .media-placeholder {
