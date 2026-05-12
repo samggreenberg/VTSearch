@@ -66,6 +66,17 @@ RUN mkdir -p /app/data && \
 # Note: model weights live under /opt/vtsearch/models, NOT this volume.
 VOLUME /app/data
 
+# Run as a non-root user. See the CPU Dockerfile for the rationale and
+# the GID-0 / g=u perm pattern that lets arbitrary OpenShift UIDs write.
+# /opt/vtsearch/models is also opened up so the baked-in HuggingFace
+# snapshot stays readable when the runtime UID is unknown at build time.
+RUN useradd --uid 1000 --gid 0 --create-home --home-dir /home/vtsearch vtsearch && \
+    chgrp -R 0 /app /home/vtsearch /opt/vtsearch && \
+    chmod -R g=u /app /home/vtsearch /opt/vtsearch
+
+ENV HOME=/home/vtsearch
+USER 1000
+
 EXPOSE 5000
 
 ENV OMP_NUM_THREADS=1 \

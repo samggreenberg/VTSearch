@@ -44,7 +44,21 @@ RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_ver
 
 # Runtime data directory (models, embeddings, settings, media files).
 # Mount a volume here to persist data across container restarts.
+RUN mkdir -p /app/data
 VOLUME /app/data
+
+# Run as a non-root user so the image works under Kubernetes
+# `runAsNonRoot: true`, OpenShift (arbitrary UID in the root group),
+# and other security-hardened environments. The user is created with
+# primary GID 0 and /app is made group-writable so any UID assigned at
+# runtime can still read/write the app tree, the data volume, and the
+# HuggingFace cache under $HOME.
+RUN useradd --uid 1000 --gid 0 --create-home --home-dir /home/vtsearch vtsearch && \
+    chgrp -R 0 /app /home/vtsearch && \
+    chmod -R g=u /app /home/vtsearch
+
+ENV HOME=/home/vtsearch
+USER 1000
 
 EXPOSE 5000
 
