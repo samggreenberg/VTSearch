@@ -7,7 +7,7 @@ import { KeyboardService } from '../../services/keyboard.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
-import { ImageViewerComponent } from './image-viewer/image-viewer.component';
+import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
 import { TextViewerComponent } from './text-viewer/text-viewer.component';
 import { DocumentViewerComponent } from './document-viewer/document-viewer.component';
@@ -46,6 +46,11 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   swipeClass = '';
   spinningVote: 'good' | 'bad' | null = null;
 
+  private currentRegionBox: RegionBox | null = null;
+  private pendingBadConfirm = false;
+  private badConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly BAD_CONFIRM_MS = 2000;
+
   private spinTimer: ReturnType<typeof setTimeout> | null = null;
 
   private _pausedByVisibility = false;
@@ -61,6 +66,10 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media']) {
       this.swipeClass = '';
+      this.cancelBadConfirm();
+      // ImageViewer also clears its own regionBox on media change and will emit null;
+      // resetting eagerly here keeps state coherent across the swap.
+      this.currentRegionBox = null;
     }
   }
 
@@ -69,6 +78,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     this.keyboard.stop();
     this.subs.forEach((s) => s.unsubscribe());
     if (this.spinTimer) clearTimeout(this.spinTimer);
+    if (this.badConfirmTimer) clearTimeout(this.badConfirmTimer);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
   }
 
@@ -162,9 +172,23 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   castVote(vote: 'good' | 'bad'): void {
     if (!this.media || this.isVoting) return;
+
+    // Region annotations only attach to yes-votes (salient-area semantics).
+    // A no-vote with a box drawn requires a confirming second press so a stray
+    // ArrowLeft can't throw away real work the user did drawing the box.
+    if (vote === 'bad' && this.currentRegionBox && !this.pendingBadConfirm) {
+      this.pendingBadConfirm = true;
+      this.imageViewer?.pulseRegionBox();
+      if (this.badConfirmTimer) clearTimeout(this.badConfirmTimer);
+      this.badConfirmTimer = setTimeout(() => this.cancelBadConfirm(), this.BAD_CONFIRM_MS);
+      return;
+    }
+
+    const regionBox = vote === 'good' ? this.currentRegionBox : null;
+    this.cancelBadConfirm();
     this.isVoting = true;
 
-    this.mediasApi.vote(this.media.id, vote).subscribe({
+    this.mediasApi.vote(this.media.id, vote, regionBox).subscribe({
       next: () => {
         const animate = this.swipeAnimation && !!this.media && !prefersReducedMotion();
         if (animate) {
@@ -185,6 +209,21 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
         this.isVoting = false;
       },
     });
+  }
+
+  onRegionBoxChange(box: RegionBox | null): void {
+    this.currentRegionBox = box;
+    // Clearing the box also clears any pending bad-vote confirmation —
+    // there's nothing left to confirm against.
+    if (!box) this.cancelBadConfirm();
+  }
+
+  private cancelBadConfirm(): void {
+    this.pendingBadConfirm = false;
+    if (this.badConfirmTimer) {
+      clearTimeout(this.badConfirmTimer);
+      this.badConfirmTimer = null;
+    }
   }
 
   private loadSettings(): void {

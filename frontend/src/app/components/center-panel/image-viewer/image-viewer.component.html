@@ -1,6 +1,7 @@
 <div
   #imageWrap
   class="image-wrap"
+  [class.region-mode]="shiftHeld"
   [style.cursor]="wrapCursor"
   (wheel)="onWheel($event)"
   (mousedown)="onMouseDown($event)"
@@ -17,4 +18,29 @@
     draggable="false"
     fetchpriority="high"
   />
+  @if (regionBox && renderedW > 0 && renderedH > 0) {
+    <div
+      class="region-stage"
+      [style.width.px]="renderedW"
+      [style.height.px]="renderedH"
+      [style.transform]="'translate(-50%, -50%) ' + imageTransform"
+    >
+      <div
+        class="region-box"
+        [class.shake]="regionBoxShake"
+        [ngStyle]="regionBoxStyle!"
+        (mousedown)="onRegionBodyMouseDown($event)"
+        title="Region annotation (Shift-drag to redraw, Esc to clear)"
+      >
+        <div class="region-handle region-handle-nw" (mousedown)="onResizeHandleMouseDown('nw', $event)"></div>
+        <div class="region-handle region-handle-n" (mousedown)="onResizeHandleMouseDown('n', $event)"></div>
+        <div class="region-handle region-handle-ne" (mousedown)="onResizeHandleMouseDown('ne', $event)"></div>
+        <div class="region-handle region-handle-e" (mousedown)="onResizeHandleMouseDown('e', $event)"></div>
+        <div class="region-handle region-handle-se" (mousedown)="onResizeHandleMouseDown('se', $event)"></div>
+        <div class="region-handle region-handle-s" (mousedown)="onResizeHandleMouseDown('s', $event)"></div>
+        <div class="region-handle region-handle-sw" (mousedown)="onResizeHandleMouseDown('sw', $event)"></div>
+        <div class="region-handle region-handle-w" (mousedown)="onResizeHandleMouseDown('w', $event)"></div>
+      </div>
+    </div>
+  }
 </div>

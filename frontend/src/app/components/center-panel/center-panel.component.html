@@ -8,7 +8,7 @@
           <vt-audio-player [media]="media" [volume]="volume" [audioPlaying]="audioPlaying" [swipeClass]="swipeClass" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
         }
         @case ('image') {
-          <vt-image-viewer [media]="media"></vt-image-viewer>
+          <vt-image-viewer [media]="media" (regionBoxChange)="onRegionBoxChange($event)"></vt-image-viewer>
         }
         @case ('video') {
           <vt-video-player [media]="media" [volume]="volume" [audioPlaying]="audioPlaying" (playingChanged)="onPlayingChanged($event)"></vt-video-player>

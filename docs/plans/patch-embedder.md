@@ -177,15 +177,49 @@ V1 records both Good and Bad against the full image. The `LabeledElement` schema
 
 This is deliberate. "Use the region that triggered the result" misattributes in any sort mode without a query (random shuffle, diversity sort, autopilot exploration, a fresh dataset), and ignores discovery — users vote Good on things the algorithm didn't surface for. Image-level votes with region-level scoring is the standard weakly-supervised setup: the MLP learns "what makes an image good" and the max-pool at scoring time picks the region that best satisfies that learned function.
 
-### v2: region voting via a click-two-corners gesture
+### v2: region voting
 
-When the user explicitly marks a box on the focus pane and votes against it:
+V2 lets the user attach a single rectangular region to a yes-vote on an image. The region is a *salient-area annotation* — it says "the good part is here", not "yes-with-region is a new label class". No-votes never carry a region.
+
+#### Backend semantics
 
 1. **Compute the vote vector on the fly from the patch grid.** Not from any tree node. Take the set of patch cells whose centers fall inside the user's box, attention-weighted-mean their `media["patch_grid"][i, j]` vectors, L2-normalise. That's the vote vector for this vote. We persist the *box* (4 floats), not the vector — the trainer rederives the vector at train time from the already-pickled `patch_grid` (stored from v1, see "Storage"). No re-import required when v2 ships.
 2. **Don't snap to tree nodes.** The HAC tree exists to give *search* a finite set of regions to scan in O(N log N). Voting is a one-off, so on-the-fly computation is fine and gives the user patch-precision without the "slightly-too-big box jumps to the full-image node" failure mode.
 3. **Display-time snapping is different.** When we draw the matched-region outline on a search-result card, we *do* snap to the best-IoU tree node, because the user isn't designating anything there — we're just showing them which scale won.
 
-V2 adds an optional `region_box: (x0, y0, x1, y1)` to `LabeledElement`. Absent → image-level (the v1 default and the forever-legacy fallback).
+V2 adds an optional `region_box: (x0, y0, x1, y1)` (normalised image coords) to `LabeledElement`. Absent → image-level (the v1 default and the forever-legacy fallback).
+
+#### Interaction design
+
+The overriding constraint is **don't degrade the existing fast binary-vote path**. Today a yes-vote is one keypress (`→`); a no-vote is one keypress (`←`). Users who never want region voting must never see new affordances in their way, and their one-keypress rhythm must survive untouched.
+
+**Scope.** Image media only. Other media types (audio, text, video, document) get no region-vote affordance in v2 — `supports_patch_regions` is image-specific and there's no obvious 2D analogue for the others. The center-pane focus view is the only place region voting is offered; the gallery card's `best_region` outline (shipped in v1) remains purely informational.
+
+**Entering region mode: hold `Shift`.** The focus pane already binds mousedown-drag to *pan-when-zoomed*. While `Shift` is held over the image-viewer canvas, that pan gesture is suppressed and replaced with a box-draw gesture; the cursor flips to a crosshair. Release `Shift` and pan is restored. Reasons for `Shift` over a sticky toggle:
+  - Matches Figma/Photoshop muscle memory (drag = move; modifier+drag = select).
+  - One key down, one key up — no mode the user can get stuck in.
+  - Doesn't collide with text input the way letter-key hotkeys do.
+  - Users who never region-vote literally never touch it.
+
+If `Shift` is released mid-drag (mouse button still down), the in-progress draw is committed on mouseup before mode exits. Don't punish a millisecond-early key release.
+
+**Drawing the box.** Click-drag-release in image-local coordinates: the mouse position is un-transformed through the current `panX / panY / zoom / rotate` so a box drawn at 4× zoom stays correctly anchored when the user zooms back out. Stored internally and on `LabeledElement.region_box` as `(x0, y0, x1, y1)` in normalised image coords (0..1, pre-rotation). A zero-area release (just a click, no drag) is treated as "no box drawn" and falls back to the binary path.
+
+**Editing the box.** After release the box stays visible with 8 corner/edge resize handles and a draggable body for translation. There is **no separate submit button** — the box is just transient state attached to the *pending* vote. Re-Shift-dragging from empty space starts a fresh box (discards the prior one).
+
+**Voting still uses Left/Right.**
+  - `→` (good) submits a yes-vote and, if a box is currently drawn, attaches its normalised coordinates as `region_box`. No box → plain yes-vote, identical to today.
+  - `←` (bad) when **no box is drawn** → plain no-vote, identical to today.
+  - `←` (bad) when a box **is drawn** → require a second confirming `←` press (or `Esc` to clear the box first and then a plain `←` works). The first `←` shakes / highlights the box to draw attention; the second within ~2 seconds submits the no-vote and discards the box. Rationale: drawing a box is real work; a stray left-arrow press shouldn't throw it away. Users with no box never see this branch and keep their single-keypress fast path.
+  - `Esc` discards the current box without voting; the user stays on the same item.
+
+The mouse-click vote buttons in the UI follow the same rules.
+
+**Touch.** Deferred to a later phase. Touch has no `Shift` modifier, and v2's audience is power users on desktop. The center-pane toolbar already exposes zoom/rotate/reset buttons; if touch support is needed later, a "draw region" toggle button there is the natural place. Out of scope for v2.
+
+**Frontend implementation surface.** A new overlay layer inside `ImageViewerComponent` (or a sibling `RegionDrawComponent` it composes) listens for `keydown/keyup` of `Shift` on `window` while the focus pane is mounted, swaps pointer handlers when the modifier is active, and renders the box + handles as a positioned div pair inside the existing `.thumbnail-wrap` (same coordinate system as the v1 `best_region` outline). The vote-dispatch service grows an optional `regionBox` parameter that flows into the existing yes-vote API call; the bad-vote path picks up a "pending discard confirmation" sub-state. None of this touches the binary-only code paths.
+
+**Tests.** Beyond the existing v1 patch tests, v2 needs: pure-function coverage for the screen↔image coordinate transform under non-trivial `pan/zoom/rotate`; coordinate stability across zoom changes after the box is drawn; box discarded on bad-vote-after-confirm; box preserved across a second `Shift`-drag attempt that becomes a no-op zero-area click; `region_box` round-tripping through `LabeledElement` serialisation; vote-API contract test that `region_box` is present on yes and absent on no. The on-the-fly patch-grid pooling (box → vote vector) is exercised by a backend test that doesn't touch the UI.
 
 ## Detector MLP
 
@@ -376,5 +410,5 @@ each other.
 ## Phasing
 
 - **v1 (this plan):** three patch embedders — DINOv2 (ungated default), DINOv3 (gated, premium), and real-EUPE (FAIR Noncommercial). `supports_patch_regions` + `license_notice` flags on `MediaEmbedder`; each patch embedder populates `media["patch_regions"]` (HAC tree) and `media["patch_grid"]` (raw H × W × 768 fp16); `PatchEmbedOutput` protocol; max-region similarity; region-aware MLP scoring (image-level training and image-level voting unchanged); gallery-card region highlight; license-notice surfacing on the embedder picker. Text sort stays grey via the already-shipped `supports_text` gate. Pre-implementation experiments run on `caltech101_s` and inform `K`, `α`, and the EUPE-real attention path.
-- **v2:** region voting (click two corners on the focus pane); on-the-fly vote-vector computation from the v1-pickled `patch_grid` (no re-import needed); optional `LabeledElement.region_box`; region-level training examples; per-region label export.
+- **v2:** region voting on image media via Shift-drag on the focus pane (single rectangular box, salient-area annotation on yes-votes only; binary fast path via `←`/`→` preserved); on-the-fly vote-vector computation from the v1-pickled `patch_grid` (no re-import needed); optional `LabeledElement.region_box`; region-level training examples; per-region label export. Touch deferred.
 - **v3:** one text embedder + one patch embedder per dataset (text queries → text embedder; region similarity / votes → patch embedder). Requires a real schema change (`media["embeddings"]` dict, `media["patch_regions"]` dict). Gets its own design doc when we get there.
