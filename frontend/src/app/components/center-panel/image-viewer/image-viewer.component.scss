@@ -8,6 +8,7 @@
 }
 
 .image-wrap {
+  position: relative;
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -31,3 +32,68 @@
   }
 }
 
+.region-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+}
+
+.region-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(255, 224, 102, 0.95);
+  background: rgba(255, 224, 102, 0.06);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  cursor: move;
+
+  &.shake {
+    animation: region-box-shake 0.45s ease-in-out;
+  }
+}
+
+@keyframes region-box-shake {
+  0%, 100% { transform: translateX(0); border-color: rgba(255, 224, 102, 0.95); }
+  15% { transform: translateX(-3px); border-color: rgba(255, 110, 110, 0.95); }
+  30% { transform: translateX(3px); }
+  45% { transform: translateX(-3px); }
+  60% { transform: translateX(3px); border-color: rgba(255, 110, 110, 0.95); }
+  75% { transform: translateX(-2px); }
+}
+
+.region-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: rgba(255, 224, 102, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+
+.region-handle-n,
+.region-handle-s {
+  left: 50%;
+  margin-left: -5px;
+  cursor: ns-resize;
+}
+.region-handle-n { top: -5px; }
+.region-handle-s { bottom: -5px; }
+
+.region-handle-e,
+.region-handle-w {
+  top: 50%;
+  margin-top: -5px;
+  cursor: ew-resize;
+}
+.region-handle-e { right: -5px; }
+.region-handle-w { left: -5px; }
+
+.region-handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.region-handle-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.region-handle-ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.region-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
