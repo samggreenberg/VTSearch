@@ -19,6 +19,12 @@ from collections.abc import Callable
 
 import numpy as np
 
+# Imported eagerly so the ~1s sklearn cold-import is paid *before* the
+# progress bar reports `(0, estimated_total_work)`.  When the import was
+# lazy (inside `_build_node`) the bar appeared stuck at `(0, N)` while
+# sklearn loaded on the first `_build_node` call.
+from sklearn.cluster import KMeans
+
 DIVERSITY_TREE_DEFAULT_K = 2
 DIVERSITY_TREE_MAX_DEPTH = 10
 DIVERSITY_TREE_MIN_NODE_SIZE = 20
@@ -130,8 +136,6 @@ class DiversityTree:
         # Each of the N_INIT runs reports progress separately, so the UI
         # updates during the expensive root clustering instead of sitting
         # at 0% until it finishes.
-        from sklearn.cluster import KMeans  # noqa: PLC0415
-
         best_labels = None
         best_inertia = float("inf")
         for init_i in range(_N_INIT):
