@@ -78,6 +78,7 @@ _TEST_GROUPS = {
         "test_settings_io",
         "test_sync_sources",
         "test_bulk_embedding",
+        "test_npz_dataset_import",
     ],
     "detectors": [
         "test_find_label",
