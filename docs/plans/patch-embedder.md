@@ -319,23 +319,25 @@ each other.
      vote semantics attached.
 
 2. **`Dockerfile.image-embedders` + `scripts/cache_gated_models.sh`
-   off the broken PE-Core AutoModel path.**
-   - Both files still call `AutoModel.from_pretrained(EUPE_MODEL_ID,
-     ..., trust_remote_code=True)`, which no longer matches the
-     embedder's actual load path (now `torch.hub.load` against
-     `facebookresearch/EUPE` with a HF weights URL).  At runtime the
-     embedder fetches its own weights via torch hub, so the bake
-     step in Docker is now ineffective (and the `trust_remote_code`
-     call would also have failed had it ever run for real).
-   - Fix: switch both files to a torch-hub-based pre-cache.  Set
-     `TORCH_HOME` to the shared `model_cache/` dir and run
+   off the broken PE-Core AutoModel path — DONE.**
+   - Both files used to call `AutoModel.from_pretrained(EUPE_MODEL_ID,
+     ..., trust_remote_code=True)`, which no longer matched the
+     embedder's actual load path (`torch.hub.load` against
+     `facebookresearch/EUPE` with a HF weights URL).  Switched both
+     to a torch-hub-based pre-cache: `TORCH_HOME` points at the
+     shared `model_cache/` dir (Dockerfile sets it equal to
+     `VTSEARCH_MODELS_DIR`; the host script sets it to the cache
+     directory it was passed) and we call
      `torch.hub.load("facebookresearch/EUPE", "eupe_vitb16",
      source="github", pretrained=True, weights=EUPE_MODEL_ID,
      trust_repo=True)` once at build / host-cache time so the
      EUPE repo clone + weights file are baked in.  No HF token
-     needed (the EUPE-ViT-B HF repo is ungated).  See "EUPE backbone
-     & licence" section for the constants.
-   - Build-time concern only; runtime works without it.
+     needed for EUPE (the EUPE-ViT-B HF repo is ungated); the
+     cache script grew a `SKIP_DINOV3=1` knob so users who only
+     need EUPE can run it without an HF login.  The Dockerfile's
+     EUPE bake step is also wrapped in a try/except so the build
+     succeeds even when no host cache is present and the build
+     environment has no network.
 
 3. **caltech101_s pre-implementation experiments.**
    - The design pins `K = 12` and `α = 0.5` as v1 defaults; the
