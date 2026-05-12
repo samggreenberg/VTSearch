@@ -66,6 +66,12 @@ Click the hamburger menu (☰) in the top-left. You get two choices:
   existing datasets. Each importer asks for the fields it needs
   (path, URL, media type) in a small form.
 
+  Two of the file-list importers — **Server Files** and **Local
+  Files** — also accept a `.npz` archive of pre-computed embedding
+  vectors so you can import media you have already embedded offline
+  without paying for embedding twice. See
+  [Pre-computed embeddings (.npz)](#pre-computed-embeddings-npz) below.
+
 Loading a dataset does three things: downloads or reads the media,
 generates an embedding for every item using the appropriate model
 (CLAP for audio, SigLIP for images, X-CLIP for video, E5 for text),
@@ -75,6 +81,41 @@ diverse sampling. Progress is shown in a modal while it runs.
 If the model for your media type isn't cached yet, the first dataset
 of that type triggers a one-time download (e.g. CLAP is ~1.1 GB).
 Subsequent datasets of the same type reuse the cached model.
+
+### Pre-computed embeddings (.npz)
+
+If you have already embedded your media offline — for example with
+your own script using the same model VTSearch uses — you can skip the
+server-side re-embedding step by handing VTSearch a NumPy `.npz`
+archive of pre-computed vectors. Two importers accept this:
+
+- **Server Files** — instead of a `.txt`/`.list` paths file, point
+  the *Paths File* field at a `.npz`. The archive holds both the
+  media-file paths AND their vectors; VTSearch reads the paths from
+  disk and reuses the supplied vectors.
+- **Local Files** — alongside the media files you upload, attach a
+  `.npz` to the optional *Pre-computed embeddings* file picker. Files
+  whose name matches an NPZ key reuse the supplied vector; files
+  without a matching entry are embedded normally on the server.
+
+VTSearch accepts two NPZ layouts:
+
+1. **`filenames` + `vectors` arrays** — produced by
+   `np.savez(path, filenames=names, vectors=vecs)` where `names` is
+   a 1-D string array of length *N* and `vecs` is a 2-D float array
+   of shape *(N, D)*. The i-th name maps to the i-th row of `vecs`.
+2. **Per-key** — produced by
+   `np.savez(path, **{name: vec for name, vec in zip(names, vecs)})`.
+   Each archive key is a filename; the corresponding value is its
+   vector.
+
+The vector dimension and the embedding model must match what
+VTSearch would have used (e.g. 512-d CLAP for audio, 768-d SigLIP for
+images). Embedding-model selection is **not** persisted inside the
+NPZ — the importer's *Embedder* setting still controls which model
+is used for any file that doesn't have a pre-computed vector, and
+also acts as the model identifier recorded on each media. Pick an
+embedder that matches the vectors in your NPZ.
 
 ---
 
