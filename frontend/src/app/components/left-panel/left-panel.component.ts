@@ -45,6 +45,9 @@ export class LeftPanelComponent implements OnInit, OnChanges {
    * only contain media IDs in the *currently loaded* dataset.
    */
   @Input() learnedSortAvailable = false;
+  /** Active detector's saved labelset counts (across all datasets). */
+  @Input() labelsetGoodCount = 0;
+  @Input() labelsetBadCount = 0;
   @Input() sortMode: SortMode = 'text';
   @Input() selectMode: SelectMode = 'top';
   @Input() inclusion: number = 0;
