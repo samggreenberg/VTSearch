@@ -118,10 +118,11 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
     return this.viewMode === 'grid';
   }
 
-  private thumbnailFailedIds = new Set<number>();
+  private thumbnailFailedUrls = new Set<string>();
 
   hasThumbnailUrl(id: number): boolean {
-    if (this.thumbnailFailedIds.has(id)) return false;
+    const url = this.thumbnailUrl(id);
+    if (url && this.thumbnailFailedUrls.has(url)) return false;
     const media = this.mediaMap.get(id);
     return !!media && (media.type === 'image' || media.type === 'video' || media.type === 'document' || media.type === 'audio');
   }
@@ -132,8 +133,8 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
     return this.activeContext.mediaUrl(`/api/medias/${id}/image`);
   }
 
-  onThumbnailError(id: number): void {
-    this.thumbnailFailedIds.add(id);
+  onThumbnailError(url: string): void {
+    if (url) this.thumbnailFailedUrls.add(url);
   }
 
   placeholderIcon(id: number): string | null {

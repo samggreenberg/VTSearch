@@ -18,7 +18,7 @@
         (keydown)="onEntryKeydown($event, entry)"
       >
         @if (hasThumbnailUrl(entry)) {
-          <img class="vote-thumbnail" [src]="thumbnailUrl(entry)" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(entry.id)" />
+          <img class="vote-thumbnail" [src]="thumbnailUrl(entry)" [alt]="entry.name" loading="lazy" (error)="onThumbnailError(thumbnailUrl(entry))" />
         } @else if (placeholderIcon(entry)) {
           <span class="vote-placeholder">{{ placeholderIcon(entry) }}</span>
         }
