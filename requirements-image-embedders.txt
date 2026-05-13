@@ -31,6 +31,11 @@ scipy
 # ── PyTorch (CPU) ────────────────────────────────────────────────────
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.0.0
+# DINOv2 / DINOv3 use `AutoImageProcessor`, which transformers loads via
+# the torchvision backend (`use_fast=True` default in recent releases).
+# Without torchvision the processor import raises ImportError at build
+# time, so install the matching CPU wheel.
+torchvision
 
 # ── Image media type ─────────────────────────────────────────────────
 Pillow
