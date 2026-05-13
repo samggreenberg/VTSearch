@@ -186,7 +186,9 @@ V2 lets the user attach a single rectangular region to a yes-vote on an image. T
 
 #### Backend semantics
 
-1. **Compute the vote vector on the fly from the patch grid.** Not from any tree node. Take the set of patch cells whose centers fall inside the user's box, attention-weighted-mean their `media["patch_grid"][i, j]` vectors, L2-normalise. That's the vote vector for this vote. We persist the *box* (4 floats), not the vector — the trainer rederives the vector at train time from the already-pickled `patch_grid` (stored from v1, see "Storage"). No re-import required when v2 ships.
+1. **Compute the vote vector on the fly from the patch grid.** Not from any tree node. Take the set of patch cells whose centers fall inside the user's box, **uniform-mean** their `media["patch_grid"][i, j]` vectors, L2-normalise. That's the vote vector for this vote. We persist the *box* (4 floats), not the vector — the trainer rederives the vector at train time from the already-pickled `patch_grid` (stored from v1, see "Storage"). No re-import required when v2 ships.
+
+   Why uniform mean and not the saliency-weighted mean the HAC leaves use? The HAC builder re-L2-normalises at every internal merge, which destroys associativity of weighted mean — three different merge orders for the same patch set yield three different unit vectors. So *no* pooling rule can guarantee `box_to_vote_vector(patches(node))` equals an existing HAC node's stored vector. Uniform mean instead gives us the simpler property that **the same set of cells always produces the same vote vector**, and the pre-normalisation sum is additive across disjoint cell sets, which keeps a hypothetical future multi-box vote consistent with a single-box vote over the union.
 2. **Don't snap to tree nodes.** The HAC tree exists to give *search* a finite set of regions to scan in O(N log N). Voting is a one-off, so on-the-fly computation is fine and gives the user patch-precision without the "slightly-too-big box jumps to the full-image node" failure mode.
 3. **Display-time snapping is different.** When we draw the matched-region outline on a search-result card, we *do* snap to the best-IoU tree node, because the user isn't designating anything there — we're just showing them which scale won.
 
@@ -446,10 +448,10 @@ the API once it's stable.
 2. **On-the-fly vote-vector pooling.** New pure-numpy helper
    `box_to_vote_vector(patch_grid, box) -> np.ndarray` in
    `vtsearch/models/patch_regions.py`.  Selects grid cells whose
-   centers fall inside the normalised box, attention-weighted-means
-   their vectors (saliency from the same `PatchEmbedOutput` source
-   that built the regions), L2-normalises.  See "v2 → Backend
-   semantics §1" above.
+   centers fall inside the normalised box, uniform-means their
+   vectors, L2-normalises.  No saliency input — see "v2 → Backend
+   semantics §1" above for why uniform mean is the right rule (and
+   for why no rule can match HAC node vectors exactly).
 3. **Vote endpoint.** Yes-vote API gains optional `region_box`;
    persists it on the resulting `LabeledElement`.  No-votes reject
    `region_box` (contract: no-votes are image-level always).
