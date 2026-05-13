@@ -2,7 +2,7 @@
 
 Throwaway experiment for `docs/plans/patch-embedder.md` — confirms the K=12, α=0.5 defaults pinned in `vtsearch/datasets/loader_folder.py::_attach_patch_regions`.
 
-Backbone: DINOv2 ViT-B/14 (`facebook/dinov2-base`) on CPU.  Sample: **30 images** spread across caltech-101 categories (seed = 0, see `scripts/run_hac_tree_sweep.py`).  Mean forward pass: **0.01 s/image** on CPU.
+Backbone: DINOv2 ViT-B/14 (`facebook/dinov2-base`) on CPU.  Sample: **30 images** spread across caltech-101 categories (seed = 0, see `scripts/run_hac_tree_sweep.py`).  Mean forward pass: **0.25 s/image** on CPU.
 
 ## Images sampled
 
@@ -39,7 +39,7 @@ Backbone: DINOv2 ViT-B/14 (`facebook/dinov2-base`) on CPU.  Sample: **30 images*
 
 ## Region trees
 
-Each image below renders one HAC region tree at the design's recommended defaults (**K=12, α=0.5**).  The full image sits at the top.  The **bottom row** is the 12 HAC **leaves** (yellow outline) — patch-grid saliency-peak clusters cropped to their bounding box.  Above them are the **11 HAC internal merges** (cyan outline), each cropped to the union box of its two children.  Grey edges connect each merge to its two children, so every merge node visually points at exactly the region the MLP and the similarity rule will max-pool over.  Read it bottom-up: leaves first, then progressively coarser merges until the root, with the CLS-pooled full image at the very top as the global-scale fallback (always present, not part of the HAC graph).
+Each image below renders one HAC region tree at the design's recommended defaults (**K=12, α=0.5**).  The full image sits at the top.  The **bottom row** is the 12 HAC **leaves** (yellow outline) — patch-grid saliency-peak Voronoi cells; each thumbnail shows only the patches that landed in that leaf (non-cell pixels dimmed), so an L-shaped leaf actually looks L-shaped.  Above them are the **11 HAC internal merges** (cyan outline), each drawn as the union of its constituent leaves' cells — the *true* polygonal footprint the MLP and similarity rule pool over, not the loose bounding box.  Edges connect each merge to its two children.  **Red edges** flag *box no-op* merges: the parent's bounding rectangle is identical to one of its children's ("merging C into AB didn't grow the rectangle") — even though the cell set always strictly grew (the merge always added new patches), so the node's vector and outlined polygon still differ from the child's.  Read it bottom-up: leaves first, then progressively coarser merges until the root, with the CLS-pooled full image at the very top as the global-scale fallback (always present, not part of the HAC graph).  Internal node vectors are the L2-normalised saliency-weighted mean over the patches in the cell union — order-independent, equal to re-pooling from scratch.
 
 ### `00` chandelier/image_0012
 
@@ -165,19 +165,19 @@ Cross-config visual comparison is intentionally omitted — at any thumbnail siz
 
 ## Quantitative metrics
 
-Means across the sample.  Notation: `leaf_area` ≈ how much of the image each leaf covers (uniform = 1/K); `leaf_overlap_max` ≈ max IoU between any two leaves (lower is better — leaves should be disjoint); `internal_area` ≈ mean HAC-internal box area; `root_area` ≈ final merge box area (1.0 = root recovers the whole image, good); `merge_balance` ∈ (0, 1] ≈ subtree-size balance at each merge (1.0 = perfectly balanced, lower = chain-like); `area_growth` ≈ internal_area / sum(child_areas) (1.0 = perfectly adjacent children, > 1 = boxes include empty space).
+Means across the sample.  Notation: `leaf_area` ≈ how much of the image each leaf covers (uniform = 1/K); `leaf_overlap_max` ≈ max IoU between any two leaves (lower is better — leaves should be disjoint); `internal_area` ≈ mean HAC-internal box area; `root_area` ≈ final merge box area (1.0 = root recovers the whole image, good); `merge_balance` ∈ (0, 1] ≈ subtree-size balance at each merge (1.0 = perfectly balanced, lower = chain-like); `area_growth` ≈ internal_area / sum(child_areas) (1.0 = perfectly adjacent children, > 1 = boxes include empty space); `box_noop_rate` ≈ fraction of internal merges whose bbox equals one of its children's bbox (the red edges in the tree visualisations).  Cells still strictly grow on every merge, so the node's vector and polygon are still distinct from the child's — the rectangle is just a duplicate label.
 
-| K | α | leaf_area | leaf_area_std | leaf_overlap_max | internal_area | root_area | merge_balance | area_growth |
-|---|---|---|---|---|---|---|---|---|
-| 8 | 0.3 | 0.179 | 0.126 | 0.345 | 0.604 | 1.000 | 0.703 | 0.959 |
-| 8 | 0.5 | 0.179 | 0.126 | 0.345 | 0.632 | 1.000 | 0.695 | 1.009 |
-| 8 | 0.7 | 0.179 | 0.126 | 0.345 | 0.642 | 1.000 | 0.705 | 1.038 |
-| 12 | 0.3 | 0.119 | 0.095 | 0.378 | 0.459 | 1.000 | 0.663 | 0.992 |
-| 12 | 0.5 | 0.119 | 0.095 | 0.378 | 0.495 | 1.000 | 0.651 | 1.033 |
-| 12 | 0.7 | 0.119 | 0.095 | 0.378 | 0.511 | 1.000 | 0.659 | 1.058 |
-| 16 | 0.3 | 0.086 | 0.072 | 0.342 | 0.371 | 1.000 | 0.635 | 1.006 |
-| 16 | 0.5 | 0.086 | 0.072 | 0.342 | 0.412 | 1.000 | 0.621 | 1.049 |
-| 16 | 0.7 | 0.086 | 0.072 | 0.342 | 0.432 | 1.000 | 0.620 | 1.078 |
+| K | α | leaf_area | leaf_area_std | leaf_overlap_max | internal_area | root_area | merge_balance | area_growth | box_noop_rate |
+|---|---|---|---|---|---|---|---|---|---|
+| 8 | 0.3 | 0.179 | 0.126 | 0.345 | 0.607 | 1.000 | 0.700 | 0.960 | 0.257 |
+| 8 | 0.5 | 0.179 | 0.126 | 0.345 | 0.630 | 1.000 | 0.693 | 1.004 | 0.262 |
+| 8 | 0.7 | 0.179 | 0.126 | 0.345 | 0.640 | 1.000 | 0.715 | 1.038 | 0.262 |
+| 12 | 0.3 | 0.119 | 0.095 | 0.378 | 0.461 | 1.000 | 0.665 | 0.992 | 0.200 |
+| 12 | 0.5 | 0.119 | 0.095 | 0.378 | 0.494 | 1.000 | 0.653 | 1.032 | 0.224 |
+| 12 | 0.7 | 0.119 | 0.095 | 0.378 | 0.512 | 1.000 | 0.656 | 1.069 | 0.215 |
+| 16 | 0.3 | 0.086 | 0.072 | 0.342 | 0.382 | 1.000 | 0.632 | 1.008 | 0.169 |
+| 16 | 0.5 | 0.086 | 0.072 | 0.342 | 0.407 | 1.000 | 0.627 | 1.053 | 0.182 |
+| 16 | 0.7 | 0.086 | 0.072 | 0.342 | 0.432 | 1.000 | 0.628 | 1.084 | 0.218 |
 
 ## Diversity-tree sanity check
 

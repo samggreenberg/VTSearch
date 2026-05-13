@@ -149,13 +149,23 @@ class TestBuildHacTree:
         out = _make_output()
         for k in (2, 4, 8, 12):
             leaves = propose_leaves(out.patch_grid, out.patch_saliency, k=k)
-            tree = build_hac_tree(leaves, alpha=0.5)
+            tree = build_hac_tree(
+                leaves,
+                alpha=0.5,
+                patch_grid=out.patch_grid,
+                patch_saliency=out.patch_saliency,
+            )
             assert len(tree) == 2 * k - 1
 
     def test_internals_have_well_formed_children(self):
         out = _make_output()
         leaves = propose_leaves(out.patch_grid, out.patch_saliency, k=6)
-        tree = build_hac_tree(leaves, alpha=0.5)
+        tree = build_hac_tree(
+            leaves,
+            alpha=0.5,
+            patch_grid=out.patch_grid,
+            patch_saliency=out.patch_saliency,
+        )
         for i, node in enumerate(tree):
             if node.children is not None:
                 ci, cj = node.children
@@ -166,7 +176,12 @@ class TestBuildHacTree:
     def test_internals_unit_norm(self):
         out = _make_output()
         leaves = propose_leaves(out.patch_grid, out.patch_saliency, k=4)
-        tree = build_hac_tree(leaves, alpha=0.5)
+        tree = build_hac_tree(
+            leaves,
+            alpha=0.5,
+            patch_grid=out.patch_grid,
+            patch_saliency=out.patch_saliency,
+        )
         for node in tree:
             np.testing.assert_allclose(np.linalg.norm(node.vec), 1.0, atol=1e-5)
 
@@ -174,8 +189,92 @@ class TestBuildHacTree:
         out = _make_output()
         leaves = propose_leaves(out.patch_grid, out.patch_saliency, k=4)
         for alpha in (0.0, 0.5, 1.0):
-            tree = build_hac_tree(leaves, alpha=alpha)
+            tree = build_hac_tree(
+                leaves,
+                alpha=alpha,
+                patch_grid=out.patch_grid,
+                patch_saliency=out.patch_saliency,
+            )
             assert len(tree) == 7  # 2*4-1
+
+    def test_leaves_carry_cell_mask_and_weight(self):
+        """propose_leaves sets cell_mask (bool HxW) and weight (sum of floored
+        saliencies) on every leaf, partitioning the grid: leaf masks are
+        pairwise disjoint and cover every cell exactly once."""
+        out = _make_output(h=8, w=8, d=4)
+        leaves = propose_leaves(out.patch_grid, out.patch_saliency, k=6)
+        h, w = out.patch_saliency.shape
+        coverage = np.zeros((h, w), dtype=np.int32)
+        for leaf in leaves:
+            assert leaf.cell_mask is not None
+            assert leaf.cell_mask.shape == (h, w)
+            assert leaf.cell_mask.dtype == bool
+            assert leaf.weight > 0
+            coverage += leaf.cell_mask.astype(np.int32)
+        # Every cell in exactly one leaf.
+        np.testing.assert_array_equal(coverage, np.ones_like(coverage))
+
+    def test_internal_vector_is_weighted_pool_of_underlying_patches(self):
+        """An internal HAC node's vector equals the L2-normalised
+        saliency-weighted mean of the patch vectors inside the union of
+        its children's cell masks — i.e., the merge is order-independent
+        and corresponds to re-pooling from scratch."""
+        out = _make_output(h=6, w=6, d=12, seed=3)
+        leaves = propose_leaves(out.patch_grid, out.patch_saliency, k=5)
+        tree = build_hac_tree(
+            leaves,
+            alpha=0.5,
+            patch_grid=out.patch_grid,
+            patch_saliency=out.patch_saliency,
+        )
+
+        def leaf_mask_of(node_idx: int) -> np.ndarray:
+            """Union of leaf cell masks under *node_idx* (walk children)."""
+            node = tree[node_idx]
+            if node.cell_mask is not None:
+                return node.cell_mask
+            ci, cj = node.children  # type: ignore[misc]
+            return leaf_mask_of(ci) | leaf_mask_of(cj)
+
+        floored = np.maximum(out.patch_saliency.astype(np.float32), 1e-8)
+        for idx, node in enumerate(tree):
+            if node.children is None:
+                continue
+            mask = leaf_mask_of(idx)
+            sal = floored[mask]
+            vecs = out.patch_grid[mask].astype(np.float32)
+            expected = (vecs * sal[:, None]).sum(axis=0)
+            n = float(np.linalg.norm(expected))
+            assert n > 0
+            expected = expected / n
+            np.testing.assert_allclose(node.vec, expected, atol=1e-5)
+
+    def test_merge_order_independence_via_weights(self):
+        """The merged node's vector and weight are sums of the children's —
+        not flat 50/50 averages — so re-ordering merges of *equivalent*
+        partitions produces the same numerical result.  Concretely:
+        a 3-leaf tree merged left-first vs right-first matches when both
+        partitions cover the same cells."""
+        out = _make_output(h=4, w=4, d=8, seed=7)
+        # Two HAC runs with different alpha can pick different merge
+        # orders.  Whichever order is picked, the *root* covers every cell
+        # and must equal the L2-normalised weighted sum over all cells.
+        leaves = propose_leaves(out.patch_grid, out.patch_saliency, k=4)
+        floored = np.maximum(out.patch_saliency.astype(np.float32), 1e-8)
+        expected_root = (
+            out.patch_grid.reshape(-1, out.patch_grid.shape[-1]).astype(np.float32)
+            * floored.reshape(-1, 1)
+        ).sum(axis=0)
+        expected_root = expected_root / np.linalg.norm(expected_root)
+        for alpha in (0.0, 0.5, 1.0):
+            tree = build_hac_tree(
+                leaves,
+                alpha=alpha,
+                patch_grid=out.patch_grid,
+                patch_saliency=out.patch_saliency,
+            )
+            np.testing.assert_allclose(tree[-1].vec, expected_root, atol=1e-5)
+            np.testing.assert_allclose(tree[-1].weight, floored.sum(), atol=1e-5)
 
 
 # ---------------------------------------------------------------------------

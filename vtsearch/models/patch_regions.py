@@ -84,16 +84,28 @@ class RegionVector:
     box: tuple[float, float, float, float]
     """Normalised image coordinates ``(x0, y0, x1, y1)``, each in ``[0, 1]``.
 
-    Resize-invariant by construction.  For the full-image node this is
-    ``(0.0, 0.0, 1.0, 1.0)``.
+    Bounding box of the underlying cells.  Lossy — an L-shaped cell set
+    has a bounding box strictly larger than the cell union.  Kept around
+    as a cheap rectangular hint for UI rendering; the *true* region
+    footprint is :attr:`cell_mask` (leaves) or the union of children's
+    cell masks (internals).
     """
 
     vec: np.ndarray
     """L2-normalised vector for this region, shape ``(D,)``.
 
+    For HAC nodes (leaves and internals) this is the L2-normalised
+    saliency-weighted mean of the underlying patch vectors — computed
+    additively from :attr:`weight` and the children's weighted sums, so
+    every internal's vector equals what we would have gotten by
+    re-pooling the patches inside its cell union from scratch.  Merge
+    order does not affect the result.
+
+    For the CLS full-image node this is the embedder's CLS-token output
+    (not a patch pool).
+
     Stored as **float16** in the dataset pickle and cast to float32 when
-    read into RAM.  Construction code uses float32; the cast to float16
-    happens at pickle time, not here.
+    read into RAM.
     """
 
     children: Optional[tuple[int, int]] = None
@@ -102,6 +114,27 @@ class RegionVector:
     ``None`` for leaves and for the CLS full-image node.  Encodes the merge
     structure of the agglomerative tree without us having to walk the list
     twice.
+    """
+
+    cell_mask: Optional[np.ndarray] = None
+    """Per-patch occupancy mask, shape ``(H, W)`` bool, **leaves only**.
+
+    Set by :func:`propose_leaves` to the Voronoi-by-spatial-distance
+    assignment for this leaf.  ``None`` on internals and on the CLS
+    full-image node — derive the internal cell mask on demand as the
+    union of the children's masks (walk :attr:`children` until you hit
+    leaves; their masks are disjoint by construction, so OR them).
+    """
+
+    weight: float = 0.0
+    """Sum of patch saliencies inside :attr:`cell_mask`.
+
+    On leaves: ``saliency[cell_mask].sum()``.  On internals: the sum of
+    the two children's weights (associative because leaf cell sets are
+    disjoint, so the same equals ``saliency[union_mask].sum()``).  Used
+    by :func:`build_hac_tree` to combine vectors additively without
+    referring back to the patch grid.  ``0.0`` on the CLS node (which is
+    not a patch pool).
     """
 
 
@@ -306,16 +339,29 @@ def propose_leaves(
             (row_hi + 1) / height,
         )
 
-        # Saliency-weighted-mean vector. Force a positive weight floor so a
+        # Saliency-weighted-mean vector.  We use floored saliencies so a
         # cell with literally zero saliency still contributes its vector
         # (otherwise a flat-saliency image would produce a zero leaf vec).
+        # The *floored* weight is what feeds into the HAC weighted-pool
+        # merger downstream — we also stash it on the leaf so internals
+        # can combine vectors additively without referring back to the
+        # patch grid.
         weights = np.maximum(patch_saliency[mask], 1e-8).astype(np.float32)
-        weights = weights / weights.sum()
+        weight_total = float(weights.sum())
+        norm_weights = weights / weight_total
         vecs = patch_grid[mask].astype(np.float32, copy=False)
-        leaf_vec = (vecs * weights[:, None]).sum(axis=0)
+        leaf_vec = (vecs * norm_weights[:, None]).sum(axis=0)
         leaf_vec = _l2_normalize(leaf_vec)
 
-        leaves.append(RegionVector(box=box, vec=leaf_vec, children=None))
+        leaves.append(
+            RegionVector(
+                box=box,
+                vec=leaf_vec,
+                children=None,
+                cell_mask=mask.astype(bool, copy=True),
+                weight=weight_total,
+            )
+        )
 
     return leaves
 
@@ -361,6 +407,9 @@ def _affinity(
 def build_hac_tree(
     leaves: list[RegionVector],
     alpha: float,
+    *,
+    patch_grid: np.ndarray,
+    patch_saliency: np.ndarray,
 ) -> list[RegionVector]:
     """Build a strict binary HAC tree on top of *leaves*.
 
@@ -369,20 +418,50 @@ def build_hac_tree(
     are internal merge nodes, each with ``children`` pointing earlier in
     the list.
 
-    The merge rule: at each step, find the pair of currently-live nodes
-    with the highest :func:`_affinity` and merge them.  The merged node's
-    vector is the saliency-balanced mean of the two children (here we use
-    a flat 50/50 mean since we have no explicit weight per node — leaf
-    saliency was already absorbed into the leaf vector), L2-normalised.
-    The merged node's box is the union of the two child boxes.
+    Merge rule: at each step, find the pair of currently-live nodes with
+    the highest :func:`_affinity` and merge them.  *patch_grid* and
+    *patch_saliency* are required so leaf weighted sums can be derived
+    from each leaf's ``cell_mask`` once at the start; internals then
+    combine vectors **additively** (``new_weighted_sum =
+    a.weighted_sum + b.weighted_sum``).  Because leaf cell sets are
+    disjoint by construction, this is exactly the saliency-weighted mean
+    of the patches in the merged cell union — order-independent, and
+    equal to what we would get by re-pooling from the patch grid each
+    merge.
+
+    The merged node's box is the union of the two child boxes (loose
+    bounding rectangle — still kept for cheap UI hints, even though the
+    true footprint is the union of cell masks).
 
     Complexity: ``O(K³)`` from the brute-force argmax inner loop.  For
     ``K ≤ 16`` this is negligible (<5 ms / image).
     """
     if not leaves:
         raise ValueError("leaves must be non-empty")
+    height, width, _ = patch_grid.shape
+    if patch_saliency.shape != (height, width):
+        raise ValueError(
+            f"patch_saliency must be ({height}, {width}); got {patch_saliency.shape}"
+        )
 
     nodes: list[RegionVector] = list(leaves)
+    # Parallel array of unnormalised saliency-weighted sums, one per node.
+    # Carried only inside build; not stored on RegionVector.  Floored
+    # saliencies (matching propose_leaves) keep zero-saliency cells from
+    # silently dropping out of the mean.
+    floored_sal = np.maximum(patch_saliency.astype(np.float32, copy=False), 1e-8)
+    weighted_sums: list[np.ndarray] = []
+    for leaf in leaves:
+        mask = leaf.cell_mask
+        if mask is None:
+            raise ValueError(
+                "build_hac_tree requires leaves with cell_mask set "
+                "(propose_leaves now populates this)"
+            )
+        sal_slice = floored_sal[mask]
+        vec_slice = patch_grid[mask].astype(np.float32, copy=False)
+        weighted_sums.append((vec_slice * sal_slice[:, None]).sum(axis=0))
+
     live: list[int] = list(range(len(leaves)))
 
     while len(live) > 1:
@@ -398,9 +477,20 @@ def build_hac_tree(
         a_idx, b_idx = best_pair
         a, b = nodes[a_idx], nodes[b_idx]
 
-        merged_vec = _l2_normalize((a.vec.astype(np.float32) + b.vec.astype(np.float32)) * 0.5)
+        merged_sum = weighted_sums[a_idx] + weighted_sums[b_idx]
+        merged_weight = float(a.weight + b.weight)
+        merged_vec = _l2_normalize(merged_sum)
         merged_box = _merge_boxes(a.box, b.box)
-        nodes.append(RegionVector(box=merged_box, vec=merged_vec, children=(a_idx, b_idx)))
+        nodes.append(
+            RegionVector(
+                box=merged_box,
+                vec=merged_vec,
+                children=(a_idx, b_idx),
+                cell_mask=None,
+                weight=merged_weight,
+            )
+        )
+        weighted_sums.append(merged_sum)
         new_idx = len(nodes) - 1
         live = [x for x in live if x not in (a_idx, b_idx)]
         live.append(new_idx)
@@ -421,7 +511,13 @@ def to_fp16(regions: list[RegionVector]) -> list[RegionVector]:
     float32 by callers that score them (similarity, MLP).
     """
     return [
-        RegionVector(box=r.box, vec=r.vec.astype(np.float16, copy=False), children=r.children)
+        RegionVector(
+            box=r.box,
+            vec=r.vec.astype(np.float16, copy=False),
+            children=r.children,
+            cell_mask=r.cell_mask,
+            weight=r.weight,
+        )
         for r in regions
     ]
 
@@ -448,9 +544,16 @@ def build_region_tree(
         box=(0.0, 0.0, 1.0, 1.0),
         vec=_l2_normalize(output.cls_vec.astype(np.float32, copy=False)),
         children=None,
+        cell_mask=None,
+        weight=0.0,
     )
     leaves = propose_leaves(output.patch_grid, output.patch_saliency, k=k)
-    hac = build_hac_tree(leaves, alpha=alpha)
+    hac = build_hac_tree(
+        leaves,
+        alpha=alpha,
+        patch_grid=output.patch_grid,
+        patch_saliency=output.patch_saliency,
+    )
     # The first K entries of `hac` are the leaves verbatim; entries K..2K-2
     # are the internal merge nodes (children indices are local to `hac`,
     # which corresponds to indices 1..2K-1 of the returned list once we
@@ -468,6 +571,8 @@ def build_region_tree(
                     box=node.box,
                     vec=node.vec,
                     children=(ci + 1, cj + 1),
+                    cell_mask=node.cell_mask,
+                    weight=node.weight,
                 )
             )
     return out
