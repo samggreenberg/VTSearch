@@ -550,53 +550,78 @@ the API once it's stable.
    `tests/test_patch_embedder.py::TestLabelExportRegionBox` and
    `::TestLabelImportRegionBox`.
 
-**Frontend**
+**Frontend** — *items 6–9 DONE.*
 
-6. **`RegionDrawComponent` overlay.** New component (or layer inside
-   `ImageViewerComponent`) that listens for `Shift` keydown/keyup on
-   `window` while the focus pane is mounted.  Shift-held swaps the
-   pan-on-drag gesture for box-draw; cursor → crosshair.  Click-drag-
-   release in image-local coordinates, un-transformed through the
-   current `panX / panY / zoom / rotate`.  Renders the box + 8 resize
-   handles + draggable body as positioned divs inside
-   `.thumbnail-wrap` (same coordinate system as the v1 `best_region`
-   outline).  Zero-area release → no box; Esc clears the box without
-   voting.  Mid-drag Shift release commits the in-progress box on
-   mouseup before mode exits.  See "v2 → Interaction design" above.
-7. **Vote keybindings + buttons.**  `→` with box → yes-vote +
-   `region_box`; `→` without box → plain yes-vote (unchanged); `←`
-   without box → plain no-vote (unchanged); `←` with box → arms a
-   visible sticky "discard & vote no" state (no timeout); second
-   `←` confirms whenever it arrives; Esc, mouse interaction with
-   the box, or navigating away clears the armed state and keeps
-   the box.  Same rules apply to the on-screen vote buttons.
-8. **Vote-dispatch service.** Carry optional `regionBox` into the
-   existing yes-vote API call.  Bad-vote path picks up the "pending
-   discard confirmation" sub-state.  None of this touches the
-   binary-only code paths.
-9. **Gallery `best_region` outline.**  Already shipped in v1 as
-   read-only — leave it as-is.  V2 adds the active draw layer only
-   on the focus pane.
+6. **`RegionDrawComponent` overlay — DONE.** Implemented as a layer
+   inside `ImageViewerComponent` (no separate component): it listens
+   for `Shift` keydown/keyup on `window` while the focus pane is
+   mounted, swaps pan-on-drag for box-draw under Shift, flips the
+   cursor to crosshair, and renders the box + 8 resize handles +
+   draggable body as positioned divs inside a `.region-stage`
+   layer that shares the image's `transform` so box coordinates are
+   anchored in image-local space.  Click-drag-release is un-
+   transformed through the current `panX / panY / zoom / rotate`.
+   Esc clears the box (when not armed — see step 7).  A zero-area
+   Shift-click restores the prior box rather than discarding it
+   (item 13 above) — drawing a box is real work.
+7. **Vote keybindings + buttons — DONE.** Lives in
+   `CenterPanelComponent.castVote`.  `→` with box → yes-vote +
+   `region_box`; `→` without box → plain yes-vote (unchanged);
+   `←` without box → plain no-vote (unchanged); `←` with box →
+   arms a visible sticky "discard & vote no" state with **no
+   timeout** (a red sticky pulse on the box plus an inline hint
+   banner — *"Press ← again to vote no and discard the box, or
+   Esc to keep the box."*); second `←` confirms.  Esc, mouse-
+   interaction with the box (mousedown on body or any handle),
+   a fresh Shift-drag-redraw, or media-item navigation all clear
+   the armed state and keep the box.  Same rules apply to the
+   on-screen vote buttons via the shared `castVote` entry point.
+8. **Vote-dispatch service — DONE.** `MediasApiService.vote(id,
+   label, regionBox?)` accepts an optional `regionBox` and only
+   appends `region_box` to the request body when the array is a
+   non-empty 4-tuple.  `CenterPanelComponent` passes
+   `currentRegionBox` on yes-votes and `null` on no-votes, so the
+   binary-only fast path is byte-for-byte unchanged from v1.
+9. **Gallery `best_region` outline — already shipped in v1.**
+   Read-only outline lives on the gallery card; v2 adds the
+   active draw/edit layer only on the focus pane.
 
-**Tests**
+**Tests** — *items 10–13 + 15–16 DONE; 14 DONE under v2 backend.*
 
-10. Coord-transform: pure-function tests for the screen↔image
-    transform under non-trivial `pan/zoom/rotate`.
-11. Coord-stability: a box drawn at one zoom level stays anchored on
-    the same image pixels when the user zooms in/out.
-12. Box-discard: bad-vote-with-box requires two consecutive `←`
-    presses (no timer — the armed state persists until confirmed
-    or backed out).  Esc, a mouse interaction with the box, or
-    item-navigation while armed clears the armed state and keeps
-    the box; only a second `←` discards.
-13. Box-preserve: a subsequent zero-area Shift-drag click does not
-    clear an already-drawn box.
-14. `LabeledElement.region_box` round-trips through serialisation
-    (replaces the v1 absence assertion).
-15. Vote-API contract: `region_box` present on yes-vote with box,
-    absent on yes-vote without box, absent on every no-vote.
-16. Backend pure-function test for `box_to_vote_vector` against a
-    hand-crafted `patch_grid`.
+10. **Coord-transform — DONE.** Pure-function tests for
+    `screenToImageNormalized` under non-trivial `pan / zoom /
+    rotate` live in
+    `frontend/src/app/components/center-panel/image-viewer/image-viewer.component.spec.ts`
+    (`describe('screenToImageNormalized (coord transform)')`).
+11. **Coord-stability — DONE.** Same spec file
+    (`describe('region box coord stability')`) asserts that
+    `regionBox` and `regionBoxStyle` are byte-for-byte stable
+    across zoom and rotation changes — the box is stored in
+    normalised image coordinates and the CSS overlay rides the
+    image's transform.
+12. **Box-discard (sticky armed state) — DONE.** Covered in
+    `center-panel.component.spec.ts`
+    (`describe('sticky bad-vote-confirm armed state')`): first `←`
+    arms without firing a request, second `←` posts the no-vote;
+    Esc / mouse-on-box (routed via `onArmedConfirmCanceled`) cancel
+    armed and keep the box; `regionBoxChange(null)` cancels armed
+    and drops the box; media-item navigation clears both.
+13. **Box-preserve — DONE.** `image-viewer.component.spec.ts`
+    (`describe('region box preservation on zero-area Shift-drag')`)
+    asserts a zero-area Shift-click restores the previous box and
+    that no spurious emit reaches the parent.  Backed by the
+    `DragMode.draw.previousBox` field on `ImageViewerComponent`.
+14. **`LabeledElement.region_box` round-trip — DONE.** Backend test
+    `tests/test_patch_embedder.py::TestRegionBoxOnLabeledElement`
+    (shipped under v2 backend step 1).
+15. **Vote-API contract — DONE.** `center-panel.component.spec.ts`
+    (`describe('vote-API contract for region_box')`) asserts
+    `region_box` is present on yes-with-box, absent on yes-without-
+    box, and absent on every no-vote (including after a two-press
+    bad-vote-confirm).
+16. **`box_to_vote_vector` — DONE.** Backend test
+    `tests/test_patch_embedder.py::TestBoxToVoteVector` (shipped
+    under v2 backend step 2).
 
 **Out of scope for v2 (deferred)**
 

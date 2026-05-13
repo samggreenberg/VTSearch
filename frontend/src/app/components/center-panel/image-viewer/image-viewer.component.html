@@ -28,6 +28,7 @@
       <div
         class="region-box"
         [class.shake]="regionBoxShake"
+        [class.armed]="pendingBadConfirm"
         [ngStyle]="regionBoxStyle!"
         (mousedown)="onRegionBodyMouseDown($event)"
         title="Region annotation (Shift-drag to redraw, Esc to clear)"
