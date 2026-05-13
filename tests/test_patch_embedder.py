@@ -1255,6 +1255,21 @@ class TestRegionAwareTraining:
         vec = _training_vec_for_vote(media, region_box=None)
         np.testing.assert_array_equal(vec, media["embedding"])
 
+    def _register_synthetic_image(self, cid: int, grid_value: float = 0.99) -> dict:
+        """Insert a synthetic image media into the active dataset context.
+
+        ``populate_label_embeddings`` uses ``resolve_current_dataset_cid``
+        internally, which looks up via the global ``snapshot_medias()``.
+        Registering the media in the active dataset makes that lookup
+        succeed by md5.  Conftest's ``reset_state`` wipes this between
+        tests so there's no cross-test bleed.
+        """
+        from vtsearch.utils.state_core import medias
+
+        media = self._media_with_patch_grid(grid_value, cid=cid)
+        medias[cid] = media
+        return media
+
     def test_populate_label_embeddings_pools_when_region_box_set(self):
         """``populate_label_embeddings`` caches pooled vectors for elements
         whose ``region_box`` is set and whose source media has a
@@ -1266,13 +1281,14 @@ class TestRegionAwareTraining:
         from vtsearch.models.patch_regions import box_to_vote_vector
         from vtsearch.utils.state_core import DetectorContext
 
-        media = self._media_with_patch_grid(0.99, cid=1)
+        cid = 9001
+        media = self._register_synthetic_image(cid)
         # Element matches the media by md5.
         elem = LabeledElement(md5=media["md5"], label="good", region_box=(0.0, 0.0, 0.5, 0.5))
         ls = LabelSet([elem])
 
         det_ctx = DetectorContext("d1")
-        snap = {1: media}
+        snap = {cid: media}
         populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
 
         eid = stable_element_id(elem)
@@ -1292,11 +1308,12 @@ class TestRegionAwareTraining:
         from vtsearch.models.patch_regions import box_to_vote_vector
         from vtsearch.utils.state_core import DetectorContext
 
-        media = self._media_with_patch_grid(0.99, cid=1)
+        cid = 9002
+        media = self._register_synthetic_image(cid)
         elem = LabeledElement(md5=media["md5"], label="good", region_box=(0.0, 0.0, 0.5, 0.5))
         ls = LabelSet([elem])
         det_ctx = DetectorContext("d1")
-        snap = {1: media}
+        snap = {cid: media}
 
         populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
         eid = stable_element_id(elem)
@@ -1320,11 +1337,12 @@ class TestRegionAwareTraining:
         from vtsearch.models.labelset_training import populate_label_embeddings
         from vtsearch.utils.state_core import DetectorContext
 
-        media = self._media_with_patch_grid(0.99, cid=1)
+        cid = 9003
+        media = self._register_synthetic_image(cid)
         elem = LabeledElement(md5=media["md5"], label="good")  # no region_box
         ls = LabelSet([elem])
         det_ctx = DetectorContext("d1")
-        snap = {1: media}
+        snap = {cid: media}
 
         populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
         eid = stable_element_id(elem)
