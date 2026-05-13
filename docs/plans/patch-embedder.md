@@ -174,11 +174,20 @@ Because the haystack has `full_image` + leaves + HAC internals all in the same f
 
 ## Vote attribution
 
-### v1: whole image
+### v1: whole image (schema), region-aware loss (training)
 
-V1 records both Good and Bad against the full image. The `LabeledElement` schema doesn't change. The patch embedder still produces the rich region set and search uses it; the *vote* is image-level until we ship a UI that lets the user designate the region themselves.
+V1 records both Good and Bad against the full image — one `LabeledElement` per vote, no `region_box` field, schema unchanged. The patch embedder still produces the rich region set and search uses it; the *vote* is image-level until v2 ships a UI that lets the user designate the region themselves.
 
-This is deliberate. "Use the region that triggered the result" misattributes in any sort mode without a query (random shuffle, diversity sort, autopilot exploration, a fresh dataset), and ignores discovery — users vote Good on things the algorithm didn't surface for. Image-level votes with region-level scoring is the standard weakly-supervised setup: the MLP learns "what makes an image good" and the max-pool at scoring time picks the region that best satisfies that learned function.
+This is deliberate. "Use the region that triggered the result" misattributes in any sort mode without a query (random shuffle, diversity sort, autopilot exploration, a fresh dataset), and ignores discovery — users vote Good on things the algorithm didn't surface for.
+
+**However**, the training *loss* is region-aware even though the labels are image-level. The natural weakly-supervised claims for the two votes are different:
+
+- **Good vote on an image** = "at least one region in this image is good." We don't know which one (no box yet), so the loss pushes up whichever region currently scores highest. The MLP gets to pick its own attention.
+- **Bad vote on an image** = "no region in this image is good." This is a strictly stronger claim, and it applies to *every* region of the image: leaves, HAC internals, and the CLS full-image node. The loss pushes all of them down.
+
+This asymmetry is encoded entirely in the loss function (see "Detector MLP" below), not in extra `LabeledElement` rows: one vote stays one labelled example. Label export, the votes UI count, and inclusion class-balancing all continue to count votes, not regions.
+
+(An earlier draft of this plan said training was image-level for v1 and region-level only in v2. The region-aware loss above subsumes that — `mean`/`max` over a one-region list reduces to today's behaviour on SigLIP and other single-vector embedders, so the loss change is fully backward compatible.)
 
 ### v2: region voting
 
@@ -191,6 +200,8 @@ V2 lets the user attach a single rectangular region to a yes-vote on an image. T
 3. **Display-time snapping is different.** When we draw the matched-region outline on a search-result card, we *do* snap to the best-IoU tree node, because the user isn't designating anything there — we're just showing them which scale won.
 
 V2 adds an optional `region_box: (x0, y0, x1, y1)` (normalised image coords) to `LabeledElement`. Absent → image-level (the v1 default and the forever-legacy fallback).
+
+When `region_box` is present on a Good vote, the v1 `max`-over-regions loss is replaced for that vote by `BCE(mlp(box_pooled_vec), 1)` — the user named the good region, so we train the MLP directly on it instead of letting it pick its own argmax. Bad votes still don't carry a box, so their `mean`-over-regions loss is unchanged from v1.
 
 #### Interaction design
 
@@ -226,6 +237,8 @@ The mouse-click vote buttons in the UI follow the same rules.
 
 ## Detector MLP
 
+### Scoring (search & sort & calibration)
+
 The current MLP scores `f(embedding) → [0, 1]`. With regions, scoring becomes:
 
 ```python
@@ -237,9 +250,58 @@ def score_media(mlp, media):
 
 The MLP itself is unchanged in shape — same input dim, same output. The change is purely "feed every region through the MLP and max-pool". Because HAC internals and the full image are both in the region list, the head/body/legs-each-miss-but-full-body-hits failure mode is handled — the full-body merge gets its own MLP pass and wins.
 
-Training in v1 stays **image-level** to match the vote rule: examples are `(full_image_vec, label)`. Region-aware scoring with image-level training is the standard weakly-supervised setup. We add region-level training examples in v2 when region voting lands; until then they'd be misattributed and noisy.
-
 Calibration / thresholding works unchanged: it uses the same scoring function above, which already returns a single scalar per media.
+
+### Training loss (region-aware, image-level labels)
+
+The training loop today (`train_model` in `vtsearch/models/training.py`) consumes `X_train: (N, D)` + `y_train: (N, 1)` and computes `BCEWithLogitsLoss` per example, weighted by `inclusion_value`-derived class weights. With patch regions, the per-example loss becomes a small region-aware reduction:
+
+```python
+def per_vote_loss(mlp, media, label):
+    regions = media.get("patch_regions") or [{"vec": media["embedding"]}]
+    scores = mlp(stack(r.vec for r in regions))   # (R,) logits, R ~ 24 for patch embedders, 1 otherwise
+    if label == 1:  # Good
+        return BCE_with_logits(max(scores), 1)             # MIL: ≥1 region should be high
+    else:           # Bad
+        return mean(BCE_with_logits(s, 0) for s in scores)  # all regions are negative
+```
+
+Then the standard outer loop:
+
+```python
+batch_loss = mean(class_weight(label) * per_vote_loss(mlp, media, label)
+                  for (media, label) in batch)
+```
+
+Why this shape:
+
+1. **Asymmetric `max` / `mean`** matches the two votes' asymmetric supervision claims (see "v1: whole image" above). Good is weakly supervised — the MLP picks its own region. Bad is fully supervised over the region set — every region must score low.
+2. **Same bookkeeping unit as today.** One vote stays one labelled example for inclusion class-balancing, label export, "you have N labelled examples" stats. The 24-way region expansion happens *inside* the per-vote loss term, not by multiplying the example count.
+3. **No new persisted artifact.** Vectors live in `media["patch_regions"]` (already pickled per the v1 storage plan); the loss reads them at train time. No region indices or hard-mine lists in `LabeledElement`, fully CLAUDE.md-compliant.
+4. **Backward compatible.** For datasets whose embedder doesn't produce `patch_regions` (SigLIP, single-vector DINO variants, etc.), the region list is `[full_image]` and the per-vote loss reduces exactly to today's `BCE(mlp(vec), label)`. No branching at the call site.
+5. **Inference symmetry.** `score_media` already does `max` over regions. The Good-side loss matches it exactly; the Bad-side `mean` drives `max → 0` as well (sigmoid scores are bounded below at 0), so train-time and test-time agree about what "low score" means.
+
+#### Why not "add all regions as separate negative LabeledElements"?
+
+A natural-looking alternative is to expand each Bad vote into 24 `(region.vec, 0)` rows in the training set ("all 24 in the Bad pile"). The gradient math is essentially equivalent to the `mean` loss above — inclusion's `weight_true = num_false / num_true` rebalances class totals so the per-Bad-vote weight winds up the same — but the plumbing is worse:
+
+- Label export, vote counts, and the "labelled examples" UI all 24× per Bad vote unless we add a second representation.
+- `LabeledElement` would need either persisted region vectors (violates CLAUDE.md's "no persisted vectors" rule) or persisted region indices (workable but new schema).
+- It's asymmetric with the inference path, which logically operates per-media.
+
+Putting the region aggregation in the loss instead of the training set keeps `LabeledElement` and the votes UI honest.
+
+#### Why not hard-mine ("vote vs. previous MLP's argmax")?
+
+Another natural-looking alternative: at each retrain, run the previous MLP over each Bad image's region tree and add the argmax region as a labelled negative. This degenerates trivially — once a region is in the training set as a negative, the next MLP drives its score toward 0, so it cannot be the next argmax. The argmax must come from the not-yet-mined set, so the procedure just enumerates all 24 regions in arbitrary order over ~24 retrains. Same destination as "all 24 in the pile," reached more slowly and with a confusing-looking incremental schedule.
+
+The `mean` loss reaches the same end state in one training run, without persisting any per-image bookkeeping.
+
+### Refactor surface
+
+`train_model`'s signature changes from `(X_train, y_train, ...)` to something that can carry per-vote region groups — concretely a list of `(regions: Tensor[R_i, D], label: int)` per vote, or a flat `(X: Tensor[total_R, D], group_ids: Tensor[total_R], labels: Tensor[V])` representation that lets us scatter-max / scatter-mean. The MLP shape and the inclusion-weighting code (`training.py:213–234`) are unchanged.
+
+`train_and_score` (`training.py:329`) and the workflow caller (`training_workflow.py`) need matching adjustments to pass per-vote region tensors instead of one full-image vector per vote. The label-store reader builds those tensors by looking up `media["patch_regions"]` at training time, with a `[full_image]` fallback for datasets without it.
 
 ## Diversity tree
 
@@ -300,6 +362,8 @@ New: `tests/test_patch_embedder.py`:
 - Merge wins: hand-crafted region tree where individual leaves miss the MLP but an internal HAC node hits → `score_media` returns the merge.
 - Capability flags: DINOv3 and EUPE register with `supports_text=False, supports_patch_regions=True`; SigLIP stays unchanged; `/api/embedders` returns the new field.
 - v1 vote semantics: voting Good or Bad on a patch-region dataset does **not** write `region_box` to `LabeledElement`.
+- Region-aware loss: `per_vote_loss` returns `BCE(max(scores), 1)` on Good votes and `mean(BCE(s, 0))` on Bad votes, against a hand-crafted `patch_regions` list. On a single-vector media (no `patch_regions`) both branches reduce to today's `BCE(mlp(vec), label)`. Class-weight code (`training.py:213–234`) is exercised unchanged — one vote stays one example for inclusion balancing.
+- Bad-vote suppression: hand-crafted MLP + region tree where one HAC leaf has a moderately positive score and the full image scores 0; one Bad-vote training step over that media drives all 24 region scores measurably toward 0, including the leaf that was the previous argmax. Smoke check for "no nail escapes the mean."
 
 `tests/test_gpu.py` gets a thin patch-embedder integration that runs a real DINOv3 (and a real EUPE) `_patch_forward`, asserts `PatchEmbedOutput` shapes and that `patch_saliency` sums to ~1. Marked `@pytest.mark.gpu`.
 
@@ -412,6 +476,6 @@ each other.
 
 ## Phasing
 
-- **v1 (this plan):** six image embedders — single/patch pairs for DINOv2 (ungated default), DINOv3 (gated, premium), and real-EUPE (FAIR Noncommercial). `supports_patch_regions` + `license_notice` flags on `MediaEmbedder`; each `_patch` embedder populates `media["patch_regions"]` (HAC tree) and `media["patch_grid"]` (raw H × W × 768 fp16); the matching `_single` slug provides a fast/cheap CLS-only path on the same backbone for datasets that don't need region search. `PatchEmbedOutput` protocol; max-region similarity; region-aware MLP scoring (image-level training and image-level voting unchanged); gallery-card region highlight; license-notice surfacing on the embedder picker. Text sort stays grey via the already-shipped `supports_text` gate. Pre-implementation experiments run on `caltech101_s` and inform `K`, `α`, and the EUPE-real attention path.
+- **v1 (this plan):** six image embedders — single/patch pairs for DINOv2 (ungated default), DINOv3 (gated, premium), and real-EUPE (FAIR Noncommercial). `supports_patch_regions` + `license_notice` flags on `MediaEmbedder`; each `_patch` embedder populates `media["patch_regions"]` (HAC tree) and `media["patch_grid"]` (raw H × W × 768 fp16); the matching `_single` slug provides a fast/cheap CLS-only path on the same backbone for datasets that don't need region search. `PatchEmbedOutput` protocol; max-region similarity; region-aware MLP scoring **and** region-aware training loss (Good = `max`-over-regions BCE, Bad = `mean`-over-regions BCE) with image-level labels unchanged on disk; gallery-card region highlight; license-notice surfacing on the embedder picker. Text sort stays grey via the already-shipped `supports_text` gate. Pre-implementation experiments run on `caltech101_s` and inform `K`, `α`, and the EUPE-real attention path.
 - **v2:** region voting on image media via Shift-drag on the focus pane (single rectangular box, salient-area annotation on yes-votes only; binary fast path via `←`/`→` preserved); on-the-fly vote-vector computation from the v1-pickled `patch_grid` (no re-import needed); optional `LabeledElement.region_box`; region-level training examples; per-region label export. Touch deferred.
 - **v3:** one text embedder + one patch embedder per dataset (text queries → text embedder; region similarity / votes → patch embedder). Requires a real schema change (`media["embeddings"]` dict, `media["patch_regions"]` dict). Gets its own design doc when we get there.
