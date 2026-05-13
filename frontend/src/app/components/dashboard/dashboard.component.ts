@@ -55,12 +55,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   selectedDetectorIds: Set<string> = new Set();
 
   // Animation flags for the right-side bulk-action column.
-  // Spin flags fire a one-shot 90° rotation on the symmetric select-all/none
-  // squares; the animationend handler clears them so the icon snaps back.
-  spinSelectAllDatasets = false;
-  spinSelectNoneDatasets = false;
-  spinSelectAllDetectors = false;
-  spinSelectNoneDetectors = false;
+  // Spin flags fire a one-shot 90° rotation on the tristate select toggle;
+  // the animationend handler clears them so the icon snaps back.
+  spinDatasetSelectToggle = false;
+  spinDetectorSelectToggle = false;
   // Confirm flags hold the trash icon at 90° while the confirm dialog is up,
   // and play a reverse animation back to 0° once the dialog resolves.
   deletingSelectedDatasetsConfirm = false;
@@ -429,17 +427,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.pushTopBarLabels();
   }
 
-  selectAllDatasets(): void {
-    this.spinSelectAllDatasets = true;
-    for (const d of this.datasets) {
-      this.selectedDatasetIds.add(d.id);
-    }
-    this.pushTopBarLabels();
+  get datasetSelectionState(): 'none' | 'some' | 'all' {
+    const sel = this.selectedDatasetIds.size;
+    if (sel === 0) return 'none';
+    if (sel >= this.datasets.length) return 'all';
+    return 'some';
   }
 
-  selectNoneDatasets(): void {
-    this.spinSelectNoneDatasets = true;
-    this.selectedDatasetIds.clear();
+  toggleAllDatasets(): void {
+    this.spinDatasetSelectToggle = true;
+    if (this.datasetSelectionState === 'all') {
+      this.selectedDatasetIds.clear();
+    } else {
+      for (const d of this.datasets) {
+        this.selectedDatasetIds.add(d.id);
+      }
+    }
     this.pushTopBarLabels();
   }
 
@@ -520,12 +523,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  onSpinSelectAllDatasetsEnd(): void {
-    this.spinSelectAllDatasets = false;
-  }
-
-  onSpinSelectNoneDatasetsEnd(): void {
-    this.spinSelectNoneDatasets = false;
+  onSpinDatasetSelectToggleEnd(): void {
+    this.spinDatasetSelectToggle = false;
   }
 
   onDeleteSelectedDatasetsAnimationEnd(): void {
@@ -567,17 +566,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.pushTopBarLabels();
   }
 
-  selectAllDetectors(): void {
-    this.spinSelectAllDetectors = true;
-    for (const m of this.detectors) {
-      this.selectedDetectorIds.add(m.id);
-    }
-    this.pushTopBarLabels();
+  get detectorSelectionState(): 'none' | 'some' | 'all' {
+    const sel = this.selectedDetectorIds.size;
+    if (sel === 0) return 'none';
+    if (sel >= this.detectors.length) return 'all';
+    return 'some';
   }
 
-  selectNoneDetectors(): void {
-    this.spinSelectNoneDetectors = true;
-    this.selectedDetectorIds.clear();
+  toggleAllDetectors(): void {
+    this.spinDetectorSelectToggle = true;
+    if (this.detectorSelectionState === 'all') {
+      this.selectedDetectorIds.clear();
+    } else {
+      for (const m of this.detectors) {
+        this.selectedDetectorIds.add(m.id);
+      }
+    }
     this.pushTopBarLabels();
   }
 
@@ -662,12 +666,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     void newName;
   }
 
-  onSpinSelectAllDetectorsEnd(): void {
-    this.spinSelectAllDetectors = false;
-  }
-
-  onSpinSelectNoneDetectorsEnd(): void {
-    this.spinSelectNoneDetectors = false;
+  onSpinDetectorSelectToggleEnd(): void {
+    this.spinDetectorSelectToggle = false;
   }
 
   onDeleteSelectedDetectorsAnimationEnd(): void {
