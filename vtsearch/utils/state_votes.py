@@ -201,8 +201,8 @@ def toggle_vote(
     if added:
         from vtsearch.achievements import record_vote
 
-        detector_id = get_active_detector_context().detector_id
-        record_vote(detector_id)
+        det_ctx = get_active_detector_context()
+        record_vote(det_ctx.detector_id, media_type=det_ctx.media_type)
 
 
 def apply_label(
