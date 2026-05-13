@@ -82,3 +82,45 @@
   font-size: .82rem;
   line-height: 1.35;
 }
+
+
+// Multi-media import: per-source-spec row.  Each row is either an
+// "include directly" label or an "Also include … via <converter>" with
+// inline param inputs.  See docs/plans/multi-media-import.md.
+.sf-source-specs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  .sf-spec-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 4px 0;
+  }
+
+  .sf-spec-direct {
+    font-style: italic;
+    color: var(--text-muted, #666);
+  }
+
+  .sf-spec-converter { min-width: 180px; }
+
+  .sf-spec-param {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .85rem;
+
+    .sf-spec-param-input { width: 70px; }
+  }
+
+  .sf-spec-remove {
+    margin-left: auto;
+    padding: 0 6px;
+    line-height: 1;
+  }
+
+  .sf-spec-add { align-self: flex-start; }
+}

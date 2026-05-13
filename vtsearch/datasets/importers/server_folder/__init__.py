@@ -1,18 +1,21 @@
 """Server-folder importer – scans a directory of media files and embeds them.
 
-When the media type is ``"image"``, PDF files (``*.pdf``) in the folder are
-also included: each page is rendered as a separate image and embedded with
-CLIP.  The origin for PDF-derived images is ``"pdf"`` (not
-``"server_folder"``) so that provenance tracks back to the original
-document.
+The importer participates in the new multi-media flow (see
+:doc:`/docs/plans/multi-media-import`).  The user picks an output media
+type and an ordered list of :class:`~vtsearch.datasets.importers.base.SourceSpec`
+rows that declare which media types to scan for.  Each row is either:
 
-Converter support
------------------
-When the ``converters`` field value is set (a comma-separated list of
-converter names, e.g. ``"video2image,document2image"``), the importer also
-scans for source files matching each converter's input type, converts them
-to the target media type, embeds the results, and appends them to the
-dataset with converter-specific origins.
+* a "direct" row (``converter`` ``= None``) whose ``source_type`` equals
+  the chosen output media type — the scanner reads matching files and
+  embeds them with the target embedder, or
+* a converter row, where the scanner reads files of the converter's
+  ``source_type`` and feeds them through the converter (with the
+  per-row params) to produce media of the output type.
+
+When the output type is ``"image"``, ``*.pdf`` files in the folder are
+also expanded as per-page images.  (PDFs participate independently of
+the explicit converter rows — they are tied to the "image" output type
+rather than to a converter.)
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ import io
 from pathlib import Path
 from typing import Any, Iterator
 
-from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+from vtsearch.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 from vtsearch.utils.paths import glob_top_level, rglob_follow_symlinks
 
@@ -125,48 +128,47 @@ def _load_pdf_images(
             media_id += 1
 
 
-def _run_selected_converters(
+def _run_converter_specs(
     folder: Path,
-    media_type: str,
-    field_values: dict,
+    output_type: str,
+    converter_specs: list[SourceSpec],
     medias: dict,
     thin: bool = False,
+    recursive: bool = True,
+    folder_path_for_origin: str = "",
 ) -> None:
-    """Run any user-selected converters from *field_values*."""
-    converters_str = field_values.get("converters", "")
-    if not converters_str:
-        return
-    converter_names = [c.strip() for c in converters_str.split(",") if c.strip()]
-    if not converter_names:
+    """Hand the non-direct rows of a multi-media spec to the runner."""
+    runnable = [s for s in converter_specs if s.converter is not None]
+    if not runnable:
         return
 
     from vtsearch.converters.runner import run_converters_on_folder  # noqa: PLC0415
 
-    base_origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": media_type}}
+    base_origin = {
+        "importer": "server_folder",
+        "params": {"path": folder_path_for_origin or str(folder), "media_type": output_type},
+    }
     run_converters_on_folder(
         folder_path=folder,
-        converter_names=converter_names,
-        target_media_type=media_type,
+        converter_specs=runnable,
+        target_media_type=output_type,
         medias=medias,
         thin=thin,
         base_origin=base_origin,
-        recursive=_coerce_recursive(field_values),
+        recursive=recursive,
     )
 
 
 class ServerFolderDatasetImporter(DatasetImporter):
     """Embed all media files found in a directory on the server's filesystem.
 
-    The user supplies an absolute filesystem path (on the **server**) and
-    selects the media type so that the correct file extensions are matched
-    during the scan.
+    The user supplies an absolute filesystem path (on the **server**) plus
+    an output media type and a list of :class:`SourceSpec` rows describing
+    which source types to scan for (and which converters to apply).  See
+    :doc:`/docs/plans/multi-media-import` for the full design.
 
-    When the media type is ``"image"``, any ``*.pdf`` files in the folder
-    are also processed: each page is rendered as a separate image.
-
-    When converters are selected (via the ``converters`` field value), files
-    matching each converter's source type are also scanned, converted, and
-    added to the dataset.
+    When the output media type is ``"image"``, any ``*.pdf`` files in the
+    folder are also processed: each page is rendered as a separate image.
 
     .. note::
        This importer reads files from the server's filesystem.  In the web
@@ -186,12 +188,13 @@ class ServerFolderDatasetImporter(DatasetImporter):
     icon = "\U0001f4c1"  # 📁 — frontend renders as a folder icon
     picker_view = "server_folder"
     category = "server"
+    multi_media = True
     fields = [
         ImporterField(
             key="media_type",
-            label="Media Type",
+            label="Output Media Type",
             field_type="select",
-            description="Type of media files to scan for in the folder.",
+            description="Type of media files the dataset ends up holding.",
             default="audio",
         ),
         ImporterField(
@@ -239,39 +242,85 @@ class ServerFolderDatasetImporter(DatasetImporter):
         d["available_converters_by_media_type"] = converters_by_target
         return d
 
-    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
-        folder = Path(field_values["path"])
-        media_type = field_values.get("media_type", "audio")
-        emb_name = field_values.get("embedder", "")
-        skip_emb = bool(field_values.get("skip_embedding"))
-        recursive = _coerce_recursive(field_values)
-        has_regular = True
+    def _load_direct(
+        self,
+        folder: Path,
+        spec: SourceSpec,
+        field_values: dict[str, Any],
+        medias: dict,
+        thin: bool,
+        recursive: bool,
+    ) -> bool:
+        """Load files of ``spec.source_type`` directly into *medias*.
+
+        Returns ``True`` if any files were found (i.e. the loader did not
+        raise ``ValueError`` for an empty folder), ``False`` otherwise.
+        """
+        from vtsearch.media import get  # noqa: PLC0415
+
+        mt = get(spec.source_type)
         try:
             load_dataset_from_folder(
                 folder,
-                media_type,
+                mt.folder_import_name,
                 medias,
                 thin=thin,
-                embedder_name=emb_name,
+                embedder_name=field_values.get("embedder", ""),
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=skip_emb,
+                skip_embedding=bool(field_values.get("skip_embedding")),
                 recursive=recursive,
             )
         except ValueError:
-            # No regular image files found — PDFs or converters may still produce output.
-            if media_type != "image" and not field_values.get("converters"):
-                raise
-            has_regular = False
-        if media_type == "image":
-            _load_pdf_images(folder, medias, thin=thin, embedder_name=emb_name, recursive=recursive)
+            return False
+        return True
 
-        # Run any user-selected converters.
-        _run_selected_converters(folder, media_type, field_values, medias, thin=thin)
+    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
+        folder = Path(field_values["path"])
+        recursive = _coerce_recursive(field_values)
 
-        if not has_regular and not medias:
-            raise ValueError(f"No {media_type} files found in folder")
+        specs = self.effective_source_specs(field_values)
+        output_type = ""
+        for spec in specs:
+            if spec.converter is None:
+                output_type = spec.source_type
+                break
+        if not output_type:
+            # Multi-media imports without a direct row still have an
+            # output type from ``media_type``; resolve it explicitly so
+            # PDF expansion and origin recording behave correctly.
+            from vtsearch.media import get_by_folder_name  # noqa: PLC0415
+
+            output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
+
+        has_direct_files = False
+        for spec in specs:
+            if spec.converter is None:
+                if self._load_direct(folder, spec, field_values, medias, thin, recursive):
+                    has_direct_files = True
+
+        if output_type == "image":
+            _load_pdf_images(
+                folder,
+                medias,
+                thin=thin,
+                embedder_name=field_values.get("embedder", ""),
+                recursive=recursive,
+            )
+
+        _run_converter_specs(
+            folder,
+            output_type,
+            [s for s in specs if s.converter is not None],
+            medias,
+            thin=thin,
+            recursive=recursive,
+            folder_path_for_origin=str(folder),
+        )
+
+        if not has_direct_files and not medias:
+            raise ValueError(f"No {output_type} files found in folder")
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
@@ -292,36 +341,60 @@ class ServerFolderDatasetImporter(DatasetImporter):
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         folder = Path(field_values["path"])
-        media_type = field_values.get("media_type", "audio")
-        emb_name = field_values.get("embedder", "")
-        skip_emb = bool(field_values.get("skip_embedding"))
         recursive = _coerce_recursive(field_values)
-        try:
-            yield from load_dataset_from_folder_chunked(
-                folder,
-                media_type,
-                chunk_size,
-                thin=thin,
-                embedder_name=emb_name,
-                content_vectors=self.content_vectors or None,
-                content_md5s=self.content_md5s or None,
-                custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=skip_emb,
-                recursive=recursive,
-            )
-        except ValueError:
-            if media_type != "image" and not field_values.get("converters"):
-                raise
-        if media_type == "image":
+
+        specs = self.effective_source_specs(field_values)
+        direct_specs = [s for s in specs if s.converter is None]
+        converter_specs = [s for s in specs if s.converter is not None]
+
+        output_type = direct_specs[0].source_type if direct_specs else ""
+        if not output_type:
+            from vtsearch.media import get_by_folder_name  # noqa: PLC0415
+
+            output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
+
+        # Chunked load only fires for the direct row.  Converter rows
+        # produce a separate chunk afterwards (matching legacy
+        # behaviour).
+        for spec in direct_specs:
+            from vtsearch.media import get  # noqa: PLC0415
+
+            mt = get(spec.source_type)
+            try:
+                yield from load_dataset_from_folder_chunked(
+                    folder,
+                    mt.folder_import_name,
+                    chunk_size,
+                    thin=thin,
+                    embedder_name=field_values.get("embedder", ""),
+                    content_vectors=self.content_vectors or None,
+                    content_md5s=self.content_md5s or None,
+                    custom_metadata_map=self.custom_metadata_map or None,
+                    skip_embedding=bool(field_values.get("skip_embedding")),
+                    recursive=recursive,
+                )
+            except ValueError:
+                # Empty folder for this source type — keep going; later
+                # PDF / converter rows may still produce output.
+                pass
+
+        if output_type == "image":
             chunk: dict[int, dict[str, Any]] = {}
             _load_pdf_images(folder, chunk, thin=thin, recursive=recursive)
             if chunk:
                 yield chunk
-        # Run converters and yield as a single chunk.
-        converters_str = field_values.get("converters", "")
-        if converters_str:
+
+        if converter_specs:
             converter_chunk: dict[int, dict[str, Any]] = {}
-            _run_selected_converters(folder, media_type, field_values, converter_chunk, thin=thin)
+            _run_converter_specs(
+                folder,
+                output_type,
+                converter_specs,
+                converter_chunk,
+                thin=thin,
+                recursive=recursive,
+                folder_path_for_origin=str(folder),
+            )
             if converter_chunk:
                 yield converter_chunk
 
@@ -340,9 +413,13 @@ class ServerFolderDatasetImporter(DatasetImporter):
 
     def build_cli_args(self, field_values: dict[str, Any]) -> str:
         base = super().build_cli_args(field_values)
-        converters = field_values.get("converters", "")
-        if converters:
-            base += f" --converters {converters}"
+        specs = field_values.get("source_specs")
+        if specs:
+            import json as _json  # noqa: PLC0415
+
+            if not isinstance(specs, str):
+                specs = _json.dumps(specs)
+            base += f" --source-specs '{specs}'"
         return base
 
     def default_display_name(self, field_values: dict[str, Any]) -> str:
@@ -355,9 +432,13 @@ class ServerFolderDatasetImporter(DatasetImporter):
 
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         origin = super().build_origin(field_values)
-        converters = field_values.get("converters", "")
-        if converters:
-            origin["params"]["converters"] = converters
+        specs = field_values.get("source_specs")
+        if specs:
+            import json as _json  # noqa: PLC0415
+
+            if not isinstance(specs, str):
+                specs = _json.dumps(specs)
+            origin["params"]["source_specs"] = specs
         return origin
 
     def origin_display(self, origin: dict[str, Any]) -> str:

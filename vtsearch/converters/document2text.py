@@ -35,7 +35,7 @@ class Document2TextMediaConverter(MediaConverter):
     def target_type(self) -> str:
         return "text"
 
-    def convert(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         media_bytes = media.get("media_bytes")
         media_path = media.get("media_path")
         filename = media.get("filename", "document")
