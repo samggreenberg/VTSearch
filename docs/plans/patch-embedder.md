@@ -213,7 +213,7 @@ If `Shift` is released mid-drag (mouse button still down), the in-progress draw 
 **Voting still uses Left/Right.**
   - `→` (good) submits a yes-vote and, if a box is currently drawn, attaches its normalised coordinates as `region_box`. No box → plain yes-vote, identical to today.
   - `←` (bad) when **no box is drawn** → plain no-vote, identical to today.
-  - `←` (bad) when a box **is drawn** → require a second confirming `←` press (or `Esc` to clear the box first and then a plain `←` works). The first `←` shakes / highlights the box to draw attention; the second within ~2 seconds submits the no-vote and discards the box. Rationale: drawing a box is real work; a stray left-arrow press shouldn't throw it away. Users with no box never see this branch and keep their single-keypress fast path.
+  - `←` (bad) when a box **is drawn** → arms a sticky "discard box & vote no" state. The box pulses to draw attention and a one-line hint reads *"Press ← again to vote no and discard the box, or Esc to keep the box."* The state has **no timeout** — a second `←` confirms whenever it arrives; Esc, mouse interaction with the box, or navigating to another item clears the armed state and keeps the box. Rationale: drawing a box is real work; a stray `←` shouldn't throw it away, but a time-based modal (e.g. "second press within 2s") is fragile — the user pauses to think, the timer expires invisibly, and the next press surprises them. A visible sticky state never lies about what the next press will do. Users with no box never see this branch and keep their single-keypress fast path.
   - `Esc` discards the current box without voting; the user stays on the same item.
 
 The mouse-click vote buttons in the UI follow the same rules.
@@ -477,10 +477,11 @@ the API once it's stable.
    mouseup before mode exits.  See "v2 → Interaction design" above.
 7. **Vote keybindings + buttons.**  `→` with box → yes-vote +
    `region_box`; `→` without box → plain yes-vote (unchanged); `←`
-   without box → plain no-vote (unchanged); `←` with box → first
-   press shakes / highlights the box, second within ~2s submits the
-   no-vote and discards the box; Esc discards the box without
-   voting.  Same rules apply to the on-screen vote buttons.
+   without box → plain no-vote (unchanged); `←` with box → arms a
+   visible sticky "discard & vote no" state (no timeout); second
+   `←` confirms whenever it arrives; Esc, mouse interaction with
+   the box, or navigating away clears the armed state and keeps
+   the box.  Same rules apply to the on-screen vote buttons.
 8. **Vote-dispatch service.** Carry optional `regionBox` into the
    existing yes-vote API call.  Bad-vote path picks up the "pending
    discard confirmation" sub-state.  None of this touches the
@@ -496,7 +497,10 @@ the API once it's stable.
 11. Coord-stability: a box drawn at one zoom level stays anchored on
     the same image pixels when the user zooms in/out.
 12. Box-discard: bad-vote-with-box requires two consecutive `←`
-    presses within the timeout; the second press discards the box.
+    presses (no timer — the armed state persists until confirmed
+    or backed out).  Esc, a mouse interaction with the box, or
+    item-navigation while armed clears the armed state and keeps
+    the box; only a second `←` discards.
 13. Box-preserve: a subsequent zero-area Shift-drag click does not
     clear an already-drawn box.
 14. `LabeledElement.region_box` round-trips through serialisation
