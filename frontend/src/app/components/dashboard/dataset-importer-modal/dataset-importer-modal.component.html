@@ -236,6 +236,47 @@
         <p class="info-text">This importer requires no additional configuration.</p>
       }
 
+      @if (selectedImporter.multi_media) {
+        <div class="form-group sf-source-specs">
+          <label class="form-label" title="Each row declares one source type to pull into the dataset. A row with no converter is included directly; a row with a converter is read in its source type and converted to the output type.">Include media</label>
+          @for (spec of formSourceSpecs; let i = $index; track i) {
+            <div class="sf-spec-row">
+              @if (spec.converter === null) {
+                <span class="sf-spec-direct">Include {{ spec.source_type }} files directly</span>
+              } @else {
+                <span class="sf-spec-label">Also include</span>
+                <select
+                  class="form-select sf-spec-converter"
+                  [ngModel]="spec.converter"
+                  (ngModelChange)="formOnConverterChange(i, $event)"
+                >
+                  @for (c of formAvailableConverters; track c.name) {
+                    <option [value]="c.name">{{ c.display_name || c.name }}</option>
+                  }
+                </select>
+                @if (formConverterFor(i); as converter) {
+                  @for (f of converter.fields || []; track f.key) {
+                    <label class="sf-spec-param">
+                      {{ f.label || f.key }}:
+                      <input
+                        type="text"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
+                      />
+                    </label>
+                  }
+                }
+              }
+              <button class="btn btn--secondary sf-spec-remove" (click)="formRemoveSpec(i)" title="Remove this row">×</button>
+            </div>
+          }
+          @if (formAvailableConverters.length > 0) {
+            <button class="btn btn--secondary sf-spec-add" (click)="formAddConverterRow()">+ Add converter</button>
+          }
+        </div>
+      }
+
       @if (availableEmbedders.length > 1) {
         <div class="form-group">
           <label class="form-label" for="field-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
@@ -303,7 +344,7 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="lf-media-type" title="The type of media files (audio, image, text, video, or document)">Media Type</label>
+        <label class="form-label" for="lf-media-type" title="The type of media files the dataset ends up holding. Converters below can pull in other source types and convert them to this output type.">Output Media Type</label>
         <select
           id="lf-media-type"
           class="form-select"
@@ -314,6 +355,45 @@
             <option [value]="opt">{{ getMediaTypeOptionLabel(opt) }}</option>
           }
         </select>
+      </div>
+
+      <div class="form-group sf-source-specs">
+        <label class="form-label" title="Each row declares one source type to pull into the dataset. A row with no converter is included directly; a row with a converter is read in its source type and converted to the output type.">Include media</label>
+        @for (spec of lfSourceSpecs; let i = $index; track i) {
+          <div class="sf-spec-row">
+            @if (spec.converter === null) {
+              <span class="sf-spec-direct">Include {{ spec.source_type }} files directly</span>
+            } @else {
+              <span class="sf-spec-label">Also include</span>
+              <select
+                class="form-select sf-spec-converter"
+                [ngModel]="spec.converter"
+                (ngModelChange)="lfOnConverterChange(i, $event)"
+              >
+                @for (c of lfAvailableConverters; track c.name) {
+                  <option [value]="c.name">{{ c.display_name || c.name }}</option>
+                }
+              </select>
+              @if (lfConverterFor(i); as converter) {
+                @for (f of converter.fields || []; track f.key) {
+                  <label class="sf-spec-param">
+                    {{ f.label || f.key }}:
+                    <input
+                      type="text"
+                      class="form-input sf-spec-param-input"
+                      [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                      (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
+                    />
+                  </label>
+                }
+              }
+            }
+            <button class="btn btn--secondary sf-spec-remove" (click)="lfRemoveSpec(i)" title="Remove this row">×</button>
+          </div>
+        }
+        @if (lfAvailableConverters.length > 0) {
+          <button class="btn btn--secondary sf-spec-add" (click)="lfAddConverterRow()">+ Add converter</button>
+        }
       </div>
 
       <div class="form-group form-group--section">

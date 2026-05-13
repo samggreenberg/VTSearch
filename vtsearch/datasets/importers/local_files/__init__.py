@@ -50,6 +50,10 @@ class LocalFilesDatasetImporter(DatasetImporter):
     ui_mode = "custom"
     picker_view = "local_files"
     category = "local"
+    # The upload flow delegates to server_folder, which already
+    # participates in the multi-media flow.  See LocalFolderDatasetImporter
+    # for the same flag and the upload-route plumbing.
+    multi_media = True
     fields = []
 
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
