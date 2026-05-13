@@ -195,7 +195,9 @@ V2 lets the user attach a single rectangular region to a yes-vote on an image. T
 
 #### Backend semantics
 
-1. **Compute the vote vector on the fly from the patch grid.** Not from any tree node. Take the set of patch cells whose centers fall inside the user's box, attention-weighted-mean their `media["patch_grid"][i, j]` vectors, L2-normalise. That's the vote vector for this vote. We persist the *box* (4 floats), not the vector — the trainer rederives the vector at train time from the already-pickled `patch_grid` (stored from v1, see "Storage"). No re-import required when v2 ships.
+1. **Compute the vote vector on the fly from the patch grid.** Not from any tree node. Take the set of patch cells whose centers fall inside the user's box, **uniform-mean** their `media["patch_grid"][i, j]` vectors, L2-normalise. That's the vote vector for this vote. We persist the *box* (4 floats), not the vector — the trainer rederives the vector at train time from the already-pickled `patch_grid` (stored from v1, see "Storage"). No re-import required when v2 ships.
+
+   Why uniform mean and not the saliency-weighted mean the HAC leaves use? The HAC builder re-L2-normalises at every internal merge, which destroys associativity of weighted mean — three different merge orders for the same patch set yield three different unit vectors. So *no* pooling rule can guarantee `box_to_vote_vector(patches(node))` equals an existing HAC node's stored vector. Uniform mean instead gives us the simpler property that **the same set of cells always produces the same vote vector**, and the pre-normalisation sum is additive across disjoint cell sets, which keeps a hypothetical future multi-box vote consistent with a single-box vote over the union.
 2. **Don't snap to tree nodes.** The HAC tree exists to give *search* a finite set of regions to scan in O(N log N). Voting is a one-off, so on-the-fly computation is fine and gives the user patch-precision without the "slightly-too-big box jumps to the full-image node" failure mode.
 3. **Display-time snapping is different.** When we draw the matched-region outline on a search-result card, we *do* snap to the best-IoU tree node, because the user isn't designating anything there — we're just showing them which scale won.
 
@@ -224,7 +226,7 @@ If `Shift` is released mid-drag (mouse button still down), the in-progress draw 
 **Voting still uses Left/Right.**
   - `→` (good) submits a yes-vote and, if a box is currently drawn, attaches its normalised coordinates as `region_box`. No box → plain yes-vote, identical to today.
   - `←` (bad) when **no box is drawn** → plain no-vote, identical to today.
-  - `←` (bad) when a box **is drawn** → require a second confirming `←` press (or `Esc` to clear the box first and then a plain `←` works). The first `←` shakes / highlights the box to draw attention; the second within ~2 seconds submits the no-vote and discards the box. Rationale: drawing a box is real work; a stray left-arrow press shouldn't throw it away. Users with no box never see this branch and keep their single-keypress fast path.
+  - `←` (bad) when a box **is drawn** → arms a sticky "discard box & vote no" state. The box pulses to draw attention and a one-line hint reads *"Press ← again to vote no and discard the box, or Esc to keep the box."* The state has **no timeout** — a second `←` confirms whenever it arrives; Esc, mouse interaction with the box, or navigating to another item clears the armed state and keeps the box. Rationale: drawing a box is real work; a stray `←` shouldn't throw it away, but a time-based modal (e.g. "second press within 2s") is fragile — the user pauses to think, the timer expires invisibly, and the next press surprises them. A visible sticky state never lies about what the next press will do. Users with no box never see this branch and keep their single-keypress fast path.
   - `Esc` discards the current box without voting; the user stays on the same item.
 
 The mouse-click vote buttons in the UI follow the same rules.
@@ -393,13 +395,11 @@ Run these **before** we ship v1, on the `caltech101_s` demo dataset (a sensible 
 
 These all run in a single throwaway script (or notebook), check results visually, then we delete the script.
 
-## Remaining v1 work
+## V1 — DONE
 
-V1 backend shipped across PR #1248; UI surface is partial.  These three
-items finish the v1 scope but were deliberately deferred from the
-session that landed the backend so it could close on a logical
-boundary.  Pick any of them up independently — they don't depend on
-each other.
+V1 is **shipped**.  Backend landed in PR #1248; the remaining UI surface
+and validation items below were closed out in follow-up sessions.  Each
+was independent so they could be picked up in any order.
 
 1. **Gallery-card `best_region.box` outline overlay — DONE.**
    - Backend returns `best_region` (4-tuple `[x0, y0, x1, y1]` in
@@ -471,9 +471,120 @@ each other.
      `vtsearch/models/patch_regions.py` is parameterised on `K` and
      `α` per the same goal.
 
+4. **FP16 ↔ FP32 rank-stability check — DONE.**
+   - Added `TestFp16Fp32RankStability` to
+     `tests/test_patch_embedder.py`.  Builds a 50-media batch of 24
+     fp32 region vectors per image at the production 768-dim shape,
+     mirrors it as fp16, scores both against 20 random unit queries,
+     and asserts: (a) the per-media max-cosine score differs by
+     < 1e-2 across the full batch; (b) no pair of media whose fp32
+     scores differ by more than the 5e-3 quantization noise band
+     flips relative order under fp16 storage; (c) the #1 result is
+     preserved across every query.
+   - Empirically the worst-case score delta lands ~1e-3 on this
+     batch (well inside the 1e-2 ceiling), and zero non-tie rank
+     flips occurred across all sampled pairs × queries.  fp16-on-
+     disk is faithful for retrieval at the v1 scale; no design
+     changes required.
+
 ## Open questions
 
-1. **FP16 ↔ FP32 numerical effect** — cosine similarity at fp16 storage / fp32 compute is fine for retrieval, but cross-check that the max-over-region rule doesn't flip rank vs. fp32-storage on a held-out batch. Cheap, low-risk; just don't skip it.
+*(None outstanding.  The v1 open question — fp16/fp32 rank stability —
+was answered above; v2 design questions are tracked in the v2 section
+below.)*
+
+## V2 work plan
+
+The v2 design is already specified above under "Vote attribution → v2:
+region voting".  This section is just the punchlist — each item points
+back at the design for semantics.  Items are grouped by surface and
+ordered so the backend can land first and the frontend can build on
+the API once it's stable.
+
+**Backend**
+
+1. **`LabeledElement.region_box`.** Add optional
+   `region_box: tuple[float, float, float, float] | None = None` to
+   `vtsearch/datasets/labelset.py::LabeledElement`.  Round-trip through
+   the dict-serialisation path used by label export/import.  Replace
+   the v1 contract test
+   `tests/test_patch_embedder.py::TestVoteSemanticsV1::test_labeled_element_has_no_region_box_field_in_v1`
+   with a presence + round-trip test.
+2. **On-the-fly vote-vector pooling.** New pure-numpy helper
+   `box_to_vote_vector(patch_grid, box) -> np.ndarray` in
+   `vtsearch/models/patch_regions.py`.  Selects grid cells whose
+   centers fall inside the normalised box, uniform-means their
+   vectors, L2-normalises.  No saliency input — see "v2 → Backend
+   semantics §1" above for why uniform mean is the right rule (and
+   for why no rule can match HAC node vectors exactly).
+3. **Vote endpoint.** Yes-vote API gains optional `region_box`;
+   persists it on the resulting `LabeledElement`.  No-votes reject
+   `region_box` (contract: no-votes are image-level always).
+4. **Region-aware training.** `vtsearch/models/detector_training.py`
+   reads `region_box` per labelled example; when set, pools the
+   training vector on-the-fly from `media["patch_grid"]` via
+   `box_to_vote_vector`.  Falls back to `media["embedding"]` when
+   `region_box` is None or `patch_grid` is absent (legacy datasets,
+   single-vector embedders).
+5. **Label export.** Once step 1 lands, exporters serialise
+   `region_box` automatically — verify with a round-trip test.
+
+**Frontend**
+
+6. **`RegionDrawComponent` overlay.** New component (or layer inside
+   `ImageViewerComponent`) that listens for `Shift` keydown/keyup on
+   `window` while the focus pane is mounted.  Shift-held swaps the
+   pan-on-drag gesture for box-draw; cursor → crosshair.  Click-drag-
+   release in image-local coordinates, un-transformed through the
+   current `panX / panY / zoom / rotate`.  Renders the box + 8 resize
+   handles + draggable body as positioned divs inside
+   `.thumbnail-wrap` (same coordinate system as the v1 `best_region`
+   outline).  Zero-area release → no box; Esc clears the box without
+   voting.  Mid-drag Shift release commits the in-progress box on
+   mouseup before mode exits.  See "v2 → Interaction design" above.
+7. **Vote keybindings + buttons.**  `→` with box → yes-vote +
+   `region_box`; `→` without box → plain yes-vote (unchanged); `←`
+   without box → plain no-vote (unchanged); `←` with box → arms a
+   visible sticky "discard & vote no" state (no timeout); second
+   `←` confirms whenever it arrives; Esc, mouse interaction with
+   the box, or navigating away clears the armed state and keeps
+   the box.  Same rules apply to the on-screen vote buttons.
+8. **Vote-dispatch service.** Carry optional `regionBox` into the
+   existing yes-vote API call.  Bad-vote path picks up the "pending
+   discard confirmation" sub-state.  None of this touches the
+   binary-only code paths.
+9. **Gallery `best_region` outline.**  Already shipped in v1 as
+   read-only — leave it as-is.  V2 adds the active draw layer only
+   on the focus pane.
+
+**Tests**
+
+10. Coord-transform: pure-function tests for the screen↔image
+    transform under non-trivial `pan/zoom/rotate`.
+11. Coord-stability: a box drawn at one zoom level stays anchored on
+    the same image pixels when the user zooms in/out.
+12. Box-discard: bad-vote-with-box requires two consecutive `←`
+    presses (no timer — the armed state persists until confirmed
+    or backed out).  Esc, a mouse interaction with the box, or
+    item-navigation while armed clears the armed state and keeps
+    the box; only a second `←` discards.
+13. Box-preserve: a subsequent zero-area Shift-drag click does not
+    clear an already-drawn box.
+14. `LabeledElement.region_box` round-trips through serialisation
+    (replaces the v1 absence assertion).
+15. Vote-API contract: `region_box` present on yes-vote with box,
+    absent on yes-vote without box, absent on every no-vote.
+16. Backend pure-function test for `box_to_vote_vector` against a
+    hand-crafted `patch_grid`.
+
+**Out of scope for v2 (deferred)**
+
+- Touch support — no `Shift` modifier on mobile.  Toolbar toggle
+  button is the natural future home, but v2's audience is desktop
+  power users.
+- Multiple regions per vote — v2 ships single rectangle only.
+- Region votes on non-image media types.  `supports_patch_regions`
+  is image-specific; no obvious 2D analogue elsewhere.
 
 ## Phasing
 

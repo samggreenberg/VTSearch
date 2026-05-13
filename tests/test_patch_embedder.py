@@ -22,6 +22,7 @@ import torch
 from vtsearch.models.patch_regions import (
     PatchEmbedOutput,
     RegionVector,
+    box_to_vote_vector,
     build_hac_tree,
     build_region_tree,
     eupe_features_to_patch_output,
@@ -262,8 +263,7 @@ class TestBuildHacTree:
         leaves = propose_leaves(out.patch_grid, out.patch_saliency, k=4)
         floored = np.maximum(out.patch_saliency.astype(np.float32), 1e-8)
         expected_root = (
-            out.patch_grid.reshape(-1, out.patch_grid.shape[-1]).astype(np.float32)
-            * floored.reshape(-1, 1)
+            out.patch_grid.reshape(-1, out.patch_grid.shape[-1]).astype(np.float32) * floored.reshape(-1, 1)
         ).sum(axis=0)
         expected_root = expected_root / np.linalg.norm(expected_root)
         for alpha in (0.0, 0.5, 1.0):
@@ -332,6 +332,148 @@ class TestToFp16:
         for orig, cast in zip(regions, casted):
             assert cast.box == orig.box
             assert cast.children == orig.children
+
+
+# ---------------------------------------------------------------------------
+# fp16 storage / fp32 compute rank stability
+# ---------------------------------------------------------------------------
+
+
+def _make_region_batch(
+    num_media: int,
+    regions_per_image: int,
+    dim: int,
+    seed: int,
+) -> dict[int, dict]:
+    """Build a batch of media dicts with fp32-stored ``patch_regions``.
+
+    Each region vector is a fresh L2-normalised draw — no shared structure
+    between media or regions, which is the worst case for cosine ranking
+    stability (no built-in margin between competing regions).
+    """
+    rng = np.random.default_rng(seed)
+    batch: dict[int, dict] = {}
+    for i in range(num_media):
+        regions = []
+        for _ in range(regions_per_image):
+            v = rng.standard_normal(dim).astype(np.float32)
+            v = v / np.linalg.norm(v).clip(min=1e-12)
+            regions.append(RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=v))
+        batch[i] = {
+            "patch_regions": regions,
+            "embedding": regions[0].vec.copy(),
+        }
+    return batch
+
+
+def _to_fp16_batch(snap_fp32: dict[int, dict]) -> dict[int, dict]:
+    """Mirror of *snap_fp32* with every region vec cast to fp16 (storage mode)."""
+    return {
+        cid: {
+            "patch_regions": [
+                RegionVector(box=r.box, vec=r.vec.astype(np.float16), children=r.children) for r in m["patch_regions"]
+            ],
+            "embedding": m["embedding"],
+        }
+        for cid, m in snap_fp32.items()
+    }
+
+
+class TestFp16Fp32RankStability:
+    """fp16 pickle storage must not flip max-over-region cosine ranks vs. fp32.
+
+    Per the patch-embedder design (Open Questions §1): region vectors are
+    pickled as fp16 to keep dataset size manageable, but cast back to fp32
+    at compute time inside ``score_against_query``.  This test pins the
+    claim that the fp16 round-trip is cheap *and* faithful — the cosine
+    ranking under fp16 storage matches fp32 storage outside of a tiny
+    quantization-noise tie band.
+    """
+
+    # Production embedders are all 768-dim ViT-Bs; K=12 leaves + 11 HAC
+    # internals + 1 full-image node = 24 regions / image.  These constants
+    # match the v1 design pins so the test exercises the prod shape.
+    _DIM = 768
+    _REGIONS_PER_IMAGE = 24
+    _NUM_MEDIA = 50
+    _NUM_QUERIES = 20
+
+    def test_max_score_difference_below_quantization_noise(self):
+        """Per-media region-max score differs by less than 1e-2 under fp16 storage.
+
+        Empirically fp16 quantization of 768-dim unit vectors costs ~1e-3 in
+        cosine sim; 1e-2 is a generous ceiling that catches any catastrophic
+        regression (e.g. dropping a normalisation, accidentally storing
+        non-normalised fp16, etc.).
+        """
+        snap_fp32 = _make_region_batch(self._NUM_MEDIA, self._REGIONS_PER_IMAGE, self._DIM, seed=0)
+        snap_fp16 = _to_fp16_batch(snap_fp32)
+        rng = np.random.default_rng(42)
+
+        max_diff = 0.0
+        for _ in range(self._NUM_QUERIES):
+            q = rng.standard_normal(self._DIM).astype(np.float32)
+            q = q / np.linalg.norm(q)
+            for cid in snap_fp32:
+                s32, _ = score_against_query(snap_fp32[cid], q)
+                s16, _ = score_against_query(snap_fp16[cid], q)
+                max_diff = max(max_diff, abs(s32 - s16))
+
+        assert max_diff < 1e-2, (
+            f"fp16 vs fp32 region-max score diff = {max_diff:.4g}; "
+            "expected < 1e-2 — investigate whether fp16 storage is dropping "
+            "normalisation or vectors are no longer near-unit-norm"
+        )
+
+    def test_no_rank_flips_outside_noise_band(self):
+        """Pairs of media whose fp32 scores differ by more than the fp16 noise
+        floor keep the same relative order under fp16 storage.
+
+        Pairs *inside* the noise band (|Δscore| ≤ 5e-3) are allowed to swap —
+        that's an unavoidable consequence of fp16 quantization and matches
+        what "rank doesn't flip in any meaningful sense" means in practice.
+        """
+        snap_fp32 = _make_region_batch(self._NUM_MEDIA, self._REGIONS_PER_IMAGE, self._DIM, seed=1)
+        snap_fp16 = _to_fp16_batch(snap_fp32)
+        rng = np.random.default_rng(7)
+        noise_band = 5e-3
+
+        flips: list[tuple[int, int, float, float]] = []
+        for _ in range(self._NUM_QUERIES):
+            q = rng.standard_normal(self._DIM).astype(np.float32)
+            q = q / np.linalg.norm(q)
+            scores32 = {cid: score_against_query(m, q)[0] for cid, m in snap_fp32.items()}
+            scores16 = {cid: score_against_query(m, q)[0] for cid, m in snap_fp16.items()}
+            ids = list(scores32.keys())
+            for i in range(len(ids)):
+                for j in range(i + 1, len(ids)):
+                    a, b = ids[i], ids[j]
+                    diff32 = scores32[a] - scores32[b]
+                    if abs(diff32) <= noise_band:
+                        continue
+                    diff16 = scores16[a] - scores16[b]
+                    if (diff32 > 0) != (diff16 > 0):
+                        flips.append((a, b, diff32, diff16))
+
+        assert not flips, (
+            f"{len(flips)} non-tie rank flip(s) between fp16 and fp32 storage; "
+            f"first: media {flips[0][0]} vs {flips[0][1]}, "
+            f"fp32 Δ={flips[0][2]:.4g}, fp16 Δ={flips[0][3]:.4g}"
+        )
+
+    def test_top_result_preserved(self):
+        """The #1 result under fp32 storage is also the #1 result under fp16,
+        across every random query — this is the assertion users actually feel."""
+        snap_fp32 = _make_region_batch(self._NUM_MEDIA, self._REGIONS_PER_IMAGE, self._DIM, seed=2)
+        snap_fp16 = _to_fp16_batch(snap_fp32)
+        rng = np.random.default_rng(99)
+
+        for _ in range(self._NUM_QUERIES):
+            q = rng.standard_normal(self._DIM).astype(np.float32)
+            q = q / np.linalg.norm(q)
+            top32 = cosine_sort_with_boxes(snap_fp32, q)[0][0]["id"]
+            top16 = cosine_sort_with_boxes(snap_fp16, q)[0][0]["id"]
+            assert top32 == top16, f"Top result flipped between storage modes: fp32→{top32}, fp16→{top16}"
 
 
 # ---------------------------------------------------------------------------
@@ -563,29 +705,273 @@ class TestCosineSortWithBoxes:
 
 
 # ---------------------------------------------------------------------------
-# v1 vote semantics — sanity check
+# v2: LabeledElement.region_box data-model contract
 # ---------------------------------------------------------------------------
 
 
-class TestVoteSemanticsV1:
-    """V1 records both Good and Bad votes against the whole image — there is
-    no region-vote API yet.  This pins that down by verifying the vote
-    endpoint persists no region_box on the LabeledElement.
+class TestRegionBoxOnLabeledElement:
+    """v2 region voting attaches a normalised ``(x0, y0, x1, y1)`` box to a
+    yes-vote when the user drew a region.  This class pins the data-model
+    contract — the field exists, defaults to ``None`` (image-level), and
+    round-trips through dict serialisation including JSON's tuple→list
+    coercion.
+
+    Replaces the v1 ``test_labeled_element_has_no_region_box_field_in_v1``
+    absence check.  Vote-endpoint wiring (yes-vote accepts region_box,
+    no-vote rejects it) and on-the-fly vote-vector pooling are separate
+    v2 work items.
     """
 
-    def test_labeled_element_has_no_region_box_field_in_v1(self):
-        """``LabeledElement`` should not (yet) carry a ``region_box`` field.
-
-        When phase-2 region voting lands this assertion can be inverted to
-        require the field with a default of None.  Today its absence is the
-        contract.
-        """
-        from dataclasses import fields
-
+    def test_region_box_defaults_to_none(self):
         from vtsearch.datasets.labelset import LabeledElement
 
-        names = {f.name for f in fields(LabeledElement)}
-        assert "region_box" not in names, (
-            "LabeledElement gained a region_box field — phase 2 has begun "
-            "and this v1-only test should be replaced by a phase-2 contract test."
+        el = LabeledElement(md5="abc", label="good")
+        assert el.region_box is None
+
+    def test_region_box_omitted_from_dict_when_none(self):
+        """Image-level votes don't emit ``region_box`` so the exported JSON
+        stays a strict superset of the v1 format for legacy consumers."""
+        from vtsearch.datasets.labelset import LabeledElement
+
+        el = LabeledElement(md5="abc", label="good")
+        assert "region_box" not in el.to_dict()
+
+    def test_region_box_round_trips_through_dict(self):
+        from vtsearch.datasets.labelset import LabeledElement
+
+        original = LabeledElement(
+            md5="abc",
+            label="good",
+            region_box=(0.1, 0.2, 0.7, 0.8),
         )
+        restored = LabeledElement.from_dict(original.to_dict())
+        assert restored.region_box == (0.1, 0.2, 0.7, 0.8)
+
+    def test_region_box_accepts_list_from_json(self):
+        """JSON encoders turn tuples into lists; ``from_dict`` must accept
+        a list and coerce back to a 4-tuple of floats so the dataclass
+        invariant holds regardless of the dict source."""
+        from vtsearch.datasets.labelset import LabeledElement
+
+        d = {"md5": "abc", "label": "good", "region_box": [0.0, 0.25, 0.5, 1.0]}
+        el = LabeledElement.from_dict(d)
+        assert isinstance(el.region_box, tuple)
+        assert el.region_box == (0.0, 0.25, 0.5, 1.0)
+        assert all(isinstance(v, float) for v in el.region_box)
+
+    def test_region_box_survives_labelset_round_trip(self):
+        from vtsearch.datasets.labelset import LabeledElement, LabelSet
+
+        ls = LabelSet(
+            [
+                LabeledElement(md5="a", label="good", region_box=(0.1, 0.2, 0.3, 0.4)),
+                LabeledElement(md5="b", label="good"),
+                LabeledElement(md5="c", label="bad"),
+            ]
+        )
+        restored = LabelSet.from_dict(ls.to_dict())
+        assert restored.elements[0].region_box == (0.1, 0.2, 0.3, 0.4)
+        assert restored.elements[1].region_box is None
+        assert restored.elements[2].region_box is None
+
+    def test_region_box_survives_merge(self):
+        """A region_box on the first occurrence of a key is preserved through
+        ``LabelSet.merge`` — the merge already keeps the first entry's
+        position, so its region annotation should ride along with it."""
+        from vtsearch.datasets.labelset import LabeledElement, LabelSet
+
+        a = LabelSet(
+            [
+                LabeledElement(md5="x", label="good", region_box=(0.1, 0.2, 0.3, 0.4)),
+            ]
+        )
+        b = LabelSet(
+            [
+                LabeledElement(md5="y", label="good"),
+            ]
+        )
+        merged = a.merge(b)
+        by_md5 = {e.md5: e for e in merged.elements}
+        assert by_md5["x"].region_box == (0.1, 0.2, 0.3, 0.4)
+        assert by_md5["y"].region_box is None
+
+
+class TestBoxToVoteVector:
+    """v2 vote-vector pooling: a user-drawn box becomes one unit vector by
+    uniform-meaning the patch cells whose centers fall inside it.
+
+    Contract pinned here:
+      * inclusion rule = closed rectangle over patch *centers*
+      * pooling rule   = uniform mean, L2-normalised
+      * fp16 patch grid is upcast on read; output is always float32
+      * empty-selection fallback = single nearest cell
+      * set-determinism: two boxes that select the same cells → same vector
+      * pre-normalisation additivity: disjoint sub-selections sum to the
+        union's sum
+    """
+
+    @staticmethod
+    def _grid_with_distinct_unit_vecs(h: int, w: int, d: int) -> np.ndarray:
+        """A patch grid where every cell is a distinct unit vector along a
+        unique axis.  Makes "did we pool the right cells" trivially checkable
+        because pooled means are easy to reason about by hand.
+        """
+        n = h * w
+        assert d >= n, "need d >= H*W for one-hot patches"
+        flat = np.zeros((n, d), dtype=np.float32)
+        for i in range(n):
+            flat[i, i] = 1.0
+        return flat.reshape(h, w, d)
+
+    def test_box_covering_entire_image_pools_every_cell(self):
+        grid = _make_output(h=4, w=4, d=8).patch_grid
+        v = box_to_vote_vector(grid, (0.0, 0.0, 1.0, 1.0))
+        expected = grid.reshape(-1, grid.shape[-1]).mean(axis=0)
+        expected = expected / np.linalg.norm(expected)
+        np.testing.assert_allclose(v, expected, atol=1e-6)
+
+    def test_box_returns_l2_normalised_float32(self):
+        grid = _make_output(h=4, w=4, d=8).patch_grid
+        v = box_to_vote_vector(grid, (0.2, 0.2, 0.8, 0.8))
+        assert v.dtype == np.float32
+        assert v.shape == (8,)
+        assert abs(float(np.linalg.norm(v)) - 1.0) < 1e-5
+
+    def test_box_containing_single_cell_center_returns_that_cell(self):
+        """A 4×4 grid puts centers at x,y ∈ {0.125, 0.375, 0.625, 0.875}.
+        A box like (0.0, 0.0, 0.2, 0.2) contains only the (row=0, col=0)
+        center, so the pooled (and re-normalised) vector equals that cell's
+        already-unit vector."""
+        grid = self._grid_with_distinct_unit_vecs(4, 4, 16)
+        v = box_to_vote_vector(grid, (0.0, 0.0, 0.2, 0.2))
+        expected = grid[0, 0]
+        np.testing.assert_allclose(v, expected, atol=1e-6)
+
+    def test_pooling_two_cells_uniform_mean(self):
+        """A 4×4 one-hot grid; a 2-cell selection should give a vector with
+        two entries at 1/√2 and zeros elsewhere — verifies uniform (not
+        saliency-) weighting."""
+        grid = self._grid_with_distinct_unit_vecs(4, 4, 16)
+        # Box spans the left two columns of the top row: centers (0.125, 0.125)
+        # and (0.375, 0.125) sit inside; nothing else.
+        v = box_to_vote_vector(grid, (0.0, 0.0, 0.5, 0.2))
+        # Cells (0,0) and (0,1) in row-major one-hot indexing → axes 0 and 1.
+        expected = np.zeros(16, dtype=np.float32)
+        expected[0] = 1.0 / np.sqrt(2.0)
+        expected[1] = 1.0 / np.sqrt(2.0)
+        np.testing.assert_allclose(v, expected, atol=1e-6)
+
+    def test_idempotent_same_box_same_vector(self):
+        grid = _make_output(h=4, w=4, d=8).patch_grid
+        a = box_to_vote_vector(grid, (0.1, 0.2, 0.7, 0.8))
+        b = box_to_vote_vector(grid, (0.1, 0.2, 0.7, 0.8))
+        np.testing.assert_array_equal(a, b)
+
+    def test_two_boxes_selecting_same_cells_give_same_vector(self):
+        """Set-determinism: shrinking the box slightly while still capturing
+        the same set of cell *centers* leaves the result identical.  This is
+        the property the design doc calls out — same patch set → same vector,
+        regardless of how the user drew the rectangle."""
+        grid = _make_output(h=4, w=4, d=8).patch_grid
+        big = box_to_vote_vector(grid, (0.0, 0.0, 0.5, 0.5))  # 2×2 = 4 cells
+        nudged = box_to_vote_vector(grid, (0.01, 0.01, 0.49, 0.49))  # same cells
+        np.testing.assert_allclose(big, nudged, atol=1e-7)
+
+    def test_disjoint_subselections_have_additive_presums(self):
+        """Pre-normalisation additivity: the unnormalised sum over the union
+        of two *disjoint* cell sets equals the sum of the two per-set sums.
+        We invert each pooled vector to recover its underlying sum (uniform
+        mean × cell count, both deducible from the same grid + boxes) and
+        check the additive identity.  This is the property that makes a
+        hypothetical multi-box future composable with the single-box present.
+        """
+        grid = _make_output(h=4, w=4, d=8).patch_grid
+        # Pick three disjoint boxes that partition the top half.
+        # Top-left quadrant: cells (0,0) (0,1) (1,0) (1,1) → 4 cells
+        # Top-right quadrant: cells (0,2) (0,3) (1,2) (1,3) → 4 cells
+        # Combined top half: 8 cells.
+        tl_cells = grid[:2, :2].reshape(-1, grid.shape[-1])
+        tr_cells = grid[:2, 2:].reshape(-1, grid.shape[-1])
+        top_cells = grid[:2, :].reshape(-1, grid.shape[-1])
+        # Verified: sums add.
+        np.testing.assert_allclose(
+            top_cells.sum(axis=0),
+            tl_cells.sum(axis=0) + tr_cells.sum(axis=0),
+            atol=1e-6,
+        )
+        # And the helper picks each partition correctly.
+        v_tl = box_to_vote_vector(grid, (0.0, 0.0, 0.5, 0.5))
+        v_tr = box_to_vote_vector(grid, (0.5, 0.0, 1.0, 0.5))
+        v_top = box_to_vote_vector(grid, (0.0, 0.0, 1.0, 0.5))
+        # Reconstruct each pre-norm pooled sum: pooled_mean * num_cells.
+        s_tl = v_tl * np.linalg.norm(tl_cells.sum(axis=0))
+        s_tr = v_tr * np.linalg.norm(tr_cells.sum(axis=0))
+        s_top = v_top * np.linalg.norm(top_cells.sum(axis=0))
+        np.testing.assert_allclose(s_top, s_tl + s_tr, atol=1e-5)
+
+    def test_fp16_grid_returns_fp32_result(self):
+        grid_fp32 = _make_output(h=4, w=4, d=8).patch_grid
+        grid_fp16 = grid_fp32.astype(np.float16)
+        v_fp32 = box_to_vote_vector(grid_fp32, (0.2, 0.2, 0.8, 0.8))
+        v_fp16 = box_to_vote_vector(grid_fp16, (0.2, 0.2, 0.8, 0.8))
+        assert v_fp16.dtype == np.float32
+        # Cosine similarity between fp32-pooled and fp16-pooled should be
+        # ~1: half-precision storage perturbs each patch entry by ~1e-3 but
+        # the pooled direction is stable.
+        cos = float(v_fp32 @ v_fp16)
+        assert cos > 0.999
+
+    def test_swapped_corners_normalised(self):
+        grid = _make_output(h=4, w=4, d=8).patch_grid
+        normal = box_to_vote_vector(grid, (0.1, 0.2, 0.7, 0.8))
+        swapped = box_to_vote_vector(grid, (0.7, 0.8, 0.1, 0.2))
+        np.testing.assert_allclose(normal, swapped, atol=1e-7)
+
+    def test_out_of_bounds_box_clamped_to_unit_square(self):
+        """A box that extends past ``[0, 1]`` is clamped, so it pools the
+        same cells as the equivalent in-bounds box."""
+        grid = _make_output(h=4, w=4, d=8).patch_grid
+        clamped = box_to_vote_vector(grid, (-0.5, -0.5, 1.5, 1.5))
+        full = box_to_vote_vector(grid, (0.0, 0.0, 1.0, 1.0))
+        np.testing.assert_allclose(clamped, full, atol=1e-7)
+
+    def test_thin_box_with_no_centers_falls_back_to_nearest_cell(self):
+        """A box too thin to contain any cell center falls back to the
+        single closest cell so callers always get a unit vector.  On a 4×4
+        grid, centers sit at y ∈ {0.125, 0.375, 0.625, 0.875}; a box at
+        y ∈ [0.40, 0.41] contains no center but is closest to row 1 (center
+        0.375)."""
+        grid = self._grid_with_distinct_unit_vecs(4, 4, 16)
+        v = box_to_vote_vector(grid, (0.0, 0.40, 1.0, 0.41))
+        # Expect the cell whose center is closest to box center (0.5, 0.405).
+        # That's row 1 (y=0.375 → |Δ| = 0.030) and column 1 or 2 (x=0.375 or
+        # 0.625 → |Δ| = 0.125 either way; argmin picks the lower index, col 1).
+        expected = grid[1, 1]
+        np.testing.assert_allclose(v, expected, atol=1e-6)
+
+    def test_zero_area_box_falls_back_to_nearest_cell(self):
+        """A point-box (zero area) is treated as the empty-selection case
+        and snaps to the nearest cell."""
+        grid = self._grid_with_distinct_unit_vecs(4, 4, 16)
+        v = box_to_vote_vector(grid, (0.4, 0.4, 0.4, 0.4))
+        # Box center is (0.4, 0.4); nearest cell center is (0.375, 0.375)
+        # → cell (row=1, col=1).
+        expected = grid[1, 1]
+        np.testing.assert_allclose(v, expected, atol=1e-6)
+
+    def test_invalid_grid_shape_raises(self):
+        with pytest_raises(ValueError):
+            box_to_vote_vector(np.zeros((4, 4), dtype=np.float32), (0.0, 0.0, 1.0, 1.0))
+
+    def test_invalid_box_length_raises(self):
+        grid = _make_output().patch_grid
+        with pytest_raises(ValueError):
+            box_to_vote_vector(grid, (0.0, 0.0, 1.0))  # type: ignore[arg-type]
+
+    def test_list_box_accepted(self):
+        """``LabeledElement.region_box`` round-trips as a list when JSON-
+        decoded; the helper should accept any 4-element sequence."""
+        grid = _make_output(h=4, w=4, d=8).patch_grid
+        tuple_v = box_to_vote_vector(grid, (0.1, 0.2, 0.7, 0.8))
+        list_v = box_to_vote_vector(grid, [0.1, 0.2, 0.7, 0.8])  # type: ignore[arg-type]
+        np.testing.assert_array_equal(tuple_v, list_v)

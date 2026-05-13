@@ -298,9 +298,7 @@ def propose_leaves(
         raise ValueError(f"patch_grid must be (H, W, D); got shape {patch_grid.shape}")
     height, width, _ = patch_grid.shape
     if patch_saliency.shape != (height, width):
-        raise ValueError(
-            f"patch_saliency must be ({height}, {width}); got {patch_saliency.shape}"
-        )
+        raise ValueError(f"patch_saliency must be ({height}, {width}); got {patch_saliency.shape}")
     num_cells = height * width
     if not 1 <= k <= num_cells:
         raise ValueError(f"k must be in [1, {num_cells}]; got {k}")
@@ -440,9 +438,7 @@ def build_hac_tree(
         raise ValueError("leaves must be non-empty")
     height, width, _ = patch_grid.shape
     if patch_saliency.shape != (height, width):
-        raise ValueError(
-            f"patch_saliency must be ({height}, {width}); got {patch_saliency.shape}"
-        )
+        raise ValueError(f"patch_saliency must be ({height}, {width}); got {patch_saliency.shape}")
 
     nodes: list[RegionVector] = list(leaves)
     # Parallel array of unnormalised saliency-weighted sums, one per node.
@@ -454,10 +450,7 @@ def build_hac_tree(
     for leaf in leaves:
         mask = leaf.cell_mask
         if mask is None:
-            raise ValueError(
-                "build_hac_tree requires leaves with cell_mask set "
-                "(propose_leaves now populates this)"
-            )
+            raise ValueError("build_hac_tree requires leaves with cell_mask set (propose_leaves now populates this)")
         sal_slice = floored_sal[mask]
         vec_slice = patch_grid[mask].astype(np.float32, copy=False)
         weighted_sums.append((vec_slice * sal_slice[:, None]).sum(axis=0))
@@ -501,6 +494,88 @@ def build_hac_tree(
 # ---------------------------------------------------------------------------
 # Top-level orchestration
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Vote attribution (v2): on-the-fly box → vote vector
+# ---------------------------------------------------------------------------
+
+
+def box_to_vote_vector(
+    patch_grid: np.ndarray,
+    box: tuple[float, float, float, float],
+) -> np.ndarray:
+    """Pool a user-drawn box into one vote vector via uniform mean.
+
+    Selects the patch cells whose centers fall inside the normalised box,
+    averages their vectors with equal weight, L2-normalises.  No saliency
+    weighting — every selected cell contributes equally.
+
+    Same patch set → same vector, regardless of how the user assembled the
+    box.  Two boxes that select the same cells produce the same result.
+    The pre-normalisation sum is additive across disjoint cell sets, so a
+    hypothetical "multi-box vote" that unioned cells from several boxes
+    would still pool consistently.
+
+    Deliberately *not* an attempt to recover the vector of whatever HAC
+    region happens to span the same patches — v1's HAC builder re-L2-
+    normalises at every internal merge, so no pooling rule can match a
+    specific HAC node's vector without replicating its exact merge chain.
+    See ``docs/plans/patch-embedder.md`` ("v2 → Backend semantics §1").
+
+    Parameters
+    ----------
+    patch_grid : ndarray, shape (H, W, D)
+        Per-patch vectors out of the embedder (already L2-normalised), as
+        stored in ``media["patch_grid"]``.  Float16 (pickle dtype) or
+        float32 input is accepted; the result is always float32.
+    box : (x0, y0, x1, y1)
+        Normalised image coordinates in ``[0, 1]``; ``x`` runs along the
+        grid columns, ``y`` along the rows.  Same convention as
+        :func:`propose_leaves` and :class:`vtsearch.datasets.labelset.LabeledElement.region_box`.
+        Swapped corners are tolerated; out-of-range coordinates are clamped
+        to the unit square.
+
+    Returns
+    -------
+    ndarray, shape (D,), float32, L2-normalised.
+
+    Notes
+    -----
+    * Inclusion rule: a patch at grid position ``(row, col)`` is included
+      iff its center ``((col + 0.5) / W, (row + 0.5) / H)`` falls inside
+      the closed rectangle ``[x_lo, x_hi] × [y_lo, y_hi]`` (clamped corners).
+    * Empty-selection fallback: if the (possibly very thin) box contains
+      no cell centers, snap to the single cell whose center is closest to
+      the box center.  Callers always get a well-defined unit vector.
+    """
+    if patch_grid.ndim != 3:
+        raise ValueError(f"patch_grid must be (H, W, D); got shape {patch_grid.shape}")
+    if len(box) != 4:
+        raise ValueError(f"box must be a 4-tuple; got {box!r}")
+
+    height, width, _ = patch_grid.shape
+    x0, y0, x1, y1 = (float(v) for v in box)
+    x_lo, x_hi = max(0.0, min(x0, x1)), min(1.0, max(x0, x1))
+    y_lo, y_hi = max(0.0, min(y0, y1)), min(1.0, max(y0, y1))
+
+    col_centers = (np.arange(width, dtype=np.float32) + 0.5) / float(width)
+    row_centers = (np.arange(height, dtype=np.float32) + 0.5) / float(height)
+    inside_x = (col_centers >= x_lo) & (col_centers <= x_hi)
+    inside_y = (row_centers >= y_lo) & (row_centers <= y_hi)
+    mask = inside_y[:, None] & inside_x[None, :]
+
+    if not mask.any():
+        cx = 0.5 * (x_lo + x_hi)
+        cy = 0.5 * (y_lo + y_hi)
+        col_idx = int(np.argmin(np.abs(col_centers - cx)))
+        row_idx = int(np.argmin(np.abs(row_centers - cy)))
+        mask = np.zeros((height, width), dtype=bool)
+        mask[row_idx, col_idx] = True
+
+    vecs = patch_grid[mask].astype(np.float32, copy=False)
+    pooled = vecs.mean(axis=0)
+    return _l2_normalize(pooled)
 
 
 def to_fp16(regions: list[RegionVector]) -> list[RegionVector]:
