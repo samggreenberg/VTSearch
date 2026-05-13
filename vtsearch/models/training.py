@@ -14,6 +14,27 @@ if TYPE_CHECKING:
     import torch.nn as nn
 
 
+def _training_vec_for_vote(
+    media: dict[str, Any],
+    region_box: tuple[float, float, float, float] | None,
+) -> np.ndarray:
+    """Return the training vector for one vote on *media*.
+
+    When *region_box* is set **and** *media* has a stored ``patch_grid``,
+    pool the box on-the-fly via
+    :func:`vtsearch.models.patch_regions.box_to_vote_vector`.  Otherwise
+    fall back to ``media["embedding"]`` — the v1/legacy image-level vector.
+    Patch-embedder v2.
+    """
+    if region_box is not None:
+        grid = media.get("patch_grid")
+        if grid is not None:
+            from vtsearch.models.patch_regions import box_to_vote_vector  # noqa: PLC0415
+
+            return box_to_vote_vector(np.asarray(grid), region_box)
+    return media["embedding"]
+
+
 def calculate_gmm_threshold(scores: list[float]) -> float:
     """Use a Gaussian Mixture Model to find a threshold between two score distributions.
 
@@ -461,6 +482,7 @@ def train_and_score(
     safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
+    vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train a small MLP on voted media embeddings and score every media.
 
@@ -482,6 +504,15 @@ def train_and_score(
         calibration_fraction: Fraction of labelled data reserved for calibration
             in each split (default 0.5).  For example, 0.2 means 80% Train /
             20% Calibrate.
+        vote_region_boxes: Optional ``media_id -> (x0, y0, x1, y1)`` map from
+            yes-votes that designated a region.  When set and the source
+            media has a stored ``patch_grid``, the training vector for that
+            vote is pooled on-the-fly via
+            :func:`vtsearch.models.patch_regions.box_to_vote_vector` instead
+            of using ``media["embedding"]``.  Falls back to the full-image
+            vector when the media lacks a patch grid (legacy datasets,
+            single-vector embedders) or when the box is missing.  Patch-
+            embedder v2.
 
     Returns:
         A tuple ``(results, threshold, model)`` where:
@@ -495,11 +526,13 @@ def train_and_score(
     """
     import torch  # noqa: PLC0415
 
+    region_boxes = vote_region_boxes or {}
+
     X_list = []
     y_list = []
     for cid in good_votes:
         if cid in clips_dict:
-            X_list.append(clips_dict[cid]["embedding"])
+            X_list.append(_training_vec_for_vote(clips_dict[cid], region_boxes.get(cid)))
             y_list.append(1.0)
     for cid in bad_votes:
         if cid in clips_dict:

@@ -13,6 +13,7 @@ from vtsearch.utils import (
     good_votes,
     resolve_media_ids,
     snapshot_medias,
+    vote_region_boxes,
 )
 
 labels_bp = Blueprint("labels", __name__)
@@ -58,7 +59,12 @@ def export_labels():
             goods, bads = good_votes, bad_votes
 
     all_medias = snapshot_medias()
-    labelset = LabelSet.from_clips_and_votes(all_medias, goods, bads)
+    labelset = LabelSet.from_clips_and_votes(
+        all_medias,
+        goods,
+        bads,
+        vote_region_boxes=dict(vote_region_boxes),
+    )
     result: dict = labelset.to_dict()
 
     # Annotate corrections: items where the user changed the detector's label.
@@ -149,8 +155,19 @@ def import_labels():
             skipped += 1
             continue
 
+        # Round-trip region_box on good-vote imports.  ``LabeledElement.from_dict``
+        # already coerces list↔tuple, so we just check shape and pass through.
+        rb_raw = entry.get("region_box") if label == "good" else None
+        region_box: tuple[float, float, float, float] | None = None
+        if (
+            isinstance(rb_raw, (list, tuple))
+            and len(rb_raw) == 4
+            and all(isinstance(v, (int, float)) for v in rb_raw)
+        ):
+            region_box = (float(rb_raw[0]), float(rb_raw[1]), float(rb_raw[2]), float(rb_raw[3]))
+
         for cid in cids:
-            apply_label(cid, label)
+            apply_label(cid, label, region_box=region_box)
         applied += 1
 
     from vtsearch.models.label_sync import sync_labels_to_loaded_detector

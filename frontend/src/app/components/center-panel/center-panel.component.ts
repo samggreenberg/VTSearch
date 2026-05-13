@@ -7,7 +7,7 @@ import { KeyboardService } from '../../services/keyboard.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
-import { ImageViewerComponent } from './image-viewer/image-viewer.component';
+import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
 import { TextViewerComponent } from './text-viewer/text-viewer.component';
 import { DocumentViewerComponent } from './document-viewer/document-viewer.component';
@@ -46,6 +46,15 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   swipeClass = '';
   spinningVote: 'good' | 'bad' | null = null;
 
+  // Bad-vote-with-box state: drawing a box is real work, so a stray ← shouldn't
+  // throw it away. The first ← arms a sticky discard-confirm state (no timeout);
+  // the second ← throws the box away and votes no. Esc, a mousedown on the box,
+  // a Shift-drag-redraw, or navigating to another item all clear the armed
+  // state without voting and without discarding the box.
+  // Public so the template can bind it into the image viewer.
+  currentRegionBox: RegionBox | null = null;
+  pendingBadConfirm = false;
+
   private spinTimer: ReturnType<typeof setTimeout> | null = null;
 
   private _pausedByVisibility = false;
@@ -61,6 +70,11 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media']) {
       this.swipeClass = '';
+      // Navigating to another item clears the armed bad-vote-confirm state.
+      // ImageViewer also clears its own regionBox on media change and will emit null;
+      // resetting eagerly here keeps state coherent across the swap.
+      this.pendingBadConfirm = false;
+      this.currentRegionBox = null;
     }
   }
 
@@ -162,9 +176,24 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   castVote(vote: 'good' | 'bad'): void {
     if (!this.media || this.isVoting) return;
+
+    // Region annotations only attach to yes-votes (salient-area semantics).
+    // A no-vote with a box drawn arms a sticky discard-confirm state — the first
+    // ← shake-pulses the box and surfaces a hint; only a second ← while armed
+    // throws the box away and votes no. The state has no timeout: a time-based
+    // modal would expire silently and surprise the user. Esc, mouse-on-box, a
+    // fresh Shift-drag, or item navigation clear armed without voting.
+    if (vote === 'bad' && this.currentRegionBox && !this.pendingBadConfirm) {
+      this.pendingBadConfirm = true;
+      this.imageViewer?.pulseRegionBox();
+      return;
+    }
+
+    const regionBox = vote === 'good' ? this.currentRegionBox : null;
+    this.pendingBadConfirm = false;
     this.isVoting = true;
 
-    this.mediasApi.vote(this.media.id, vote).subscribe({
+    this.mediasApi.vote(this.media.id, vote, regionBox).subscribe({
       next: () => {
         const animate = this.swipeAnimation && !!this.media && !prefersReducedMotion();
         if (animate) {
@@ -185,6 +214,18 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
         this.isVoting = false;
       },
     });
+  }
+
+  onRegionBoxChange(box: RegionBox | null): void {
+    this.currentRegionBox = box;
+    // Clearing the box also clears any pending bad-vote confirmation —
+    // there's nothing left to confirm against.
+    if (!box) this.pendingBadConfirm = false;
+  }
+
+  /** Esc-while-armed or mouse interaction with the box: cancel armed, keep the box. */
+  onArmedConfirmCanceled(): void {
+    this.pendingBadConfirm = false;
   }
 
   private loadSettings(): void {

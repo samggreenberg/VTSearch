@@ -116,6 +116,7 @@ class DetectorContext:
         "bad_votes",
         "label_history",
         "vote_click_times",
+        "vote_region_boxes",
         "click_counter",
         # Training artifacts
         "last_learned_scores",
@@ -154,6 +155,10 @@ class DetectorContext:
         self.bad_votes: dict[int, None] = {}
         self.label_history: list[tuple[int, str, float]] = []
         self.vote_click_times: dict[int, int] = {}
+        # Per-good-vote region boxes (normalised x0, y0, x1, y1).  Only set when
+        # the user drew a region as part of a yes-vote; absent for image-level
+        # yes-votes and for every no-vote.  Patch-embedder v2.
+        self.vote_region_boxes: dict[int, tuple[float, float, float, float]] = {}
         self.click_counter: int = 0
         # Training artifacts
         self.last_learned_scores: dict[int, float] = {}
@@ -567,6 +572,14 @@ label_history: list[tuple[int, str, float]] = _ProxyList("label_history", get_ac
 
 # Click-time tracking: media_id -> click order (1-indexed).
 vote_click_times: dict[int, int] = _ProxyDict("vote_click_times", get_active_detector_context)  # type: ignore[assignment]
+
+# Per-good-vote region boxes: media_id -> (x0, y0, x1, y1) in normalised image
+# coords.  Only populated when the user drew a region as part of a yes-vote;
+# absent for image-level yes-votes and for every no-vote.  Patch-embedder v2.
+vote_region_boxes: dict[int, tuple[float, float, float, float]] = _ProxyDict(  # type: ignore[assignment]
+    "vote_region_boxes",
+    get_active_detector_context,
+)
 
 # Last learned-sort scores: media_id -> score (float in [0, 1]).
 last_learned_scores: dict[int, float] = _ProxyDict("last_learned_scores", get_active_detector_context)  # type: ignore[assignment]

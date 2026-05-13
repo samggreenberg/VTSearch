@@ -37,6 +37,7 @@ from vtsearch.utils import (
     snapshot_medias,
     update_learned_scores,
     update_sort_progress,
+    vote_region_boxes,
 )
 
 sorting_bp = Blueprint("sorting", __name__)
@@ -233,6 +234,7 @@ def learned_sort():
             safe_thresholds=get_safe_thresholds(),
             calibrate_count=get_calibrate_count(),
             calibration_fraction=get_calibration_fraction(),
+            vote_region_boxes=dict(vote_region_boxes),
         )
 
     # Store scores so the /api/votes endpoint can provide confidence info.

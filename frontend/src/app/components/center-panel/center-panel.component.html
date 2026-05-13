@@ -8,7 +8,12 @@
           <vt-audio-player [media]="media" [volume]="volume" [audioPlaying]="audioPlaying" [swipeClass]="swipeClass" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
         }
         @case ('image') {
-          <vt-image-viewer [media]="media"></vt-image-viewer>
+          <vt-image-viewer
+            [media]="media"
+            [pendingBadConfirm]="pendingBadConfirm"
+            (regionBoxChange)="onRegionBoxChange($event)"
+            (armedConfirmCanceled)="onArmedConfirmCanceled()"
+          ></vt-image-viewer>
         }
         @case ('video') {
           <vt-video-player [media]="media" [volume]="volume" [audioPlaying]="audioPlaying" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
@@ -77,6 +82,12 @@
         </div>
       }
     </div>
+
+    @if (pendingBadConfirm) {
+      <div class="bad-confirm-hint" role="status" aria-live="polite">
+        Press &larr; again to vote no and discard the box, or Esc to keep the box.
+      </div>
+    }
 
     <vt-voting-overlay
       [isGood]="isGood"

@@ -600,6 +600,12 @@ def import_local_folder():
     delegate to the regular folder importer to do the actual scanning,
     embedding, and dataset registration.  The temp directory is removed
     once the importer finishes (success or failure).
+
+    Local-files uploads may additionally include a ``vectors_file`` form
+    field carrying a ``.npz`` archive of pre-computed embedding vectors
+    keyed by uploaded-file name (basename or relative path).  Files
+    whose name matches an NPZ key reuse the supplied vector instead of
+    running the embedding model.
     """
     files = request.files.getlist("files")
     if not files:
@@ -650,6 +656,31 @@ def import_local_folder():
         shutil.rmtree(upload_dir, ignore_errors=True)
         return jsonify({"error": "No valid files in upload"}), 400
 
+    # Optional .npz of pre-computed embedding vectors.  Saved into the
+    # upload directory and parsed before kicking off the importer; the
+    # resulting mapping is handed to the server_folder importer via its
+    # ``content_vectors`` attribute (cleared in a ``finally`` block to
+    # avoid bleeding into unrelated runs of the singleton).
+    content_vectors: dict[str, Any] = {}
+    vectors_file_storage = request.files.get("vectors_file")
+    if vectors_file_storage and vectors_file_storage.filename:
+        from vtsearch.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
+
+        npz_path = upload_dir / "__vtsearch_vectors__.npz"
+        try:
+            vectors_file_storage.save(npz_path)
+            content_vectors = dict(read_npz_filenames_and_vectors(npz_path))
+        except Exception as exc:
+            shutil.rmtree(upload_dir, ignore_errors=True)
+            return jsonify({"error": f"Invalid vectors_file: {exc}"}), 400
+        finally:
+            # The npz is no longer needed once it's parsed; remove it so
+            # the importer doesn't see it as a media file.
+            try:
+                npz_path.unlink()
+            except FileNotFoundError:
+                pass
+
     field_values: dict = {
         "path": str(upload_dir),
         "media_type": media_type,
@@ -689,12 +720,17 @@ def import_local_folder():
     chunk_size = auto_chunk_size(media_type) if use_chunked else 0
 
     def _load(target_medias):
+        previous_vectors = importer.content_vectors
+        if content_vectors:
+            importer.content_vectors = content_vectors
         try:
             if use_chunked:
                 consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size))
             else:
                 importer.run(field_values, target_medias)
         finally:
+            if content_vectors:
+                importer.content_vectors = previous_vectors
             shutil.rmtree(upload_dir, ignore_errors=True)
 
     task_id = _run_origin_load_in_background(

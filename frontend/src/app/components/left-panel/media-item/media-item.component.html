@@ -14,18 +14,28 @@
   (keydown.space)="onClick()"
 >
   @if (isGrid) {
-    @if (thumbnailUrl) {
-      <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
-    } @else if (placeholderIcon) {
-      <span class="media-placeholder">{{ placeholderIcon }}</span>
-    }
+    <div class="thumbnail-wrap">
+      @if (thumbnailUrl) {
+        <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
+      } @else if (placeholderIcon) {
+        <span class="media-placeholder">{{ placeholderIcon }}</span>
+      }
+      @if (bestRegionStyle) {
+        <div class="best-region-outline" [ngStyle]="bestRegionStyle" aria-hidden="true" title="Region the embedder matched best"></div>
+      }
+    </div>
     <span class="media-name-grid">{{ displayName }}</span>
   } @else {
     <span class="label-indicator" [class.good]="voteLabel === 'good'" [class.bad]="voteLabel === 'bad'" [title]="voteLabel === 'good' ? 'Labeled good' : voteLabel === 'bad' ? 'Labeled bad' : ''">
       @if (voteLabel === 'good') { &#x2713; } @else if (voteLabel === 'bad') { &#x2717; }
     </span>
     @if (thumbnailUrl) {
-      <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
+      <span class="thumbnail-wrap thumbnail-wrap-list">
+        <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
+        @if (bestRegionStyle) {
+          <span class="best-region-outline" [ngStyle]="bestRegionStyle" aria-hidden="true" title="Region the embedder matched best"></span>
+        }
+      </span>
     }
     <span class="media-name">{{ displayName }}</span>
   }

@@ -51,7 +51,7 @@ def sync_to_labelset_source() -> None:
     field_values = cfg.get("field_values", {})
 
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils.state_core import good_votes, bad_votes, medias
+    from vtsearch.utils.state_core import good_votes, bad_votes, medias, vote_region_boxes
 
     # Serialize against any in-progress sync_from on another thread.
     # Re-check the flag inside the lock so we never push partial state
@@ -60,7 +60,12 @@ def sync_to_labelset_source() -> None:
         if _syncing:
             return
         try:
-            labelset = LabelSet.from_clips_and_votes(dict(medias), dict(good_votes), dict(bad_votes))
+            labelset = LabelSet.from_clips_and_votes(
+                dict(medias),
+                dict(good_votes),
+                dict(bad_votes),
+                vote_region_boxes=dict(vote_region_boxes),
+            )
             source.save(labelset, field_values)
         except Exception as exc:
             logger.exception("Failed to sync labels to source: %s", exc)

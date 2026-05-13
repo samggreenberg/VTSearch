@@ -39,8 +39,14 @@ export class MediasApiService {
     return this.http.get(`/api/medias/${id}/media`, { responseType: 'blob' });
   }
 
-  vote(id: number, label: 'good' | 'bad'): Observable<VoteResponse> {
-    return this.http.post<VoteResponse>(`/api/medias/${id}/vote`, { vote: label });
+  vote(
+    id: number,
+    label: 'good' | 'bad',
+    regionBox?: readonly number[] | null,
+  ): Observable<VoteResponse> {
+    const body: { vote: string; region_box?: number[] } = { vote: label };
+    if (regionBox && regionBox.length === 4) body.region_box = [...regionBox];
+    return this.http.post<VoteResponse>(`/api/medias/${id}/vote`, body);
   }
 
   addToPile(file: File, label: 'good' | 'bad'): Observable<{ ok: boolean; media_id: number; is_new: boolean }> {

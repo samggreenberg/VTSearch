@@ -139,55 +139,61 @@ class TestImageSiglip2Embedder:
         assert result is None
 
 
-class TestImageDinov2Embedder:
+class TestImageDinov2SingleEmbedder:
     def test_name(self):
-        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
-        assert ImageDinov2Embedder().name == "dinov2"
+        assert ImageDinov2SingleEmbedder().name == "dinov2_single"
 
     def test_media_type_id(self):
-        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
-        assert ImageDinov2Embedder().media_type_id == "image"
+        assert ImageDinov2SingleEmbedder().media_type_id == "image"
 
     def test_is_not_default(self):
-        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
-        assert ImageDinov2Embedder().is_default is False
+        assert ImageDinov2SingleEmbedder().is_default is False
 
     def test_supports_text_false(self):
         """DINOv2 has no text encoder."""
-        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
-        assert ImageDinov2Embedder().supports_text is False
+        assert ImageDinov2SingleEmbedder().supports_text is False
+
+    def test_supports_patch_regions_false(self):
+        """Single-vector variant: region pipeline disabled."""
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
+
+        assert ImageDinov2SingleEmbedder().supports_patch_regions is False
 
     def test_to_dict(self):
-        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
-        assert ImageDinov2Embedder().to_dict() == {
-            "name": "dinov2",
+        assert ImageDinov2SingleEmbedder().to_dict() == {
+            "name": "dinov2_single",
             "media_type_id": "image",
             "supports_text": False,
-            "supports_patch_regions": True,
+            "supports_patch_regions": False,
             "license_notice": None,
         }
 
     def test_embed_text_returns_none(self):
-        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
-        emb = ImageDinov2Embedder()
+        emb = ImageDinov2SingleEmbedder()
         assert emb.embed_text("anything") is None
 
     def test_no_description_wrappers(self):
-        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
-        assert ImageDinov2Embedder().description_wrappers == []
+        assert ImageDinov2SingleEmbedder().description_wrappers == []
 
     def test_registered_in_registry(self):
         from vtsearch.media import get_embedder
 
-        emb = get_embedder("dinov2")
-        assert emb.name == "dinov2"
+        emb = get_embedder("dinov2_single")
+        assert emb.name == "dinov2_single"
 
     def test_uses_correct_model_id(self):
         """DINOv2's HF repo is ungated — any builder can download it without
@@ -198,65 +204,106 @@ class TestImageDinov2Embedder:
         assert DINOV2_MODEL_ID == "facebook/dinov2-base"
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtsearch.media.image.embedder_dinov2 import ImageDinov2Embedder
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
-        emb = ImageDinov2Embedder()
+        emb = ImageDinov2SingleEmbedder()
         with patch.object(emb, "load_models"):
             result = emb.embed_media({"media_path": "/nonexistent.jpg"})
         assert result is None
 
+    def test_patch_forward_returns_none(self):
+        """Single-vector variant inherits the ABC default and returns None."""
+        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
-class TestImageDinov3Embedder:
+        emb = ImageDinov2SingleEmbedder()
+        assert emb.patch_forward({"media_path": "/nonexistent.jpg"}) is None
+
+
+class TestImageDinov2PatchEmbedder:
     def test_name(self):
-        from vtsearch.media.image.embedder_dinov3 import ImageDinov3Embedder
+        from vtsearch.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
 
-        assert ImageDinov3Embedder().name == "dinov3"
+        assert ImageDinov2PatchEmbedder().name == "dinov2_patch"
 
-    def test_media_type_id(self):
-        from vtsearch.media.image.embedder_dinov3 import ImageDinov3Embedder
+    def test_supports_patch_regions_true(self):
+        from vtsearch.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
 
-        assert ImageDinov3Embedder().media_type_id == "image"
-
-    def test_is_not_default(self):
-        from vtsearch.media.image.embedder_dinov3 import ImageDinov3Embedder
-
-        assert ImageDinov3Embedder().is_default is False
-
-    def test_supports_text_false(self):
-        """DINOv3 has no text encoder — supports_text must be False."""
-        from vtsearch.media.image.embedder_dinov3 import ImageDinov3Embedder
-
-        assert ImageDinov3Embedder().supports_text is False
+        assert ImageDinov2PatchEmbedder().supports_patch_regions is True
 
     def test_to_dict(self):
-        from vtsearch.media.image.embedder_dinov3 import ImageDinov3Embedder
+        from vtsearch.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
 
-        assert ImageDinov3Embedder().to_dict() == {
-            "name": "dinov3",
+        assert ImageDinov2PatchEmbedder().to_dict() == {
+            "name": "dinov2_patch",
             "media_type_id": "image",
             "supports_text": False,
             "supports_patch_regions": True,
             "license_notice": None,
         }
 
+    def test_registered_in_registry(self):
+        from vtsearch.media import get_embedder
+
+        emb = get_embedder("dinov2_patch")
+        assert emb.name == "dinov2_patch"
+
+
+class TestImageDinov3SingleEmbedder:
+    def test_name(self):
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+
+        assert ImageDinov3SingleEmbedder().name == "dinov3_single"
+
+    def test_media_type_id(self):
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+
+        assert ImageDinov3SingleEmbedder().media_type_id == "image"
+
+    def test_is_not_default(self):
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+
+        assert ImageDinov3SingleEmbedder().is_default is False
+
+    def test_supports_text_false(self):
+        """DINOv3 has no text encoder — supports_text must be False."""
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+
+        assert ImageDinov3SingleEmbedder().supports_text is False
+
+    def test_supports_patch_regions_false(self):
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+
+        assert ImageDinov3SingleEmbedder().supports_patch_regions is False
+
+    def test_to_dict(self):
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+
+        assert ImageDinov3SingleEmbedder().to_dict() == {
+            "name": "dinov3_single",
+            "media_type_id": "image",
+            "supports_text": False,
+            "supports_patch_regions": False,
+            "license_notice": None,
+        }
+
     def test_embed_text_returns_none(self):
         """Base-class ``embed_text`` default kicks in (DINOv3 doesn't override)."""
-        from vtsearch.media.image.embedder_dinov3 import ImageDinov3Embedder
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
-        emb = ImageDinov3Embedder()
+        emb = ImageDinov3SingleEmbedder()
         assert emb.embed_text("anything") is None
 
     def test_no_description_wrappers(self):
         """Without a text encoder, description-enrichment wrappers are meaningless."""
-        from vtsearch.media.image.embedder_dinov3 import ImageDinov3Embedder
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
-        assert ImageDinov3Embedder().description_wrappers == []
+        assert ImageDinov3SingleEmbedder().description_wrappers == []
 
     def test_registered_in_registry(self):
         from vtsearch.media import get_embedder
 
-        emb = get_embedder("dinov3")
-        assert emb.name == "dinov3"
+        emb = get_embedder("dinov3_single")
+        assert emb.name == "dinov3_single"
 
     def test_uses_correct_model_id(self):
         from vtsearch.config import DINOV3_MODEL_ID
@@ -264,71 +311,106 @@ class TestImageDinov3Embedder:
         assert DINOV3_MODEL_ID == "facebook/dinov3-vitb16-pretrain-lvd1689m"
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtsearch.media.image.embedder_dinov3 import ImageDinov3Embedder
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
-        emb = ImageDinov3Embedder()
+        emb = ImageDinov3SingleEmbedder()
         with patch.object(emb, "load_models"):
             result = emb.embed_media({"media_path": "/nonexistent.jpg"})
         assert result is None
 
+    def test_patch_forward_returns_none(self):
+        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
-class TestImageEupeEmbedder:
+        emb = ImageDinov3SingleEmbedder()
+        assert emb.patch_forward({"media_path": "/nonexistent.jpg"}) is None
+
+
+class TestImageDinov3PatchEmbedder:
     def test_name(self):
-        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
+        from vtsearch.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
 
-        assert ImageEupeEmbedder().name == "eupe"
-
-    def test_media_type_id(self):
-        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
-
-        assert ImageEupeEmbedder().media_type_id == "image"
-
-    def test_is_not_default(self):
-        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
-
-        assert ImageEupeEmbedder().is_default is False
-
-    def test_supports_text_false(self):
-        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
-
-        assert ImageEupeEmbedder().supports_text is False
+        assert ImageDinov3PatchEmbedder().name == "dinov3_patch"
 
     def test_supports_patch_regions_true(self):
-        """EUPE produces patch tokens; patch_regions is True."""
-        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
+        from vtsearch.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
 
-        assert ImageEupeEmbedder().supports_patch_regions is True
+        assert ImageDinov3PatchEmbedder().supports_patch_regions is True
+
+    def test_to_dict(self):
+        from vtsearch.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
+
+        assert ImageDinov3PatchEmbedder().to_dict() == {
+            "name": "dinov3_patch",
+            "media_type_id": "image",
+            "supports_text": False,
+            "supports_patch_regions": True,
+            "license_notice": None,
+        }
+
+    def test_registered_in_registry(self):
+        from vtsearch.media import get_embedder
+
+        emb = get_embedder("dinov3_patch")
+        assert emb.name == "dinov3_patch"
+
+
+class TestImageEupeSingleEmbedder:
+    def test_name(self):
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+
+        assert ImageEupeSingleEmbedder().name == "eupe_single"
+
+    def test_media_type_id(self):
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+
+        assert ImageEupeSingleEmbedder().media_type_id == "image"
+
+    def test_is_not_default(self):
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+
+        assert ImageEupeSingleEmbedder().is_default is False
+
+    def test_supports_text_false(self):
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+
+        assert ImageEupeSingleEmbedder().supports_text is False
+
+    def test_supports_patch_regions_false(self):
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+
+        assert ImageEupeSingleEmbedder().supports_patch_regions is False
 
     def test_license_notice_set(self):
-        """EUPE outputs are bound by FAIR Noncommercial — surface that."""
-        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
+        """EUPE outputs are bound by FAIR Noncommercial — surface that on
+        both variants."""
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
 
-        notice = ImageEupeEmbedder().license_notice
+        notice = ImageEupeSingleEmbedder().license_notice
         assert isinstance(notice, str)
         assert "Noncommercial" in notice or "noncommercial" in notice.lower()
 
     def test_to_dict(self):
-        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
 
-        d = ImageEupeEmbedder().to_dict()
-        assert d["name"] == "eupe"
+        d = ImageEupeSingleEmbedder().to_dict()
+        assert d["name"] == "eupe_single"
         assert d["media_type_id"] == "image"
         assert d["supports_text"] is False
-        assert d["supports_patch_regions"] is True
+        assert d["supports_patch_regions"] is False
         assert isinstance(d["license_notice"], str)
         assert "noncommercial" in d["license_notice"].lower()
 
     def test_embed_text_returns_none(self):
-        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
 
-        emb = ImageEupeEmbedder()
+        emb = ImageEupeSingleEmbedder()
         assert emb.embed_text("anything") is None
 
     def test_registered_in_registry(self):
         from vtsearch.media import get_embedder
 
-        emb = get_embedder("eupe")
-        assert emb.name == "eupe"
+        emb = get_embedder("eupe_single")
+        assert emb.name == "eupe_single"
 
     def test_uses_correct_model_id(self):
         """EUPE_MODEL_ID is the HF weight URL torch.hub fetches.
@@ -346,12 +428,52 @@ class TestImageEupeEmbedder:
         )
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtsearch.media.image.embedder_eupe import ImageEupeEmbedder
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
 
-        emb = ImageEupeEmbedder()
+        emb = ImageEupeSingleEmbedder()
         with patch.object(emb, "load_models"):
             result = emb.embed_media({"media_path": "/nonexistent.jpg"})
         assert result is None
+
+    def test_patch_forward_returns_none(self):
+        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+
+        emb = ImageEupeSingleEmbedder()
+        assert emb.patch_forward({"media_path": "/nonexistent.jpg"}) is None
+
+
+class TestImageEupePatchEmbedder:
+    def test_name(self):
+        from vtsearch.media.image.embedder_eupe_patch import ImageEupePatchEmbedder
+
+        assert ImageEupePatchEmbedder().name == "eupe_patch"
+
+    def test_supports_patch_regions_true(self):
+        from vtsearch.media.image.embedder_eupe_patch import ImageEupePatchEmbedder
+
+        assert ImageEupePatchEmbedder().supports_patch_regions is True
+
+    def test_license_notice_set(self):
+        from vtsearch.media.image.embedder_eupe_patch import ImageEupePatchEmbedder
+
+        notice = ImageEupePatchEmbedder().license_notice
+        assert isinstance(notice, str)
+        assert "noncommercial" in notice.lower()
+
+    def test_to_dict(self):
+        from vtsearch.media.image.embedder_eupe_patch import ImageEupePatchEmbedder
+
+        d = ImageEupePatchEmbedder().to_dict()
+        assert d["name"] == "eupe_patch"
+        assert d["supports_text"] is False
+        assert d["supports_patch_regions"] is True
+        assert isinstance(d["license_notice"], str)
+
+    def test_registered_in_registry(self):
+        from vtsearch.media import get_embedder
+
+        emb = get_embedder("eupe_patch")
+        assert emb.name == "eupe_patch"
 
 
 class TestApiEmbeddersResponseShape:
@@ -363,8 +485,19 @@ class TestApiEmbeddersResponseShape:
         assert resp.status_code == 200
         body = resp.get_json()
         entries = {e["name"]: e for e in body["embedders"]}
-        # All six image embedders must be present.
-        assert set(entries) == {"siglip", "siglip2", "clip", "dinov2", "dinov3", "eupe"}
+        # All nine image embedders must be present — three CLIP-family
+        # bimodal models plus single/patch pairs for DINOv2, DINOv3, EUPE.
+        assert set(entries) == {
+            "siglip",
+            "siglip2",
+            "clip",
+            "dinov2_single",
+            "dinov2_patch",
+            "dinov3_single",
+            "dinov3_patch",
+            "eupe_single",
+            "eupe_patch",
+        }
         # Shape: every entry has the three capability fields, with bool /
         # Optional[str] types.
         for entry in entries.values():
@@ -373,21 +506,44 @@ class TestApiEmbeddersResponseShape:
             assert entry["license_notice"] is None or isinstance(entry["license_notice"], str)
         # Specific expectations.
         assert entries["siglip"]["supports_text"] is True
-        assert entries["dinov2"]["supports_text"] is False
-        assert entries["dinov3"]["supports_text"] is False
-        assert entries["eupe"]["supports_text"] is False
-        # DINOv2, DINOv3 and EUPE all produce patch regions; the bimodal
-        # CLIP-style embedders don't.
-        for name in ("dinov2", "dinov3", "eupe"):
+        for name in (
+            "dinov2_single",
+            "dinov2_patch",
+            "dinov3_single",
+            "dinov3_patch",
+            "eupe_single",
+            "eupe_patch",
+        ):
+            assert entries[name]["supports_text"] is False
+        # Patch variants produce patch regions; single variants and the
+        # bimodal CLIP-style embedders don't.
+        for name in ("dinov2_patch", "dinov3_patch", "eupe_patch"):
             assert entries[name]["supports_patch_regions"] is True
-        for name in ("siglip", "siglip2", "clip"):
+        for name in (
+            "siglip",
+            "siglip2",
+            "clip",
+            "dinov2_single",
+            "dinov3_single",
+            "eupe_single",
+        ):
             assert entries[name]["supports_patch_regions"] is False
-        # Only EUPE carries a licence warning today (FAIR Noncommercial).
-        for name in ("siglip", "siglip2", "clip", "dinov2", "dinov3"):
+        # Only EUPE carries a licence warning today (FAIR Noncommercial) —
+        # on both variants.
+        for name in (
+            "siglip",
+            "siglip2",
+            "clip",
+            "dinov2_single",
+            "dinov2_patch",
+            "dinov3_single",
+            "dinov3_patch",
+        ):
             assert entries[name]["license_notice"] is None
-        eupe_notice = entries["eupe"]["license_notice"]
-        assert isinstance(eupe_notice, str)
-        assert "noncommercial" in eupe_notice.lower()
+        for name in ("eupe_single", "eupe_patch"):
+            notice = entries[name]["license_notice"]
+            assert isinstance(notice, str)
+            assert "noncommercial" in notice.lower()
 
 
 class TestSortRouteRejectsTextWhenUnsupported:
@@ -409,13 +565,13 @@ class TestSortRouteRejectsTextWhenUnsupported:
                 "type": "image",
                 "filename": "x.jpg",
                 "md5": "deadbeef",
-                "embedder": "dinov3",
+                "embedder": "dinov3_single",
             }
             resp = client.post("/api/sort", json={"text": "a cat"})
             assert resp.status_code == 400
             body = resp.get_json()
             assert body.get("supports_text") is False
-            assert "dinov3" in body["error"]
+            assert "dinov3_single" in body["error"]
         finally:
             medias.clear()
             medias.update(saved)

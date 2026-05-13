@@ -8,23 +8,36 @@
 #   * SigLIP   (google/siglip-base-patch16-224)         — default, text-capable
 #   * SigLIP 2 (google/siglip2-base-patch16-224)        — text-capable
 #   * CLIP     (openai/clip-vit-base-patch32)           — text-capable
-#   * DINOv2   (facebook/dinov2-base)                   — image-only, ungated
+#   * DINOv2   (facebook/dinov2-base)                     — image-only, ungated
 #   * DINOv3   (facebook/dinov3-vitb16-pretrain-lvd1689m) — image-only, gated
-#   * EUPE     (facebook/PE-Core-B16-224)               — image-only, gated
+#   * EUPE     (facebookresearch/EUPE, ViT-B/16)          — image-only, ungated
+#                                                          (FAIR Noncommercial
+#                                                          Research Licence on
+#                                                          *outputs*, not on
+#                                                          download access)
 #
-# The first four are ungated on Hugging Face and download during the build
-# with no credentials. DINOv3 and EUPE are gated under Meta's research
-# licence; rather than passing an HF token through ``docker build``, we
-# expect the user to run ``scripts/cache_gated_models.sh`` **once** on the
-# host (with their HF credentials), which populates ``./model_cache/``.
-# This Dockerfile then COPYs that local cache into the image — no token
-# ever touches the build, the codebase, or any image layer.
+# SigLIP / SigLIP 2 / CLIP / DINOv2 are ungated on Hugging Face and
+# download during the build with no credentials.
+#
+# DINOv3 is gated under Meta's research licence: rather than passing an
+# HF token through ``docker build``, we expect the user to run
+# ``scripts/cache_gated_models.sh`` **once** on the host (with their HF
+# credentials), which populates ``./model_cache/``. This Dockerfile then
+# COPYs that local cache into the image — no token ever touches the
+# build, the codebase, or any image layer.
+#
+# EUPE no longer needs an HF token (its weights mirror at
+# ``facebook/EUPE-ViT-B`` is ungated), but it loads via ``torch.hub``
+# from ``facebookresearch/EUPE``, which clones a GitHub repo and
+# downloads a ~400 MB ``.pt`` file. The cache script handles both for
+# you so the build can run fully offline; if ``model_cache/`` is empty
+# the build still attempts the download itself.
 #
 # If ``./model_cache/`` is empty (the cache script wasn't run), the build
-# still succeeds; DINOv3 and EUPE simply remain unavailable until the
-# user runs the cache script and rebuilds, or sets an HF_TOKEN at
-# container runtime to download them lazily into the persistent
-# /app/data volume on first use.
+# still succeeds; DINOv3 simply remains unavailable until the user runs
+# the cache script and rebuilds, or sets an HF_TOKEN at container
+# runtime to download it lazily into the persistent /app/data volume
+# on first use.
 #
 # SigLIP stays the default — it's marked is_default=True on the embedder
 # class and is the only entry in `autoload_media_embedders` seeded into
@@ -36,9 +49,12 @@
 # them (see MediaEmbedder.supports_text).
 #
 # Build:
-#   # 1. ONE-TIME setup for the gated weights (skip if you only want
-#   #    SigLIP / SigLIP 2 / CLIP / DINOv2):
+#   # 1. ONE-TIME setup to bake DINOv3 + EUPE into the image (skip if you
+#   #    only want SigLIP / SigLIP 2 / CLIP / DINOv2). HF_TOKEN is needed
+#   #    only for DINOv3; pass SKIP_DINOV3=1 to cache only EUPE:
 #   HF_TOKEN=hf_xxx ./scripts/cache_gated_models.sh
+#   #   …or, EUPE only (no token needed):
+#   SKIP_DINOV3=1 ./scripts/cache_gated_models.sh
 #
 #   # 2. Build the image — no token, no secrets:
 #   docker build -f Dockerfile.image-embedders -t vtsearch:image-embedders .
@@ -146,18 +162,25 @@ except Exception as exc: \
     print(f'DINOv3 not in local cache ({exc.__class__.__name__}); skipping. ' \
           'Run scripts/cache_gated_models.sh on the host to enable DINOv3.', flush=True)"
 
-# EUPE (gated; Meta Perception Encoder). Same fallback as DINOv3.
+# EUPE (facebookresearch/EUPE, ViT-B/16). Loads via torch.hub: a cloned
+# GitHub repo plus a downloaded .pt weights file, both under
+# $TORCH_HOME/hub/. We point TORCH_HOME at the same dir the COPY above
+# seeded from ./model_cache/ so a host-cache run skips both the clone
+# and the weights download. If neither is present we still attempt the
+# fetch (EUPE's HF mirror is ungated — no token required) and fall back
+# to skipping EUPE if the build host has no network access.
+ENV TORCH_HOME=${VTSEARCH_MODELS_DIR}
 RUN python -u -c "import os; \
 from vtsearch.config import EUPE_MODEL_ID; \
-cache=os.environ['VTSEARCH_MODELS_DIR']; \
 try: \
-    from transformers import AutoModel, AutoImageProcessor; \
-    AutoModel.from_pretrained(EUPE_MODEL_ID, cache_dir=cache, local_files_only=True, trust_remote_code=True); \
-    AutoImageProcessor.from_pretrained(EUPE_MODEL_ID, cache_dir=cache, local_files_only=True, trust_remote_code=True); \
-    print('EUPE weights loaded from local cache.', flush=True); \
+    import torch; \
+    torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16', source='github', \
+                   pretrained=True, weights=EUPE_MODEL_ID, trust_repo=True); \
+    print('EUPE weights cached via torch.hub.', flush=True); \
 except Exception as exc: \
-    print(f'EUPE not in local cache ({exc.__class__.__name__}); skipping. ' \
-          'Run scripts/cache_gated_models.sh on the host to enable EUPE.', flush=True)"
+    print(f'EUPE not cached ({exc.__class__.__name__}: {exc}); skipping. ' \
+          'Run scripts/cache_gated_models.sh on the host to enable EUPE ' \
+          'in offline builds.', flush=True)"
 
 # ---------- application layer ----------
 COPY . .
@@ -177,6 +200,17 @@ RUN mkdir -p /app/data && \
 # Mount a volume here to persist user data across container restarts.
 # Note: model weights live under /opt/vtsearch/models, NOT this volume.
 VOLUME /app/data
+
+# Run as a non-root user. See the CPU Dockerfile for the rationale and
+# the GID-0 / g=u perm pattern that lets arbitrary OpenShift UIDs write.
+# /opt/vtsearch/models is also opened up so the baked-in HuggingFace
+# snapshots stay readable when the runtime UID is unknown at build time.
+RUN useradd --uid 1000 --gid 0 --create-home --home-dir /home/vtsearch vtsearch && \
+    chgrp -R 0 /app /home/vtsearch /opt/vtsearch && \
+    chmod -R g=u /app /home/vtsearch /opt/vtsearch
+
+ENV HOME=/home/vtsearch
+USER 1000
 
 EXPOSE 5000
 

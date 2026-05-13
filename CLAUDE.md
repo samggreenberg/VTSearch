@@ -147,6 +147,7 @@ If a failure is genuinely outside the scope of the current task (e.g. a flaky ne
   - `test_combine_datasets.py` — Combine-datasets importer: metadata, dedup, media type validation, CLI, API routes
   - `test_synthetic_importer.py` — SyntheticDatasetImporter: discovery, metadata (factory icon), field validation, audio/image/video generators, deterministic seeding, idempotent caching, origin round-trip, resolve_file
   - `test_server_files_importer.py` — ServerFilesDatasetImporter: paths-file parsing, symlink staging, origin rewrite to original absolute paths, resolve_file
+  - `test_npz_dataset_import.py` — `.npz` paths-file support: NPZ reader helper (`filenames`+`vectors` and per-key layouts), server_files end-to-end with NPZ vectors, local-folder upload endpoint's optional `vectors_file` multipart field
   - `test_corrections_export.py` — Corrections tracking: _find_initial_labels state, is_correction annotation on label export, label_filter=corrections filtering
   - `test_creation_info.py` — Legacy creation_info handling in pickle datasets
   - `test_parallel_loading.py` — Parallel dataset loading: LoadingTasksTracker, thread-local progress, per-task cancel, loading-tasks API endpoints, build_diversity_tree_for_context
@@ -177,7 +178,7 @@ If a failure is genuinely outside the scope of the current task (e.g. a flaky ne
   - `test_export_options.py` — Export boolean options, negative_hits in CLI scoring, fill-from-sort
   - `test_frontend.py` — Frontend serving: Angular SPA entry point, static files (main.js, polyfills.js, styles.css), favicon variants, logo, legacy /ng/ redirect, content types
   - `test_gtzan_download.py` — GTZAN dataset download and load_demo_source integration
-  - `test_image_sources_download.py` — Image dataset downloads: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, and load_demo_source integration
+  - `test_image_sources_download.py` — Image dataset downloads: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, Places365, and load_demo_source integration
   - `test_video_datasets_download.py` — Video dataset downloads (UCF-101 subset) and load_demo_source integration
   - `test_multi_media_coverage.py` — Cross-media-type smoke (text sort, learned sort, vote, label export/import) for each registered media type
   - `test_imdb_download.py` — IMDB dataset download and load_demo_source integration

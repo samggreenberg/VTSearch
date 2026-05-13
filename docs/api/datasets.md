@@ -39,6 +39,53 @@ GET /api/embedders
 
 → `{"embedders": [{"name": "siglip", "display_name": "SigLIP", "media_type_id": "image", ...}]}`
 
+### Embed on demand
+
+```
+POST /api/embed
+```
+
+Embed a single media file or text snippet with a chosen embedder, without
+loading a dataset.  Two input modes share the endpoint — the embedder
+declares its own `media_type_id`, so the caller does not pass a media
+type separately.
+
+**Media upload (`multipart/form-data`)** — form fields:
+
+| Field | Description |
+|-------|-------------|
+| `embedder` | Required. Embedder name from `GET /api/embedders`. |
+| `file` | Required. Binary upload. The extension is checked against the embedder's `media_type_id` before any model load. |
+
+**Text (`application/json`)** — body:
+
+```json
+{"embedder": "e5", "text": "a cat on a mat"}
+```
+
+Calls `embed_text(...)` — only embedders whose `supports_text` is `true`
+accept this mode (image/audio cross-modal embedders like CLIP, SigLIP, CLAP
+support it; vision-only embedders like DINOv3 do not).
+
+→
+```json
+{
+  "embedding": [0.123, -0.045, ...],
+  "dim": 512,
+  "norm": 1.0,
+  "embedder": "clip",
+  "media_type": "image"
+}
+```
+
+**Errors:**
+
+| Status | Cause |
+|--------|-------|
+| `400` | Missing `embedder`; missing `file` (multipart) or `text` (JSON); text sent to an embedder where `supports_text == false`; file extension does not match the embedder's media type; embedder returned no vector for the upload. |
+| `404` | Unknown embedder name. Response body lists every registered embedder's `name`. |
+| `500` | Model load failure, or text embedding returned `None`. |
+
 ### Clippers
 
 ```

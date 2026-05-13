@@ -99,6 +99,10 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Whether the user has manually edited :prop:`lfDatasetName` (so we stop
    *  auto-overwriting it from the picked folder name). */
   private lfDatasetNameDirty = false;
+  /** Optional .npz file of pre-computed embedding vectors (Local Files only).
+   *  When set, the upload endpoint reuses these vectors instead of running
+   *  the embedding model for matching uploaded files. */
+  lfVectorsFile: File | null = null;
 
   // Server folder browser state
   sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
@@ -725,6 +729,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.selectedImporter = resolved;
     this.lfPickerKind = resolved?.name === 'local_files' ? 'files' : 'folder';
     this.lfFiles = [];
+    this.lfVectorsFile = null;
     this.lfError = '';
     this.lfSubmitting = false;
     this.lfRecursive = this.readRecursiveDefault(resolved);
@@ -758,6 +763,16 @@ export class DatasetImporterModalComponent implements OnInit {
     if (!this.lfDatasetNameDirty) {
       this.lfDatasetName = this.lfDerivedDatasetName();
     }
+  }
+
+  lfOnVectorsFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.lfVectorsFile = input.files && input.files.length > 0 ? input.files[0] : null;
+    this.lfError = '';
+  }
+
+  lfClearVectorsFile(): void {
+    this.lfVectorsFile = null;
   }
 
   /** Derive a default dataset name from the currently picked files / folder.
@@ -886,6 +901,9 @@ export class DatasetImporterModalComponent implements OnInit {
       // Browsers only populate webkitRelativePath when the input has the
       // `webkitdirectory` attribute; fall back to the file's own name.
       formData.append('files', file, rel && rel.length > 0 ? rel : file.name);
+    }
+    if (this.lfPickerKind === 'files' && this.lfVectorsFile) {
+      formData.append('vectors_file', this.lfVectorsFile, this.lfVectorsFile.name);
     }
 
     this.datasetsApi.importLocalFolder(formData).subscribe({

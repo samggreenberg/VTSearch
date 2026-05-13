@@ -66,6 +66,12 @@ Click the hamburger menu (☰) in the top-left. You get two choices:
   existing datasets. Each importer asks for the fields it needs
   (path, URL, media type) in a small form.
 
+  Two of the file-list importers — **Server Files** and **Local
+  Files** — also accept a `.npz` archive of pre-computed embedding
+  vectors so you can import media you have already embedded offline
+  without paying for embedding twice. See
+  [Pre-computed embeddings (.npz)](#pre-computed-embeddings-npz) below.
+
 Loading a dataset does three things: downloads or reads the media,
 generates an embedding for every item using the appropriate model
 (CLAP for audio, SigLIP for images, X-CLIP for video, E5 for text),
@@ -75,6 +81,41 @@ diverse sampling. Progress is shown in a modal while it runs.
 If the model for your media type isn't cached yet, the first dataset
 of that type triggers a one-time download (e.g. CLAP is ~1.1 GB).
 Subsequent datasets of the same type reuse the cached model.
+
+### Pre-computed embeddings (.npz)
+
+If you have already embedded your media offline — for example with
+your own script using the same model VTSearch uses — you can skip the
+server-side re-embedding step by handing VTSearch a NumPy `.npz`
+archive of pre-computed vectors. Two importers accept this:
+
+- **Server Files** — instead of a `.txt`/`.list` paths file, point
+  the *Paths File* field at a `.npz`. The archive holds both the
+  media-file paths AND their vectors; VTSearch reads the paths from
+  disk and reuses the supplied vectors.
+- **Local Files** — alongside the media files you upload, attach a
+  `.npz` to the optional *Pre-computed embeddings* file picker. Files
+  whose name matches an NPZ key reuse the supplied vector; files
+  without a matching entry are embedded normally on the server.
+
+VTSearch accepts two NPZ layouts:
+
+1. **`filenames` + `vectors` arrays** — produced by
+   `np.savez(path, filenames=names, vectors=vecs)` where `names` is
+   a 1-D string array of length *N* and `vecs` is a 2-D float array
+   of shape *(N, D)*. The i-th name maps to the i-th row of `vecs`.
+2. **Per-key** — produced by
+   `np.savez(path, **{name: vec for name, vec in zip(names, vecs)})`.
+   Each archive key is a filename; the corresponding value is its
+   vector.
+
+The vector dimension and the embedding model must match what
+VTSearch would have used (e.g. 512-d CLAP for audio, 768-d SigLIP for
+images). Embedding-model selection is **not** persisted inside the
+NPZ — the importer's *Embedder* setting still controls which model
+is used for any file that doesn't have a pre-computed vector, and
+also acts as the model identifier recorded on each media. Pick an
+embedder that matches the vectors in your NPZ.
 
 ---
 
@@ -87,7 +128,10 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
   sort). This is where you pick what to look at next.
 - **Centre panel** — the **media viewer**. The selected item plays
   (audio), displays (image, video, text, document page), and offers
-  two big vote buttons: **Good** (green) and **Bad** (red).
+  two big vote buttons: **Good** (green) and **Bad** (red).  On
+  image datasets that use a patch-region embedder
+  (DINOv2/DINOv3/EUPE `_patch`), the centre panel also supports
+  **region voting** — see "Region voting on images" below.
 - **Right panel** — your **vote piles**. Everything you've voted good
   or bad is stacked here, most-recent first, so you can scan your
   work, un-vote, or re-vote.
@@ -232,6 +276,67 @@ modal. All preferences are remembered per media type.
 
 There's a separate view modal for the right panel (vote piles),
 with the same controls.
+
+---
+
+## Region voting on images
+
+When the dataset's embedder is patch-region-aware (DINOv2, DINOv3,
+or EUPE with a `_patch` slug — set when the dataset was created),
+you can vote **good** on a *region* of the image instead of the
+whole image.  This tells the model "this specific part is what I
+like", and the learned sort uses that hint to find similar regions
+elsewhere in the dataset.
+
+The binary vote experience is **unchanged**: `→` is good, `←` is
+bad.  Region voting is opt-in via a modifier key and never gets in
+the way of fast keyboard voting.
+
+### Drawing a region
+
+1. **Hold `Shift`** while the focus pane is showing an image.  The
+   cursor flips to a crosshair and the normal pan-on-drag gesture
+   is suppressed.
+2. **Click-drag-release** to draw a rectangle over the region you
+   want to vote good on.  After release the rectangle shows 8
+   resize handles plus a draggable body, so you can adjust it.
+3. **Press `→`** (or click **Good**) to submit a good vote with
+   the region attached.
+
+The rectangle is stored in *normalised image coordinates* — it
+stays anchored to the same pixels of the image even if you zoom in,
+pan, or rotate before voting.  A `Shift`-click without dragging (a
+zero-area "click") restores the previously drawn rectangle rather
+than discarding it.  `Esc` clears the rectangle without voting.
+
+### Voting bad while a region is drawn
+
+A `←` press while a region is drawn would normally throw the
+rectangle away — and drawing a rectangle is real work, so VTSearch
+**asks for confirmation**:
+
+- The rectangle pulses red and a hint banner reads
+  *"Press ← again to vote no and discard the box, or Esc to keep
+  the box."*
+- A second `←` confirms — the no-vote fires and the rectangle is
+  discarded.
+- `Esc`, clicking on the rectangle, drawing a new one, or
+  navigating to the next item all cancel the confirmation and keep
+  the rectangle.
+
+There is **no timer** — the confirmation state waits as long as you
+need.
+
+### What region voting does to the model
+
+Region-voted good examples train the model on the *region* (pooled
+from the patch grid) instead of the full image.  Bad votes are
+unaffected — VTSearch already treats every bad vote as "no region
+in this image is good" regardless of whether you drew a rectangle.
+
+Region voting is image-only.  Audio, text, video, and document
+media types have no region affordance.
+
 
 ---
 

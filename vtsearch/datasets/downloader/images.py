@@ -1,4 +1,4 @@
-"""Image dataset downloaders: CIFAR-10, Caltech-101/256, Oxford Flowers, Food-101, EuroSAT, Stanford Dogs."""
+"""Image dataset downloaders: CIFAR-10, Caltech-101/256, Oxford Flowers, Food-101, EuroSAT, Stanford Dogs, Places365."""
 
 import os
 import shutil
@@ -334,3 +334,55 @@ def download_stanford_dogs(on_progress: Optional[ProgressCallback] = None) -> Pa
         on_progress=on_progress,
     )
     return images_dir
+
+
+def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the Places365 validation set.
+
+    Downloads ``val_256.tar`` (the 256x256 validation split, ~501 MB) from the
+    MIT CSAIL Places2 server into ``DATA_DIR`` if it is not already present,
+    then extracts it.  The archive is deleted after extraction to reclaim
+    disk space.  The per-image label file ``places365_val.txt`` is also
+    fetched from the CSAILVision GitHub repository so that downstream code
+    can map each image filename to a scene category index.
+
+    The validation set contains 36 500 images across 365 scene categories
+    (100 images per category).  Images are stored in a single flat
+    ``val_256/`` directory with names like ``Places365_val_00000001.jpg``.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``places365/`` directory containing ``val_256/`` (the
+        flat image folder) and ``places365_val.txt`` (the label mapping
+        file).
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+
+    extract_dir = _core.DATA_DIR / "places365"
+    _core._download_and_extract(
+        url=_core.PLACES365_URL,
+        archive_name="val_256.tar",
+        extract_to=extract_dir,
+        check_path=extract_dir / "val_256",
+        download_size_mb=_core.PLACES365_DOWNLOAD_SIZE_MB,
+        dataset_name="Places365",
+        on_progress=on_progress,
+    )
+
+    # Download the per-image label file if not present.  It is a small
+    # text file (~1 MB) listing one "<filename> <category_index>" pair per
+    # validation image.
+    labels_path = extract_dir / "places365_val.txt"
+    if not labels_path.exists():
+        _core.DATA_DIR.mkdir(exist_ok=True)
+        extract_dir.mkdir(exist_ok=True, parents=True)
+        on_progress("downloading", "Downloading Places365 labels...", 0, 0)
+        _core.download_file_with_progress(_core.PLACES365_LABELS_URL, labels_path, 1024 * 1024, on_progress)
+
+    return extract_dir

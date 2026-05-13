@@ -6,6 +6,7 @@ from vtsearch.routes.detector_find import detector_find_bp
 from vtsearch.routes.detector_scoring import detector_scoring_bp
 from vtsearch.routes.detectors import detectors_bp
 from vtsearch.routes.detectors_registry import detectors_registry_bp
+from vtsearch.routes.embed import embed_bp
 from vtsearch.routes.eval import eval_bp
 from vtsearch.routes.file_browser import file_browser_bp
 from vtsearch.routes.labels import labels_bp
@@ -29,6 +30,7 @@ __all__ = [
     "detector_scoring_bp",
     "detectors_bp",
     "detectors_registry_bp",
+    "embed_bp",
     "eval_bp",
     "file_browser_bp",
     "labels_bp",

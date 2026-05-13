@@ -14,6 +14,7 @@ from vtsearch.utils.state_core import (
     last_learned_scores,
     textsort_suggestions,
     vote_click_times,
+    vote_region_boxes,
 )
 from vtsearch.utils.state_core import (
     _get_click_counter,
@@ -41,6 +42,7 @@ def clear_votes() -> None:
         label_history.clear()
         textsort_suggestions.clear()
         vote_click_times.clear()
+        vote_region_boxes.clear()
         _set_click_counter(0)
         last_learned_scores.clear()
         ctx = get_active_detector_context()
@@ -120,7 +122,11 @@ def get_find_initial_labels() -> dict[int, str]:
 # ---------------------------------------------------------------------------
 
 
-def toggle_vote(media_id: int, vote: str) -> None:
+def toggle_vote(
+    media_id: int,
+    vote: str,
+    region_box: tuple[float, float, float, float] | None = None,
+) -> None:
     """Atomically toggle a good/bad vote for a media item.
 
     Implements the same toggle semantics as the ``/api/medias/<id>/vote``
@@ -139,6 +145,13 @@ def toggle_vote(media_id: int, vote: str) -> None:
     Args:
         media_id: Integer ID of the media to vote on.
         vote: ``"good"`` or ``"bad"``.
+        region_box: Optional normalised ``(x0, y0, x1, y1)`` box that the
+            user drew as part of a yes-vote.  Only honoured when *vote* is
+            ``"good"`` and the vote is being *added* (not toggled off);
+            stored in :attr:`DetectorContext.vote_region_boxes` so label
+            export / detector sync emit it on the resulting LabeledElement.
+            Ignored for no-votes (which are always image-level — see the
+            patch-embedder v2 design).  Patch-embedder v2.
     """
     from vtsearch.models.progress import invalidate_progress_cache_from
 
@@ -147,6 +160,7 @@ def toggle_vote(media_id: int, vote: str) -> None:
         if vote == "good":
             if media_id in good_votes:
                 good_votes.pop(media_id, None)
+                vote_region_boxes.pop(media_id, None)
                 remove_click_time(media_id)
                 add_label_to_history(media_id, "unlabel")
                 if media_id not in bad_votes:
@@ -155,6 +169,10 @@ def toggle_vote(media_id: int, vote: str) -> None:
                 was_opposite = media_id in bad_votes
                 bad_votes.pop(media_id, None)
                 good_votes[media_id] = None
+                if region_box is not None:
+                    vote_region_boxes[media_id] = region_box
+                else:
+                    vote_region_boxes.pop(media_id, None)
                 assign_click_time(media_id)
                 add_label_to_history(media_id, "good")
                 diversity_tree_label(media_id)
@@ -171,6 +189,7 @@ def toggle_vote(media_id: int, vote: str) -> None:
             else:
                 was_opposite = media_id in good_votes
                 good_votes.pop(media_id, None)
+                vote_region_boxes.pop(media_id, None)
                 bad_votes[media_id] = None
                 assign_click_time(media_id)
                 add_label_to_history(media_id, "bad")
@@ -186,7 +205,13 @@ def toggle_vote(media_id: int, vote: str) -> None:
         record_vote(detector_id)
 
 
-def apply_label(media_id: int, label: str, *, silent: bool = False) -> None:
+def apply_label(
+    media_id: int,
+    label: str,
+    *,
+    silent: bool = False,
+    region_box: tuple[float, float, float, float] | None = None,
+) -> None:
     """Atomically apply a label to a media (for imports).
 
     Unlike :func:`toggle_vote`, this always sets the label without toggling.
@@ -203,15 +228,23 @@ def apply_label(media_id: int, label: str, *, silent: bool = False) -> None:
         media_id: Integer ID of the media to label.
         label: ``"good"`` or ``"bad"``.
         silent: If True, skip history append and diversity-tree marking.
+        region_box: Optional normalised ``(x0, y0, x1, y1)`` box from an
+            imported labelset entry.  Only stored when *label* is ``"good"``
+            (no-votes are always image-level).  Patch-embedder v2.
     """
     with _state_lock:
         if label == "good":
             bad_votes.pop(media_id, None)
             good_votes[media_id] = None
+            if region_box is not None:
+                vote_region_boxes[media_id] = region_box
+            else:
+                vote_region_boxes.pop(media_id, None)
             if not silent:
                 add_label_to_history(media_id, "good")
         else:
             good_votes.pop(media_id, None)
+            vote_region_boxes.pop(media_id, None)
             bad_votes[media_id] = None
             if not silent:
                 add_label_to_history(media_id, "bad")
@@ -233,9 +266,11 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
         if label == "good":
             bad_votes.pop(media_id, None)
             good_votes[media_id] = None
+            vote_region_boxes.pop(media_id, None)
             add_label_to_history(media_id, "good")
         else:
             good_votes.pop(media_id, None)
+            vote_region_boxes.pop(media_id, None)
             bad_votes[media_id] = None
             add_label_to_history(media_id, "bad")
         assign_click_time(media_id)
@@ -268,14 +303,18 @@ def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all
                 bad_votes.pop(cid, None)
             for cid in [c for c in vote_click_times if c not in kept]:
                 vote_click_times.pop(cid, None)
+            for cid in [c for c in vote_region_boxes if c not in kept]:
+                vote_region_boxes.pop(cid, None)
             ctx.find_initial_labels.clear()
         for media_id, label in labels:
             if label == "good":
                 bad_votes.pop(media_id, None)
                 good_votes[media_id] = None
+                vote_region_boxes.pop(media_id, None)
                 label_history.append((media_id, "good", _time.time()))
             else:
                 good_votes.pop(media_id, None)
+                vote_region_boxes.pop(media_id, None)
                 bad_votes[media_id] = None
                 label_history.append((media_id, "bad", _time.time()))
             new_val = _get_click_counter() + 1

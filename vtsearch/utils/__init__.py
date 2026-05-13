@@ -93,6 +93,7 @@ from vtsearch.utils.state import (
     toggle_vote,
     update_learned_scores,
     vote_click_times,
+    vote_region_boxes,
 )
 
 __all__ = [
@@ -115,6 +116,7 @@ __all__ = [
     "autorun_extractors",
     "autorun_localizers",
     "vote_click_times",
+    "vote_region_boxes",
     "last_learned_scores",
     "clear_votes",
     "clear_medias",

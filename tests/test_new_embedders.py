@@ -439,8 +439,9 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import all_embedders
 
         embedders = all_embedders()
-        # 7 original + 5 new image embedders (clip, siglip2, dinov2, dinov3, eupe).
-        assert len(embedders) == 12
+        # 7 original + 8 image embedders (clip, siglip2, plus single/patch
+        # variants for dinov2, dinov3, eupe).
+        assert len(embedders) == 15
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -453,7 +454,14 @@ class TestAllEmbeddersRegistration:
         for name in ("siglip", "siglip2", "clip", "clap", "xclip"):
             assert by_name[name]["supports_text"] is True, name
         # Vision-only / patch-based embedders do not.
-        for name in ("dinov2", "dinov3", "eupe"):
+        for name in (
+            "dinov2_single",
+            "dinov2_patch",
+            "dinov3_single",
+            "dinov3_patch",
+            "eupe_single",
+            "eupe_patch",
+        ):
             assert by_name[name]["supports_text"] is False, name
 
     def test_all_expected_names_present(self):
@@ -466,9 +474,12 @@ class TestAllEmbeddersRegistration:
             "siglip",
             "siglip2",
             "clip",
-            "dinov2",
-            "dinov3",
-            "eupe",
+            "dinov2_single",
+            "dinov2_patch",
+            "dinov3_single",
+            "dinov3_patch",
+            "eupe_single",
+            "eupe_patch",
             "e5",
             "bge",
             "xclip",
@@ -486,7 +497,17 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("image")}
-        assert names == {"siglip", "siglip2", "clip", "dinov2", "dinov3", "eupe"}
+        assert names == {
+            "siglip",
+            "siglip2",
+            "clip",
+            "dinov2_single",
+            "dinov2_patch",
+            "dinov3_single",
+            "dinov3_patch",
+            "eupe_single",
+            "eupe_patch",
+        }
 
     def test_siglip_is_still_default_image_embedder(self):
         """SigLIP must remain the first (default) image embedder so callers
@@ -514,8 +535,9 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import all_embedders_dict
 
         dicts = all_embedders_dict()
-        # 7 original + 5 new image embedders.
-        assert len(dicts) == 12
+        # 7 original + 8 image embedders (clip, siglip2, plus single/patch
+        # variants for dinov2, dinov3, eupe).
+        assert len(dicts) == 15
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d

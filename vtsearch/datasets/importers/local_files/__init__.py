@@ -12,6 +12,13 @@ webkitdirectory>`` (a single directory pick), while Local Files uses
 ``<input type="file" multiple>`` (one or more individual file picks).
 Both flows deliver the same multipart shape to the same upload
 endpoint.
+
+The Local Files card additionally accepts an optional ``vectors_file``
+form input — a ``.npz`` archive containing pre-computed embedding
+vectors keyed by uploaded-file name.  Files whose name matches an NPZ
+key reuse the supplied vector and skip the embedding model, which lets
+users import media they have already embedded offline without
+re-embedding it on the server.
 """
 
 from __future__ import annotations
@@ -34,7 +41,11 @@ class LocalFilesDatasetImporter(DatasetImporter):
 
     name = "local_files"
     display_name = "Files"
-    description = "Upload one or more individual media files from this computer (your browser machine) to the server"
+    description = (
+        "Upload one or more individual media files from this computer (your browser machine) "
+        "to the server.  Optionally include a .npz archive of pre-computed embedding vectors "
+        "to skip re-embedding for media you have already embedded offline."
+    )
     icon = "\U0001f4c4"  # 📄 — falls back to a generic file icon
     ui_mode = "custom"
     picker_view = "local_files"

@@ -1,6 +1,6 @@
 """Tests for new image dataset downloads and load_demo_source integration.
 
-Covers: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs.
+Covers: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, Places365.
 """
 
 import tarfile
@@ -69,6 +69,21 @@ def _make_eurosat_zip(tmp_path: Path) -> Path:
                 zf.writestr(f"EuroSAT_RGB/{cat}/{cat}_{i:05d}.jpg", b"\xff\xd8\xff\xe0" + b"\x00" * 20)
 
     return zip_path
+
+
+def _make_places365_tar(tmp_path: Path) -> Path:
+    """Create a minimal Places365 val_256 tar fixture."""
+    tar_path = tmp_path / "val_256.tar"
+
+    tree_root = tmp_path / "tar_staging" / "val_256"
+    tree_root.mkdir(parents=True)
+    for i in range(1, 5):
+        (tree_root / f"Places365_val_{i:08d}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+    with tarfile.open(tar_path, "w") as tf:
+        tf.add(tree_root, arcname="val_256")
+
+    return tar_path
 
 
 def _make_stanford_dogs_tar(tmp_path: Path) -> Path:
@@ -606,3 +621,245 @@ class TestLoadDemoSourceStanfordDogs:
                 clips={},
                 on_progress=lambda *a: None,
             )
+
+
+# ---------------------------------------------------------------------------
+# download_places365
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadPlaces365:
+    def test_returns_extract_directory(self, tmp_path):
+        """download_places365 returns the places365/ directory with val_256/ and labels."""
+        from vtsearch.datasets import downloader as dl_module
+
+        tar_path = _make_places365_tar(tmp_path)
+        labels_bytes = b"Places365_val_00000001.jpg 0\nPlaces365_val_00000002.jpg 1\n"
+
+        def fake_download(url, dest, size, cb):
+            if url.endswith("places365_val.txt"):
+                dest.write_bytes(labels_bytes)
+            else:
+                import shutil
+
+                shutil.copy(str(tar_path), str(dest))
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+        ):
+            result = dl_module.download_places365(on_progress=lambda *a: None)
+
+        assert result.name == "places365"
+        assert (result / "val_256").is_dir()
+        assert (result / "places365_val.txt").read_bytes() == labels_bytes
+        assert any(p.name.startswith("Places365_val_") for p in (result / "val_256").iterdir())
+
+    def test_cached_extraction_skips_download(self, tmp_path):
+        """If val_256/ and the labels file already exist, no download is triggered."""
+        from vtsearch.datasets import downloader as dl_module
+
+        extract_dir = tmp_path / "places365"
+        val_dir = extract_dir / "val_256"
+        val_dir.mkdir(parents=True)
+        (val_dir / "Places365_val_00000001.jpg").write_bytes(b"\xff\xd8")
+        (extract_dir / "places365_val.txt").write_text("Places365_val_00000001.jpg 0\n")
+
+        download_called = []
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda *a, **kw: download_called.append(True),
+            ),
+        ):
+            result = dl_module.download_places365(on_progress=lambda *a: None)
+
+        assert not download_called
+        assert result.exists()
+
+
+# ---------------------------------------------------------------------------
+# load_places365_metadata
+# ---------------------------------------------------------------------------
+
+
+class TestLoadPlaces365Metadata:
+    def test_maps_indices_to_categories(self, tmp_path):
+        """Reads places365_val.txt and maps numeric indices to category names."""
+        from vtsearch.datasets.loader import load_places365_metadata
+
+        val_dir = tmp_path / "val_256"
+        val_dir.mkdir()
+        for i in range(1, 4):
+            (val_dir / f"Places365_val_{i:08d}.jpg").write_bytes(b"\xff\xd8")
+
+        labels_text = "Places365_val_00000001.jpg 0\nPlaces365_val_00000002.jpg 2\nPlaces365_val_00000003.jpg 1\n"
+        (tmp_path / "places365_val.txt").write_text(labels_text)
+
+        categories = ["airfield", "alley", "amphitheater"]
+        metadata = load_places365_metadata(tmp_path, categories)
+
+        assert len(metadata) == 3
+        assert metadata["Places365_val_00000001.jpg"]["category"] == "airfield"
+        assert metadata["Places365_val_00000002.jpg"]["category"] == "amphitheater"
+        assert metadata["Places365_val_00000003.jpg"]["category"] == "alley"
+        assert metadata["Places365_val_00000001.jpg"]["path"] == val_dir / "Places365_val_00000001.jpg"
+
+    def test_out_of_range_indices_are_skipped(self, tmp_path):
+        """Label indices outside the categories list are silently ignored."""
+        from vtsearch.datasets.loader import load_places365_metadata
+
+        (tmp_path / "val_256").mkdir()
+        (tmp_path / "places365_val.txt").write_text(
+            "Places365_val_00000001.jpg 0\n"
+            "Places365_val_00000002.jpg 99\n"  # out of range
+            "Places365_val_00000003.jpg -1\n"  # out of range
+            "Places365_val_00000004.jpg bogus\n"  # unparseable
+        )
+
+        metadata = load_places365_metadata(tmp_path, ["airfield"])
+
+        assert list(metadata) == ["Places365_val_00000001.jpg"]
+
+
+# ---------------------------------------------------------------------------
+# load_demo_source — places365
+# ---------------------------------------------------------------------------
+
+
+class TestLoadDemoSourcePlaces365:
+    """ImageMediaType.load_demo_source with source='places365'."""
+
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "siglip"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(768))
+        return mock_emb
+
+    def test_places365_populates_clips(self, tmp_path):
+        """load_demo_source with source='places365' fills the clips dict."""
+        from vtsearch.datasets import downloader as dl_module
+        from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.image.media_type import ImageMediaType
+
+        (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+        (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+        fake_metadata = {
+            "Places365_val_00000001.jpg": {"category": "airfield", "path": tmp_path / "img1.jpg"},
+            "Places365_val_00000002.jpg": {"category": "beach", "path": tmp_path / "img2.jpg"},
+        }
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_places365", return_value=tmp_path),
+            patch.object(loader_module, "load_places365_metadata", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="places365",
+                categories=["airfield", "beach"],
+                slice_start=0,
+                slice_end=10,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        assert len(clips) == 2
+        categories_seen = {c["category"] for c in clips.values()}
+        assert categories_seen == {"airfield", "beach"}
+
+    def test_places365_filters_by_requested_categories(self, tmp_path):
+        """Metadata entries whose category is not requested are dropped."""
+        from vtsearch.datasets import downloader as dl_module
+        from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.image.media_type import ImageMediaType
+
+        (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+        (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+        fake_metadata = {
+            "Places365_val_00000001.jpg": {"category": "airfield", "path": tmp_path / "img1.jpg"},
+            "Places365_val_00000002.jpg": {"category": "beach", "path": tmp_path / "img2.jpg"},
+        }
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_places365", return_value=tmp_path),
+            patch.object(loader_module, "load_places365_metadata", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="places365",
+                categories=["airfield"],
+                slice_start=0,
+                slice_end=10,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        assert len(clips) == 1
+        assert next(iter(clips.values()))["category"] == "airfield"
+
+    def test_places365_slice_is_applied(self, tmp_path):
+        """slice_start/slice_end limits images per category."""
+        from vtsearch.datasets import downloader as dl_module
+        from vtsearch.datasets import loader as loader_module
+        from vtsearch.media.image.media_type import ImageMediaType
+
+        fake_metadata = {}
+        for i in range(10):
+            p = tmp_path / f"img_{i}.jpg"
+            p.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+            fake_metadata[f"Places365_val_{i + 1:08d}.jpg"] = {"category": "airfield", "path": p}
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_places365", return_value=tmp_path),
+            patch.object(loader_module, "load_places365_metadata", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="places365",
+                categories=["airfield"],
+                slice_start=2,
+                slice_end=5,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        assert len(clips) == 3
+
+
+class TestPlaces365CategoriesList:
+    """The hardcoded ``_PLACES365_CATEGORIES`` matches the upstream label space."""
+
+    def test_has_365_unique_entries(self):
+        from vtsearch.media.image.media_type import ImageMediaType
+
+        cats = ImageMediaType._PLACES365_CATEGORIES
+        assert len(cats) == 365
+        assert len(set(cats)) == 365
+        # Spot-check entries near the index that previously had an off-by-one
+        # error (swimming_pool/indoor vs swimming_pool/outdoor).
+        assert cats[324] == "swimming_hole"
+        assert cats[325] == "swimming_pool_indoor"
+        assert cats[326] == "swimming_pool_outdoor"
+        assert cats[0] == "airfield"
+        assert cats[364] == "zen_garden"
