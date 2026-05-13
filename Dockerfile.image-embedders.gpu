@@ -1,12 +1,12 @@
 # -----------------------------------------------------------------
-# VTSearch — All-image-embedders CPU image
+# VTSearch — All-image-embedders GPU (CUDA) image
 #
-# For the GPU/CUDA variant see Dockerfile.image-embedders.gpu — same
-# six embedders, baked the same way, but on nvidia/cuda + cu121 wheels.
+# GPU twin of Dockerfile.image-embedders. Same six embedders, same
+# baked-in weights, but on the CUDA 12.1 runtime base with PyTorch
+# pulled from the cu121 wheel index so the embedders actually use the
+# GPU at inference time.
 #
-# Bundles every supported image embedder and bakes their weights into the
-# image at build time so the container is ready to serve immediately on
-# first run:
+# Embedders bundled (identical to the CPU image):
 #
 #   * SigLIP   (google/siglip-base-patch16-224)         — default, text-capable
 #   * SigLIP 2 (google/siglip2-base-patch16-224)        — text-capable
@@ -19,37 +19,10 @@
 #                                                          *outputs*, not on
 #                                                          download access)
 #
-# SigLIP / SigLIP 2 / CLIP / DINOv2 are ungated on Hugging Face and
-# download during the build with no credentials.
-#
-# DINOv3 is gated under Meta's research licence: rather than passing an
-# HF token through ``docker build``, we expect the user to run
-# ``scripts/cache_gated_models.sh`` **once** on the host (with their HF
-# credentials), which populates ``./model_cache/``. This Dockerfile then
-# COPYs that local cache into the image — no token ever touches the
-# build, the codebase, or any image layer.
-#
-# EUPE no longer needs an HF token (its weights mirror at
-# ``facebook/EUPE-ViT-B`` is ungated), but it loads via ``torch.hub``
-# from ``facebookresearch/EUPE``, which clones a GitHub repo and
-# downloads a ~400 MB ``.pt`` file. The cache script handles both for
-# you so the build can run fully offline; if ``model_cache/`` is empty
-# the build still attempts the download itself.
-#
-# If ``./model_cache/`` is empty (the cache script wasn't run), the build
-# still succeeds; DINOv3 simply remains unavailable until the user runs
-# the cache script and rebuilds, or sets an HF_TOKEN at container
-# runtime to download it lazily into the persistent /app/data volume
-# on first use.
-#
-# SigLIP stays the default — it's marked is_default=True on the embedder
-# class and is the only entry in `autoload_media_embedders` seeded into
-# the default settings below. The other five sit on disk and only warm
-# when explicitly selected.
-#
-# DINOv2 / DINOv3 / EUPE are vision-only — they do not embed text, so
-# the UI hides the "Text sort" affordance for datasets embedded with
-# them (see MediaEmbedder.supports_text).
+# Gated weights (DINOv3, optionally EUPE's GitHub clone) are sourced
+# from the host's ./model_cache/ — populate it with
+# scripts/cache_gated_models.sh BEFORE building. See the comments in
+# Dockerfile.image-embedders for the full rationale.
 #
 # Build:
 #   # 1. ONE-TIME setup to bake DINOv3 + EUPE into the image (skip if you
@@ -60,30 +33,56 @@
 #   SKIP_DINOV3=1 ./scripts/cache_gated_models.sh
 #
 #   # 2. Build the image — no token, no secrets:
-#   docker build -f Dockerfile.image-embedders -t vtsearch:image-embedders .
+#   docker build -f Dockerfile.image-embedders.gpu \
+#                -t vtsearch:image-embedders-gpu .
 #
-# Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:image-embedders
+# Run:
+#   docker run --gpus all -p 5000:5000 \
+#              -v vtsearch-data:/app/data \
+#              vtsearch:image-embedders-gpu
+#
+# Requires the NVIDIA Container Toolkit on the host:
+#   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
 #
 # Build args:
 #   * VTSEARCH_VERSION  — bake a version string into the image
 # -----------------------------------------------------------------
 
-FROM python:3.10-slim AS base
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+
+# Avoid interactive prompts during apt-get
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Python 3.10 + the handful of native libs Pillow / transformers pull in.
+# (No ffmpeg / libsndfile here — this image is image-only.)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.10 \
+        python3.10-venv \
+        python3-pip \
+        libgl1 \
+        libglib2.0-0 && \
+    rm -rf /var/lib/apt/lists/* && \
+    ln -sf /usr/bin/python3.10 /usr/bin/python
 
 WORKDIR /app
 
 # ---------- dependency layer (cached unless requirements*.txt change) ------
-COPY requirements-image-embedders.txt ./
+COPY requirements-image-embedders-gpu.txt ./
 COPY pyproject.toml ./
 COPY vtsearch/__init__.py vtsearch/__init__.py
 
 # Copy package source so `pip install -e .` finds it.
 COPY vtsearch/ vtsearch/
 
+# Pre-install numpy/scipy as binary-only wheels so the PyTorch extra-index
+# cannot pull in source tarballs that require g++.
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
+    pip install --no-cache-dir --only-binary :all: numpy scipy && \
     pip install --no-cache-dir \
+        --extra-index-url https://download.pytorch.org/whl/cu121 \
         --prefer-binary \
-        -r requirements-image-embedders.txt && \
+        -r requirements-image-embedders-gpu.txt && \
     pip install --no-cache-dir --no-deps -e .
 
 # ---------- pre-download every image embedder's weights ------------------
@@ -219,6 +218,8 @@ EXPOSE 5000
 
 ENV OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     VTSEARCH_SERVER_INIT=1
 
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]

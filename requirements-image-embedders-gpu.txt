@@ -1,0 +1,43 @@
+# VTSearch — All image embedders (GPU / CUDA)
+#
+# GPU twin of requirements-image-embedders.txt. Identical Python deps; the
+# only difference is that the CPU PyTorch extra-index-url is omitted so the
+# Dockerfile can pass --extra-index-url https://download.pytorch.org/whl/cu121
+# at install time. Used by Dockerfile.image-embedders.gpu.
+
+# ── Core framework ───────────────────────────────────────────────────
+flask
+gunicorn
+numpy
+requests
+tqdm
+scikit-learn
+# SigLIP 2 + DINOv3 require recent transformers ( >= 4.49 ships SigLIP 2,
+# and DINOv3's HF wrapper landed in the same window ). Pin a known-good
+# floor instead of "latest" so the image is reproducible.
+transformers>=4.49.0
+pandas
+
+# ── Eval / visualization ────────────────────────────────────────────
+matplotlib
+scipy
+
+# ── PyTorch (GPU — CUDA version set via --extra-index-url at install time)
+torch>=2.0.0
+
+# ── Image media type ─────────────────────────────────────────────────
+Pillow
+
+# ── SigLIP / SigLIP 2 / CLIP tokenizers ──────────────────────────────
+sentencepiece
+protobuf
+# CLIP's tokenizer + SigLIP 2 fast processor both prefer the Rust
+# tokenizer crate; install it eagerly so first-load doesn't fall back
+# to the slow Python path.
+tokenizers
+
+# ── EUPE (Perception Encoder) ────────────────────────────────────────
+# EUPE ships custom modeling code on the Hub; loading uses
+# trust_remote_code=True. einops is the only extra runtime dep its
+# custom code typically pulls in.
+einops

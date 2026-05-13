@@ -278,23 +278,23 @@ docker build -f Dockerfile.gpu -t vtsearch:gpu .
 docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
 ```
 
-### SigLIP-only (image search)
+### LabBench (SigLIP-only image search)
 
-For the most common deployment — browsing/voting on images with the SigLIP
-embedder — use the streamlined `Dockerfile.siglip` variant. It skips audio,
+For the LabBench deployment — browsing/voting on images with the SigLIP
+embedder — use the streamlined `Dockerfile.labbench` variant. It skips audio,
 video, document, text, and extractor plugin dependencies, and **bakes the
 SigLIP model weights into the image at build time** so the container is
 ready to serve immediately on first run (no Hugging Face download).
 
 ```bash
-docker compose -f docker-compose.siglip.yml up
+docker compose -f docker-compose.labbench.yml up
 ```
 
 Or with plain Docker:
 
 ```bash
-docker build -f Dockerfile.siglip -t vtsearch:siglip .
-docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:siglip
+docker build -f Dockerfile.labbench -t vtsearch:labbench .
+docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
 ```
 
 The model cache lives in `/opt/vtsearch/models` (set via `VTSEARCH_MODELS_DIR`)
@@ -315,7 +315,7 @@ After pulling new code, rebuild the image:
 ```bash
 docker compose build           # CPU
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml build  # GPU
-docker compose -f docker-compose.siglip.yml build                      # SigLIP-only
+docker compose -f docker-compose.labbench.yml build                    # LabBench (SigLIP-only)
 ```
 
 Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
