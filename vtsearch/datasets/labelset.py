@@ -43,6 +43,11 @@ class LabeledElement:
             can attach extra key-value data here (such as ``contentID``,
             ``mediaID``, ``media_url``).  ``None`` when no metadata is
             present.
+        region_box: Normalised ``(x0, y0, x1, y1)`` box on the source
+            image when the user drew a region as part of a yes-vote;
+            ``None`` for image-level votes (the perpetual default for
+            no-votes, and the v1 default for every vote).  See the
+            patch-embedder v2 design for region-vote semantics.
     """
 
     md5: str
@@ -52,6 +57,7 @@ class LabeledElement:
     filename: str = ""
     category: str = ""
     metadata: dict[str, Any] | None = None
+    region_box: tuple[float, float, float, float] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a plain dict.
@@ -70,11 +76,22 @@ class LabeledElement:
             d["category"] = self.category
         if self.metadata is not None:
             d["metadata"] = self.metadata
+        if self.region_box is not None:
+            d["region_box"] = list(self.region_box)
         return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> LabeledElement:
-        """Reconstruct a :class:`LabeledElement` from a dict."""
+        """Reconstruct a :class:`LabeledElement` from a dict.
+
+        ``region_box`` is accepted as either a list (its JSON form) or a
+        tuple, and is always normalised to a 4-tuple of floats so the
+        dataclass invariant holds regardless of where the dict came from.
+        """
+        rb = d.get("region_box")
+        region_box: tuple[float, float, float, float] | None = None
+        if rb is not None:
+            region_box = (float(rb[0]), float(rb[1]), float(rb[2]), float(rb[3]))
         return cls(
             md5=d.get("md5", ""),
             label=d.get("label", ""),
@@ -83,6 +100,7 @@ class LabeledElement:
             filename=d.get("filename", ""),
             category=d.get("category", ""),
             metadata=d.get("metadata"),
+            region_box=region_box,
         )
 
 
@@ -290,6 +308,7 @@ class LabelSet:
                         filename=el.filename,
                         category=el.category,
                         metadata=dict(el.metadata) if el.metadata else None,
+                        region_box=el.region_box,
                     )
                 )
         return LabelSet(merged)

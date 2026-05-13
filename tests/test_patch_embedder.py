@@ -714,29 +714,86 @@ class TestCosineSortWithBoxes:
 
 
 # ---------------------------------------------------------------------------
-# v1 vote semantics — sanity check
+# v2: LabeledElement.region_box data-model contract
 # ---------------------------------------------------------------------------
 
 
-class TestVoteSemanticsV1:
-    """V1 records both Good and Bad votes against the whole image — there is
-    no region-vote API yet.  This pins that down by verifying the vote
-    endpoint persists no region_box on the LabeledElement.
+class TestRegionBoxOnLabeledElement:
+    """v2 region voting attaches a normalised ``(x0, y0, x1, y1)`` box to a
+    yes-vote when the user drew a region.  This class pins the data-model
+    contract — the field exists, defaults to ``None`` (image-level), and
+    round-trips through dict serialisation including JSON's tuple→list
+    coercion.
+
+    Replaces the v1 ``test_labeled_element_has_no_region_box_field_in_v1``
+    absence check.  Vote-endpoint wiring (yes-vote accepts region_box,
+    no-vote rejects it) and on-the-fly vote-vector pooling are separate
+    v2 work items.
     """
 
-    def test_labeled_element_has_no_region_box_field_in_v1(self):
-        """``LabeledElement`` should not (yet) carry a ``region_box`` field.
-
-        When phase-2 region voting lands this assertion can be inverted to
-        require the field with a default of None.  Today its absence is the
-        contract.
-        """
-        from dataclasses import fields
-
+    def test_region_box_defaults_to_none(self):
         from vtsearch.datasets.labelset import LabeledElement
 
-        names = {f.name for f in fields(LabeledElement)}
-        assert "region_box" not in names, (
-            "LabeledElement gained a region_box field — phase 2 has begun "
-            "and this v1-only test should be replaced by a phase-2 contract test."
+        el = LabeledElement(md5="abc", label="good")
+        assert el.region_box is None
+
+    def test_region_box_omitted_from_dict_when_none(self):
+        """Image-level votes don't emit ``region_box`` so the exported JSON
+        stays a strict superset of the v1 format for legacy consumers."""
+        from vtsearch.datasets.labelset import LabeledElement
+
+        el = LabeledElement(md5="abc", label="good")
+        assert "region_box" not in el.to_dict()
+
+    def test_region_box_round_trips_through_dict(self):
+        from vtsearch.datasets.labelset import LabeledElement
+
+        original = LabeledElement(
+            md5="abc",
+            label="good",
+            region_box=(0.1, 0.2, 0.7, 0.8),
         )
+        restored = LabeledElement.from_dict(original.to_dict())
+        assert restored.region_box == (0.1, 0.2, 0.7, 0.8)
+
+    def test_region_box_accepts_list_from_json(self):
+        """JSON encoders turn tuples into lists; ``from_dict`` must accept
+        a list and coerce back to a 4-tuple of floats so the dataclass
+        invariant holds regardless of the dict source."""
+        from vtsearch.datasets.labelset import LabeledElement
+
+        d = {"md5": "abc", "label": "good", "region_box": [0.0, 0.25, 0.5, 1.0]}
+        el = LabeledElement.from_dict(d)
+        assert isinstance(el.region_box, tuple)
+        assert el.region_box == (0.0, 0.25, 0.5, 1.0)
+        assert all(isinstance(v, float) for v in el.region_box)
+
+    def test_region_box_survives_labelset_round_trip(self):
+        from vtsearch.datasets.labelset import LabeledElement, LabelSet
+
+        ls = LabelSet([
+            LabeledElement(md5="a", label="good", region_box=(0.1, 0.2, 0.3, 0.4)),
+            LabeledElement(md5="b", label="good"),
+            LabeledElement(md5="c", label="bad"),
+        ])
+        restored = LabelSet.from_dict(ls.to_dict())
+        assert restored.elements[0].region_box == (0.1, 0.2, 0.3, 0.4)
+        assert restored.elements[1].region_box is None
+        assert restored.elements[2].region_box is None
+
+    def test_region_box_survives_merge(self):
+        """A region_box on the first occurrence of a key is preserved through
+        ``LabelSet.merge`` — the merge already keeps the first entry's
+        position, so its region annotation should ride along with it."""
+        from vtsearch.datasets.labelset import LabeledElement, LabelSet
+
+        a = LabelSet([
+            LabeledElement(md5="x", label="good", region_box=(0.1, 0.2, 0.3, 0.4)),
+        ])
+        b = LabelSet([
+            LabeledElement(md5="y", label="good"),
+        ])
+        merged = a.merge(b)
+        by_md5 = {e.md5: e for e in merged.elements}
+        assert by_md5["x"].region_box == (0.1, 0.2, 0.3, 0.4)
+        assert by_md5["y"].region_box is None
