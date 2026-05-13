@@ -115,6 +115,7 @@ If a failure is genuinely outside the scope of the current task (e.g. a flaky ne
   - `test_api_contracts.py` — API response shape verification: status codes, content types, required keys, error format consistency
   - `test_ssrf_validation.py` — SSRF URL validation: blocking private/internal network addresses, public URL allowlisting, integration with HTTP archive importer and webhook exporter
   - `test_path_validation.py` — Server file-path validation: path traversal prevention
+  - `test_dockerfile_syntax.py` — Static syntax check for Python embedded in `python -c "..."` blocks inside every `Dockerfile*`. Catches SyntaxErrors (e.g. compound statements flattened with semicolons) without invoking `docker build`.
   - `test_audio.py` — WAV generation
   - `test_medias.py` — Media init, listing, audio endpoint, MD5
   - `test_votes.py` — Voting and vote retrieval

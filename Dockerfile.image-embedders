@@ -83,6 +83,26 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
         -r requirements-image-embedders.txt && \
     pip install --no-cache-dir --no-deps -e .
 
+# ---------- import-only canary -------------------------------------------
+# Fail fast (in seconds) if any transformers class used in the
+# pre-download blocks below would hit ImportError once we call
+# ``.from_pretrained``. Transformers loads optional backends lazily via
+# ``requires_backends``, so touching ``.from_pretrained`` on each class
+# is what triggers the check — `from transformers import X` alone only
+# returns a placeholder. Adding new pre-download blocks below? Add the
+# class here too. (See PR #1282 for the bug this guards against:
+# AutoImageProcessor required torchvision but the requirements file
+# didn't pull it in, and the failure only surfaced minutes into the
+# DINOv2 weights download.)
+RUN python -c "import torch, torchvision; \
+from transformers import (AutoModel, AutoProcessor, AutoImageProcessor, \
+    SiglipModel, SiglipImageProcessor, SiglipTokenizer, \
+    CLIPModel, CLIPProcessor); \
+[c.from_pretrained for c in (AutoModel, AutoProcessor, AutoImageProcessor, \
+    SiglipModel, SiglipImageProcessor, SiglipTokenizer, \
+    CLIPModel, CLIPProcessor)]; \
+print('image-embedders import canary OK', flush=True)"
+
 # ---------- pre-download every image embedder's weights ------------------
 # Bake weights into a non-volume path so they survive volume mounts on
 # /app/data. The app reads MODELS_CACHE_DIR from VTSEARCH_MODELS_DIR.
