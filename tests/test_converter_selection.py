@@ -216,42 +216,48 @@ class TestConvertersAPI:
 
 
 class TestFolderImporterConverterFields:
-    def test_build_cli_args_without_converters(self):
+    def test_build_cli_args_without_source_specs(self):
         from vtsearch.datasets.importers.server_folder import IMPORTER
 
         args = IMPORTER.build_cli_args({"media_type": "image", "path": "/data"})
-        assert "--converters" not in args
+        assert "--source-specs" not in args
 
-    def test_build_cli_args_with_converters(self):
+    def test_build_cli_args_with_source_specs(self):
         from vtsearch.datasets.importers.server_folder import IMPORTER
 
         args = IMPORTER.build_cli_args(
             {
                 "media_type": "image",
                 "path": "/data",
-                "converters": "video2image,document2image",
+                "source_specs": [
+                    {"source_type": "image", "converter": None, "params": {}},
+                    {"source_type": "video", "converter": "video2image", "params": {"n_clips": "8"}},
+                ],
             }
         )
-        assert "--converters video2image,document2image" in args
+        assert "--source-specs" in args
+        assert "video2image" in args
 
-    def test_build_origin_without_converters(self):
+    def test_build_origin_without_source_specs(self):
         from vtsearch.datasets.importers.server_folder import IMPORTER
 
         origin = IMPORTER.build_origin({"media_type": "image", "path": "/data"})
         assert origin["importer"] == "server_folder"
-        assert "converters" not in origin["params"]
+        assert "source_specs" not in origin["params"]
 
-    def test_build_origin_with_converters(self):
+    def test_build_origin_with_source_specs(self):
         from vtsearch.datasets.importers.server_folder import IMPORTER
 
         origin = IMPORTER.build_origin(
             {
                 "media_type": "image",
                 "path": "/data",
-                "converters": "video2image",
+                "source_specs": [
+                    {"source_type": "video", "converter": "video2image", "params": {}},
+                ],
             }
         )
-        assert origin["params"]["converters"] == "video2image"
+        assert "video2image" in origin["params"]["source_specs"]
 
 
 class TestHttpArchiveImporterConverterFields:
@@ -474,7 +480,7 @@ class TestRunConvertersOnFolder:
 
         call_count = [0]
 
-        def _side_effect(media):
+        def _side_effect(media, params=None):
             call_count[0] += 1
             if call_count[0] == 1:
                 raise RuntimeError("corrupt video")
@@ -653,8 +659,8 @@ class TestEmbedAndMd5Helpers:
 
 
 class TestFolderImporterWithConverters:
-    def test_run_passes_converters_to_runner(self, tmp_path):
-        """Folder importer calls run_converters_on_folder when converters set."""
+    def test_run_passes_converter_specs_to_runner(self, tmp_path):
+        """server_folder hands converter rows from source_specs to _run_converter_specs."""
         from vtsearch.datasets.importers.server_folder import IMPORTER
 
         # Create a folder with an image file so the normal load succeeds.
@@ -662,34 +668,47 @@ class TestFolderImporterWithConverters:
 
         with (
             patch("vtsearch.datasets.importers.server_folder.load_dataset_from_folder") as mock_load,
-            patch("vtsearch.datasets.importers.server_folder._run_selected_converters") as mock_conv,
+            patch("vtsearch.datasets.importers.server_folder._run_converter_specs") as mock_conv,
         ):
             medias: dict = {}
             IMPORTER.run(
-                {"path": str(tmp_path), "media_type": "image", "converters": "video2image"},
+                {
+                    "path": str(tmp_path),
+                    "media_type": "image",
+                    "source_specs": [
+                        {"source_type": "image", "converter": None, "params": {}},
+                        {"source_type": "video", "converter": "video2image", "params": {"n_clips": "5"}},
+                    ],
+                },
                 medias,
             )
             mock_load.assert_called_once()
             mock_conv.assert_called_once()
-            # _run_selected_converters(folder, media_type, field_values, medias, thin=False)
             call_args = mock_conv.call_args
-            assert call_args[0][1] == "image"  # media_type
-            assert "video2image" in call_args[0][2].get("converters", "")
+            # Output type is the second positional arg.
+            assert call_args[0][1] == "image"
+            forwarded_specs = call_args[0][2]
+            assert len(forwarded_specs) == 1
+            assert forwarded_specs[0].converter == "video2image"
+            assert forwarded_specs[0].params == {"n_clips": "5"}
 
-    def test_run_without_converters_does_not_call_runner(self, tmp_path):
-        """Without converters field, runner is not called."""
+    def test_run_with_no_converter_rows_skips_runner(self, tmp_path):
+        """When source_specs has only a direct row, _run_converter_specs is still
+        called but gets an empty spec list and bails out without running the
+        runner."""
         from vtsearch.datasets.importers.server_folder import IMPORTER
 
         (tmp_path / "photo.png").write_bytes(_make_png_bytes())
 
         with (
             patch("vtsearch.datasets.importers.server_folder.load_dataset_from_folder"),
-            patch("vtsearch.datasets.importers.server_folder._run_selected_converters") as mock_conv,
+            patch("vtsearch.datasets.importers.server_folder._run_converter_specs") as mock_conv,
         ):
             medias: dict = {}
             IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
-            mock_conv.assert_called_once()  # still called, but with empty converters
-            # The actual runner inside checks for empty string and returns immediately
+            mock_conv.assert_called_once()
+            forwarded_specs = mock_conv.call_args[0][2]
+            assert forwarded_specs == []
 
     def test_folder_only_converters_no_regular_files(self, tmp_path):
         """When only converter source files exist and no regular target files."""
@@ -700,8 +719,8 @@ class TestFolderImporterWithConverters:
 
         mock_converter_medias = {1: {"id": 1, "type": "image"}}
 
-        def _fake_run_converters(folder, mt, fv, medias, thin=False):
-            if fv.get("converters"):
+        def _fake_run_converters(folder, output_type, specs, medias, thin=False, recursive=True, folder_path_for_origin=""):
+            if specs:
                 medias.update(mock_converter_medias)
 
         with (
@@ -710,15 +729,22 @@ class TestFolderImporterWithConverters:
                 side_effect=ValueError("No images files found"),
             ),
             patch(
-                "vtsearch.datasets.importers.server_folder._run_selected_converters", side_effect=_fake_run_converters
+                "vtsearch.datasets.importers.server_folder._run_converter_specs", side_effect=_fake_run_converters
             ),
         ):
             medias: dict = {}
             IMPORTER.run(
-                {"path": str(tmp_path), "media_type": "image", "converters": "video2image"},
+                {
+                    "path": str(tmp_path),
+                    "media_type": "image",
+                    "source_specs": [
+                        {"source_type": "image", "converter": None, "params": {}},
+                        {"source_type": "video", "converter": "video2image", "params": {}},
+                    ],
+                },
                 medias,
             )
-            # Should not raise because converters produced output
+            # Should not raise because converter rows produced output
             assert len(medias) == 1
 
 
@@ -755,3 +781,222 @@ class TestImportAPIConverters:
             assert resp.status_code == 200
             field_values = mock_run.call_args[0][1]
             assert "converters" not in field_values
+
+
+# ===========================================================================
+# Multi-media import: SourceSpec + effective_source_specs + API plumbing.
+# See docs/plans/multi-media-import.md.
+# ===========================================================================
+
+
+class TestSourceSpecParsing:
+    def test_from_dict_roundtrip(self):
+        from vtsearch.datasets.importers.base import SourceSpec
+
+        spec = SourceSpec.from_dict({"source_type": "video", "converter": "video2image", "params": {"n_clips": "12"}})
+        assert spec.source_type == "video"
+        assert spec.converter == "video2image"
+        assert spec.params == {"n_clips": "12"}
+        d = spec.to_dict()
+        assert d == {"source_type": "video", "converter": "video2image", "params": {"n_clips": "12"}}
+
+    def test_direct_row_has_no_converter(self):
+        from vtsearch.datasets.importers.base import SourceSpec
+
+        spec = SourceSpec.from_dict({"source_type": "image", "converter": None, "params": {}})
+        assert spec.converter is None
+
+
+class TestLegacyEffectiveSourceSpecs:
+    """Legacy (multi_media=False) importers synthesise specs from
+    media_type + comma-separated converters."""
+
+    def test_legacy_single_media_type_only(self):
+        from vtsearch.datasets.importers.http_archive import IMPORTER
+
+        specs = IMPORTER.effective_source_specs({"media_type": "image"})
+        assert len(specs) == 1
+        assert specs[0].source_type == "image"
+        assert specs[0].converter is None
+
+    def test_legacy_with_converters_csv(self):
+        from vtsearch.datasets.importers.http_archive import IMPORTER
+
+        specs = IMPORTER.effective_source_specs(
+            {"media_type": "image", "converters": "video2image,document2image"}
+        )
+        assert [s.converter for s in specs] == [None, "video2image", "document2image"]
+        assert [s.source_type for s in specs] == ["image", "video", "document"]
+
+    def test_legacy_unknown_converter_is_skipped(self):
+        from vtsearch.datasets.importers.http_archive import IMPORTER
+
+        specs = IMPORTER.effective_source_specs(
+            {"media_type": "image", "converters": "video2image,bogus"}
+        )
+        assert [s.converter for s in specs] == [None, "video2image"]
+
+
+class TestMultiMediaEffectiveSourceSpecs:
+    """multi_media=True importers parse the explicit source_specs form value."""
+
+    def test_parses_list_of_dicts(self):
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        specs = IMPORTER.effective_source_specs(
+            {
+                "media_type": "image",
+                "source_specs": [
+                    {"source_type": "image", "converter": None, "params": {}},
+                    {"source_type": "video", "converter": "video2image", "params": {"n_clips": "8"}},
+                ],
+            }
+        )
+        assert len(specs) == 2
+        assert specs[0].converter is None and specs[0].source_type == "image"
+        assert specs[1].converter == "video2image"
+        assert specs[1].params == {"n_clips": "8"}
+
+    def test_parses_json_string(self):
+        import json
+
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        raw = json.dumps(
+            [
+                {"source_type": "image", "converter": None, "params": {}},
+                {"source_type": "video", "converter": "video2image", "params": {}},
+            ]
+        )
+        specs = IMPORTER.effective_source_specs({"media_type": "image", "source_specs": raw})
+        assert [s.converter for s in specs] == [None, "video2image"]
+
+    def test_missing_source_specs_defaults_to_direct_only(self):
+        """When the multi_media flag is set but the form omits source_specs,
+        a single 'include directly' row is synthesised so the importer still
+        loads cleanly."""
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        specs = IMPORTER.effective_source_specs({"media_type": "image"})
+        assert len(specs) == 1
+        assert specs[0].converter is None
+
+    def test_rejects_invalid_converter(self):
+        import pytest
+
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        with pytest.raises(ValueError, match="Unknown converter"):
+            IMPORTER.effective_source_specs(
+                {
+                    "media_type": "image",
+                    "source_specs": [
+                        {"source_type": "video", "converter": "does_not_exist", "params": {}},
+                    ],
+                }
+            )
+
+    def test_rejects_target_mismatch(self):
+        """A converter whose target_type doesn't match the output media_type
+        is rejected — e.g. video2audio applied to an image-output dataset."""
+        import pytest
+
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        with pytest.raises(ValueError, match="produces"):
+            IMPORTER.effective_source_specs(
+                {
+                    "media_type": "image",
+                    "source_specs": [
+                        {"source_type": "video", "converter": "video2audio", "params": {}},
+                    ],
+                }
+            )
+
+    def test_rejects_direct_row_with_wrong_type(self):
+        """A no-converter row whose source_type differs from the output type
+        is rejected — that's the form a stale UI submission would take."""
+        import pytest
+
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        with pytest.raises(ValueError, match="does not match"):
+            IMPORTER.effective_source_specs(
+                {
+                    "media_type": "image",
+                    "source_specs": [
+                        {"source_type": "video", "converter": None, "params": {}},
+                    ],
+                }
+            )
+
+
+class TestImporterMultiMediaFlagInToDict:
+    def test_server_folder_advertises_multi_media(self):
+        from vtsearch.datasets.importers.server_folder import IMPORTER
+
+        d = IMPORTER.to_dict()
+        assert d.get("multi_media") is True
+
+    def test_http_archive_does_not_advertise_multi_media(self):
+        from vtsearch.datasets.importers.http_archive import IMPORTER
+
+        d = IMPORTER.to_dict()
+        assert d.get("multi_media") is False
+
+
+class TestConverterFieldsInToDict:
+    def test_video2image_exposes_n_clips_field(self):
+        from vtsearch.converters import get_converter
+
+        c = get_converter("video2image")
+        d = c.to_dict()
+        fields = d.get("fields") or []
+        assert any(f["key"] == "n_clips" for f in fields)
+
+
+class TestConverterAcceptsParams:
+    """convert(media, params) is the new signature; converters with declared
+    fields use params to drive behaviour, others ignore it gracefully."""
+
+    def test_video2audio_accepts_empty_params(self):
+        from vtsearch.converters import get_converter
+
+        c = get_converter("video2audio")
+        # Empty params, empty source media → returns empty list (no crash).
+        assert c.convert({}, {}) == []
+
+    def test_document2image_accepts_none_params(self):
+        from vtsearch.converters import get_converter
+
+        c = get_converter("document2image")
+        assert c.convert({}, None) == []
+
+    def test_video2image_reads_n_clips_param(self):
+        """Verify the converter reads its declared n_clips param from the dict."""
+        from vtsearch.converters import get_converter
+
+        c = get_converter("video2image")
+        # Bogus media → empty list, but get_param resolution exercised below.
+        assert c.get_param({"n_clips": "30"}, "n_clips") == "30"
+        # Default falls back to the field's declared default.
+        assert c.get_param({}, "n_clips") == "10"
+
+
+class TestImportAPISourceSpecs:
+    def test_import_endpoint_passes_source_specs(self, client):
+        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+            resp = client.post(
+                "/api/dataset/import/server_folder",
+                json={
+                    "path": "/tmp/test",
+                    "media_type": "image",
+                    "source_specs": [
+                        {"source_type": "image", "converter": None, "params": {}},
+                        {"source_type": "video", "converter": "video2image", "params": {"n_clips": "5"}},
+                    ],
+                },
+            )
+            assert resp.status_code == 200
+            field_values = mock_run.call_args[0][1]
+            assert "source_specs" in field_values

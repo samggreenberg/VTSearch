@@ -16,6 +16,7 @@ extractors).
 - [Shared Plugin Architecture](#shared-plugin-architecture) — PluginField,
   PluginRegistry, discovery, route generation
 - [Adding a Data Importer](#adding-a-data-importer)
+- [Adding a Media Converter](#adding-a-media-converter)
 - [Adding a Results Exporter](#adding-a-results-exporter)
 - [Adding a Label Importer](#adding-a-label-importer)
 - [Adding a Processor Importer](#adding-a-processor-importer)
@@ -240,6 +241,13 @@ IMPORTER = S3Importer()
 | `can_reload_from_origin()` | `(origin: dict) -> bool` | Whether data can be re-loaded from an origin. Default: `True` |
 | `reload_from_origin()` | `(origin: dict) -> dict | None` | Extract field_values from an origin for re-import |
 | `resolve_file()` | `(origin, origin_name, filename) -> Path | None` | Resolve a media file from origin info. Default: `None` |
+| `effective_source_specs()` | `(field_values: dict) -> list[SourceSpec]` | Resolve the user's form values into a flat list of `(source_type, converter, params)` rows for multi-media imports. See [Multi-media imports](#multi-media-imports) |
+
+**Class attributes:**
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `multi_media` | `bool` | `False` | When `True`, the importer participates in the new multi-media flow (output type + per-source-type converter rows). See [Multi-media imports](#multi-media-imports) |
 
 **Instance attributes (set during `run()`):**
 
@@ -471,6 +479,148 @@ your `run()` expects non-string values (e.g. FileStorage objects).
 Add any extra packages to a `requirements.txt` inside the plugin directory,
 then run `bash install-plugin-deps.sh` to regenerate the dependency tree.
 The next `pip install -r requirements.txt` will pick them up.
+
+### Multi-media imports
+
+Importers that want to pull in **multiple source media types** (e.g.
+"images, plus videos converted to images, plus documents converted to
+images") set the class attribute `multi_media = True` and iterate
+`self.effective_source_specs(field_values)` inside `run()`.
+
+A `SourceSpec` (defined in `vtsearch.datasets.importers.base`) is:
+
+```python
+SourceSpec(
+    source_type="video",            # type_id of the source media
+    converter="video2image",        # converter name, or None to include directly
+    params={"n_clips": "30"},       # user-supplied converter param values
+)
+```
+
+`effective_source_specs()` reads the user's `source_specs` form value
+(either a Python list or a JSON-encoded string), validates it against
+the converter registry, and returns the typed list.  Each spec where
+`converter is None` is a "include directly" row — the importer fetches
+files of `source_type` straight into the dataset.  Each spec where
+`converter` is set asks the importer to fetch files of `source_type` and
+pass them through that converter (with `spec.params`) to produce media
+of the dataset's output type.
+
+```python
+class DXImporter(DatasetImporter):
+    name = "dx"
+    multi_media = True
+    fields = [
+        ImporterField(key="media_type", label="Output Media Type", field_type="select", ...),
+        ImporterField(key="dataset_id", ..., required=True),
+    ]
+
+    def run(self, field_values, medias, thin=False):
+        from vtsearch.converters import get_converter
+
+        for spec in self.effective_source_specs(field_values):
+            for record in self._dx_list(spec.source_type, field_values):
+                raw = self._dx_fetch(record, spec.source_type, field_values)
+                if spec.converter is None:
+                    self._add(medias, raw)
+                else:
+                    converter = get_converter(spec.converter)
+                    for out in converter.convert(raw, spec.params):
+                        self._add(medias, out)
+```
+
+**Legacy / shim path.** Importers that have **not** flipped
+`multi_media` still work as before: they declare a single `media_type`
+field and (optionally) accept a comma-separated `converters` field that
+post-processes the imported folder through
+`run_converters_on_folder()`.  Legacy importers can also call
+`effective_source_specs()` — it synthesises an equivalent list from the
+classic `media_type` + `converters` fields, so a legacy importer can
+migrate its `run()` to iterate specs before changing its form schema.
+
+See [`docs/plans/multi-media-import.md`](plans/multi-media-import.md) for
+the full design and migration checklist.
+
+---
+
+## Adding a Media Converter
+
+A `MediaConverter` takes media of one type and produces one or more
+media dicts of a *different* type.  Built-in examples:
+`video2image`, `video2audio`, `document2image`, `document2text`.
+Converters are auto-discovered from `vtsearch.converters` via the
+`CONVERTER` sentinel.
+
+### File structure
+
+```
+vtsearch/converters/<your_converter>.py    # flat module — single file per converter
+```
+
+### What to implement
+
+Subclass `MediaConverter` from `vtsearch.converters.base`.  Implement
+`source_type`, `target_type`, and `convert()`.  Optionally declare
+user-configurable parameters as a list of `PluginField`s on the class.
+
+```python
+from vtsearch.converters.base import MediaConverter
+from vtsearch.utils.registry import PluginField
+
+
+class Image2TextMediaConverter(MediaConverter):
+    display_name = "Image → Text (OCR)"
+    converter_description = "Run OCR on image files"
+    fields = [
+        PluginField(
+            key="lang",
+            label="OCR Language",
+            field_type="text",
+            default="eng",
+            description="Tesseract language code (e.g. 'eng', 'spa').",
+        ),
+    ]
+
+    @property
+    def source_type(self) -> str:
+        return "image"
+
+    @property
+    def target_type(self) -> str:
+        return "text"
+
+    def convert(self, media: dict, params: dict | None = None) -> list[dict]:
+        lang = self.get_param(params, "lang")
+        import pytesseract
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(media["media_bytes"]))
+        text = pytesseract.image_to_string(img, lang=lang)
+        if not text.strip():
+            return []
+        return [{"filename": Path(media["filename"]).stem + ".txt", "media_string": text}]
+
+
+CONVERTER = Image2TextMediaConverter()
+```
+
+### MediaConverter class reference
+
+| Member | Description |
+|--------|-------------|
+| `source_type` (property) | The `type_id` of the input media type (e.g. `"image"`) |
+| `target_type` (property) | The `type_id` of the output media type (e.g. `"text"`) |
+| `convert(media, params=None)` | Convert a single source media dict; return a list of target dicts |
+| `fields` | Class-level list of `PluginField`s for user-configurable params |
+| `get_param(params, key)` | Helper: read a param value with field-default fallback |
+| `name` (property) | Auto-derived as `f"{source_type}2{target_type}"` |
+| `display_name` | Human-readable label shown in the picker |
+| `converter_description` | One-line description |
+
+Each returned dict must include a `filename` and the target type's data
+fields (`media_bytes` and `duration` for image/audio/video,
+`media_string` for text).  The caller assigns IDs and embeds the
+outputs.
 
 ---
 

@@ -49,6 +49,8 @@ the importer's directory.  They will be auto-discovered and installed by
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass, field as dc_field
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -57,7 +59,44 @@ from vtsearch.utils.registry import PluginBase, PluginField
 # Backward-compatible alias — existing plugins import ``ImporterField``.
 ImporterField = PluginField
 
-__all__ = ["DatasetImporter", "ImporterField"]
+__all__ = ["DatasetImporter", "ImporterField", "SourceSpec"]
+
+
+@dataclass
+class SourceSpec:
+    """Declarative description of one media stream an importer should pull in.
+
+    A multi-media import is a list of these.  Each spec asks the importer
+    to fetch media of ``source_type`` and — when ``converter`` is set —
+    pass them through that converter (with the supplied ``params``) to
+    produce media of the dataset's output media type.
+
+    When ``converter`` is ``None`` the source media is included directly
+    and ``source_type`` must equal the importer's chosen output media
+    type.
+
+    See :meth:`DatasetImporter.effective_source_specs` for how importers
+    obtain this list.
+    """
+
+    source_type: str
+    converter: str | None = None
+    params: dict[str, Any] = dc_field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source_type": self.source_type,
+            "converter": self.converter,
+            "params": dict(self.params),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SourceSpec:
+        return cls(
+            source_type=str(data.get("source_type") or ""),
+            converter=(str(data["converter"]) if data.get("converter") else None),
+            params=dict(data.get("params") or {}),
+        )
 
 
 PickerView = str  # one of: "form", "demo", "server_folder", "local_folder"
@@ -162,10 +201,30 @@ class DatasetImporter(PluginBase):
     #: that doesn't override this attribute.
     category: str = "services"
 
+    #: When ``True``, this importer participates in the multi-media import
+    #: flow: the user supplies a list of :class:`SourceSpec` rows (output
+    #: media type + per-source converters with per-converter params), and
+    #: :meth:`run` is expected to iterate :meth:`effective_source_specs`
+    #: rather than fetching a single ``media_type`` and bolting converters
+    #: on the side.
+    #:
+    #: When ``False`` (the default), the importer behaves as before — it
+    #: fetches a single ``media_type`` and optionally hands its folder to
+    #: :func:`vtsearch.converters.runner.run_converters_on_folder` for a
+    #: legacy comma-separated ``converters`` field.  Such importers may
+    #: still call :meth:`effective_source_specs` to opt into the new
+    #: iteration style without flipping this flag; the helper returns a
+    #: list that mirrors the legacy form fields.
+    #:
+    #: See :doc:`/docs/plans/multi-media-import` for the migration
+    #: checklist.
+    multi_media: bool = False
+
     def to_dict(self) -> dict[str, Any]:
         d = super().to_dict()
         d["picker_view"] = self.picker_view
         d["category"] = self.category
+        d["multi_media"] = self.multi_media
         d["fields"] = [_dataset_name_field().to_dict()] + d["fields"]
         return d
 
@@ -515,6 +574,121 @@ class DatasetImporter(PluginBase):
             if value:
                 parts.append(f"{arg_name} {value}")
         return " ".join(parts)
+
+    # ------------------------------------------------------------------
+    # Source specs (multi-media import)
+    # ------------------------------------------------------------------
+
+    def effective_source_specs(self, field_values: dict[str, Any]) -> list[SourceSpec]:
+        """Resolve *field_values* into a flat list of :class:`SourceSpec`.
+
+        For importers with :attr:`multi_media` ``= True``, the user submits
+        the list explicitly via the ``source_specs`` form key.  This helper
+        parses that value (either a Python list or a JSON-encoded string),
+        validates each entry against the registered media types and
+        converter registry, and returns the typed list.
+
+        For importers with :attr:`multi_media` ``= False`` (the legacy
+        path), this helper synthesises an equivalent list from the
+        importer's classic ``media_type`` and (optional) comma-separated
+        ``converters`` form fields — so even legacy importers can rewrite
+        their :meth:`run` to iterate specs without first changing their
+        form schema.
+
+        Args:
+            field_values: The same dict passed to :meth:`run`.
+
+        Returns:
+            A list of :class:`SourceSpec`.  Order matches the user's
+            submitted order (or, for legacy importers, ``[media_type]``
+            followed by the converter list in submission order).
+
+        Raises:
+            ValueError: If a referenced media type or converter is
+                unknown, if a converter's ``target_type`` does not match
+                the importer's chosen output media type, or if a
+                ``multi_media=True`` import is missing a ``media_type``
+                output declaration.
+        """
+        from vtsearch.converters import get_converter  # noqa: PLC0415
+        from vtsearch.media import get_by_folder_name  # noqa: PLC0415
+
+        output_type_raw = field_values.get("media_type", "") or ""
+        try:
+            output_type = get_by_folder_name(str(output_type_raw)).type_id if output_type_raw else ""
+        except (KeyError, AttributeError):
+            output_type = str(output_type_raw)
+
+        if self.multi_media:
+            raw = field_values.get("source_specs")
+            specs_raw: list[dict[str, Any]]
+            if raw is None or raw == "":
+                # No specs declared: fall through to the legacy
+                # "include directly" single-row default so a flipped
+                # importer still loads cleanly when the frontend hasn't
+                # caught up with the new UI yet.
+                specs_raw = [{"source_type": output_type, "converter": None, "params": {}}]
+            elif isinstance(raw, str):
+                try:
+                    specs_raw = json.loads(raw)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"Invalid source_specs JSON: {exc}") from exc
+            else:
+                specs_raw = list(raw)
+
+            if not output_type:
+                raise ValueError("multi_media import requires a 'media_type' (output) field")
+
+            specs: list[SourceSpec] = []
+            for item in specs_raw:
+                if not isinstance(item, dict):
+                    raise ValueError(f"source_specs entries must be objects, got {type(item).__name__}")
+                spec = SourceSpec.from_dict(item)
+                # Normalise source_type (allow folder_import_name).
+                try:
+                    spec.source_type = get_by_folder_name(spec.source_type).type_id
+                except (KeyError, AttributeError) as exc:
+                    raise ValueError(f"Unknown source_type: {spec.source_type!r}") from exc
+                if spec.converter is None:
+                    if spec.source_type != output_type:
+                        raise ValueError(
+                            f"Direct (no-converter) source_type {spec.source_type!r} "
+                            f"does not match output media_type {output_type!r}",
+                        )
+                else:
+                    converter = get_converter(spec.converter)
+                    if converter is None:
+                        raise ValueError(f"Unknown converter: {spec.converter!r}")
+                    if converter.source_type != spec.source_type:
+                        raise ValueError(
+                            f"Converter {spec.converter!r} expects source_type "
+                            f"{converter.source_type!r}, not {spec.source_type!r}",
+                        )
+                    if converter.target_type != output_type:
+                        raise ValueError(
+                            f"Converter {spec.converter!r} produces "
+                            f"{converter.target_type!r}, but output media_type is {output_type!r}",
+                        )
+                specs.append(spec)
+            return specs
+
+        # Legacy: synthesise from media_type + comma-separated converters.
+        legacy_specs: list[SourceSpec] = []
+        if output_type:
+            legacy_specs.append(SourceSpec(source_type=output_type, converter=None, params={}))
+        raw_converters = field_values.get("converters", "") or ""
+        if isinstance(raw_converters, list):
+            names = [str(n).strip() for n in raw_converters if str(n).strip()]
+        else:
+            names = [n.strip() for n in str(raw_converters).split(",") if n.strip()]
+        for name in names:
+            converter = get_converter(name)
+            if converter is None:
+                # Match the runner's behaviour: silently skip unknown
+                # converters rather than crashing the legacy path.
+                continue
+            legacy_specs.append(SourceSpec(source_type=converter.source_type, converter=name, params={}))
+        return legacy_specs
 
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         """Build an origin dict for elements imported by this importer.

@@ -6,7 +6,7 @@ import { FileBrowserComponent } from '../../file-browser/file-browser.component'
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
+import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 @Component({
@@ -125,6 +125,10 @@ export class DatasetImporterModalComponent implements OnInit {
   sfDatasetName = '';
   /** Whether the user has manually edited :prop:`sfDatasetName`. */
   private sfDatasetNameDirty = false;
+  /** Multi-media import rows for the server_folder picker.  Each row is a
+   *  ``(source_type, converter|null, params)`` triple — see
+   *  ``docs/plans/multi-media-import.md``. */
+  sfSourceSpecs: SourceSpec[] = [];
 
   // Dynamic-options cache for the generic form view.  Keyed by ImporterField.key.
   /** Options last fetched from the backend for dynamic-options fields. */
@@ -946,6 +950,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
     this.sfLoadEmbedders(this.sfMediaType);
     this.sfLoadClippers(this.sfMediaType);
+    this.sfResetSourceSpecs();
     this.sfLoadDirectory('');
   }
 
@@ -1013,6 +1018,93 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfMediaType = mediaType;
     this.sfLoadEmbedders(mediaType);
     this.sfLoadClippers(mediaType);
+    this.sfResetSourceSpecs();
+  }
+
+  /** Lookup of converters whose ``target_type`` matches the active
+   *  server_folder output type.  Drives the "Add converter" picker. */
+  get sfAvailableConverters(): ConverterInfo[] {
+    const importer = this.importers.find((i) => i.name === 'server_folder');
+    const byType = (importer?.available_converters_by_media_type as Record<string, ConverterInfo[]> | undefined) || {};
+    const outputTypeId = this.sfOutputTypeId();
+    return byType[outputTypeId] || [];
+  }
+
+  /** Resolve the active output media's ``type_id`` (e.g. "image") from the
+   *  ``folder_import_name`` stored on the form (e.g. "images"). */
+  private sfOutputTypeId(): string {
+    const mt = this.mediaTypes.find((m) => m.folder_import_name === this.sfMediaType);
+    return mt?.type_id || this.sfMediaType;
+  }
+
+  /** Reset the source-spec list to a single "include directly" row matching
+   *  the current output type.  Called when the output type changes. */
+  private sfResetSourceSpecs(): void {
+    const outputTypeId = this.sfOutputTypeId();
+    this.sfSourceSpecs = outputTypeId
+      ? [{ source_type: outputTypeId, converter: null, params: {} }]
+      : [];
+  }
+
+  /** Add a converter row to the source-spec list.  Defaults to the first
+   *  converter whose target matches the current output type; defaults all
+   *  the converter's params to their declared defaults. */
+  sfAddConverterRow(): void {
+    const converters = this.sfAvailableConverters;
+    if (converters.length === 0) return;
+    const first = converters[0];
+    this.sfSourceSpecs = [
+      ...this.sfSourceSpecs,
+      {
+        source_type: first.source_type,
+        converter: first.name,
+        params: this.sfDefaultConverterParams(first),
+      },
+    ];
+  }
+
+  /** Remove the source-spec row at *index*. */
+  sfRemoveSpec(index: number): void {
+    this.sfSourceSpecs = this.sfSourceSpecs.filter((_, i) => i !== index);
+  }
+
+  /** Called when the converter dropdown changes on row *index*.  Resets
+   *  ``source_type`` to match the picked converter and ``params`` to the
+   *  converter's declared defaults. */
+  sfOnConverterChange(index: number, converterName: string): void {
+    const converter = this.sfAvailableConverters.find((c) => c.name === converterName);
+    if (!converter) return;
+    const next = [...this.sfSourceSpecs];
+    next[index] = {
+      source_type: converter.source_type,
+      converter: converter.name,
+      params: this.sfDefaultConverterParams(converter),
+    };
+    this.sfSourceSpecs = next;
+  }
+
+  /** Update a single converter param value on row *index*. */
+  sfOnConverterParamChange(index: number, key: string, value: string): void {
+    const row = this.sfSourceSpecs[index];
+    if (!row) return;
+    const next = [...this.sfSourceSpecs];
+    next[index] = { ...row, params: { ...row.params, [key]: value } };
+    this.sfSourceSpecs = next;
+  }
+
+  private sfDefaultConverterParams(converter: ConverterInfo): Record<string, string> {
+    const params: Record<string, string> = {};
+    for (const f of converter.fields || []) {
+      params[f.key] = String(f.default ?? '');
+    }
+    return params;
+  }
+
+  /** Look up converter metadata for the converter named in row *index*. */
+  sfConverterFor(index: number): ConverterInfo | null {
+    const row = this.sfSourceSpecs[index];
+    if (!row || !row.converter) return null;
+    return this.sfAvailableConverters.find((c) => c.name === row.converter) || null;
   }
 
   private sfLoadEmbedders(mediaType: string): void {
@@ -1164,6 +1256,9 @@ export class DatasetImporterModalComponent implements OnInit {
       if (this.sfClipperParams.length > 0 && Object.keys(this.sfClipperParamValues).length > 0) {
         params['clipper_params'] = { ...this.sfClipperParamValues };
       }
+    }
+    if (this.sfSourceSpecs.length > 0) {
+      params['source_specs'] = this.sfSourceSpecs;
     }
 
     this.datasetsApi.runImporter('server_folder', params).subscribe({

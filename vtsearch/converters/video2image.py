@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from vtsearch.converters.base import MediaConverter
+from vtsearch.utils.registry import PluginField
 
 
 class Video2ImageMediaConverter(MediaConverter):
@@ -15,18 +16,26 @@ class Video2ImageMediaConverter(MediaConverter):
 
     Uses OpenCV (``cv2``) to read the video and sample frames.
 
-    Parameters
-    ----------
-    n_clips : int
-        Number of clips to divide the video into.  One frame is
-        extracted from the temporal centre of each clip.  Defaults to 10.
+    User-configurable parameters
+    ----------------------------
+    ``n_clips``
+        Number of clips to divide the video into.  One frame is extracted
+        from the temporal centre of each clip.  Defaults to 10.  Set via
+        the per-import form (or the converter's :attr:`fields`).
     """
 
-    display_name = "Video \u2192 Images"
+    display_name = "Video → Images"
     converter_description = "Extract frames from video files"
-
-    def __init__(self, n_clips: int = 10) -> None:
-        self.n_clips = n_clips
+    fields = [
+        PluginField(
+            key="n_clips",
+            label="Frames per video",
+            field_type="text",
+            description="Number of evenly-spaced frames to extract from each video.",
+            default="10",
+            required=False,
+        ),
+    ]
 
     @property
     def source_type(self) -> str:
@@ -36,8 +45,15 @@ class Video2ImageMediaConverter(MediaConverter):
     def target_type(self) -> str:
         return "image"
 
-    def convert(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         import tempfile  # noqa: PLC0415
+
+        try:
+            n_clips = int(self.get_param(params, "n_clips") or 10)
+        except (TypeError, ValueError):
+            n_clips = 10
+        if n_clips < 1:
+            n_clips = 1
 
         media_bytes = media.get("media_bytes")
         media_path = media.get("media_path")
@@ -74,7 +90,7 @@ class Video2ImageMediaConverter(MediaConverter):
                 if frame_count <= 0:
                     return []
 
-                n = min(self.n_clips, frame_count)
+                n = min(n_clips, frame_count)
                 # Divide video into n equal segments, pick middle frame of each
                 segment_size = frame_count / n
                 mid_indices = [int((i + 0.5) * segment_size) for i in range(n)]

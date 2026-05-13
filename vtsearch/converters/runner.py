@@ -20,6 +20,50 @@ from vtsearch.utils.paths import glob_top_level, rglob_follow_symlinks
 ProgressCallback = Callable[[str, str, int, int], None]
 
 
+def _normalise_converter_specs(
+    converter_names: list[str] | None,
+    converter_specs: "list | None",
+) -> list[tuple[Any, dict[str, Any]]]:
+    """Build a ``list[(converter_instance, params)]`` from either input form.
+
+    Accepts:
+
+    * ``converter_specs`` — list of :class:`~vtsearch.datasets.importers.base.SourceSpec`
+      objects or equivalent dicts with ``converter`` + ``params`` keys
+      (the multi-media path).  Specs whose ``converter`` is ``None`` are
+      skipped (those are the "include directly" rows, handled by the
+      importer's own loader, not the converter runner).
+    * ``converter_names`` — list of converter name strings (the legacy
+      path).  Each name gets an empty params dict.
+
+    Returns a list whose entries are guaranteed to be ``(converter, params)``
+    with both fields populated.  Unknown converter names are silently
+    dropped to match the runner's prior behaviour.
+    """
+    result: list[tuple[Any, dict[str, Any]]] = []
+    if converter_specs:
+        for spec in converter_specs:
+            if hasattr(spec, "converter"):
+                name = spec.converter
+                params = dict(spec.params or {})
+            else:
+                name = spec.get("converter") if isinstance(spec, dict) else None
+                params = dict((spec.get("params") if isinstance(spec, dict) else None) or {})
+            if not name:
+                continue
+            c = get_converter(name)
+            if c is None:
+                continue
+            result.append((c, params))
+    if converter_names:
+        for name in converter_names:
+            c = get_converter(name)
+            if c is None:
+                continue
+            result.append((c, {}))
+    return result
+
+
 def _default_progress() -> ProgressCallback:
     from vtsearch.utils.progress import get_thread_progress
 
@@ -33,17 +77,20 @@ def _default_progress() -> ProgressCallback:
 
 def run_converters_on_folder(
     folder_path: Path,
-    converter_names: list[str],
-    target_media_type: str,
-    medias: dict[int, dict[str, Any]],
+    converter_names: list[str] | None = None,
+    target_media_type: str = "",
+    medias: dict[int, dict[str, Any]] | None = None,
     thin: bool = False,
     on_progress: Optional[ProgressCallback] = None,
     base_origin: dict[str, Any] | None = None,
     recursive: bool = True,
+    converter_specs: list | None = None,
 ) -> None:
     """Scan *folder_path* for source files, convert them, and add to *medias*.
 
-    For each converter named in *converter_names*:
+    For each converter (either named in *converter_names* with default
+    params, or supplied as a typed spec in *converter_specs* with explicit
+    per-converter params):
 
     1. Look up the converter's source media type to get file extensions.
     2. Scan *folder_path* recursively for files matching those extensions.
@@ -54,7 +101,10 @@ def run_converters_on_folder(
 
     Args:
         folder_path: Root directory to scan.
-        converter_names: List of converter names (e.g. ``["video2image"]``).
+        converter_names: Legacy entry point — a list of converter names
+            (e.g. ``["video2image"]``) that run with their declared
+            defaults.  Prefer *converter_specs* when per-converter params
+            need to flow through.
         target_media_type: The target media type identifier
             (e.g. ``"image"``).
         medias: The medias dict to append to (not cleared).
@@ -66,17 +116,18 @@ def run_converters_on_folder(
         base_origin: The origin dict of the parent import (e.g.
             ``{"importer": "server_folder", "params": {"path": "..."}}``)
             used to record provenance.
+        converter_specs: Multi-media entry point — a list of
+            :class:`~vtsearch.datasets.importers.base.SourceSpec`
+            instances (or equivalent dicts) carrying both the converter
+            name and the user-supplied params for that converter.  Specs
+            whose ``converter`` is ``None`` are ignored here (those are
+            "include directly" rows, handled by the importer's own
+            file loader).
     """
-    if not converter_names:
+    if medias is None:
         return
-
-    # Validate converter names up front — skip model loading if none are valid.
-    valid_converters = []
-    for cname in converter_names:
-        c = get_converter(cname)
-        if c is not None:
-            valid_converters.append(c)
-    if not valid_converters:
+    converters_with_params = _normalise_converter_specs(converter_names, converter_specs)
+    if not converters_with_params:
         return
 
     if on_progress is None:
@@ -88,8 +139,8 @@ def run_converters_on_folder(
     target_mt = get_by_folder_name(target_media_type)
 
     # Filter to converters that actually target this media type.
-    valid_converters = [c for c in valid_converters if c.target_type == target_mt.type_id]
-    if not valid_converters:
+    converters_with_params = [(c, p) for c, p in converters_with_params if c.target_type == target_mt.type_id]
+    if not converters_with_params:
         return
 
     # Resolve the embedder for the target media type
@@ -101,7 +152,7 @@ def run_converters_on_folder(
 
     media_id = max(medias.keys(), default=0) + 1
 
-    for converter in valid_converters:
+    for converter, conv_params in converters_with_params:
         # Get the source media type to know which file extensions to scan.
         try:
             source_mt = media_get(converter.source_type)
@@ -150,7 +201,7 @@ def run_converters_on_folder(
                     continue
 
             try:
-                outputs = converter.convert(source_media)
+                outputs = converter.convert(source_media, conv_params)
             except Exception as exc:
                 print(f"Converter {converter.name} failed on {source_rel}: {exc}")
                 continue
@@ -159,12 +210,16 @@ def run_converters_on_folder(
                 continue
 
             # Build origin for converted media.
+            origin_params: dict[str, Any] = {
+                "converter": converter.name,
+                "source_file": source_rel,
+            }
+            for pk, pv in conv_params.items():
+                # Record converter params so the import is reproducible.
+                origin_params[f"converter_param_{pk}"] = str(pv)
             origin = {
                 "importer": "converter",
-                "params": {
-                    "converter": converter.name,
-                    "source_file": source_rel,
-                },
+                "params": origin_params,
             }
             if base_origin:
                 origin["params"]["parent_importer"] = base_origin.get("importer", "")
@@ -332,7 +387,7 @@ def apply_converter_to_demo(
         )
 
         try:
-            outputs = converter.convert(src)
+            outputs = converter.convert(src, {})
         except Exception:
             continue
         if not outputs:
