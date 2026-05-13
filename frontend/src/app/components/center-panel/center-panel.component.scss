@@ -187,3 +187,18 @@
   font-family: monospace;
   font-size: 0.75rem;
 }
+
+// Sticky-armed-state hint banner for the bad-vote-with-box discard flow
+// (v2 patch-embedder plan). Sits between the metadata tray and the voting
+// overlay so it's near the vote buttons without overlapping the image.
+.bad-confirm-hint {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 110, 110, 0.5);
+  border-radius: 4px;
+  background: rgba(255, 110, 110, 0.08);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  text-align: center;
+}

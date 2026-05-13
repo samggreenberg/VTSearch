@@ -18,7 +18,7 @@ export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
 
 type DragMode =
   | { kind: 'pan'; startX: number; startY: number; originX: number; originY: number }
-  | { kind: 'draw'; anchor: { x: number; y: number } }
+  | { kind: 'draw'; anchor: { x: number; y: number }; previousBox: RegionBox | null }
   | { kind: 'move'; startLocal: { x: number; y: number }; startBox: RegionBox }
   | { kind: 'resize'; handle: ResizeHandle; startBox: RegionBox };
 
@@ -33,7 +33,19 @@ const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a s
 })
 export class ImageViewerComponent implements OnChanges, OnDestroy {
   @Input() media!: MediaItem;
+  /**
+   * True while the parent is in the v2 "bad-vote-with-box discard confirm" armed state.
+   * The viewer uses it to (a) render the box with a sticky red pulse, and (b) route Esc /
+   * mouse-on-box back to the parent via `armedConfirmCanceled` instead of clearing the box.
+   */
+  @Input() pendingBadConfirm = false;
   @Output() regionBoxChange = new EventEmitter<RegionBox | null>();
+  /**
+   * Fired when the user does something that cancels the armed bad-vote-confirm without
+   * voting (Esc while armed, or any mousedown on the box body/handles, or starting a
+   * fresh Shift-drag). The parent clears its armed state but keeps the box.
+   */
+  @Output() armedConfirmCanceled = new EventEmitter<void>();
 
   @ViewChild('imageWrap') wrapRef!: ElementRef<HTMLDivElement>;
   @ViewChild('imageEl') imageRef!: ElementRef<HTMLImageElement>;
@@ -51,8 +63,10 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   renderedW = 0;
   renderedH = 0;
 
-  private panX = 0;
-  private panY = 0;
+  // panX/panY are not `private` so tests can drive screenToImageNormalized()
+  // with non-zero pan without simulating a full wheel + drag sequence.
+  panX = 0;
+  panY = 0;
   private drag: DragMode | null = null;
 
   private mouseMoveHandler: ((e: MouseEvent) => void) | null = null;
@@ -161,7 +175,10 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       if (!local) return;
       const x = clamp01(local.x);
       const y = clamp01(local.y);
-      this.drag = { kind: 'draw', anchor: { x, y } };
+      if (this.pendingBadConfirm) this.armedConfirmCanceled.emit();
+      // Remember the prior box so we can restore it on a zero-area release —
+      // a stray Shift-click on empty space must not throw away real work.
+      this.drag = { kind: 'draw', anchor: { x, y }, previousBox: this.regionBox };
       this.regionBox = [x, y, x, y];
       event.preventDefault();
       this.setupWindowMouseListeners();
@@ -188,6 +205,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     event.preventDefault();
     const local = this.screenToImageNormalized(event);
     if (!local) return;
+    if (this.pendingBadConfirm) this.armedConfirmCanceled.emit();
     this.drag = { kind: 'move', startLocal: local, startBox: this.regionBox };
     this.setupWindowMouseListeners();
   }
@@ -196,6 +214,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     if (event.button !== 0 || !this.regionBox) return;
     event.stopPropagation();
     event.preventDefault();
+    if (this.pendingBadConfirm) this.armedConfirmCanceled.emit();
     this.drag = { kind: 'resize', handle, startBox: this.regionBox };
     this.setupWindowMouseListeners();
   }
@@ -296,8 +315,9 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   }
 
   /** Convert a screen-space mouse event to normalised image coords (pre-rotation).
-   *  Returns null when the image isn't laid out yet. */
-  private screenToImageNormalized(event: MouseEvent): { x: number; y: number } | null {
+   *  Returns null when the image isn't laid out yet. Public so tests can drive it
+   *  with a mocked wrapRef + arbitrary pan/zoom/rotate state. */
+  screenToImageNormalized(event: MouseEvent): { x: number; y: number } | null {
     const wrap = this.wrapRef?.nativeElement;
     if (!wrap || !this.renderedW || !this.renderedH) return null;
     const rect = wrap.getBoundingClientRect();
@@ -381,20 +401,21 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       this.removeWindowMouseListeners();
       return;
     }
-    const wasDraw = this.drag.kind === 'draw';
+    const drag = this.drag;
     this.drag = null;
     this.removeWindowMouseListeners();
-    if (this.regionBox) {
-      const [x0, y0, x1, y1] = this.regionBox;
-      const tooSmall = x1 - x0 < MIN_BOX_SIZE || y1 - y0 < MIN_BOX_SIZE;
-      if (wasDraw && tooSmall) {
-        // Stray click in draw mode — treat as no box.
-        this.regionBox = null;
-        this.regionBoxChange.emit(null);
-        return;
-      }
-      this.regionBoxChange.emit(this.regionBox);
+    if (!this.regionBox) return;
+    const [x0, y0, x1, y1] = this.regionBox;
+    const tooSmall = x1 - x0 < MIN_BOX_SIZE || y1 - y0 < MIN_BOX_SIZE;
+    if (drag.kind === 'draw' && tooSmall) {
+      // Zero-area Shift-drag (a stray click without motion). Restore the
+      // prior box rather than discarding it — drawing a box is real work.
+      // Don't emit: the parent's last-known state was already previousBox
+      // (the transient zero-area draw was never emitted).
+      this.regionBox = drag.previousBox;
+      return;
     }
+    this.regionBoxChange.emit(this.regionBox);
   }
 
   private setupWindowKeyListeners(): void {
@@ -430,7 +451,17 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       this.shiftHeld = true;
       return;
     }
-    if (e.key === 'Escape' && this.regionBox && !this.isTyping()) {
+    if (e.key !== 'Escape' || this.isTyping()) return;
+    // Esc while a bad-vote-with-box discard is armed cancels the armed state but
+    // keeps the box — per the v2 patch-embedder plan, drawing a box is real work
+    // and Esc should be the "I changed my mind about voting no" out, not "throw
+    // away the box". Only consume the key if we actually had an action to take.
+    if (this.pendingBadConfirm) {
+      e.preventDefault();
+      this.armedConfirmCanceled.emit();
+      return;
+    }
+    if (this.regionBox) {
       e.preventDefault();
       this.clearRegionBox({ emit: true });
     }

@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { CenterPanelComponent } from './center-panel.component';
 import { MediaItem } from '../../models/api.models';
+import { RegionBox } from './image-viewer/image-viewer.component';
 
 describe('CenterPanelComponent', () => {
   let component: CenterPanelComponent;
@@ -144,5 +145,171 @@ describe('CenterPanelComponent', () => {
     expect(component.formatMetadataValue('Duration', 3.5)).toBe('3.5s');
     expect(component.formatMetadataValue('Frequency', 44100)).toBe('44100 Hz');
     expect(component.formatMetadataValue('Other', 'hello')).toBe('hello');
+  });
+
+  /**
+   * v2 patch-embedder plan, item 15: vote-API contract for region annotations.
+   * `region_box` must be present on a yes-vote when a box is drawn, absent on
+   * a yes-vote without a box, and never present on any no-vote (no-votes are
+   * region-agnostic — see "Vote attribution → v2" in docs/plans/patch-embedder.md).
+   */
+  describe('vote-API contract for region_box', () => {
+    const imageMedia: MediaItem = { ...mockMedia, type: 'image', filename: 'pic.png' };
+    const box: RegionBox = [0.1, 0.2, 0.5, 0.6];
+
+    function setup(): void {
+      component.media = imageMedia;
+      component.swipeAnimation = false;
+      fixture.detectChanges();
+    }
+
+    it('attaches region_box to a yes-vote when a box is drawn', () => {
+      setup();
+      component.onRegionBoxChange(box);
+      component.castVote('good');
+      const req = httpMock.expectOne('/api/medias/1/vote');
+      expect(req.request.body).toEqual({ vote: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
+      req.flush({ ok: true });
+      const votesReq = httpMock.expectOne('/api/votes');
+      votesReq.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
+    });
+
+    it('omits region_box from a yes-vote when no box is drawn', () => {
+      setup();
+      component.castVote('good');
+      const req = httpMock.expectOne('/api/medias/1/vote');
+      expect(req.request.body).toEqual({ vote: 'good' });
+      req.flush({ ok: true });
+      const votesReq = httpMock.expectOne('/api/votes');
+      votesReq.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
+    });
+
+    it('omits region_box from a no-vote even when a box is drawn (after confirm)', () => {
+      setup();
+      component.onRegionBoxChange(box);
+      // First ← arms the discard-confirm — no request yet.
+      component.castVote('bad');
+      httpMock.expectNone('/api/medias/1/vote');
+      expect(component.pendingBadConfirm).toBeTrue();
+      // Second ← throws the box away and votes no.
+      component.castVote('bad');
+      const req = httpMock.expectOne('/api/medias/1/vote');
+      expect(req.request.body).toEqual({ vote: 'bad' });
+      req.flush({ ok: true });
+      const votesReq = httpMock.expectOne('/api/votes');
+      votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });
+    });
+
+    it('omits region_box from a no-vote when no box is drawn (no confirm armed)', () => {
+      setup();
+      component.castVote('bad');
+      const req = httpMock.expectOne('/api/medias/1/vote');
+      expect(req.request.body).toEqual({ vote: 'bad' });
+      expect(component.pendingBadConfirm).toBeFalse();
+      req.flush({ ok: true });
+      const votesReq = httpMock.expectOne('/api/votes');
+      votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });
+    });
+  });
+
+  /**
+   * v2 patch-embedder plan, item 12: bad-vote-with-box requires two consecutive
+   * ← presses (no timer). Esc, mouse-on-box, or item navigation while armed
+   * clears the armed state and keeps the box.
+   */
+  describe('sticky bad-vote-confirm armed state', () => {
+    const imageMedia: MediaItem = { ...mockMedia, type: 'image', filename: 'pic.png' };
+    const box: RegionBox = [0.1, 0.2, 0.5, 0.6];
+
+    function setup(): void {
+      component.media = imageMedia;
+      component.swipeAnimation = false;
+      fixture.detectChanges();
+    }
+
+    it('arms on first ← without firing a request, fires on second ←', () => {
+      setup();
+      component.onRegionBoxChange(box);
+      component.castVote('bad');
+      httpMock.expectNone('/api/medias/1/vote');
+      expect(component.pendingBadConfirm).toBeTrue();
+      expect(component.currentRegionBox).toEqual(box);
+
+      component.castVote('bad');
+      const req = httpMock.expectOne('/api/medias/1/vote');
+      expect(req.request.body).toEqual({ vote: 'bad' });
+      expect(component.pendingBadConfirm).toBeFalse();
+      req.flush({ ok: true });
+      const votesReq = httpMock.expectOne('/api/votes');
+      votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });
+    });
+
+    it('cancels armed state on onArmedConfirmCanceled (Esc/mouse-on-box) and keeps the box', () => {
+      setup();
+      component.onRegionBoxChange(box);
+      component.castVote('bad');
+      expect(component.pendingBadConfirm).toBeTrue();
+
+      // Esc-while-armed (or mousedown-on-box) routes through this handler from
+      // the image viewer.
+      component.onArmedConfirmCanceled();
+      expect(component.pendingBadConfirm).toBeFalse();
+      expect(component.currentRegionBox).toEqual(box);
+      httpMock.expectNone('/api/medias/1/vote');
+    });
+
+    it('cancels armed state when the box is cleared (Esc-while-not-armed routes via regionBoxChange(null))', () => {
+      setup();
+      component.onRegionBoxChange(box);
+      component.castVote('bad');
+      expect(component.pendingBadConfirm).toBeTrue();
+
+      component.onRegionBoxChange(null);
+      expect(component.pendingBadConfirm).toBeFalse();
+      expect(component.currentRegionBox).toBeNull();
+    });
+
+    it('cancels armed state when the user navigates to another item', () => {
+      setup();
+      component.onRegionBoxChange(box);
+      component.castVote('bad');
+      expect(component.pendingBadConfirm).toBeTrue();
+
+      const next: MediaItem = { ...imageMedia, id: 2, filename: 'next.png' };
+      component.media = next;
+      component.ngOnChanges({
+        media: {
+          currentValue: next,
+          previousValue: imageMedia,
+          firstChange: false,
+          isFirstChange: () => false,
+        },
+      });
+      expect(component.pendingBadConfirm).toBeFalse();
+      expect(component.currentRegionBox).toBeNull();
+    });
+
+    it('does not arm when no box is drawn (single ← votes no immediately)', () => {
+      setup();
+      component.castVote('bad');
+      const req = httpMock.expectOne('/api/medias/1/vote');
+      expect(req.request.body).toEqual({ vote: 'bad' });
+      expect(component.pendingBadConfirm).toBeFalse();
+      req.flush({ ok: true });
+      const votesReq = httpMock.expectOne('/api/votes');
+      votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });
+    });
+
+    it('uses the box on a yes-vote even after a first ← would have armed (yes wins over armed-only)', () => {
+      setup();
+      component.onRegionBoxChange(box);
+      // Without arming first: yes-vote attaches the box immediately.
+      component.castVote('good');
+      const req = httpMock.expectOne('/api/medias/1/vote');
+      expect(req.request.body).toEqual({ vote: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
+      req.flush({ ok: true });
+      const votesReq = httpMock.expectOne('/api/votes');
+      votesReq.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
+    });
   });
 });

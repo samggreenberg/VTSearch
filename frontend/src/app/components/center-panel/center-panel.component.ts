@@ -46,10 +46,14 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   swipeClass = '';
   spinningVote: 'good' | 'bad' | null = null;
 
-  private currentRegionBox: RegionBox | null = null;
-  private pendingBadConfirm = false;
-  private badConfirmTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly BAD_CONFIRM_MS = 2000;
+  // Bad-vote-with-box state: drawing a box is real work, so a stray ← shouldn't
+  // throw it away. The first ← arms a sticky discard-confirm state (no timeout);
+  // the second ← throws the box away and votes no. Esc, a mousedown on the box,
+  // a Shift-drag-redraw, or navigating to another item all clear the armed
+  // state without voting and without discarding the box.
+  // Public so the template can bind it into the image viewer.
+  currentRegionBox: RegionBox | null = null;
+  pendingBadConfirm = false;
 
   private spinTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -66,9 +70,10 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media']) {
       this.swipeClass = '';
-      this.cancelBadConfirm();
+      // Navigating to another item clears the armed bad-vote-confirm state.
       // ImageViewer also clears its own regionBox on media change and will emit null;
       // resetting eagerly here keeps state coherent across the swap.
+      this.pendingBadConfirm = false;
       this.currentRegionBox = null;
     }
   }
@@ -78,7 +83,6 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     this.keyboard.stop();
     this.subs.forEach((s) => s.unsubscribe());
     if (this.spinTimer) clearTimeout(this.spinTimer);
-    if (this.badConfirmTimer) clearTimeout(this.badConfirmTimer);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
   }
 
@@ -174,18 +178,19 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     if (!this.media || this.isVoting) return;
 
     // Region annotations only attach to yes-votes (salient-area semantics).
-    // A no-vote with a box drawn requires a confirming second press so a stray
-    // ArrowLeft can't throw away real work the user did drawing the box.
+    // A no-vote with a box drawn arms a sticky discard-confirm state — the first
+    // ← shake-pulses the box and surfaces a hint; only a second ← while armed
+    // throws the box away and votes no. The state has no timeout: a time-based
+    // modal would expire silently and surprise the user. Esc, mouse-on-box, a
+    // fresh Shift-drag, or item navigation clear armed without voting.
     if (vote === 'bad' && this.currentRegionBox && !this.pendingBadConfirm) {
       this.pendingBadConfirm = true;
       this.imageViewer?.pulseRegionBox();
-      if (this.badConfirmTimer) clearTimeout(this.badConfirmTimer);
-      this.badConfirmTimer = setTimeout(() => this.cancelBadConfirm(), this.BAD_CONFIRM_MS);
       return;
     }
 
     const regionBox = vote === 'good' ? this.currentRegionBox : null;
-    this.cancelBadConfirm();
+    this.pendingBadConfirm = false;
     this.isVoting = true;
 
     this.mediasApi.vote(this.media.id, vote, regionBox).subscribe({
@@ -215,15 +220,12 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     this.currentRegionBox = box;
     // Clearing the box also clears any pending bad-vote confirmation —
     // there's nothing left to confirm against.
-    if (!box) this.cancelBadConfirm();
+    if (!box) this.pendingBadConfirm = false;
   }
 
-  private cancelBadConfirm(): void {
+  /** Esc-while-armed or mouse interaction with the box: cancel armed, keep the box. */
+  onArmedConfirmCanceled(): void {
     this.pendingBadConfirm = false;
-    if (this.badConfirmTimer) {
-      clearTimeout(this.badConfirmTimer);
-      this.badConfirmTimer = null;
-    }
   }
 
   private loadSettings(): void {
