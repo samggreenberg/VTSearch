@@ -61,7 +61,7 @@ def apply_and_retrain(
         sync_labels_to_loaded_detector()
 
         # Retrain MLP if we have at least one good and one bad vote.
-        from vtsearch.utils import bad_votes, good_votes
+        from vtsearch.utils import bad_votes, good_votes, vote_region_boxes
 
         trained = False
         if good_votes and bad_votes:
@@ -81,6 +81,7 @@ def apply_and_retrain(
                 safe_thresholds=get_safe_thresholds(),
                 calibrate_count=get_calibrate_count(),
                 calibration_fraction=get_calibration_fraction(),
+                vote_region_boxes=dict(vote_region_boxes),
             )
             if model is not None:
                 det_ctx.model = model

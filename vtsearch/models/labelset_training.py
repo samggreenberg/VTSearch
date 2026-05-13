@@ -55,6 +55,30 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
         return embed_file(file_path, media_type, embedder_name)
 
 
+def _pool_box_from_media(
+    media: dict[str, Any],
+    region_box: tuple[float, float, float, float] | None,
+) -> np.ndarray | None:
+    """Return the region-pooled training vector for *media*, if applicable.
+
+    When *region_box* is set **and** the media has a stored ``patch_grid``,
+    pool the box on-the-fly via
+    :func:`vtsearch.models.patch_regions.box_to_vote_vector` and return that
+    vector.  Otherwise return ``None`` so the caller can fall back to
+    ``media["embedding"]`` — i.e. the legacy image-level training vector for
+    image-level votes, single-vector embedders, and patch datasets that
+    haven't been re-loaded under the v1 storage scheme.  Patch-embedder v2.
+    """
+    if region_box is None:
+        return None
+    grid = media.get("patch_grid")
+    if grid is None:
+        return None
+    from vtsearch.models.patch_regions import box_to_vote_vector
+
+    return box_to_vote_vector(np.asarray(grid), region_box)
+
+
 def populate_label_embeddings(
     det_ctx,
     labelset: LabelSet,
@@ -90,13 +114,26 @@ def populate_label_embeddings(
 
     for idx, elem in enumerate(labelset.elements):
         eid = stable_element_id(elem)
-        if eid in cache:
+        # Region-voted elements always re-pool from the source patch grid:
+        # the cache is keyed by ``stable_element_id`` (origin / md5), which
+        # is intentionally stable across region edits.  Re-pooling per
+        # training pass is cheap (one patch grid + uniform mean) and is the
+        # only way region_box changes propagate without an explicit cache
+        # invalidation.  Image-level elements keep the cached embedding so
+        # the existing fast path for non-region datasets is unchanged.
+        if eid in cache and elem.region_box is None:
             cached += 1
             continue
 
         cid = resolve_current_dataset_cid(elem) if snap else None
         if cid is not None and snap and cid in snap:
-            emb = snap[cid].get("embedding")
+            media = snap[cid]
+            # Region-aware path: pool from ``patch_grid`` when the element has
+            # a ``region_box`` annotation and the source media has a stored
+            # patch grid (i.e. the dataset was loaded with a patch-region
+            # embedder).  Otherwise fall back to the full-image embedding.
+            pooled = _pool_box_from_media(media, elem.region_box)
+            emb = pooled if pooled is not None else media.get("embedding")
             if emb is not None:
                 cache[eid] = np.asarray(emb)
                 cached += 1
@@ -104,6 +141,10 @@ def populate_label_embeddings(
                     on_progress(elem.origin_name or elem.filename or eid, idx + 1, total)
                 continue
 
+        # Cross-dataset path: we resolve the element via its importer and
+        # embed it freshly.  No patch_grid is available here, so a stashed
+        # ``region_box`` falls back to the image-level embedding — exactly
+        # the design's fallback for legacy / non-patch datasets.
         emb = _embed_one(elem, media_type=media_type, embedder_name=embedder_name)
         if emb is not None:
             cache[eid] = np.asarray(emb)

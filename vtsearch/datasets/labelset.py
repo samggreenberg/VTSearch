@@ -135,6 +135,7 @@ class LabelSet:
         bad_votes: dict[int, None],
         *,
         expand_dupes: bool = True,
+        vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
     ) -> LabelSet:
         """Build a ``LabelSet`` from the current media and vote state.
 
@@ -148,16 +149,29 @@ class LabelSet:
                 labelset will be re-imported into the same system (e.g.
                 detector persistence) to avoid inflating the label
                 count.
+            vote_region_boxes: Optional ``media_id -> (x0, y0, x1, y1)``
+                map populated by yes-votes that designated a region.  Each
+                box is attached to the corresponding good vote's
+                :class:`LabeledElement`.  Ignored for bad votes (no-votes
+                are always image-level — see the patch-embedder v2 design).
 
         Returns:
             A new ``LabelSet`` containing one :class:`LabeledElement` per
             voted media, in vote-insertion order (good votes first, then bad).
         """
+        region_boxes = vote_region_boxes or {}
         elements: list[LabeledElement] = []
         for cid in good_votes:
             media = medias.get(cid)
             if media:
-                elements.extend(_clip_to_elements(media, "good", expand_dupes=expand_dupes))
+                elements.extend(
+                    _clip_to_elements(
+                        media,
+                        "good",
+                        expand_dupes=expand_dupes,
+                        region_box=region_boxes.get(cid),
+                    )
+                )
         for cid in bad_votes:
             media = medias.get(cid)
             if media:
@@ -349,7 +363,13 @@ def media_element_key(media: dict[str, Any]) -> Any:
     return element_key(fake)
 
 
-def _clip_to_elements(media: dict[str, Any], label: str, *, expand_dupes: bool = True) -> list[LabeledElement]:
+def _clip_to_elements(
+    media: dict[str, Any],
+    label: str,
+    *,
+    expand_dupes: bool = True,
+    region_box: tuple[float, float, float, float] | None = None,
+) -> list[LabeledElement]:
     """Convert a media dict into one or more :class:`LabeledElement` instances.
 
     When *expand_dupes* is ``True`` and the media is a dupe-set
@@ -359,6 +379,14 @@ def _clip_to_elements(media: dict[str, Any], label: str, *, expand_dupes: bool =
     using the representative's own MD5 and origin, which avoids inflating
     the label count for internal round-trip use cases (e.g. detector
     persistence).
+
+    When *region_box* is provided (only ever populated for ``label == "good"``
+    by the caller), it is attached to every emitted element so the region
+    annotation rides along through label export / detector sync.  Dupe-set
+    members share the representative's box — the user voted "this region is
+    good in *this* image" and the representative is what the user actually
+    saw, so cloning the box across structurally-identical members is the
+    right default.
     """
     origin = media.get("origin")
     cm = media.get("custom_metadata") or None
@@ -374,6 +402,7 @@ def _clip_to_elements(media: dict[str, Any], label: str, *, expand_dupes: bool =
                     filename=m.get("filename", ""),
                     category=m.get("category", ""),
                     metadata=cm,
+                    region_box=region_box,
                 )
                 for m in members
             ]
@@ -388,5 +417,6 @@ def _clip_to_elements(media: dict[str, Any], label: str, *, expand_dupes: bool =
             filename=media.get("filename", ""),
             category=media.get("category", ""),
             metadata=cm,
+            region_box=region_box,
         )
     ]

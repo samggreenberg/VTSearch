@@ -501,33 +501,54 @@ back at the design for semantics.  Items are grouped by surface and
 ordered so the backend can land first and the frontend can build on
 the API once it's stable.
 
-**Backend**
+**Backend** — *all items DONE.*
 
-1. **`LabeledElement.region_box`.** Add optional
-   `region_box: tuple[float, float, float, float] | None = None` to
-   `vtsearch/datasets/labelset.py::LabeledElement`.  Round-trip through
-   the dict-serialisation path used by label export/import.  Replace
-   the v1 contract test
-   `tests/test_patch_embedder.py::TestVoteSemanticsV1::test_labeled_element_has_no_region_box_field_in_v1`
-   with a presence + round-trip test.
-2. **On-the-fly vote-vector pooling.** New pure-numpy helper
-   `box_to_vote_vector(patch_grid, box) -> np.ndarray` in
+1. **`LabeledElement.region_box` — DONE (PR #1271).** Optional
+   `region_box: tuple[float, float, float, float] | None = None` lives on
+   `vtsearch/datasets/labelset.py::LabeledElement`, round-trips through
+   the dict-serialisation path used by label export/import, and is
+   covered by
+   `tests/test_patch_embedder.py::TestRegionBoxOnLabeledElement`.
+2. **On-the-fly vote-vector pooling — DONE (PR #1271).** Pure-numpy
+   helper `box_to_vote_vector(patch_grid, box) -> np.ndarray` lives in
    `vtsearch/models/patch_regions.py`.  Selects grid cells whose
    centers fall inside the normalised box, uniform-means their
    vectors, L2-normalises.  No saliency input — see "v2 → Backend
    semantics §1" above for why uniform mean is the right rule (and
    for why no rule can match HAC node vectors exactly).
-3. **Vote endpoint.** Yes-vote API gains optional `region_box`;
-   persists it on the resulting `LabeledElement`.  No-votes reject
-   `region_box` (contract: no-votes are image-level always).
-4. **Region-aware training.** `vtsearch/models/detector_training.py`
-   reads `region_box` per labelled example; when set, pools the
-   training vector on-the-fly from `media["patch_grid"]` via
-   `box_to_vote_vector`.  Falls back to `media["embedding"]` when
-   `region_box` is None or `patch_grid` is absent (legacy datasets,
-   single-vector embedders).
-5. **Label export.** Once step 1 lands, exporters serialise
-   `region_box` automatically — verify with a round-trip test.
+3. **Vote endpoint — DONE.** `POST /api/medias/<id>/vote` now accepts
+   an optional `region_box`: a 4-float list in `[0, 1]`.  Yes-votes
+   persist the box on
+   `DetectorContext.vote_region_boxes` (and from there into label
+   export, detector sync, and labelset-source sync); no-votes that
+   include a box return HTTP 400 instead of silently dropping it,
+   surfacing the client bug immediately.  Toggling a good vote off
+   evicts the box, as does switching good → bad.  Tests in
+   `tests/test_patch_embedder.py::TestVoteEndpointRegionBox`.
+4. **Region-aware training — DONE.**
+   `vtsearch/models/training.py::_training_vec_for_vote` (used by
+   `train_and_score` and the active-votes learned-sort path) and
+   `vtsearch/models/labelset_training.py::populate_label_embeddings`
+   pool the training vector on-the-fly from `media["patch_grid"]` via
+   `box_to_vote_vector` when `region_box` is set and a patch grid is
+   available.  Falls back to `media["embedding"]` for legacy datasets,
+   single-vector embedders, or cross-dataset elements resolved via
+   their origin importer.  Region-voted labelset elements re-pool on
+   every training pass so `region_box` edits propagate without an
+   explicit cache invalidation; the image-level cache fast path is
+   unchanged.  Tests in
+   `tests/test_patch_embedder.py::TestRegionAwareTraining`.
+5. **Label export — DONE.** `LabelSet.from_clips_and_votes` accepts an
+   optional `vote_region_boxes` map and attaches each box to its
+   matching good vote's `LabeledElement`.  All four call sites
+   (`/api/labels/export`, `POST /api/detectors/<name>/labels`,
+   `sync_labels_to_loaded_detector`, `sync_to_labelset_source`) thread
+   it through, so a region annotation round-trips from the vote API
+   all the way to disk + any configured labelset source.
+   `POST /api/labels/import` rebuilds `vote_region_boxes` on good-vote
+   imports.  Tests in
+   `tests/test_patch_embedder.py::TestLabelExportRegionBox` and
+   `::TestLabelImportRegionBox`.
 
 **Frontend**
 
