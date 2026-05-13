@@ -47,10 +47,16 @@ def sync_labels_to_loaded_detector() -> None:
         return
 
     from vtsearch.datasets.labelset import LabelSet, element_key, media_element_key
-    from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+    from vtsearch.utils import bad_votes, good_votes, snapshot_medias, vote_region_boxes
 
     snap = snapshot_medias()
-    current_ls = LabelSet.from_clips_and_votes(snap, good_votes, bad_votes, expand_dupes=False)
+    current_ls = LabelSet.from_clips_and_votes(
+        snap,
+        good_votes,
+        bad_votes,
+        expand_dupes=False,
+        vote_region_boxes=dict(vote_region_boxes),
+    )
     existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 
     # Origin keys for *every* media in the active dataset (voted or not).

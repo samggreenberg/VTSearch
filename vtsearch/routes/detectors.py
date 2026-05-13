@@ -280,9 +280,15 @@ def save_detector_labels(name: str):
         return jsonify({"error": f"Detector '{name}' not found"}), 404
 
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import bad_votes, good_votes, snapshot_medias
+    from vtsearch.utils import bad_votes, good_votes, snapshot_medias, vote_region_boxes
 
-    labelset = LabelSet.from_clips_and_votes(snapshot_medias(), good_votes, bad_votes, expand_dupes=False)
+    labelset = LabelSet.from_clips_and_votes(
+        snapshot_medias(),
+        good_votes,
+        bad_votes,
+        expand_dupes=False,
+        vote_region_boxes=dict(vote_region_boxes),
+    )
     data["labelset"] = labelset.to_dict()
     _write_detector(path, data)
 

@@ -31,6 +31,28 @@ medias_bp = Blueprint("medias", __name__)
 _BROWSER_VIDEO_EXTS = {".mp4", ".m4v", ".webm", ".ogg", ".ogv"}
 
 
+def _parse_region_box(raw: Any) -> tuple[float, float, float, float] | None:
+    """Validate a ``region_box`` field from a vote request body.
+
+    Returns ``None`` when the field is absent or explicitly null.  Otherwise
+    coerces a 4-element list/tuple of numbers in ``[0, 1]`` into a float
+    4-tuple.  Raises :class:`ValueError` with a user-facing message when the
+    value is malformed.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, (list, tuple)) or len(raw) != 4:
+        raise ValueError("region_box must be a 4-element list of numbers")
+    try:
+        x0, y0, x1, y1 = (float(v) for v in raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("region_box entries must be numbers") from exc
+    for v in (x0, y0, x1, y1):
+        if not (0.0 <= v <= 1.0):
+            raise ValueError("region_box entries must be in [0, 1]")
+    return (x0, y0, x1, y1)
+
+
 def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:
     """Transcode video bytes to browser-playable MP4.
 
@@ -540,7 +562,11 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
         media_id: Integer media ID from the URL path.
 
     Request body (JSON):
-        ``{"vote": "good"}`` or ``{"vote": "bad"}``.
+        ``{"vote": "good"}`` or ``{"vote": "bad"}``.  Yes-votes may
+        additionally carry ``"region_box": [x0, y0, x1, y1]`` (normalised
+        image coords in ``[0, 1]``) to designate the good region.
+        No-votes that include ``region_box`` are rejected — by design
+        no-votes are image-level always (patch-embedder v2).
 
     Returns:
         ``{"ok": True}`` (HTTP 200) on success, or a JSON error response for:
@@ -560,7 +586,14 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
     if vote not in ("good", "bad"):
         return jsonify({"error": "vote must be 'good' or 'bad'"}), 400
 
-    toggle_vote(media_id, vote)
+    try:
+        region_box = _parse_region_box(data.get("region_box"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if vote == "bad" and region_box is not None:
+        return jsonify({"error": "no-votes cannot carry a region_box"}), 400
+
+    toggle_vote(media_id, vote, region_box=region_box)
 
     from vtsearch.models.label_sync import sync_labels_to_loaded_detector
 

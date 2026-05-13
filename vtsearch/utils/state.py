@@ -27,6 +27,7 @@ from vtsearch.utils.state_core import (  # noqa: F401
     medias,
     textsort_suggestions,
     vote_click_times,
+    vote_region_boxes,
 )
 
 # Re-export context management functions ---------------------------------
