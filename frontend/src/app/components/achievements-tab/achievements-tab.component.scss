@@ -1,3 +1,27 @@
+.achievements-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--surface-alt, rgba(255, 255, 255, 0.04));
+  border-radius: 6px;
+}
+
+.achievements-total-label {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, #888);
+}
+
+.achievements-total-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--accent, #4aa3ff);
+}
+
 .achievements-intro {
   margin: 0 0 1rem;
   color: var(--text-muted, #888);
