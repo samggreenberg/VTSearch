@@ -128,7 +128,10 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
   sort). This is where you pick what to look at next.
 - **Centre panel** — the **media viewer**. The selected item plays
   (audio), displays (image, video, text, document page), and offers
-  two big vote buttons: **Good** (green) and **Bad** (red).
+  two big vote buttons: **Good** (green) and **Bad** (red).  On
+  image datasets that use a patch-region embedder
+  (DINOv2/DINOv3/EUPE `_patch`), the centre panel also supports
+  **region voting** — see "Region voting on images" below.
 - **Right panel** — your **vote piles**. Everything you've voted good
   or bad is stacked here, most-recent first, so you can scan your
   work, un-vote, or re-vote.
@@ -273,6 +276,67 @@ modal. All preferences are remembered per media type.
 
 There's a separate view modal for the right panel (vote piles),
 with the same controls.
+
+---
+
+## Region voting on images
+
+When the dataset's embedder is patch-region-aware (DINOv2, DINOv3,
+or EUPE with a `_patch` slug — set when the dataset was created),
+you can vote **good** on a *region* of the image instead of the
+whole image.  This tells the model "this specific part is what I
+like", and the learned sort uses that hint to find similar regions
+elsewhere in the dataset.
+
+The binary vote experience is **unchanged**: `→` is good, `←` is
+bad.  Region voting is opt-in via a modifier key and never gets in
+the way of fast keyboard voting.
+
+### Drawing a region
+
+1. **Hold `Shift`** while the focus pane is showing an image.  The
+   cursor flips to a crosshair and the normal pan-on-drag gesture
+   is suppressed.
+2. **Click-drag-release** to draw a rectangle over the region you
+   want to vote good on.  After release the rectangle shows 8
+   resize handles plus a draggable body, so you can adjust it.
+3. **Press `→`** (or click **Good**) to submit a good vote with
+   the region attached.
+
+The rectangle is stored in *normalised image coordinates* — it
+stays anchored to the same pixels of the image even if you zoom in,
+pan, or rotate before voting.  A `Shift`-click without dragging (a
+zero-area "click") restores the previously drawn rectangle rather
+than discarding it.  `Esc` clears the rectangle without voting.
+
+### Voting bad while a region is drawn
+
+A `←` press while a region is drawn would normally throw the
+rectangle away — and drawing a rectangle is real work, so VTSearch
+**asks for confirmation**:
+
+- The rectangle pulses red and a hint banner reads
+  *"Press ← again to vote no and discard the box, or Esc to keep
+  the box."*
+- A second `←` confirms — the no-vote fires and the rectangle is
+  discarded.
+- `Esc`, clicking on the rectangle, drawing a new one, or
+  navigating to the next item all cancel the confirmation and keep
+  the rectangle.
+
+There is **no timer** — the confirmation state waits as long as you
+need.
+
+### What region voting does to the model
+
+Region-voted good examples train the model on the *region* (pooled
+from the patch grid) instead of the full image.  Bad votes are
+unaffected — VTSearch already treats every bad vote as "no region
+in this image is good" regardless of whether you drew a rectangle.
+
+Region voting is image-only.  Audio, text, video, and document
+media types have no region affordance.
+
 
 ---
 
