@@ -155,39 +155,6 @@ def _label(draw: ImageDraw.ImageDraw, text: str, w: int) -> None:
     draw.text((pad, 2), text, fill=(255, 255, 255), font=font)
 
 
-def _dashed_line(
-    draw: ImageDraw.ImageDraw,
-    start: tuple[float, float],
-    end: tuple[float, float],
-    fill: tuple[int, int, int],
-    width: int,
-    *,
-    dash: int = 6,
-    gap: int = 5,
-) -> None:
-    """Draw a dashed line from ``start`` to ``end``.
-
-    PIL has no built-in dashed-line support, so we step along the segment
-    and draw fixed-length ``dash``/``gap`` pieces.  Used for "box no-op"
-    HAC merges where the parent's bbox equals one of its children's, so
-    the edge is visually distinct without relying on colour.
-    """
-    x0, y0 = start
-    x1, y1 = end
-    dx, dy = x1 - x0, y1 - y0
-    length = (dx * dx + dy * dy) ** 0.5
-    if length <= 0:
-        return
-    ux, uy = dx / length, dy / length
-    pos = 0.0
-    while pos < length:
-        end_pos = min(pos + dash, length)
-        sx, sy = x0 + ux * pos, y0 + uy * pos
-        ex, ey = x0 + ux * end_pos, y0 + uy * end_pos
-        draw.line([(sx, sy), (ex, ey)], fill=fill, width=width)
-        pos = end_pos + gap
-
-
 def _cell_mask_of(regions: list[RegionVector], idx: int) -> np.ndarray:
     """Return the union-of-cells mask for ``regions[idx]`` (bool, ``(H, W)``).
 
@@ -359,13 +326,16 @@ def render_config_tree(
     * HAC internal merge nodes in the middle (each masked to the *union
       of patch cells* under the node — not its loose bounding box),
     * HAC leaves along the bottom (each masked to its cell footprint),
-    * edges connecting parents to their two children.  Edges are grey
-      solid by default and **dashed** when the merge is a box no-op —
-      i.e., the parent's bbox equals one of the child's bboxes
-      ("merging C into AB didn't grow the rectangle, even though it
-      did add new cells").
+    * solid grey edges connecting parents to their two children.
 
-    Leaves are outlined in yellow; internals in cyan.
+    Leaves are outlined in yellow; internals in cyan.  There is no
+    duplicate-edge highlighting because, in patch-cell space, every
+    merge strictly grows the cell set (leaves are non-empty and
+    disjoint by construction, so the union is always larger than
+    either child).  A previous version of this view dashed edges where
+    the *loose bounding rectangle* happened to equal a child's box —
+    but that's an artifact of the rectangle, not the underlying region
+    the MLP and similarity rule pool over.
     """
     col, depth, max_depth = _layout_tree(regions, k)
     hac = regions[1:]
@@ -434,10 +404,12 @@ def render_config_tree(
         _label(draw, title, canvas_w)
 
     # ---- edges (drawn first so thumbnails sit on top) ----------------------
-    # Dashed edge = "box no-op" merge: the parent's bbox is identical to
-    # the child's bbox.  Cells DID grow (HAC always adds new patches) but
-    # the bounding rectangle did not — visually, "ABC + C = ABC" if names
-    # are bboxes.  The non-no-op sibling stays solid grey.
+    # All edges are solid grey.  Earlier we dashed edges where the
+    # parent's *bbox* equalled a child's bbox, but in patch-cell space
+    # the parent's cell set always strictly grows on every merge — so
+    # the "duplicate" only existed in rectangle-land and was misleading
+    # for a viewer reasoning about what the MLP / similarity rule
+    # actually sees.
     for i in range(k, n):
         pcx, pcy = center(i)
         children = hac[i].children
@@ -445,13 +417,11 @@ def render_config_tree(
         for child_idx in children:
             ci = child_idx - 1
             ccx, ccy = center(ci)
-            start = (pcx, pcy + thumb // 2)
-            end = (ccx, ccy - thumb // 2)
-            color = (120, 120, 120)
-            if hac[i].box == hac[ci].box:
-                _dashed_line(draw, start, end, color, width=2)
-            else:
-                draw.line([start, end], fill=color, width=1)
+            draw.line(
+                [(pcx, pcy + thumb // 2), (ccx, ccy - thumb // 2)],
+                fill=(120, 120, 120),
+                width=1,
+            )
 
     # ---- node thumbnails ---------------------------------------------------
     # `regions` indexing: 0 is CLS, 1..K leaves, K+1.. internals.  `hac`
@@ -554,12 +524,14 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
       * ``area_growth``              — mean ratio of internal area to
         sum of its children's areas; ≈ 1 means children are adjacent,
         > 1 means the merge introduces a lot of empty bounding box.
-      * ``box_noop_rate``            — fraction of internal merges
-        whose bounding box equals one of its children's bbox.  These
-        are the "merging C into AB → still labelled AB-by-bbox" cases
-        the visualisation renders with red edges.  Cells still
-        strictly grow, so the vector and polygon are still distinct —
-        but the rectangle is a duplicate.
+      * ``cell_noop_rate``           — fraction of internal merges
+        whose **patch-cell union** is identical to one of its children's
+        cell sets.  This is the right "did the merge actually produce
+        a new region?" check (the MLP and similarity rule pool over
+        cells, not over bounding boxes).  Always ``0.0`` by
+        construction: leaves are non-empty and disjoint, so the union
+        of any two HAC subtrees strictly contains either child's
+        cells.  Reported anyway as a sanity invariant.
     """
     leaves = regions[1 : 1 + k]
     internals = regions[1 + k :]
@@ -579,7 +551,7 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
                        # in `regions` are 1-based because of the CLS node).
     balances: list[float] = []
     growths: list[float] = []
-    n_box_noop = 0
+    n_cell_noop = 0
     for offset, node in enumerate(internals, start=len(leaves)):
         ci, cj = node.children  # type: ignore[misc]
         # children are indices into `regions`; shift by 1 to index `flat`.
@@ -594,8 +566,14 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
         area_children_sum = _box_area(a_box) + _box_area(b_box)
         if area_children_sum > 1e-9:
             growths.append(area_node / area_children_sum)
-        if node.box == a_box or node.box == b_box:
-            n_box_noop += 1
+        # Compare the actual patch-cell sets the MLP / similarity rule
+        # see, not the loose rectangles.  Leaves are non-empty disjoint,
+        # so this is always False — we tally it to publish the invariant.
+        parent_mask = _cell_mask_of(regions, offset + 1)
+        left_mask = _cell_mask_of(regions, ci)
+        right_mask = _cell_mask_of(regions, cj)
+        if np.array_equal(parent_mask, left_mask) or np.array_equal(parent_mask, right_mask):
+            n_cell_noop += 1
 
     root_area = _box_area(internals[-1].box) if internals else 1.0
     return {
@@ -606,7 +584,7 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
         "root_area": float(root_area),
         "merge_balance": float(np.mean(balances)) if balances else 0.0,
         "area_growth": float(np.mean(growths)) if growths else 0.0,
-        "box_noop_rate": float(n_box_noop / len(internals)) if internals else 0.0,
+        "cell_noop_rate": float(n_cell_noop / len(internals)) if internals else 0.0,
     }
 
 
@@ -826,19 +804,19 @@ def write_report(
         "merges** (cyan outline), each drawn as the union of its "
         "constituent leaves' cells — the *true* polygonal footprint "
         "the MLP and similarity rule pool over, not the loose bounding "
-        "box.  Edges connect each merge to its two children.  **Dashed "
-        "edges** flag *box no-op* merges: the parent's bounding "
-        "rectangle is identical to one of its children's (\"merging C "
-        "into AB didn't grow the rectangle\") — even though the cell "
-        "set always strictly grew (the merge always added new "
-        "patches), so the node's vector and outlined polygon still "
-        "differ from the child's.  Read it bottom-up: leaves first, then "
-        "progressively coarser merges until the root, with the CLS-"
-        "pooled full image in the top-left as the global-scale fallback "
-        "(always present, not part of the HAC graph).  Internal node "
-        "vectors are the L2-normalised saliency-weighted mean over the "
-        "patches in the cell union — order-independent, equal to "
-        "re-pooling from scratch."
+        "box.  Solid grey edges connect each merge to its two children. "
+        " Read it bottom-up: leaves first, then progressively coarser "
+        "merges until the root, with the CLS-pooled full image in the "
+        "top-left as the global-scale fallback (always present, not "
+        "part of the HAC graph).  Internal node vectors are the "
+        "L2-normalised saliency-weighted mean over the patches in the "
+        "cell union — order-independent, equal to re-pooling from "
+        "scratch.  By construction every merge strictly grows the cell "
+        "set (leaves are non-empty and disjoint, so the union always "
+        "contains new patches relative to either child), so there are "
+        "no \"duplicate\" merges to flag — the loose bounding "
+        "rectangle occasionally lands on a child's rectangle, but "
+        "that's a rectangle artifact, not something the model sees."
     )
     lines.append("")
     for i, label in enumerate(image_labels):
@@ -877,17 +855,19 @@ def write_report(
         "`area_growth` ≈ internal_area / sum(child_areas) "
         "(1.0 = perfectly adjacent children, > 1 = boxes include empty "
         "space); "
-        "`box_noop_rate` ≈ fraction of internal merges whose bbox "
-        "equals one of its children's bbox (the dashed edges in the "
-        "tree visualisations).  Cells still strictly grow on every "
-        "merge, so the node's vector and polygon are still distinct "
-        "from the child's — the rectangle is just a duplicate label."
+        "`cell_noop_rate` ≈ fraction of internal merges whose "
+        "**patch-cell union** equals one of its children's cell set — "
+        "i.e. \"did the merge actually grow the region the MLP sees?\""
+        "  Always 0 by construction (leaves are non-empty and disjoint, "
+        "so the union strictly contains either child).  Published "
+        "as a sanity invariant — if it ever drifts above 0 the "
+        "HAC implementation is doing something wrong."
     )
     lines.append("")
     headers = (
         "| K | α | leaf_area | leaf_area_std | leaf_overlap_max | "
         "internal_area | root_area | merge_balance | area_growth | "
-        "box_noop_rate |"
+        "cell_noop_rate |"
     )
     sep = "|---|---|---|---|---|---|---|---|---|---|"
     lines.append(headers)
@@ -902,7 +882,7 @@ def write_report(
             f"{m['root_area']:.3f} | "
             f"{m['merge_balance']:.3f} | "
             f"{m['area_growth']:.3f} | "
-            f"{m['box_noop_rate']:.3f} |"
+            f"{m['cell_noop_rate']:.3f} |"
         )
     lines.append("")
 
