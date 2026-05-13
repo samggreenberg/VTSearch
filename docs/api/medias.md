@@ -100,8 +100,24 @@ POST /api/medias/{media_id}/vote
 Toggle semantics: voting the same direction again removes the vote. Voting the
 opposite direction switches sides.
 
+**Optional `region_box`** (yes-votes only): a 4-float array
+`[x0, y0, x1, y1]` in normalised image coordinates (`0..1`,
+pre-rotation) that annotates *which region of the image* the user
+is voting good on. Persisted alongside the vote and consumed by
+region-aware MLP training (the trainer pools the box's patch-grid
+cells on the fly). The box is dropped when the vote is toggled off
+or switched good → bad.
+
+```json
+{"vote": "good", "region_box": [0.2, 0.3, 0.55, 0.7]}
+```
+
 → `{"ok": true}`
-400 for invalid vote value. 404 if not found.
+
+| Status | Cause |
+|--------|-------|
+| `400` | Invalid `vote` value; `region_box` on a `bad` vote; `region_box` outside `[0, 1]` or not a 4-tuple. |
+| `404` | Media not found. |
 
 ---
 
@@ -119,6 +135,17 @@ Embeds the text query using the media type's embedding model, then sorts all
 medias by cosine similarity. Includes a GMM-based threshold.
 
 → `{"results": [{"id": 0, "similarity": 0.8234}], "threshold": 0.5123}`
+
+When the dataset's embedder is patch-region-aware (e.g.
+`dinov3_patch`), each result additionally carries
+`"best_region": [x0, y0, x1, y1]` — the normalised box of the
+region whose vector matched best against the query, used by the
+gallery card to draw a faint outline. Boxes that cover the full
+image (the single-vector fallback `[0, 0, 1, 1]`) are suppressed by
+the frontend.
+
+Returns HTTP 400 + `{"supports_text": false, ...}` when the dataset's
+embedder doesn't support text queries.
 
 ### Text sort progress
 
@@ -141,6 +168,14 @@ least one good and one bad vote.
 
 → `{"results": [{"id": 0, "score": 0.9234}], "threshold": 0.5123}`
 
+On patch-region-aware datasets the MLP is max-pooled over each
+image's region tree, and each result carries `"best_region": [x0,
+y0, x1, y1]` for the region whose score won. Region-annotated Good
+votes (`region_box` on `LabeledElement`) pool the user's box from
+the patch grid at training time; Bad votes use a region-aware
+asymmetric loss. See [`docs/plans/patch-embedder.md`](../plans/patch-embedder.md)
+for the design.
+
 ### Example sort (upload)
 
 ```
@@ -152,6 +187,9 @@ POST /api/example-sort
 Embeds the uploaded file and sorts by cosine similarity.
 
 → `{"results": [{"id": 0, "similarity": 0.8234}], "threshold": 0.5123}`
+
+`best_region` is included per-result on patch-region-aware datasets,
+same shape as text sort.
 
 ### Example sort (server file)
 

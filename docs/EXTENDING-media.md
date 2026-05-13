@@ -476,9 +476,26 @@ loaded via `spec_from_file_location` so discovery still works.
 | `AudioClapEmbedder` | `clap` | `audio` | LAION CLAP (laion/clap-htsat-unfused) | 512 |
 | `AudioClapMusicEmbedder` | `clap_music` | `audio` | CLAP Music & Speech (laion/larger_clap_music_and_speech) | 512 |
 | `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |
+| `ImageDinov2SingleEmbedder` / `ImageDinov2PatchEmbedder` | `dinov2_single` / `dinov2_patch` | `image` | DINOv2 ViT-B/14 (facebook/dinov2-base) — ungated | 768 |
+| `ImageDinov3SingleEmbedder` / `ImageDinov3PatchEmbedder` | `dinov3_single` / `dinov3_patch` | `image` | DINOv3 ViT-B/16 (facebook/dinov3-vitb16-pretrain-lvd1689m) — HF-gated | 768 |
+| `ImageEupeSingleEmbedder` / `ImageEupePatchEmbedder` | `eupe_single` / `eupe_patch` | `image` | EUPE ViT-B/16 (facebookresearch/EUPE) — FAIR Noncommercial Research Licence | 768 |
 | `TextE5Embedder` | `e5` | `text` | E5-base-v2 (intfloat/e5-base-v2) | 768 |
 | `TextBGEEmbedder` | `bge` | `text` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
 | `VideoXClipEmbedder` | `xclip` | `video` | X-CLIP (microsoft/xclip-base-patch32) | 768 |
+
+The image embedders come in **single/patch pairs**: `_single` slugs expose only the CLS-pooled vector (same shape and cost as SigLIP); `_patch` slugs additionally populate `media["patch_regions"]` (HAC region tree, ~24 vectors per image) and `media["patch_grid"]` (raw `H × W × D` fp16) so the region-similarity, region-aware MLP scoring, and region-voting code paths can opt in. Both variants of a backbone share weights via an underscore-prefixed `_<backbone>_shared.py` module that the auto-discovery scan skips.
+
+### Embedder capability flags
+
+`MediaEmbedder` carries three capability flags consumed by the routes layer and the frontend. Set them on your subclass when relevant:
+
+| Flag | Default | When to set |
+|---|---|---|
+| `supports_text: bool` | False | True for cross-modal encoders that have a text tower (CLIP, SigLIP, CLAP, E5, BGE). Required for `POST /api/sort` text queries. |
+| `supports_patch_regions: bool` | False | True for image embedders that implement `_patch_forward(image) -> PatchEmbedOutput`. Loaders that see this flag run the patch pass after the standard CLS pass. |
+| `license_notice: Optional[str]` | None | Non-None when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend embedder picker surfaces this as a warning chip; the dataset-create flow surfaces it inline. |
+
+All three flags are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/embedders`.
 
 ---
 

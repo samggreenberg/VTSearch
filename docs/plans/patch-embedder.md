@@ -324,14 +324,11 @@ The dataset surface gains two getters that just delegate: `dataset.supports_text
 
 ### Future: one text embedder + one patch embedder per dataset
 
-The natural next step is to let a dataset bind **up to one** text-capable embedder and **up to one** patch-capable embedder. When the user opens a text sort, the system runs the text embedder; when they open a region similarity search or cast a region vote, the system runs the patch embedder. Both embeddings live in the pickle, keyed by embedder name. The schema becomes something like:
-
-```python
-media["embeddings"] = {"siglip": ndarray, "dinov3": ndarray}   # full-image per embedder
-media["patch_regions"] = {"dinov3": [RegionVector, ...]}        # per patch embedder
-```
-
-This is a real schema change with implications for every loader/exporter and for the activation flow, so it lives behind its own design doc. For this plan it's only relevant as a constraint: every name we pick now (capability flags, field keys) should be compatible with that future where multiple embedders coexist. The fields above already are — `media["embedding"]` collapses cleanly into `media["embeddings"][primary_name]`, and `media["patch_regions"]` collapses into `media["patch_regions"][patch_embedder_name]`.
+Tracked in "V3 — design" below.  v1/v2 picked the field names
+(`media["embedding"]`, `media["patch_regions"]`, `media["patch_grid"]`)
+so that they collapse cleanly into the v3 dict schema — no rewrite of
+the v1/v2 storage decisions is needed; v3 is purely additive at the
+schema level.
 
 ## Backend integration points
 
@@ -490,150 +487,324 @@ was independent so they could be picked up in any order.
 ## Open questions
 
 *(None outstanding.  The v1 open question — fp16/fp32 rank stability —
-was answered above; v2 design questions are tracked in the v2 section
-below.)*
+was answered under "V1 — DONE"; v2 shipped without leaving any open
+design questions behind.)*
 
-## V2 work plan
+## V2 — DONE
 
-The v2 design is already specified above under "Vote attribution → v2:
-region voting".  This section is just the punchlist — each item points
-back at the design for semantics.  Items are grouped by surface and
-ordered so the backend can land first and the frontend can build on
-the API once it's stable.
+V2 is **shipped**.  Region voting on the focus pane via Shift-drag is
+live: yes-votes carry an optional rectangular `region_box`; no-votes
+never carry one; and the binary-only `←`/`→` fast path is byte-for-byte
+identical to v1.  Semantics live under "Vote attribution → v2: region
+voting" above; closeout summary below.
 
-**Backend** — *all items DONE.*
+1. **Backend region plumbing — DONE (PRs #1271, #1272, #1273).**
+   - `vtsearch/datasets/labelset.py::LabeledElement` gained an
+     optional `region_box: tuple[float, float, float, float] | None`
+     that round-trips through the dict-serialisation path used by
+     label export/import.
+   - `vtsearch/models/patch_regions.py::box_to_vote_vector(patch_grid,
+     box)` does the on-the-fly pooling: select grid cells whose
+     centers fall inside the normalised box, uniform-mean their
+     vectors, L2-normalise.  Uniform mean is the only rule that keeps
+     `box → vote_vector` consistent across disjoint cell sets — see
+     "v2 → Backend semantics §1" above for the HAC-associativity
+     argument.
+   - `POST /api/medias/<id>/vote` accepts an optional `region_box`
+     (4-float list in `[0, 1]`).  Yes-votes persist it on
+     `DetectorContext.vote_region_boxes` and from there into label
+     export, detector sync, and labelset-source sync.  No-votes that
+     include a box return HTTP 400 instead of silently dropping it
+     (surfaces client bugs immediately).  Toggling a good vote off
+     or switching good → bad evicts the box.
+   - `vtsearch/models/training.py::_training_vec_for_vote` and
+     `vtsearch/models/labelset_training.py::populate_label_embeddings`
+     pool the training vector on-the-fly from `media["patch_grid"]`
+     via `box_to_vote_vector` when `region_box` is set, falling back
+     to `media["embedding"]` for legacy datasets, single-vector
+     embedders, and cross-dataset elements resolved via origin.
+     Region-voted labelset elements re-pool every training pass so
+     `region_box` edits propagate without explicit cache
+     invalidation; the image-level cache fast path is unchanged.
+   - `LabelSet.from_clips_and_votes` accepts an optional
+     `vote_region_boxes` map.  All four call sites
+     (`/api/labels/export`, `POST /api/detectors/<name>/labels`,
+     `sync_labels_to_loaded_detector`, `sync_to_labelset_source`)
+     thread it through, and `POST /api/labels/import` rebuilds the
+     map on good-vote imports — so a region annotation round-trips
+     from the vote API all the way to disk + any configured labelset
+     source.
 
-1. **`LabeledElement.region_box` — DONE (PR #1271).** Optional
-   `region_box: tuple[float, float, float, float] | None = None` lives on
-   `vtsearch/datasets/labelset.py::LabeledElement`, round-trips through
-   the dict-serialisation path used by label export/import, and is
-   covered by
-   `tests/test_patch_embedder.py::TestRegionBoxOnLabeledElement`.
-2. **On-the-fly vote-vector pooling — DONE (PR #1271).** Pure-numpy
-   helper `box_to_vote_vector(patch_grid, box) -> np.ndarray` lives in
-   `vtsearch/models/patch_regions.py`.  Selects grid cells whose
-   centers fall inside the normalised box, uniform-means their
-   vectors, L2-normalises.  No saliency input — see "v2 → Backend
-   semantics §1" above for why uniform mean is the right rule (and
-   for why no rule can match HAC node vectors exactly).
-3. **Vote endpoint — DONE.** `POST /api/medias/<id>/vote` now accepts
-   an optional `region_box`: a 4-float list in `[0, 1]`.  Yes-votes
-   persist the box on
-   `DetectorContext.vote_region_boxes` (and from there into label
-   export, detector sync, and labelset-source sync); no-votes that
-   include a box return HTTP 400 instead of silently dropping it,
-   surfacing the client bug immediately.  Toggling a good vote off
-   evicts the box, as does switching good → bad.  Tests in
-   `tests/test_patch_embedder.py::TestVoteEndpointRegionBox`.
-4. **Region-aware training — DONE.**
-   `vtsearch/models/training.py::_training_vec_for_vote` (used by
-   `train_and_score` and the active-votes learned-sort path) and
-   `vtsearch/models/labelset_training.py::populate_label_embeddings`
-   pool the training vector on-the-fly from `media["patch_grid"]` via
-   `box_to_vote_vector` when `region_box` is set and a patch grid is
-   available.  Falls back to `media["embedding"]` for legacy datasets,
-   single-vector embedders, or cross-dataset elements resolved via
-   their origin importer.  Region-voted labelset elements re-pool on
-   every training pass so `region_box` edits propagate without an
-   explicit cache invalidation; the image-level cache fast path is
-   unchanged.  Tests in
-   `tests/test_patch_embedder.py::TestRegionAwareTraining`.
-5. **Label export — DONE.** `LabelSet.from_clips_and_votes` accepts an
-   optional `vote_region_boxes` map and attaches each box to its
-   matching good vote's `LabeledElement`.  All four call sites
-   (`/api/labels/export`, `POST /api/detectors/<name>/labels`,
-   `sync_labels_to_loaded_detector`, `sync_to_labelset_source`) thread
-   it through, so a region annotation round-trips from the vote API
-   all the way to disk + any configured labelset source.
-   `POST /api/labels/import` rebuilds `vote_region_boxes` on good-vote
-   imports.  Tests in
-   `tests/test_patch_embedder.py::TestLabelExportRegionBox` and
-   `::TestLabelImportRegionBox`.
+2. **Frontend region-draw UX — DONE (PRs #1273, #1274).**
+   - `ImageViewerComponent` carries a `.region-stage` overlay that
+     listens for `Shift` keydown/keyup on `window` while the focus
+     pane is mounted, swaps pan-on-drag for box-draw under Shift,
+     flips the cursor to crosshair, and renders the box + 8 resize
+     handles + draggable body as positioned divs.  The stage shares
+     the image's `transform`, so click-drag-release coordinates are
+     anchored in image-local space and stay stable across zoom and
+     rotate.  A zero-area Shift-click restores the prior box rather
+     than discarding it — drawing a box is real work.
+   - `CenterPanelComponent.castVote` is the sole vote entry point.
+     `→` with box → yes-vote + `region_box`; `→` without box → plain
+     yes-vote (unchanged from v1).  `←` without box → plain no-vote
+     (unchanged from v1).  `←` with box → arms a visible sticky
+     "discard & vote no" state with **no timeout** (a red pulse on
+     the box plus an inline hint banner *"Press ← again to vote no
+     and discard the box, or Esc to keep the box."*); second `←`
+     confirms.  Esc, mouse-interaction with the box, a fresh
+     Shift-drag-redraw, or media-item navigation all clear the armed
+     state and keep the box.  The on-screen vote buttons use the
+     same `castVote` path.
+   - `MediasApiService.vote(id, label, regionBox?)` only appends
+     `region_box` to the request body when a non-empty 4-tuple is
+     passed, so the binary-only fast path is byte-for-byte unchanged
+     from v1.
+   - The gallery card's `best_region` outline shipped in v1 already
+     and is unchanged in v2 — it stays read-only; the active
+     draw/edit layer lives only on the focus pane.
 
-**Frontend** — *items 6–9 DONE.*
+3. **Test coverage — DONE.**
+   - Backend tests under `tests/test_patch_embedder.py`:
+     `TestRegionBoxOnLabeledElement`, `TestBoxToVoteVector`,
+     `TestVoteEndpointRegionBox`, `TestRegionAwareTraining`,
+     `TestLabelExportRegionBox`, `TestLabelImportRegionBox`.
+   - Frontend specs in
+     `frontend/src/app/components/center-panel/image-viewer/image-viewer.component.spec.ts`:
+     pure-function `screenToImageNormalized` under non-trivial
+     `pan / zoom / rotate`, region-box coord stability across zoom
+     and rotate, and zero-area Shift-click box preservation.
+   - Frontend specs in `center-panel.component.spec.ts`: the sticky
+     armed state (first `←` arms without firing a request; second
+     `←` posts the no-vote; Esc / mouse-on-box /
+     `regionBoxChange(null)` / media-item navigation cancel armed),
+     and the vote-API contract (`region_box` present on
+     yes-with-box, absent on yes-without-box, absent on every
+     no-vote including after a two-press bad-vote confirm).
 
-6. **`RegionDrawComponent` overlay — DONE.** Implemented as a layer
-   inside `ImageViewerComponent` (no separate component): it listens
-   for `Shift` keydown/keyup on `window` while the focus pane is
-   mounted, swaps pan-on-drag for box-draw under Shift, flips the
-   cursor to crosshair, and renders the box + 8 resize handles +
-   draggable body as positioned divs inside a `.region-stage`
-   layer that shares the image's `transform` so box coordinates are
-   anchored in image-local space.  Click-drag-release is un-
-   transformed through the current `panX / panY / zoom / rotate`.
-   Esc clears the box (when not armed — see step 7).  A zero-area
-   Shift-click restores the prior box rather than discarding it
-   (item 13 above) — drawing a box is real work.
-7. **Vote keybindings + buttons — DONE.** Lives in
-   `CenterPanelComponent.castVote`.  `→` with box → yes-vote +
-   `region_box`; `→` without box → plain yes-vote (unchanged);
-   `←` without box → plain no-vote (unchanged); `←` with box →
-   arms a visible sticky "discard & vote no" state with **no
-   timeout** (a red sticky pulse on the box plus an inline hint
-   banner — *"Press ← again to vote no and discard the box, or
-   Esc to keep the box."*); second `←` confirms.  Esc, mouse-
-   interaction with the box (mousedown on body or any handle),
-   a fresh Shift-drag-redraw, or media-item navigation all clear
-   the armed state and keep the box.  Same rules apply to the
-   on-screen vote buttons via the shared `castVote` entry point.
-8. **Vote-dispatch service — DONE.** `MediasApiService.vote(id,
-   label, regionBox?)` accepts an optional `regionBox` and only
-   appends `region_box` to the request body when the array is a
-   non-empty 4-tuple.  `CenterPanelComponent` passes
-   `currentRegionBox` on yes-votes and `null` on no-votes, so the
-   binary-only fast path is byte-for-byte unchanged from v1.
-9. **Gallery `best_region` outline — already shipped in v1.**
-   Read-only outline lives on the gallery card; v2 adds the
-   active draw/edit layer only on the focus pane.
-
-**Tests** — *items 10–13 + 15–16 DONE; 14 DONE under v2 backend.*
-
-10. **Coord-transform — DONE.** Pure-function tests for
-    `screenToImageNormalized` under non-trivial `pan / zoom /
-    rotate` live in
-    `frontend/src/app/components/center-panel/image-viewer/image-viewer.component.spec.ts`
-    (`describe('screenToImageNormalized (coord transform)')`).
-11. **Coord-stability — DONE.** Same spec file
-    (`describe('region box coord stability')`) asserts that
-    `regionBox` and `regionBoxStyle` are byte-for-byte stable
-    across zoom and rotation changes — the box is stored in
-    normalised image coordinates and the CSS overlay rides the
-    image's transform.
-12. **Box-discard (sticky armed state) — DONE.** Covered in
-    `center-panel.component.spec.ts`
-    (`describe('sticky bad-vote-confirm armed state')`): first `←`
-    arms without firing a request, second `←` posts the no-vote;
-    Esc / mouse-on-box (routed via `onArmedConfirmCanceled`) cancel
-    armed and keep the box; `regionBoxChange(null)` cancels armed
-    and drops the box; media-item navigation clears both.
-13. **Box-preserve — DONE.** `image-viewer.component.spec.ts`
-    (`describe('region box preservation on zero-area Shift-drag')`)
-    asserts a zero-area Shift-click restores the previous box and
-    that no spurious emit reaches the parent.  Backed by the
-    `DragMode.draw.previousBox` field on `ImageViewerComponent`.
-14. **`LabeledElement.region_box` round-trip — DONE.** Backend test
-    `tests/test_patch_embedder.py::TestRegionBoxOnLabeledElement`
-    (shipped under v2 backend step 1).
-15. **Vote-API contract — DONE.** `center-panel.component.spec.ts`
-    (`describe('vote-API contract for region_box')`) asserts
-    `region_box` is present on yes-with-box, absent on yes-without-
-    box, and absent on every no-vote (including after a two-press
-    bad-vote-confirm).
-16. **`box_to_vote_vector` — DONE.** Backend test
-    `tests/test_patch_embedder.py::TestBoxToVoteVector` (shipped
-    under v2 backend step 2).
-
-**Out of scope for v2 (deferred)**
+**Deferred (out of scope for v2):**
 
 - Touch support — no `Shift` modifier on mobile.  Toolbar toggle
   button is the natural future home, but v2's audience is desktop
   power users.
 - Multiple regions per vote — v2 ships single rectangle only.
-- Region votes on non-image media types.  `supports_patch_regions`
+- Region votes on non-image media types — `supports_patch_regions`
   is image-specific; no obvious 2D analogue elsewhere.
+
+## V3 — design
+
+V3 lets a dataset bind **up to one text-capable embedder + up to one
+patch-capable embedder** instead of exactly one embedder.  Text sort
+runs against the text embedder; region similarity, region voting, and
+the detector MLP run against the patch embedder; both live side-by-
+side in the pickle.  No dataset is forced to take two embedders — a
+single-embedder dataset still works, and a dataset that doesn't
+benefit from one of the two roles simply leaves that slot empty.
+
+The point is to **stop forcing the user to choose** between "good
+text queries" (SigLIP/CLIP) and "good region voting + visual quality"
+(DINOv3 patch).  Today those are mutually exclusive because the
+dataset has exactly one embedder; in v3 they coexist on the same
+pickle.
+
+### Schema change
+
+The on-disk per-media fields become dicts keyed by embedder name:
+
+```python
+media["embeddings"]    = {"siglip": ndarray, "dinov3_patch": ndarray}   # fp16, L2-normalised, one entry per bound embedder
+media["patch_regions"] = {"dinov3_patch": [RegionVector, ...]}          # only the patch embedder(s) populate this
+media["patch_grid"]    = {"dinov3_patch": ndarray}                      # (H, W, D) fp16 per patch embedder
+```
+
+The legacy `media["embedding"]` (singular, scalar value) is **dropped
+from the on-disk format** in v3.  Loaders that read an older pickle
+re-key it on the fly:
+
+```python
+media["embeddings"] = {legacy_embedder_name: media.pop("embedding")}
+if legacy_embedder_supports_patch and "patch_regions" in media:
+    media["patch_regions"] = {legacy_embedder_name: media.pop("patch_regions")}
+    media["patch_grid"]    = {legacy_embedder_name: media.pop("patch_grid")}
+```
+
+This is a one-shot read-time migration, not a runtime compat shim.
+After the first save under v3, the legacy fields are gone.  Per
+CLAUDE.md ("Backwards Compatibility"), we don't keep a parallel
+`media["embedding"]` mirror.
+
+### Dataset binding
+
+Two new fields on the dataset header (the part of the pickle that
+describes the dataset, not the per-media list):
+
+```python
+dataset.text_embedder:  str | None   # e.g. "siglip" or "e5" or None
+dataset.patch_embedder: str | None   # e.g. "dinov3_patch" or None
+```
+
+Constraints:
+
+- At least one of the two must be set (otherwise no sort/search/vote
+  works).
+- `text_embedder` must point at an embedder with
+  `supports_text == True`.
+- `patch_embedder` must point at an embedder with
+  `supports_patch_regions == True`.  Slots are role-typed; a
+  single-vector embedder (e.g. `dinov3_single`) is not eligible for
+  the patch slot.
+- Both slots may be filled — that's the new capability v3 unlocks.
+  The two embedders run independently at load time; their outputs
+  share nothing.
+
+`dataset.supports_text` becomes `text_embedder is not None`;
+`dataset.supports_patch_regions` becomes `patch_embedder is not None`.
+The existing `MediaEmbedder.supports_text` /
+`supports_patch_regions` flags stay — they describe an embedder's
+*capabilities*; the dataset slots record which embedder is *bound* to
+which role.
+
+### Routing rules
+
+| Operation | Embedder used | Behaviour when slot empty |
+|---|---|---|
+| Text sort (`POST /api/sort`) | `text_embedder` | HTTP 400 + `supports_text: false` (already the v1 behaviour) |
+| Cosine example sort (`POST /api/example-sort`) | `patch_embedder` if set, else `text_embedder` | HTTP 400 if neither is set |
+| Region similarity (`POST /api/find-label`, etc.) | `patch_embedder` | HTTP 400 if `patch_embedder` is None |
+| Region voting / `region_box` on `LabeledElement` | `patch_embedder` | UI hides Shift-drag affordance if `patch_embedder` is None |
+| Diversity tree | `patch_embedder` if set, else `text_embedder` | One tree per dataset; rebuilt when the bound embedder changes |
+| Detector MLP scoring | `patch_embedder` if set, else `text_embedder` | Region max-pool applies only when scoring against `patch_embedder` |
+| Detector MLP training | same embedder as scoring (must match) | — |
+| Gallery `best_region` overlay | `patch_embedder` | Outline absent when `patch_embedder` is None (v1 behaviour) |
+
+The example-sort fallback to `text_embedder` is **only** for image
+uploads — text sort never falls back to the patch embedder, because
+patch embedders don't have a text encoder.  The
+`MediaEmbedder.supports_text` gate already enforces this at request
+time.
+
+### Detector MLP keying
+
+Today an MLP is keyed by `(detector_id, dataset_id)` and trained on
+whatever vectors the dataset's single embedder produced.  In v3:
+
+- An MLP is keyed by `(detector_id, dataset_id, embedder_name)`.
+- A detector that ran against `siglip` on a v2-era dataset stays
+  valid post-migration — its embedder_name is the pre-migration
+  embedder.
+- Switching `dataset.patch_embedder` from `None` to `dinov3_patch`
+  doesn't invalidate existing `text_embedder`-keyed MLPs; the new
+  patch-keyed MLP is trained fresh from the existing votes the next
+  time the user runs Learned sort.  Votes are embedder-agnostic
+  (they're `(media_id, label, region_box?)`), so they re-use cleanly.
+
+### Loader / exporter / importer impact
+
+- **Pickle loaders** (`loader_pickle.py`, `loader_folder.py`) run
+  both bound embedders during ingest.  Each one writes into its own
+  key under `media["embeddings"]` / `media["patch_regions"]` /
+  `media["patch_grid"]`.  The two passes share dataset I/O (one file
+  open per media) but run their forwards independently.
+- **`ConcurrencyGate`** (`load_pipeline.py`) gates embed work; v3's
+  two embedders count as two embed phases for the same dataset.  Net
+  effect: a two-embedder dataset takes longer to ingest than a
+  single-embedder one, gated under the same `_embed_gate` limit.
+- **Dataset pickle schema version** bumps.  Old pickles still load
+  via the read-time re-key; saving from v3 always writes the new
+  schema.
+- **NPZ paths-file (server_files importer)** today carries one
+  `vectors` array per media.  In v3 it grows an optional
+  `vectors_<embedder_name>` per-embedder layout; the existing
+  single-`vectors` layout maps to the dataset's `text_embedder` slot
+  (or `patch_embedder` if no text slot is set).
+- **Combine Datasets importer**: input pickles must have identical
+  `(text_embedder, patch_embedder)` pairs to combine.  We refuse the
+  combine with a clear error otherwise — no partial-overlap
+  reconciliation in v3.
+
+### Frontend
+
+- **Dataset-create flow**: today's single embedder picker becomes a
+  pair of pickers ("Text embedder" + "Patch embedder"), each
+  defaulted to None and filtered by the role-typed capability list.
+  The license-notice chip surfaces on whichever picker shows an
+  embedder with one.
+- **Sort bar** continues to read `dataset.supports_text` /
+  `supports_patch_regions` — no per-component change.
+- **Embedder picker page** (admin-ish): no shape change; embedder
+  cards already list `supports_text` and `supports_patch_regions`.
+- **Region-vote UI**: unchanged from v2 once the routing wires up;
+  Shift-drag continues to work whenever `dataset.patch_embedder` is
+  set.
+
+### Migration
+
+Per-dataset migration is one-time and automatic at first load under
+v3:
+
+1. Read legacy `dataset.embedder: str` and `media["embedding"]:
+   ndarray`.
+2. If the legacy embedder is `supports_text=True` →
+   `dataset.text_embedder = legacy_name`,
+   `dataset.patch_embedder = None`.
+   If it's `supports_patch_regions=True` →
+   `dataset.patch_embedder = legacy_name`,
+   `dataset.text_embedder = None`.
+3. Re-key per-media fields as in "Schema change".
+4. Mark the dataset as v3-schema in memory; the next save writes the
+   new format.
+
+There is **no in-place "add a second embedder to an existing dataset"
+flow** in v3.  Same rule as v1: changing or adding an embedder
+requires re-import.  This is consistent with the "Per-dataset
+embedder model" rule today and avoids the partial-embedding
+inconsistency window.
+
+### Out of scope for v3
+
+- **>1 text or >1 patch embedder per dataset.**  A user wanting two
+  text embedders re-imports under a separate dataset.  The schema
+  (dict keyed by name) is forward-compatible with this, but the
+  binding rules (`text_embedder: str | None`) intentionally aren't.
+- **In-place add-an-embedder on a loaded dataset.**  Same re-import
+  rule as v1.
+- **Cross-embedder MLP transfer.**  An MLP trained against `siglip`
+  is not reused against `dinov3_patch`; training restarts from the
+  existing vote pile.
+- **Embedding diff / freshness checks.**  We don't ship a "the
+  pickle has a stale embedder version" check — embedder weights are
+  versioned by HF revision, and re-import covers any case where the
+  user wants newer weights.
+
+### Open questions (v3)
+
+1. **Where in the dataset header do `text_embedder` /
+   `patch_embedder` live?**  Today's single `dataset.embedder` field
+   probably can't just be renamed without breaking labelset sync.
+   Most likely: keep the legacy field as an alias to whichever slot
+   is filled (read-only, computed) for one release, then drop it.
+   To be confirmed during impl.
+2. **Combine Datasets ergonomics.**  Strict "embedder pair must
+   match" is the v3 rule, but if it bites enough users in practice
+   we may want a "combine on the text slot only" variant.  Punt
+   until we see real demand.
+3. **Diversity-tree backbone preference.**  The routing table picks
+   `patch_embedder` over `text_embedder` when both are set, on the
+   theory that patch backbones (DINO/EUPE) cluster images more
+   semantically than text-trained backbones (SigLIP).  Worth a
+   sanity check on a mixed dataset before we lock the preference
+   in.
+
+### V3 work plan (sketch)
+
+Filled in when we start, just like the v2 plan was a punchlist
+during impl.  Rough size estimate: backend ~2× v2 (schema +
+loader + per-embedder MLP keying), frontend ~0.5× v2 (just the
+dual-picker on dataset-create).  No new ML algorithms — v3 is
+plumbing, not modelling.
 
 ## Phasing
 
 - **v1 (this plan):** six image embedders — single/patch pairs for DINOv2 (ungated default), DINOv3 (gated, premium), and real-EUPE (FAIR Noncommercial). `supports_patch_regions` + `license_notice` flags on `MediaEmbedder`; each `_patch` embedder populates `media["patch_regions"]` (HAC tree) and `media["patch_grid"]` (raw H × W × 768 fp16); the matching `_single` slug provides a fast/cheap CLS-only path on the same backbone for datasets that don't need region search. `PatchEmbedOutput` protocol; max-region similarity; region-aware MLP scoring; asymmetric training loss (Good = `BCE(mlp(full_image_vec), 1)` unchanged from today, Bad = `mean`-over-regions BCE) with image-level labels unchanged on disk; gallery-card region highlight; license-notice surfacing on the embedder picker. Text sort stays grey via the already-shipped `supports_text` gate. Pre-implementation experiments run on `caltech101_s` and inform `K`, `α`, and the EUPE-real attention path.
 - **v2:** region voting on image media via Shift-drag on the focus pane (single rectangular box, salient-area annotation on yes-votes only; binary fast path via `←`/`→` preserved); on-the-fly vote-vector computation from the v1-pickled `patch_grid` (no re-import needed); optional `LabeledElement.region_box`; region-level training examples; per-region label export. Touch deferred.
-- **v3:** one text embedder + one patch embedder per dataset (text queries → text embedder; region similarity / votes → patch embedder). Requires a real schema change (`media["embeddings"]` dict, `media["patch_regions"]` dict). Gets its own design doc when we get there.
+- **v3:** one text embedder + one patch embedder per dataset (text queries → text embedder; region similarity / votes → patch embedder).  Schema change to dict-keyed `media["embeddings"]` / `media["patch_regions"]` / `media["patch_grid"]`; legacy `media["embedding"]` is read-migrated then dropped on next save; MLPs become keyed by `(detector, dataset, embedder)`.  Designed in "V3 — design" above; work plan filled in when impl starts.
