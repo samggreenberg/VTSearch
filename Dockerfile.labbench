@@ -1,14 +1,14 @@
 # -----------------------------------------------------------------
-# VTSearch — SigLIP CPU image (image search with SigLIP only)
+# VTSearch — LabBench CPU image (image search with SigLIP only)
 #
-# Streamlined for the most common use case: browsing/voting on an
+# Streamlined for the LabBench environment: browsing/voting on an
 # image dataset using the SigLIP embedder. Skips audio, video,
 # document, text, and extractor plugins, and bakes the SigLIP model
 # weights into the image at build time so the container is ready to
 # serve immediately on first run (no Hugging Face download needed).
 #
-# Build:  docker build -f Dockerfile.siglip -t vtsearch:siglip .
-# Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:siglip
+# Build:  docker build -f Dockerfile.labbench -t vtsearch:labbench .
+# Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
 # -----------------------------------------------------------------
 
 FROM python:3.10-slim AS base
@@ -16,7 +16,7 @@ FROM python:3.10-slim AS base
 WORKDIR /app
 
 # ---------- dependency layer (cached unless requirements*.txt change) ------
-COPY requirements-siglip.txt ./
+COPY requirements-labbench.txt ./
 COPY pyproject.toml ./
 COPY vtsearch/__init__.py vtsearch/__init__.py
 
@@ -26,7 +26,7 @@ COPY vtsearch/ vtsearch/
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
         --prefer-binary \
-        -r requirements-siglip.txt && \
+        -r requirements-labbench.txt && \
     pip install --no-cache-dir --no-deps -e .
 
 # ---------- pre-download SigLIP weights into the image ----------
