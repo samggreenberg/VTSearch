@@ -335,6 +335,157 @@ class TestToFp16:
 
 
 # ---------------------------------------------------------------------------
+# fp16 storage / fp32 compute rank stability
+# ---------------------------------------------------------------------------
+
+
+def _make_region_batch(
+    num_media: int,
+    regions_per_image: int,
+    dim: int,
+    seed: int,
+) -> dict[int, dict]:
+    """Build a batch of media dicts with fp32-stored ``patch_regions``.
+
+    Each region vector is a fresh L2-normalised draw — no shared structure
+    between media or regions, which is the worst case for cosine ranking
+    stability (no built-in margin between competing regions).
+    """
+    rng = np.random.default_rng(seed)
+    batch: dict[int, dict] = {}
+    for i in range(num_media):
+        regions = []
+        for _ in range(regions_per_image):
+            v = rng.standard_normal(dim).astype(np.float32)
+            v = v / np.linalg.norm(v).clip(min=1e-12)
+            regions.append(RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=v))
+        batch[i] = {
+            "patch_regions": regions,
+            "embedding": regions[0].vec.copy(),
+        }
+    return batch
+
+
+def _to_fp16_batch(snap_fp32: dict[int, dict]) -> dict[int, dict]:
+    """Mirror of *snap_fp32* with every region vec cast to fp16 (storage mode)."""
+    return {
+        cid: {
+            "patch_regions": [
+                RegionVector(box=r.box, vec=r.vec.astype(np.float16), children=r.children)
+                for r in m["patch_regions"]
+            ],
+            "embedding": m["embedding"],
+        }
+        for cid, m in snap_fp32.items()
+    }
+
+
+class TestFp16Fp32RankStability:
+    """fp16 pickle storage must not flip max-over-region cosine ranks vs. fp32.
+
+    Per the patch-embedder design (Open Questions §1): region vectors are
+    pickled as fp16 to keep dataset size manageable, but cast back to fp32
+    at compute time inside ``score_against_query``.  This test pins the
+    claim that the fp16 round-trip is cheap *and* faithful — the cosine
+    ranking under fp16 storage matches fp32 storage outside of a tiny
+    quantization-noise tie band.
+    """
+
+    # Production embedders are all 768-dim ViT-Bs; K=12 leaves + 11 HAC
+    # internals + 1 full-image node = 24 regions / image.  These constants
+    # match the v1 design pins so the test exercises the prod shape.
+    _DIM = 768
+    _REGIONS_PER_IMAGE = 24
+    _NUM_MEDIA = 50
+    _NUM_QUERIES = 20
+
+    def test_max_score_difference_below_quantization_noise(self):
+        """Per-media region-max score differs by less than 1e-2 under fp16 storage.
+
+        Empirically fp16 quantization of 768-dim unit vectors costs ~1e-3 in
+        cosine sim; 1e-2 is a generous ceiling that catches any catastrophic
+        regression (e.g. dropping a normalisation, accidentally storing
+        non-normalised fp16, etc.).
+        """
+        snap_fp32 = _make_region_batch(
+            self._NUM_MEDIA, self._REGIONS_PER_IMAGE, self._DIM, seed=0
+        )
+        snap_fp16 = _to_fp16_batch(snap_fp32)
+        rng = np.random.default_rng(42)
+
+        max_diff = 0.0
+        for _ in range(self._NUM_QUERIES):
+            q = rng.standard_normal(self._DIM).astype(np.float32)
+            q = q / np.linalg.norm(q)
+            for cid in snap_fp32:
+                s32, _ = score_against_query(snap_fp32[cid], q)
+                s16, _ = score_against_query(snap_fp16[cid], q)
+                max_diff = max(max_diff, abs(s32 - s16))
+
+        assert max_diff < 1e-2, (
+            f"fp16 vs fp32 region-max score diff = {max_diff:.4g}; "
+            "expected < 1e-2 — investigate whether fp16 storage is dropping "
+            "normalisation or vectors are no longer near-unit-norm"
+        )
+
+    def test_no_rank_flips_outside_noise_band(self):
+        """Pairs of media whose fp32 scores differ by more than the fp16 noise
+        floor keep the same relative order under fp16 storage.
+
+        Pairs *inside* the noise band (|Δscore| ≤ 5e-3) are allowed to swap —
+        that's an unavoidable consequence of fp16 quantization and matches
+        what "rank doesn't flip in any meaningful sense" means in practice.
+        """
+        snap_fp32 = _make_region_batch(
+            self._NUM_MEDIA, self._REGIONS_PER_IMAGE, self._DIM, seed=1
+        )
+        snap_fp16 = _to_fp16_batch(snap_fp32)
+        rng = np.random.default_rng(7)
+        noise_band = 5e-3
+
+        flips: list[tuple[int, int, float, float]] = []
+        for _ in range(self._NUM_QUERIES):
+            q = rng.standard_normal(self._DIM).astype(np.float32)
+            q = q / np.linalg.norm(q)
+            scores32 = {cid: score_against_query(m, q)[0] for cid, m in snap_fp32.items()}
+            scores16 = {cid: score_against_query(m, q)[0] for cid, m in snap_fp16.items()}
+            ids = list(scores32.keys())
+            for i in range(len(ids)):
+                for j in range(i + 1, len(ids)):
+                    a, b = ids[i], ids[j]
+                    diff32 = scores32[a] - scores32[b]
+                    if abs(diff32) <= noise_band:
+                        continue
+                    diff16 = scores16[a] - scores16[b]
+                    if (diff32 > 0) != (diff16 > 0):
+                        flips.append((a, b, diff32, diff16))
+
+        assert not flips, (
+            f"{len(flips)} non-tie rank flip(s) between fp16 and fp32 storage; "
+            f"first: media {flips[0][0]} vs {flips[0][1]}, "
+            f"fp32 Δ={flips[0][2]:.4g}, fp16 Δ={flips[0][3]:.4g}"
+        )
+
+    def test_top_result_preserved(self):
+        """The #1 result under fp32 storage is also the #1 result under fp16,
+        across every random query — this is the assertion users actually feel."""
+        snap_fp32 = _make_region_batch(
+            self._NUM_MEDIA, self._REGIONS_PER_IMAGE, self._DIM, seed=2
+        )
+        snap_fp16 = _to_fp16_batch(snap_fp32)
+        rng = np.random.default_rng(99)
+
+        for _ in range(self._NUM_QUERIES):
+            q = rng.standard_normal(self._DIM).astype(np.float32)
+            q = q / np.linalg.norm(q)
+            top32 = cosine_sort_with_boxes(snap_fp32, q)[0][0]["id"]
+            top16 = cosine_sort_with_boxes(snap_fp16, q)[0][0]["id"]
+            assert top32 == top16, (
+                f"Top result flipped between storage modes: fp32→{top32}, fp16→{top16}"
+            )
+
+
+# ---------------------------------------------------------------------------
 # Adapters: HF ViT and EUPE
 # ---------------------------------------------------------------------------
 

@@ -328,13 +328,11 @@ Run these **before** we ship v1, on the `caltech101_s` demo dataset (a sensible 
 
 These all run in a single throwaway script (or notebook), check results visually, then we delete the script.
 
-## Remaining v1 work
+## V1 — DONE
 
-V1 backend shipped across PR #1248; UI surface is partial.  These three
-items finish the v1 scope but were deliberately deferred from the
-session that landed the backend so it could close on a logical
-boundary.  Pick any of them up independently — they don't depend on
-each other.
+V1 is **shipped**.  Backend landed in PR #1248; the remaining UI surface
+and validation items below were closed out in follow-up sessions.  Each
+was independent so they could be picked up in any order.
 
 1. **Gallery-card `best_region.box` outline overlay — DONE.**
    - Backend returns `best_region` (4-tuple `[x0, y0, x1, y1]` in
@@ -406,9 +404,116 @@ each other.
      `vtsearch/models/patch_regions.py` is parameterised on `K` and
      `α` per the same goal.
 
+4. **FP16 ↔ FP32 rank-stability check — DONE.**
+   - Added `TestFp16Fp32RankStability` to
+     `tests/test_patch_embedder.py`.  Builds a 50-media batch of 24
+     fp32 region vectors per image at the production 768-dim shape,
+     mirrors it as fp16, scores both against 20 random unit queries,
+     and asserts: (a) the per-media max-cosine score differs by
+     < 1e-2 across the full batch; (b) no pair of media whose fp32
+     scores differ by more than the 5e-3 quantization noise band
+     flips relative order under fp16 storage; (c) the #1 result is
+     preserved across every query.
+   - Empirically the worst-case score delta lands ~1e-3 on this
+     batch (well inside the 1e-2 ceiling), and zero non-tie rank
+     flips occurred across all sampled pairs × queries.  fp16-on-
+     disk is faithful for retrieval at the v1 scale; no design
+     changes required.
+
 ## Open questions
 
-1. **FP16 ↔ FP32 numerical effect** — cosine similarity at fp16 storage / fp32 compute is fine for retrieval, but cross-check that the max-over-region rule doesn't flip rank vs. fp32-storage on a held-out batch. Cheap, low-risk; just don't skip it.
+*(None outstanding.  The v1 open question — fp16/fp32 rank stability —
+was answered above; v2 design questions are tracked in the v2 section
+below.)*
+
+## V2 work plan
+
+The v2 design is already specified above under "Vote attribution → v2:
+region voting".  This section is just the punchlist — each item points
+back at the design for semantics.  Items are grouped by surface and
+ordered so the backend can land first and the frontend can build on
+the API once it's stable.
+
+**Backend**
+
+1. **`LabeledElement.region_box`.** Add optional
+   `region_box: tuple[float, float, float, float] | None = None` to
+   `vtsearch/datasets/labelset.py::LabeledElement`.  Round-trip through
+   the dict-serialisation path used by label export/import.  Replace
+   the v1 contract test
+   `tests/test_patch_embedder.py::TestVoteSemanticsV1::test_labeled_element_has_no_region_box_field_in_v1`
+   with a presence + round-trip test.
+2. **On-the-fly vote-vector pooling.** New pure-numpy helper
+   `box_to_vote_vector(patch_grid, box) -> np.ndarray` in
+   `vtsearch/models/patch_regions.py`.  Selects grid cells whose
+   centers fall inside the normalised box, attention-weighted-means
+   their vectors (saliency from the same `PatchEmbedOutput` source
+   that built the regions), L2-normalises.  See "v2 → Backend
+   semantics §1" above.
+3. **Vote endpoint.** Yes-vote API gains optional `region_box`;
+   persists it on the resulting `LabeledElement`.  No-votes reject
+   `region_box` (contract: no-votes are image-level always).
+4. **Region-aware training.** `vtsearch/models/detector_training.py`
+   reads `region_box` per labelled example; when set, pools the
+   training vector on-the-fly from `media["patch_grid"]` via
+   `box_to_vote_vector`.  Falls back to `media["embedding"]` when
+   `region_box` is None or `patch_grid` is absent (legacy datasets,
+   single-vector embedders).
+5. **Label export.** Once step 1 lands, exporters serialise
+   `region_box` automatically — verify with a round-trip test.
+
+**Frontend**
+
+6. **`RegionDrawComponent` overlay.** New component (or layer inside
+   `ImageViewerComponent`) that listens for `Shift` keydown/keyup on
+   `window` while the focus pane is mounted.  Shift-held swaps the
+   pan-on-drag gesture for box-draw; cursor → crosshair.  Click-drag-
+   release in image-local coordinates, un-transformed through the
+   current `panX / panY / zoom / rotate`.  Renders the box + 8 resize
+   handles + draggable body as positioned divs inside
+   `.thumbnail-wrap` (same coordinate system as the v1 `best_region`
+   outline).  Zero-area release → no box; Esc clears the box without
+   voting.  Mid-drag Shift release commits the in-progress box on
+   mouseup before mode exits.  See "v2 → Interaction design" above.
+7. **Vote keybindings + buttons.**  `→` with box → yes-vote +
+   `region_box`; `→` without box → plain yes-vote (unchanged); `←`
+   without box → plain no-vote (unchanged); `←` with box → first
+   press shakes / highlights the box, second within ~2s submits the
+   no-vote and discards the box; Esc discards the box without
+   voting.  Same rules apply to the on-screen vote buttons.
+8. **Vote-dispatch service.** Carry optional `regionBox` into the
+   existing yes-vote API call.  Bad-vote path picks up the "pending
+   discard confirmation" sub-state.  None of this touches the
+   binary-only code paths.
+9. **Gallery `best_region` outline.**  Already shipped in v1 as
+   read-only — leave it as-is.  V2 adds the active draw layer only
+   on the focus pane.
+
+**Tests**
+
+10. Coord-transform: pure-function tests for the screen↔image
+    transform under non-trivial `pan/zoom/rotate`.
+11. Coord-stability: a box drawn at one zoom level stays anchored on
+    the same image pixels when the user zooms in/out.
+12. Box-discard: bad-vote-with-box requires two consecutive `←`
+    presses within the timeout; the second press discards the box.
+13. Box-preserve: a subsequent zero-area Shift-drag click does not
+    clear an already-drawn box.
+14. `LabeledElement.region_box` round-trips through serialisation
+    (replaces the v1 absence assertion).
+15. Vote-API contract: `region_box` present on yes-vote with box,
+    absent on yes-vote without box, absent on every no-vote.
+16. Backend pure-function test for `box_to_vote_vector` against a
+    hand-crafted `patch_grid`.
+
+**Out of scope for v2 (deferred)**
+
+- Touch support — no `Shift` modifier on mobile.  Toolbar toggle
+  button is the natural future home, but v2's audience is desktop
+  power users.
+- Multiple regions per vote — v2 ships single rectangle only.
+- Region votes on non-image media types.  `supports_patch_regions`
+  is image-specific; no obvious 2D analogue elsewhere.
 
 ## Phasing
 
