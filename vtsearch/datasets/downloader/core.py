@@ -46,7 +46,13 @@ FOOD101_URL = "http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"
 EUROSAT_URL = "https://zenodo.org/records/7711810/files/EuroSAT_RGB.zip"
 STANFORD_DOGS_URL = "https://huggingface.co/datasets/Alanox/stanford-dogs/resolve/main/images.tar.gz"
 PLACES365_URL = "http://data.csail.mit.edu/places/places365/val_256.tar"
-PLACES365_LABELS_URL = "https://raw.githubusercontent.com/CSAILVision/places365/master/places365_val.txt"
+# The official labels file ships inside a ~67 MB tarball alongside
+# train/test/category lists.  The historical raw.githubusercontent.com
+# mirror (CSAILVision/places365 master branch) started returning 404,
+# so we now pull the canonical bundle from the MIT mirror and extract
+# only the `places365_val.txt` member we need.
+PLACES365_LABELS_FILELIST_URL = "http://data.csail.mit.edu/places/places365/filelist_places365-standard.tar"
+PLACES365_LABELS_FILELIST_SIZE_MB = 65
 UCSF_IDL_API_URL = "https://metadata.idl.ucsf.edu/solr/ltdl3/query"
 UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 

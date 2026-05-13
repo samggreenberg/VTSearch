@@ -375,14 +375,34 @@ def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
         on_progress=on_progress,
     )
 
-    # Download the per-image label file if not present.  It is a small
-    # text file (~1 MB) listing one "<filename> <category_index>" pair per
-    # validation image.
+    # Pull the per-image label file out of the canonical "filelist"
+    # tarball (~65 MB) hosted on the MIT mirror.  The historical raw-
+    # GitHub mirror went 404, so we now fetch the bundle that ships the
+    # whole train/val/test/category file set and extract only the val
+    # member we need.
     labels_path = extract_dir / "places365_val.txt"
     if not labels_path.exists():
         _core.DATA_DIR.mkdir(exist_ok=True)
         extract_dir.mkdir(exist_ok=True, parents=True)
-        on_progress("downloading", "Downloading Places365 labels...", 0, 0)
-        _core.download_file_with_progress(_core.PLACES365_LABELS_URL, labels_path, 1024 * 1024, on_progress)
+        unique_id = uuid.uuid4().hex[:8]
+        filelist_archive = _core.DATA_DIR / f".dl_{unique_id}_places365_filelist.tar"
+        try:
+            on_progress("downloading", "Downloading Places365 labels...", 0, 0)
+            _core.download_file_with_progress(
+                _core.PLACES365_LABELS_FILELIST_URL,
+                filelist_archive,
+                _core.PLACES365_LABELS_FILELIST_SIZE_MB * 1024 * 1024,
+                on_progress,
+            )
+            with tarfile.open(filelist_archive, "r") as tar:
+                member = tar.getmember("places365_val.txt")
+                src = tar.extractfile(member)
+                if src is None:
+                    raise RuntimeError("places365_val.txt not extractable from filelist tar")
+                with open(labels_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+        finally:
+            if filelist_archive.exists():
+                filelist_archive.unlink()
 
     return extract_dir

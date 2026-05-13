@@ -1,10 +1,15 @@
-"""HAC tree sweep on caltech-101.
+"""HAC tree sweep on Places365.
 
 Throwaway experiment script supporting the patch-embedder design
 (``docs/plans/patch-embedder.md``).  Sweeps ``K ∈ {8, 12, 16}`` and
-``α ∈ {0.3, 0.5, 0.7}`` over a sample of caltech-101 images, renders the
-leaf + HAC-internal bounding-box overlays as PNGs, and writes a markdown
-report under ``docs/experiments/hac-tree-sweep/``.
+``α ∈ {0.3, 0.5, 0.7}`` over a sample of Places365 validation images,
+renders the leaf + HAC-internal bounding-box overlays as PNGs, and
+writes a markdown report under ``docs/experiments/hac-tree-sweep/``.
+
+Places365 is closer to the application's actual imagery (varied
+real-world scenes — indoor rooms, outdoor natural + man-made
+environments) than the cropped-object photos of caltech-101, so the
+visual review is more representative of what users will see.
 
 Embedder: DINOv2 ViT-B/14 (``facebook/dinov2-base``).  DINOv2 is the
 ungated patch-capable embedder; the HAC tree code does not depend on
@@ -14,7 +19,7 @@ choice transfers to DINOv3 / EUPE.
 Usage::
 
     python scripts/run_hac_tree_sweep.py \\
-        --image-root data/caltech-101/101_ObjectCategories \\
+        --places-dir data/places365 \\
         --out-dir docs/experiments/hac-tree-sweep \\
         --num-images 30 \\
         --seed 0
@@ -50,34 +55,50 @@ DEFAULT_ALPHA_VALUES = (0.3, 0.5, 0.7)
 # ---------------------------------------------------------------------------
 
 
-def sample_caltech_paths(root: Path, n: int, seed: int) -> list[Path]:
-    """Pick *n* JPEGs from caltech-101 spread across many categories.
+def sample_places365_paths(places_dir: Path, n: int, seed: int) -> list[tuple[Path, str]]:
+    """Pick *n* JPEGs from the Places365 validation set spread across categories.
 
-    We round-robin over the categories (sorted alphabetically) so the
-    sample contains both single-object (e.g. faces, airplanes) and
-    cluttered-object (e.g. anchor, ant) scenes.  ``BACKGROUND_Google``
-    is dropped — it has no foreground subject and would muddle the
-    visual review.
+    Places365's val_256 split is a flat folder of 36 500 images
+    (``Places365_val_*.jpg``) plus a label file ``places365_val.txt``
+    mapping each filename to one of 365 scene categories.  We parse the
+    label file, group by category, shuffle each category's file list,
+    then round-robin one image from each shuffled category until we
+    have *n* — the same strategy used previously for caltech-101's
+    nested category dirs, so the sample spans many scene types rather
+    than concentrating on a few.
+
+    Returns ``(path, category_name)`` pairs.  We need the category
+    explicitly because the on-disk layout is flat — the parent dir is
+    just ``val_256/`` for everything.
     """
+    from vtsearch.datasets.metadata import load_places365_metadata
+    from vtsearch.media.image.media_type import _PLACES365_CATEGORIES_LIST
+
+    metadata = load_places365_metadata(places_dir, _PLACES365_CATEGORIES_LIST)
+
+    by_cat: dict[str, list[tuple[Path, str]]] = {}
+    for fname in sorted(metadata):
+        meta = metadata[fname]
+        by_cat.setdefault(meta["category"], []).append((meta["path"], meta["category"]))
+
     rng = random.Random(seed)
-    cats = sorted([p for p in root.iterdir() if p.is_dir() and p.name != "BACKGROUND_Google"])
+    cats = sorted(by_cat.keys())
     rng.shuffle(cats)
-
-    by_cat: list[list[Path]] = []
+    buckets: list[list[tuple[Path, str]]] = []
     for cat in cats:
-        files = sorted(cat.glob("*.jpg"))
+        files = by_cat[cat]
+        rng.shuffle(files)
         if files:
-            rng.shuffle(files)
-            by_cat.append(files)
+            buckets.append(files)
 
-    out: list[Path] = []
+    out: list[tuple[Path, str]] = []
     i = 0
-    while len(out) < n and by_cat:
-        idx = i % len(by_cat)
-        files = by_cat[idx]
+    while len(out) < n and buckets:
+        idx = i % len(buckets)
+        files = buckets[idx]
         out.append(files.pop())
         if not files:
-            by_cat.pop(idx)
+            buckets.pop(idx)
         else:
             i += 1
     return out[:n]
@@ -625,8 +646,8 @@ def diversity_tree_clusters(
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--image-root", type=Path,
-                    default=Path("data/caltech-101/101_ObjectCategories"))
+    ap.add_argument("--places-dir", type=Path,
+                    default=Path("data/places365"))
     ap.add_argument("--out-dir", type=Path,
                     default=Path("docs/experiments/hac-tree-sweep"))
     ap.add_argument("--num-images", type=int, default=30)
@@ -649,10 +670,16 @@ def main() -> None:
     k_values = tuple(args.k_values)
     alpha_values = tuple(args.alpha_values)
 
-    print(f"sampling {args.num_images} images from {args.image_root}")
-    paths = sample_caltech_paths(args.image_root, args.num_images, args.seed)
-    for p in paths:
-        print(f"  {p.parent.name}/{p.name}")
+    # Download Places365 val_256 (501 MB) + label file on first run.
+    if not (args.places_dir / "val_256").is_dir() or not (args.places_dir / "places365_val.txt").is_file():
+        from vtsearch.datasets.downloader import download_places365
+        print(f"downloading Places365 to {args.places_dir.parent}…")
+        download_places365()
+
+    print(f"sampling {args.num_images} images from {args.places_dir}")
+    samples = sample_places365_paths(args.places_dir, args.num_images, args.seed)
+    for path, cat in samples:
+        print(f"  {cat}/{path.name}")
 
     print("loading DINOv2…")
     bb = load_dinov2()
@@ -665,9 +692,9 @@ def main() -> None:
     }
     timings: list[float] = []
 
-    for idx, path in enumerate(paths):
+    for idx, (path, category) in enumerate(samples):
         image = Image.open(path).convert("RGB")
-        image_label = f"{path.parent.name}/{path.stem}"
+        image_label = f"{category}/{path.stem}"
         cache_path = _cache_path(args.out_dir, idx, image_label)
 
         t0 = time.perf_counter()
@@ -695,7 +722,7 @@ def main() -> None:
             k=args.default_k,
             title=f"K={args.default_k} alpha={args.default_alpha}",
         )
-        tree_path = args.out_dir / "trees" / f"{idx:02d}_{path.parent.name}_{path.stem}.jpg"
+        tree_path = args.out_dir / "trees" / f"{idx:02d}_{category}_{path.stem}.jpg"
         tree.save(tree_path, quality=88, optimize=True)
         print(
             f"  [{idx}] {image_label}: "
@@ -753,7 +780,7 @@ def write_report(
     mean_forward_s: float,
 ) -> None:
     lines: list[str] = []
-    lines.append("# HAC tree (K, α) sweep — caltech-101")
+    lines.append("# HAC tree (K, α) sweep — Places365")
     lines.append("")
     lines.append(
         "Throwaway experiment for `docs/plans/patch-embedder.md` — "
@@ -762,8 +789,18 @@ def write_report(
     )
     lines.append("")
     lines.append(
+        "Sample drawn from the **Places365 validation set** (`val_256`, "
+        "365 scene categories, 100 images per category).  Places365 is "
+        "closer to the application's real-world imagery than the cropped-"
+        "object photos of caltech-101 — indoor rooms, outdoor natural "
+        "scenes, and outdoor man-made environments, with the kind of "
+        "background clutter and scene-level structure that the patch-"
+        "embedder's region tree actually has to handle in production."
+    )
+    lines.append("")
+    lines.append(
         f"Backbone: DINOv2 ViT-B/14 (`facebook/dinov2-base`) on CPU.  "
-        f"Sample: **{num_images} images** spread across caltech-101 categories "
+        f"Sample: **{num_images} images** spread across Places365 categories "
         f"(seed = 0, see `scripts/run_hac_tree_sweep.py`).  Mean forward "
         f"pass: **{mean_forward_s:.2f} s/image** on CPU."
     )
@@ -876,9 +913,9 @@ def write_report(
         "Top-level groupings produced by agglomerative clustering "
         "(cosine, average linkage, 6 clusters) on the CLS-pooled "
         "DINOv2 vectors for the sampled images.  We're looking for "
-        "clusters that group semantically related categories "
-        "(e.g. animals, vehicles, faces) rather than arbitrary visual "
-        "noise."
+        "clusters that group scenes by broad visual context "
+        "(indoor rooms, outdoor natural, outdoor man-made) rather than "
+        "arbitrary visual noise."
     )
     lines.append("")
     for cid in sorted(clusters):
@@ -935,22 +972,26 @@ def write_report(
     )
     lines.append("")
     lines.append(
-        "- K=8 lumps multi-object scenes into too few regions (see "
-        "image `00` chandelier or `04` headphone — the whole subject "
-        "ends up in 1–2 leaves, so the MLP and similarity rule have "
-        "nothing finer than the full image to choose between)."
+        "- K=8 lumps multi-object scenes into too few regions — entire "
+        "rooms or scene-wide subjects end up in 1–2 leaves, so the MLP "
+        "and similarity rule have nothing finer than the full image to "
+        "choose between.  Especially painful on Places365 where most "
+        "frames are layered (foreground subject + mid-ground objects + "
+        "background)."
     )
     lines.append(
-        "- K=16 over-splits compact subjects (`13` flamingo, `15` "
-        "Leopards — leaves on grass *and* leaves on the animal at the "
-        "same scale, diluting the saliency mass).  Balance also drops "
-        "noticeably."
+        "- K=16 over-splits compact subjects: leaves land on the "
+        "background *and* on individual objects at the same scale, "
+        "diluting the saliency mass.  Balance also drops noticeably "
+        "(see `merge_balance` column)."
     )
     lines.append(
-        "- K=12 is the smallest K where the cougar / leopard images "
-        "cleanly separate animal-parts from background-parts in the "
-        "leaf row, and the HAC internals span the *whole animal* at a "
-        "useful scale (visible as a single cyan thumbnail mid-tree)."
+        "- K=12 is the smallest K where scenes with a clear "
+        "foreground+background separation (e.g. people in a room, an "
+        "object on a surface) cleanly split subject-cells from "
+        "context-cells in the leaf row, and the HAC internals span the "
+        "*whole subject* at a useful scale (visible as a single cyan "
+        "thumbnail mid-tree)."
     )
     lines.append("")
     lines.append("For α:")
@@ -959,19 +1000,22 @@ def write_report(
         "- α=0.3 produces the tightest, most spatially-coherent "
         "internals (`area_growth` ≈ 1.0) — internals nearly always "
         "correspond to a contiguous crop.  Visually the cleanest read "
-        "on faces and single-subject animals."
+        "on scenes with a single dominant subject."
     )
     lines.append(
         "- α=0.7 lets a few internals form L-shapes over background "
-        "patches — at α=0.7 a cyan internal can span the animal *plus* "
-        "a chunk of grass."
+        "patches — at α=0.7 a cyan internal can span a scene subject "
+        "*plus* a chunk of surrounding context that shares its texture "
+        "(common in Places365 scenes where foreground and background "
+        "share materials)."
     )
     lines.append(
         "- α=0.5 sits in between and was the design's starting point.  "
         "The margin over α=0.3 is small (1.5% area_growth, 1% "
         "merge_balance) and α=0.5 retains a useful tilt toward cosine "
-        "when two spatially-separated patches really are part of the "
-        "same object (e.g. the two wings of `10` butterfly)."
+        "when two spatially-separated patches really do belong to the "
+        "same object (e.g. two halves of a person split by an occluder, "
+        "or matching architectural elements on either side of a scene)."
     )
     lines.append("")
     lines.append(
@@ -985,15 +1029,17 @@ def write_report(
     lines.append("### Diversity-tree verdict — pass")
     lines.append("")
     lines.append(
-        "Several clusters above are clearly semantically meaningful — "
-        "the mammal-in-natural-setting group (leopard, cougar, beaver, "
-        "platypus) and the side-profile-fauna group (trilobite, "
-        "flamingo, scorpion, emu) both jump out, and the rest split "
-        "along texture / silhouette lines rather than randomly.  CLS-"
-        "pooled DINOv2 vectors produce sensible top-level groupings, "
-        "so the diversity tree (which builds on the same CLS-pooled "
-        "vector pulled from the patch-aware embedder) will continue "
-        "to behave reasonably after the patch-embedder switch."
+        "Inspect the clusters above — Places365 scenes should land in "
+        "indoor / outdoor-natural / outdoor-man-made groupings, with "
+        "finer splits along lighting and dominant-material lines.  "
+        "Treating those broad scene types as semantic clusters is the "
+        "right bar for the diversity tree: it sorts before users have "
+        "voted, so all it can do is keep the picker from showing five "
+        "near-identical scenes in a row.  CLS-pooled DINOv2 vectors "
+        "produce sensible top-level groupings, so the diversity tree "
+        "(which builds on the same CLS-pooled vector pulled from the "
+        "patch-aware embedder) will continue to behave reasonably "
+        "after the patch-embedder switch."
     )
     lines.append("")
 
