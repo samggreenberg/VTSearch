@@ -22,6 +22,15 @@
           <div class="achievement-head">
             <span class="achievement-name">{{ row.name }}</span>
             <span class="achievement-tier" [attr.data-tier-idx]="row.tier_idx">{{ row.tierName }}</span>
+            @if (row.id === 'docs_read') {
+              <button
+                type="button"
+                class="docs-expand-toggle"
+                (click)="toggleDocsExpanded()"
+                [attr.aria-expanded]="docsExpanded">
+                {{ docsExpanded ? 'Collapse' : 'Expand' }}
+              </button>
+            }
           </div>
           <p class="achievement-desc">{{ row.description }}</p>
           <div class="achievement-progress" [title]="row.progressLabel">
@@ -30,6 +39,48 @@
             </div>
             <span class="achievement-progress-label">{{ row.progressLabel }}</span>
           </div>
+          @if (row.id === 'docs_read' && docsExpanded) {
+            <div class="docs-panel">
+              <ul class="docs-list">
+                @for (doc of docs; track doc.id) {
+                  <li class="docs-list-item" [class.docs-list-item--read]="doc.read">
+                    <span class="docs-list-status" [attr.aria-label]="doc.read ? 'read' : 'unread'">
+                      {{ doc.read ? '✓' : '○' }}
+                    </span>
+                    <a class="docs-list-link" [href]="docRawUrl(doc.id)" target="_blank" rel="noopener noreferrer">
+                      {{ doc.name }}
+                    </a>
+                    <span class="docs-list-path">{{ doc.path }}</span>
+                  </li>
+                }
+              </ul>
+              <form class="docs-phrase-form" (ngSubmit)="submitPhrase()">
+                <label class="docs-phrase-label" for="docs-phrase-input">
+                  Paste a code phrase
+                </label>
+                <input
+                  id="docs-phrase-input"
+                  class="docs-phrase-input"
+                  type="text"
+                  name="phrase"
+                  autocomplete="off"
+                  [(ngModel)]="phraseInput"
+                  [disabled]="submitting"
+                  placeholder="e.g. all systems nominal" />
+                <button
+                  type="submit"
+                  class="docs-phrase-submit"
+                  [disabled]="submitting || !phraseInput.trim()">
+                  {{ submitting ? 'Checking…' : 'Submit' }}
+                </button>
+              </form>
+              @if (phraseStatus.kind !== 'idle') {
+                <p class="docs-phrase-status" [attr.data-kind]="phraseStatus.kind">
+                  {{ phraseStatus.message }}
+                </p>
+              }
+            </div>
+          }
         </div>
       </li>
     }

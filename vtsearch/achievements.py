@@ -13,6 +13,7 @@ announcement via :func:`acknowledge` so the popup doesn't fire on refresh.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from datetime import datetime, timezone
@@ -91,6 +92,17 @@ ACHIEVEMENTS: list[dict[str, Any]] = [
         "icon": "steering-wheel",
         "tiers": [6, 12, 20, 24],
     },
+    {
+        "id": "docs_read",
+        "name": "Readme Reader",
+        "description": (
+            "Find the code phrase at the bottom of each documentation page and "
+            "paste it in to claim credit. Four docs hide a phrase; Platinum is "
+            "all four."
+        ),
+        "icon": "file-text",
+        "tiers": [1, 2, 3, 4],
+    },
 ]
 
 _ACH_BY_ID: dict[str, dict[str, Any]] = {a["id"]: a for a in ACHIEVEMENTS}
@@ -104,6 +116,62 @@ EXCLUDED_DATASET_IMPORTERS: frozenset[str] = frozenset({"demo", "synthetic"})
 #: Marathoner streak alive.  Anything strictly greater than this resets the
 #: streak counter to 1 on the next vote.
 STREAK_GAP_SECONDS: float = 10 * 60
+
+#: Readme Reader docs.  Each entry pairs a doc with the code phrase printed at
+#: the bottom of it.  The phrase is matched server-side: the user pastes their
+#: guess and we compare it to ``_DOC_HASHES`` (SHA-256 of the normalised
+#: phrase).  Phrases are kept in source so the test suite can verify each doc's
+#: footer is in sync, but :func:`get_full_state` never returns them to the
+#: client — only the per-doc read state.
+#:
+#: ``path`` is repo-relative so the docs route can stream the raw markdown.
+_DOCS_RAW: list[dict[str, str]] = [
+    {
+        "id": "readme",
+        "name": "README",
+        "path": "README.md",
+        "phrase": "all aboard the embedding express",
+    },
+    {
+        "id": "user_guide",
+        "name": "User Guide",
+        "path": "docs/USER_GUIDE.md",
+        "phrase": "label like nobody's watching",
+    },
+    {
+        "id": "cli",
+        "name": "CLI",
+        "path": "docs/CLI.md",
+        "phrase": "command palette unlocked",
+    },
+    {
+        "id": "api",
+        "name": "HTTP API",
+        "path": "docs/API.md",
+        "phrase": "json all the way down",
+    },
+]
+
+
+def _normalize_phrase(phrase: str) -> str:
+    """Lower-case + collapse internal whitespace + strip; the canonical form
+    used for hashing and matching.  Tolerant to copy-paste artefacts (extra
+    spaces, trailing newline, accidental capitalisation)."""
+    return " ".join(phrase.lower().split())
+
+
+def _hash_phrase(phrase: str) -> str:
+    return hashlib.sha256(_normalize_phrase(phrase).encode("utf-8")).hexdigest()
+
+
+#: ``doc_id → sha256(normalised phrase)``.  Precomputed at import time.
+_DOC_HASHES: dict[str, str] = {d["id"]: _hash_phrase(d["phrase"]) for d in _DOCS_RAW}
+
+#: Public, phrase-free copy of the doc list for serialisation.
+DOCS: list[dict[str, str]] = [
+    {"id": d["id"], "name": d["name"], "path": d["path"]} for d in _DOCS_RAW
+]
+_DOC_BY_ID: dict[str, dict[str, str]] = {d["id"]: d for d in DOCS}
 
 
 def _ensure_state(settings: dict[str, Any]) -> dict[str, Any]:
@@ -123,6 +191,7 @@ def _ensure_state(settings: dict[str, Any]) -> dict[str, Any]:
     state.setdefault("days_seen", [])
     state.setdefault("media_types_seen", [])
     state.setdefault("hours_seen", [])
+    state.setdefault("docs_read_ids", [])
     if not isinstance(state.get("last_vote_ts"), (int, float)):
         state["last_vote_ts"] = 0.0
     if not isinstance(state.get("current_streak"), int):
@@ -258,6 +327,54 @@ def record_find(n_scored: int) -> None:
         _save(s)
 
 
+def record_doc_phrase(phrase: str) -> dict[str, Any]:
+    """Check a user-submitted phrase against every doc and credit on match.
+
+    The match is case-insensitive and whitespace-normalised — anything that
+    survives :func:`_normalize_phrase` and SHA-256-hashes to a registered doc
+    counts.  A phrase that matches a doc already in ``docs_read_ids`` is
+    reported as ``already_read`` (idempotent, no double-credit).
+
+    Returns a result dict with:
+
+    - ``matched`` (bool): whether the phrase corresponds to a known doc.
+    - ``doc_id`` / ``doc_name`` (str | None): identifying the matched doc.
+    - ``already_read`` (bool): True when the doc was previously credited.
+    """
+    h = _hash_phrase(phrase)
+    matched_id: str | None = None
+    for doc_id, doc_hash in _DOC_HASHES.items():
+        if h == doc_hash:
+            matched_id = doc_id
+            break
+
+    if matched_id is None:
+        return {"matched": False, "doc_id": None, "doc_name": None, "already_read": False}
+
+    doc = _DOC_BY_ID[matched_id]
+    with _settings_lock:
+        s = _ensure_loaded()
+        state = _ensure_state(s)
+        read_ids = state["docs_read_ids"]
+        if matched_id in read_ids:
+            return {
+                "matched": True,
+                "doc_id": matched_id,
+                "doc_name": doc["name"],
+                "already_read": True,
+            }
+        read_ids.append(matched_id)
+        state["counters"]["docs_read"] = len(read_ids)
+        _save(s)
+
+    return {
+        "matched": True,
+        "doc_id": matched_id,
+        "doc_name": doc["name"],
+        "already_read": False,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Read-only API
 # ---------------------------------------------------------------------------
@@ -332,10 +449,16 @@ def get_full_state() -> dict[str, Any]:
                         "threshold": a["tiers"][i],
                     }
                 )
+        read_ids = set(state.get("docs_read_ids", []))
+        docs = [
+            {"id": d["id"], "name": d["name"], "path": d["path"], "read": d["id"] in read_ids}
+            for d in DOCS
+        ]
         return {
             "tier_names": list(TIER_NAMES),
             "achievements": achievements,
             "pending_announcements": pending,
+            "docs": docs,
         }
 
 
