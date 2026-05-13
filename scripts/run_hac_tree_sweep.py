@@ -134,41 +134,91 @@ def _label(draw: ImageDraw.ImageDraw, text: str, w: int) -> None:
     draw.text((pad, 2), text, fill=(255, 255, 255), font=font)
 
 
-def _crop_to_box(
+def _cell_mask_of(regions: list[RegionVector], idx: int) -> np.ndarray:
+    """Return the union-of-cells mask for ``regions[idx]`` (bool, ``(H, W)``).
+
+    Walks ``children`` until it bottoms out at leaves, then ORs their
+    ``cell_mask`` arrays.  Leaf cell masks are disjoint by construction
+    (Voronoi-by-spatial-distance), so the union is exactly the set of
+    patch cells underneath this node — the *true* polygonal footprint,
+    not the loose bounding box.
+    """
+    node = regions[idx]
+    if node.cell_mask is not None:
+        return node.cell_mask.astype(bool, copy=False)
+    if node.children is None:
+        raise ValueError(
+            f"region {idx} has neither cell_mask nor children "
+            "(only the CLS full-image node is allowed in that state, "
+            "and it should be handled by the caller)"
+        )
+    ci, cj = node.children
+    return _cell_mask_of(regions, ci) | _cell_mask_of(regions, cj)
+
+
+def _render_cell_thumb(
     image: Image.Image,
-    box: tuple[float, float, float, float],
+    cell_mask: np.ndarray,
     size: tuple[int, int],
     *,
     pad: tuple[int, int, int] = (250, 250, 250),
+    dim_outside: tuple[int, int, int] = (210, 210, 210),
 ) -> Image.Image:
-    """Crop *image* to *box* and fit (preserving aspect ratio) inside *size*.
+    """Render *image* masked to *cell_mask* and sized to *size*.
 
-    The crop is resized to the largest dimensions that fit inside ``size``
-    while keeping its native aspect ratio, then pasted centred onto a
-    *size*-shaped canvas filled with *pad*.  This avoids the squashing
-    that happens when a tall or wide crop is forced into a square
-    thumbnail — important here because the leaves and internal merges
-    have very different shapes from the underlying images.
+    The mask is a ``(H_patch, W_patch)`` bool array over the patch grid.
+    We upsample it to image resolution by nearest-neighbour (every patch
+    cell is a regular rectangle), crop to the mask's tight bounding box,
+    desaturate / dim the *outside-mask* pixels so the eye locks onto the
+    cell union, then fit inside *size* with aspect-preserving resize.
+
+    This shows the union-of-cells footprint, not the loose bounding
+    rectangle — so an L-shaped leaf actually looks L-shaped, and an
+    internal whose merge added cells "inside" its child's bbox is
+    visibly different from that child.
     """
-    w, h = image.size
-    x0, y0, x1, y1 = box
-    px0 = max(0, int(round(x0 * w)))
-    py0 = max(0, int(round(y0 * h)))
-    px1 = min(w, max(px0 + 1, int(round(x1 * w))))
-    py1 = min(h, max(py0 + 1, int(round(y1 * h))))
-    crop = image.crop((px0, py0, px1, py1))
+    h_grid, w_grid = cell_mask.shape
+    w_img, h_img = image.size
+    # Upsample patch-grid mask to image resolution.
+    full = np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
+    # Patch i covers rows [i * h_img / h_grid, (i+1) * h_img / h_grid).
+    row_edges = np.linspace(0, h_img, h_grid + 1).astype(int)
+    col_edges = np.linspace(0, w_img, w_grid + 1).astype(int)
+    full_mask = np.zeros((h_img, w_img), dtype=bool)
+    for r in range(h_grid):
+        for c in range(w_grid):
+            if cell_mask[r, c]:
+                full_mask[row_edges[r] : row_edges[r + 1],
+                          col_edges[c] : col_edges[c + 1]] = True
 
+    if not full_mask.any():
+        canvas = Image.new("RGB", size, pad)
+        return canvas
+
+    # Crop to mask bbox in image coordinates.
+    ys, xs = np.where(full_mask)
+    py0, py1 = int(ys.min()), int(ys.max()) + 1
+    px0, px1 = int(xs.min()), int(xs.max()) + 1
+
+    crop = full[py0:py1, px0:px1, :]
+    crop_mask = full_mask[py0:py1, px0:px1]
+    # Dim outside-mask pixels heavily so the cell union dominates.
+    dim_arr = np.array(dim_outside, dtype=np.uint8)
+    inside = crop_mask[:, :, None]
+    masked = np.where(inside, crop, dim_arr[None, None, :])
+
+    crop_img = Image.fromarray(masked, mode="RGB")
     target_w, target_h = size
-    cw, ch = crop.size
+    cw, ch = crop_img.size
     scale = min(target_w / cw, target_h / ch)
     new_w = max(1, int(round(cw * scale)))
     new_h = max(1, int(round(ch * scale)))
-    crop = crop.resize((new_w, new_h), Image.LANCZOS)
+    crop_img = crop_img.resize((new_w, new_h), Image.LANCZOS)
 
     cell = Image.new("RGB", size, pad)
     ox = (target_w - new_w) // 2
     oy = (target_h - new_h) // 2
-    cell.paste(crop, (ox, oy))
+    cell.paste(crop_img, (ox, oy))
     return cell
 
 
@@ -200,9 +250,9 @@ def _layout_tree(
     # order (children always precede their parent).
     min_cx: dict[int, float] = dict(leaf_cx)
     for i in range(k, n):
-        l = hac[i].children[0] - 1  # type: ignore[index]
-        rr = hac[i].children[1] - 1  # type: ignore[index]
-        min_cx[i] = min(min_cx[l], min_cx[rr])
+        lc = hac[i].children[0] - 1  # type: ignore[index]
+        rc = hac[i].children[1] - 1  # type: ignore[index]
+        min_cx[i] = min(min_cx[lc], min_cx[rc])
 
     col: list[float] = [0.0] * n
     next_slot = 0
@@ -213,9 +263,9 @@ def _layout_tree(
             col[i] = float(next_slot)
             next_slot += 1
             return
-        l = hac[i].children[0] - 1  # type: ignore[index]
-        rr = hac[i].children[1] - 1  # type: ignore[index]
-        first, second = (l, rr) if min_cx[l] <= min_cx[rr] else (rr, l)
+        lc = hac[i].children[0] - 1  # type: ignore[index]
+        rc = hac[i].children[1] - 1  # type: ignore[index]
+        first, second = (lc, rc) if min_cx[lc] <= min_cx[rc] else (rc, lc)
         visit(first)
         visit(second)
         col[i] = (col[first] + col[second]) / 2.0
@@ -227,9 +277,9 @@ def _layout_tree(
     depth = [0] * n
     for i, r in enumerate(hac):
         if r.children is not None:
-            l = r.children[0] - 1
-            rr = r.children[1] - 1
-            depth[i] = max(depth[l], depth[rr]) + 1
+            lc = r.children[0] - 1
+            rc = r.children[1] - 1
+            depth[i] = max(depth[lc], depth[rc]) + 1
     max_depth = max(depth)
 
     return col, depth, max_depth
@@ -251,12 +301,15 @@ def render_config_tree(
     """Render one HAC region tree as a stack:
 
     * the full image at the top,
-    * HAC internal merge nodes in the middle (cropped to their union box),
-    * HAC leaves along the bottom (cropped to each leaf's box),
-    * grey edges connecting parents to their two children.
+    * HAC internal merge nodes in the middle (each masked to the *union
+      of patch cells* under the node — not its loose bounding box),
+    * HAC leaves along the bottom (each masked to its cell footprint),
+    * edges connecting parents to their two children.  Edges are grey by
+      default, **red** when the merge is a box no-op — i.e., the
+      parent's bbox equals one of the child's bboxes ("merging C into AB
+      didn't grow the rectangle, even though it did add new cells").
 
-    Leaves are outlined in yellow; internals in cyan, matching the design
-    doc's vocabulary.
+    Leaves are outlined in yellow; internals in cyan.
     """
     col, depth, max_depth = _layout_tree(regions, k)
     hac = regions[1:]
@@ -296,6 +349,10 @@ def render_config_tree(
         return cx, cy
 
     # ---- edges (drawn first so thumbnails sit on top) ----------------------
+    # Red edge = "box no-op" merge: the parent's bbox is identical to the
+    # child's bbox.  Cells DID grow (HAC always adds new patches) but the
+    # bounding rectangle did not — visually, "ABC + C = ABC" if names are
+    # bboxes.  The non-no-op sibling stays grey.
     for i in range(k, n):
         pcx, pcy = center(i)
         children = hac[i].children
@@ -303,18 +360,26 @@ def render_config_tree(
         for child_idx in children:
             ci = child_idx - 1
             ccx, ccy = center(ci)
+            is_box_noop = hac[i].box == hac[ci].box
+            color = (200, 50, 50) if is_box_noop else (120, 120, 120)
+            width = 2 if is_box_noop else 1
             draw.line(
                 [(pcx, pcy + thumb // 2), (ccx, ccy - thumb // 2)],
-                fill=(120, 120, 120),
-                width=1,
+                fill=color,
+                width=width,
             )
 
     # ---- node thumbnails ---------------------------------------------------
+    # `regions` indexing: 0 is CLS, 1..K leaves, K+1.. internals.  `hac`
+    # is regions[1:], so node-in-hac index i corresponds to regions
+    # index i+1.  _cell_mask_of needs the full `regions` list so we can
+    # walk children (which are also indices into `regions`).
     for i, r in enumerate(hac):
         cx, cy = center(i)
         tx = cx - thumb // 2
         ty = cy - thumb // 2
-        canvas.paste(_crop_to_box(image, r.box, (thumb, thumb)), (tx, ty))
+        mask = _cell_mask_of(regions, i + 1)
+        canvas.paste(_render_cell_thumb(image, mask, (thumb, thumb)), (tx, ty))
         # Yellow ring for leaves, cyan ring for internals.
         color = (255, 215, 0) if i < k else (40, 170, 200)
         draw.rectangle((tx, ty, tx + thumb, ty + thumb), outline=color, width=2)
@@ -405,6 +470,12 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
       * ``area_growth``              — mean ratio of internal area to
         sum of its children's areas; ≈ 1 means children are adjacent,
         > 1 means the merge introduces a lot of empty bounding box.
+      * ``box_noop_rate``            — fraction of internal merges
+        whose bounding box equals one of its children's bbox.  These
+        are the "merging C into AB → still labelled AB-by-bbox" cases
+        the visualisation renders with red edges.  Cells still
+        strictly grow, so the vector and polygon are still distinct —
+        but the rectangle is a duplicate.
     """
     leaves = regions[1 : 1 + k]
     internals = regions[1 + k :]
@@ -424,6 +495,7 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
                        # in `regions` are 1-based because of the CLS node).
     balances: list[float] = []
     growths: list[float] = []
+    n_box_noop = 0
     for offset, node in enumerate(internals, start=len(leaves)):
         ci, cj = node.children  # type: ignore[misc]
         # children are indices into `regions`; shift by 1 to index `flat`.
@@ -438,6 +510,8 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
         area_children_sum = _box_area(a_box) + _box_area(b_box)
         if area_children_sum > 1e-9:
             growths.append(area_node / area_children_sum)
+        if node.box == a_box or node.box == b_box:
+            n_box_noop += 1
 
     root_area = _box_area(internals[-1].box) if internals else 1.0
     return {
@@ -448,6 +522,7 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
         "root_area": float(root_area),
         "merge_balance": float(np.mean(balances)) if balances else 0.0,
         "area_growth": float(np.mean(growths)) if growths else 0.0,
+        "box_noop_rate": float(n_box_noop / len(internals)) if internals else 0.0,
     }
 
 
@@ -642,16 +717,25 @@ def write_report(
         f"recommended defaults (**K={default_k}, α={default_alpha}**).  "
         "The full image sits at the top.  The **bottom row** is the "
         f"{default_k} HAC **leaves** (yellow outline) — patch-grid "
-        "saliency-peak clusters cropped to their bounding box.  Above "
-        f"them are the **{default_k - 1} HAC internal merges** (cyan "
-        "outline), each cropped to the union box of its two children.  "
-        "Grey edges connect each merge to its two children, so every "
-        "merge node visually points at exactly the region the MLP and "
-        "the similarity rule will max-pool over.  Read it bottom-up: "
-        "leaves first, then progressively coarser merges until the "
-        "root, with the CLS-pooled full image at the very top as the "
-        "global-scale fallback (always present, not part of the HAC "
-        "graph)."
+        "saliency-peak Voronoi cells; each thumbnail shows only the "
+        "patches that landed in that leaf (non-cell pixels dimmed), so "
+        "an L-shaped leaf actually looks L-shaped.  Above them are the "
+        f"**{default_k - 1} HAC internal merges** (cyan outline), each "
+        "drawn as the union of its constituent leaves' cells — the *true* "
+        "polygonal footprint the MLP and similarity rule pool over, not "
+        "the loose bounding box.  Edges connect each merge to its two "
+        "children.  **Red edges** flag *box no-op* merges: the parent's "
+        "bounding rectangle is identical to one of its children's "
+        "(\"merging C into AB didn't grow the rectangle\") — even though "
+        "the cell set always strictly grew (the merge always added new "
+        "patches), so the node's vector and outlined polygon still "
+        "differ from the child's.  Read it bottom-up: leaves first, then "
+        "progressively coarser merges until the root, with the CLS-"
+        "pooled full image at the very top as the global-scale fallback "
+        "(always present, not part of the HAC graph).  Internal node "
+        "vectors are the L2-normalised saliency-weighted mean over the "
+        "patches in the cell union — order-independent, equal to "
+        "re-pooling from scratch."
     )
     lines.append("")
     for i, label in enumerate(image_labels):
@@ -689,14 +773,20 @@ def write_report(
         "(1.0 = perfectly balanced, lower = chain-like); "
         "`area_growth` ≈ internal_area / sum(child_areas) "
         "(1.0 = perfectly adjacent children, > 1 = boxes include empty "
-        "space)."
+        "space); "
+        "`box_noop_rate` ≈ fraction of internal merges whose bbox "
+        "equals one of its children's bbox (the red edges in the "
+        "tree visualisations).  Cells still strictly grow on every "
+        "merge, so the node's vector and polygon are still distinct "
+        "from the child's — the rectangle is just a duplicate label."
     )
     lines.append("")
     headers = (
         "| K | α | leaf_area | leaf_area_std | leaf_overlap_max | "
-        "internal_area | root_area | merge_balance | area_growth |"
+        "internal_area | root_area | merge_balance | area_growth | "
+        "box_noop_rate |"
     )
-    sep = "|---|---|---|---|---|---|---|---|---|"
+    sep = "|---|---|---|---|---|---|---|---|---|---|"
     lines.append(headers)
     lines.append(sep)
     for k, alpha, m in sorted(agg_rows):
@@ -708,7 +798,8 @@ def write_report(
             f"{m['internal_area_mean']:.3f} | "
             f"{m['root_area']:.3f} | "
             f"{m['merge_balance']:.3f} | "
-            f"{m['area_growth']:.3f} |"
+            f"{m['area_growth']:.3f} | "
+            f"{m['box_noop_rate']:.3f} |"
         )
     lines.append("")
 

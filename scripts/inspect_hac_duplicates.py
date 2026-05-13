@@ -27,7 +27,6 @@ Run::
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 from dataclasses import dataclass
 
 import numpy as np
@@ -35,8 +34,6 @@ import numpy as np
 from vtsearch.models.patch_regions import (
     PatchEmbedOutput,
     build_region_tree,
-    propose_leaves,
-    build_hac_tree,
 )
 
 
@@ -189,13 +186,13 @@ def main() -> None:
     print(f"underlying cell set == earlier region's:   {totals['cells_eq_earlier']:>6} "
           f"({100 * totals['cells_eq_earlier'] / T:.1f}%)")
     print()
-    print(f"of the box-equal pairs:")
+    print("of the box-equal pairs:")
     print(f"  cells also equal (true duplicates):      {totals['cells_eq_box_eq']}")
     print(f"  cells differ      (box-only duplicates): {totals['cells_neq_box_eq']}")
     print()
     if all_sims:
         sims = np.array(all_sims)
-        print(f"cosine(stored vecs) between same-box pairs:")
+        print("cosine(stored vecs) between same-box pairs:")
         print(f"  N pairs:   {len(sims)}")
         print(f"  min/mean/max: {sims.min():.4f} / {sims.mean():.4f} / {sims.max():.4f}")
         print(f"  % > 0.99:  {100 * (sims > 0.99).mean():.1f}%")
