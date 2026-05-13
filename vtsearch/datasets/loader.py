@@ -35,6 +35,7 @@ from vtsearch.datasets.metadata import (  # noqa: F401  — re-exported for cons
     load_image_metadata_from_folders,
     load_oxford_flowers_metadata,
     load_paragraph_metadata_from_folders,
+    load_places365_metadata,
     load_urbansound8k_metadata,
     load_video_metadata_from_folders,
 )

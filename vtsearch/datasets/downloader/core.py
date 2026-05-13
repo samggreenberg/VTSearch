@@ -45,6 +45,8 @@ OXFORD_FLOWERS_LABELS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/i
 FOOD101_URL = "http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"
 EUROSAT_URL = "https://zenodo.org/records/7711810/files/EuroSAT_RGB.zip"
 STANFORD_DOGS_URL = "https://huggingface.co/datasets/Alanox/stanford-dogs/resolve/main/images.tar.gz"
+PLACES365_URL = "http://data.csail.mit.edu/places/places365/val_256.tar"
+PLACES365_LABELS_URL = "https://raw.githubusercontent.com/CSAILVision/places365/master/places365_val.txt"
 UCSF_IDL_API_URL = "https://metadata.idl.ucsf.edu/solr/ltdl3/query"
 UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 
@@ -75,6 +77,7 @@ OXFORD_FLOWERS_DOWNLOAD_SIZE_MB = 330
 FOOD101_DOWNLOAD_SIZE_MB = 5000
 EUROSAT_DOWNLOAD_SIZE_MB = 90
 STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
+PLACES365_DOWNLOAD_SIZE_MB = 501
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 HMDB51_DOWNLOAD_SIZE_MB = 2000
 UCF101_FULL_DOWNLOAD_SIZE_MB = 6960

@@ -22,6 +22,7 @@ from vtsearch.datasets.metadata import (
     load_esc50_metadata,
     load_image_metadata_from_folders,
     load_paragraph_metadata_from_folders,
+    load_places365_metadata,
     load_video_metadata_from_folders,
 )
 from vtsearch.datasets.origin import Origin
@@ -50,6 +51,7 @@ __all__ = [
     "load_video_metadata_from_folders",
     "load_image_metadata_from_folders",
     "load_paragraph_metadata_from_folders",
+    "load_places365_metadata",
     "load_dataset_from_folder",
     "load_dataset_from_pickle",
     "load_demo_dataset",

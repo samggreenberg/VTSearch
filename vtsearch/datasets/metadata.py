@@ -174,6 +174,52 @@ def load_oxford_flowers_metadata(flowers_dir: Path, categories: list[str]) -> di
     return metadata
 
 
+def load_places365_metadata(places_dir: Path, categories: list[str]) -> dict[str, dict[str, Any]]:
+    """Load metadata for the Places365 validation set.
+
+    Reads the ``places365_val.txt`` label file and maps each image filename
+    to a scene category name via the integer index into ``categories``.
+    Images live in a flat ``val_256/`` directory with names like
+    ``Places365_val_00000001.jpg``.
+
+    Args:
+        places_dir: Path to the root Places365 directory (contains
+            ``val_256/`` and ``places365_val.txt``).
+        categories: Ordered list of 365 scene category names (index 0
+            corresponds to category index 0 in the label file).
+
+    Returns:
+        A dict mapping image filename to a dict with the keys:
+
+        - ``"category"`` (``str``): Scene category name from *categories*.
+        - ``"path"`` (``Path``): Full path to the image file.
+    """
+    labels_path = places_dir / "places365_val.txt"
+    images_dir = places_dir / "val_256"
+    metadata: dict[str, dict[str, Any]] = {}
+
+    with open(labels_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            fname, _, idx_str = line.rpartition(" ")
+            if not fname:
+                continue
+            try:
+                idx = int(idx_str)
+            except ValueError:
+                continue
+            if idx < 0 or idx >= len(categories):
+                continue
+            metadata[fname] = {
+                "category": categories[idx],
+                "path": images_dir / fname,
+            }
+
+    return metadata
+
+
 def load_cifar10_batch(file_path: Path) -> tuple[np.ndarray, list[int], list[str]]:
     """Load a CIFAR-10 pickle batch file and return images, labels, and label names.
 
