@@ -51,6 +51,10 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **stanford_dogs_m** | Fine-grained dog breed photos across Stanford Dogs categories (medium) |
 | **stanford_dogs_l** | Fine-grained dog breed photos across Stanford Dogs categories (large) |
 | **stanford_dogs_a** | Fine-grained dog breed photos across 120 Stanford Dogs categories (all) |
+| **places365_s** | Scene photos across 365 Places365 categories (small) |
+| **places365_m** | Scene photos across 365 Places365 categories (medium) |
+| **places365_l** | Scene photos across 365 Places365 categories (large) |
+| **places365_a** | Scene photos across 365 Places365 categories — indoor, outdoor natural, and outdoor man-made environments (all) |
 | **ucsf_documents_a** | Scanned industry document pages from the UCSF Industry Documents Library — tobacco, food, drug, chemical, fossil fuel, and opioids |
 
 ## Text

@@ -7,7 +7,7 @@ This package is split into sub-modules by media type:
 - :mod:`~vtsearch.datasets.downloader.audio` — ESC-50, GTZAN, Speech Commands v2,
   UrbanSound8K
 - :mod:`~vtsearch.datasets.downloader.images` — CIFAR-10, Caltech-101/256, Oxford
-  Flowers, Food-101, EuroSAT, Stanford Dogs
+  Flowers, Food-101, EuroSAT, Stanford Dogs, Places365
 - :mod:`~vtsearch.datasets.downloader.video` — UCF-101 subset
 - :mod:`~vtsearch.datasets.downloader.text` — 20 Newsgroups, BBC News, AG News, IMDB
 - :mod:`~vtsearch.datasets.downloader.documents` — UCSF Industry Documents
@@ -47,6 +47,9 @@ from vtsearch.datasets.downloader.core import (
     OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
     OXFORD_FLOWERS_LABELS_URL,
     OXFORD_FLOWERS_URL,
+    PLACES365_DOWNLOAD_SIZE_MB,
+    PLACES365_LABELS_URL,
+    PLACES365_URL,
     SAMPLE_VIDEOS_URL,
     SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
     SPEECH_COMMANDS_V2_URL,
@@ -86,6 +89,7 @@ from vtsearch.datasets.downloader.images import (
     download_eurosat,
     download_food101,
     download_oxford_flowers,
+    download_places365,
     download_stanford_dogs,
 )
 
@@ -145,6 +149,9 @@ __all__ = [
     "OXFORD_FLOWERS_DOWNLOAD_SIZE_MB",
     "OXFORD_FLOWERS_LABELS_URL",
     "OXFORD_FLOWERS_URL",
+    "PLACES365_DOWNLOAD_SIZE_MB",
+    "PLACES365_LABELS_URL",
+    "PLACES365_URL",
     "ProgressCallback",
     "SAMPLE_VIDEOS_URL",
     "SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB",
@@ -174,6 +181,7 @@ __all__ = [
     "download_eurosat",
     "download_food101",
     "download_oxford_flowers",
+    "download_places365",
     "download_stanford_dogs",
     # Video
     "download_hmdb51",

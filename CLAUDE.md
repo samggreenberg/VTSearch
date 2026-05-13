@@ -178,7 +178,7 @@ If a failure is genuinely outside the scope of the current task (e.g. a flaky ne
   - `test_export_options.py` — Export boolean options, negative_hits in CLI scoring, fill-from-sort
   - `test_frontend.py` — Frontend serving: Angular SPA entry point, static files (main.js, polyfills.js, styles.css), favicon variants, logo, legacy /ng/ redirect, content types
   - `test_gtzan_download.py` — GTZAN dataset download and load_demo_source integration
-  - `test_image_sources_download.py` — Image dataset downloads: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, and load_demo_source integration
+  - `test_image_sources_download.py` — Image dataset downloads: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, Places365, and load_demo_source integration
   - `test_video_datasets_download.py` — Video dataset downloads (UCF-101 subset) and load_demo_source integration
   - `test_multi_media_coverage.py` — Cross-media-type smoke (text sort, learned sort, vote, label export/import) for each registered media type
   - `test_imdb_download.py` — IMDB dataset download and load_demo_source integration
