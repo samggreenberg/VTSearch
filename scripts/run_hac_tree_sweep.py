@@ -134,6 +134,39 @@ def _label(draw: ImageDraw.ImageDraw, text: str, w: int) -> None:
     draw.text((pad, 2), text, fill=(255, 255, 255), font=font)
 
 
+def _dashed_line(
+    draw: ImageDraw.ImageDraw,
+    start: tuple[float, float],
+    end: tuple[float, float],
+    fill: tuple[int, int, int],
+    width: int,
+    *,
+    dash: int = 6,
+    gap: int = 5,
+) -> None:
+    """Draw a dashed line from ``start`` to ``end``.
+
+    PIL has no built-in dashed-line support, so we step along the segment
+    and draw fixed-length ``dash``/``gap`` pieces.  Used for "box no-op"
+    HAC merges where the parent's bbox equals one of its children's, so
+    the edge is visually distinct without relying on colour.
+    """
+    x0, y0 = start
+    x1, y1 = end
+    dx, dy = x1 - x0, y1 - y0
+    length = (dx * dx + dy * dy) ** 0.5
+    if length <= 0:
+        return
+    ux, uy = dx / length, dy / length
+    pos = 0.0
+    while pos < length:
+        end_pos = min(pos + dash, length)
+        sx, sy = x0 + ux * pos, y0 + uy * pos
+        ex, ey = x0 + ux * end_pos, y0 + uy * end_pos
+        draw.line([(sx, sy), (ex, ey)], fill=fill, width=width)
+        pos = end_pos + gap
+
+
 def _cell_mask_of(regions: list[RegionVector], idx: int) -> np.ndarray:
     """Return the union-of-cells mask for ``regions[idx]`` (bool, ``(H, W)``).
 
@@ -295,19 +328,21 @@ def render_config_tree(
     gap_x: int = 8,
     gap_y: int = 28,
     margin: int = 14,
-    header_pad: int = 18,
-    full_h: int = 132,
 ) -> Image.Image:
     """Render one HAC region tree as a stack:
 
-    * the full image at the top,
+    * the full image in the top-left, scaled as large as possible without
+      growing the canvas past what the tree itself needs (the binary
+      tree leaves the upper-left corner empty, so the original image
+      tucks into that staircase),
     * HAC internal merge nodes in the middle (each masked to the *union
       of patch cells* under the node — not its loose bounding box),
     * HAC leaves along the bottom (each masked to its cell footprint),
-    * edges connecting parents to their two children.  Edges are grey by
-      default, **red** when the merge is a box no-op — i.e., the
-      parent's bbox equals one of the child's bboxes ("merging C into AB
-      didn't grow the rectangle, even though it did add new cells").
+    * edges connecting parents to their two children.  Edges are grey
+      solid by default and **dashed** when the merge is a box no-op —
+      i.e., the parent's bbox equals one of the child's bboxes
+      ("merging C into AB didn't grow the rectangle, even though it
+      did add new cells").
 
     Leaves are outlined in yellow; internals in cyan.
     """
@@ -318,41 +353,70 @@ def render_config_tree(
     cell_w = thumb + gap_x
     row_pitch = thumb + gap_y
 
+    title_h = 18 if title else 0
+    # Tree begins just below the title bar; canvas height is fixed by the
+    # tree (top-of-root → bottom-of-leaves + bottom margin).  The full
+    # image is squeezed into the upper-left empty region of that canvas,
+    # so it can never push the canvas larger.
+    tree_top = title_h + margin
     canvas_w = int(k * cell_w + 2 * margin)
-    header_h = header_pad + full_h + header_pad
-    canvas_h = int(header_h + (max_depth + 1) * row_pitch + margin)
+    canvas_h = int(tree_top + thumb + max_depth * row_pitch + margin)
 
     canvas = Image.new("RGB", (canvas_w, canvas_h), (250, 250, 250))
     draw = ImageDraw.Draw(canvas)
-
-    # ---- header: full image + title ---------------------------------------
-    full = image.convert("RGB").copy()
-    fw, fh = full.size
-    scale = full_h / fh
-    full = full.resize((max(1, int(fw * scale)), full_h), Image.LANCZOS)
-    fx = (canvas_w - full.size[0]) // 2
-    fy = header_pad + 18  # leave a bit of space for the title bar
-    canvas.paste(full, (fx, fy))
-    draw.rectangle(
-        (fx - 1, fy - 1, fx + full.size[0], fy + full.size[1]),
-        outline=(60, 60, 60),
-        width=1,
-    )
-    if title:
-        _label(draw, title, canvas_w)
 
     # ---- per-node center positions ----------------------------------------
     def center(i: int) -> tuple[int, int]:
         cx = int(margin + thumb / 2 + col[i] * cell_w)
         row_from_top = max_depth - depth[i]
-        cy = int(header_h + thumb / 2 + row_from_top * row_pitch)
+        cy = int(tree_top + thumb / 2 + row_from_top * row_pitch)
         return cx, cy
 
+    # ---- full image in the top-left ---------------------------------------
+    # Maximise the image's display size subject to: for every tree-node
+    # thumbnail at (cx, cy), the image rectangle anchored at
+    # (margin, tree_top) is either entirely to the left of the thumbnail
+    # OR entirely above it.  At any aspect-preserving scale s,
+    # image_right = margin + s * img_w_orig, image_bottom = tree_top +
+    # s * img_h_orig.  Per node the max permissible s is
+    # max(s_x_node, s_y_node) (either constraint suffices); the overall
+    # cap is the min across nodes (every node must be respected).
+    full_orig = image.convert("RGB").copy()
+    img_w_orig, img_h_orig = full_orig.size
+    img_origin_x = margin
+    img_origin_y = tree_top
+    node_caps: list[float] = []
+    for i in range(n):
+        cx, cy = center(i)
+        s_x = (cx - thumb / 2 - img_origin_x) / img_w_orig
+        s_y = (cy - thumb / 2 - img_origin_y) / img_h_orig
+        node_caps.append(max(s_x, s_y))
+    # Also clamp by the canvas itself — the image must not extend past
+    # the right edge or the bottom margin.
+    s_canvas_w = (canvas_w - margin - img_origin_x) / img_w_orig
+    s_canvas_h = (canvas_h - margin - img_origin_y) / img_h_orig
+    max_scale = max(0.0, min([s_canvas_w, s_canvas_h] + node_caps))
+
+    if max_scale > 0:
+        new_w = max(1, int(img_w_orig * max_scale))
+        new_h = max(1, int(img_h_orig * max_scale))
+        full = full_orig.resize((new_w, new_h), Image.LANCZOS)
+        canvas.paste(full, (img_origin_x, img_origin_y))
+        draw.rectangle(
+            (img_origin_x - 1, img_origin_y - 1,
+             img_origin_x + new_w, img_origin_y + new_h),
+            outline=(60, 60, 60),
+            width=1,
+        )
+
+    if title:
+        _label(draw, title, canvas_w)
+
     # ---- edges (drawn first so thumbnails sit on top) ----------------------
-    # Red edge = "box no-op" merge: the parent's bbox is identical to the
-    # child's bbox.  Cells DID grow (HAC always adds new patches) but the
-    # bounding rectangle did not — visually, "ABC + C = ABC" if names are
-    # bboxes.  The non-no-op sibling stays grey.
+    # Dashed edge = "box no-op" merge: the parent's bbox is identical to
+    # the child's bbox.  Cells DID grow (HAC always adds new patches) but
+    # the bounding rectangle did not — visually, "ABC + C = ABC" if names
+    # are bboxes.  The non-no-op sibling stays solid grey.
     for i in range(k, n):
         pcx, pcy = center(i)
         children = hac[i].children
@@ -360,14 +424,13 @@ def render_config_tree(
         for child_idx in children:
             ci = child_idx - 1
             ccx, ccy = center(ci)
-            is_box_noop = hac[i].box == hac[ci].box
-            color = (200, 50, 50) if is_box_noop else (120, 120, 120)
-            width = 2 if is_box_noop else 1
-            draw.line(
-                [(pcx, pcy + thumb // 2), (ccx, ccy - thumb // 2)],
-                fill=color,
-                width=width,
-            )
+            start = (pcx, pcy + thumb // 2)
+            end = (ccx, ccy - thumb // 2)
+            color = (120, 120, 120)
+            if hac[i].box == hac[ci].box:
+                _dashed_line(draw, start, end, color, width=2)
+            else:
+                draw.line([start, end], fill=color, width=1)
 
     # ---- node thumbnails ---------------------------------------------------
     # `regions` indexing: 0 is CLS, 1..K leaves, K+1.. internals.  `hac`
@@ -715,23 +778,26 @@ def write_report(
     lines.append(
         "Each image below renders one HAC region tree at the design's "
         f"recommended defaults (**K={default_k}, α={default_alpha}**).  "
-        "The full image sits at the top.  The **bottom row** is the "
-        f"{default_k} HAC **leaves** (yellow outline) — patch-grid "
-        "saliency-peak Voronoi cells; each thumbnail shows only the "
-        "patches that landed in that leaf (non-cell pixels dimmed), so "
-        "an L-shaped leaf actually looks L-shaped.  Above them are the "
-        f"**{default_k - 1} HAC internal merges** (cyan outline), each "
-        "drawn as the union of its constituent leaves' cells — the *true* "
-        "polygonal footprint the MLP and similarity rule pool over, not "
-        "the loose bounding box.  Edges connect each merge to its two "
-        "children.  **Red edges** flag *box no-op* merges: the parent's "
-        "bounding rectangle is identical to one of its children's "
-        "(\"merging C into AB didn't grow the rectangle\") — even though "
-        "the cell set always strictly grew (the merge always added new "
+        "The full image tucks into the **top-left** corner, sized as "
+        "large as the empty upper-left region of the binary tree allows "
+        "(so the canvas is no taller than the tree itself needs).  The "
+        f"**bottom row** is the {default_k} HAC **leaves** (yellow "
+        "outline) — patch-grid saliency-peak Voronoi cells; each "
+        "thumbnail shows only the patches that landed in that leaf "
+        "(non-cell pixels dimmed), so an L-shaped leaf actually looks "
+        f"L-shaped.  Above them are the **{default_k - 1} HAC internal "
+        "merges** (cyan outline), each drawn as the union of its "
+        "constituent leaves' cells — the *true* polygonal footprint "
+        "the MLP and similarity rule pool over, not the loose bounding "
+        "box.  Edges connect each merge to its two children.  **Dashed "
+        "edges** flag *box no-op* merges: the parent's bounding "
+        "rectangle is identical to one of its children's (\"merging C "
+        "into AB didn't grow the rectangle\") — even though the cell "
+        "set always strictly grew (the merge always added new "
         "patches), so the node's vector and outlined polygon still "
         "differ from the child's.  Read it bottom-up: leaves first, then "
         "progressively coarser merges until the root, with the CLS-"
-        "pooled full image at the very top as the global-scale fallback "
+        "pooled full image in the top-left as the global-scale fallback "
         "(always present, not part of the HAC graph).  Internal node "
         "vectors are the L2-normalised saliency-weighted mean over the "
         "patches in the cell union — order-independent, equal to "
@@ -775,7 +841,7 @@ def write_report(
         "(1.0 = perfectly adjacent children, > 1 = boxes include empty "
         "space); "
         "`box_noop_rate` ≈ fraction of internal merges whose bbox "
-        "equals one of its children's bbox (the red edges in the "
+        "equals one of its children's bbox (the dashed edges in the "
         "tree visualisations).  Cells still strictly grow on every "
         "merge, so the node's vector and polygon are still distinct "
         "from the child's — the rectangle is just a duplicate label."
