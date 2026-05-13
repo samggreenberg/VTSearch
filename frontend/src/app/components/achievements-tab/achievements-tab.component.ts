@@ -28,6 +28,7 @@ interface AchievementRow extends AchievementInfo {
 export class AchievementsTabComponent implements OnInit, OnDestroy {
   rows: AchievementRow[] = [];
   loading = true;
+  totalScore = 0;
 
   private destroy$ = new Subject<void>();
 
@@ -48,6 +49,10 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
   private applyState(state: AchievementsState): void {
     this.rows = state.achievements.map((a) => this.toRow(a));
     this.loading = state.achievements.length === 0;
+    this.totalScore = state.achievements.reduce(
+      (sum, a) => sum + (a.tier_idx >= 0 ? 1 << a.tier_idx : 0),
+      0,
+    );
   }
 
   private toRow(a: AchievementInfo): AchievementRow {
