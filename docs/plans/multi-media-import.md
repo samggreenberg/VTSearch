@@ -237,7 +237,7 @@ When migrating an importer to `multi_media=True`:
 5. Update `build_origin()` to include the `source_specs` instead of the
    legacy `media_type` / `converters` pair.
 
-## Prototype scope (this PR)
+## Scope landed in this PR
 
 - ABC changes: `MediaConverter.fields`, `MediaConverter.convert(media,
   params)`, `DatasetImporter.multi_media`, `DatasetImporter.effective_source_specs()`,
@@ -245,20 +245,27 @@ When migrating an importer to `multi_media=True`:
 - `Video2ImageMediaConverter` migrated to expose `n_clips` as a
   `PluginField`. Other converters get an empty `fields=[]` (no
   user-visible change) and a no-op `params` arg.
-- `ServerFolderDatasetImporter` flipped to `multi_media=True` and its
-  `run()` rewritten to iterate `effective_source_specs()`.
+- `ServerFolderDatasetImporter`, `ServerFilesDatasetImporter`,
+  `LocalFolderDatasetImporter`, and `LocalFilesDatasetImporter` flipped
+  to `multi_media=True`. Server-side `run()` / `run_chunked()` iterate
+  `effective_source_specs()`; the lf-* importers are upload placeholders
+  whose flow re-enters `server_folder`, so flipping the flag just lets
+  the frontend render the Include-rows editor.
 - `run_converters_on_folder()` accepts the new `SourceSpec` form.
-- New frontend repeater rendered in the existing server-folder picker.
-- Tests covering the new code path and shim.
-- Other importers (`local_folder`, `pickle`, `combine_datasets`,
-  `synthetic`, `server_files`, `http_archive`, `recaller`, `demo`) stay
-  on the shim and behave as today.
+- Source-specs editor rendered in all four pickers (sf-folder, sf-files
+  via the generic form view, lf-folder, lf-files). Shared edit helpers
+  in `dataset-importer-modal.component.ts`.
+- Tests covering the new code path, the shim, and the `multi_media`
+  flag on all migrated importers.
+
+Still on the legacy shim (will migrate in followups):
+
+- `pickle`, `combine_datasets`, `synthetic`, `http_archive`, `recaller`,
+  `demo`. Each is mechanical — flip the flag and rewrite `run()` to
+  iterate. ReCaller specifically waits on a working API client (see
+  `plans/RCDatasetImporter.md`).
 
 Followups (not in this PR):
 
-- Flip `local_folder`, `http_archive`, `server_files`, `synthetic` to
-  `multi_media=True`. Each is mechanical once the prototype lands.
-- Land ReCaller's `multi_media=True` rewrite once it has a working API
-  client.
 - Once everything in-tree is migrated, delete the shim and the legacy
   `converters` form field, and rename `media_type` → `output_type`.

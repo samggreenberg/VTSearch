@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from vtsearch.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
-from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+from vtsearch.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 
 
@@ -179,12 +179,17 @@ class ServerFilesDatasetImporter(DatasetImporter):
     icon = "\U0001f5c2"  # 🗂 — falls back to a generic file icon
     picker_view = "form"
     category = "server"
+    multi_media = True
     fields = [
         ImporterField(
             key="media_type",
-            label="Media Type",
+            label="Output Media Type",
             field_type="select",
-            description="Type of media files listed in the paths file.",
+            description=(
+                "Type of media files the dataset ends up holding.  When source "
+                "files of other types are listed in the paths file, an Include "
+                "row with a matching converter pulls them in too."
+            ),
             default="audio",
         ),
         ImporterField(
@@ -213,6 +218,20 @@ class ServerFilesDatasetImporter(DatasetImporter):
             if f.key == "media_type":
                 f.options = all_folder_names()
                 break
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        from vtsearch.converters import list_converters_for_target
+        from vtsearch.media import all_types_dict
+
+        converters_by_target: dict[str, list[dict]] = {}
+        for mt_info in all_types_dict():
+            type_id = mt_info["type_id"]
+            convs = list_converters_for_target(type_id)
+            if convs:
+                converters_by_target[type_id] = [c.to_dict() for c in convs]
+        d["available_converters_by_media_type"] = converters_by_target
+        return d
 
     def _stage_paths(
         self, field_values: dict[str, Any]
@@ -266,10 +285,44 @@ class ServerFilesDatasetImporter(DatasetImporter):
             media["origin_name"] = str(src)
             media["media_path"] = str(src)
 
+    def _load_direct_into(
+        self,
+        staging: Path,
+        spec: SourceSpec,
+        field_values: dict[str, Any],
+        medias: dict,
+        thin: bool,
+        merged_vectors: dict[str, Any],
+    ) -> bool:
+        """Load files of ``spec.source_type`` from the staging dir.
+
+        Returns ``True`` when the loader produced any output (i.e. did
+        not raise ``ValueError`` for an empty folder).
+        """
+        from vtsearch.media import get  # noqa: PLC0415
+
+        mt = get(spec.source_type)
+        try:
+            load_dataset_from_folder(
+                staging,
+                mt.folder_import_name,
+                medias,
+                thin=thin,
+                embedder_name=field_values.get("embedder", ""),
+                content_vectors=merged_vectors or None,
+                content_md5s=self.content_md5s or None,
+                custom_metadata_map=self.custom_metadata_map or None,
+                skip_embedding=bool(field_values.get("skip_embedding")),
+            )
+        except ValueError:
+            return False
+        return True
+
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
-        media_type = field_values.get("media_type", "audio")
-        embedder = field_values.get("embedder", "")
-        skip_emb = bool(field_values.get("skip_embedding"))
+        from vtsearch.media import get_by_folder_name  # noqa: PLC0415
+
+        specs = self.effective_source_specs(field_values)
+        output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
 
         staging, name_to_source, npz_vectors = self._stage_paths(field_values)
         # Merge npz-supplied vectors with any vectors set externally on
@@ -278,19 +331,29 @@ class ServerFilesDatasetImporter(DatasetImporter):
         merged_vectors: dict[str, Any] = dict(self.content_vectors or {})
         merged_vectors.update(npz_vectors)
         try:
-            load_dataset_from_folder(
-                staging,
-                media_type,
-                medias,
-                thin=thin,
-                embedder_name=embedder,
-                content_vectors=merged_vectors or None,
-                content_md5s=self.content_md5s or None,
-                custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=skip_emb,
-            )
+            had_direct = False
+            for spec in specs:
+                if spec.converter is None:
+                    if self._load_direct_into(staging, spec, field_values, medias, thin, merged_vectors):
+                        had_direct = True
+
+            converter_rows = [s for s in specs if s.converter is not None]
+            if converter_rows:
+                from vtsearch.converters.runner import run_converters_on_folder  # noqa: PLC0415
+
+                run_converters_on_folder(
+                    folder_path=staging,
+                    converter_specs=converter_rows,
+                    target_media_type=output_type,
+                    medias=medias,
+                    thin=thin,
+                    base_origin={"importer": self.name, "params": {"paths_file": str(field_values.get("paths_file", ""))}},
+                )
 
             self._rewrite_origins(medias, name_to_source, self.build_origin(field_values))
+
+            if not had_direct and not medias:
+                raise ValueError(f"No {output_type} files found in listed paths")
         finally:
             shutil.rmtree(staging, ignore_errors=True)
 
@@ -312,28 +375,58 @@ class ServerFilesDatasetImporter(DatasetImporter):
         chunk_size: int,
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
-        media_type = field_values.get("media_type", "audio")
-        embedder = field_values.get("embedder", "")
-        skip_emb = bool(field_values.get("skip_embedding"))
+        from vtsearch.media import get as media_get, get_by_folder_name  # noqa: PLC0415
+
+        specs = self.effective_source_specs(field_values)
+        output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
 
         staging, name_to_source, npz_vectors = self._stage_paths(field_values)
         origin = self.build_origin(field_values)
         merged_vectors: dict[str, Any] = dict(self.content_vectors or {})
         merged_vectors.update(npz_vectors)
         try:
-            for chunk in load_dataset_from_folder_chunked(
-                staging,
-                media_type,
-                chunk_size,
-                thin=thin,
-                embedder_name=embedder,
-                content_vectors=merged_vectors or None,
-                content_md5s=self.content_md5s or None,
-                custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=skip_emb,
-            ):
-                self._rewrite_origins(chunk, name_to_source, origin)
-                yield chunk
+            for spec in specs:
+                if spec.converter is not None:
+                    continue
+                mt = media_get(spec.source_type)
+                try:
+                    for chunk in load_dataset_from_folder_chunked(
+                        staging,
+                        mt.folder_import_name,
+                        chunk_size,
+                        thin=thin,
+                        embedder_name=field_values.get("embedder", ""),
+                        content_vectors=merged_vectors or None,
+                        content_md5s=self.content_md5s or None,
+                        custom_metadata_map=self.custom_metadata_map or None,
+                        skip_embedding=bool(field_values.get("skip_embedding")),
+                    ):
+                        self._rewrite_origins(chunk, name_to_source, origin)
+                        yield chunk
+                except ValueError:
+                    # Empty for this source type — keep going; converter
+                    # rows may still produce output.
+                    pass
+
+            converter_rows = [s for s in specs if s.converter is not None]
+            if converter_rows:
+                from vtsearch.converters.runner import run_converters_on_folder  # noqa: PLC0415
+
+                converter_chunk: dict[int, dict[str, Any]] = {}
+                run_converters_on_folder(
+                    folder_path=staging,
+                    converter_specs=converter_rows,
+                    target_media_type=output_type,
+                    medias=converter_chunk,
+                    thin=thin,
+                    base_origin={"importer": self.name, "params": {"paths_file": str(field_values.get("paths_file", ""))}},
+                )
+                if converter_chunk:
+                    # Converter-origin medias keep their converter origin
+                    # (don't rewrite to the server_files origin — the
+                    # converted output isn't a directly-listed source
+                    # file).
+                    yield converter_chunk
         finally:
             shutil.rmtree(staging, ignore_errors=True)
 
