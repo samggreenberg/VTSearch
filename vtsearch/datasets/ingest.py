@@ -400,7 +400,9 @@ def ingest_missing_medias(
 
         # Cherry-pick matching medias.  Allocate IDs and insert atomically
         # under _state_lock so a concurrent ingest can't reuse the same ID.
-        for temp_clip in temp_medias.values():
+        # Snapshot the values up front: the importer may retain a reference to
+        # temp_medias and mutate it from a background thread.
+        for temp_clip in list(temp_medias.values()):
             clip_origin_name = temp_clip.get("origin_name", "")
             clip_md5 = temp_clip.get("md5", "")
             if clip_origin_name in wanted_names or clip_md5 in wanted_md5s:
