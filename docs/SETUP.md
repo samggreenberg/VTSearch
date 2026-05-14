@@ -379,7 +379,7 @@ VTSearch reads several optional environment variables:
 | `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn — triggers model init / settings sync at import time |
 | `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
 | `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |
-| `VTSEARCH_TIMEOUT` | `120` | Gunicorn worker timeout in seconds |
+| `VTSEARCH_TIMEOUT` | `0` | Gunicorn worker timeout in seconds (`0` = disabled; long imports / training would otherwise SIGKILL the worker) |
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for additional deployment-specific configuration, including the full env-var reference and gunicorn tuning.
 
