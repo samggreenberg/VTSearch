@@ -1279,8 +1279,8 @@ class ImageMediaType(MediaType):
                 with open(img_path, "rb") as f:
                     image_bytes = f.read()
                 try:
-                    img = Image.open(img_path)
-                    width, height = img.width, img.height
+                    with Image.open(img_path) as img:
+                        width, height = img.width, img.height
                 except Exception:
                     width, height = None, None
                 clips[clip_id] = {
@@ -1609,8 +1609,8 @@ class ImageMediaType(MediaType):
         with open(file_path, "rb") as f:
             media_bytes = f.read()
         try:
-            img = Image.open(file_path)
-            width, height = img.width, img.height
+            with Image.open(file_path) as img:
+                width, height = img.width, img.height
         except Exception:
             width, height = None, None
         return {
