@@ -19,7 +19,13 @@ from uuid import uuid4
 from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
-from vtsearch.routes.helpers import get_json_or_400, get_json_safe, get_plugin_or_404, get_request_field
+from vtsearch.routes.helpers import (
+    format_exception_detail,
+    get_json_or_400,
+    get_json_safe,
+    get_plugin_or_404,
+    get_request_field,
+)
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtsearch.datasets.pickle_security import peek_pickle_dataset_summary
 from vtsearch.datasets.registry import (
@@ -881,11 +887,11 @@ def export_dataset():
             download_name="vtsearch_dataset.pkl",
             as_attachment=True,
         )
-    except Exception:
+    except Exception as exc:
         import logging
 
         logging.getLogger(__name__).exception("Dataset export failed")
-        return jsonify({"error": "Dataset export failed"}), 500
+        return jsonify({"error": f"Dataset export failed: {format_exception_detail(exc)}"}), 500
 
 
 @datasets_bp.route("/api/dataset/clear", methods=["POST"])

@@ -8,7 +8,12 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import get_embedder_for_medias, get_json_or_400, get_json_safe
+from vtsearch.routes.helpers import (
+    format_exception_detail,
+    get_embedder_for_medias,
+    get_json_or_400,
+    get_json_safe,
+)
 
 from vtsearch.config import DATA_DIR
 import vtsearch.utils.paths as _paths
@@ -171,10 +176,10 @@ def sort_clips():
         results, threshold = _cosine_sort(text_vec)
         update_sort_progress("idle")
         return jsonify({"results": results, "threshold": threshold})
-    except Exception:
+    except Exception as exc:
         logging.getLogger(__name__).exception("text sort failed")
         update_sort_progress("idle")
-        return jsonify({"error": "Text sort failed"}), 500
+        return jsonify({"error": f"Text sort failed: {format_exception_detail(exc)}"}), 500
 
 
 @sorting_bp.route("/api/learned-sort", methods=["POST"])
@@ -556,11 +561,11 @@ def example_sort():
 
         return jsonify({"results": results, "threshold": thresh})
 
-    except Exception:
+    except Exception as exc:
         import logging
 
         logging.getLogger(__name__).exception("example-sort failed")
-        return jsonify({"error": "Example sort failed"}), 500
+        return jsonify({"error": f"Example sort failed: {format_exception_detail(exc)}"}), 500
 
 
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])
