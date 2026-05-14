@@ -196,17 +196,23 @@ def learned_sort():
 
     snap = snapshot_medias()
 
-    # Resolve the active detector's labelset (if any).
+    # Resolve the active detector's labelset (if any).  Prefer the parsed
+    # labelset cached on det_ctx by ``ensure_votes_match_active_dataset`` to
+    # avoid re-reading the JSON file on every click.
     det_ctx = get_active_detector_context()
     labelset: LabelSet | None = None
     det_media_type = ""
     if det_ctx is not _empty_detector_context and det_ctx.detector_id:
-        entry = get_detector(det_ctx.detector_id)
-        if entry and entry.get("name"):
-            det_data = _read_detector(_detector_path(entry["name"]))
-            if det_data:
-                labelset = LabelSet.from_dict(det_data.get("labelset") or {})
-                det_media_type = det_data.get("media_type", "") or ""
+        if det_ctx.cached_labelset is not None:
+            labelset = det_ctx.cached_labelset
+            det_media_type = det_ctx.cached_labelset_media_type
+        else:
+            entry = get_detector(det_ctx.detector_id)
+            if entry and entry.get("name"):
+                det_data = _read_detector(_detector_path(entry["name"]))
+                if det_data:
+                    labelset = LabelSet.from_dict(det_data.get("labelset") or {})
+                    det_media_type = det_data.get("media_type", "") or ""
 
     if labelset is not None:
         good_count = sum(1 for el in labelset.elements if el.label == "good")

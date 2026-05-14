@@ -95,6 +95,14 @@ def sync_labels_to_loaded_detector() -> None:
 
     det_ctx.labelset_good_count = sum(1 for el in merged.elements if el.label == "good")
     det_ctx.labelset_bad_count = sum(1 for el in merged.elements if el.label == "bad")
+    # Refresh the cached labelset + mtime so ``ensure_votes_match_active_dataset``
+    # doesn't trip on the file we just rewrote and needlessly rehydrate.
+    det_ctx.cached_labelset = merged
+    det_ctx.cached_labelset_media_type = data.get("media_type", "") or det_ctx.cached_labelset_media_type
+    try:
+        det_ctx.cached_labelset_mtime = path.stat().st_mtime
+    except OSError:
+        det_ctx.cached_labelset_mtime = 0.0
 
     import time as _time
 

@@ -353,6 +353,14 @@ def load_detector_route():
 
                     det_ctx.labelset_good_count = sum(1 for el in labelset.elements if el.label == "good")
                     det_ctx.labelset_bad_count = sum(1 for el in labelset.elements if el.label == "bad")
+                    # Cache the parsed labelset so before_request's rehydrate
+                    # hook and learned_sort don't re-read the JSON file.
+                    det_ctx.cached_labelset = labelset
+                    det_ctx.cached_labelset_media_type = media_type
+                    try:
+                        det_ctx.cached_labelset_mtime = _detector_path(det_name).stat().st_mtime
+                    except OSError:
+                        det_ctx.cached_labelset_mtime = 0.0
 
                     def _embed_progress(name: str, done: int, total: int) -> None:
                         tracker.check_cancelled()

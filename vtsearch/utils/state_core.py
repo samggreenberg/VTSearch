@@ -141,6 +141,14 @@ class DetectorContext:
         # dicts and re-derive them from the on-disk labelset against the new
         # dataset's medias.  See ``ensure_votes_match_active_dataset``.
         "votes_dataset_id",
+        # Cached parsed labelset + mtime of the on-disk detector JSON the cache
+        # was derived from.  Lets ``ensure_votes_match_active_dataset`` skip the
+        # rehydrate (read+parse) when neither the active dataset nor the file
+        # has changed, and lets ``learned_sort`` reuse the parsed labelset
+        # instead of re-reading the JSON from disk on every click.
+        "cached_labelset",  # LabelSet | None
+        "cached_labelset_mtime",  # float
+        "cached_labelset_media_type",  # str
         # Sync source
         "labelset_source",  # dict | None — {"source_name": "...", "field_values": {...}}
     )
@@ -178,6 +186,9 @@ class DetectorContext:
         self.labelset_good_count: int = 0
         self.labelset_bad_count: int = 0
         self.votes_dataset_id: str = ""
+        self.cached_labelset: Any = None  # LabelSet | None
+        self.cached_labelset_mtime: float = 0.0
+        self.cached_labelset_media_type: str = ""
         # Sync source
         self.labelset_source: dict[str, Any] | None = None
 

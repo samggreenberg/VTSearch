@@ -17,6 +17,14 @@ from that labelset whenever the active dataset has changed.
 from __future__ import annotations
 
 
+def _detector_file_mtime(path) -> float:
+    """Return the mtime of ``path`` in seconds, or 0.0 if it doesn't exist."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def ensure_votes_match_active_dataset() -> None:
     """Rehydrate the active detector's cid-keyed vote state against the active dataset.
 
@@ -26,15 +34,17 @@ def ensure_votes_match_active_dataset() -> None:
     * a dataset is loaded (and its id is non-empty),
     * the detector has a registry entry that points at a real on-disk file
       (so we have a labelset to rehydrate from), and
-    * the detector's recorded ``votes_dataset_id`` differs from the active
-      dataset id.
+    * either the detector's recorded ``votes_dataset_id`` differs from the
+      active dataset id, or the on-disk detector file's mtime has changed
+      since the cached labelset was loaded.
 
     When triggered, clears the per-dataset detector state (good_votes,
     bad_votes, label_history, vote_click_times, click_counter,
     last_learned_scores, find_initial_labels, training_medias) and replays
     ``restore_labels_from_detector`` against the active dataset's medias,
-    then stamps ``votes_dataset_id`` so subsequent requests within the same
-    dataset are no-ops.
+    then stamps ``votes_dataset_id`` and caches the parsed labelset +
+    file mtime on the detector context so subsequent requests within the
+    same (dataset, file-mtime) tuple are no-ops.
     """
     from vtsearch.utils.state_core import (
         _state_lock,
@@ -50,8 +60,6 @@ def ensure_votes_match_active_dataset() -> None:
         # No active dataset; preserve whatever the detector last saw so a
         # request that happens to omit the dataset header doesn't wipe state.
         return
-    if det_ctx.votes_dataset_id == ds_ctx.dataset_id:
-        return
 
     from vtsearch.models.detector_registry import get_detector
     from vtsearch.models.detector_store import _detector_path, _read_detector
@@ -64,6 +72,16 @@ def ensure_votes_match_active_dataset() -> None:
         return
 
     path = _detector_path(entry["name"])
+    current_mtime = _detector_file_mtime(path)
+
+    if (
+        det_ctx.votes_dataset_id == ds_ctx.dataset_id
+        and det_ctx.cached_labelset is not None
+        and det_ctx.cached_labelset_mtime == current_mtime
+        and current_mtime != 0.0
+    ):
+        return
+
     data = _read_detector(path)
     if data is None:
         # Detector file missing — still mark the dataset transition so we
@@ -78,11 +96,22 @@ def ensure_votes_match_active_dataset() -> None:
             det_ctx.find_initial_labels.clear()
             det_ctx.training_medias.clear()
             det_ctx.votes_dataset_id = ds_ctx.dataset_id
+            det_ctx.cached_labelset = None
+            det_ctx.cached_labelset_mtime = 0.0
+            det_ctx.cached_labelset_media_type = ""
         return
+
+    from vtsearch.datasets.labelset import LabelSet
 
     with _state_lock:
         # Re-check inside the lock — another request may have rehydrated us.
-        if det_ctx.votes_dataset_id == ds_ctx.dataset_id:
+        refreshed_mtime = _detector_file_mtime(path)
+        if (
+            det_ctx.votes_dataset_id == ds_ctx.dataset_id
+            and det_ctx.cached_labelset is not None
+            and det_ctx.cached_labelset_mtime == refreshed_mtime
+            and refreshed_mtime != 0.0
+        ):
             return
         det_ctx.good_votes.clear()
         det_ctx.bad_votes.clear()
@@ -94,3 +123,6 @@ def ensure_votes_match_active_dataset() -> None:
         det_ctx.training_medias.clear()
         restore_labels_from_detector(data)
         det_ctx.votes_dataset_id = ds_ctx.dataset_id
+        det_ctx.cached_labelset = LabelSet.from_dict(data.get("labelset") or {})
+        det_ctx.cached_labelset_mtime = refreshed_mtime
+        det_ctx.cached_labelset_media_type = data.get("media_type", "") or ""
