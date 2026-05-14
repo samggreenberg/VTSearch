@@ -127,9 +127,11 @@ def cosine_sort_with_boxes(
 
     # Fast path: pure single-vector cosine — same arithmetic as the
     # original _cosine_sort, retained verbatim so SigLIP / CLIP /
-    # SigLIP2 datasets see zero overhead from this refactor.
-    all_ids = list(snap.keys())
-    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
+    # SigLIP2 datasets see zero overhead from this refactor.  The matrix
+    # is reused from the active DatasetContext cache when available.
+    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+
+    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
     q_norm = np.linalg.norm(query_vec)
     emb_norms = np.linalg.norm(all_embs, axis=1)
     norm_products = emb_norms * q_norm

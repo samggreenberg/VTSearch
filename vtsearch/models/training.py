@@ -565,7 +565,7 @@ def train_and_score(
     if len(X_list) < 2 or num_good == 0 or num_bad == 0:
         return [], 0.5, None
 
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
     input_dim = X.shape[1]
@@ -609,24 +609,33 @@ def train_and_score(
     # dataset is patch-region-aware, plain single-vector scoring when not.
     # We build one flat tensor of (media, region) rows so the MLP runs
     # in a single forward pass; the per-media max is computed after.
-    all_ids = sorted(clips_dict.keys())
-    flat_vecs: list[np.ndarray] = []
-    media_index_per_row: list[int] = []
-    region_index_per_row: list[int] = []
-    for mi, cid in enumerate(all_ids):
-        media = clips_dict[cid]
-        regions = media.get("patch_regions")
-        if regions:
-            for ri, r in enumerate(regions):
-                flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
+    has_regions = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
+    if has_regions:
+        all_ids = sorted(clips_dict.keys())
+        flat_vecs: list[np.ndarray] = []
+        media_index_per_row: list[int] = []
+        region_index_per_row: list[int] = []
+        for mi, cid in enumerate(all_ids):
+            media = clips_dict[cid]
+            regions = media.get("patch_regions")
+            if regions:
+                for ri, r in enumerate(regions):
+                    flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
+                    media_index_per_row.append(mi)
+                    region_index_per_row.append(ri)
+            else:
+                flat_vecs.append(np.asarray(media["embedding"], dtype=np.float32))
                 media_index_per_row.append(mi)
-                region_index_per_row.append(ri)
-        else:
-            flat_vecs.append(np.asarray(media["embedding"], dtype=np.float32))
-            media_index_per_row.append(mi)
-            region_index_per_row.append(0)
+                region_index_per_row.append(0)
+        X_all = torch.from_numpy(np.stack(flat_vecs).astype(np.float32, copy=False))
+    else:
+        from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
-    X_all = torch.tensor(np.array(flat_vecs), dtype=torch.float32)
+        all_ids, all_embs = get_embedding_matrix_for_snap(clips_dict)
+        X_all = torch.from_numpy(all_embs)
+        n = len(all_ids)
+        media_index_per_row = list(range(n))
+        region_index_per_row = [0] * n
     with torch.no_grad():
         flat_scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().numpy()
 
@@ -765,7 +774,7 @@ def train_detector_from_origins(
     if len(X_list) < 2 or num_good == 0 or num_bad == 0:
         return None, 0.5
 
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 

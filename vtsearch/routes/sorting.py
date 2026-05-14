@@ -5,7 +5,6 @@ import logging
 import threading
 from pathlib import Path
 
-import numpy as np
 from flask import Blueprint, jsonify, request
 
 from vtsearch.routes.helpers import (
@@ -801,9 +800,10 @@ def label_file_sort():
         model, threshold = train_and_threshold(X_list, y_list, snap=snap)
 
         # Score every media in the dataset
-        all_ids = sorted(snap.keys())
-        all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-        X_all = torch.tensor(all_embs, dtype=torch.float32)
+        from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+
+        all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+        X_all = torch.from_numpy(all_embs)
         with torch.no_grad():
             scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
 
