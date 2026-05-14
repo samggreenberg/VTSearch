@@ -1,6 +1,7 @@
 import { Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject, takeUntil, timer, switchMap } from 'rxjs';
+import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
+import { EvalTrainAndScoreJobResponse } from '../../../models/api.models';
 import { ModalComponent } from '../../modal/modal.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
@@ -104,23 +105,55 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
         },
       });
 
-    // Request train-and-score
+    // Request train-and-score; the new endpoint returns a job envelope.
     this.sortingApi.trainAndScore(this.metric).subscribe({
       next: (res) => {
-        this.analyzing = false;
-        if (this.metric === 'smart') {
-          this.chartData = res.error_cost || [];
-        } else if (this.metric === 'stable') {
-          this.chartData = res.stability || [];
+        if (res.status === 'done') {
+          this.applyEvalResult(res);
+        } else if (res.status === 'running') {
+          this.pollEvalJob(res.job_id);
         } else {
-          this.chartData = res.diversity || [];
+          this.analyzing = false;
         }
-        setTimeout(() => this.renderChart(), 50);
       },
       error: () => {
         this.analyzing = false;
       },
     });
+  }
+
+  private pollEvalJob(jobId: string): void {
+    timer(200, 500)
+      .pipe(
+        takeUntil(this.destroy$),
+        switchMap(() => this.sortingApi.getEvalTrainAndScoreResult(jobId)),
+        filter((res) => res.status !== 'running'),
+        take(1),
+      )
+      .subscribe({
+        next: (res) => {
+          if (res.status === 'done') {
+            this.applyEvalResult(res);
+          } else {
+            this.analyzing = false;
+          }
+        },
+        error: () => {
+          this.analyzing = false;
+        },
+      });
+  }
+
+  private applyEvalResult(res: EvalTrainAndScoreJobResponse): void {
+    this.analyzing = false;
+    if (this.metric === 'smart') {
+      this.chartData = res.error_cost || [];
+    } else if (this.metric === 'stable') {
+      this.chartData = res.stability || [];
+    } else {
+      this.chartData = res.diversity || [];
+    }
+    setTimeout(() => this.renderChart(), 50);
   }
 
   private renderChart(): void {

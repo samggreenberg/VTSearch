@@ -65,6 +65,20 @@ export interface LearnedSortResponse {
   threshold: number;
 }
 
+/** Initial response to ``POST /api/learned-sort`` and shape returned by the
+ *  result-polling endpoint.  ``status: "done"`` carries the full result;
+ *  ``status: "running"`` means the client should poll
+ *  ``GET /api/learned-sort/result?job_id=…`` until done. */
+export interface LearnedSortJobResponse {
+  job_id: string;
+  status: 'running' | 'done' | 'error' | 'cancelled' | 'missing';
+  results?: LearnedSortResult[];
+  threshold?: number;
+  current?: number;
+  total?: number;
+  error?: string;
+}
+
 export interface VotesResponse {
   good: number[];
   bad: number[];
@@ -537,6 +551,20 @@ export interface TrainAndScoreResponse {
   stability?: StabilityDataPoint[];
   diversity?: DiversityDataPoint[];
   [key: string]: unknown;
+}
+
+/** Job envelope for ``/api/eval/train-and-score``.  Mirrors
+ *  :class:`LearnedSortJobResponse`. */
+export interface EvalTrainAndScoreJobResponse {
+  job_id: string;
+  status: 'running' | 'done' | 'error' | 'cancelled' | 'missing';
+  metric?: 'smart' | 'stable' | 'diverse';
+  error_cost?: ErrorCostDataPoint[];
+  stability?: StabilityDataPoint[];
+  diversity?: DiversityDataPoint[];
+  current?: number;
+  total?: number;
+  error?: string;
 }
 
 export interface IndicatorScoreHistoryResponse {

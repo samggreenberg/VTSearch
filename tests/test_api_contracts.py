@@ -137,7 +137,7 @@ class TestLearnedSortContract:
     def test_response_has_results_and_threshold(self, client):
         good_votes.update({1: None, 2: None})
         bad_votes.update({3: None, 4: None})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "results" in data
@@ -146,7 +146,7 @@ class TestLearnedSortContract:
     def test_each_result_has_id_and_score(self, client):
         good_votes.update({1: None, 2: None})
         bad_votes.update({3: None, 4: None})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         for entry in data["results"]:
             assert "id" in entry
@@ -582,7 +582,7 @@ class TestErrorResponseFormat:
         assert "error" in data
 
     def test_400_learned_sort_no_votes_is_json(self, client):
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data

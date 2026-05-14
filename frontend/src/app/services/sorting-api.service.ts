@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import {
   SortResponse,
   LearnedSortResponse,
+  LearnedSortJobResponse,
   VotesResponse,
   InclusionResponse,
   SafeThresholdsResponse,
@@ -18,7 +19,7 @@ import {
   LabelingStatusResponse,
   DiversityTreeNextResponse,
   ServerMediaFilesResponse,
-  TrainAndScoreResponse,
+  EvalTrainAndScoreJobResponse,
   VotingIterationsResponse,
   IndicatorScoreHistoryResponse,
 } from '../models/api.models';
@@ -35,8 +36,18 @@ export class SortingApiService {
     return this.http.get<SortProgressResponse>('/api/sort/progress');
   }
 
-  learnedSort(): Observable<LearnedSortResponse> {
-    return this.http.post<LearnedSortResponse>('/api/learned-sort', {});
+  /** Kick off a learned-sort training job.  The response will be ``done``
+   *  immediately when the cached signature matches; otherwise the caller
+   *  must poll {@link getLearnedSortResult} with the returned ``job_id``. */
+  learnedSort(): Observable<LearnedSortJobResponse> {
+    return this.http.post<LearnedSortJobResponse>('/api/learned-sort', {});
+  }
+
+  /** Poll for a learned-sort job's completion. */
+  getLearnedSortResult(jobId: string): Observable<LearnedSortJobResponse> {
+    return this.http.get<LearnedSortJobResponse>('/api/learned-sort/result', {
+      params: { job_id: jobId },
+    });
   }
 
   getVotes(): Observable<VotesResponse> {
@@ -158,8 +169,17 @@ export class SortingApiService {
     return this.http.get<DiversityTreeNextResponse>('/api/diversity-tree/next');
   }
 
-  trainAndScore(metric: string): Observable<TrainAndScoreResponse> {
-    return this.http.post<TrainAndScoreResponse>('/api/eval/train-and-score', { metric });
+  /** Kick off an eval train-and-score job.  Like {@link learnedSort}, the
+   *  response will be ``done`` immediately on a cache hit; otherwise poll
+   *  {@link getEvalTrainAndScoreResult}. */
+  trainAndScore(metric: string): Observable<EvalTrainAndScoreJobResponse> {
+    return this.http.post<EvalTrainAndScoreJobResponse>('/api/eval/train-and-score', { metric });
+  }
+
+  getEvalTrainAndScoreResult(jobId: string): Observable<EvalTrainAndScoreJobResponse> {
+    return this.http.get<EvalTrainAndScoreJobResponse>('/api/eval/train-and-score/result', {
+      params: { job_id: jobId },
+    });
   }
 
   getVotingIterations(): Observable<VotingIterationsResponse> {

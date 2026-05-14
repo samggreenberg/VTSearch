@@ -182,22 +182,49 @@ def sort_clips():
         return jsonify({"error": f"Text sort failed: {format_exception_detail(exc)}"}), 500
 
 
+def _learned_sort_done_payload(job) -> dict:
+    """Build the JSON body returned when a learned-sort job is finished."""
+    result = job.result or {}
+    return {
+        "job_id": job.job_id,
+        "status": "done",
+        "results": result.get("results", []),
+        "threshold": result.get("threshold", 0.0),
+    }
+
+
 @sorting_bp.route("/api/learned-sort", methods=["POST"])
 def learned_sort():
-    """Train MLP on the active detector's saved labelset (or active votes when
-    no detector is loaded) and return all medias sorted by predicted score.
+    """Kick off (or short-circuit) a learned-sort training job.
 
-    When a detector is active, training uses every label saved on disk —
-    including labels whose underlying media isn't part of the active dataset.
-    Their vectors are pulled from :attr:`DetectorContext.label_embeddings`
-    (populated at load) so the MLP isn't degraded by ignoring cross-dataset
-    labels.
+    Training is GIL-bound and ran inline used to stall every other request
+    served by the small ``gthread`` pool — votes polls, thumbnails, even
+    media bytes.  The endpoint now hands the work off to a background daemon
+    thread and returns immediately with a ``job_id``; clients poll
+    :func:`learned_sort_result` until ``status == "done"``.
+
+    A small signature cache short-circuits the no-op case: when the votes,
+    detector, inclusion and thresholding settings are unchanged from the
+    most recent successful run, the previous result is returned directly.
+
+    Tests can pass ``{"wait": true}`` in the body to block until the job
+    completes and receive the result inline.  The frontend leaves it false.
     """
     from vtsearch.datasets.labelset import LabelSet
     from vtsearch.models.detector_registry import get_detector
     from vtsearch.models.detector_store import _detector_path, _read_detector
     from vtsearch.models.labelset_training import labelset_train_and_score
-    from vtsearch.utils.state_core import _empty_detector_context, get_active_detector_context
+    from vtsearch.utils.async_jobs import learned_sort_jobs
+    from vtsearch.utils.state_core import (
+        _empty_detector_context,
+        get_active_context,
+        get_active_detector_context,
+        set_thread_dataset_context,
+        set_thread_detector_context,
+    )
+
+    body = request.get_json(silent=True) or {}
+    wait = bool(body.get("wait"))
 
     snap = snapshot_medias()
 
@@ -205,6 +232,7 @@ def learned_sort():
     # labelset cached on det_ctx by ``ensure_votes_match_active_dataset`` to
     # avoid re-reading the JSON file on every click.
     det_ctx = get_active_detector_context()
+    ds_ctx = get_active_context()
     labelset: LabelSet | None = None
     det_media_type = ""
     if det_ctx is not _empty_detector_context and det_ctx.detector_id:
@@ -219,99 +247,203 @@ def learned_sort():
                     labelset = LabelSet.from_dict(det_data.get("labelset") or {})
                     det_media_type = det_data.get("media_type", "") or ""
 
+    # Early validation so 400s come back before we spin a thread.
     if labelset is not None:
         good_count = sum(1 for el in labelset.elements if el.label == "good")
         bad_count = sum(1 for el in labelset.elements if el.label == "bad")
         if good_count == 0 or bad_count == 0:
             return jsonify({"error": "need at least one good and one bad vote"}), 400
-        results, threshold, model = labelset_train_and_score(
-            det_ctx,
-            labelset,
-            media_type=det_media_type,
-            clips_dict=snap,
-            inclusion_value=get_inclusion(),
-            safe_thresholds=get_safe_thresholds(),
-            calibrate_count=get_calibrate_count(),
-            calibration_fraction=get_calibration_fraction(),
-        )
     else:
         if not good_votes or not bad_votes:
             return jsonify({"error": "need at least one good and one bad vote"}), 400
-        results, threshold, model = train_and_score(
-            snap,
-            good_votes,
-            bad_votes,
-            get_inclusion(),
-            safe_thresholds=get_safe_thresholds(),
-            calibrate_count=get_calibrate_count(),
-            calibration_fraction=get_calibration_fraction(),
-            vote_region_boxes=dict(vote_region_boxes),
-        )
 
-    # Store scores so the /api/votes endpoint can provide confidence info.
-    update_learned_scores({r["id"]: r["score"] for r in results})
+    inclusion_value = get_inclusion()
+    safe_thresholds_value = get_safe_thresholds()
+    calibrate_count_value = get_calibrate_count()
+    calibration_fraction_value = get_calibration_fraction()
+    region_boxes_snapshot = dict(vote_region_boxes)
 
-    # In the labelset path, training used the on-disk labelset (potentially
-    # cross-dataset) — derive the live-cache key and the cached training
-    # snapshot from the labelset itself, not from local cid-keyed votes.
-    labelset_local_good: set[int] | None = None
-    labelset_local_bad: set[int] | None = None
-    labelset_training_medias: dict[int, dict] | None = None
-    labelset_has_cross_dataset = False
+    # Signature: covers everything that changes the training output.  Re-sorts
+    # with the same vote set + settings reuse the cached result.
     if labelset is not None:
-        from vtsearch.utils import build_media_lookup, resolve_media_ids
+        labels_sig = tuple(
+            sorted((el.label, _stable_element_id_for_sig(el)) for el in labelset.elements)
+        )
+    else:
+        labels_sig = (
+            ("good", tuple(sorted(good_votes))),
+            ("bad", tuple(sorted(bad_votes))),
+            ("regions", tuple(sorted(region_boxes_snapshot.items()))),
+        )
+    signature = (
+        det_ctx.detector_id,
+        ds_ctx.dataset_id,
+        tuple(sorted(snap.keys())),
+        labels_sig,
+        inclusion_value,
+        safe_thresholds_value,
+        calibrate_count_value,
+        calibration_fraction_value,
+    )
 
-        origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
-        labelset_local_good = set()
-        labelset_local_bad = set()
-        labelset_training_medias = {}
-        for el in labelset.elements:
-            if el.label not in ("good", "bad"):
-                continue
-            cids = resolve_media_ids(el.to_dict(), origin_lookup, md5_lookup, name_lookup)
-            if not cids:
-                labelset_has_cross_dataset = True
-                continue
-            target = labelset_local_good if el.label == "good" else labelset_local_bad
-            for cid in cids:
-                target.add(cid)
-                if cid in snap:
-                    labelset_training_medias[cid] = snap[cid]
+    cached = learned_sort_jobs.cached_for(signature)
+    if cached is not None:
+        return jsonify(_learned_sort_done_payload(cached))
 
-    # Inject the live model into the progress cache so indicators and the
-    # progress line-graph use the actual model that guided sorting, rather
-    # than retraining an independent model from scratch.  The cache is keyed
-    # by current-dataset cids, so only inject when the model's training set
-    # is fully representable in that key — otherwise the cache would return
-    # a cross-dataset model when local-cids replay asks for a local-only one.
-    if model is not None:
-        if labelset is None:
-            inject_live_model(good_votes, bad_votes, model, threshold)
-        elif (
-            not labelset_has_cross_dataset
-            and labelset_local_good == set(good_votes)
-            and labelset_local_bad == set(bad_votes)
-        ):
-            inject_live_model(good_votes, bad_votes, model, threshold)
+    def _run(job):
+        # Background thread needs the same dataset/detector context as the
+        # request thread so proxies (good_votes, bad_votes, etc.) resolve
+        # correctly when the training helpers reach for them.
+        set_thread_dataset_context(ds_ctx)
+        set_thread_detector_context(det_ctx)
+        try:
+            if labelset is not None:
+                results, threshold, model = labelset_train_and_score(
+                    det_ctx,
+                    labelset,
+                    media_type=det_media_type,
+                    clips_dict=snap,
+                    inclusion_value=inclusion_value,
+                    safe_thresholds=safe_thresholds_value,
+                    calibrate_count=calibrate_count_value,
+                    calibration_fraction=calibration_fraction_value,
+                )
+            else:
+                results, threshold, model = train_and_score(
+                    snap,
+                    dict(good_votes),
+                    dict(bad_votes),
+                    inclusion_value,
+                    safe_thresholds=safe_thresholds_value,
+                    calibrate_count=calibrate_count_value,
+                    calibration_fraction=calibration_fraction_value,
+                    vote_region_boxes=region_boxes_snapshot,
+                )
 
-    if det_ctx is not _empty_detector_context and model is not None:
-        det_ctx.model = model
-        det_ctx.threshold = threshold
-        # Cache the voted media items with embeddings for cross-embedder scenarios.
-        if labelset is not None:
-            det_ctx.training_medias = labelset_training_medias or {}
-        else:
-            training = {}
-            for cid in list(good_votes) + list(bad_votes):
-                if cid in snap:
-                    training[cid] = snap[cid]
-            det_ctx.training_medias = training
-        if snap:
-            first = next(iter(snap.values()), {})
-            det_ctx.embedder = first.get("embedder", "")
-            det_ctx.media_type = first.get("type", "")
+            # Store scores so the /api/votes endpoint can provide confidence info.
+            update_learned_scores({r["id"]: r["score"] for r in results})
 
-    return jsonify({"results": results, "threshold": round(threshold, 4)})
+            # In the labelset path, training used the on-disk labelset
+            # (potentially cross-dataset) — derive the live-cache key and the
+            # cached training snapshot from the labelset itself, not from
+            # local cid-keyed votes.
+            labelset_local_good: set[int] | None = None
+            labelset_local_bad: set[int] | None = None
+            labelset_training_medias: dict[int, dict] | None = None
+            labelset_has_cross_dataset = False
+            if labelset is not None:
+                from vtsearch.utils import build_media_lookup, resolve_media_ids
+
+                origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+                labelset_local_good = set()
+                labelset_local_bad = set()
+                labelset_training_medias = {}
+                for el in labelset.elements:
+                    if el.label not in ("good", "bad"):
+                        continue
+                    cids = resolve_media_ids(
+                        el.to_dict(), origin_lookup, md5_lookup, name_lookup
+                    )
+                    if not cids:
+                        labelset_has_cross_dataset = True
+                        continue
+                    target = labelset_local_good if el.label == "good" else labelset_local_bad
+                    for cid in cids:
+                        target.add(cid)
+                        if cid in snap:
+                            labelset_training_medias[cid] = snap[cid]
+
+            # Inject the live model into the progress cache so indicators and
+            # the progress line-graph use the actual model that guided
+            # sorting, rather than retraining an independent model from
+            # scratch.  The cache is keyed by current-dataset cids, so only
+            # inject when the model's training set is fully representable in
+            # that key — otherwise the cache would return a cross-dataset
+            # model when local-cids replay asks for a local-only one.
+            if model is not None:
+                if labelset is None:
+                    inject_live_model(good_votes, bad_votes, model, threshold)
+                elif (
+                    not labelset_has_cross_dataset
+                    and labelset_local_good == set(good_votes)
+                    and labelset_local_bad == set(bad_votes)
+                ):
+                    inject_live_model(good_votes, bad_votes, model, threshold)
+
+            if det_ctx is not _empty_detector_context and model is not None:
+                det_ctx.model = model
+                det_ctx.threshold = threshold
+                # Cache the voted media items with embeddings for cross-embedder scenarios.
+                if labelset is not None:
+                    det_ctx.training_medias = labelset_training_medias or {}
+                else:
+                    training = {}
+                    for cid in list(good_votes) + list(bad_votes):
+                        if cid in snap:
+                            training[cid] = snap[cid]
+                    det_ctx.training_medias = training
+                if snap:
+                    first = next(iter(snap.values()), {})
+                    det_ctx.embedder = first.get("embedder", "")
+                    det_ctx.media_type = first.get("type", "")
+
+            job.result = {"results": results, "threshold": round(threshold, 4)}
+        finally:
+            set_thread_dataset_context(None)
+            set_thread_detector_context(None)
+
+    job = learned_sort_jobs.start(signature, _run)
+
+    if wait:
+        job.done_event.wait(timeout=120)
+        if job.status == "error":
+            return jsonify({"error": job.error or "learned-sort failed"}), 500
+        if job.status == "done":
+            return jsonify(_learned_sort_done_payload(job))
+
+    return jsonify({"job_id": job.job_id, "status": "running", "current": 0, "total": 1})
+
+
+def _stable_element_id_for_sig(el) -> str:
+    """Return a stable identifier for a labelset element for signature use."""
+    from vtsearch.models.labelset_elements import stable_element_id
+
+    return stable_element_id(el)
+
+
+@sorting_bp.route("/api/learned-sort/result", methods=["GET"])
+def learned_sort_result():
+    """Poll a learned-sort background job.
+
+    Returns the same shape as the POST endpoint's ``done`` response when the
+    job has finished, or a ``running`` snapshot otherwise.
+    """
+    from vtsearch.utils.async_jobs import learned_sort_jobs
+
+    job_id = request.args.get("job_id", "").strip()
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+
+    job = learned_sort_jobs.get(job_id)
+    if job is None:
+        return jsonify({"status": "missing", "error": "Job not found"}), 404
+
+    if job.status == "running":
+        return jsonify({
+            "job_id": job.job_id,
+            "status": "running",
+            "current": job.current,
+            "total": job.total,
+        })
+    if job.status == "error":
+        return jsonify({
+            "job_id": job.job_id,
+            "status": "error",
+            "error": job.error or "learned-sort failed",
+        }), 500
+    if job.status == "cancelled":
+        return jsonify({"job_id": job.job_id, "status": "cancelled"})
+    return jsonify(_learned_sort_done_payload(job))
 
 
 @sorting_bp.route("/api/votes")

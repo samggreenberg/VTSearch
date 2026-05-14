@@ -398,7 +398,7 @@ class TestLearnedSort:
     def test_returns_all_clips(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
         data = resp.get_json()
         assert len(data["results"]) == app_module.NUM_MEDIAS
@@ -407,7 +407,7 @@ class TestLearnedSort:
     def test_result_fields(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         for entry in data["results"]:
             assert "id" in entry
@@ -416,7 +416,7 @@ class TestLearnedSort:
     def test_sorted_descending(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         scores = [e["score"] for e in data["results"]]
         assert scores == sorted(scores, reverse=True)
@@ -424,28 +424,137 @@ class TestLearnedSort:
     def test_all_media_ids_present(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         ids = {e["id"] for e in data["results"]}
         assert ids == set(range(1, app_module.NUM_MEDIAS + 1))
 
     def test_only_good_votes_returns_400(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
 
     def test_only_bad_votes_returns_400(self, client):
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
 
     def test_scores_in_valid_range(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         for entry in data["results"]:
             assert 0.0 <= entry["score"] <= 1.0
+
+
+class TestLearnedSortAsync:
+    """The endpoint now hands the work off to a background thread and the
+    client polls ``/api/learned-sort/result?job_id=...`` until done."""
+
+    def test_async_returns_job_id_then_polling_yields_result(self, client):
+        from tests.conftest import _wait_for_job
+        from vtsearch.utils.async_jobs import learned_sort_jobs
+
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4]})
+
+        resp = client.post("/api/learned-sort", json={})
+        assert resp.status_code == 200
+        envelope = resp.get_json()
+        assert envelope["status"] in ("running", "done")
+        job_id = envelope["job_id"]
+
+        # Wait for the background thread to finish before polling, since the
+        # test client otherwise sees the still-running snapshot.
+        _wait_for_job(learned_sort_jobs)
+
+        result = client.get(f"/api/learned-sort/result?job_id={job_id}").get_json()
+        assert result["status"] == "done"
+        assert result["job_id"] == job_id
+        assert "results" in result and len(result["results"]) > 0
+        assert "threshold" in result
+
+    def test_unchanged_votes_short_circuit_to_cached(self, client):
+        """The signature cache lets re-sorts skip training entirely."""
+        from vtsearch.utils.async_jobs import learned_sort_jobs
+
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4]})
+
+        first = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert first["status"] == "done"
+        first_job_id = first["job_id"]
+
+        # Second call with the same signature should reuse the cached result —
+        # job_id is the original job's id and we get back done immediately
+        # without ``wait=true``.
+        second = client.post("/api/learned-sort", json={}).get_json()
+        assert second["status"] == "done"
+        assert second["job_id"] == first_job_id
+
+        # Cache invalidates when votes change.
+        app_module.bad_votes.update({5: None})
+        third = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert third["status"] == "done"
+        assert third["job_id"] != first_job_id
+
+        learned_sort_jobs.reset_for_tests()
+
+    def test_polling_unknown_job_returns_404(self, client):
+        resp = client.get("/api/learned-sort/result?job_id=does-not-exist")
+        assert resp.status_code == 404
+        assert resp.get_json()["status"] == "missing"
+
+    def test_polling_without_job_id_returns_400(self, client):
+        resp = client.get("/api/learned-sort/result")
+        assert resp.status_code == 400
+
+
+class TestEvalTrainAndScoreAsync:
+    """The eval train-and-score endpoint mirrors the learned-sort pattern:
+    return a job envelope, poll a result endpoint, short-circuit unchanged
+    runs via the signature cache."""
+
+    def _seed_history(self):
+        from vtsearch.utils import label_history
+
+        # A handful of "good" votes are enough to exercise the smart metric.
+        for cid, lbl in [(1, "good"), (2, "good"), (3, "bad"), (4, "bad")]:
+            if lbl == "good":
+                app_module.good_votes[cid] = None
+            else:
+                app_module.bad_votes[cid] = None
+            label_history.append((cid, lbl, 0.0))
+
+    def test_wait_returns_metric_inline(self, client):
+        self._seed_history()
+        resp = client.post("/api/eval/train-and-score", json={"metric": "smart", "wait": True})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "done"
+        assert data["metric"] == "smart"
+        assert "error_cost" in data
+
+    def test_async_polls_to_done(self, client):
+        from tests.conftest import _wait_for_job
+        from vtsearch.utils.async_jobs import eval_jobs
+
+        self._seed_history()
+        envelope = client.post("/api/eval/train-and-score", json={"metric": "stable"}).get_json()
+        assert envelope["status"] in ("running", "done")
+        job_id = envelope["job_id"]
+
+        _wait_for_job(eval_jobs)
+
+        result = client.get(f"/api/eval/train-and-score/result?job_id={job_id}").get_json()
+        assert result["status"] == "done"
+        assert result["metric"] == "stable"
+        assert "stability" in result
+
+    def test_invalid_metric_rejected(self, client):
+        resp = client.post("/api/eval/train-and-score", json={"metric": "bogus", "wait": True})
+        assert resp.status_code == 400
 
 
 class TestExampleSort:
