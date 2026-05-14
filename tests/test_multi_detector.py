@@ -397,7 +397,7 @@ class TestMLPCaching:
         bad_votes[19] = None
         bad_votes[20] = None
 
-        res = client.post("/api/learned-sort")
+        res = client.post("/api/learned-sort", json={"wait": True})
         assert res.status_code == 200
 
         det_ctx = get_active_detector_context()
@@ -417,13 +417,13 @@ class TestMLPCaching:
         bad_votes[19] = None
         bad_votes[20] = None
 
-        client.post("/api/learned-sort")
+        client.post("/api/learned-sort", json={"wait": True})
         det_ctx = get_active_detector_context()
         model1 = det_ctx.model
 
         # Add more votes and retrain
         good_votes[4] = None
-        client.post("/api/learned-sort")
+        client.post("/api/learned-sort", json={"wait": True})
 
         # Model should have been updated
         model2 = det_ctx.model

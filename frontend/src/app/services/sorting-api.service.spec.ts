@@ -39,11 +39,23 @@ describe('SortingApiService', () => {
     req.flush({});
   });
 
-  it('learnedSort should POST', () => {
-    service.learnedSort().subscribe(data => expect(data.results).toBeDefined());
+  it('learnedSort should POST and return a job envelope', () => {
+    service.learnedSort().subscribe(data => {
+      expect(data.job_id).toBeDefined();
+      expect(data.status).toBe('done');
+      expect(data.results).toBeDefined();
+    });
     const req = httpMock.expectOne('/api/learned-sort');
     expect(req.request.method).toBe('POST');
-    req.flush({ results: [], threshold: 0.5 });
+    req.flush({ job_id: 'xyz', status: 'done', results: [], threshold: 0.5 });
+  });
+
+  it('getLearnedSortResult should GET the result endpoint with the job_id', () => {
+    service.getLearnedSortResult('xyz').subscribe();
+    const req = httpMock.expectOne((r) => r.url === '/api/learned-sort/result');
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.get('job_id')).toBe('xyz');
+    req.flush({ job_id: 'xyz', status: 'done', results: [], threshold: 0.5 });
   });
 
   it('getVotes should GET', () => {

@@ -966,7 +966,7 @@ class TestSeedVotesFromExamples:
         assert len(bad_votes) >= 1
 
         # Learned sort should work — it accesses the embedding from the inserted media
-        res = client.post("/api/learned-sort")
+        res = client.post("/api/learned-sort", json={"wait": True})
         assert res.status_code == 200
         data = res.get_json()
         assert "results" in data

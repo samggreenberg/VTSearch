@@ -121,7 +121,7 @@ class TestLearnedSortMultiMedia:
                 good_votes[i] = None
             for i in [18, 19, 20]:
                 bad_votes[i] = None
-            resp = client.post("/api/learned-sort")
+            resp = client.post("/api/learned-sort", json={"wait": True})
             assert resp.status_code == 200
             data = resp.get_json()
             assert "results" in data
@@ -143,7 +143,7 @@ class TestLearnedSortMultiMedia:
                 good_votes[i] = None
             for i in [18, 19, 20]:
                 bad_votes[i] = None
-            resp = client.post("/api/learned-sort")
+            resp = client.post("/api/learned-sort", json={"wait": True})
             assert resp.status_code == 200
             data = resp.get_json()
             assert "results" in data

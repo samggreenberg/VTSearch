@@ -97,17 +97,45 @@ def indicator_score_history():
         return jsonify({"error": "Score history computation failed"}), 500
 
 
+_METRIC_KEY = {"smart": "error_cost", "stable": "stability", "diverse": "diversity"}
+
+
+def _eval_done_payload(job) -> dict:
+    """Build the JSON body for a finished eval job, including metric data."""
+    result = job.result or {}
+    metric = result.get("metric")
+    data_key = _METRIC_KEY.get(metric, "data")
+    return {
+        "job_id": job.job_id,
+        "status": "done",
+        "metric": metric,
+        data_key: result.get("data", []),
+    }
+
+
 @eval_bp.route("/api/eval/train-and-score", methods=["POST"])
 def eval_train_and_score():
-    """Compute indicator score history for a given metric.
+    """Start (or short-circuit) an eval train-and-score computation.
 
-    Expects JSON::
+    The work walks the full ``label_history`` retraining a small MLP at
+    every step, which used to block every other request on the gthread
+    pool.  We now run it on a background daemon thread and return a
+    ``job_id``; clients poll ``/api/eval/train-and-score/result`` for the
+    metric data and ``/api/eval/voting-iterations`` for progress.
 
-        {"metric": "smart" | "stable" | "diverse"}
+    A signature cache keyed by ``(metric, history, votes, inclusion,
+    dataset, detector)`` short-circuits identical re-runs.
 
-    Runs the computation in a background thread and returns the result
-    synchronously. Progress can be polled via ``/api/eval/voting-iterations``.
+    Tests can pass ``{"wait": true}`` to block until the job completes.
     """
+    from vtsearch.utils.async_jobs import eval_jobs
+    from vtsearch.utils.state_core import (
+        get_active_context,
+        get_active_detector_context,
+        set_thread_dataset_context,
+        set_thread_detector_context,
+    )
+
     data = get_json_or_400()
     if not isinstance(data, dict):
         return data
@@ -116,32 +144,96 @@ def eval_train_and_score():
     if metric not in ("smart", "stable", "diverse"):
         return jsonify({"error": "metric must be one of: smart, stable, diverse"}), 400
 
+    wait = bool(data.get("wait"))
+
     clips = snapshot_medias()
     inclusion = get_inclusion()
     history = list(label_history)
-    n_total = max(len(history) - 1, 0)
+    good_snap = dict(good_votes)
+    bad_snap = dict(bad_votes)
 
+    ds_ctx = get_active_context()
+    det_ctx = get_active_detector_context()
+
+    signature = (
+        metric,
+        ds_ctx.dataset_id,
+        det_ctx.detector_id,
+        tuple(sorted(clips.keys())),
+        tuple(history),
+        tuple(sorted(good_snap)),
+        tuple(sorted(bad_snap)),
+        inclusion,
+    )
+
+    cached = eval_jobs.cached_for(signature)
+    if cached is not None:
+        return jsonify(_eval_done_payload(cached))
+
+    n_total = max(len(history) - 1, 0)
     update_eval_progress("running", f"Computing {metric}...", 0, n_total)
 
-    try:
-        if metric == "smart":
-            result_data = calculate_error_cost_over_time(clips, history, good_votes, bad_votes, inclusion)
+    def _run(job):
+        set_thread_dataset_context(ds_ctx)
+        set_thread_detector_context(det_ctx)
+        try:
+            if metric == "smart":
+                data = calculate_error_cost_over_time(clips, history, good_snap, bad_snap, inclusion)
+            elif metric == "stable":
+                data = calculate_prediction_stability_over_time(clips, history, inclusion)
+            else:
+                data = calculate_diversity_level_over_time(clips, history, inclusion)
+            job.result = {"metric": metric, "data": data}
             update_eval_progress("idle", "Done", n_total, n_total)
-            return jsonify({"error_cost": result_data})
-        elif metric == "stable":
-            result_data = calculate_prediction_stability_over_time(clips, history, inclusion)
-            update_eval_progress("idle", "Done", n_total, n_total)
-            return jsonify({"stability": result_data})
-        else:
-            result_data = calculate_diversity_level_over_time(clips, history, inclusion)
-            update_eval_progress("idle", "Done", n_total, n_total)
-            return jsonify({"diversity": result_data})
-    except Exception:
-        import logging
+        except Exception:
+            update_eval_progress("idle", "Error", 0, 0)
+            raise
+        finally:
+            set_thread_dataset_context(None)
+            set_thread_detector_context(None)
 
-        logging.getLogger(__name__).exception("eval train-and-score failed")
-        update_eval_progress("idle", "Error", 0, 0)
-        return jsonify({"error": "Evaluation computation failed"}), 500
+    job = eval_jobs.start(signature, _run)
+
+    if wait:
+        job.done_event.wait(timeout=300)
+        if job.status == "error":
+            return jsonify({"error": job.error or "Evaluation computation failed"}), 500
+        if job.status == "done":
+            return jsonify(_eval_done_payload(job))
+
+    return jsonify({"job_id": job.job_id, "status": "running", "current": 0, "total": n_total})
+
+
+@eval_bp.route("/api/eval/train-and-score/result", methods=["GET"])
+def eval_train_and_score_result():
+    """Poll a background eval train-and-score job."""
+    from vtsearch.utils.async_jobs import eval_jobs
+
+    job_id = request.args.get("job_id", "").strip()
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+
+    job = eval_jobs.get(job_id)
+    if job is None:
+        return jsonify({"status": "missing", "error": "Job not found"}), 404
+
+    if job.status == "running":
+        prog = get_eval_progress()
+        return jsonify({
+            "job_id": job.job_id,
+            "status": "running",
+            "current": prog.get("current", 0),
+            "total": prog.get("total", 0),
+        })
+    if job.status == "error":
+        return jsonify({
+            "job_id": job.job_id,
+            "status": "error",
+            "error": job.error or "Evaluation computation failed",
+        }), 500
+    if job.status == "cancelled":
+        return jsonify({"job_id": job.job_id, "status": "cancelled"})
+    return jsonify(_eval_done_payload(job))
 
 
 @eval_bp.route("/api/eval/voting-iterations", methods=["GET"])
