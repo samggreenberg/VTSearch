@@ -12,7 +12,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from vtsearch.config import DATA_DIR
+from vtsearch.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ _DEFAULTS: dict[str, Any] = {
     "theme": "dark",
     "enrich_descriptions": False,
     "safe_thresholds": False,
-    "calibrate_count": 2,
+    "calibrate_count": DEFAULT_CALIBRATE_COUNT,
     "calibration_fraction": 0.5,
     "audio_playing": True,
     "swipe_animation": True,
@@ -107,7 +107,10 @@ def _save(data: dict[str, Any]) -> None:
 
     SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = SETTINGS_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(data, indent=2) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, SETTINGS_PATH)
 
     # Auto-export to active settings source (skip during import-from-source).

@@ -318,7 +318,7 @@ class TestEmptyState:
         saved = dict(medias)
         medias.clear()
         try:
-            resp = client.get("/api/medias")
+            resp = client.get("/api/medias/ids")
             assert resp.status_code == 200
             assert resp.get_json() == []
         finally:
@@ -335,18 +335,18 @@ class TestEmptyState:
             medias.update(saved)
 
     def test_learned_sort_no_votes(self, client):
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
         assert "need at least" in resp.get_json()["error"]
 
     def test_learned_sort_only_good_votes(self, client):
         good_votes[1] = None
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
 
     def test_learned_sort_only_bad_votes(self, client):
         bad_votes[1] = None
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
 
     def test_labeling_progress_no_votes(self, client):

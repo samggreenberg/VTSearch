@@ -10,11 +10,11 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-import numpy as np
 from flask import Blueprint, jsonify, request
 
 from vtsearch.routes.helpers import get_json_safe
 from vtsearch.utils import snapshot_medias
+from vtsearch.utils.memory_budget import cap_workers_by_memory
 from vtsearch.utils.progress import update_find_progress
 
 logger = logging.getLogger(__name__)
@@ -280,9 +280,10 @@ def find_label():
         total_steps=_FIND_LABEL_STEPS,
     )
 
-    all_ids = sorted(snap.keys())
-    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-    X_all = torch.tensor(all_embs, dtype=torch.float32)
+    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+
+    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+    X_all = torch.from_numpy(all_embs).to(next(mlp.parameters()).device)
 
     batch_size = max(1, min(500, n_total // 10))
     scores: list[float] = []
@@ -290,7 +291,7 @@ def find_label():
         for start in range(0, n_total, batch_size):
             end = min(start + batch_size, n_total)
             batch_logits = mlp(X_all[start:end])
-            scores.extend(torch.sigmoid(batch_logits).squeeze(1).tolist())
+            scores.extend(torch.sigmoid(batch_logits).squeeze(1).cpu().tolist())
             update_find_progress(
                 "running",
                 f"Scoring {n_total} items…",
@@ -415,9 +416,10 @@ def auto_detect():
     if not detectors_to_run:
         return jsonify({"error": f"No autorun detectors found for media type: {media_type}"}), 400
 
-    all_ids = sorted(snap.keys())
-    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-    X_all = torch.tensor(all_embs, dtype=torch.float32)
+    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+
+    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+    X_all = torch.from_numpy(all_embs)
 
     def _run_single(name: str, det_data: dict, reg_entry: dict | None):
         try:
@@ -434,7 +436,8 @@ def auto_detect():
                 return None
 
             with torch.no_grad():
-                scores = torch.sigmoid(mlp(X_all)).squeeze(1).tolist()
+                X_in = X_all.to(next(mlp.parameters()).device)
+                scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
 
             positive_hits = []
             negative_hits = []
@@ -460,8 +463,14 @@ def auto_detect():
             logger.exception("Auto-detect failed for detector %s", name)
             return None
 
+    embed_dim = int(all_embs.shape[1]) if all_embs.ndim > 1 else 0
+    worker_cap = cap_workers_by_memory(
+        len(all_ids),
+        embed_dim,
+        max_workers=min(len(detectors_to_run), 8),
+    )
     results: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=min(len(detectors_to_run), 8)) as pool:
+    with ThreadPoolExecutor(max_workers=worker_cap) as pool:
         futures = [pool.submit(_run_single, name, data, entry) for name, data, entry in detectors_to_run]
         for future in futures:
             outcome = future.result()

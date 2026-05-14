@@ -223,7 +223,8 @@ def _compute_step_stability(
     X_unlabeled = torch.tensor(unlabeled_embs, dtype=torch.float32)
 
     with torch.no_grad():
-        scores_unl = torch.sigmoid(model(X_unlabeled)).squeeze(1).tolist()
+        X_unlabeled = X_unlabeled.to(next(model.parameters()).device)
+        scores_unl = torch.sigmoid(model(X_unlabeled)).squeeze(1).cpu().tolist()
 
     predictions: dict[int, int] = {cid: 1 if score >= threshold else 0 for cid, score in zip(unlabeled_ids, scores_unl)}
 
@@ -278,7 +279,8 @@ def _train_step(
     model = train_model(X, y, X.shape[1], inclusion_value)
 
     with torch.no_grad():
-        scores = torch.sigmoid(model(X)).squeeze(1).tolist()
+        X_dev = X.to(next(model.parameters()).device)
+        scores = torch.sigmoid(model(X_dev)).squeeze(1).cpu().tolist()
     threshold = find_optimal_threshold(scores, y_list, inclusion_value)
 
     stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
@@ -430,7 +432,8 @@ def _eval_cached_models(
             continue
 
         with torch.no_grad():
-            scores = torch.sigmoid(step["model"](X_eval)).squeeze(1).tolist()
+            X_in = X_eval.to(next(step["model"].parameters()).device)
+            scores = torch.sigmoid(step["model"](X_in)).squeeze(1).cpu().tolist()
 
         fp = fn = 0
         for score, true_label in zip(scores, eval_labels):

@@ -464,8 +464,10 @@ def _reembed_clip(clip: dict, content_bytes: bytes, media_type: str) -> None:
 
     fd, tmp_path = tempfile.mkstemp(suffix=ext)
     try:
-        os.write(fd, content_bytes)
-        os.close(fd)
+        try:
+            os.write(fd, content_bytes)
+        finally:
+            os.close(fd)
         embedding = embed_file(Path(tmp_path), media_type)
         if embedding is not None:
             clip["embedding"] = embedding

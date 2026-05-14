@@ -19,9 +19,15 @@ from uuid import uuid4
 from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
-from vtsearch.routes.helpers import get_json_or_400, get_json_safe, get_plugin_or_404, get_request_field
+from vtsearch.routes.helpers import (
+    format_exception_detail,
+    get_json_or_400,
+    get_json_safe,
+    get_plugin_or_404,
+    get_request_field,
+)
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
-from vtsearch.datasets.loader import safe_pickle_load
+from vtsearch.datasets.pickle_security import peek_pickle_dataset_summary
 from vtsearch.datasets.registry import (
     list_datasets as _reg_list_all,
     remove_loaded_id as _reg_remove_loaded,
@@ -333,23 +339,24 @@ def stage_file():
     staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
     file.save(staging_path)
 
-    # Peek inside the pkl to get count and media type.
+    # Peek the pkl's dict structure cheaply — embeddings and inline media
+    # bytes are skipped, so this stays light even on multi-GB uploads.
     try:
         with open(staging_path, "rb") as f:
-            data = safe_pickle_load(f)
-        if isinstance(data, dict) and "medias" in data:
-            media_dict = data["medias"]
-        elif isinstance(data, dict):
-            media_dict = data
+            peeked = peek_pickle_dataset_summary(f)
+        if isinstance(peeked, dict) and "medias" in peeked:
+            media_dict = peeked["medias"]
+        elif isinstance(peeked, dict):
+            media_dict = peeked
         else:
             media_dict = {}
-        count = len(media_dict)
-        if media_dict:
+        count = len(media_dict) if isinstance(media_dict, dict) else 0
+        media_type = "unknown"
+        if isinstance(media_dict, dict) and media_dict:
             first = next(iter(media_dict.values()))
-            media_type = first.get("type", "audio")
-        else:
-            media_type = "unknown"
-        del data, media_dict
+            if isinstance(first, dict):
+                media_type = first.get("type", "audio") or "unknown"
+        del peeked, media_dict
     except Exception:
         count = 0
         media_type = "unknown"
@@ -880,11 +887,11 @@ def export_dataset():
             download_name="vtsearch_dataset.pkl",
             as_attachment=True,
         )
-    except Exception:
+    except Exception as exc:
         import logging
 
         logging.getLogger(__name__).exception("Dataset export failed")
-        return jsonify({"error": "Dataset export failed"}), 500
+        return jsonify({"error": f"Dataset export failed: {format_exception_detail(exc)}"}), 500
 
 
 @datasets_bp.route("/api/dataset/clear", methods=["POST"])

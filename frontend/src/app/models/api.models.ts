@@ -2,12 +2,21 @@
 
 // --- Medias ---
 
+/**
+ * One media item.
+ *
+ * Only ``id`` and ``type`` are guaranteed — the dataset listing
+ * (``GET /api/medias/ids``) returns just those plus an optional
+ * ``embedder``.  The remaining display-worthy fields are populated on
+ * demand for items currently in the viewport via the metadata cache
+ * (``POST /api/medias/batch``).
+ */
 export interface MediaItem {
   id: number;
   type: string;
-  filename: string;
-  md5: string;
-  custom_metadata: Record<string, unknown>;
+  filename?: string;
+  md5?: string;
+  custom_metadata?: Record<string, unknown>;
   origin_name?: string;
   description?: string;
   clip_start?: number;
@@ -54,6 +63,20 @@ export interface LearnedSortResult {
 export interface LearnedSortResponse {
   results: LearnedSortResult[];
   threshold: number;
+}
+
+/** Initial response to ``POST /api/learned-sort`` and shape returned by the
+ *  result-polling endpoint.  ``status: "done"`` carries the full result;
+ *  ``status: "running"`` means the client should poll
+ *  ``GET /api/learned-sort/result?job_id=…`` until done. */
+export interface LearnedSortJobResponse {
+  job_id: string;
+  status: 'running' | 'done' | 'error' | 'cancelled' | 'missing';
+  results?: LearnedSortResult[];
+  threshold?: number;
+  current?: number;
+  total?: number;
+  error?: string;
 }
 
 export interface VotesResponse {
@@ -528,6 +551,20 @@ export interface TrainAndScoreResponse {
   stability?: StabilityDataPoint[];
   diversity?: DiversityDataPoint[];
   [key: string]: unknown;
+}
+
+/** Job envelope for ``/api/eval/train-and-score``.  Mirrors
+ *  :class:`LearnedSortJobResponse`. */
+export interface EvalTrainAndScoreJobResponse {
+  job_id: string;
+  status: 'running' | 'done' | 'error' | 'cancelled' | 'missing';
+  metric?: 'smart' | 'stable' | 'diverse';
+  error_cost?: ErrorCostDataPoint[];
+  stability?: StabilityDataPoint[];
+  diversity?: DiversityDataPoint[];
+  current?: number;
+  total?: number;
+  error?: string;
 }
 
 export interface IndicatorScoreHistoryResponse {

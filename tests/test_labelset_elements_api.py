@@ -352,7 +352,7 @@ class TestCrossDatasetMLPTraining:
         detector_id = self._seed_with_resolvable_labelset(tmp_path, monkeypatch)
         _load_detector_and_wait_local(client, detector_id)
 
-        res = client.post("/api/learned-sort", json={})
+        res = client.post("/api/learned-sort", json={"wait": True})
         assert res.status_code == 200, res.get_data(as_text=True)
         data = res.get_json()
         assert "results" in data and len(data["results"]) > 0

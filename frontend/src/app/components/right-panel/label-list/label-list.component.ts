@@ -1,8 +1,11 @@
-import { Component, EventEmitter, Input, OnInit, Output, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewChecked, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { MediaItem } from '../../../models/api.models';
 import { LabelSortMode } from '../label-sort/label-sort.component';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 
 export interface LabelEntry {
   id: number;
@@ -19,7 +22,7 @@ export interface LabelEntry {
   templateUrl: './label-list.component.html',
   styleUrl: './label-list.component.scss',
 })
-export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
+export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterViewChecked {
   @Input() label: 'good' | 'bad' = 'good';
   @Input() ids: number[] = [];
   @Input() medias: MediaItem[] = [];
@@ -36,14 +39,25 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
 
   sortedEntries: LabelEntry[] = [];
   private pendingScrollPct: number | null = null;
-  /** Pre-built Map for O(1) media lookups by id (rebuilt when medias input changes). */
+  /** Pre-built Map for O(1) media stub lookups by id (rebuilt when medias input changes). */
   private mediaMap = new Map<number, MediaItem>();
+  private readonly destroy$ = new Subject<void>();
 
-  constructor(private activeContext: ActiveContextService) {}
+  constructor(
+    private activeContext: ActiveContextService,
+    private metadataCache: MediaMetadataCacheService,
+  ) {}
 
   ngOnInit(): void {
     this.mediaMap = new Map(this.medias.map(m => [m.id, m]));
+    this.metadataCache.ensureLoaded(this.ids);
     this.sortedEntries = this.buildSortedEntries();
+    // Re-render entry names when the cache hydrates voted items.
+    this.metadataCache.version$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.sortedEntries = this.buildSortedEntries();
+      });
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -55,7 +69,19 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
     if (changes['medias']) {
       this.mediaMap = new Map(this.medias.map(m => [m.id, m]));
     }
+    if (changes['ids']) {
+      this.metadataCache.ensureLoaded(this.ids);
+    }
     this.sortedEntries = this.buildSortedEntries();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private lookup(id: number): MediaItem | undefined {
+    return this.metadataCache.get(id) ?? this.mediaMap.get(id);
   }
 
   ngAfterViewChecked(): void {
@@ -74,7 +100,7 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
   }
 
   private buildEntry(id: number): LabelEntry {
-    const media = this.mediaMap.get(id);
+    const media = this.lookup(id);
     const name = media ? (media.filename || `Clip #${id}`) : `Clip #${id}`;
     const time = this.clickTimes[String(id)] ?? -1;
     const score = this.learnedScores[String(id)] ?? -1;
@@ -123,12 +149,12 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
   hasThumbnailUrl(id: number): boolean {
     const url = this.thumbnailUrl(id);
     if (url && this.thumbnailFailedUrls.has(url)) return false;
-    const media = this.mediaMap.get(id);
+    const media = this.lookup(id);
     return !!media && (media.type === 'image' || media.type === 'video' || media.type === 'document' || media.type === 'audio');
   }
 
   thumbnailUrl(id: number): string {
-    const media = this.mediaMap.get(id);
+    const media = this.lookup(id);
     if (!media) return '';
     return this.activeContext.mediaUrl(`/api/medias/${id}/image`);
   }
@@ -139,7 +165,7 @@ export class LabelListComponent implements OnInit, OnChanges, AfterViewChecked {
 
   placeholderIcon(id: number): string | null {
     if (this.hasThumbnailUrl(id)) return null;
-    const media = this.mediaMap.get(id);
+    const media = this.lookup(id);
     if (!media) return null;
     if (media.type === 'audio') return '\u266B';
     if (media.type === 'text') return '\u00B6';

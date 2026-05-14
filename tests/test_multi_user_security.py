@@ -179,7 +179,7 @@ class TestFlaskAuthMiddleware:
     def test_g_user_set_on_api_requests(self, client):
         """Verify g.user is set via the before_request middleware."""
         # Any API call should work without errors — the middleware sets g.user
-        resp = client.get("/api/medias")
+        resp = client.get("/api/medias/ids")
         assert resp.status_code == 200
 
 
@@ -326,7 +326,7 @@ class TestProviderSwapSafety:
         set_login_provider(AnotherProvider())
 
         # These should all return 200 regardless of provider
-        resp = client.get("/api/medias")
+        resp = client.get("/api/medias/ids")
         assert resp.status_code == 200
 
         resp = client.get("/api/auth/status")

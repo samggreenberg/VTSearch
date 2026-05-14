@@ -61,27 +61,35 @@ def train_and_threshold(
         get_safe_thresholds,
     )
 
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        get_inclusion(),
-        calibrate_count=get_calibrate_count(),
-        calibration_fraction=get_calibration_fraction(),
-    )
+    safe = bool(get_safe_thresholds() and snap)
+    # Below the safe-threshold ramp floor the cross-cal output is blended
+    # away (pure GMM), so don't pay for the fold trainings.
+    if safe and len(X_list) < 6:
+        threshold = float("inf")
+    else:
+        threshold = calculate_cross_calibration_threshold(
+            X_list,
+            y_list,
+            input_dim,
+            get_inclusion(),
+            calibrate_count=get_calibrate_count(),
+            calibration_fraction=get_calibration_fraction(),
+        )
 
     model = train_model(X, y, input_dim, get_inclusion())
 
-    if get_safe_thresholds() and snap:
-        all_ids = sorted(snap.keys())
-        all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-        X_all = torch.tensor(all_embs, dtype=torch.float32)
+    if safe:
+        from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+
+        _all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+        X_all = torch.from_numpy(all_embs)
         with torch.no_grad():
-            all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+            X_all = X_all.to(next(model.parameters()).device)
+            all_scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().tolist()
         threshold = calculate_safe_threshold(threshold, all_scores, len(y_list))
 
     return model, threshold
@@ -89,4 +97,4 @@ def train_and_threshold(
 
 def serialize_weights(model) -> dict[str, list]:
     """Convert a PyTorch model's state dict to JSON-serialisable nested lists."""
-    return {key: value.tolist() for key, value in model.state_dict().items()}
+    return {key: value.cpu().tolist() for key, value in model.state_dict().items()}

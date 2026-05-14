@@ -11,16 +11,18 @@ import { MediasApiService } from './medias-api.service';
 const BATCH_SIZE = 200;
 
 /**
- * Caches media metadata (id, type, filename, md5, etc.) and loads it lazily in
- * batches via `POST /api/medias/batch`.
+ * Caches full media metadata (`filename`, `md5`, `custom_metadata`, …)
+ * loaded lazily in batches via `POST /api/medias/batch`.
  *
- * The full `/api/medias` response can be hundreds of megabytes for large
- * datasets.  This cache fetches only the metadata the UI actually needs —
- * typically the items currently visible in the virtual-scrolling viewport.
+ * The dataset-wide listing comes from `GET /api/medias/ids` and only
+ * carries `id`, `type`, and (optionally) `embedder`.  This cache fills in
+ * the rest on demand — typically for the items currently in a
+ * virtual-scrolling viewport.
  *
  * Usage:
  *   1. Call `ensureLoaded(ids)` with the IDs the viewport needs.
- *   2. Subscribe to `medias$` or call `get(id)` for cached items.
+ *   2. Subscribe to `version$` to re-render when new items arrive, or call
+ *      `get(id)` to read a single cached item.
  *   3. `toMediaItems(ids)` returns MediaItem[] for already-cached IDs (skips
  *      unknown ones so the template can render immediately).
  */
@@ -56,14 +58,6 @@ export class MediaMetadataCacheService implements OnDestroy {
   /** Current cache size. */
   get size(): number {
     return this.cache.size;
-  }
-
-  /** Bulk-insert items (e.g. from the initial full `/api/medias` load for small datasets). */
-  populate(items: MediaItem[]): void {
-    for (const item of items) {
-      this.cache.set(item.id, item);
-    }
-    this.versionSubject.next(this.versionSubject.value + 1);
   }
 
   /** Clear all cached metadata. */

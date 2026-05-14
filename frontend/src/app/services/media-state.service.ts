@@ -6,11 +6,15 @@ import { MediasApiService } from './medias-api.service';
 import { MediaMetadataCacheService } from './media-metadata-cache.service';
 
 /**
- * Threshold: datasets with more items than this use lazy metadata loading
- * instead of fetching everything in a single /api/medias call.
+ * Tracks the dataset-wide list of media stubs (``{id, type, embedder?}``)
+ * and the current selection.
+ *
+ * Each stub is the minimum the UI needs to build the virtual scroller, the
+ * stripe overview, and the media-type / embedder gates.  Full per-item
+ * metadata (``filename``, ``md5``, ``custom_metadata``, …) is fetched on
+ * demand for whatever is currently in the viewport via
+ * {@link MediaMetadataCacheService}.
  */
-const LAZY_THRESHOLD = 500;
-
 @Injectable({ providedIn: 'root' })
 export class MediaStateService implements OnDestroy {
   private readonly mediasSubject = new BehaviorSubject<MediaItem[]>([]);
@@ -41,7 +45,6 @@ export class MediaStateService implements OnDestroy {
   get selectedMedia(): MediaItem | null {
     const id = this.selectedIdSubject.value;
     if (id === null) return null;
-    // Try cache first (works for both large and small datasets).
     const cached = this.metadataCache.get(id);
     if (cached) return cached;
     return this.mediasSubject.value.find((m) => m.id === id) ?? null;
@@ -49,18 +52,15 @@ export class MediaStateService implements OnDestroy {
 
   selectMedia(id: number): void {
     this.selectedIdSubject.next(id);
-    // Ensure the selected item's metadata is loaded for the center panel.
     this.metadataCache.ensureLoaded([id]);
   }
 
   loadMedias(): void {
     this.mediasApi
-      .getMedias()
+      .getMediaIds()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((medias) => {
-        // Populate the metadata cache so batch lookups work for any ID.
-        this.metadataCache.populate(medias);
-        this.mediasSubject.next(medias);
+      .subscribe((stubs) => {
+        this.mediasSubject.next(stubs);
       });
   }
 

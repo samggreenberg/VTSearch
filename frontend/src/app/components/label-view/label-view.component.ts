@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject, timer, Subscription, pairwise } from 'rxjs';
-import { takeUntil, switchMap } from 'rxjs/operators';
+import { takeUntil, switchMap, filter, take } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -19,7 +19,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DetectorRegistryEntry } from '../../models/api.models';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
-import { LabelingStatusResponse } from '../../models/api.models';
+import { LabelingStatusResponse, LearnedSortJobResponse } from '../../models/api.models';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 
 @Component({
@@ -395,14 +395,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setSortStatus('Training...');
     this.sortingApi.learnedSort().pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
-        this.sortState.setSortResults(
-          response.results.map((r) => ({ id: r.id, score: r.score, bestRegion: r.best_region })),
-          response.threshold,
-        );
-        this.sortState.setSortBusy(false);
-        this.sortState.setSortStatus('');
-        if (autoSelect) {
-          this.autoSelectNext();
+        if (response.status === 'done') {
+          this.applyLearnedSortResult(response, autoSelect);
+        } else if (response.status === 'running') {
+          this.pollLearnedSortJob(response.job_id, autoSelect);
+        } else {
+          this.sortState.setSortBusy(false);
+          this.sortState.setSortStatus(response.error || 'Training failed');
         }
       },
       error: () => {
@@ -410,6 +409,44 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         this.sortState.setSortStatus('Training failed');
       },
     });
+  }
+
+  private pollLearnedSortJob(jobId: string, autoSelect: boolean): void {
+    timer(200, 500)
+      .pipe(
+        takeUntil(this.destroy$),
+        switchMap(() => this.sortingApi.getLearnedSortResult(jobId)),
+        filter((res) => res.status !== 'running'),
+        take(1),
+      )
+      .subscribe({
+        next: (res) => {
+          if (res.status === 'done') {
+            this.applyLearnedSortResult(res, autoSelect);
+          } else {
+            this.sortState.setSortBusy(false);
+            this.sortState.setSortStatus(res.error || 'Training failed');
+          }
+        },
+        error: () => {
+          this.sortState.setSortBusy(false);
+          this.sortState.setSortStatus('Training failed');
+        },
+      });
+  }
+
+  private applyLearnedSortResult(response: LearnedSortJobResponse, autoSelect: boolean): void {
+    const results = response.results ?? [];
+    const threshold = response.threshold ?? 0;
+    this.sortState.setSortResults(
+      results.map((r) => ({ id: r.id, score: r.score, bestRegion: r.best_region })),
+      threshold,
+    );
+    this.sortState.setSortBusy(false);
+    this.sortState.setSortStatus('');
+    if (autoSelect) {
+      this.autoSelectNext();
+    }
   }
 
   onLoadSort(): void {

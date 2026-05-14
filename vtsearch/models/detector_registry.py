@@ -61,7 +61,10 @@ def _save(entries: list[dict[str, Any]]) -> None:
 
     REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = REGISTRY_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(entries, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(str(tmp), str(REGISTRY_PATH))
 
 

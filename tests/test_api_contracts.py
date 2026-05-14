@@ -16,53 +16,51 @@ from vtsearch.utils import good_votes, bad_votes
 
 
 class TestMediasContract:
-    """GET /api/medias response shape."""
+    """GET /api/medias/ids and POST /api/medias/batch response shapes."""
 
-    def test_returns_json_array(self, client):
-        resp = client.get("/api/medias")
+    def _all_ids(self, client) -> list[int]:
+        return [m["id"] for m in client.get("/api/medias/ids").get_json()]
+
+    def _batch(self, client) -> list[dict]:
+        ids = self._all_ids(client)
+        return client.post("/api/medias/batch", json={"ids": ids}).get_json()
+
+    def test_ids_returns_json_array(self, client):
+        resp = client.get("/api/medias/ids")
         assert resp.status_code == 200
         assert resp.content_type.startswith("application/json")
         data = resp.get_json()
         assert isinstance(data, list)
-
-    def test_each_media_has_required_fields(self, client):
-        resp = client.get("/api/medias")
-        data = resp.get_json()
-        required = {"id", "type", "filename", "md5", "custom_metadata"}
-        for item in data:
-            assert required.issubset(item.keys()), f"Missing keys: {required - item.keys()}"
-
-    def test_custom_metadata_is_dict(self, client):
-        resp = client.get("/api/medias")
-        data = resp.get_json()
-        for item in data:
-            assert isinstance(item["custom_metadata"], dict)
-
-    def test_id_is_integer(self, client):
-        resp = client.get("/api/medias")
-        data = resp.get_json()
         for item in data:
             assert isinstance(item["id"], int)
+            assert isinstance(item["type"], str)
 
-    def test_file_size_in_custom_metadata(self, client):
-        resp = client.get("/api/medias")
-        data = resp.get_json()
-        for item in data:
+    def test_batch_each_media_has_required_fields(self, client):
+        required = {"id", "type", "filename", "md5", "custom_metadata"}
+        for item in self._batch(client):
+            assert required.issubset(item.keys()), f"Missing keys: {required - item.keys()}"
+
+    def test_batch_custom_metadata_is_dict(self, client):
+        for item in self._batch(client):
+            assert isinstance(item["custom_metadata"], dict)
+
+    def test_batch_id_is_integer(self, client):
+        for item in self._batch(client):
+            assert isinstance(item["id"], int)
+
+    def test_batch_file_size_in_custom_metadata(self, client):
+        for item in self._batch(client):
             assert "File Size" in item["custom_metadata"]
             assert isinstance(item["custom_metadata"]["File Size"], int)
             assert item["custom_metadata"]["File Size"] > 0
 
-    def test_md5_is_32_char_hex_string(self, client):
-        resp = client.get("/api/medias")
-        data = resp.get_json()
-        for item in data:
+    def test_batch_md5_is_32_char_hex_string(self, client):
+        for item in self._batch(client):
             assert isinstance(item["md5"], str)
             assert len(item["md5"]) == 32
 
-    def test_excludes_embedding_and_media_bytes(self, client):
-        resp = client.get("/api/medias")
-        data = resp.get_json()
-        for item in data:
+    def test_batch_excludes_embedding_and_media_bytes(self, client):
+        for item in self._batch(client):
             assert "embedding" not in item
             assert "media_bytes" not in item
             assert "media_string" not in item
@@ -139,7 +137,7 @@ class TestLearnedSortContract:
     def test_response_has_results_and_threshold(self, client):
         good_votes.update({1: None, 2: None})
         bad_votes.update({3: None, 4: None})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
         data = resp.get_json()
         assert "results" in data
@@ -148,7 +146,7 @@ class TestLearnedSortContract:
     def test_each_result_has_id_and_score(self, client):
         good_votes.update({1: None, 2: None})
         bad_votes.update({3: None, 4: None})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         for entry in data["results"]:
             assert "id" in entry
@@ -584,7 +582,7 @@ class TestErrorResponseFormat:
         assert "error" in data
 
     def test_400_learned_sort_no_votes_is_json(self, client):
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
         data = resp.get_json()
         assert "error" in data
@@ -623,5 +621,5 @@ class TestApiCacheControl:
         assert resp.headers.get("Cache-Control") == "no-store"
 
     def test_medias_no_store(self, client):
-        resp = client.get("/api/medias")
+        resp = client.get("/api/medias/ids")
         assert resp.headers.get("Cache-Control") == "no-store"

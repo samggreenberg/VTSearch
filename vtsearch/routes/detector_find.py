@@ -273,9 +273,10 @@ def multi_find():
             first_media = next(iter(temp_medias.values()), {})
             detected_media_type = first_media.get("type", "")
 
-        all_ids = sorted(temp_medias.keys())
-        all_embs = np.array([temp_medias[cid]["embedding"] for cid in all_ids])
-        X_all = torch.tensor(all_embs, dtype=torch.float32)
+        from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+
+        all_ids, all_embs = get_embedding_matrix_for_snap(temp_medias)
+        X_all = torch.from_numpy(all_embs)
 
         total_scoring_units += len(all_ids) * len(detector_configs)
 
@@ -310,8 +311,9 @@ def multi_find():
                 try:
                     mlp = dc["live_mlp"]
                     with torch.no_grad():
-                        raw_logits = mlp(X_all)
-                        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
+                        X_in = X_all.to(next(mlp.parameters()).device)
+                        raw_logits = mlp(X_in)
+                        scores = torch.sigmoid(raw_logits).squeeze(1).cpu().tolist()
                     threshold = dc.get("threshold", 0.5)
 
                     for cid, score in zip(all_ids, scores):
@@ -365,7 +367,8 @@ def multi_find():
                         mlp, threshold = train_and_threshold(X_list, y_list)
 
                         with torch.no_grad():
-                            scores = torch.sigmoid(mlp(X_all)).squeeze(1).tolist()
+                            X_in = X_all.to(next(mlp.parameters()).device)
+                            scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
 
                         for cid, score in zip(all_ids, scores):
                             verdict = "Good" if score >= threshold else "Bad"

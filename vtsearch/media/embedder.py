@@ -114,17 +114,13 @@ def embedder_load_setup(on_progress: ProgressCallback, message: str) -> str:
     """Common setup ceremony shared by all embedder ``_load_models_impl()`` methods.
 
     1. Calls :func:`ensure_torch_configured`.
-    2. Runs ``gc.collect()`` to free memory before loading a large model.
-    3. Reports initial progress via *on_progress*.
-    4. Returns the model cache directory as a string.
+    2. Reports initial progress via *on_progress*.
+    3. Returns the model cache directory as a string.
     """
-    import gc  # noqa: PLC0415
-
     from vtsearch.config import MODELS_CACHE_DIR  # noqa: PLC0415
     from vtsearch.models.loader import ensure_torch_configured  # noqa: PLC0415
 
     ensure_torch_configured()
-    gc.collect()
     on_progress("loading", message, 0, 0)
     return str(MODELS_CACHE_DIR)
 

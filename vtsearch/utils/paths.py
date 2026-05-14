@@ -17,8 +17,8 @@ def get_file_access_base_dir() -> Path | None:
 
     In single-user mode (:class:`~vtsearch.auth.DefaultLoginProvider`) this
     returns ``None``, which causes :func:`validate_server_filepath` to fall
-    back to ``Path.cwd()`` — giving the single user full access to any path
-    under the working directory.
+    back to :data:`vtsearch.config.SERVER_ROOTS[0]` (``Path.cwd()`` by
+    default).
 
     In multi-user mode (any non-default provider) this returns the current
     user's data directory so that each user is confined to their own
@@ -41,7 +41,9 @@ def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) ->
         User-supplied file path (absolute or relative).
     base_dir:
         The directory the resolved path must reside in.
-        Defaults to ``Path.cwd()``.
+        Defaults to :data:`vtsearch.config.SERVER_ROOTS[0]` (which itself
+        falls back to ``Path.cwd()`` when ``VTSEARCH_SERVER_ROOTS`` is
+        unset).
 
     Returns
     -------
@@ -54,7 +56,9 @@ def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) ->
         If the resolved path is outside *base_dir*.
     """
     if base_dir is None:
-        base_dir = Path.cwd()
+        from vtsearch.config import SERVER_ROOTS  # noqa: PLC0415
+
+        base_dir = SERVER_ROOTS[0]
 
     path = Path(filepath_str)
 

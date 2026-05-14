@@ -97,7 +97,7 @@ class TestVotesEndpointEnriched:
         app_module.good_votes.update({1: None, 2: None})
         app_module.bad_votes.update({3: None, 4: None})
         # Trigger learned sort
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
         sort_data = resp.get_json()
         assert "results" in sort_data

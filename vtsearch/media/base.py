@@ -391,13 +391,18 @@ class MediaType(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    def load_media_data(self, file_path: Path) -> dict:
+    def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
         """Load and return media-specific fields for a media dict.
 
         The returned dict is merged into the *base* media dict (which already
         contains ``id``, ``type``, ``file_size``, ``md5``, ``embedding``,
         ``filename``, and ``category``).  You must include at minimum a
         ``"duration"`` key.
+
+        When *media_bytes* is provided, implementations should use it instead
+        of re-reading the file from disk.  Callers that have already loaded
+        the file contents (e.g. the folder loader, which needs them to
+        compute MD5) pass them through to avoid a second read.
 
         Example return value for audio::
 

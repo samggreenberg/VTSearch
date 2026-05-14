@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from vtsearch.config import MLP_DROPOUT, MLP_HIDDEN_MAX, MLP_HIDDEN_MIN, TRAIN_EPOCHS
+from vtsearch import config
+from vtsearch.config import MLP_DROPOUT, MLP_HIDDEN_MAX, MLP_HIDDEN_MIN
+
+# ``TRAIN_EPOCHS`` and ``TRAIN_PATIENCE`` are read off ``config`` at call time
+# (not import time) so env-var / monkey-patched overrides take effect.
 
 if TYPE_CHECKING:
     import torch
@@ -213,9 +217,10 @@ def train_model(
     import torch  # noqa: PLC0415
     import torch.nn as nn  # noqa: PLC0415
 
-    from vtsearch.models.loader import ensure_torch_configured
+    from vtsearch.models.loader import ensure_torch_configured, get_torch_device
 
     ensure_torch_configured()
+    device = get_torch_device()
 
     n_train = len(X_train)
     if hidden_dim is None:
@@ -228,6 +233,9 @@ def train_model(
     g.manual_seed(seed)
 
     model = build_model(input_dim, hidden_dim=hidden_dim, dropout=MLP_DROPOUT, generator=g)
+    model = model.to(device)
+    X_train = X_train.to(device)
+    y_train = y_train.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 
@@ -252,21 +260,37 @@ def train_model(
         weight_false *= 2.0 ** (-inclusion_value)
 
     # Create sample weights
-    weights = torch.where(y_train == 1, weight_true, weight_false).squeeze()
+    weights = torch.where(y_train == 1, weight_true, weight_false).squeeze().to(device)
     loss_fn = nn.BCEWithLogitsLoss(reduction="none")
 
     # Fork the global RNG so the Dropout seed is isolated per call —
     # concurrent training invocations each get their own RNG state.
     model.train()
+    epochs = config.TRAIN_EPOCHS
+    patience = config.TRAIN_PATIENCE
+    best_loss = float("inf")
+    epochs_since_improve = 0
+    # Require at least this much absolute decrease to count as progress —
+    # without it, float noise drifts the loss down forever and the early-stop
+    # never fires.
+    min_delta = 1e-4
     with torch.random.fork_rng(), torch.enable_grad():
         torch.manual_seed(seed)
-        for _ in range(TRAIN_EPOCHS):
+        for _ in range(epochs):
             optimizer.zero_grad()
             logits = model(X_train)
             losses = loss_fn(logits, y_train)
             weighted_loss = (losses.squeeze() * weights).mean()
             weighted_loss.backward()
             optimizer.step()
+            cur = weighted_loss.item()
+            if cur < best_loss - min_delta:
+                best_loss = cur
+                epochs_since_improve = 0
+            else:
+                epochs_since_improve += 1
+                if patience > 0 and epochs_since_improve >= patience:
+                    break
 
     model.eval()
     return model
@@ -425,7 +449,8 @@ def calculate_cross_calibration_threshold(
         model = train_model(X_train, y_train, input_dim, inclusion_value, hidden_dim=hidden_dim)
 
         with torch.no_grad():
-            scores = torch.sigmoid(model(X_cal)).squeeze(1).tolist()
+            X_cal = X_cal.to(next(model.parameters()).device)
+            scores = torch.sigmoid(model(X_cal)).squeeze(1).cpu().tolist()
         t = find_optimal_threshold(scores, y_np[cal_idx].tolist(), inclusion_value)
         thresholds.append(t)
 
@@ -545,7 +570,7 @@ def train_and_score(
     if len(X_list) < 2 or num_good == 0 or num_bad == 0:
         return [], 0.5, None
 
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
     input_dim = X.shape[1]
@@ -556,20 +581,27 @@ def train_and_score(
     # scores (same capacity, same score distribution shape).
     hidden_dim = _auto_hidden_dim(len(X_list))
 
-    # Calculate threshold using k-fold calibration.
-    # Use a seeded RNG so that train/calibrate splits are deterministic —
-    # without this, the global np.random state makes results non-reproducible.
-    cal_rng = np.random.RandomState(42)
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        inclusion_value,
-        rng=cal_rng,
-        calibrate_count=calibrate_count,
-        calibration_fraction=calibration_fraction,
-        hidden_dim=hidden_dim,
-    )
+    # Calculate threshold using k-fold calibration.  Skip when the label
+    # count is below the ``calculate_safe_threshold`` ramp floor: the
+    # calibration trainings would be expensive (two 200-epoch fits) and
+    # the result is either discarded (safe_thresholds=True blends with
+    # label_weight=0 → pure GMM) or unreliable (safe_thresholds=False with
+    # so few labels).  Use 0.5 as the neutral default; it blends to pure
+    # GMM under safe_thresholds and is a sensible mid-point otherwise.
+    if len(X_list) < 6:
+        threshold = 0.5
+    else:
+        cal_rng = np.random.RandomState(42)
+        threshold = calculate_cross_calibration_threshold(
+            X_list,
+            y_list,
+            input_dim,
+            inclusion_value,
+            rng=cal_rng,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            hidden_dim=hidden_dim,
+        )
 
     # Train final model on all data.  Training is image-level in v1 — the
     # MLP only ever sees one vector per voted media (``media["embedding"]``,
@@ -582,25 +614,35 @@ def train_and_score(
     # dataset is patch-region-aware, plain single-vector scoring when not.
     # We build one flat tensor of (media, region) rows so the MLP runs
     # in a single forward pass; the per-media max is computed after.
-    all_ids = sorted(clips_dict.keys())
-    flat_vecs: list[np.ndarray] = []
-    media_index_per_row: list[int] = []
-    region_index_per_row: list[int] = []
-    for mi, cid in enumerate(all_ids):
-        media = clips_dict[cid]
-        regions = media.get("patch_regions")
-        if regions:
-            for ri, r in enumerate(regions):
-                flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
+    has_regions = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
+    if has_regions:
+        all_ids = sorted(clips_dict.keys())
+        flat_vecs: list[np.ndarray] = []
+        media_index_per_row: list[int] = []
+        region_index_per_row: list[int] = []
+        for mi, cid in enumerate(all_ids):
+            media = clips_dict[cid]
+            regions = media.get("patch_regions")
+            if regions:
+                for ri, r in enumerate(regions):
+                    flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
+                    media_index_per_row.append(mi)
+                    region_index_per_row.append(ri)
+            else:
+                flat_vecs.append(np.asarray(media["embedding"], dtype=np.float32))
                 media_index_per_row.append(mi)
-                region_index_per_row.append(ri)
-        else:
-            flat_vecs.append(np.asarray(media["embedding"], dtype=np.float32))
-            media_index_per_row.append(mi)
-            region_index_per_row.append(0)
+                region_index_per_row.append(0)
+        X_all = torch.from_numpy(np.stack(flat_vecs).astype(np.float32, copy=False))
+    else:
+        from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
-    X_all = torch.tensor(np.array(flat_vecs), dtype=torch.float32)
+        all_ids, all_embs = get_embedding_matrix_for_snap(clips_dict)
+        X_all = torch.from_numpy(all_embs)
+        n = len(all_ids)
+        media_index_per_row = list(range(n))
+        region_index_per_row = [0] * n
     with torch.no_grad():
+        X_all = X_all.to(next(model.parameters()).device)
         flat_scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().numpy()
 
     # Max-pool per media; remember the winning region index so we can
@@ -738,20 +780,23 @@ def train_detector_from_origins(
     if len(X_list) < 2 or num_good == 0 or num_bad == 0:
         return None, 0.5
 
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        inclusion,
-        calibrate_count=calibrate_count,
-        calibration_fraction=calibration_fraction,
-    )
+    if len(X_list) < 6:
+        threshold = 0.5
+    else:
+        threshold = calculate_cross_calibration_threshold(
+            X_list,
+            y_list,
+            input_dim,
+            inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+        )
     model = train_model(X, y, input_dim, inclusion)
 
     state_dict = model.state_dict()
-    weights = {k: v.tolist() for k, v in state_dict.items()}
+    weights = {k: v.cpu().tolist() for k, v in state_dict.items()}
     return weights, threshold

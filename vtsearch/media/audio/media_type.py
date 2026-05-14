@@ -645,11 +645,12 @@ class AudioMediaType(MediaType):
     def pickle_extra_fields(self) -> list[str]:
         return ["thumbnail_bytes"]
 
-    def load_media_data(self, file_path: Path) -> dict:
+    def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
         import librosa  # noqa: PLC0415
 
-        with open(file_path, "rb") as f:
-            media_bytes = f.read()
+        if media_bytes is None:
+            with open(file_path, "rb") as f:
+                media_bytes = f.read()
         try:
             audio_data, sr = librosa.load(file_path, sr=None, mono=True)
             duration = len(audio_data) / sr

@@ -237,11 +237,168 @@ class TestTrainModelConfig:
             assert 0.0 <= s <= 1.0
 
 
+class TestTrainModelEpochs:
+    """Tests for env-tunable epochs and early-stopping on loss plateau."""
+
+    @staticmethod
+    def _count_optimizer_steps(fn):
+        """Run ``fn`` and return the number of ``Adam.step`` invocations.
+
+        The training loop calls ``optimizer.step()`` exactly once per epoch,
+        so this counter equals the number of epochs actually executed.
+        """
+        calls = {"n": 0}
+        real_step = torch.optim.Adam.step
+
+        def counting_step(self, *args, **kwargs):
+            calls["n"] += 1
+            return real_step(self, *args, **kwargs)
+
+        with unittest.mock.patch.object(torch.optim.Adam, "step", counting_step):
+            fn()
+        return calls["n"]
+
+    def test_early_stop_fires_on_loss_plateau(self):
+        """With a small patience, training stops well before TRAIN_EPOCHS."""
+        import vtsearch.config as config
+        from vtsearch.models import training
+
+        saved_epochs = config.TRAIN_EPOCHS
+        saved_patience = config.TRAIN_PATIENCE
+        config.TRAIN_EPOCHS = 500
+        try:
+            rng = np.random.RandomState(11)
+            # Trivially separable so the loss plateaus quickly.
+            good = rng.randn(8, 16).astype(np.float32) + 5.0
+            bad = rng.randn(8, 16).astype(np.float32) - 5.0
+            X = torch.tensor(np.vstack([good, bad]))
+            y = torch.tensor([1.0] * 8 + [0.0] * 8).unsqueeze(1)
+
+            config.TRAIN_PATIENCE = 0
+            full_epochs = self._count_optimizer_steps(lambda: training.train_model(X, y, 16))
+
+            config.TRAIN_PATIENCE = 5
+            stopped_epochs = self._count_optimizer_steps(lambda: training.train_model(X, y, 16))
+
+            assert full_epochs == 500
+            assert stopped_epochs < full_epochs
+        finally:
+            config.TRAIN_EPOCHS = saved_epochs
+            config.TRAIN_PATIENCE = saved_patience
+
+    def test_patience_zero_disables_early_stop(self):
+        """``TRAIN_PATIENCE=0`` should always run the full ``TRAIN_EPOCHS``."""
+        import vtsearch.config as config
+        from vtsearch.models import training
+
+        saved_epochs = config.TRAIN_EPOCHS
+        saved_patience = config.TRAIN_PATIENCE
+        config.TRAIN_EPOCHS = 42
+        config.TRAIN_PATIENCE = 0
+        try:
+            rng = np.random.RandomState(2)
+            X = torch.tensor(rng.randn(8, 16).astype(np.float32))
+            y = torch.tensor([1.0] * 4 + [0.0] * 4).unsqueeze(1)
+            n_epochs = self._count_optimizer_steps(lambda: training.train_model(X, y, 16))
+            assert n_epochs == 42
+        finally:
+            config.TRAIN_EPOCHS = saved_epochs
+            config.TRAIN_PATIENCE = saved_patience
+
+
+class TestCalibrationSkippedForTinyLabels:
+    """``train_and_score`` should skip cross-calibration when there are
+    too few labels for the result to be useful — regardless of
+    ``safe_thresholds``.  Calibration costs two 200-epoch trainings per
+    call, and below the blend's ramp floor those trainings are either
+    discarded (safe_thresholds=True) or trained on too little data to
+    be reliable (safe_thresholds=False)."""
+
+    def test_skips_calibration_when_safe_and_under_six_labels(self):
+        """With safe_thresholds=True and n_labels<6, calculate_cross_calibration_threshold
+        must not be invoked — its output is entirely discarded by the blender."""
+        from vtsearch.models import training
+
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
+
+        with unittest.mock.patch.object(
+            training,
+            "calculate_cross_calibration_threshold",
+            side_effect=AssertionError("calibration should be skipped for tiny label sets"),
+        ) as patched:
+            _, threshold, _model = training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+                safe_thresholds=True,
+            )
+        patched.assert_not_called()
+        assert 0.0 <= threshold <= 1.0
+
+    def test_skips_calibration_when_safe_off_and_under_six_labels(self):
+        """With safe_thresholds=False and n_labels<6, calibration is still
+        skipped — fold trainings are unreliable with so few labels, and the
+        gate is purely a function of n_labels."""
+        from vtsearch.models import training
+
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4, 5]})
+
+        with unittest.mock.patch.object(
+            training,
+            "calculate_cross_calibration_threshold",
+            side_effect=AssertionError("calibration should be skipped for tiny label sets"),
+        ) as patched:
+            training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+                safe_thresholds=False,
+            )
+        patched.assert_not_called()
+
+    def test_still_calibrates_when_enough_labels(self):
+        """With safe_thresholds=True and n_labels>=6, calibration still runs."""
+        from vtsearch.models import training
+
+        app_module.good_votes.update({k: None for k in [1, 2, 3]})
+        app_module.bad_votes.update({k: None for k in [18, 19, 20]})  # 6 labels
+
+        with unittest.mock.patch.object(
+            training,
+            "calculate_cross_calibration_threshold",
+            wraps=training.calculate_cross_calibration_threshold,
+        ) as patched:
+            training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+                safe_thresholds=True,
+            )
+        assert patched.call_count == 1
+
+
+class TestCalibrateCountEnvDefault:
+    """``VTSEARCH_CALIBRATE_COUNT`` should drive the settings default."""
+
+    def test_default_calibrate_count_constant_exists(self):
+        from vtsearch import config
+
+        assert isinstance(config.DEFAULT_CALIBRATE_COUNT, int)
+        assert config.DEFAULT_CALIBRATE_COUNT >= 1
+
+    def test_settings_default_matches_config(self):
+        from vtsearch import config, settings
+
+        assert settings._DEFAULTS["calibrate_count"] == config.DEFAULT_CALIBRATE_COUNT
+
+
 class TestLearnedSort:
     def test_returns_all_clips(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
         data = resp.get_json()
         assert len(data["results"]) == app_module.NUM_MEDIAS
@@ -250,7 +407,7 @@ class TestLearnedSort:
     def test_result_fields(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         for entry in data["results"]:
             assert "id" in entry
@@ -259,7 +416,7 @@ class TestLearnedSort:
     def test_sorted_descending(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         scores = [e["score"] for e in data["results"]]
         assert scores == sorted(scores, reverse=True)
@@ -267,28 +424,137 @@ class TestLearnedSort:
     def test_all_media_ids_present(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         ids = {e["id"] for e in data["results"]}
         assert ids == set(range(1, app_module.NUM_MEDIAS + 1))
 
     def test_only_good_votes_returns_400(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
 
     def test_only_bad_votes_returns_400(self, client):
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
 
     def test_scores_in_valid_range(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         for entry in data["results"]:
             assert 0.0 <= entry["score"] <= 1.0
+
+
+class TestLearnedSortAsync:
+    """The endpoint now hands the work off to a background thread and the
+    client polls ``/api/learned-sort/result?job_id=...`` until done."""
+
+    def test_async_returns_job_id_then_polling_yields_result(self, client):
+        from tests.conftest import _wait_for_job
+        from vtsearch.utils.async_jobs import learned_sort_jobs
+
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4]})
+
+        resp = client.post("/api/learned-sort", json={})
+        assert resp.status_code == 200
+        envelope = resp.get_json()
+        assert envelope["status"] in ("running", "done")
+        job_id = envelope["job_id"]
+
+        # Wait for the background thread to finish before polling, since the
+        # test client otherwise sees the still-running snapshot.
+        _wait_for_job(learned_sort_jobs)
+
+        result = client.get(f"/api/learned-sort/result?job_id={job_id}").get_json()
+        assert result["status"] == "done"
+        assert result["job_id"] == job_id
+        assert "results" in result and len(result["results"]) > 0
+        assert "threshold" in result
+
+    def test_unchanged_votes_short_circuit_to_cached(self, client):
+        """The signature cache lets re-sorts skip training entirely."""
+        from vtsearch.utils.async_jobs import learned_sort_jobs
+
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4]})
+
+        first = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert first["status"] == "done"
+        first_job_id = first["job_id"]
+
+        # Second call with the same signature should reuse the cached result —
+        # job_id is the original job's id and we get back done immediately
+        # without ``wait=true``.
+        second = client.post("/api/learned-sort", json={}).get_json()
+        assert second["status"] == "done"
+        assert second["job_id"] == first_job_id
+
+        # Cache invalidates when votes change.
+        app_module.bad_votes.update({5: None})
+        third = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert third["status"] == "done"
+        assert third["job_id"] != first_job_id
+
+        learned_sort_jobs.reset_for_tests()
+
+    def test_polling_unknown_job_returns_404(self, client):
+        resp = client.get("/api/learned-sort/result?job_id=does-not-exist")
+        assert resp.status_code == 404
+        assert resp.get_json()["status"] == "missing"
+
+    def test_polling_without_job_id_returns_400(self, client):
+        resp = client.get("/api/learned-sort/result")
+        assert resp.status_code == 400
+
+
+class TestEvalTrainAndScoreAsync:
+    """The eval train-and-score endpoint mirrors the learned-sort pattern:
+    return a job envelope, poll a result endpoint, short-circuit unchanged
+    runs via the signature cache."""
+
+    def _seed_history(self):
+        from vtsearch.utils import label_history
+
+        # A handful of "good" votes are enough to exercise the smart metric.
+        for cid, lbl in [(1, "good"), (2, "good"), (3, "bad"), (4, "bad")]:
+            if lbl == "good":
+                app_module.good_votes[cid] = None
+            else:
+                app_module.bad_votes[cid] = None
+            label_history.append((cid, lbl, 0.0))
+
+    def test_wait_returns_metric_inline(self, client):
+        self._seed_history()
+        resp = client.post("/api/eval/train-and-score", json={"metric": "smart", "wait": True})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "done"
+        assert data["metric"] == "smart"
+        assert "error_cost" in data
+
+    def test_async_polls_to_done(self, client):
+        from tests.conftest import _wait_for_job
+        from vtsearch.utils.async_jobs import eval_jobs
+
+        self._seed_history()
+        envelope = client.post("/api/eval/train-and-score", json={"metric": "stable"}).get_json()
+        assert envelope["status"] in ("running", "done")
+        job_id = envelope["job_id"]
+
+        _wait_for_job(eval_jobs)
+
+        result = client.get(f"/api/eval/train-and-score/result?job_id={job_id}").get_json()
+        assert result["status"] == "done"
+        assert result["metric"] == "stable"
+        assert "stability" in result
+
+    def test_invalid_metric_rejected(self, client):
+        resp = client.post("/api/eval/train-and-score", json={"metric": "bogus", "wait": True})
+        assert resp.status_code == 400
 
 
 class TestExampleSort:

@@ -91,7 +91,8 @@ class _Dinov2Base(MediaEmbedder):
         try:
             from PIL import Image  # noqa: PLC0415
 
-            image = Image.open(file_path).convert("RGB")
+            with Image.open(file_path) as _img:
+                image = _img.convert("RGB")
             return self.embed_pil_image(image)
         except Exception:
             logging.getLogger(__name__).exception("Error embedding %s", file_path)
@@ -137,7 +138,8 @@ class _Dinov2Base(MediaEmbedder):
             import torch  # noqa: PLC0415
             from PIL import Image  # noqa: PLC0415
 
-            image = Image.open(file_path).convert("RGB")
+            with Image.open(file_path) as _img:
+                image = _img.convert("RGB")
             inputs = self._processor(images=image, return_tensors="pt")
             device = next(self._model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}

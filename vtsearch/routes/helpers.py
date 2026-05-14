@@ -183,6 +183,18 @@ def get_request_field(key: str, has_file_fields: bool) -> str:
     return get_json_safe().get(key, "")
 
 
+def format_exception_detail(exc: BaseException) -> str:
+    """Return ``"ExcType: first line"`` (or ``"ExcType"`` when the message is empty).
+
+    Used in 500 response bodies so the UI can distinguish failure kinds
+    (e.g. ``MemoryError`` from ``RuntimeError: embedder X not loaded``)
+    without exposing a multi-line traceback.
+    """
+    text = str(exc)
+    first = text.splitlines()[0].strip() if text else ""
+    return f"{type(exc).__name__}: {first}" if first else type(exc).__name__
+
+
 def format_mtime(entry) -> str:
     """Return the file/directory modification time as an ISO-8601 string.
 

@@ -312,17 +312,6 @@ def load_dataset_from_folder(
             if avail:
                 emb = avail[0]
 
-        # Eagerly load models before starting the embedding timer so that
-        # download / weight-loading time does not pollute the progress bar.
-        if emb is not None and getattr(emb, "_model", None) is None:
-            on_progress("loading", "Loading embedding model…", 0, 0)
-            original_cb = emb._on_progress
-            emb._on_progress = on_progress
-            try:
-                emb.load_models()
-            finally:
-                emb._on_progress = original_cb
-
     # Find all files of the specified media type.  Recursion descends into
     # subdirectories (default); when disabled, only files directly inside
     # ``folder_path`` are included.
@@ -333,9 +322,37 @@ def load_dataset_from_folder(
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")
 
+    # Skip eager model load when every file already has an override
+    # (custom_metadata embedding or content_vectors entry).  An NPZ-only
+    # import should not pay the embedder weight-load cost.
+    if not skip_embedding and emb is not None and getattr(emb, "_model", None) is None:
+        needs_model = any(
+            not _has_override(
+                fp.relative_to(folder_path).as_posix(),
+                fp.name,
+                content_vectors,
+                custom_metadata_map,
+            )
+            for fp in media_files
+        )
+        if needs_model:
+            # Eagerly load models before starting the embedding timer so that
+            # download / weight-loading time does not pollute the progress bar.
+            on_progress("loading", "Loading embedding model…", 0, 0)
+            original_cb = emb._on_progress
+            emb._on_progress = on_progress
+            try:
+                emb.load_models()
+            finally:
+                emb._on_progress = original_cb
+
     medias.clear()
     media_id = 1
     total_files = len(media_files)
+    # Report progress every ~2% or at most every 50 items (mirrors
+    # loader_pickle.py).  At 100k files this is ~2k callback invocations
+    # instead of 100k.
+    _progress_interval = max(1, min(50, total_files // 50)) if total_files > 0 else 1
 
     # Flush everything that still needs embedding through the embedder's
     # bulk entrypoint up front; the per-file loop below just looks up the
@@ -377,13 +394,14 @@ def load_dataset_from_folder(
             # different subdirectories with the same basename stay distinct.
             rel_path = file_path.relative_to(folder_path).as_posix()
 
-            phase = "loading" if skip_embedding else "embedding"
-            on_progress(
-                phase,
-                f"{'Loading' if skip_embedding else 'Embedding'} {media_type} {rel_path}...",
-                i + 1,
-                total_files,
-            )
+            if i % _progress_interval == 0 or i + 1 == total_files:
+                phase = "loading" if skip_embedding else "embedding"
+                on_progress(
+                    phase,
+                    f"{'Loading' if skip_embedding else 'Embedding'} {media_type} {rel_path}...",
+                    i + 1,
+                    total_files,
+                )
 
             # Look up per-file custom metadata (relative path first, then
             # basename fallback — same lookup order as content_vectors).
@@ -394,24 +412,29 @@ def load_dataset_from_folder(
                 elif file_path.name in custom_metadata_map:
                     file_cm = custom_metadata_map[file_path.name]
 
-            # Resolve embedding: custom_metadata > content_vectors > model
+            # Externally-supplied vectors (custom_metadata / content_vectors)
+            # may come from a different model than ``emb`` — leave embedder_id
+            # blank so downstream query re-embedding doesn't dimension-mismatch.
             cm_embedding = _get_embedding_value(file_cm) if file_cm else None
             if cm_embedding is not None:
                 embedding = cm_embedding
+                embedder_id = ""
             elif content_vectors and rel_path in content_vectors:
                 embedding = content_vectors[rel_path]
+                embedder_id = ""
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
+                embedder_id = ""
             elif skip_embedding:
                 embedding = None
+                embedder_id = ""
             else:
                 if emb is None:
                     continue
                 embedding = bulk_embeddings.get(file_path)
                 if embedding is None:
                     continue
-
-            embedder_id = emb.name if emb else ""
+                embedder_id = emb.name
 
             # Resolve MD5: custom_metadata > content_md5s > computed
             cm_md5 = _get_md5_value(file_cm) if file_cm else ""
@@ -476,8 +499,11 @@ def load_dataset_from_folder(
                     "duration": 0,
                 }
 
-                # Merge in media-specific fields from the media type
-                media_data.update(mt.load_media_data(file_path))
+                # Merge in media-specific fields from the media type.
+                # Pass the already-read bytes through so the media type does
+                # not re-open the file (e.g. PIL was doing a second read just
+                # to fetch width/height).
+                media_data.update(mt.load_media_data(file_path, media_bytes=file_bytes))
 
             if file_cm:
                 media_data["custom_metadata"] = file_cm
@@ -597,17 +623,6 @@ def load_dataset_from_folder_chunked(
             if avail:
                 emb = avail[0]
 
-        # Eagerly load models before starting the embedding timer so that
-        # download / weight-loading time does not pollute the progress bar.
-        if emb is not None and getattr(emb, "_model", None) is None:
-            on_progress("loading", "Loading embedding model…", 0, 0)
-            original_cb = emb._on_progress
-            emb._on_progress = on_progress
-            try:
-                emb.load_models()
-            finally:
-                emb._on_progress = original_cb
-
     # Find all files of the specified media type.  Recursion descends into
     # subdirectories (default); when disabled, only files directly inside
     # ``folder_path`` are included.
@@ -618,8 +633,30 @@ def load_dataset_from_folder_chunked(
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")
 
+    # Skip eager model load when every file already has an override.
+    if not skip_embedding and emb is not None and getattr(emb, "_model", None) is None:
+        needs_model = any(
+            not _has_override(
+                fp.relative_to(folder_path).as_posix(),
+                fp.name,
+                content_vectors,
+                custom_metadata_map,
+            )
+            for fp in media_files
+        )
+        if needs_model:
+            # Eagerly load models before starting the embedding timer so that
+            # download / weight-loading time does not pollute the progress bar.
+            on_progress("loading", "Loading embedding model…", 0, 0)
+            original_cb = emb._on_progress
+            emb._on_progress = on_progress
+            try:
+                emb.load_models()
+            finally:
+                emb._on_progress = original_cb
+
     total_files = len(media_files)
-    embedder_id = emb.name if emb else ""
+    _progress_interval = max(1, min(50, total_files // 50)) if total_files > 0 else 1
 
     # Process in groups of chunk_size
     for start in range(0, total_files, chunk_size):
@@ -660,13 +697,14 @@ def load_dataset_from_folder_chunked(
             global_idx = start + i
             rel_path = file_path.relative_to(folder_path).as_posix()
 
-            phase = "loading" if skip_embedding else "embedding"
-            on_progress(
-                phase,
-                f"{'Loading' if skip_embedding else 'Embedding'} {media_type} {rel_path} (chunk {start // chunk_size + 1})...",
-                global_idx + 1,
-                total_files,
-            )
+            if global_idx % _progress_interval == 0 or global_idx + 1 == total_files:
+                phase = "loading" if skip_embedding else "embedding"
+                on_progress(
+                    phase,
+                    f"{'Loading' if skip_embedding else 'Embedding'} {media_type} {rel_path} (chunk {start // chunk_size + 1})...",
+                    global_idx + 1,
+                    total_files,
+                )
 
             # Look up per-file custom metadata (same logic as non-chunked).
             file_cm: dict[str, Any] | None = None
@@ -676,22 +714,27 @@ def load_dataset_from_folder_chunked(
                 elif file_path.name in custom_metadata_map:
                     file_cm = custom_metadata_map[file_path.name]
 
-            # Resolve embedding: custom_metadata > content_vectors > model
+            # External vectors keep embedder_id blank — see non-chunked path.
             cm_embedding = _get_embedding_value(file_cm) if file_cm else None
             if cm_embedding is not None:
                 embedding = cm_embedding
+                embedder_id = ""
             elif content_vectors and rel_path in content_vectors:
                 embedding = content_vectors[rel_path]
+                embedder_id = ""
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
+                embedder_id = ""
             elif skip_embedding:
                 embedding = None
+                embedder_id = ""
             else:
                 if emb is None:
                     continue
                 embedding = chunk_bulk_embeddings.get(file_path)
                 if embedding is None:
                     continue
+                embedder_id = emb.name
 
             cm_md5 = _get_md5_value(file_cm) if file_cm else ""
 
@@ -749,7 +792,7 @@ def load_dataset_from_folder_chunked(
                     "media_path": str(file_path.resolve()),
                     "duration": 0,
                 }
-                media_data.update(mt.load_media_data(file_path))
+                media_data.update(mt.load_media_data(file_path, media_bytes=file_bytes))
 
             if file_cm:
                 media_data["custom_metadata"] = file_cm

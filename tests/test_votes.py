@@ -232,13 +232,13 @@ class TestProgressCacheWithLabelChanges:
         """Learned sort should work after toggling off a vote."""
         client.post("/api/medias/1/vote", json={"vote": "good"})
         client.post("/api/medias/2/vote", json={"vote": "bad"})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
 
         # Toggle off good vote, add a different good vote
         client.post("/api/medias/1/vote", json={"vote": "good"})
         client.post("/api/medias/3/vote", json={"vote": "good"})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
 
     def test_learned_sort_returns_400_after_toggling_all_good(self, client):
@@ -247,7 +247,7 @@ class TestProgressCacheWithLabelChanges:
         client.post("/api/medias/2/vote", json={"vote": "bad"})
         # Toggle off the only good vote
         client.post("/api/medias/1/vote", json={"vote": "good"})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
 
     def test_labeling_status_after_label_change(self, client):
@@ -344,7 +344,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         """Live models from learned-sort should also be cleared on a vote switch."""
         client.post("/api/medias/1/vote", json={"vote": "good"})
         client.post("/api/medias/2/vote", json={"vote": "bad"})
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
         assert len(_live_models) > 0
 
@@ -706,7 +706,7 @@ class TestLiveModelReuse:
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
 
-        resp = client.post("/api/learned-sort")
+        resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
 
         # A live model should have been injected for the current vote set

@@ -1082,11 +1082,7 @@ class TestImportLocalFolderRouteForwardsSourceSpecs:
     reach the importer."""
 
     def test_source_specs_form_field_is_forwarded(self, client, tmp_path):
-        import io
         import json
-
-        # Send a single dummy file so the upload doesn't 400 on empty.
-        files = [("files", ("a.png", io.BytesIO(b"\x89PNG\r\n\x1a\n"), "image/png"))]
 
         specs_json = json.dumps(
             [

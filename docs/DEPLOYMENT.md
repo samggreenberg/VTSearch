@@ -34,7 +34,7 @@ installation and getting started, see [SETUP.md](SETUP.md).
 | `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn — triggers model init / autoload / settings-source sync at import time (the Flask `__main__` block is skipped under WSGI). Set automatically in the Dockerfiles. |
 | `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
 | `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |
-| `VTSEARCH_TIMEOUT` | `120` | Worker request timeout in seconds; `0` disables |
+| `VTSEARCH_TIMEOUT` | `0` | Worker request timeout in seconds; `0` (default) disables. Long imports, training, and evaluation runs routinely exceed any short timeout — overriding to anything below ~1800 risks SIGKILL mid-operation. |
 
 ### HuggingFace / PyTorch
 
@@ -87,7 +87,7 @@ The bundled config pins a single worker with 8 gthread threads:
 workers = 1
 worker_class = "gthread"
 threads = 8
-timeout = 120
+timeout = 0  # disabled; long imports / training would otherwise SIGKILL the worker
 ```
 
 **Why one worker?** VTSearch keeps all dataset/model state in-process
@@ -105,7 +105,7 @@ Override the relevant config via environment variables:
 |---------|---------|-------|
 | `VTSEARCH_BIND` | `0.0.0.0:5000` | `host:port` |
 | `VTSEARCH_THREADS` | `8` | Threads per worker — raise for more concurrent requests |
-| `VTSEARCH_TIMEOUT` | `120` | Worker timeout in seconds; `0` disables |
+| `VTSEARCH_TIMEOUT` | `0` | Worker timeout in seconds; `0` (default) disables. Long imports / training routinely exceed short timeouts. |
 | `VTSEARCH_LOG_LEVEL` | `warning` | Gunicorn log level |
 
 For larger tuning changes, edit `gunicorn.conf.py` directly.

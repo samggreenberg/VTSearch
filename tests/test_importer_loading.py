@@ -161,6 +161,41 @@ class TestLoadDatasetContentVectors:
         np.testing.assert_array_equal(medias[1]["embedding"], model_vector)
         mt._mock_embedder.embed_media.assert_called_once()
 
+    def test_content_vector_file_has_empty_embedder_id(self, tmp_path):
+        """Files whose vectors came from content_vectors should not be stamped
+        with the active embedder's name — the external vector may be a different
+        dimension, and downstream re-embedding for queries would dimension-mismatch.
+        """
+        import numpy as np
+
+        from vtsearch.datasets.loader import load_dataset_from_folder
+
+        wav_pre = tmp_path / "pre.wav"
+        wav_model = tmp_path / "model.wav"
+        self._write_wav(wav_pre)
+        self._write_wav(wav_model)
+
+        # External vector with a different dimension than the model would produce
+        # — simulates an NPZ from a higher-dim embedder (e.g. SigLIP-so400m 1152d).
+        external_vector = np.array([10.0, 20.0, 30.0, 40.0, 50.0])
+        model_vector = np.array([1.0, 2.0, 3.0])
+        mt = self._make_fake_media_type(embed_return=model_vector)
+
+        medias: dict = {}
+
+        with self._patch_media_registry(mt):
+            load_dataset_from_folder(
+                tmp_path,
+                "audio",
+                medias,
+                content_vectors={"pre.wav": external_vector},
+                on_progress=lambda *a: None,
+            )
+
+        by_name = {m["filename"]: m for m in medias.values()}
+        assert by_name["pre.wav"]["embedder"] == ""
+        assert by_name["model.wav"]["embedder"] == "clap"
+
     def test_content_vector_file_skips_none_embed_check(self, tmp_path):
         """A file with a content vector is included even if embed_media would return None."""
         import unittest.mock as mock

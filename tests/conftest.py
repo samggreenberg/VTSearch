@@ -351,6 +351,10 @@ def reset_state():
     _loading_tasks.reset_for_tests()
     _model_loading_tasks.reset_for_tests()
 
+    from vtsearch.utils.async_jobs import reset_all_async_jobs_for_tests
+
+    reset_all_async_jobs_for_tests()
+
     _set_login_provider(_DefaultLoginProvider())
 
     _reset_ds_reg()
@@ -396,6 +400,25 @@ def client():
     app_module.app.config["TESTING"] = True
     with app_module.app.test_client() as c:
         yield c
+
+
+def _wait_for_job(job_manager, *, timeout: float = 30.0) -> None:
+    """Block until the current job in *job_manager* (if any) is done.
+
+    Test helper that the route-level ``wait=true`` flag relies on so tests
+    can call the async endpoints synchronously without sprinkling poll
+    loops everywhere.
+    """
+    import time as _time
+
+    job = job_manager.current()
+    if job is None:
+        return
+    deadline = _time.monotonic() + timeout
+    while job.status == "running" and _time.monotonic() < deadline:
+        job.done_event.wait(timeout=0.05)
+    if job.status == "running":
+        raise TimeoutError(f"Job {job.job_id} did not finish within {timeout}s")
 
 
 @pytest.hookimpl(trylast=True)
