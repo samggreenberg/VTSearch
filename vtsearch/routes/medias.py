@@ -224,69 +224,48 @@ def _flask_response(mr: MediaResponse) -> Response:
     return send_file(io.BytesIO(mr.data), mimetype=mr.mimetype, download_name=mr.download_name)
 
 
-@medias_bp.route("/api/medias")
-def list_medias() -> Response:
-    """Return metadata for all loaded medias as a JSON array.
+@medias_bp.route("/api/medias/ids")
+def list_media_ids() -> Response:
+    """Return a lightweight listing of all loaded medias.
 
-    Excludes heavyweight fields (``embedding``, ``media_bytes``,
-    ``media_string``) from the response.
+    Each item contains only the fields the frontend needs to build virtual
+    scrollers and to inspect the dataset's media type / embedder *before*
+    any item becomes visible: ``id``, ``type``, and ``embedder`` (when set).
+    Display-worthy metadata (``filename``, ``md5``, ``custom_metadata``,
+    ``origin_name``, ``description``, ``clip_*``) is fetched on demand for
+    the items currently in the viewport via ``POST /api/medias/batch``.
 
-    Each item contains the required fields ``id``, ``type``, ``filename``,
-    ``md5``, and a ``custom_metadata`` dict of display-worthy key/value
-    pairs contributed by the media type and/or importer.
-
-    Returns:
-        A JSON array of media metadata dicts.
+    This replaces the previous unpaginated ``GET /api/medias`` endpoint,
+    which serialised the full metadata for every media in the dataset on
+    every call — a 10-20× larger payload that the cache + batch pattern
+    makes unnecessary.
     """
-    from vtsearch.media import get as get_media_type  # noqa: PLC0415
-
     result: list[dict[str, Any]] = []
     for c in snapshot_medias().values():
-        media_type_id = c.get("type", "audio")
-        media_data: dict[str, Any] = {
-            "id": c["id"],
-            "type": media_type_id,
-            "filename": c.get("filename", f"media_{c['id']}.wav"),
-            "md5": c["md5"],
-        }
-        # Build custom_metadata from media type + any importer-supplied fields
-        try:
-            mt = get_media_type(media_type_id)
-            custom: dict[str, Any] = mt.display_metadata(c)
-        except KeyError:
-            custom = {}
-        importer_custom = c.get("custom_metadata")
-        if importer_custom:
-            custom.update(importer_custom)
-        media_data["custom_metadata"] = custom
-        if "origin_name" in c:
-            media_data["origin_name"] = c["origin_name"]
-        if "description" in c:
-            media_data["description"] = c["description"]
-        if c.get("embedder"):
-            media_data["embedder"] = c["embedder"]
-        # Include clip metadata so the frontend can trim playback / display.
-        for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
-            if clip_key in c:
-                media_data[clip_key] = c[clip_key]
-        result.append(media_data)
+        item: dict[str, Any] = {"id": c["id"], "type": c.get("type", "audio")}
+        embedder = c.get("embedder")
+        if embedder:
+            item["embedder"] = embedder
+        result.append(item)
     return jsonify(result)
 
 
 @medias_bp.route("/api/medias/batch", methods=["POST"])
 def batch_medias() -> tuple[Response, int] | Response:
-    """Return metadata for a specific set of media IDs.
+    """Return full metadata for a specific set of media IDs.
 
-    This is the paginated counterpart of ``GET /api/medias`` — callers
-    request only the IDs they need (e.g. the ones currently visible in a
-    virtual-scrolling viewport), keeping payload size bounded.
+    Callers request only the IDs they need (e.g. the ones currently visible
+    in a virtual-scrolling viewport), keeping payload size bounded.  Use
+    :func:`list_media_ids` (``GET /api/medias/ids``) to discover which
+    media IDs exist in the loaded dataset.
 
     Request body (JSON):
         ``{"ids": [1, 2, 3, ...]}`` — list of integer media IDs.
 
     Returns:
-        A JSON array of media metadata dicts (same shape as the full
-        ``/api/medias`` response) for the requested IDs that exist.
+        A JSON array of media metadata dicts containing ``id``, ``type``,
+        ``filename``, ``md5``, ``custom_metadata``, and optional
+        ``origin_name`` / ``description`` / ``embedder`` / ``clip_*`` keys.
         Unknown IDs are silently omitted.
     """
     from vtsearch.media import get as get_media_type  # noqa: PLC0415

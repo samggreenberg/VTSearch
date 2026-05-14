@@ -318,7 +318,7 @@ class TestEmptyState:
         saved = dict(medias)
         medias.clear()
         try:
-            resp = client.get("/api/medias")
+            resp = client.get("/api/medias/ids")
             assert resp.status_code == 200
             assert resp.get_json() == []
         finally:

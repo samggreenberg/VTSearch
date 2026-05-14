@@ -8,6 +8,7 @@ import {
   AfterViewChecked,
   OnChanges,
   OnDestroy,
+  OnInit,
   SimpleChanges,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -34,7 +35,7 @@ const PREFETCH_BUFFER = 50;
   templateUrl: './media-list.component.html',
   styleUrl: './media-list.component.scss',
 })
-export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestroy {
+export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, OnDestroy {
   @Input() medias: MediaItem[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
@@ -62,6 +63,14 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
   private scrollSubscribed = false;
 
   constructor(private metadataCache: MediaMetadataCacheService) {}
+
+  ngOnInit(): void {
+    // When the cache hydrates new items, re-enrich the displayed rows so
+    // visible items show their filename / score / metadata.
+    this.metadataCache.version$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.rebuildOrderedItems());
+  }
 
   ngOnDestroy(): void {
     this.destroy$.next();
@@ -98,13 +107,20 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
   }
 
   private rebuildOrderedItems(): void {
-    const mediaMap = new Map(this.medias.map((m) => [m.id, m]));
+    // ``this.medias`` carries stubs (``{id, type, embedder?}``) from
+    // ``/api/medias/ids``.  Look up the cached full metadata for visible
+    // rows; fall back to the stub so the row renders immediately and gets
+    // upgraded once the batch fetch lands.
+    const stubMap = new Map(this.medias.map((m) => [m.id, m]));
+    const enrich = (id: number): MediaItem | undefined =>
+      this.metadataCache.get(id) ?? stubMap.get(id);
+
     const items: { media: MediaItem; score: number | null; showThreshold: boolean; bestRegion: number[] | null }[] = [];
 
     if (this.sortOrder && this.sortOrder.length > 0) {
       let thresholdInserted = false;
       for (const sorted of this.sortOrder) {
-        const media = mediaMap.get(sorted.id);
+        const media = enrich(sorted.id);
         if (!media) continue;
 
         let showThreshold = false;
@@ -121,7 +137,8 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
         });
       }
     } else {
-      for (const media of this.medias) {
+      for (const stub of this.medias) {
+        const media = this.metadataCache.get(stub.id) ?? stub;
         items.push({ media, score: null, showThreshold: false, bestRegion: null });
       }
     }

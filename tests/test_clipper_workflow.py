@@ -562,30 +562,6 @@ class TestCrossDatasetClipEmbedding:
 class TestAPIClipMetadata:
     """The /api/medias endpoint should include clip metadata."""
 
-    def test_list_medias_includes_clip_fields(self, client):
-        saved = dict(medias)
-        medias.clear()
-        try:
-            from vtsearch.datasets.load_pipeline import _apply_clipper
-
-            clips_dict = {1: _make_audio_media(1, duration=5.0)}
-            _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
-            for cid, clip in clips_dict.items():
-                medias[cid] = clip
-
-            resp = client.get("/api/medias")
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert len(data) > 1
-
-            for item in data:
-                assert "clip_start" in item
-                assert "clip_end" in item
-                assert "clip_index" in item
-        finally:
-            medias.clear()
-            medias.update(saved)
-
     def test_batch_medias_includes_clip_fields(self, client):
         saved = dict(medias)
         medias.clear()
@@ -597,7 +573,7 @@ class TestAPIClipMetadata:
             for cid, clip in clips_dict.items():
                 medias[cid] = clip
 
-            ids = list(clips_dict.keys())
+            ids = list(medias.keys())
             resp = client.post("/api/medias/batch", json={"ids": ids})
             assert resp.status_code == 200
             data = resp.get_json()
@@ -621,7 +597,8 @@ class TestAPIClipMetadata:
             for cid, clip in clips_dict.items():
                 medias[cid] = clip
 
-            resp = client.get("/api/medias")
+            ids = list(medias.keys())
+            resp = client.post("/api/medias/batch", json={"ids": ids})
             assert resp.status_code == 200
             data = resp.get_json()
             for item in data:

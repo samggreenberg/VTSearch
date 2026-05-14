@@ -799,7 +799,7 @@ class TestImporterMediasInSorting:
         assert scores == sorted(scores, reverse=True)
 
     def test_api_medias_shows_importer_md5(self, client, tmp_path):
-        """GET /api/medias should expose the importer-supplied MD5."""
+        """POST /api/medias/batch should expose the importer-supplied MD5."""
         from vtsearch.utils import medias as app_medias
 
         loaded, _, md5s = self._load_importer_medias_into_app(tmp_path, num_files=3)
@@ -808,9 +808,12 @@ class TestImporterMediasInSorting:
         app_medias.clear()
         try:
             app_medias.update(loaded)
-            resp = client.get("/api/medias")
-            assert resp.status_code == 200
-            data = resp.get_json()
+            ids_resp = client.get("/api/medias/ids")
+            assert ids_resp.status_code == 200
+            ids = [m["id"] for m in ids_resp.get_json()]
+            batch_resp = client.post("/api/medias/batch", json={"ids": ids})
+            assert batch_resp.status_code == 200
+            data = batch_resp.get_json()
             api_md5s = {m["filename"]: m["md5"] for m in data}
             for fname, expected_md5 in md5s.items():
                 assert api_md5s[fname] == expected_md5
