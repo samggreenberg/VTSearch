@@ -26,12 +26,16 @@ file_browser_bp = Blueprint("file_browser", __name__)
 def _get_browse_root() -> Path:
     """Return the root directory users are allowed to browse.
 
-    In single-user mode this is ``Path.cwd()``; in multi-user mode it is
+    In single-user mode this is the first entry of
+    :data:`vtsearch.config.SERVER_ROOTS` (which defaults to
+    ``Path.cwd()`` when the env var is unset).  In multi-user mode it is
     the current user's data directory.
     """
     base = _paths.get_file_access_base_dir()
     if base is None:
-        return Path.cwd()
+        from vtsearch.config import SERVER_ROOTS  # noqa: PLC0415
+
+        return SERVER_ROOTS[0]
     return base
 
 

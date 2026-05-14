@@ -3,9 +3,15 @@ import os
 import sys
 import warnings
 
-# Limit threads to reduce memory overhead in constrained environments
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
+# Limit threads to reduce memory overhead in constrained environments.  Native
+# math libraries read these env vars during *their* import, which happens the
+# moment torch / numpy / scipy are imported — so they have to be set before
+# anything triggers that.  Mirrors ``vtsearch.config.TORCH_THREADS`` but
+# resolved inline to avoid importing ``vtsearch.config`` (and therefore
+# everything it transitively imports) this early.
+_torch_threads = str(max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1"))))
+os.environ["OMP_NUM_THREADS"] = _torch_threads
+os.environ["MKL_NUM_THREADS"] = _torch_threads
 
 # Configure logging — respects VTSEARCH_LOG_LEVEL env var.
 # Default is WARNING.  Set to INFO or DEBUG for resolver diagnostics:
@@ -79,6 +85,14 @@ app = Flask(__name__)
 # if set; otherwise fall back to a dev-only default.  Production
 # deployments should always set the env var.
 app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-in-production")
+
+# Optional cap on request body size (uploads).  ``MAX_UPLOAD_MB == 0`` leaves
+# Flask's default of no limit in place; a positive value rejects oversized
+# requests with HTTP 413 before they consume disk.
+from vtsearch.config import MAX_UPLOAD_MB as _MAX_UPLOAD_MB  # noqa: E402
+
+if _MAX_UPLOAD_MB > 0:
+    app.config["MAX_CONTENT_LENGTH"] = _MAX_UPLOAD_MB * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
