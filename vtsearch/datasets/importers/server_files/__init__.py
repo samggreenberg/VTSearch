@@ -25,6 +25,7 @@ that :meth:`resolve_file` can find the original file on disk.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
@@ -35,6 +36,22 @@ from typing import Any
 from vtsearch.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
+
+logger = logging.getLogger(__name__)
+
+
+def _cleanup_staging(staging: Path) -> None:
+    """Remove the staging symlink farm, logging (not raising) failures.
+
+    Cleanup runs in ``finally`` blocks where re-raising would mask the
+    real error; but silently swallowing leaves a symlink farm behind on
+    e.g. a permission error, so log every per-path failure.
+    """
+
+    def _onerror(func, path, exc_info):
+        logger.warning("Failed to remove staging entry %s: %s", path, exc_info[1])
+
+    shutil.rmtree(staging, onerror=_onerror)
 
 
 def _read_text_paths_file(paths_file: Path) -> list[Path]:
@@ -256,7 +273,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
         staging = Path(tempfile.mkdtemp(prefix="server_files_"))
         name_to_source = _symlink_paths(paths, staging)
         if not name_to_source:
-            shutil.rmtree(staging, ignore_errors=True)
+            _cleanup_staging(staging)
             raise ValueError(f"None of the paths in {paths_file} resolved to existing files")
 
         # Rekey npz vectors from the original absolute path to the
@@ -355,7 +372,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
             if not had_direct and not medias:
                 raise ValueError(f"No {output_type} files found in listed paths")
         finally:
-            shutil.rmtree(staging, ignore_errors=True)
+            _cleanup_staging(staging)
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         paths_file = Path(field_values["paths_file"])
@@ -428,7 +445,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                     # file).
                     yield converter_chunk
         finally:
-            shutil.rmtree(staging, ignore_errors=True)
+            _cleanup_staging(staging)
 
     def run_chunked_cli(
         self,
