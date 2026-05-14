@@ -165,7 +165,8 @@ class _EupeBase(MediaEmbedder):
             import torch  # noqa: PLC0415
             from PIL import Image  # noqa: PLC0415
 
-            image = Image.open(file_path).convert("RGB")
+            with Image.open(file_path) as _img:
+                image = _img.convert("RGB")
             tensor = self._preprocess(image).unsqueeze(0)
             device = next(self._model.parameters()).device
             tensor = tensor.to(device)

@@ -488,10 +488,10 @@ def _apply_clip_and_embed(
             from PIL import Image
 
             box_values = [int(float(v)) for v in clip_box.split(",")]
-            img = Image.open(file_path)
-            cropped = img.crop(tuple(box_values))
-            buf = _io.BytesIO()
-            cropped.save(buf, format=img.format or "PNG")
+            with Image.open(file_path) as img:
+                cropped = img.crop(tuple(box_values))
+                buf = _io.BytesIO()
+                cropped.save(buf, format=img.format or "PNG")
             crop_bytes = buf.getvalue()
             fd, tmp = tempfile.mkstemp(suffix=".png")
             try:
