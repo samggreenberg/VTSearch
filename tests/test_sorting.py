@@ -237,6 +237,157 @@ class TestTrainModelConfig:
             assert 0.0 <= s <= 1.0
 
 
+class TestTrainModelEpochs:
+    """Tests for env-tunable epochs and early-stopping on loss plateau."""
+
+    @staticmethod
+    def _count_optimizer_steps(fn):
+        """Run ``fn`` and return the number of ``Adam.step`` invocations.
+
+        The training loop calls ``optimizer.step()`` exactly once per epoch,
+        so this counter equals the number of epochs actually executed.
+        """
+        calls = {"n": 0}
+        real_step = torch.optim.Adam.step
+
+        def counting_step(self, *args, **kwargs):
+            calls["n"] += 1
+            return real_step(self, *args, **kwargs)
+
+        with unittest.mock.patch.object(torch.optim.Adam, "step", counting_step):
+            fn()
+        return calls["n"]
+
+    def test_early_stop_fires_on_loss_plateau(self):
+        """With a small patience, training stops well before TRAIN_EPOCHS."""
+        import vtsearch.config as config
+        from vtsearch.models import training
+
+        saved_epochs = config.TRAIN_EPOCHS
+        saved_patience = config.TRAIN_PATIENCE
+        config.TRAIN_EPOCHS = 500
+        try:
+            rng = np.random.RandomState(11)
+            # Trivially separable so the loss plateaus quickly.
+            good = rng.randn(8, 16).astype(np.float32) + 5.0
+            bad = rng.randn(8, 16).astype(np.float32) - 5.0
+            X = torch.tensor(np.vstack([good, bad]))
+            y = torch.tensor([1.0] * 8 + [0.0] * 8).unsqueeze(1)
+
+            config.TRAIN_PATIENCE = 0
+            full_epochs = self._count_optimizer_steps(lambda: training.train_model(X, y, 16))
+
+            config.TRAIN_PATIENCE = 5
+            stopped_epochs = self._count_optimizer_steps(lambda: training.train_model(X, y, 16))
+
+            assert full_epochs == 500
+            assert stopped_epochs < full_epochs
+        finally:
+            config.TRAIN_EPOCHS = saved_epochs
+            config.TRAIN_PATIENCE = saved_patience
+
+    def test_patience_zero_disables_early_stop(self):
+        """``TRAIN_PATIENCE=0`` should always run the full ``TRAIN_EPOCHS``."""
+        import vtsearch.config as config
+        from vtsearch.models import training
+
+        saved_epochs = config.TRAIN_EPOCHS
+        saved_patience = config.TRAIN_PATIENCE
+        config.TRAIN_EPOCHS = 42
+        config.TRAIN_PATIENCE = 0
+        try:
+            rng = np.random.RandomState(2)
+            X = torch.tensor(rng.randn(8, 16).astype(np.float32))
+            y = torch.tensor([1.0] * 4 + [0.0] * 4).unsqueeze(1)
+            n_epochs = self._count_optimizer_steps(lambda: training.train_model(X, y, 16))
+            assert n_epochs == 42
+        finally:
+            config.TRAIN_EPOCHS = saved_epochs
+            config.TRAIN_PATIENCE = saved_patience
+
+
+class TestCalibrationSkippedForTinyLabels:
+    """``train_and_score`` should skip cross-calibration when safe_thresholds
+    is on and there are too few labels for the blend to use the xcal output."""
+
+    def test_skips_calibration_when_safe_and_under_six_labels(self):
+        """With safe_thresholds=True and n_labels<6, calculate_cross_calibration_threshold
+        must not be invoked — its output is entirely discarded by the blender."""
+        from vtsearch.models import training
+
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
+
+        with unittest.mock.patch.object(
+            training,
+            "calculate_cross_calibration_threshold",
+            side_effect=AssertionError("calibration should be skipped for tiny label sets"),
+        ) as patched:
+            _, threshold, _model = training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+                safe_thresholds=True,
+            )
+        patched.assert_not_called()
+        assert 0.0 <= threshold <= 1.0
+
+    def test_still_calibrates_when_safe_off(self):
+        """With safe_thresholds=False, the xcal threshold is always required."""
+        from vtsearch.models import training
+
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4, 5]})
+
+        with unittest.mock.patch.object(
+            training,
+            "calculate_cross_calibration_threshold",
+            wraps=training.calculate_cross_calibration_threshold,
+        ) as patched:
+            training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+                safe_thresholds=False,
+            )
+        assert patched.call_count == 1
+
+    def test_still_calibrates_when_enough_labels(self):
+        """With safe_thresholds=True and n_labels>=6, calibration still runs."""
+        from vtsearch.models import training
+
+        app_module.good_votes.update({k: None for k in [1, 2, 3]})
+        app_module.bad_votes.update({k: None for k in [18, 19, 20]})  # 6 labels
+
+        with unittest.mock.patch.object(
+            training,
+            "calculate_cross_calibration_threshold",
+            wraps=training.calculate_cross_calibration_threshold,
+        ) as patched:
+            training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+                safe_thresholds=True,
+            )
+        assert patched.call_count == 1
+
+
+class TestCalibrateCountEnvDefault:
+    """``VTSEARCH_CALIBRATE_COUNT`` should drive the settings default."""
+
+    def test_default_calibrate_count_constant_exists(self):
+        from vtsearch import config
+
+        assert isinstance(config.DEFAULT_CALIBRATE_COUNT, int)
+        assert config.DEFAULT_CALIBRATE_COUNT >= 1
+
+    def test_settings_default_matches_config(self):
+        from vtsearch import config, settings
+
+        assert settings._DEFAULTS["calibrate_count"] == config.DEFAULT_CALIBRATE_COUNT
+
+
 class TestLearnedSort:
     def test_returns_all_clips(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
