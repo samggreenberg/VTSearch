@@ -245,21 +245,62 @@ def learned_sort():
 
     # Store scores so the /api/votes endpoint can provide confidence info.
     update_learned_scores({r["id"]: r["score"] for r in results})
+
+    # In the labelset path, training used the on-disk labelset (potentially
+    # cross-dataset) — derive the live-cache key and the cached training
+    # snapshot from the labelset itself, not from local cid-keyed votes.
+    labelset_local_good: set[int] | None = None
+    labelset_local_bad: set[int] | None = None
+    labelset_training_medias: dict[int, dict] | None = None
+    labelset_has_cross_dataset = False
+    if labelset is not None:
+        from vtsearch.utils import build_media_lookup, resolve_media_ids
+
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+        labelset_local_good = set()
+        labelset_local_bad = set()
+        labelset_training_medias = {}
+        for el in labelset.elements:
+            if el.label not in ("good", "bad"):
+                continue
+            cids = resolve_media_ids(el.to_dict(), origin_lookup, md5_lookup, name_lookup)
+            if not cids:
+                labelset_has_cross_dataset = True
+                continue
+            target = labelset_local_good if el.label == "good" else labelset_local_bad
+            for cid in cids:
+                target.add(cid)
+                if cid in snap:
+                    labelset_training_medias[cid] = snap[cid]
+
     # Inject the live model into the progress cache so indicators and the
     # progress line-graph use the actual model that guided sorting, rather
-    # than retraining an independent model from scratch.
+    # than retraining an independent model from scratch.  The cache is keyed
+    # by current-dataset cids, so only inject when the model's training set
+    # is fully representable in that key — otherwise the cache would return
+    # a cross-dataset model when local-cids replay asks for a local-only one.
     if model is not None:
-        inject_live_model(good_votes, bad_votes, model, threshold)
+        if labelset is None:
+            inject_live_model(good_votes, bad_votes, model, threshold)
+        elif (
+            not labelset_has_cross_dataset
+            and labelset_local_good == set(good_votes)
+            and labelset_local_bad == set(bad_votes)
+        ):
+            inject_live_model(good_votes, bad_votes, model, threshold)
 
     if det_ctx is not _empty_detector_context and model is not None:
         det_ctx.model = model
         det_ctx.threshold = threshold
         # Cache the voted media items with embeddings for cross-embedder scenarios.
-        training = {}
-        for cid in list(good_votes) + list(bad_votes):
-            if cid in snap:
-                training[cid] = snap[cid]
-        det_ctx.training_medias = training
+        if labelset is not None:
+            det_ctx.training_medias = labelset_training_medias or {}
+        else:
+            training = {}
+            for cid in list(good_votes) + list(bad_votes):
+                if cid in snap:
+                    training[cid] = snap[cid]
+            det_ctx.training_medias = training
         if snap:
             first = next(iter(snap.values()), {})
             det_ctx.embedder = first.get("embedder", "")
