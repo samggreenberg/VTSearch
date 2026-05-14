@@ -250,17 +250,23 @@ def labelset_train_and_score(
     input_dim = X.shape[1]
     hidden_dim = _auto_hidden_dim(len(X_list))
 
-    cal_rng = np.random.RandomState(42)
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        inclusion_value,
-        rng=cal_rng,
-        calibrate_count=calibrate_count,
-        calibration_fraction=calibration_fraction,
-        hidden_dim=hidden_dim,
-    )
+    # Skip cross-cal trainings below the ``calculate_safe_threshold`` ramp
+    # floor — they're expensive and the result is discarded by the blend
+    # (label_weight=0 → pure GMM) or unreliable with so few labels.
+    if len(X_list) < 6:
+        threshold = 0.5
+    else:
+        cal_rng = np.random.RandomState(42)
+        threshold = calculate_cross_calibration_threshold(
+            X_list,
+            y_list,
+            input_dim,
+            inclusion_value,
+            rng=cal_rng,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            hidden_dim=hidden_dim,
+        )
 
     model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
 

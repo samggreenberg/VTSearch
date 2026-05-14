@@ -307,8 +307,12 @@ class TestTrainModelEpochs:
 
 
 class TestCalibrationSkippedForTinyLabels:
-    """``train_and_score`` should skip cross-calibration when safe_thresholds
-    is on and there are too few labels for the blend to use the xcal output."""
+    """``train_and_score`` should skip cross-calibration when there are
+    too few labels for the result to be useful — regardless of
+    ``safe_thresholds``.  Calibration costs two 200-epoch trainings per
+    call, and below the blend's ramp floor those trainings are either
+    discarded (safe_thresholds=True) or trained on too little data to
+    be reliable (safe_thresholds=False)."""
 
     def test_skips_calibration_when_safe_and_under_six_labels(self):
         """With safe_thresholds=True and n_labels<6, calculate_cross_calibration_threshold
@@ -332,8 +336,10 @@ class TestCalibrationSkippedForTinyLabels:
         patched.assert_not_called()
         assert 0.0 <= threshold <= 1.0
 
-    def test_still_calibrates_when_safe_off(self):
-        """With safe_thresholds=False, the xcal threshold is always required."""
+    def test_skips_calibration_when_safe_off_and_under_six_labels(self):
+        """With safe_thresholds=False and n_labels<6, calibration is still
+        skipped — fold trainings are unreliable with so few labels, and the
+        gate is purely a function of n_labels."""
         from vtsearch.models import training
 
         app_module.good_votes.update({k: None for k in [1, 2]})
@@ -342,7 +348,7 @@ class TestCalibrationSkippedForTinyLabels:
         with unittest.mock.patch.object(
             training,
             "calculate_cross_calibration_threshold",
-            wraps=training.calculate_cross_calibration_threshold,
+            side_effect=AssertionError("calibration should be skipped for tiny label sets"),
         ) as patched:
             training.train_and_score(
                 app_module.medias,
@@ -350,7 +356,7 @@ class TestCalibrationSkippedForTinyLabels:
                 app_module.bad_votes,
                 safe_thresholds=False,
             )
-        assert patched.call_count == 1
+        patched.assert_not_called()
 
     def test_still_calibrates_when_enough_labels(self):
         """With safe_thresholds=True and n_labels>=6, calibration still runs."""

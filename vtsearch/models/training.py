@@ -576,16 +576,15 @@ def train_and_score(
     # scores (same capacity, same score distribution shape).
     hidden_dim = _auto_hidden_dim(len(X_list))
 
-    # Calculate threshold using k-fold calibration.
-    # Use a seeded RNG so that train/calibrate splits are deterministic —
-    # without this, the global np.random state makes results non-reproducible.
-    # When ``safe_thresholds`` is on and the label count is below the
-    # ``calculate_safe_threshold`` ramp floor, the blended weight on the
-    # cross-cal threshold is exactly 0 (pure GMM), so the calibration
-    # trainings would be discarded.  Skip them and pass ``inf`` to signal
-    # "use the GMM threshold" downstream.
-    if safe_thresholds and len(X_list) < 6:
-        threshold = float("inf")
+    # Calculate threshold using k-fold calibration.  Skip when the label
+    # count is below the ``calculate_safe_threshold`` ramp floor: the
+    # calibration trainings would be expensive (two 200-epoch fits) and
+    # the result is either discarded (safe_thresholds=True blends with
+    # label_weight=0 → pure GMM) or unreliable (safe_thresholds=False with
+    # so few labels).  Use 0.5 as the neutral default; it blends to pure
+    # GMM under safe_thresholds and is a sensible mid-point otherwise.
+    if len(X_list) < 6:
+        threshold = 0.5
     else:
         cal_rng = np.random.RandomState(42)
         threshold = calculate_cross_calibration_threshold(
@@ -770,14 +769,17 @@ def train_detector_from_origins(
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        inclusion,
-        calibrate_count=calibrate_count,
-        calibration_fraction=calibration_fraction,
-    )
+    if len(X_list) < 6:
+        threshold = 0.5
+    else:
+        threshold = calculate_cross_calibration_threshold(
+            X_list,
+            y_list,
+            input_dim,
+            inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+        )
     model = train_model(X, y, input_dim, inclusion)
 
     state_dict = model.state_dict()
