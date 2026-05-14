@@ -15,6 +15,7 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.routes.helpers import get_json_safe
 from vtsearch.utils import snapshot_medias
+from vtsearch.utils.memory_budget import cap_workers_by_memory
 from vtsearch.utils.progress import update_find_progress
 
 logger = logging.getLogger(__name__)
@@ -460,8 +461,14 @@ def auto_detect():
             logger.exception("Auto-detect failed for detector %s", name)
             return None
 
+    embed_dim = int(all_embs.shape[1]) if all_embs.ndim > 1 else 0
+    worker_cap = cap_workers_by_memory(
+        len(all_ids),
+        embed_dim,
+        max_workers=min(len(detectors_to_run), 8),
+    )
     results: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=min(len(detectors_to_run), 8)) as pool:
+    with ThreadPoolExecutor(max_workers=worker_cap) as pool:
         futures = [pool.submit(_run_single, name, data, entry) for name, data, entry in detectors_to_run]
         for future in futures:
             outcome = future.result()
