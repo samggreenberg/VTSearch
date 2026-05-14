@@ -8,6 +8,7 @@ persist or inspect detector data without importing the full route blueprint.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -43,4 +44,9 @@ def _read_detector(path: Path) -> dict | None:
 
 def _write_detector(path: Path, data: dict) -> None:
     get_detectors_dir().mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
