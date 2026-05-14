@@ -25,7 +25,10 @@ def _atomic_write_text(path: Path, text: str) -> None:
     process is killed mid-write.
     """
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
 
 

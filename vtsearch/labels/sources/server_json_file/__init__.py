@@ -62,7 +62,10 @@ class ServerFileLabelsetSource(LabelsetSource):
         filepath = Path(_resolve_filepath(field_values))
         filepath.parent.mkdir(parents=True, exist_ok=True)
         tmp = filepath.with_suffix(".tmp")
-        tmp.write_text(json.dumps(labelset.to_dict(), indent=2) + "\n", encoding="utf-8")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(json.dumps(labelset.to_dict(), indent=2) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, filepath)
 
 

@@ -48,7 +48,10 @@ class ServerFileSettingsExporter(SettingsExporter):
         # Atomic write: tmp + rename. A direct write_text leaves the file
         # truncated if the process is killed mid-write.
         tmp = filepath.with_name(filepath.name + ".tmp")
-        tmp.write_text(json.dumps(settings_data, indent=2), encoding="utf-8")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(settings_data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, filepath)
 
         return {
