@@ -88,7 +88,8 @@ def train_and_threshold(
         _all_ids, all_embs = get_embedding_matrix_for_snap(snap)
         X_all = torch.from_numpy(all_embs)
         with torch.no_grad():
-            all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+            X_all = X_all.to(next(model.parameters()).device)
+            all_scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().tolist()
         threshold = calculate_safe_threshold(threshold, all_scores, len(y_list))
 
     return model, threshold
@@ -96,4 +97,4 @@ def train_and_threshold(
 
 def serialize_weights(model) -> dict[str, list]:
     """Convert a PyTorch model's state dict to JSON-serialisable nested lists."""
-    return {key: value.tolist() for key, value in model.state_dict().items()}
+    return {key: value.cpu().tolist() for key, value in model.state_dict().items()}

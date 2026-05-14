@@ -277,7 +277,8 @@ def labelset_train_and_score(
         return [], threshold, model
     X_all = torch.from_numpy(all_embs)
     with torch.no_grad():
-        scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+        X_all = X_all.to(next(model.parameters()).device)
+        scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().tolist()
 
     if safe_thresholds:
         threshold = calculate_safe_threshold(threshold, scores, len(X_list))

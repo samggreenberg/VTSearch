@@ -113,7 +113,8 @@ def _score_medias_with_detectors(
         mlp = info["mlp"]
         threshold = info["threshold"]
         with torch.no_grad():
-            scores = torch.sigmoid(mlp(X_all)).squeeze(1).tolist()
+            X_in = X_all.to(next(mlp.parameters()).device)
+            scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
 
         positive_hits: list[dict[str, Any]] = []
         negative_hits: list[dict[str, Any]] = []

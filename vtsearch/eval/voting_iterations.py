@@ -89,7 +89,8 @@ def _evaluate_on_test(
     X = torch.tensor(embs, dtype=torch.float32)
 
     with torch.no_grad():
-        scores = torch.sigmoid(model(X)).squeeze(1).tolist()
+        X = X.to(next(model.parameters()).device)
+        scores = torch.sigmoid(model(X)).squeeze(1).cpu().tolist()
 
     true_labels = [1.0 if clips_dict[cid]["category"] == target_category else 0.0 for cid in test_ids]
 
@@ -219,7 +220,8 @@ def simulate_voting_iterations(
         # Apply safe threshold blending if enabled
         if safe_thresholds:
             with torch.no_grad():
-                all_scores = torch.sigmoid(model(X_all_clips)).squeeze(1).tolist()
+                X_eval = X_all_clips.to(next(model.parameters()).device)
+                all_scores = torch.sigmoid(model(X_eval)).squeeze(1).cpu().tolist()
             n_labels = len(good_votes) + len(bad_votes)
             threshold = calculate_safe_threshold(threshold, all_scores, n_labels)
 

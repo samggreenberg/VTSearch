@@ -805,7 +805,8 @@ def label_file_sort():
         all_ids, all_embs = get_embedding_matrix_for_snap(snap)
         X_all = torch.from_numpy(all_embs)
         with torch.no_grad():
-            scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
+            X_all = X_all.to(next(model.parameters()).device)
+            scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().tolist()
 
         # Sort by raw scores (full precision) before rounding for display.
         paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)

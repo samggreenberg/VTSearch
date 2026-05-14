@@ -283,7 +283,7 @@ def find_label():
     from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
 
     all_ids, all_embs = get_embedding_matrix_for_snap(snap)
-    X_all = torch.from_numpy(all_embs)
+    X_all = torch.from_numpy(all_embs).to(next(mlp.parameters()).device)
 
     batch_size = max(1, min(500, n_total // 10))
     scores: list[float] = []
@@ -291,7 +291,7 @@ def find_label():
         for start in range(0, n_total, batch_size):
             end = min(start + batch_size, n_total)
             batch_logits = mlp(X_all[start:end])
-            scores.extend(torch.sigmoid(batch_logits).squeeze(1).tolist())
+            scores.extend(torch.sigmoid(batch_logits).squeeze(1).cpu().tolist())
             update_find_progress(
                 "running",
                 f"Scoring {n_total} items…",
@@ -436,7 +436,8 @@ def auto_detect():
                 return None
 
             with torch.no_grad():
-                scores = torch.sigmoid(mlp(X_all)).squeeze(1).tolist()
+                X_in = X_all.to(next(mlp.parameters()).device)
+                scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
 
             positive_hits = []
             negative_hits = []
