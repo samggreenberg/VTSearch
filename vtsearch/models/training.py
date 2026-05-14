@@ -217,9 +217,10 @@ def train_model(
     import torch  # noqa: PLC0415
     import torch.nn as nn  # noqa: PLC0415
 
-    from vtsearch.models.loader import ensure_torch_configured
+    from vtsearch.models.loader import ensure_torch_configured, get_torch_device
 
     ensure_torch_configured()
+    device = get_torch_device()
 
     n_train = len(X_train)
     if hidden_dim is None:
@@ -232,6 +233,9 @@ def train_model(
     g.manual_seed(seed)
 
     model = build_model(input_dim, hidden_dim=hidden_dim, dropout=MLP_DROPOUT, generator=g)
+    model = model.to(device)
+    X_train = X_train.to(device)
+    y_train = y_train.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 
@@ -256,7 +260,7 @@ def train_model(
         weight_false *= 2.0 ** (-inclusion_value)
 
     # Create sample weights
-    weights = torch.where(y_train == 1, weight_true, weight_false).squeeze()
+    weights = torch.where(y_train == 1, weight_true, weight_false).squeeze().to(device)
     loss_fn = nn.BCEWithLogitsLoss(reduction="none")
 
     # Fork the global RNG so the Dropout seed is isolated per call —
@@ -445,7 +449,8 @@ def calculate_cross_calibration_threshold(
         model = train_model(X_train, y_train, input_dim, inclusion_value, hidden_dim=hidden_dim)
 
         with torch.no_grad():
-            scores = torch.sigmoid(model(X_cal)).squeeze(1).tolist()
+            X_cal = X_cal.to(next(model.parameters()).device)
+            scores = torch.sigmoid(model(X_cal)).squeeze(1).cpu().tolist()
         t = find_optimal_threshold(scores, y_np[cal_idx].tolist(), inclusion_value)
         thresholds.append(t)
 
@@ -637,6 +642,7 @@ def train_and_score(
         media_index_per_row = list(range(n))
         region_index_per_row = [0] * n
     with torch.no_grad():
+        X_all = X_all.to(next(model.parameters()).device)
         flat_scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().numpy()
 
     # Max-pool per media; remember the winning region index so we can
@@ -792,5 +798,5 @@ def train_detector_from_origins(
     model = train_model(X, y, input_dim, inclusion)
 
     state_dict = model.state_dict()
-    weights = {k: v.tolist() for k, v in state_dict.items()}
+    weights = {k: v.cpu().tolist() for k, v in state_dict.items()}
     return weights, threshold

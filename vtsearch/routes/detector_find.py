@@ -311,8 +311,9 @@ def multi_find():
                 try:
                     mlp = dc["live_mlp"]
                     with torch.no_grad():
-                        raw_logits = mlp(X_all)
-                        scores = torch.sigmoid(raw_logits).squeeze(1).tolist()
+                        X_in = X_all.to(next(mlp.parameters()).device)
+                        raw_logits = mlp(X_in)
+                        scores = torch.sigmoid(raw_logits).squeeze(1).cpu().tolist()
                     threshold = dc.get("threshold", 0.5)
 
                     for cid, score in zip(all_ids, scores):
@@ -366,7 +367,8 @@ def multi_find():
                         mlp, threshold = train_and_threshold(X_list, y_list)
 
                         with torch.no_grad():
-                            scores = torch.sigmoid(mlp(X_all)).squeeze(1).tolist()
+                            X_in = X_all.to(next(mlp.parameters()).device)
+                            scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
 
                         for cid, score in zip(all_ids, scores):
                             verdict = "Good" if score >= threshold else "Bad"
