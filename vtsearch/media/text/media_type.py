@@ -437,10 +437,13 @@ class TextMediaType(MediaType):
     # Clip data
     # ------------------------------------------------------------------
 
-    def load_media_data(self, file_path: Path) -> dict:
+    def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                text_content = f.read().strip()
+            if media_bytes is not None:
+                text_content = media_bytes.decode("utf-8", errors="replace").strip()
+            else:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    text_content = f.read().strip()
         except Exception:
             text_content = ""
         return {

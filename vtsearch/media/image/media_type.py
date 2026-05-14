@@ -1603,13 +1603,16 @@ class ImageMediaType(MediaType):
     # Clip data
     # ------------------------------------------------------------------
 
-    def load_media_data(self, file_path: Path) -> dict:
+    def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
+        import io  # noqa: PLC0415
+
         from PIL import Image  # noqa: PLC0415
 
-        with open(file_path, "rb") as f:
-            media_bytes = f.read()
+        if media_bytes is None:
+            with open(file_path, "rb") as f:
+                media_bytes = f.read()
         try:
-            with Image.open(file_path) as img:
+            with Image.open(io.BytesIO(media_bytes)) as img:
                 width, height = img.width, img.height
         except Exception:
             width, height = None, None

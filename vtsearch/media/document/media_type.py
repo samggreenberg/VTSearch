@@ -103,9 +103,10 @@ class DocumentMediaType(MediaType):
     # Media data
     # ------------------------------------------------------------------
 
-    def load_media_data(self, file_path: Path) -> dict:
-        with open(file_path, "rb") as f:
-            media_bytes = f.read()
+    def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
+        if media_bytes is None:
+            with open(file_path, "rb") as f:
+                media_bytes = f.read()
         return {"media_bytes": media_bytes, "duration": 0}
 
     # ------------------------------------------------------------------
