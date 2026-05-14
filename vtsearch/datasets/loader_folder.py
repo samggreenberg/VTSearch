@@ -394,24 +394,29 @@ def load_dataset_from_folder(
                 elif file_path.name in custom_metadata_map:
                     file_cm = custom_metadata_map[file_path.name]
 
-            # Resolve embedding: custom_metadata > content_vectors > model
+            # Externally-supplied vectors (custom_metadata / content_vectors)
+            # may come from a different model than ``emb`` — leave embedder_id
+            # blank so downstream query re-embedding doesn't dimension-mismatch.
             cm_embedding = _get_embedding_value(file_cm) if file_cm else None
             if cm_embedding is not None:
                 embedding = cm_embedding
+                embedder_id = ""
             elif content_vectors and rel_path in content_vectors:
                 embedding = content_vectors[rel_path]
+                embedder_id = ""
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
+                embedder_id = ""
             elif skip_embedding:
                 embedding = None
+                embedder_id = ""
             else:
                 if emb is None:
                     continue
                 embedding = bulk_embeddings.get(file_path)
                 if embedding is None:
                     continue
-
-            embedder_id = emb.name if emb else ""
+                embedder_id = emb.name
 
             # Resolve MD5: custom_metadata > content_md5s > computed
             cm_md5 = _get_md5_value(file_cm) if file_cm else ""
@@ -619,7 +624,6 @@ def load_dataset_from_folder_chunked(
         raise ValueError(f"No {media_type} files found in folder")
 
     total_files = len(media_files)
-    embedder_id = emb.name if emb else ""
 
     # Process in groups of chunk_size
     for start in range(0, total_files, chunk_size):
@@ -676,22 +680,27 @@ def load_dataset_from_folder_chunked(
                 elif file_path.name in custom_metadata_map:
                     file_cm = custom_metadata_map[file_path.name]
 
-            # Resolve embedding: custom_metadata > content_vectors > model
+            # External vectors keep embedder_id blank — see non-chunked path.
             cm_embedding = _get_embedding_value(file_cm) if file_cm else None
             if cm_embedding is not None:
                 embedding = cm_embedding
+                embedder_id = ""
             elif content_vectors and rel_path in content_vectors:
                 embedding = content_vectors[rel_path]
+                embedder_id = ""
             elif content_vectors and file_path.name in content_vectors:
                 embedding = content_vectors[file_path.name]
+                embedder_id = ""
             elif skip_embedding:
                 embedding = None
+                embedder_id = ""
             else:
                 if emb is None:
                     continue
                 embedding = chunk_bulk_embeddings.get(file_path)
                 if embedding is None:
                     continue
+                embedder_id = emb.name
 
             cm_md5 = _get_md5_value(file_cm) if file_cm else ""
 
