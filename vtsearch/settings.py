@@ -107,7 +107,10 @@ def _save(data: dict[str, Any]) -> None:
 
     SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = SETTINGS_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(data, indent=2) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, SETTINGS_PATH)
 
     # Auto-export to active settings source (skip during import-from-source).

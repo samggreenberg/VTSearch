@@ -32,7 +32,10 @@ def _atomic_write_csv(path: Path, write_rows) -> None:
     writer = csv.writer(buf)
     write_rows(writer)
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(buf.getvalue(), encoding="utf-8", newline="")
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(buf.getvalue())
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
 
 
