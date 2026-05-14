@@ -6,7 +6,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import DATA_DIR
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes.helpers import format_exception_detail, get_json_or_400
 from vtsearch.utils import snapshot_medias
 
 media_server_bp = Blueprint("media_server", __name__)
@@ -231,11 +231,11 @@ def example_sort_server():
         else:
             results, thresh = _example_sort_from_path(file_path)
         return jsonify({"results": results, "threshold": thresh})
-    except Exception:
+    except Exception as exc:
         import logging
 
         logging.getLogger(__name__).exception("example-sort-server failed")
-        return jsonify({"error": "Example sort failed"}), 500
+        return jsonify({"error": f"Example sort failed: {format_exception_detail(exc)}"}), 500
 
 
 @media_server_bp.route("/api/example-sort-origin", methods=["POST"])
@@ -300,10 +300,10 @@ def example_sort_origin():
         else:
             results, thresh = _example_sort_from_path(file_path)
         return jsonify({"results": results, "threshold": thresh})
-    except Exception:
+    except Exception as exc:
         import logging
 
         logging.getLogger(__name__).exception("example-sort-origin failed")
-        return jsonify({"error": "Example sort failed"}), 500
+        return jsonify({"error": f"Example sort failed: {format_exception_detail(exc)}"}), 500
     finally:
         source.cleanup()
