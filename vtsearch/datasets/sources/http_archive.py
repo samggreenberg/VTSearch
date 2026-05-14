@@ -59,22 +59,10 @@ class HttpArchiveSource(MediaSource):
 
         from vtsearch.datasets.sources.local_folder import LocalFolderSource
 
-        url_filename = self._url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or "archive"
-        cached_dir = DATA_DIR / f"http_archive_resolve_{url_filename}"
-
-        # Serialise cache checks so concurrent requests don't both download.
         with _extract_lock:
-            # Re-check after acquiring the lock (another thread may have finished).
             if self._inner is not None:
                 return self._inner
 
-            # Check for a previously-cached extraction for this URL.
-            if cached_dir.is_dir():
-                self._extract_dir = cached_dir
-                self._inner = LocalFolderSource(cached_dir)
-                return self._inner
-
-            # Download and extract to a unique temp directory.
             from vtsearch.datasets.downloader import download_file_with_progress
             from vtsearch.datasets.importers.http_archive import _extract_archive
             from vtsearch.utils.url_validation import validate_url
@@ -82,6 +70,7 @@ class HttpArchiveSource(MediaSource):
             validate_url(self._url)
             DATA_DIR.mkdir(exist_ok=True)
 
+            url_filename = self._url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or "archive"
             run_id = uuid4().hex[:12]
             archive_path = DATA_DIR / f"http_archive_download_{run_id}_{url_filename}"
             extract_dir = DATA_DIR / f"http_archive_source_{run_id}"
@@ -122,9 +111,7 @@ class HttpArchiveSource(MediaSource):
     def cleanup(self) -> None:
         """Remove the temporary extraction directory."""
         if self._extract_dir is not None and self._extract_dir.is_dir():
-            # Only clean up directories we created (not cached ones).
-            if "http_archive_source_" in self._extract_dir.name:
-                shutil.rmtree(self._extract_dir, ignore_errors=True)
+            shutil.rmtree(self._extract_dir, ignore_errors=True)
         self._extract_dir = None
         self._inner = None
 

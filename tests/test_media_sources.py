@@ -153,26 +153,6 @@ class TestHttpArchiveSource:
         # Before any access, _inner should be None
         assert source._inner is None
 
-    def test_uses_cached_dir(self, tmp_path):
-        """When a cached extraction directory exists, it's reused."""
-        from vtsearch.config import DATA_DIR
-        from vtsearch.datasets.sources.http_archive import HttpArchiveSource
-
-        # Create a fake cached extraction dir
-        cached = DATA_DIR / "http_archive_resolve_test.zip"
-        cached.mkdir(parents=True, exist_ok=True)
-        (cached / "clip.wav").write_bytes(b"audio")
-
-        try:
-            source = HttpArchiveSource("https://example.com/test.zip")
-            result = source.resolve_path(origin_name="clip.wav")
-            assert result is not None
-            assert result.name == "clip.wav"
-        finally:
-            import shutil
-
-            shutil.rmtree(cached, ignore_errors=True)
-
     def test_delegates_to_local_folder(self, tmp_path):
         """After extraction, fetch_item delegates to LocalFolderSource."""
         from vtsearch.datasets.sources.http_archive import HttpArchiveSource
@@ -204,8 +184,8 @@ class TestHttpArchiveSource:
         assert any(i.key == "audio/clip.wav" for i in items)
         assert all(i.source_name == "http_archive" for i in items)
 
-    def test_cleanup_removes_source_dir(self, tmp_path):
-        """cleanup() removes directories named http_archive_source_*."""
+    def test_cleanup_removes_extract_dir(self, tmp_path):
+        """cleanup() removes the extraction directory."""
         from vtsearch.datasets.sources.http_archive import HttpArchiveSource
 
         source = HttpArchiveSource("https://example.com/test.zip")
@@ -221,24 +201,6 @@ class TestHttpArchiveSource:
         source.cleanup()
         assert not source_dir.exists()
         assert source._inner is None
-
-    def test_cleanup_preserves_cached_dir(self, tmp_path):
-        """cleanup() does NOT remove http_archive_resolve_* (cached) dirs."""
-        from vtsearch.datasets.sources.http_archive import HttpArchiveSource
-
-        source = HttpArchiveSource("https://example.com/test.zip")
-        cached_dir = tmp_path / "http_archive_resolve_test.zip"
-        cached_dir.mkdir()
-        (cached_dir / "file.wav").write_bytes(b"data")
-
-        from vtsearch.datasets.sources.local_folder import LocalFolderSource
-
-        source._extract_dir = cached_dir
-        source._inner = LocalFolderSource(cached_dir)
-
-        source.cleanup()
-        # Cached dir should still exist
-        assert cached_dir.exists()
 
 
 # ── get_source_for_origin ─────────────────────────────────────────────
