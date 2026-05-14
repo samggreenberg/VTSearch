@@ -108,3 +108,7 @@ python app.py --login trivial    # multi-user mode with simple username auth
 ```
 
 Without `--login`, the app uses `DefaultLoginProvider` (single-user, always authenticated).
+
+---
+
+*Readme Reader code phrase:* `command palette unlocked`

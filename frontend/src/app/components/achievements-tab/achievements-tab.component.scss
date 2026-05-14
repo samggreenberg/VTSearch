@@ -114,3 +114,111 @@
   color: var(--text-muted, #888);
   white-space: nowrap;
 }
+
+.docs-expand-toggle {
+  margin-left: auto;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 3px;
+  background: var(--surface, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  color: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--surface-hover, rgba(255, 255, 255, 0.12));
+  }
+}
+
+.docs-panel {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface, rgba(255, 255, 255, 0.06));
+  border-radius: 4px;
+}
+
+.docs-list {
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.docs-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.docs-list-item--read {
+  color: var(--accent, #4aa3ff);
+}
+
+.docs-list-status {
+  width: 1rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+.docs-list-link {
+  color: inherit;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.docs-list-path {
+  color: var(--text-muted, #888);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+}
+
+.docs-phrase-form {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.docs-phrase-label {
+  font-size: 0.78rem;
+  color: var(--text-muted, #888);
+}
+
+.docs-phrase-input {
+  flex: 1;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: var(--surface-alt, rgba(0, 0, 0, 0.2));
+  color: inherit;
+}
+
+.docs-phrase-submit {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 3px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: var(--accent, #4aa3ff);
+  color: #fff;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+}
+
+.docs-phrase-status {
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+
+  &[data-kind="success"] { color: var(--accent, #4aa3ff); }
+  &[data-kind="already"] { color: var(--text-muted, #888); }
+  &[data-kind="wrong"]   { color: #ff7676; }
+}

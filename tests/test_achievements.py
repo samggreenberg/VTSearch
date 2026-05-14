@@ -12,6 +12,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import pathlib
 
 import app as app_module  # noqa: F401 — triggers conftest media init
 from vtsearch import achievements
@@ -44,11 +45,19 @@ class TestEmptyState:
         state = achievements.get_full_state()
         assert state["tier_names"] == ["Bronze", "Silver", "Gold", "Platinum"]
         assert state["pending_announcements"] == []
-        assert len(state["achievements"]) == 9
+        assert len(state["achievements"]) == 10
         for a in state["achievements"]:
             assert a["counter"] == 0
             assert a["tier_idx"] == -1
             assert a["next_threshold"] == a["tiers"][0]
+        # docs field is always present, with read=False for every doc.
+        assert {d["id"] for d in state["docs"]} == {
+            "readme",
+            "user_guide",
+            "cli",
+            "api",
+        }
+        assert all(d["read"] is False for d in state["docs"])
 
     def test_known_categories_present(self):
         ids = {a["id"] for a in achievements.get_full_state()["achievements"]}
@@ -62,6 +71,7 @@ class TestEmptyState:
             "media_types_touched",
             "vote_streak",
             "hours_voted",
+            "docs_read",
         }
 
 
@@ -316,6 +326,151 @@ class TestVoteStateRoundTrip:
         assert state["current_streak"] == 1
         assert state["counters"]["vote_streak"] == 1
         assert state["last_vote_ts"] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Readme Reader: record_doc_phrase + docs in get_full_state
+# ---------------------------------------------------------------------------
+
+
+class TestReadmeReader:
+    """Behavioural tests for the docs_read achievement."""
+
+    def _phrase_for(self, doc_id: str) -> str:
+        """Lookup the canonical phrase for *doc_id* from the private list."""
+        for d in achievements._DOCS_RAW:
+            if d["id"] == doc_id:
+                return d["phrase"]
+        raise KeyError(doc_id)
+
+    def test_correct_phrase_credits_doc(self):
+        result = achievements.record_doc_phrase(self._phrase_for("readme"))
+        assert result["matched"] is True
+        assert result["doc_id"] == "readme"
+        assert result["already_read"] is False
+        state = achievements.get_full_state()
+        assert _by_id(state, "docs_read")["counter"] == 1
+        assert [d for d in state["docs"] if d["id"] == "readme"][0]["read"] is True
+
+    def test_wrong_phrase_is_no_op(self):
+        result = achievements.record_doc_phrase("definitely not a real phrase")
+        assert result["matched"] is False
+        assert result["doc_id"] is None
+        state = achievements.get_full_state()
+        assert _by_id(state, "docs_read")["counter"] == 0
+        assert all(d["read"] is False for d in state["docs"])
+
+    def test_case_insensitive_match(self):
+        phrase = self._phrase_for("cli").upper()
+        result = achievements.record_doc_phrase(phrase)
+        assert result["matched"] is True
+        assert result["doc_id"] == "cli"
+
+    def test_whitespace_tolerant_match(self):
+        phrase = "  " + self._phrase_for("api").replace(" ", "   ") + "\n"
+        result = achievements.record_doc_phrase(phrase)
+        assert result["matched"] is True
+        assert result["doc_id"] == "api"
+
+    def test_duplicate_credit_reports_already_read(self):
+        phrase = self._phrase_for("user_guide")
+        first = achievements.record_doc_phrase(phrase)
+        assert first["already_read"] is False
+        second = achievements.record_doc_phrase(phrase)
+        assert second["matched"] is True
+        assert second["already_read"] is True
+        # Counter stays at 1, not 2.
+        assert _by_id(achievements.get_full_state(), "docs_read")["counter"] == 1
+
+    def test_all_four_docs_unlock_platinum(self):
+        for doc_id in ("readme", "user_guide", "cli", "api"):
+            achievements.record_doc_phrase(self._phrase_for(doc_id))
+        state = achievements.get_full_state()
+        docs_read = _by_id(state, "docs_read")
+        assert docs_read["counter"] == 4
+        assert docs_read["tier_idx"] == 3  # Platinum
+        assert docs_read["next_threshold"] is None
+
+    def test_state_round_trips_via_settings(self, isolated_settings):
+        achievements.record_doc_phrase(self._phrase_for("readme"))
+        achievements.record_doc_phrase(self._phrase_for("api"))
+        raw = json.loads(isolated_settings.read_text())
+        state = raw["achievement_state"]
+        assert sorted(state["docs_read_ids"]) == ["api", "readme"]
+        assert state["counters"]["docs_read"] == 2
+
+
+class TestReadmeReaderDocsDriftGuard:
+    """Each doc file must actually contain the phrase listed in the registry.
+
+    This catches silent drift where someone edits one side (the doc or the
+    DOCS_RAW table) without updating the other.
+    """
+
+    def test_each_doc_contains_its_phrase(self):
+        repo_root = pathlib.Path(__file__).resolve().parent.parent
+        for doc in achievements._DOCS_RAW:
+            text = (repo_root / doc["path"]).read_text(encoding="utf-8")
+            assert achievements._normalize_phrase(doc["phrase"]) in achievements._normalize_phrase(text), (
+                f"Doc {doc['path']} is missing its Readme Reader phrase "
+                f"{doc['phrase']!r}; update either the doc footer or "
+                f"_DOCS_RAW in vtsearch/achievements.py."
+            )
+
+    def test_no_two_docs_share_a_phrase(self):
+        phrases = [achievements._normalize_phrase(d["phrase"]) for d in achievements._DOCS_RAW]
+        assert len(phrases) == len(set(phrases))
+
+
+# ---------------------------------------------------------------------------
+# Readme Reader: API routes
+# ---------------------------------------------------------------------------
+
+
+class TestReadmeReaderApi:
+    def _phrase_for(self, doc_id: str) -> str:
+        for d in achievements._DOCS_RAW:
+            if d["id"] == doc_id:
+                return d["phrase"]
+        raise KeyError(doc_id)
+
+    def test_check_phrase_correct(self, client):
+        resp = client.post(
+            "/api/achievements/check-phrase",
+            json={"phrase": self._phrase_for("readme")},
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["matched"] is True
+        assert body["doc_id"] == "readme"
+        assert body["already_read"] is False
+
+    def test_check_phrase_wrong(self, client):
+        resp = client.post("/api/achievements/check-phrase", json={"phrase": "nope"})
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["matched"] is False
+        assert body["doc_id"] is None
+
+    def test_check_phrase_missing_body(self, client):
+        resp = client.post("/api/achievements/check-phrase", json={})
+        assert resp.status_code == 400
+
+    def test_check_phrase_non_string(self, client):
+        resp = client.post("/api/achievements/check-phrase", json={"phrase": 42})
+        assert resp.status_code == 400
+
+    def test_docs_raw_returns_markdown(self, client):
+        resp = client.get("/api/achievements/docs/readme/raw")
+        assert resp.status_code == 200
+        assert resp.mimetype == "text/plain"
+        body = resp.get_data(as_text=True)
+        # Should contain the README's phrase footer.
+        assert "all aboard the embedding express" in body.lower()
+
+    def test_docs_raw_unknown_id(self, client):
+        resp = client.get("/api/achievements/docs/not-a-doc/raw")
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
