@@ -2,7 +2,8 @@
 
 Connects directly to the recipient's mail server (via DNS MX record lookup)
 so no SMTP credentials or server configuration are needed.  The sender
-address is always ``VTSearch@fake.ai``.
+address is supplied by the caller — a real domain you control is required,
+because most MX hosts reject mail whose sender domain has no DNS records.
 
 Requires the ``dnspython`` package for MX record resolution.
 """
@@ -15,8 +16,6 @@ from email.mime.text import MIMEText
 from typing import Any
 
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
-
-FROM_ADDRESS = "VTSearch@fake.ai"
 
 
 def _build_plain_text(results: dict[str, Any]) -> str:
@@ -86,8 +85,9 @@ class EmailLabelsetExporter(LabelsetExporter):
     """Send auto-detect results by e-mail via direct MX delivery.
 
     Looks up the recipient domain's MX record and connects directly — no
-    SMTP credentials or server configuration required.  The sender address
-    is always ``VTSearch@fake.ai``.
+    SMTP credentials or server configuration required.  The caller must
+    supply a sender address on a domain they control; receiving MX hosts
+    reject mail whose sender domain has no DNS records.
     """
 
     name = "email_smtp"
@@ -95,6 +95,16 @@ class EmailLabelsetExporter(LabelsetExporter):
     description = "Email the results summary to any address."
     icon = "📧"
     fields = [
+        ExporterField(
+            key="from",
+            label="Sender Email",
+            field_type="email",
+            description=(
+                "The email address to send from. Must be on a domain you control — "
+                "MX hosts reject mail from non-existent domains."
+            ),
+            placeholder="vtsearch@your-domain.example",
+        ),
         ExporterField(
             key="to",
             label="Recipient Email",
@@ -105,11 +115,16 @@ class EmailLabelsetExporter(LabelsetExporter):
     ]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        from_addr = field_values.get("from", "").strip()
         to_addr = field_values.get("to", "").strip()
+
+        if not from_addr:
+            raise ValueError("Sender email address is required.")
+        if "@" not in from_addr:
+            raise ValueError("Sender email address is invalid.")
 
         if not to_addr:
             raise ValueError("Recipient email address is required.")
-
         if "@" not in to_addr:
             raise ValueError("Recipient email address is invalid.")
 
@@ -122,7 +137,7 @@ class EmailLabelsetExporter(LabelsetExporter):
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = FROM_ADDRESS
+        msg["From"] = from_addr
         msg["To"] = to_addr
 
         plain = _build_plain_text(results)
@@ -132,7 +147,7 @@ class EmailLabelsetExporter(LabelsetExporter):
 
         with smtplib.SMTP(mx_host, 25, timeout=30) as server:
             server.ehlo()
-            server.sendmail(FROM_ADDRESS, [to_addr], msg.as_string())
+            server.sendmail(from_addr, [to_addr], msg.as_string())
 
         return {
             "message": (f"Email with {total_hits} hit(s) sent to {to_addr} via {mx_host}."),

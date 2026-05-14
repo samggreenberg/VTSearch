@@ -373,19 +373,26 @@ class TestEmailLabelsetExporter:
         keys = {f.key for f in exp.fields}
         assert "to" in keys
 
-    def test_only_to_field_required(self):
+    def test_fields_are_from_and_to(self):
         from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         keys = {f.key for f in exp.fields}
-        assert keys == {"to"}
+        assert keys == {"from", "to"}
 
     def test_export_raises_on_missing_to(self):
         from vtsearch.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Recipient"):
-            exp.export(SAMPLE_RESULTS, {"to": ""})
+            exp.export(SAMPLE_RESULTS, {"from": "me@example.com", "to": ""})
+
+    def test_export_raises_on_missing_from(self):
+        from vtsearch.exporters import get_exporter
+
+        exp = get_exporter("email_smtp")
+        with pytest.raises(ValueError, match="Sender"):
+            exp.export(SAMPLE_RESULTS, {"from": "", "to": "you@example.com"})
 
     def test_export_calls_smtp_via_mx(self):
         from vtsearch.exporters import get_exporter
@@ -401,17 +408,18 @@ class TestEmailLabelsetExporter:
             patch("vtsearch.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
             patch("vtsearch.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
         ):
-            result = exp.export(SAMPLE_RESULTS, {"to": "you@example.com"})
+            result = exp.export(
+                SAMPLE_RESULTS,
+                {"from": "me@my-domain.example", "to": "you@example.com"},
+            )
 
         mock_smtp_cls.assert_called_once_with("mx.example.com", 25, timeout=30)
         mock_server.sendmail.assert_called_once()
+        sender, recipients, _ = mock_server.sendmail.call_args.args
+        assert sender == "me@my-domain.example"
+        assert recipients == ["you@example.com"]
         assert "message" in result
         assert "you@example.com" in result["message"]
-
-    def test_from_address_is_vtsearch(self):
-        from vtsearch.exporters.email_smtp import FROM_ADDRESS
-
-        assert FROM_ADDRESS == "VTSearch@fake.ai"
 
     def test_plain_text_builder(self):
         from vtsearch.exporters.email_smtp import _build_plain_text
@@ -560,7 +568,7 @@ class TestExportEndpoint:
                 "/api/exporters/export",
                 json={
                     "exporter_name": "email_smtp",
-                    "field_values": {"to": "you@example.com"},
+                    "field_values": {"from": "me@my-domain.example", "to": "you@example.com"},
                     "results": SAMPLE_RESULTS,
                 },
             )
