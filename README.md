@@ -128,3 +128,7 @@ VTSearch has a plugin architecture for media types, data importers, results expo
 - **[docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md)** — data importers, results exporters, label importers, processor importers, settings importers/exporters, settings sources, labelset sources (eight auto-discovered plugin families).
 - **[docs/EXTENDING-media.md](docs/EXTENDING-media.md)** — media types, embedders, clippers, converters, media sources.
 - **[docs/EXTENDING-processors.md](docs/EXTENDING-processors.md)** — detectors, localizers, extractors.
+
+---
+
+*Readme Reader code phrase:* `all aboard the embedding express`

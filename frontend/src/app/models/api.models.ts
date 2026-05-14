@@ -201,7 +201,33 @@ export interface ImporterInfo {
   /** Picker tab this importer belongs to.  One of ``"services"``,
    *  ``"server"``, ``"local"``, ``"demo"``, or ``""`` (uncategorised). */
   category?: string;
+  /** When true, the importer participates in the multi-media flow: the
+   *  frontend sends ``source_specs`` (a JSON array of SourceSpec rows)
+   *  instead of (or in addition to) a single ``media_type`` field. */
+  multi_media?: boolean;
+  /** server_folder-specific: map of output media-type id → converters
+   *  whose ``target_type`` matches that id.  Drives the "Include rows"
+   *  UI without an extra round-trip to ``/api/converters``. */
+  available_converters_by_media_type?: Record<string, ConverterInfo[]>;
   [key: string]: unknown;
+}
+
+export interface ConverterInfo {
+  name: string;
+  source_type: string;
+  target_type: string;
+  display_name?: string;
+  description?: string;
+  fields?: ImporterField[];
+}
+
+/** One row of a multi-media import specification.  See
+ *  ``docs/plans/multi-media-import.md``. */
+export interface SourceSpec {
+  source_type: string;
+  /** ``null`` means "include directly" (source_type must equal output). */
+  converter: string | null;
+  params: Record<string, string | number | null>;
 }
 
 export interface ImporterField {

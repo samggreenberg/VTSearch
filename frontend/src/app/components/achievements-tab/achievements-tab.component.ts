@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AchievementBadgeComponent } from '../achievement-badge/achievement-badge.component';
@@ -7,6 +8,7 @@ import {
   AchievementInfo,
   AchievementsService,
   AchievementsState,
+  DocInfo,
 } from '../../services/achievements.service';
 
 const TIER_NAMES = ['Bronze', 'Silver', 'Gold', 'Platinum'];
@@ -21,13 +23,23 @@ interface AchievementRow extends AchievementInfo {
 @Component({
   selector: 'vt-achievements-tab',
   standalone: true,
-  imports: [CommonModule, AchievementBadgeComponent],
+  imports: [CommonModule, FormsModule, AchievementBadgeComponent],
   templateUrl: './achievements-tab.component.html',
   styleUrl: './achievements-tab.component.scss',
 })
 export class AchievementsTabComponent implements OnInit, OnDestroy {
   rows: AchievementRow[] = [];
+  docs: DocInfo[] = [];
   loading = true;
+  totalScore = 0;
+
+  docsExpanded = false;
+  phraseInput = '';
+  phraseStatus: { kind: 'idle' | 'success' | 'already' | 'wrong'; message: string } = {
+    kind: 'idle',
+    message: '',
+  };
+  submitting = false;
 
   private destroy$ = new Subject<void>();
 
@@ -45,9 +57,48 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  toggleDocsExpanded(): void {
+    this.docsExpanded = !this.docsExpanded;
+  }
+
+  docRawUrl(docId: string): string {
+    return this.achievements.docRawUrl(docId);
+  }
+
+  submitPhrase(): void {
+    const phrase = this.phraseInput.trim();
+    if (!phrase || this.submitting) return;
+    this.submitting = true;
+    this.achievements.checkPhrase(phrase).subscribe((result) => {
+      this.submitting = false;
+      if (result.matched && !result.already_read) {
+        this.phraseStatus = {
+          kind: 'success',
+          message: `Correct! Credit applied for "${result.doc_name}".`,
+        };
+        this.phraseInput = '';
+      } else if (result.matched && result.already_read) {
+        this.phraseStatus = {
+          kind: 'already',
+          message: `Already credited for "${result.doc_name}". Try a different doc!`,
+        };
+      } else {
+        this.phraseStatus = {
+          kind: 'wrong',
+          message: 'No match. Check spelling and try again.',
+        };
+      }
+    });
+  }
+
   private applyState(state: AchievementsState): void {
     this.rows = state.achievements.map((a) => this.toRow(a));
+    this.docs = state.docs;
     this.loading = state.achievements.length === 0;
+    this.totalScore = state.achievements.reduce(
+      (sum, a) => sum + (a.tier_idx >= 0 ? 1 << a.tier_idx : 0),
+      0,
+    );
   }
 
   private toRow(a: AchievementInfo): AchievementRow {

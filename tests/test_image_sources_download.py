@@ -86,6 +86,23 @@ def _make_places365_tar(tmp_path: Path) -> Path:
     return tar_path
 
 
+def _make_places365_filelist_tar(tmp_path: Path, labels_bytes: bytes) -> Path:
+    """Create a minimal Places365 filelist tar fixture.
+
+    Mirrors the structure of MIT's ``filelist_places365-standard.tar``: a
+    tarball whose root contains a ``places365_val.txt`` member (alongside
+    other label files we don't use).  The production code only reads the
+    val member, so that's the only one we need to fake.
+    """
+    tar_path = tmp_path / "filelist_places365-standard.tar"
+    labels_src = tmp_path / "_filelist_staging_places365_val.txt"
+    labels_src.write_bytes(labels_bytes)
+    with tarfile.open(tar_path, "w") as tf:
+        tf.add(labels_src, arcname="places365_val.txt")
+    labels_src.unlink()
+    return tar_path
+
+
 def _make_stanford_dogs_tar(tmp_path: Path) -> Path:
     """Create a minimal Stanford Dogs tar.gz fixture."""
     tar_path = tmp_path / "stanford_dogs_images.tar.gz"
@@ -633,16 +650,15 @@ class TestDownloadPlaces365:
         """download_places365 returns the places365/ directory with val_256/ and labels."""
         from vtsearch.datasets import downloader as dl_module
 
-        tar_path = _make_places365_tar(tmp_path)
+        val_tar_path = _make_places365_tar(tmp_path)
         labels_bytes = b"Places365_val_00000001.jpg 0\nPlaces365_val_00000002.jpg 1\n"
+        filelist_tar_path = _make_places365_filelist_tar(tmp_path, labels_bytes)
 
         def fake_download(url, dest, size, cb):
-            if url.endswith("places365_val.txt"):
-                dest.write_bytes(labels_bytes)
-            else:
-                import shutil
+            import shutil
 
-                shutil.copy(str(tar_path), str(dest))
+            src = filelist_tar_path if "filelist" in url else val_tar_path
+            shutil.copy(str(src), str(dest))
 
         with (
             patch.object(dl_module.core, "DATA_DIR", tmp_path),

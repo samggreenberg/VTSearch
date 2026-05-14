@@ -415,3 +415,7 @@ Two ways to bring in existing work:
 - Measuring sort quality on demo datasets — [EVAL.md](EVAL.md).
 - How Autopilot and sort modes are implemented — the
   [architecture doc](ARCHITECTURE.md) (developer-oriented).
+
+---
+
+*Readme Reader code phrase:* `label like nobody's watching`

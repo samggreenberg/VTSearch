@@ -12,6 +12,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import pathlib
 
 import app as app_module  # noqa: F401 — triggers conftest media init
 from vtsearch import achievements
@@ -44,11 +45,19 @@ class TestEmptyState:
         state = achievements.get_full_state()
         assert state["tier_names"] == ["Bronze", "Silver", "Gold", "Platinum"]
         assert state["pending_announcements"] == []
-        assert len(state["achievements"]) == 5
+        assert len(state["achievements"]) == 10
         for a in state["achievements"]:
             assert a["counter"] == 0
             assert a["tier_idx"] == -1
             assert a["next_threshold"] == a["tiers"][0]
+        # docs field is always present, with read=False for every doc.
+        assert {d["id"] for d in state["docs"]} == {
+            "readme",
+            "user_guide",
+            "cli",
+            "api",
+        }
+        assert all(d["read"] is False for d in state["docs"])
 
     def test_known_categories_present(self):
         ids = {a["id"] for a in achievements.get_full_state()["achievements"]}
@@ -58,6 +67,11 @@ class TestEmptyState:
             "detectors_trained",
             "detectors_imported",
             "find_media",
+            "days_active",
+            "media_types_touched",
+            "vote_streak",
+            "hours_voted",
+            "docs_read",
         }
 
 
@@ -159,6 +173,304 @@ class TestImportAndFind:
         achievements.record_find(0)
         achievements.record_find(-5)
         assert _by_id(achievements.get_full_state(), "find_media")["counter"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Vote-driven achievements: days_active / hours_voted / media_types / streak
+# ---------------------------------------------------------------------------
+
+
+def _ts(year: int, month: int, day: int, hour: int = 0, minute: int = 0, second: int = 0) -> float:
+    """Build a UTC unix timestamp without pulling in test-only dependencies."""
+    from datetime import datetime, timezone
+
+    return datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc).timestamp()
+
+
+class TestDaysActive:
+    def test_first_vote_credits_first_day(self):
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 12))
+        assert _by_id(achievements.get_full_state(), "days_active")["counter"] == 1
+
+    def test_same_day_does_not_double_count(self):
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 8))
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 23, 59, 59))
+        assert _by_id(achievements.get_full_state(), "days_active")["counter"] == 1
+
+    def test_different_days_each_count_once(self):
+        for day in (10, 11, 12):
+            achievements.record_vote("det", "audio", now=_ts(2026, 5, day, 9))
+        assert _by_id(achievements.get_full_state(), "days_active")["counter"] == 3
+
+    def test_bronze_threshold_at_two_days(self):
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 10))
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 11))
+        day_state = _by_id(achievements.get_full_state(), "days_active")
+        assert day_state["tier_idx"] == 0
+        assert day_state["next_threshold"] == 20
+
+
+class TestMediaTypesTouched:
+    def test_each_distinct_type_counts_once(self):
+        for mt in ("audio", "image", "text", "audio"):
+            achievements.record_vote("det", mt)
+        assert _by_id(achievements.get_full_state(), "media_types_touched")["counter"] == 3
+
+    def test_empty_media_type_does_not_credit(self):
+        achievements.record_vote("det", "")
+        assert _by_id(achievements.get_full_state(), "media_types_touched")["counter"] == 0
+
+    def test_bronze_at_two_types(self):
+        achievements.record_vote("det", "audio")
+        achievements.record_vote("det", "image")
+        mt_state = _by_id(achievements.get_full_state(), "media_types_touched")
+        assert mt_state["tier_idx"] == 0
+        assert mt_state["next_threshold"] == 3
+
+    def test_platinum_at_all_five_types(self):
+        for mt in ("audio", "image", "text", "video", "document"):
+            achievements.record_vote("det", mt)
+        mt_state = _by_id(achievements.get_full_state(), "media_types_touched")
+        assert mt_state["counter"] == 5
+        assert mt_state["tier_idx"] == 3  # Platinum
+        assert mt_state["next_threshold"] is None
+
+
+class TestHoursVoted:
+    def test_first_vote_credits_one_hour(self):
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 14, 30))
+        assert _by_id(achievements.get_full_state(), "hours_voted")["counter"] == 1
+
+    def test_same_hour_across_days_dedupes(self):
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 14, 0))
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 14, 14, 59))
+        assert _by_id(achievements.get_full_state(), "hours_voted")["counter"] == 1
+
+    def test_distinct_hours_count(self):
+        for hour in (0, 5, 10, 15, 20):
+            achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, hour))
+        assert _by_id(achievements.get_full_state(), "hours_voted")["counter"] == 5
+
+    def test_around_the_clock_platinum_at_24_hours(self):
+        for hour in range(24):
+            achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, hour))
+        hv = _by_id(achievements.get_full_state(), "hours_voted")
+        assert hv["counter"] == 24
+        assert hv["tier_idx"] == 3  # Platinum at 24
+        assert hv["next_threshold"] is None
+
+
+class TestVoteStreak:
+    def test_single_vote_streak_is_one(self):
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 12))
+        assert _by_id(achievements.get_full_state(), "vote_streak")["counter"] == 1
+
+    def test_gap_within_10min_extends_streak(self):
+        base = _ts(2026, 5, 13, 12, 0, 0)
+        achievements.record_vote("det", "audio", now=base)
+        achievements.record_vote("det", "audio", now=base + 60)  # 1 min
+        achievements.record_vote("det", "audio", now=base + 120)  # 2 min
+        assert _by_id(achievements.get_full_state(), "vote_streak")["counter"] == 3
+
+    def test_exactly_10min_gap_still_extends(self):
+        # The spec is "at most a 10min gap", so gap == 600s continues the streak.
+        base = _ts(2026, 5, 13, 12, 0, 0)
+        achievements.record_vote("det", "audio", now=base)
+        achievements.record_vote("det", "audio", now=base + 600)
+        assert _by_id(achievements.get_full_state(), "vote_streak")["counter"] == 2
+
+    def test_gap_over_10min_resets_current_but_preserves_max(self):
+        base = _ts(2026, 5, 13, 12, 0, 0)
+        # Run of 3 within 10-min gaps.
+        achievements.record_vote("det", "audio", now=base)
+        achievements.record_vote("det", "audio", now=base + 300)
+        achievements.record_vote("det", "audio", now=base + 600)
+        # 11-minute gap → resets the running streak to 1.
+        achievements.record_vote("det", "audio", now=base + 600 + 660)
+        achievements.record_vote("det", "audio", now=base + 600 + 660 + 60)
+        streak = _by_id(achievements.get_full_state(), "vote_streak")
+        assert streak["counter"] == 3  # max watermark, not current
+
+    def test_streak_watermark_climbs_during_run(self):
+        # Cross the Bronze threshold of 200 votes within tight gaps.
+        ts = _ts(2026, 5, 13, 12, 0, 0)
+        for _ in range(200):
+            achievements.record_vote("det", "audio", now=ts)
+            ts += 60  # 1-min gaps — well under 10 min
+        streak = _by_id(achievements.get_full_state(), "vote_streak")
+        assert streak["counter"] == 200
+        assert streak["tier_idx"] == 0  # Bronze at 200
+
+    def test_long_pause_then_new_streak_does_not_combine(self):
+        # 50 in a row, hour-long break, 30 more — watermark stays at 50.
+        ts = _ts(2026, 5, 13, 8, 0, 0)
+        for _ in range(50):
+            achievements.record_vote("det", "audio", now=ts)
+            ts += 30
+        ts += 60 * 60  # 1-hour gap
+        for _ in range(30):
+            achievements.record_vote("det", "audio", now=ts)
+            ts += 30
+        streak = _by_id(achievements.get_full_state(), "vote_streak")
+        assert streak["counter"] == 50
+
+
+class TestVoteStateRoundTrip:
+    def test_new_state_keys_persisted(self, isolated_settings):
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 9))
+        raw = json.loads(isolated_settings.read_text())
+        state = raw["achievement_state"]
+        assert state["days_seen"] == ["2026-05-13"]
+        assert state["hours_seen"] == [9]
+        assert state["media_types_seen"] == ["audio"]
+        assert state["current_streak"] == 1
+        assert state["counters"]["vote_streak"] == 1
+        assert state["last_vote_ts"] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Readme Reader: record_doc_phrase + docs in get_full_state
+# ---------------------------------------------------------------------------
+
+
+class TestReadmeReader:
+    """Behavioural tests for the docs_read achievement."""
+
+    def _phrase_for(self, doc_id: str) -> str:
+        """Lookup the canonical phrase for *doc_id* from the private list."""
+        for d in achievements._DOCS_RAW:
+            if d["id"] == doc_id:
+                return d["phrase"]
+        raise KeyError(doc_id)
+
+    def test_correct_phrase_credits_doc(self):
+        result = achievements.record_doc_phrase(self._phrase_for("readme"))
+        assert result["matched"] is True
+        assert result["doc_id"] == "readme"
+        assert result["already_read"] is False
+        state = achievements.get_full_state()
+        assert _by_id(state, "docs_read")["counter"] == 1
+        assert [d for d in state["docs"] if d["id"] == "readme"][0]["read"] is True
+
+    def test_wrong_phrase_is_no_op(self):
+        result = achievements.record_doc_phrase("definitely not a real phrase")
+        assert result["matched"] is False
+        assert result["doc_id"] is None
+        state = achievements.get_full_state()
+        assert _by_id(state, "docs_read")["counter"] == 0
+        assert all(d["read"] is False for d in state["docs"])
+
+    def test_case_insensitive_match(self):
+        phrase = self._phrase_for("cli").upper()
+        result = achievements.record_doc_phrase(phrase)
+        assert result["matched"] is True
+        assert result["doc_id"] == "cli"
+
+    def test_whitespace_tolerant_match(self):
+        phrase = "  " + self._phrase_for("api").replace(" ", "   ") + "\n"
+        result = achievements.record_doc_phrase(phrase)
+        assert result["matched"] is True
+        assert result["doc_id"] == "api"
+
+    def test_duplicate_credit_reports_already_read(self):
+        phrase = self._phrase_for("user_guide")
+        first = achievements.record_doc_phrase(phrase)
+        assert first["already_read"] is False
+        second = achievements.record_doc_phrase(phrase)
+        assert second["matched"] is True
+        assert second["already_read"] is True
+        # Counter stays at 1, not 2.
+        assert _by_id(achievements.get_full_state(), "docs_read")["counter"] == 1
+
+    def test_all_four_docs_unlock_platinum(self):
+        for doc_id in ("readme", "user_guide", "cli", "api"):
+            achievements.record_doc_phrase(self._phrase_for(doc_id))
+        state = achievements.get_full_state()
+        docs_read = _by_id(state, "docs_read")
+        assert docs_read["counter"] == 4
+        assert docs_read["tier_idx"] == 3  # Platinum
+        assert docs_read["next_threshold"] is None
+
+    def test_state_round_trips_via_settings(self, isolated_settings):
+        achievements.record_doc_phrase(self._phrase_for("readme"))
+        achievements.record_doc_phrase(self._phrase_for("api"))
+        raw = json.loads(isolated_settings.read_text())
+        state = raw["achievement_state"]
+        assert sorted(state["docs_read_ids"]) == ["api", "readme"]
+        assert state["counters"]["docs_read"] == 2
+
+
+class TestReadmeReaderDocsDriftGuard:
+    """Each doc file must actually contain the phrase listed in the registry.
+
+    This catches silent drift where someone edits one side (the doc or the
+    DOCS_RAW table) without updating the other.
+    """
+
+    def test_each_doc_contains_its_phrase(self):
+        repo_root = pathlib.Path(__file__).resolve().parent.parent
+        for doc in achievements._DOCS_RAW:
+            text = (repo_root / doc["path"]).read_text(encoding="utf-8")
+            assert achievements._normalize_phrase(doc["phrase"]) in achievements._normalize_phrase(text), (
+                f"Doc {doc['path']} is missing its Readme Reader phrase "
+                f"{doc['phrase']!r}; update either the doc footer or "
+                f"_DOCS_RAW in vtsearch/achievements.py."
+            )
+
+    def test_no_two_docs_share_a_phrase(self):
+        phrases = [achievements._normalize_phrase(d["phrase"]) for d in achievements._DOCS_RAW]
+        assert len(phrases) == len(set(phrases))
+
+
+# ---------------------------------------------------------------------------
+# Readme Reader: API routes
+# ---------------------------------------------------------------------------
+
+
+class TestReadmeReaderApi:
+    def _phrase_for(self, doc_id: str) -> str:
+        for d in achievements._DOCS_RAW:
+            if d["id"] == doc_id:
+                return d["phrase"]
+        raise KeyError(doc_id)
+
+    def test_check_phrase_correct(self, client):
+        resp = client.post(
+            "/api/achievements/check-phrase",
+            json={"phrase": self._phrase_for("readme")},
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["matched"] is True
+        assert body["doc_id"] == "readme"
+        assert body["already_read"] is False
+
+    def test_check_phrase_wrong(self, client):
+        resp = client.post("/api/achievements/check-phrase", json={"phrase": "nope"})
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["matched"] is False
+        assert body["doc_id"] is None
+
+    def test_check_phrase_missing_body(self, client):
+        resp = client.post("/api/achievements/check-phrase", json={})
+        assert resp.status_code == 400
+
+    def test_check_phrase_non_string(self, client):
+        resp = client.post("/api/achievements/check-phrase", json={"phrase": 42})
+        assert resp.status_code == 400
+
+    def test_docs_raw_returns_markdown(self, client):
+        resp = client.get("/api/achievements/docs/readme/raw")
+        assert resp.status_code == 200
+        assert resp.mimetype == "text/plain"
+        body = resp.get_data(as_text=True)
+        # Should contain the README's phrase footer.
+        assert "all aboard the embedding express" in body.lower()
+
+    def test_docs_raw_unknown_id(self, client):
+        resp = client.get("/api/achievements/docs/not-a-doc/raw")
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

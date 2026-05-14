@@ -37,3 +37,8 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 Status codes follow standard HTTP semantics: 200 OK, 201 Created, 204 No
 Content, 400 Bad Request, 404 Not Found, 409 Conflict, 500 Internal Server
 Error.
+
+---
+
+*Readme Reader code phrase:* `json all the way down`
+

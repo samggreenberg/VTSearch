@@ -24,6 +24,7 @@ _TEST_GROUPS = {
         "test_frontend",
         "test_resize_handle_centering",
         "test_achievements",
+        "test_dockerfile_syntax",
     ],
     "api": [
         "test_api_contracts",

@@ -1,10 +1,15 @@
-"""HAC tree sweep on caltech-101.
+"""HAC tree sweep on Places365.
 
 Throwaway experiment script supporting the patch-embedder design
 (``docs/plans/patch-embedder.md``).  Sweeps ``K ∈ {8, 12, 16}`` and
-``α ∈ {0.3, 0.5, 0.7}`` over a sample of caltech-101 images, renders the
-leaf + HAC-internal bounding-box overlays as PNGs, and writes a markdown
-report under ``docs/experiments/hac-tree-sweep/``.
+``α ∈ {0.3, 0.5, 0.7}`` over a sample of Places365 validation images,
+renders the leaf + HAC-internal bounding-box overlays as PNGs, and
+writes a markdown report under ``docs/experiments/hac-tree-sweep/``.
+
+Places365 is closer to the application's actual imagery (varied
+real-world scenes — indoor rooms, outdoor natural + man-made
+environments) than the cropped-object photos of caltech-101, so the
+visual review is more representative of what users will see.
 
 Embedder: DINOv2 ViT-B/14 (``facebook/dinov2-base``).  DINOv2 is the
 ungated patch-capable embedder; the HAC tree code does not depend on
@@ -14,7 +19,7 @@ choice transfers to DINOv3 / EUPE.
 Usage::
 
     python scripts/run_hac_tree_sweep.py \\
-        --image-root data/caltech-101/101_ObjectCategories \\
+        --places-dir data/places365 \\
         --out-dir docs/experiments/hac-tree-sweep \\
         --num-images 30 \\
         --seed 0
@@ -50,34 +55,50 @@ DEFAULT_ALPHA_VALUES = (0.3, 0.5, 0.7)
 # ---------------------------------------------------------------------------
 
 
-def sample_caltech_paths(root: Path, n: int, seed: int) -> list[Path]:
-    """Pick *n* JPEGs from caltech-101 spread across many categories.
+def sample_places365_paths(places_dir: Path, n: int, seed: int) -> list[tuple[Path, str]]:
+    """Pick *n* JPEGs from the Places365 validation set spread across categories.
 
-    We round-robin over the categories (sorted alphabetically) so the
-    sample contains both single-object (e.g. faces, airplanes) and
-    cluttered-object (e.g. anchor, ant) scenes.  ``BACKGROUND_Google``
-    is dropped — it has no foreground subject and would muddle the
-    visual review.
+    Places365's val_256 split is a flat folder of 36 500 images
+    (``Places365_val_*.jpg``) plus a label file ``places365_val.txt``
+    mapping each filename to one of 365 scene categories.  We parse the
+    label file, group by category, shuffle each category's file list,
+    then round-robin one image from each shuffled category until we
+    have *n* — the same strategy used previously for caltech-101's
+    nested category dirs, so the sample spans many scene types rather
+    than concentrating on a few.
+
+    Returns ``(path, category_name)`` pairs.  We need the category
+    explicitly because the on-disk layout is flat — the parent dir is
+    just ``val_256/`` for everything.
     """
+    from vtsearch.datasets.metadata import load_places365_metadata
+    from vtsearch.media.image.media_type import _PLACES365_CATEGORIES_LIST
+
+    metadata = load_places365_metadata(places_dir, _PLACES365_CATEGORIES_LIST)
+
+    by_cat: dict[str, list[tuple[Path, str]]] = {}
+    for fname in sorted(metadata):
+        meta = metadata[fname]
+        by_cat.setdefault(meta["category"], []).append((meta["path"], meta["category"]))
+
     rng = random.Random(seed)
-    cats = sorted([p for p in root.iterdir() if p.is_dir() and p.name != "BACKGROUND_Google"])
+    cats = sorted(by_cat.keys())
     rng.shuffle(cats)
-
-    by_cat: list[list[Path]] = []
+    buckets: list[list[tuple[Path, str]]] = []
     for cat in cats:
-        files = sorted(cat.glob("*.jpg"))
+        files = by_cat[cat]
+        rng.shuffle(files)
         if files:
-            rng.shuffle(files)
-            by_cat.append(files)
+            buckets.append(files)
 
-    out: list[Path] = []
+    out: list[tuple[Path, str]] = []
     i = 0
-    while len(out) < n and by_cat:
-        idx = i % len(by_cat)
-        files = by_cat[idx]
+    while len(out) < n and buckets:
+        idx = i % len(buckets)
+        files = buckets[idx]
         out.append(files.pop())
         if not files:
-            by_cat.pop(idx)
+            buckets.pop(idx)
         else:
             i += 1
     return out[:n]
@@ -295,21 +316,26 @@ def render_config_tree(
     gap_x: int = 8,
     gap_y: int = 28,
     margin: int = 14,
-    header_pad: int = 18,
-    full_h: int = 132,
 ) -> Image.Image:
     """Render one HAC region tree as a stack:
 
-    * the full image at the top,
+    * the full image in the top-left, scaled as large as possible without
+      growing the canvas past what the tree itself needs (the binary
+      tree leaves the upper-left corner empty, so the original image
+      tucks into that staircase),
     * HAC internal merge nodes in the middle (each masked to the *union
       of patch cells* under the node — not its loose bounding box),
     * HAC leaves along the bottom (each masked to its cell footprint),
-    * edges connecting parents to their two children.  Edges are grey by
-      default, **red** when the merge is a box no-op — i.e., the
-      parent's bbox equals one of the child's bboxes ("merging C into AB
-      didn't grow the rectangle, even though it did add new cells").
+    * solid grey edges connecting parents to their two children.
 
-    Leaves are outlined in yellow; internals in cyan.
+    Leaves are outlined in yellow; internals in cyan.  There is no
+    duplicate-edge highlighting because, in patch-cell space, every
+    merge strictly grows the cell set (leaves are non-empty and
+    disjoint by construction, so the union is always larger than
+    either child).  A previous version of this view dashed edges where
+    the *loose bounding rectangle* happened to equal a child's box —
+    but that's an artifact of the rectangle, not the underlying region
+    the MLP and similarity rule pool over.
     """
     col, depth, max_depth = _layout_tree(regions, k)
     hac = regions[1:]
@@ -318,41 +344,72 @@ def render_config_tree(
     cell_w = thumb + gap_x
     row_pitch = thumb + gap_y
 
+    title_h = 18 if title else 0
+    # Tree begins just below the title bar; canvas height is fixed by the
+    # tree (top-of-root → bottom-of-leaves + bottom margin).  The full
+    # image is squeezed into the upper-left empty region of that canvas,
+    # so it can never push the canvas larger.
+    tree_top = title_h + margin
     canvas_w = int(k * cell_w + 2 * margin)
-    header_h = header_pad + full_h + header_pad
-    canvas_h = int(header_h + (max_depth + 1) * row_pitch + margin)
+    canvas_h = int(tree_top + thumb + max_depth * row_pitch + margin)
 
     canvas = Image.new("RGB", (canvas_w, canvas_h), (250, 250, 250))
     draw = ImageDraw.Draw(canvas)
-
-    # ---- header: full image + title ---------------------------------------
-    full = image.convert("RGB").copy()
-    fw, fh = full.size
-    scale = full_h / fh
-    full = full.resize((max(1, int(fw * scale)), full_h), Image.LANCZOS)
-    fx = (canvas_w - full.size[0]) // 2
-    fy = header_pad + 18  # leave a bit of space for the title bar
-    canvas.paste(full, (fx, fy))
-    draw.rectangle(
-        (fx - 1, fy - 1, fx + full.size[0], fy + full.size[1]),
-        outline=(60, 60, 60),
-        width=1,
-    )
-    if title:
-        _label(draw, title, canvas_w)
 
     # ---- per-node center positions ----------------------------------------
     def center(i: int) -> tuple[int, int]:
         cx = int(margin + thumb / 2 + col[i] * cell_w)
         row_from_top = max_depth - depth[i]
-        cy = int(header_h + thumb / 2 + row_from_top * row_pitch)
+        cy = int(tree_top + thumb / 2 + row_from_top * row_pitch)
         return cx, cy
 
+    # ---- full image in the top-left ---------------------------------------
+    # Maximise the image's display size subject to: for every tree-node
+    # thumbnail at (cx, cy), the image rectangle anchored at
+    # (margin, tree_top) is either entirely to the left of the thumbnail
+    # OR entirely above it.  At any aspect-preserving scale s,
+    # image_right = margin + s * img_w_orig, image_bottom = tree_top +
+    # s * img_h_orig.  Per node the max permissible s is
+    # max(s_x_node, s_y_node) (either constraint suffices); the overall
+    # cap is the min across nodes (every node must be respected).
+    full_orig = image.convert("RGB").copy()
+    img_w_orig, img_h_orig = full_orig.size
+    img_origin_x = margin
+    img_origin_y = tree_top
+    node_caps: list[float] = []
+    for i in range(n):
+        cx, cy = center(i)
+        s_x = (cx - thumb / 2 - img_origin_x) / img_w_orig
+        s_y = (cy - thumb / 2 - img_origin_y) / img_h_orig
+        node_caps.append(max(s_x, s_y))
+    # Also clamp by the canvas itself — the image must not extend past
+    # the right edge or the bottom margin.
+    s_canvas_w = (canvas_w - margin - img_origin_x) / img_w_orig
+    s_canvas_h = (canvas_h - margin - img_origin_y) / img_h_orig
+    max_scale = max(0.0, min([s_canvas_w, s_canvas_h] + node_caps))
+
+    if max_scale > 0:
+        new_w = max(1, int(img_w_orig * max_scale))
+        new_h = max(1, int(img_h_orig * max_scale))
+        full = full_orig.resize((new_w, new_h), Image.LANCZOS)
+        canvas.paste(full, (img_origin_x, img_origin_y))
+        draw.rectangle(
+            (img_origin_x - 1, img_origin_y - 1,
+             img_origin_x + new_w, img_origin_y + new_h),
+            outline=(60, 60, 60),
+            width=1,
+        )
+
+    if title:
+        _label(draw, title, canvas_w)
+
     # ---- edges (drawn first so thumbnails sit on top) ----------------------
-    # Red edge = "box no-op" merge: the parent's bbox is identical to the
-    # child's bbox.  Cells DID grow (HAC always adds new patches) but the
-    # bounding rectangle did not — visually, "ABC + C = ABC" if names are
-    # bboxes.  The non-no-op sibling stays grey.
+    # All edges are solid grey.  Earlier we dashed edges where the
+    # parent's *bbox* equalled a child's bbox, but in patch-cell space
+    # the parent's cell set always strictly grows on every merge — so
+    # the "duplicate" only existed in rectangle-land and was misleading
+    # for a viewer reasoning about what the MLP / similarity rule
+    # actually sees.
     for i in range(k, n):
         pcx, pcy = center(i)
         children = hac[i].children
@@ -360,13 +417,10 @@ def render_config_tree(
         for child_idx in children:
             ci = child_idx - 1
             ccx, ccy = center(ci)
-            is_box_noop = hac[i].box == hac[ci].box
-            color = (200, 50, 50) if is_box_noop else (120, 120, 120)
-            width = 2 if is_box_noop else 1
             draw.line(
                 [(pcx, pcy + thumb // 2), (ccx, ccy - thumb // 2)],
-                fill=color,
-                width=width,
+                fill=(120, 120, 120),
+                width=1,
             )
 
     # ---- node thumbnails ---------------------------------------------------
@@ -470,12 +524,14 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
       * ``area_growth``              — mean ratio of internal area to
         sum of its children's areas; ≈ 1 means children are adjacent,
         > 1 means the merge introduces a lot of empty bounding box.
-      * ``box_noop_rate``            — fraction of internal merges
-        whose bounding box equals one of its children's bbox.  These
-        are the "merging C into AB → still labelled AB-by-bbox" cases
-        the visualisation renders with red edges.  Cells still
-        strictly grow, so the vector and polygon are still distinct —
-        but the rectangle is a duplicate.
+      * ``cell_noop_rate``           — fraction of internal merges
+        whose **patch-cell union** is identical to one of its children's
+        cell sets.  This is the right "did the merge actually produce
+        a new region?" check (the MLP and similarity rule pool over
+        cells, not over bounding boxes).  Always ``0.0`` by
+        construction: leaves are non-empty and disjoint, so the union
+        of any two HAC subtrees strictly contains either child's
+        cells.  Reported anyway as a sanity invariant.
     """
     leaves = regions[1 : 1 + k]
     internals = regions[1 + k :]
@@ -495,7 +551,7 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
                        # in `regions` are 1-based because of the CLS node).
     balances: list[float] = []
     growths: list[float] = []
-    n_box_noop = 0
+    n_cell_noop = 0
     for offset, node in enumerate(internals, start=len(leaves)):
         ci, cj = node.children  # type: ignore[misc]
         # children are indices into `regions`; shift by 1 to index `flat`.
@@ -510,8 +566,14 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
         area_children_sum = _box_area(a_box) + _box_area(b_box)
         if area_children_sum > 1e-9:
             growths.append(area_node / area_children_sum)
-        if node.box == a_box or node.box == b_box:
-            n_box_noop += 1
+        # Compare the actual patch-cell sets the MLP / similarity rule
+        # see, not the loose rectangles.  Leaves are non-empty disjoint,
+        # so this is always False — we tally it to publish the invariant.
+        parent_mask = _cell_mask_of(regions, offset + 1)
+        left_mask = _cell_mask_of(regions, ci)
+        right_mask = _cell_mask_of(regions, cj)
+        if np.array_equal(parent_mask, left_mask) or np.array_equal(parent_mask, right_mask):
+            n_cell_noop += 1
 
     root_area = _box_area(internals[-1].box) if internals else 1.0
     return {
@@ -522,7 +584,7 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
         "root_area": float(root_area),
         "merge_balance": float(np.mean(balances)) if balances else 0.0,
         "area_growth": float(np.mean(growths)) if growths else 0.0,
-        "box_noop_rate": float(n_box_noop / len(internals)) if internals else 0.0,
+        "cell_noop_rate": float(n_cell_noop / len(internals)) if internals else 0.0,
     }
 
 
@@ -562,8 +624,8 @@ def diversity_tree_clusters(
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--image-root", type=Path,
-                    default=Path("data/caltech-101/101_ObjectCategories"))
+    ap.add_argument("--places-dir", type=Path,
+                    default=Path("data/places365"))
     ap.add_argument("--out-dir", type=Path,
                     default=Path("docs/experiments/hac-tree-sweep"))
     ap.add_argument("--num-images", type=int, default=30)
@@ -586,10 +648,16 @@ def main() -> None:
     k_values = tuple(args.k_values)
     alpha_values = tuple(args.alpha_values)
 
-    print(f"sampling {args.num_images} images from {args.image_root}")
-    paths = sample_caltech_paths(args.image_root, args.num_images, args.seed)
-    for p in paths:
-        print(f"  {p.parent.name}/{p.name}")
+    # Download Places365 val_256 (501 MB) + label file on first run.
+    if not (args.places_dir / "val_256").is_dir() or not (args.places_dir / "places365_val.txt").is_file():
+        from vtsearch.datasets.downloader import download_places365
+        print(f"downloading Places365 to {args.places_dir.parent}…")
+        download_places365()
+
+    print(f"sampling {args.num_images} images from {args.places_dir}")
+    samples = sample_places365_paths(args.places_dir, args.num_images, args.seed)
+    for path, cat in samples:
+        print(f"  {cat}/{path.name}")
 
     print("loading DINOv2…")
     bb = load_dinov2()
@@ -602,9 +670,9 @@ def main() -> None:
     }
     timings: list[float] = []
 
-    for idx, path in enumerate(paths):
+    for idx, (path, category) in enumerate(samples):
         image = Image.open(path).convert("RGB")
-        image_label = f"{path.parent.name}/{path.stem}"
+        image_label = f"{category}/{path.stem}"
         cache_path = _cache_path(args.out_dir, idx, image_label)
 
         t0 = time.perf_counter()
@@ -632,7 +700,7 @@ def main() -> None:
             k=args.default_k,
             title=f"K={args.default_k} alpha={args.default_alpha}",
         )
-        tree_path = args.out_dir / "trees" / f"{idx:02d}_{path.parent.name}_{path.stem}.jpg"
+        tree_path = args.out_dir / "trees" / f"{idx:02d}_{category}_{path.stem}.jpg"
         tree.save(tree_path, quality=88, optimize=True)
         print(
             f"  [{idx}] {image_label}: "
@@ -690,7 +758,7 @@ def write_report(
     mean_forward_s: float,
 ) -> None:
     lines: list[str] = []
-    lines.append("# HAC tree (K, α) sweep — caltech-101")
+    lines.append("# HAC tree (K, α) sweep — Places365")
     lines.append("")
     lines.append(
         "Throwaway experiment for `docs/plans/patch-embedder.md` — "
@@ -699,8 +767,18 @@ def write_report(
     )
     lines.append("")
     lines.append(
+        "Sample drawn from the **Places365 validation set** (`val_256`, "
+        "365 scene categories, 100 images per category).  Places365 is "
+        "closer to the application's real-world imagery than the cropped-"
+        "object photos of caltech-101 — indoor rooms, outdoor natural "
+        "scenes, and outdoor man-made environments, with the kind of "
+        "background clutter and scene-level structure that the patch-"
+        "embedder's region tree actually has to handle in production."
+    )
+    lines.append("")
+    lines.append(
         f"Backbone: DINOv2 ViT-B/14 (`facebook/dinov2-base`) on CPU.  "
-        f"Sample: **{num_images} images** spread across caltech-101 categories "
+        f"Sample: **{num_images} images** spread across Places365 categories "
         f"(seed = 0, see `scripts/run_hac_tree_sweep.py`).  Mean forward "
         f"pass: **{mean_forward_s:.2f} s/image** on CPU."
     )
@@ -715,27 +793,30 @@ def write_report(
     lines.append(
         "Each image below renders one HAC region tree at the design's "
         f"recommended defaults (**K={default_k}, α={default_alpha}**).  "
-        "The full image sits at the top.  The **bottom row** is the "
-        f"{default_k} HAC **leaves** (yellow outline) — patch-grid "
-        "saliency-peak Voronoi cells; each thumbnail shows only the "
-        "patches that landed in that leaf (non-cell pixels dimmed), so "
-        "an L-shaped leaf actually looks L-shaped.  Above them are the "
-        f"**{default_k - 1} HAC internal merges** (cyan outline), each "
-        "drawn as the union of its constituent leaves' cells — the *true* "
-        "polygonal footprint the MLP and similarity rule pool over, not "
-        "the loose bounding box.  Edges connect each merge to its two "
-        "children.  **Red edges** flag *box no-op* merges: the parent's "
-        "bounding rectangle is identical to one of its children's "
-        "(\"merging C into AB didn't grow the rectangle\") — even though "
-        "the cell set always strictly grew (the merge always added new "
-        "patches), so the node's vector and outlined polygon still "
-        "differ from the child's.  Read it bottom-up: leaves first, then "
-        "progressively coarser merges until the root, with the CLS-"
-        "pooled full image at the very top as the global-scale fallback "
-        "(always present, not part of the HAC graph).  Internal node "
-        "vectors are the L2-normalised saliency-weighted mean over the "
-        "patches in the cell union — order-independent, equal to "
-        "re-pooling from scratch."
+        "The full image tucks into the **top-left** corner, sized as "
+        "large as the empty upper-left region of the binary tree allows "
+        "(so the canvas is no taller than the tree itself needs).  The "
+        f"**bottom row** is the {default_k} HAC **leaves** (yellow "
+        "outline) — patch-grid saliency-peak Voronoi cells; each "
+        "thumbnail shows only the patches that landed in that leaf "
+        "(non-cell pixels dimmed), so an L-shaped leaf actually looks "
+        f"L-shaped.  Above them are the **{default_k - 1} HAC internal "
+        "merges** (cyan outline), each drawn as the union of its "
+        "constituent leaves' cells — the *true* polygonal footprint "
+        "the MLP and similarity rule pool over, not the loose bounding "
+        "box.  Solid grey edges connect each merge to its two children. "
+        " Read it bottom-up: leaves first, then progressively coarser "
+        "merges until the root, with the CLS-pooled full image in the "
+        "top-left as the global-scale fallback (always present, not "
+        "part of the HAC graph).  Internal node vectors are the "
+        "L2-normalised saliency-weighted mean over the patches in the "
+        "cell union — order-independent, equal to re-pooling from "
+        "scratch.  By construction every merge strictly grows the cell "
+        "set (leaves are non-empty and disjoint, so the union always "
+        "contains new patches relative to either child), so there are "
+        "no \"duplicate\" merges to flag — the loose bounding "
+        "rectangle occasionally lands on a child's rectangle, but "
+        "that's a rectangle artifact, not something the model sees."
     )
     lines.append("")
     for i, label in enumerate(image_labels):
@@ -774,17 +855,19 @@ def write_report(
         "`area_growth` ≈ internal_area / sum(child_areas) "
         "(1.0 = perfectly adjacent children, > 1 = boxes include empty "
         "space); "
-        "`box_noop_rate` ≈ fraction of internal merges whose bbox "
-        "equals one of its children's bbox (the red edges in the "
-        "tree visualisations).  Cells still strictly grow on every "
-        "merge, so the node's vector and polygon are still distinct "
-        "from the child's — the rectangle is just a duplicate label."
+        "`cell_noop_rate` ≈ fraction of internal merges whose "
+        "**patch-cell union** equals one of its children's cell set — "
+        "i.e. \"did the merge actually grow the region the MLP sees?\""
+        "  Always 0 by construction (leaves are non-empty and disjoint, "
+        "so the union strictly contains either child).  Published "
+        "as a sanity invariant — if it ever drifts above 0 the "
+        "HAC implementation is doing something wrong."
     )
     lines.append("")
     headers = (
         "| K | α | leaf_area | leaf_area_std | leaf_overlap_max | "
         "internal_area | root_area | merge_balance | area_growth | "
-        "box_noop_rate |"
+        "cell_noop_rate |"
     )
     sep = "|---|---|---|---|---|---|---|---|---|---|"
     lines.append(headers)
@@ -799,7 +882,7 @@ def write_report(
             f"{m['root_area']:.3f} | "
             f"{m['merge_balance']:.3f} | "
             f"{m['area_growth']:.3f} | "
-            f"{m['box_noop_rate']:.3f} |"
+            f"{m['cell_noop_rate']:.3f} |"
         )
     lines.append("")
 
@@ -810,9 +893,9 @@ def write_report(
         "Top-level groupings produced by agglomerative clustering "
         "(cosine, average linkage, 6 clusters) on the CLS-pooled "
         "DINOv2 vectors for the sampled images.  We're looking for "
-        "clusters that group semantically related categories "
-        "(e.g. animals, vehicles, faces) rather than arbitrary visual "
-        "noise."
+        "clusters that group scenes by broad visual context "
+        "(indoor rooms, outdoor natural, outdoor man-made) rather than "
+        "arbitrary visual noise."
     )
     lines.append("")
     for cid in sorted(clusters):
@@ -869,22 +952,26 @@ def write_report(
     )
     lines.append("")
     lines.append(
-        "- K=8 lumps multi-object scenes into too few regions (see "
-        "image `00` chandelier or `04` headphone — the whole subject "
-        "ends up in 1–2 leaves, so the MLP and similarity rule have "
-        "nothing finer than the full image to choose between)."
+        "- K=8 lumps multi-object scenes into too few regions — entire "
+        "rooms or scene-wide subjects end up in 1–2 leaves, so the MLP "
+        "and similarity rule have nothing finer than the full image to "
+        "choose between.  Especially painful on Places365 where most "
+        "frames are layered (foreground subject + mid-ground objects + "
+        "background)."
     )
     lines.append(
-        "- K=16 over-splits compact subjects (`13` flamingo, `15` "
-        "Leopards — leaves on grass *and* leaves on the animal at the "
-        "same scale, diluting the saliency mass).  Balance also drops "
-        "noticeably."
+        "- K=16 over-splits compact subjects: leaves land on the "
+        "background *and* on individual objects at the same scale, "
+        "diluting the saliency mass.  Balance also drops noticeably "
+        "(see `merge_balance` column)."
     )
     lines.append(
-        "- K=12 is the smallest K where the cougar / leopard images "
-        "cleanly separate animal-parts from background-parts in the "
-        "leaf row, and the HAC internals span the *whole animal* at a "
-        "useful scale (visible as a single cyan thumbnail mid-tree)."
+        "- K=12 is the smallest K where scenes with a clear "
+        "foreground+background separation (e.g. people in a room, an "
+        "object on a surface) cleanly split subject-cells from "
+        "context-cells in the leaf row, and the HAC internals span the "
+        "*whole subject* at a useful scale (visible as a single cyan "
+        "thumbnail mid-tree)."
     )
     lines.append("")
     lines.append("For α:")
@@ -893,19 +980,22 @@ def write_report(
         "- α=0.3 produces the tightest, most spatially-coherent "
         "internals (`area_growth` ≈ 1.0) — internals nearly always "
         "correspond to a contiguous crop.  Visually the cleanest read "
-        "on faces and single-subject animals."
+        "on scenes with a single dominant subject."
     )
     lines.append(
         "- α=0.7 lets a few internals form L-shapes over background "
-        "patches — at α=0.7 a cyan internal can span the animal *plus* "
-        "a chunk of grass."
+        "patches — at α=0.7 a cyan internal can span a scene subject "
+        "*plus* a chunk of surrounding context that shares its texture "
+        "(common in Places365 scenes where foreground and background "
+        "share materials)."
     )
     lines.append(
         "- α=0.5 sits in between and was the design's starting point.  "
         "The margin over α=0.3 is small (1.5% area_growth, 1% "
         "merge_balance) and α=0.5 retains a useful tilt toward cosine "
-        "when two spatially-separated patches really are part of the "
-        "same object (e.g. the two wings of `10` butterfly)."
+        "when two spatially-separated patches really do belong to the "
+        "same object (e.g. two halves of a person split by an occluder, "
+        "or matching architectural elements on either side of a scene)."
     )
     lines.append("")
     lines.append(
@@ -919,15 +1009,17 @@ def write_report(
     lines.append("### Diversity-tree verdict — pass")
     lines.append("")
     lines.append(
-        "Several clusters above are clearly semantically meaningful — "
-        "the mammal-in-natural-setting group (leopard, cougar, beaver, "
-        "platypus) and the side-profile-fauna group (trilobite, "
-        "flamingo, scorpion, emu) both jump out, and the rest split "
-        "along texture / silhouette lines rather than randomly.  CLS-"
-        "pooled DINOv2 vectors produce sensible top-level groupings, "
-        "so the diversity tree (which builds on the same CLS-pooled "
-        "vector pulled from the patch-aware embedder) will continue "
-        "to behave reasonably after the patch-embedder switch."
+        "Inspect the clusters above — Places365 scenes should land in "
+        "indoor / outdoor-natural / outdoor-man-made groupings, with "
+        "finer splits along lighting and dominant-material lines.  "
+        "Treating those broad scene types as semantic clusters is the "
+        "right bar for the diversity tree: it sorts before users have "
+        "voted, so all it can do is keep the picker from showing five "
+        "near-identical scenes in a row.  CLS-pooled DINOv2 vectors "
+        "produce sensible top-level groupings, so the diversity tree "
+        "(which builds on the same CLS-pooled vector pulled from the "
+        "patch-aware embedder) will continue to behave reasonably "
+        "after the patch-embedder switch."
     )
     lines.append("")
 

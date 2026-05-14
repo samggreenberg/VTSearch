@@ -362,29 +362,34 @@ class TestVideo2ImageMediaConverter:
     def test_source_and_target_types(self):
         from vtsearch.converters.video2image import Video2ImageMediaConverter
 
-        c = Video2ImageMediaConverter(n_clips=5)
+        c = Video2ImageMediaConverter()
         assert c.source_type == "video"
         assert c.target_type == "image"
 
-    def test_default_n_clips(self):
+    def test_default_n_clips_is_field_default(self):
+        """n_clips is a PluginField, not a constructor arg.  Its declared
+        default flows in through get_param() when the caller passes no
+        params."""
         from vtsearch.converters.video2image import Video2ImageMediaConverter
 
         c = Video2ImageMediaConverter()
-        assert c.n_clips == 10
+        n_clips_field = next(f for f in c.fields if f.key == "n_clips")
+        assert n_clips_field.default == "10"
+        assert c.get_param({}, "n_clips") == "10"
 
-    def test_custom_n_clips(self):
+    def test_custom_n_clips_via_params(self):
         from vtsearch.converters.video2image import Video2ImageMediaConverter
 
-        c = Video2ImageMediaConverter(n_clips=3)
-        assert c.n_clips == 3
+        c = Video2ImageMediaConverter()
+        assert c.get_param({"n_clips": "3"}, "n_clips") == "3"
 
     def test_convert_video_to_images(self):
         from vtsearch.converters.video2image import Video2ImageMediaConverter
 
         video_bytes = _make_minimal_video(frames=30)
         media = {"filename": "test.mp4", "media_bytes": video_bytes}
-        c = Video2ImageMediaConverter(n_clips=3)
-        results = c.convert(media)
+        c = Video2ImageMediaConverter()
+        results = c.convert(media, {"n_clips": "3"})
         assert len(results) == 3
         for i, r in enumerate(results):
             assert r["filename"] == f"test_clip_{i + 1}.png"
@@ -399,8 +404,8 @@ class TestVideo2ImageMediaConverter:
 
         video_bytes = _make_minimal_video(frames=3)
         media = {"filename": "short.mp4", "media_bytes": video_bytes}
-        c = Video2ImageMediaConverter(n_clips=10)
-        results = c.convert(media)
+        c = Video2ImageMediaConverter()
+        results = c.convert(media, {"n_clips": "10"})
         # Should produce min(10, 3) = 3 clips
         assert len(results) <= 3
 
@@ -411,8 +416,8 @@ class TestVideo2ImageMediaConverter:
         video_path = tmp_path / "from_path.mp4"
         video_path.write_bytes(video_bytes)
         media = {"filename": "from_path.mp4", "media_bytes": None, "media_path": str(video_path)}
-        c = Video2ImageMediaConverter(n_clips=2)
-        results = c.convert(media)
+        c = Video2ImageMediaConverter()
+        results = c.convert(media, {"n_clips": "2"})
         assert len(results) == 2
 
     def test_convert_no_data(self):

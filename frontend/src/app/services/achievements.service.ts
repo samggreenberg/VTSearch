@@ -23,16 +23,32 @@ export interface PendingAnnouncement {
   threshold: number;
 }
 
+export interface DocInfo {
+  id: string;
+  name: string;
+  path: string;
+  read: boolean;
+}
+
 export interface AchievementsState {
   tier_names: string[];
   achievements: AchievementInfo[];
   pending_announcements: PendingAnnouncement[];
+  docs: DocInfo[];
+}
+
+export interface PhraseCheckResult {
+  matched: boolean;
+  doc_id: string | null;
+  doc_name: string | null;
+  already_read: boolean;
 }
 
 const EMPTY_STATE: AchievementsState = {
   tier_names: [],
   achievements: [],
   pending_announcements: [],
+  docs: [],
 };
 
 /**
@@ -96,5 +112,39 @@ export class AchievementsService {
       })
       .pipe(catchError(() => of(null)))
       .subscribe(() => this.refresh());
+  }
+
+  /**
+   * Submit a Readme Reader phrase guess.  Returns the server's classification
+   * (matched / which doc / whether already credited) and refreshes the state
+   * so the docs panel reflects the new read state on success.
+   */
+  checkPhrase(phrase: string): Observable<PhraseCheckResult> {
+    return new Observable<PhraseCheckResult>((subscriber) => {
+      this.http
+        .post<PhraseCheckResult>('/api/achievements/check-phrase', { phrase })
+        .pipe(
+          catchError(() =>
+            of<PhraseCheckResult>({
+              matched: false,
+              doc_id: null,
+              doc_name: null,
+              already_read: false,
+            }),
+          ),
+        )
+        .subscribe((result) => {
+          if (result.matched && !result.already_read) {
+            this.refresh();
+          }
+          subscriber.next(result);
+          subscriber.complete();
+        });
+    });
+  }
+
+  /** Absolute URL to the raw markdown for a doc. */
+  docRawUrl(docId: string): string {
+    return `/api/achievements/docs/${encodeURIComponent(docId)}/raw`;
   }
 }

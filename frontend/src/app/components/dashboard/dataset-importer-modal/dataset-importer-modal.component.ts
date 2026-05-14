@@ -6,7 +6,7 @@ import { FileBrowserComponent } from '../../file-browser/file-browser.component'
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo } from '../../../models/api.models';
+import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 @Component({
@@ -77,6 +77,16 @@ export class DatasetImporterModalComponent implements OnInit {
     { initialSort: 'num_files', storageKey: DatasetImporterModalComponent.DEMO_COL_ORDER_KEY },
   );
 
+  /** Source-specs editor state for the form view (server_files +
+   *  any future ``multi_media=True`` form-style importer). */
+  formSourceSpecs: SourceSpec[] = [];
+
+  /** Source-specs editor state for the local-folder / local-files
+   *  views.  These uploads go through ``/api/dataset/import-local-folder``,
+   *  which delegates to server_folder — so the same multi-media flow
+   *  applies. */
+  lfSourceSpecs: SourceSpec[] = [];
+
   // Local folder upload state — files come from the browser machine
   lfFiles: File[] = [];
   lfMediaType = '';
@@ -125,6 +135,10 @@ export class DatasetImporterModalComponent implements OnInit {
   sfDatasetName = '';
   /** Whether the user has manually edited :prop:`sfDatasetName`. */
   private sfDatasetNameDirty = false;
+  /** Multi-media import rows for the server_folder picker.  Each row is a
+   *  ``(source_type, converter|null, params)`` triple — see
+   *  ``docs/plans/multi-media-import.md``. */
+  sfSourceSpecs: SourceSpec[] = [];
 
   // Dynamic-options cache for the generic form view.  Keyed by ImporterField.key.
   /** Options last fetched from the backend for dynamic-options fields. */
@@ -319,6 +333,10 @@ export class DatasetImporterModalComponent implements OnInit {
       this.loadEmbedders(defaultType);
     }
 
+    // Reset the multi-media source-specs list so this picker opens with
+    // a single "include directly" row for the active output type.
+    this.resetFormSourceSpecs();
+
     // Fetch initial options for dynamic fields whose deps are already filled.
     for (const field of importer.fields || []) {
       if (field.dynamic_options) {
@@ -331,6 +349,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.formValues['media_type'] = mediaType;
     this.loadClippers(mediaType);
     this.loadEmbedders(mediaType);
+    this.resetFormSourceSpecs();
     this.onFormFieldChanged('media_type');
   }
 
@@ -750,6 +769,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
     this.lfLoadEmbedders(this.lfMediaType);
     this.lfLoadClippers(this.lfMediaType);
+    this.lfResetSourceSpecs();
   }
 
   lfOnFolderSelected(event: Event): void {
@@ -798,6 +818,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.lfMediaType = mediaType;
     this.lfLoadEmbedders(mediaType);
     this.lfLoadClippers(mediaType);
+    this.lfResetSourceSpecs();
   }
 
   private lfLoadEmbedders(mediaType: string): void {
@@ -905,6 +926,10 @@ export class DatasetImporterModalComponent implements OnInit {
     if (this.lfPickerKind === 'files' && this.lfVectorsFile) {
       formData.append('vectors_file', this.lfVectorsFile, this.lfVectorsFile.name);
     }
+    if (this.lfSourceSpecs.length > 0) {
+      // Multipart form fields are flat strings; encode as JSON.
+      formData.append('source_specs', JSON.stringify(this.lfSourceSpecs));
+    }
 
     this.datasetsApi.importLocalFolder(formData).subscribe({
       next: () => {
@@ -946,6 +971,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
     this.sfLoadEmbedders(this.sfMediaType);
     this.sfLoadClippers(this.sfMediaType);
+    this.sfResetSourceSpecs();
     this.sfLoadDirectory('');
   }
 
@@ -1013,6 +1039,214 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfMediaType = mediaType;
     this.sfLoadEmbedders(mediaType);
     this.sfLoadClippers(mediaType);
+    this.sfResetSourceSpecs();
+  }
+
+  // -------------------------------------------------------------------
+  // Source-specs editor — shared logic across the three picker views.
+  //
+  // Each view ("sf" / "lf" / "form") owns its own SourceSpec[] and its
+  // own "output media-type" form value.  The helpers below take that
+  // state in as arguments so the same edit logic works for all three.
+  // -------------------------------------------------------------------
+
+  /** Map a folder_import_name (e.g. "images") to a type_id (e.g. "image"). */
+  private toTypeId(folderName: string): string {
+    if (!folderName) return '';
+    const mt = this.mediaTypes.find((m) => m.folder_import_name === folderName);
+    return mt?.type_id || folderName;
+  }
+
+  /** Converters whose ``target_type`` matches *outputTypeId*.  The map
+   *  comes from the importer's ``to_dict()`` so each importer can
+   *  declare its own filtered list. */
+  availableConvertersFor(importerName: string, outputTypeId: string): ConverterInfo[] {
+    const importer = this.importers.find((i) => i.name === importerName);
+    const byType = (importer?.available_converters_by_media_type as Record<string, ConverterInfo[]> | undefined) || {};
+    return byType[outputTypeId] || [];
+  }
+
+  /** Build the "default" spec list for a freshly-opened picker: one
+   *  "include directly" row whose source matches the output type. */
+  private defaultSpecListFor(outputTypeId: string): SourceSpec[] {
+    return outputTypeId
+      ? [{ source_type: outputTypeId, converter: null, params: {} }]
+      : [];
+  }
+
+  /** Compute the params dict pre-filled with a converter's declared
+   *  field defaults — used when adding a new converter row. */
+  private defaultConverterParams(converter: ConverterInfo): Record<string, string> {
+    const params: Record<string, string> = {};
+    for (const f of converter.fields || []) {
+      params[f.key] = String(f.default ?? '');
+    }
+    return params;
+  }
+
+  /** Append a converter row to *specs*; returns the new list. */
+  private addConverterRowTo(specs: SourceSpec[], converters: ConverterInfo[]): SourceSpec[] {
+    if (converters.length === 0) return specs;
+    const first = converters[0];
+    return [
+      ...specs,
+      {
+        source_type: first.source_type,
+        converter: first.name,
+        params: this.defaultConverterParams(first),
+      },
+    ];
+  }
+
+  /** Drop the row at *index* from *specs*; returns the new list. */
+  private removeSpecFrom(specs: SourceSpec[], index: number): SourceSpec[] {
+    return specs.filter((_, i) => i !== index);
+  }
+
+  /** Change the converter on row *index*; returns the new list. */
+  private changeConverterIn(
+    specs: SourceSpec[],
+    index: number,
+    converterName: string,
+    converters: ConverterInfo[],
+  ): SourceSpec[] {
+    const converter = converters.find((c) => c.name === converterName);
+    if (!converter) return specs;
+    const next = [...specs];
+    next[index] = {
+      source_type: converter.source_type,
+      converter: converter.name,
+      params: this.defaultConverterParams(converter),
+    };
+    return next;
+  }
+
+  /** Set a single converter param on row *index*; returns the new list. */
+  private setParamOn(specs: SourceSpec[], index: number, key: string, value: string): SourceSpec[] {
+    const row = specs[index];
+    if (!row) return specs;
+    const next = [...specs];
+    next[index] = { ...row, params: { ...row.params, [key]: value } };
+    return next;
+  }
+
+  /** Look up the converter metadata for a spec row. */
+  private converterFor(spec: SourceSpec, converters: ConverterInfo[]): ConverterInfo | null {
+    if (!spec || !spec.converter) return null;
+    return converters.find((c) => c.name === spec.converter) || null;
+  }
+
+  // -- sf-* (server_folder picker) ------------------------------------
+
+  private sfOutputTypeId(): string {
+    return this.toTypeId(this.sfMediaType);
+  }
+
+  get sfAvailableConverters(): ConverterInfo[] {
+    return this.availableConvertersFor('server_folder', this.sfOutputTypeId());
+  }
+
+  private sfResetSourceSpecs(): void {
+    this.sfSourceSpecs = this.defaultSpecListFor(this.sfOutputTypeId());
+  }
+
+  sfAddConverterRow(): void {
+    this.sfSourceSpecs = this.addConverterRowTo(this.sfSourceSpecs, this.sfAvailableConverters);
+  }
+
+  sfRemoveSpec(index: number): void {
+    this.sfSourceSpecs = this.removeSpecFrom(this.sfSourceSpecs, index);
+  }
+
+  sfOnConverterChange(index: number, converterName: string): void {
+    this.sfSourceSpecs = this.changeConverterIn(
+      this.sfSourceSpecs, index, converterName, this.sfAvailableConverters,
+    );
+  }
+
+  sfOnConverterParamChange(index: number, key: string, value: string): void {
+    this.sfSourceSpecs = this.setParamOn(this.sfSourceSpecs, index, key, value);
+  }
+
+  sfConverterFor(index: number): ConverterInfo | null {
+    return this.converterFor(this.sfSourceSpecs[index], this.sfAvailableConverters);
+  }
+
+  // -- lf-* (local_folder / local_files picker) -----------------------
+  //
+  // Local uploads stream to the server-side temp dir and re-enter
+  // server_folder.run() — so the converter list is the same one
+  // server_folder advertises in its to_dict().
+
+  private lfOutputTypeId(): string {
+    return this.toTypeId(this.lfMediaType);
+  }
+
+  get lfAvailableConverters(): ConverterInfo[] {
+    return this.availableConvertersFor('server_folder', this.lfOutputTypeId());
+  }
+
+  private lfResetSourceSpecs(): void {
+    this.lfSourceSpecs = this.defaultSpecListFor(this.lfOutputTypeId());
+  }
+
+  lfAddConverterRow(): void {
+    this.lfSourceSpecs = this.addConverterRowTo(this.lfSourceSpecs, this.lfAvailableConverters);
+  }
+
+  lfRemoveSpec(index: number): void {
+    this.lfSourceSpecs = this.removeSpecFrom(this.lfSourceSpecs, index);
+  }
+
+  lfOnConverterChange(index: number, converterName: string): void {
+    this.lfSourceSpecs = this.changeConverterIn(
+      this.lfSourceSpecs, index, converterName, this.lfAvailableConverters,
+    );
+  }
+
+  lfOnConverterParamChange(index: number, key: string, value: string): void {
+    this.lfSourceSpecs = this.setParamOn(this.lfSourceSpecs, index, key, value);
+  }
+
+  lfConverterFor(index: number): ConverterInfo | null {
+    return this.converterFor(this.lfSourceSpecs[index], this.lfAvailableConverters);
+  }
+
+  // -- form-* (generic form view, e.g. server_files) ------------------
+
+  private formOutputTypeId(): string {
+    return this.toTypeId(String(this.formValues['media_type'] || ''));
+  }
+
+  get formAvailableConverters(): ConverterInfo[] {
+    if (!this.selectedImporter) return [];
+    return this.availableConvertersFor(this.selectedImporter.name, this.formOutputTypeId());
+  }
+
+  resetFormSourceSpecs(): void {
+    this.formSourceSpecs = this.defaultSpecListFor(this.formOutputTypeId());
+  }
+
+  formAddConverterRow(): void {
+    this.formSourceSpecs = this.addConverterRowTo(this.formSourceSpecs, this.formAvailableConverters);
+  }
+
+  formRemoveSpec(index: number): void {
+    this.formSourceSpecs = this.removeSpecFrom(this.formSourceSpecs, index);
+  }
+
+  formOnConverterChange(index: number, converterName: string): void {
+    this.formSourceSpecs = this.changeConverterIn(
+      this.formSourceSpecs, index, converterName, this.formAvailableConverters,
+    );
+  }
+
+  formOnConverterParamChange(index: number, key: string, value: string): void {
+    this.formSourceSpecs = this.setParamOn(this.formSourceSpecs, index, key, value);
+  }
+
+  formConverterFor(index: number): ConverterInfo | null {
+    return this.converterFor(this.formSourceSpecs[index], this.formAvailableConverters);
   }
 
   private sfLoadEmbedders(mediaType: string): void {
@@ -1165,6 +1399,9 @@ export class DatasetImporterModalComponent implements OnInit {
         params['clipper_params'] = { ...this.sfClipperParamValues };
       }
     }
+    if (this.sfSourceSpecs.length > 0) {
+      params['source_specs'] = this.sfSourceSpecs;
+    }
 
     this.datasetsApi.runImporter('server_folder', params).subscribe({
       next: () => {
@@ -1201,6 +1438,9 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.selectedEmbedder) {
       submitValues['embedder'] = this.selectedEmbedder;
+    }
+    if (this.selectedImporter.multi_media && this.formSourceSpecs.length > 0) {
+      submitValues['source_specs'] = this.formSourceSpecs;
     }
 
     // If there's a file field, use loadFile; otherwise runImporter

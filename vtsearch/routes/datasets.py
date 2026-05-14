@@ -409,7 +409,7 @@ def stage_import(importer_name: str):
 
     # Pass through optional keys not declared as plugin fields.
     file_keys = {f.key for f in importer.fields if f.field_type == "file"}
-    for key in ("converters",):
+    for key in ("converters", "source_specs"):
         val = get_request_field(key, bool(file_keys))
         if val:
             field_values[key] = val
@@ -515,7 +515,7 @@ def import_dataset(importer_name: str):
 
     # Pass through optional keys not declared as plugin fields.
     file_keys = {f.key for f in importer.fields if f.field_type == "file"}
-    for key in ("converters", "clipper", "embedder"):
+    for key in ("converters", "source_specs", "clipper", "embedder"):
         val = get_request_field(key, bool(file_keys))
         if val:
             field_values[key] = val
@@ -622,6 +622,7 @@ def import_local_folder():
     embedder = (request.form.get("embedder") or "").strip()
     clipper = (request.form.get("clipper") or "").strip()
     converters = (request.form.get("converters") or "").strip()
+    source_specs = (request.form.get("source_specs") or "").strip()
     recursive_raw = (request.form.get("recursive") or "true").strip().lower()
     recursive = recursive_raw not in ("false", "0", "no", "off")
     user_dataset_name = (request.form.get("dataset_name") or "").strip()
@@ -694,6 +695,8 @@ def import_local_folder():
             field_values["clipper_params"] = clipper_params
     if converters:
         field_values["converters"] = converters
+    if source_specs:
+        field_values["source_specs"] = source_specs
 
     # Origin is intentionally synthetic — the on-disk path is a temp dir we
     # are about to delete, so storing it on each media would be misleading
