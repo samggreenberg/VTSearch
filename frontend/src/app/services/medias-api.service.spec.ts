@@ -21,11 +21,20 @@ describe('MediasApiService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('getMedias should GET /api/medias', () => {
-    const mock = [{ id: 1, type: 'audio', filename: 'a.wav', md5: 'abc', custom_metadata: {} }];
-    service.getMedias().subscribe(data => expect(data).toEqual(mock));
-    const req = httpMock.expectOne('/api/medias');
+  it('getMediaIds should GET /api/medias/ids', () => {
+    const mock = { ids: [1, 2], type: 'audio', embedder: 'laion-clap-large' };
+    service.getMediaIds().subscribe(data => expect(data).toEqual(mock));
+    const req = httpMock.expectOne('/api/medias/ids');
     expect(req.request.method).toBe('GET');
+    req.flush(mock);
+  });
+
+  it('getMediasBatch should POST ids to /api/medias/batch', () => {
+    const mock = [{ id: 1, type: 'audio', filename: 'a.wav', md5: 'abc', custom_metadata: {} }];
+    service.getMediasBatch([1]).subscribe(data => expect(data).toEqual(mock));
+    const req = httpMock.expectOne('/api/medias/batch');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ ids: [1] });
     req.flush(mock);
   });
 

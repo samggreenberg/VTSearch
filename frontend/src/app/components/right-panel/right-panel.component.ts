@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DetectorsApiService } from '../../services/detectors-api.service';
-import { LabelElement, MediaItem } from '../../models/api.models';
+import { LabelElement } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
@@ -38,7 +38,8 @@ export interface TrainModeContext {
   styleUrl: './right-panel.component.scss',
 })
 export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
-  @Input() medias: MediaItem[] = [];
+  /** Media type of the active dataset; drives the right-pane view mode. */
+  @Input() mediaType = '';
   @Input() trainMode: TrainModeContext | null = null;
   @Input() focusMode: 'click' | 'hover' = 'click';
   /** 'label' = Labeling mode (detector export allowed), 'find' = Finding mode (no detector export). */
@@ -97,8 +98,8 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['medias'] && this.medias.length > 0) {
-      const newType = this.medias[0].type;
+    if (changes['mediaType'] && this.mediaType) {
+      const newType = this.mediaType;
       if (newType !== this.currentMediaType) {
         this.currentMediaType = newType;
         this.viewMode = this.viewModeRightDict[newType] ?? 'grid';

@@ -18,6 +18,19 @@ export interface MediaItem {
   embedder?: string;
 }
 
+/**
+ * Lightweight snapshot returned by ``GET /api/medias/ids``.  Carries just
+ * the ID list plus the first item's ``type`` / ``embedder`` so the UI can
+ * size virtual scrollers and configure type-dependent controls without
+ * fetching full metadata for every item.  Full per-item metadata is
+ * resolved lazily through ``POST /api/medias/batch``.
+ */
+export interface MediaIdsResponse {
+  ids: number[];
+  type: string | null;
+  embedder: string | null;
+}
+
 export interface TextResponse {
   content: string;
   word_count?: number;

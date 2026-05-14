@@ -145,13 +145,9 @@ export class AppComponent {
   }
 
   private inferMediaType(): string {
-    // From labeling view: use the media type of loaded medias
+    // From labeling view: use the media type of the active dataset.
     if (this.isOnLabelView) {
-      const medias = this.mediaState.medias;
-      if (medias.length > 0) {
-        return medias[0].type;
-      }
-      return '';
+      return this.mediaState.mediaType;
     }
     // From dashboard: if all datasets and models share a single media type, use it
     const datasets = this.datasetState.datasets;

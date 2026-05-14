@@ -7,11 +7,11 @@
     <div class="tab-panel-manual" role="region" aria-label="Find results">
       <div class="images-header">
         <h3 class="images-header-title">
-          {{ mediaTypeName }}s ({{ medias.length | number }})
+          {{ mediaTypeName }}s ({{ mediaIds.length | number }})
         </h3>
         <vt-view-controls
           side="left"
-          [currentMediaType]="medias.length > 0 ? medias[0].type : ''"
+          [currentMediaType]="mediaType"
           class="view-controls-slot" />
 
       </div>
@@ -28,7 +28,7 @@
 
       <div class="media-list-container">
         <vt-media-list
-          [medias]="medias"
+          [mediaIds]="mediaIds"
           [sortOrder]="sortOrder"
           [threshold]="threshold"
           [selectedId]="selectedId"
@@ -47,7 +47,7 @@
           [selectedId]="selectedId"
           [goodVotes]="goodVotes"
           [badVotes]="badVotes"
-          [totalCount]="medias.length"
+          [totalCount]="mediaIds.length"
           (stripeClick)="onStripeClick($event)"
         />
       </div>
@@ -114,17 +114,17 @@
 
         <div class="images-header">
           <h3 class="images-header-title">
-            {{ mediaTypeName }}s ({{ medias.length | number }})
+            {{ mediaTypeName }}s ({{ mediaIds.length | number }})
           </h3>
           <vt-view-controls
             side="left"
-            [currentMediaType]="medias.length > 0 ? medias[0].type : ''"
+            [currentMediaType]="mediaType"
             class="view-controls-slot" />
         </div>
 
         <div class="media-list-container">
           <vt-media-list
-            [medias]="medias"
+            [mediaIds]="mediaIds"
             [sortOrder]="sortOrder"
             [threshold]="threshold"
             [selectedId]="selectedId"
@@ -143,7 +143,7 @@
             [selectedId]="selectedId"
             [goodVotes]="goodVotes"
             [badVotes]="badVotes"
-            [totalCount]="medias.length"
+            [totalCount]="mediaIds.length"
             (stripeClick)="onStripeClick($event)"
           />
         </div>

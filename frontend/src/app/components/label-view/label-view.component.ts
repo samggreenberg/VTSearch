@@ -120,25 +120,27 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((modelId) => this.refreshTrainableModelName(modelId));
     this.refreshTrainableModelName(this.activeContext.modelId);
 
-    this.mediaState.medias$
+    this.mediaState.mediaType$
       .pipe(takeUntil(this.destroy$))
-      .subscribe((medias) => {
-        if (medias.length > 0) {
-          const newType = medias[0].type;
-          if (newType !== this.currentMediaType) {
-            this.currentMediaType = newType;
-            this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
-            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
-            this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
-            this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
-            this.applyPanelPx(newType);
-          }
+      .subscribe((newType) => {
+        if (newType && newType !== this.currentMediaType) {
+          this.currentMediaType = newType;
+          this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
+          this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
+          this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
+          this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
+          this.applyPanelPx(newType);
         }
-        if (this.autopilotTextSortPending && medias.length > 0) {
+      });
+
+    this.mediaState.mediaIds$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((ids) => {
+        if (this.autopilotTextSortPending && ids.length > 0) {
           this.autopilotTextSortPending = false;
           this.triggerAutopilotTextSort();
         }
-        if (this.autopilotMediaSortPending && medias.length > 0) {
+        if (this.autopilotMediaSortPending && ids.length > 0) {
           this.autopilotMediaSortPending = false;
           this.triggerAutopilotMediaSort();
         }
@@ -628,13 +630,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       const textQuery = this.labelSession.textQuery;
       const mediaExample = this.labelSession.mediaExample;
       if (textQuery) {
-        if (this.mediaState.medias.length > 0) {
+        if (this.mediaState.mediaIds.length > 0) {
           this.triggerAutopilotTextSort();
         } else {
           this.autopilotTextSortPending = true;
         }
       } else if (mediaExample) {
-        if (this.mediaState.medias.length > 0) {
+        if (this.mediaState.mediaIds.length > 0) {
           this.triggerAutopilotMediaSort();
         } else {
           this.autopilotMediaSortPending = true;

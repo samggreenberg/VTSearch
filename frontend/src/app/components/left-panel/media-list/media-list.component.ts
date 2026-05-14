@@ -8,6 +8,7 @@ import {
   AfterViewChecked,
   OnChanges,
   OnDestroy,
+  OnInit,
   SimpleChanges,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -19,6 +20,11 @@ import { MediaItem } from '../../../models/api.models';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { SortedItem } from '../left-panel.component';
 import { prefersReducedMotion } from '../../../utils/reduced-motion';
+
+/** Build a placeholder MediaItem for IDs whose metadata is not yet cached. */
+function placeholderMedia(id: number): MediaItem {
+  return { id, type: '', filename: '', md5: '', custom_metadata: {} };
+}
 
 /** Threshold above which we switch from plain DOM to CDK virtual scrolling (list mode only). */
 const VIRTUAL_SCROLL_THRESHOLD = 500;
@@ -34,8 +40,8 @@ const PREFETCH_BUFFER = 50;
   templateUrl: './media-list.component.html',
   styleUrl: './media-list.component.scss',
 })
-export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestroy {
-  @Input() medias: MediaItem[] = [];
+export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, OnDestroy {
+  @Input() mediaIds: number[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
   @Input() selectedId: number | null = null;
@@ -73,6 +79,14 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
     return this.viewMode === 'list' && this.cachedOrderedItems.length > VIRTUAL_SCROLL_THRESHOLD;
   }
 
+  ngOnInit(): void {
+    // Re-render when the metadata cache has new entries so cached items
+    // replace their placeholders.
+    this.metadataCache.version$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.rebuildOrderedItems());
+  }
+
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['selectedId'] && !changes['selectedId'].firstChange) {
       this.pendingScrollToSelected = true;
@@ -87,7 +101,7 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
 
     // Rebuild cache only when relevant inputs change.
     if (
-      changes['medias'] ||
+      changes['mediaIds'] ||
       changes['sortOrder'] ||
       changes['threshold'] ||
       changes['showScores'] ||
@@ -97,15 +111,18 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
     }
   }
 
+  private lookupMedia(id: number): MediaItem {
+    return this.metadataCache.get(id) ?? placeholderMedia(id);
+  }
+
   private rebuildOrderedItems(): void {
-    const mediaMap = new Map(this.medias.map((m) => [m.id, m]));
     const items: { media: MediaItem; score: number | null; showThreshold: boolean; bestRegion: number[] | null }[] = [];
 
     if (this.sortOrder && this.sortOrder.length > 0) {
+      const knownIds = new Set(this.mediaIds);
       let thresholdInserted = false;
       for (const sorted of this.sortOrder) {
-        const media = mediaMap.get(sorted.id);
-        if (!media) continue;
+        if (!knownIds.has(sorted.id)) continue;
 
         let showThreshold = false;
         if (!thresholdInserted && this.threshold !== null && sorted.score < this.threshold) {
@@ -114,15 +131,15 @@ export class MediaListComponent implements AfterViewChecked, OnChanges, OnDestro
         }
 
         items.push({
-          media,
+          media: this.lookupMedia(sorted.id),
           score: this.showScores ? sorted.score : null,
           showThreshold,
           bestRegion: sorted.bestRegion ?? null,
         });
       }
     } else {
-      for (const media of this.medias) {
-        items.push({ media, score: null, showThreshold: false, bestRegion: null });
+      for (const id of this.mediaIds) {
+        items.push({ media: this.lookupMedia(id), score: null, showThreshold: false, bestRegion: null });
       }
     }
 

@@ -1,7 +1,9 @@
 <div class="layout" #layout>
   <div class="panel-left">
     <vt-left-panel
-      [medias]="mediaState.medias"
+      [mediaIds]="mediaState.mediaIds"
+      [mediaType]="mediaState.mediaType"
+      [embedder]="mediaState.embedder"
       [sortOrder]="sortState.sortOrder"
       [threshold]="sortState.threshold"
       [selectedId]="mediaState.selectedId"
@@ -60,7 +62,7 @@
   ></div>
   <div class="panel-right">
     <vt-right-panel
-      [medias]="mediaState.medias"
+      [mediaType]="mediaState.mediaType"
       [focusMode]="focusModeRight"
       [trainableModelName]="trainableModelName"
       (mediaSelected)="onMediaSelect($event)"

@@ -75,20 +75,16 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
 
-    // When medias arrive, run the find-label scoring
-    this.mediaState.medias$
+    this.mediaState.mediaType$
       .pipe(takeUntil(this.destroy$))
-      .subscribe((medias) => {
-        if (medias.length > 0) {
-          const newType = medias[0].type;
-          if (newType !== this.currentMediaType) {
-            this.currentMediaType = newType;
-            this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
-            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
-            this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
-            this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
-            this.applyPanelPx(newType);
-          }
+      .subscribe((newType) => {
+        if (newType && newType !== this.currentMediaType) {
+          this.currentMediaType = newType;
+          this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
+          this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
+          this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
+          this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
+          this.applyPanelPx(newType);
         }
       });
 

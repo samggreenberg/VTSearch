@@ -8,7 +8,7 @@ import { MediaListComponent } from './media-list/media-list.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
-import { MediaItem, LabelingStatusResponse, MediaTypeInfo, EmbedderInfo } from '../../models/api.models';
+import { LabelingStatusResponse, MediaTypeInfo, EmbedderInfo } from '../../models/api.models';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 
@@ -32,7 +32,11 @@ export type { SortMode, SelectMode, SortedItem };
   styleUrl: './left-panel.component.scss',
 })
 export class LeftPanelComponent implements OnInit, OnChanges {
-  @Input() medias: MediaItem[] = [];
+  @Input() mediaIds: number[] = [];
+  /** Media type of the active dataset (taken from the first item). */
+  @Input() mediaType = '';
+  /** Embedder name of the active dataset (taken from the first item). */
+  @Input() embedder = '';
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
   @Input() selectedId: number | null = null;
@@ -123,14 +127,16 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['medias']) {
+    if (changes['mediaType']) {
       this.updateMediaTypeName();
+    }
+    if (changes['embedder']) {
       this.updateTextSortAvailable();
     }
   }
 
   private updateMediaTypeName(): void {
-    const typeId = this.medias.length > 0 ? this.medias[0].type : '';
+    const typeId = this.mediaType;
     if (typeId && typeId !== this.currentTypeId) {
       this.currentTypeId = typeId;
       const info = this.mediaTypeInfos.find((mt) => mt.type_id === typeId);
@@ -145,12 +151,11 @@ export class LeftPanelComponent implements OnInit, OnChanges {
    * hide a working feature.
    */
   private updateTextSortAvailable(): void {
-    const embedderName = this.medias.length > 0 ? this.medias[0].embedder : '';
-    if (!embedderName || this.embedderInfos.length === 0) {
+    if (!this.embedder || this.embedderInfos.length === 0) {
       this.textSortAvailable = true;
       return;
     }
-    const info = this.embedderInfos.find((e) => e.name === embedderName);
+    const info = this.embedderInfos.find((e) => e.name === this.embedder);
     this.textSortAvailable = info ? info.supports_text !== false : true;
   }
 

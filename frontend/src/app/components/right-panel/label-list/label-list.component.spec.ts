@@ -1,11 +1,15 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { LabelListComponent, LabelEntry } from './label-list.component';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { LabelListComponent } from './label-list.component';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { MediaItem } from '../../../models/api.models';
 
 describe('LabelListComponent', () => {
   let component: LabelListComponent;
   let fixture: ComponentFixture<LabelListComponent>;
+  let cache: MediaMetadataCacheService;
 
   const sampleMedias: MediaItem[] = [
     { id: 1, type: 'audio', filename: 'song.wav', md5: 'aaa', custom_metadata: {} },
@@ -13,14 +17,25 @@ describe('LabelListComponent', () => {
     { id: 3, type: 'video', filename: 'clip.mp4', md5: 'ccc', custom_metadata: {} },
   ];
 
+  function seedCache(): void {
+    for (const m of sampleMedias) {
+      (cache as unknown as { cache: Map<number, MediaItem> }).cache.set(m.id, m);
+    }
+  }
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LabelListComponent],
-      providers: [ActiveContextService],
+      providers: [
+        ActiveContextService,
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LabelListComponent);
     component = fixture.componentInstance;
+    cache = TestBed.inject(MediaMetadataCacheService);
   });
 
   it('should create', () => {
@@ -29,9 +44,9 @@ describe('LabelListComponent', () => {
   });
 
   it('should display correct label heading and count', () => {
+    seedCache();
     component.label = 'good';
     component.ids = [1, 2];
-    component.medias = sampleMedias;
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;
@@ -42,9 +57,9 @@ describe('LabelListComponent', () => {
   });
 
   it('should display bad label heading', () => {
+    seedCache();
     component.label = 'bad';
     component.ids = [3];
-    component.medias = sampleMedias;
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;
@@ -55,9 +70,9 @@ describe('LabelListComponent', () => {
 
   describe('sorting', () => {
     beforeEach(() => {
+      seedCache();
       component.label = 'good';
       component.ids = [1, 2, 3];
-      component.medias = sampleMedias;
       component.clickTimes = { '1': 3, '2': 1, '3': 2 };
       component.learnedScores = { '1': 0.9, '2': 0.5, '3': 0.7 };
     });
@@ -109,9 +124,9 @@ describe('LabelListComponent', () => {
 
   describe('confidence calculation', () => {
     it('should use score directly for good label', () => {
+      seedCache();
       component.label = 'good';
       component.ids = [1];
-      component.medias = sampleMedias;
       component.learnedScores = { '1': 0.8 };
       fixture.detectChanges();
 
@@ -119,9 +134,9 @@ describe('LabelListComponent', () => {
     });
 
     it('should use 1-score for bad label', () => {
+      seedCache();
       component.label = 'bad';
       component.ids = [1];
-      component.medias = sampleMedias;
       component.learnedScores = { '1': 0.3 };
       fixture.detectChanges();
 
@@ -129,9 +144,9 @@ describe('LabelListComponent', () => {
     });
 
     it('should set confidence to -1 when no score', () => {
+      seedCache();
       component.label = 'good';
       component.ids = [1];
-      component.medias = sampleMedias;
       component.learnedScores = {};
       fixture.detectChanges();
 
@@ -141,7 +156,7 @@ describe('LabelListComponent', () => {
 
   describe('view modes and thumbnails', () => {
     beforeEach(() => {
-      component.medias = sampleMedias;
+      seedCache();
     });
 
     it('should have thumbnail URL for images', () => {
@@ -213,23 +228,23 @@ describe('LabelListComponent', () => {
   });
 
   it('should use filename for entry name', () => {
+    seedCache();
     component.ids = [1];
-    component.medias = sampleMedias;
     fixture.detectChanges();
     expect(component.sortedEntries[0].name).toBe('song.wav');
   });
 
   it('should fallback to Clip #ID when no media found', () => {
+    seedCache();
     component.ids = [999];
-    component.medias = sampleMedias;
     fixture.detectChanges();
     expect(component.sortedEntries[0].name).toBe('Clip #999');
   });
 
   it('should render vote entries in the DOM', () => {
+    seedCache();
     component.label = 'good';
     component.ids = [1, 2];
-    component.medias = sampleMedias;
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;

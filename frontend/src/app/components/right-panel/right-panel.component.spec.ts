@@ -52,13 +52,13 @@ describe('RightPanelComponent', () => {
   }));
 
   it('should load view mode from settings on init', fakeAsync(() => {
-    component.medias = [{ id: 1, type: 'audio', filename: 'a.wav', md5: 'x', custom_metadata: {} }];
+    component.mediaType = 'audio';
     fixture.detectChanges();
     tick();
     httpMock.expectOne('/api/settings').flush({ volume: 1, view_mode_right: { audio: 'list', image: 'grid' } });
     httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
-    // Trigger ngOnChanges by setting medias via input
-    component.ngOnChanges({ medias: { currentValue: component.medias, previousValue: [], firstChange: true, isFirstChange: () => true } });
+    // Trigger ngOnChanges by setting mediaType via input
+    component.ngOnChanges({ mediaType: { currentValue: 'audio', previousValue: '', firstChange: true, isFirstChange: () => true } });
     expect(component.viewMode).toBe('list');
     cleanup();
   }));

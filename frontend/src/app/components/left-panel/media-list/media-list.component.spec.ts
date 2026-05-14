@@ -1,10 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { MediaListComponent } from './media-list.component';
+import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { MediaItem } from '../../../models/api.models';
 
 describe('MediaListComponent', () => {
   let component: MediaListComponent;
   let fixture: ComponentFixture<MediaListComponent>;
+  let cache: MediaMetadataCacheService;
 
   const mockMedias: MediaItem[] = [
     { id: 1, type: 'audio', filename: 'a.wav', md5: 'a1', custom_metadata: {} },
@@ -15,11 +19,17 @@ describe('MediaListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [MediaListComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(MediaListComponent);
     component = fixture.componentInstance;
-    component.medias = mockMedias;
+    cache = TestBed.inject(MediaMetadataCacheService);
+    // Preload the cache so lookups return real items instead of placeholders.
+    for (const m of mockMedias) {
+      (cache as unknown as { cache: Map<number, MediaItem> }).cache.set(m.id, m);
+    }
+    component.mediaIds = mockMedias.map((m) => m.id);
     fixture.detectChanges();
   });
 
@@ -57,7 +67,6 @@ describe('MediaListComponent', () => {
     component.threshold = 0.4;
     fixture.detectChanges();
     const items = component.cachedOrderedItems;
-    // Threshold is at 0.4, so item with score 0.2 should have showThreshold
     expect(items[0].showThreshold).toBeFalse();
     expect(items[1].showThreshold).toBeFalse();
     expect(items[2].showThreshold).toBeTrue();
@@ -78,7 +87,7 @@ describe('MediaListComponent', () => {
   });
 
   it('should show empty message when no medias', () => {
-    component.medias = [];
+    component.mediaIds = [];
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.empty-list')?.textContent).toContain('No media loaded');
   });

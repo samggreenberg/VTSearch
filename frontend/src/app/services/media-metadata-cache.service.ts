@@ -11,18 +11,15 @@ import { MediasApiService } from './medias-api.service';
 const BATCH_SIZE = 200;
 
 /**
- * Caches media metadata (id, type, filename, md5, etc.) and loads it lazily in
- * batches via `POST /api/medias/batch`.
- *
- * The full `/api/medias` response can be hundreds of megabytes for large
- * datasets.  This cache fetches only the metadata the UI actually needs —
- * typically the items currently visible in the virtual-scrolling viewport.
+ * Caches media metadata (id, type, filename, md5, etc.) and loads it lazily
+ * in batches via `POST /api/medias/batch`.  This is the only path the
+ * frontend uses to fetch per-item metadata — the legacy bulk `GET
+ * /api/medias` endpoint is reserved for tests / CLI tooling.
  *
  * Usage:
  *   1. Call `ensureLoaded(ids)` with the IDs the viewport needs.
- *   2. Subscribe to `medias$` or call `get(id)` for cached items.
- *   3. `toMediaItems(ids)` returns MediaItem[] for already-cached IDs (skips
- *      unknown ones so the template can render immediately).
+ *   2. Subscribe to `version$` to react to cache updates, or call `get(id)`
+ *      directly for cached items.
  */
 @Injectable({ providedIn: 'root' })
 export class MediaMetadataCacheService implements OnDestroy {
@@ -56,14 +53,6 @@ export class MediaMetadataCacheService implements OnDestroy {
   /** Current cache size. */
   get size(): number {
     return this.cache.size;
-  }
-
-  /** Bulk-insert items (e.g. from the initial full `/api/medias` load for small datasets). */
-  populate(items: MediaItem[]): void {
-    for (const item of items) {
-      this.cache.set(item.id, item);
-    }
-    this.versionSubject.next(this.versionSubject.value + 1);
   }
 
   /** Clear all cached metadata. */

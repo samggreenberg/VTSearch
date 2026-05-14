@@ -330,6 +330,32 @@ class TestListMedias:
             assert "embedding" not in media
 
 
+class TestListMediaIds:
+    def test_returns_all_ids(self, client):
+        resp = client.get("/api/medias/ids")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert isinstance(data, dict)
+        assert "ids" in data
+        assert len(data["ids"]) == app_module.NUM_MEDIAS
+        assert all(isinstance(i, int) for i in data["ids"])
+
+    def test_reports_dataset_type_and_embedder(self, client):
+        resp = client.get("/api/medias/ids")
+        data = resp.get_json()
+        # The test fixture loads audio medias so type should be "audio".
+        assert data["type"] == "audio"
+        assert "embedder" in data
+
+    def test_does_not_expose_metadata(self, client):
+        resp = client.get("/api/medias/ids")
+        data = resp.get_json()
+        # The endpoint must stay lightweight — no per-item metadata, bytes
+        # or embeddings.
+        assert "media_bytes" not in str(data)
+        assert "embedding" not in str(data)
+
+
 class TestBatchMedias:
     def test_returns_requested_ids(self, client):
         resp = client.post("/api/medias/batch", json={"ids": [1, 2]})

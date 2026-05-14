@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
+  MediaIdsResponse,
   MediaItem,
   TextResponse,
   VoteResponse,
@@ -11,8 +12,8 @@ import {
 export class MediasApiService {
   constructor(private http: HttpClient) {}
 
-  getMedias(): Observable<MediaItem[]> {
-    return this.http.get<MediaItem[]>('/api/medias');
+  getMediaIds(): Observable<MediaIdsResponse> {
+    return this.http.get<MediaIdsResponse>('/api/medias/ids');
   }
 
   getMediasBatch(ids: number[]): Observable<MediaItem[]> {

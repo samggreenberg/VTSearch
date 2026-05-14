@@ -273,6 +273,32 @@ def list_medias() -> Response:
     return jsonify(result)
 
 
+@medias_bp.route("/api/medias/ids")
+def list_media_ids() -> Response:
+    """Return a lightweight snapshot of media IDs for the active dataset.
+
+    Used by the frontend to drive virtual-scrolling and "any medias loaded?"
+    checks without pulling tens of MB of metadata for large datasets.  Full
+    per-item metadata is fetched lazily via ``POST /api/medias/batch``.
+
+    Returns:
+        JSON object ``{"ids": [int, ...], "type": str|null,
+        "embedder": str|null}``.  ``type`` and ``embedder`` are taken from
+        the first media (or ``null`` when the dataset is empty) so the UI
+        can configure view-mode / text-sort capability without an extra
+        round trip.
+    """
+    snap = snapshot_medias()
+    ids = list(snap.keys())
+    first_type: str | None = None
+    first_embedder: str | None = None
+    if ids:
+        first = snap[ids[0]]
+        first_type = first.get("type", "audio")
+        first_embedder = first.get("embedder") or None
+    return jsonify({"ids": ids, "type": first_type, "embedder": first_embedder})
+
+
 @medias_bp.route("/api/medias/batch", methods=["POST"])
 def batch_medias() -> tuple[Response, int] | Response:
     """Return metadata for a specific set of media IDs.
