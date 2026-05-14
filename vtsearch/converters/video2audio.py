@@ -9,6 +9,7 @@ from typing import Any
 
 from vtsearch.converters.base import MediaConverter
 from vtsearch.utils.ffmpeg import get_ffmpeg_exe
+from vtsearch.utils.registry import PluginField
 
 
 class Video2AudioMediaConverter(MediaConverter):
@@ -21,10 +22,27 @@ class Video2AudioMediaConverter(MediaConverter):
     Returns a single-element list with the WAV bytes and duration, or
     an empty list if the video has no audio track or ffmpeg is not
     available.
+
+    User-configurable parameters
+    ----------------------------
+    ``ffmpeg_timeout``
+        Seconds to wait for the ffmpeg subprocess before aborting.
+        Defaults to 600 (10 minutes) \u2014 independent of the gunicorn
+        worker timeout so long videos don't race the request budget.
     """
 
     display_name = "Video \u2192 Audio"
     converter_description = "Extract audio tracks from video files"
+    fields = [
+        PluginField(
+            key="ffmpeg_timeout",
+            label="ffmpeg timeout (seconds)",
+            field_type="text",
+            description="Maximum seconds to wait for ffmpeg to extract the audio track.",
+            default="600",
+            required=False,
+        ),
+    ]
 
     @property
     def source_type(self) -> str:
@@ -35,6 +53,13 @@ class Video2AudioMediaConverter(MediaConverter):
         return "audio"
 
     def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        try:
+            ffmpeg_timeout = float(self.get_param(params, "ffmpeg_timeout") or 600)
+        except (TypeError, ValueError):
+            ffmpeg_timeout = 600.0
+        if ffmpeg_timeout <= 0:
+            ffmpeg_timeout = 600.0
+
         media_bytes = media.get("media_bytes")
         media_path = media.get("media_path")
         filename = media.get("filename", "video.mp4")
@@ -68,7 +93,7 @@ class Video2AudioMediaConverter(MediaConverter):
                         wav_path,
                     ],
                     capture_output=True,
-                    timeout=120,
+                    timeout=ffmpeg_timeout,
                     check=True,
                 )
             except FileNotFoundError:
