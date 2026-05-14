@@ -245,7 +245,7 @@ def labelset_train_and_score(
     if len(X_list) < 2 or num_good == 0 or num_bad == 0:
         return [], 0.5, None
 
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
     hidden_dim = _auto_hidden_dim(len(X_list))
@@ -270,11 +270,12 @@ def labelset_train_and_score(
 
     model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
 
-    all_ids = sorted(clips_dict.keys())
+    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+
+    all_ids, all_embs = get_embedding_matrix_for_snap(clips_dict)
     if not all_ids:
         return [], threshold, model
-    all_embs = np.array([clips_dict[cid]["embedding"] for cid in all_ids])
-    X_all = torch.tensor(all_embs, dtype=torch.float32)
+    X_all = torch.from_numpy(all_embs)
     with torch.no_grad():
         scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
 

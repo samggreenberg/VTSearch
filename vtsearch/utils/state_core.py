@@ -89,6 +89,13 @@ class DatasetContext:
         "medias",
         "diversity_tree",
         "dataset_display_name",
+        # Cached contiguous (N, D) float32 embedding matrix and the sorted
+        # media-id list it corresponds to.  Built lazily on first access by
+        # ``vtsearch.models.embedding_matrix.get_embedding_matrix`` and reused
+        # across cosine sort, MLP scoring, and diversity-tree construction so
+        # we don't rebuild a 10k-row matrix per call.
+        "_emb_matrix_ids",
+        "_emb_matrix",
     )
 
     def __init__(self, dataset_id: str = "") -> None:
@@ -96,6 +103,8 @@ class DatasetContext:
         self.medias: dict[int, dict[str, Any]] = {}
         self.diversity_tree: Any = None  # DiversityTree | None
         self.dataset_display_name: str | None = None
+        self._emb_matrix_ids: list[int] | None = None
+        self._emb_matrix: Any = None  # np.ndarray | None
 
 
 class DetectorContext:

@@ -12,7 +12,6 @@ from pathlib import Path
 from collections.abc import Iterator
 from typing import Any
 
-import numpy as np
 
 from vtsearch.datasets.loader import apply_custom_metadata_md5, load_dataset_from_pickle
 from vtsearch.utils.hits import build_media_hit
@@ -104,9 +103,10 @@ def _score_medias_with_detectors(
 
     import torch  # noqa: PLC0415
 
-    all_ids = sorted(medias.keys())
-    all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
-    X_all = torch.tensor(all_embs, dtype=torch.float32)
+    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+
+    all_ids, all_embs = get_embedding_matrix_for_snap(medias)
+    X_all = torch.from_numpy(all_embs)
 
     results: dict[str, dict[str, Any]] = {}
     for det_name, info in detector_mlps.items():

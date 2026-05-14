@@ -161,6 +161,12 @@ def clear_medias() -> None:
 
     with _state_lock:
         medias.clear()
+        # Drop the cached embedding matrix so its RAM is released along with
+        # the medias dict.  Lazy rebuild on next access would also handle it,
+        # but releasing now is the friendly thing to do.
+        ctx = _core.get_active_context()
+        ctx._emb_matrix_ids = None
+        ctx._emb_matrix = None
         _core._set_diversity_tree(None)
         _core._set_dataset_display_name(None)
         clear_progress_cache()

@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-import numpy as np
 from flask import Blueprint, jsonify, request
 
 from vtsearch.routes.helpers import get_json_safe
@@ -281,9 +280,10 @@ def find_label():
         total_steps=_FIND_LABEL_STEPS,
     )
 
-    all_ids = sorted(snap.keys())
-    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-    X_all = torch.tensor(all_embs, dtype=torch.float32)
+    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+
+    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+    X_all = torch.from_numpy(all_embs)
 
     batch_size = max(1, min(500, n_total // 10))
     scores: list[float] = []
@@ -416,9 +416,10 @@ def auto_detect():
     if not detectors_to_run:
         return jsonify({"error": f"No autorun detectors found for media type: {media_type}"}), 400
 
-    all_ids = sorted(snap.keys())
-    all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-    X_all = torch.tensor(all_embs, dtype=torch.float32)
+    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+
+    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+    X_all = torch.from_numpy(all_embs)
 
     def _run_single(name: str, det_data: dict, reg_entry: dict | None):
         try:

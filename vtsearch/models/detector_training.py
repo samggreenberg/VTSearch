@@ -61,7 +61,7 @@ def train_and_threshold(
         get_safe_thresholds,
     )
 
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
@@ -83,9 +83,10 @@ def train_and_threshold(
     model = train_model(X, y, input_dim, get_inclusion())
 
     if safe:
-        all_ids = sorted(snap.keys())
-        all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
-        X_all = torch.tensor(all_embs, dtype=torch.float32)
+        from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+
+        _all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+        X_all = torch.from_numpy(all_embs)
         with torch.no_grad():
             all_scores = torch.sigmoid(model(X_all)).squeeze(1).tolist()
         threshold = calculate_safe_threshold(threshold, all_scores, len(y_list))
