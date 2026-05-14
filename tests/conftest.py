@@ -92,6 +92,8 @@ _TEST_GROUPS = {
         "test_eval",
         "test_eval_visualize",
         "test_eval_voting_iterations",
+        "test_label_curve",
+        "test_svm_training",
         "test_resolver",
         "test_new_embedders",
         "test_labelset_elements_api",
