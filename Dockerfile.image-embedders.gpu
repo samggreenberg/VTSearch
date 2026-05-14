@@ -154,15 +154,12 @@ print('DINOv2 weights cached.', flush=True)"
 # produces a usable image with the other five embedders.
 RUN python -u -c "import os; \
 from vtsearch.config import DINOV3_MODEL_ID; \
+from transformers import AutoModel, AutoImageProcessor; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
-try: \
-    from transformers import AutoModel, AutoImageProcessor; \
-    AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
-    AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
-    print('DINOv3 weights loaded from local cache.', flush=True); \
-except Exception as exc: \
-    print(f'DINOv3 not in local cache ({exc.__class__.__name__}); skipping. ' \
-          'Run scripts/cache_gated_models.sh on the host to enable DINOv3.', flush=True)"
+AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
+AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
+print('DINOv3 weights loaded from local cache.', flush=True)" \
+    || echo "DINOv3 not in local cache; skipping. Run scripts/cache_gated_models.sh on the host to enable DINOv3."
 
 # EUPE (facebookresearch/EUPE, ViT-B/16). Loads via torch.hub: a cloned
 # GitHub repo plus a downloaded .pt weights file, both under
@@ -174,15 +171,11 @@ except Exception as exc: \
 ENV TORCH_HOME=${VTSEARCH_MODELS_DIR}
 RUN python -u -c "import os; \
 from vtsearch.config import EUPE_MODEL_ID; \
-try: \
-    import torch; \
-    torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16', source='github', \
-                   pretrained=True, weights=EUPE_MODEL_ID, trust_repo=True); \
-    print('EUPE weights cached via torch.hub.', flush=True); \
-except Exception as exc: \
-    print(f'EUPE not cached ({exc.__class__.__name__}: {exc}); skipping. ' \
-          'Run scripts/cache_gated_models.sh on the host to enable EUPE ' \
-          'in offline builds.', flush=True)"
+import torch; \
+torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16', source='github', \
+               pretrained=True, weights=EUPE_MODEL_ID, trust_repo=True); \
+print('EUPE weights cached via torch.hub.', flush=True)" \
+    || echo "EUPE not cached; skipping. Run scripts/cache_gated_models.sh on the host to enable EUPE in offline builds."
 
 # ---------- application layer ----------
 COPY . .
