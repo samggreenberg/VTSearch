@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import pickle
+import struct
 from typing import Any
 
 
@@ -60,3 +61,81 @@ def safe_pickle_load(f: io.BufferedIOBase, **kwargs: Any) -> Any:
     forwarded to the underlying ``Unpickler``.
     """
     return RestrictedUnpickler(f, **kwargs).load()
+
+
+class _PeekUnpickler(pickle._Unpickler):
+    """Pure-Python unpickler that preserves dict/key structure but stubs out
+    heavy leaf values.
+
+    Used by :func:`peek_pickle_dataset_summary` to extract a dataset's media
+    count and first-entry media type from a ``.pkl`` upload without paying
+    the cost of materialising per-media embedding lists (millions of Python
+    floats) or inline media bytes (audio/image/video blobs).
+
+    Safety: ``find_class`` enforces the same allowlist as
+    :class:`RestrictedUnpickler`, so an RCE payload is still rejected.
+    """
+
+    dispatch = pickle._Unpickler.dispatch.copy()
+
+    def find_class(self, module: str, name: str) -> Any:
+        if (module, name) in _PICKLE_SAFE_CLASSES:
+            return pickle._Unpickler.find_class(self, module, name)
+        raise pickle.UnpicklingError(
+            f"Forbidden pickle class: {module}.{name}. Only plain Python types and numpy arrays are allowed."
+        )
+
+    def load_binfloat(self) -> None:
+        self.read(8)
+        self.append(None)
+
+    dispatch[pickle.BINFLOAT[0]] = load_binfloat
+
+    def load_binbytes(self) -> None:
+        (size,) = struct.unpack("<I", self.read(4))
+        self.read(size)
+        self.append(b"")
+
+    dispatch[pickle.BINBYTES[0]] = load_binbytes
+
+    def load_binbytes8(self) -> None:
+        (size,) = struct.unpack("<Q", self.read(8))
+        self.read(size)
+        self.append(b"")
+
+    dispatch[pickle.BINBYTES8[0]] = load_binbytes8
+
+    def load_short_binbytes(self) -> None:
+        size = self.read(1)[0]
+        self.read(size)
+        self.append(b"")
+
+    dispatch[pickle.SHORT_BINBYTES[0]] = load_short_binbytes
+
+    def load_append(self) -> None:
+        # Discard the value instead of appending to the list below it.
+        self.stack.pop()
+
+    dispatch[pickle.APPEND[0]] = load_append
+
+    def load_appends(self) -> None:
+        # Drop everything between the mark and the top; the list below the
+        # mark stays empty.
+        self.pop_mark()
+
+    dispatch[pickle.APPENDS[0]] = load_appends
+
+
+def peek_pickle_dataset_summary(f: io.BufferedIOBase) -> Any:
+    """Cheaply summarise a dataset pickle without instantiating embeddings.
+
+    Returns the same top-level structure ``pickle.load`` would, but with
+    embedding lists left empty and inline media-byte blobs replaced by
+    ``b""``. Sufficient for reading the media count and the first entry's
+    ``"type"`` field; not suitable for any operation that needs the
+    underlying vectors or bytes.
+
+    Rejects non-allowlisted classes the same way :func:`safe_pickle_load`
+    does, so an RCE payload still raises ``UnpicklingError``.
+    """
+    return _PeekUnpickler(f).load()
