@@ -702,26 +702,27 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
 
         thumb = generate_video_thumbnail(file_bytes)
 
+    new_media: dict[str, Any] = {
+        "type": dataset_media_type,
+        "embedder": dataset_embedder_name,
+        "md5": file_md5,
+        "embedding": embedding,
+        "media_bytes": file_bytes,
+        "filename": original_filename,
+        "file_size": len(file_bytes),
+        "category": "",
+        "origin": {
+            "importer": "add_to_pile",
+            "params": {"filename": original_filename},
+        },
+        "origin_name": original_filename,
+    }
+    if thumb is not None:
+        new_media["thumbnail_bytes"] = thumb
+
     with _state_lock:
         new_id = next_media_id(medias)
-        new_media: dict[str, Any] = {
-            "id": new_id,
-            "type": dataset_media_type,
-            "embedder": dataset_embedder_name,
-            "md5": file_md5,
-            "embedding": embedding,
-            "media_bytes": file_bytes,
-            "filename": original_filename,
-            "file_size": len(file_bytes),
-            "category": "",
-            "origin": {
-                "importer": "add_to_pile",
-                "params": {"filename": original_filename},
-            },
-            "origin_name": original_filename,
-        }
-        if thumb is not None:
-            new_media["thumbnail_bytes"] = thumb
+        new_media["id"] = new_id
         medias[new_id] = new_media
 
     apply_label(new_id, label)
