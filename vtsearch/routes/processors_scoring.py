@@ -13,6 +13,7 @@ from vtsearch.utils import (
     get_autorun_localizers_by_media,
     snapshot_medias,
 )
+from vtsearch.utils.memory_budget import cap_workers_by_memory
 
 processors_scoring_bp = Blueprint("processors_scoring", __name__)
 
@@ -74,8 +75,20 @@ def _auto_run_processors(
             "results": hits,
         }
 
+    n_items = len(snap)
+    first = next(iter(snap.values()), {}) if snap else {}
+    embedding = first.get("embedding")
+    try:
+        embed_dim = int(len(embedding)) if embedding is not None else 0
+    except TypeError:
+        embed_dim = 0
+    worker_cap = cap_workers_by_memory(
+        n_items,
+        embed_dim,
+        max_workers=min(len(processors), 8),
+    )
     results = {}
-    with ThreadPoolExecutor(max_workers=min(len(processors), 8)) as pool:
+    with ThreadPoolExecutor(max_workers=worker_cap) as pool:
         futures = [pool.submit(_run_single, name, data) for name, data in processors.items()]
         for future in futures:
             outcome = future.result()
