@@ -13,14 +13,14 @@ to work unchanged.
 import gc
 import sys
 
-from vtsearch.config import MODELS_CACHE_DIR
+from vtsearch.config import MODELS_CACHE_DIR, TORCH_THREADS
 
 
 _torch_configured = False
 
 
 def ensure_torch_configured() -> None:
-    """Set ``torch.set_num_threads(1)`` once, the first time torch is used.
+    """Set ``torch.set_num_threads(TORCH_THREADS)`` the first time torch is used.
 
     Safe to call multiple times — the configuration is applied only once.
     Call this from any code path that imports torch before doing work
@@ -33,7 +33,7 @@ def ensure_torch_configured() -> None:
         return
     import torch  # noqa: PLC0415
 
-    torch.set_num_threads(1)
+    torch.set_num_threads(TORCH_THREADS)
     _torch_configured = True
 
 
