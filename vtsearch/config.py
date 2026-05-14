@@ -16,7 +16,20 @@ MODELS_CACHE_DIR = (
 )
 
 # Training
-TRAIN_EPOCHS = 200
+#
+# ``TRAIN_EPOCHS`` is an *upper bound* — :func:`vtsearch.models.training.train_model`
+# also short-circuits on a loss plateau (see ``TRAIN_PATIENCE``).  Override with
+# ``VTSEARCH_TRAIN_EPOCHS`` for benchmarking or to disable early-stop entirely
+# by pairing with ``VTSEARCH_TRAIN_PATIENCE=0``.
+TRAIN_EPOCHS = int(os.environ.get("VTSEARCH_TRAIN_EPOCHS", "200"))
+# Number of epochs the training loss must fail to improve before training
+# stops early.  Set to 0 to disable early-stop and always run ``TRAIN_EPOCHS``.
+TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
+# Default ``calibrate_count`` baked into ``data/settings.json`` on first run.
+# Each unit adds one full fold-training pass per learned-sort; lower it to
+# trade calibration quality for latency.  Min 1 (clamped in
+# :mod:`vtsearch.settings`).
+DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "2")))
 MLP_HIDDEN_MIN = 4
 MLP_HIDDEN_MAX = 32
 MLP_DROPOUT = 0.5

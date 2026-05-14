@@ -22,7 +22,8 @@ The model outputs raw logits (not probabilities) during training. This allows th
 |---------|-------|-------|
 | **Loss function** | `BCEWithLogitsLoss` | Per-sample (unreduced), with manual class weighting |
 | **Optimizer** | Adam | `lr=0.001`, `weight_decay=1e-4` |
-| **Epochs** | 200 | Configurable via `TRAIN_EPOCHS` in `config.py` |
+| **Epochs (cap)** | 200 | Configurable via `TRAIN_EPOCHS` in `config.py` or the `VTSEARCH_TRAIN_EPOCHS` env var |
+| **Early-stop patience** | 10 | Training halts when the loss fails to improve for this many consecutive epochs (configurable via `TRAIN_PATIENCE` / `VTSEARCH_TRAIN_PATIENCE`; set 0 to disable) |
 | **Hidden layer** | 4–32 neurons | `max(4, min(32, n_train // 3))` via `_auto_hidden_dim()` |
 | **Dropout** | 0.5 | Applied after ReLU, active only during training |
 | **Batching** | Full-batch | All labeled data in every forward pass |
@@ -46,6 +47,8 @@ A decision threshold separating "good" from "bad" predictions is computed via **
 3. Train a fold model on Train **using the full-data `hidden_dim`**, find the optimal threshold by evaluating on Calibrate.
 4. Repeat for `calibrate_count` independent random splits.
 5. Return the mean of all thresholds.
+
+The `calibrate_count` setting defaults to `2` but can be lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality for latency. When `safe_thresholds` is enabled and fewer than 6 labels exist, the cross-calibration step is skipped entirely — the `calculate_safe_threshold` blender weights the calibrated value at 0 in that regime, so paying for the fold trainings would be pure waste.
 
 **Why fold models use the full-data hidden_dim:** The hidden-layer width is normally auto-sized from the training-set size (`n_train // 3`, clamped to 4–32). Without intervention, each fold model would train on fewer examples and therefore get a smaller hidden layer than the final model. A smaller architecture produces a different score distribution, so thresholds found on fold models would not transfer faithfully to the final model. By forcing fold models to use the same `hidden_dim` as the final model, the architectures match: same capacity, same score distribution shape. The only difference is the fold models see less data, which is the whole point — you want held-out calibration data. Existing regularization (dropout 0.5, weight decay 1e-4) and the small max width (32) prevent the slightly "oversized" fold models from overfitting meaningfully.
 

@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from vtsearch.config import MLP_DROPOUT, MLP_HIDDEN_MAX, MLP_HIDDEN_MIN, TRAIN_EPOCHS
+from vtsearch import config
+from vtsearch.config import MLP_DROPOUT, MLP_HIDDEN_MAX, MLP_HIDDEN_MIN
+
+# ``TRAIN_EPOCHS`` and ``TRAIN_PATIENCE`` are read off ``config`` at call time
+# (not import time) so env-var / monkey-patched overrides take effect.
 
 if TYPE_CHECKING:
     import torch
@@ -258,15 +262,31 @@ def train_model(
     # Fork the global RNG so the Dropout seed is isolated per call —
     # concurrent training invocations each get their own RNG state.
     model.train()
+    epochs = config.TRAIN_EPOCHS
+    patience = config.TRAIN_PATIENCE
+    best_loss = float("inf")
+    epochs_since_improve = 0
+    # Require at least this much absolute decrease to count as progress —
+    # without it, float noise drifts the loss down forever and the early-stop
+    # never fires.
+    min_delta = 1e-4
     with torch.random.fork_rng(), torch.enable_grad():
         torch.manual_seed(seed)
-        for _ in range(TRAIN_EPOCHS):
+        for _ in range(epochs):
             optimizer.zero_grad()
             logits = model(X_train)
             losses = loss_fn(logits, y_train)
             weighted_loss = (losses.squeeze() * weights).mean()
             weighted_loss.backward()
             optimizer.step()
+            cur = weighted_loss.item()
+            if cur < best_loss - min_delta:
+                best_loss = cur
+                epochs_since_improve = 0
+            else:
+                epochs_since_improve += 1
+                if patience > 0 and epochs_since_improve >= patience:
+                    break
 
     model.eval()
     return model
@@ -559,17 +579,25 @@ def train_and_score(
     # Calculate threshold using k-fold calibration.
     # Use a seeded RNG so that train/calibrate splits are deterministic —
     # without this, the global np.random state makes results non-reproducible.
-    cal_rng = np.random.RandomState(42)
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        inclusion_value,
-        rng=cal_rng,
-        calibrate_count=calibrate_count,
-        calibration_fraction=calibration_fraction,
-        hidden_dim=hidden_dim,
-    )
+    # When ``safe_thresholds`` is on and the label count is below the
+    # ``calculate_safe_threshold`` ramp floor, the blended weight on the
+    # cross-cal threshold is exactly 0 (pure GMM), so the calibration
+    # trainings would be discarded.  Skip them and pass ``inf`` to signal
+    # "use the GMM threshold" downstream.
+    if safe_thresholds and len(X_list) < 6:
+        threshold = float("inf")
+    else:
+        cal_rng = np.random.RandomState(42)
+        threshold = calculate_cross_calibration_threshold(
+            X_list,
+            y_list,
+            input_dim,
+            inclusion_value,
+            rng=cal_rng,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            hidden_dim=hidden_dim,
+        )
 
     # Train final model on all data.  Training is image-level in v1 — the
     # MLP only ever sees one vector per voted media (``media["embedding"]``,

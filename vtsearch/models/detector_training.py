@@ -65,18 +65,24 @@ def train_and_threshold(
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        get_inclusion(),
-        calibrate_count=get_calibrate_count(),
-        calibration_fraction=get_calibration_fraction(),
-    )
+    safe = bool(get_safe_thresholds() and snap)
+    # Below the safe-threshold ramp floor the cross-cal output is blended
+    # away (pure GMM), so don't pay for the fold trainings.
+    if safe and len(X_list) < 6:
+        threshold = float("inf")
+    else:
+        threshold = calculate_cross_calibration_threshold(
+            X_list,
+            y_list,
+            input_dim,
+            get_inclusion(),
+            calibrate_count=get_calibrate_count(),
+            calibration_fraction=get_calibration_fraction(),
+        )
 
     model = train_model(X, y, input_dim, get_inclusion())
 
-    if get_safe_thresholds() and snap:
+    if safe:
         all_ids = sorted(snap.keys())
         all_embs = np.array([snap[cid]["embedding"] for cid in all_ids])
         X_all = torch.tensor(all_embs, dtype=torch.float32)
