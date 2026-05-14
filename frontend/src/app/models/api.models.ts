@@ -2,12 +2,21 @@
 
 // --- Medias ---
 
+/**
+ * One media item.
+ *
+ * Only ``id`` and ``type`` are guaranteed — the dataset listing
+ * (``GET /api/medias/ids``) returns just those plus an optional
+ * ``embedder``.  The remaining display-worthy fields are populated on
+ * demand for items currently in the viewport via the metadata cache
+ * (``POST /api/medias/batch``).
+ */
 export interface MediaItem {
   id: number;
   type: string;
-  filename: string;
-  md5: string;
-  custom_metadata: Record<string, unknown>;
+  filename?: string;
+  md5?: string;
+  custom_metadata?: Record<string, unknown>;
   origin_name?: string;
   description?: string;
   clip_start?: number;

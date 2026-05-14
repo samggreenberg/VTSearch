@@ -35,14 +35,14 @@ describe('MediaStateService', () => {
 
   it('loadMedias should fetch and store medias', () => {
     service.loadMedias();
-    const req = httpMock.expectOne('/api/medias');
+    const req = httpMock.expectOne('/api/medias/ids');
     req.flush(mockMedias);
     expect(service.medias).toEqual(mockMedias);
   });
 
   it('selectMedia should update selectedId', () => {
     service.loadMedias();
-    httpMock.expectOne('/api/medias').flush(mockMedias);
+    httpMock.expectOne('/api/medias/ids').flush(mockMedias);
 
     service.selectMedia(2);
     expect(service.selectedId).toBe(2);
@@ -51,7 +51,7 @@ describe('MediaStateService', () => {
 
   it('selectedMedia should return null for unknown id', () => {
     service.loadMedias();
-    httpMock.expectOne('/api/medias').flush(mockMedias);
+    httpMock.expectOne('/api/medias/ids').flush(mockMedias);
 
     service.selectMedia(999);
     expect(service.selectedMedia).toBeNull();
@@ -59,7 +59,7 @@ describe('MediaStateService', () => {
 
   it('clear should reset all state', () => {
     service.loadMedias();
-    httpMock.expectOne('/api/medias').flush(mockMedias);
+    httpMock.expectOne('/api/medias/ids').flush(mockMedias);
     service.selectMedia(1);
 
     service.clear();
@@ -72,7 +72,7 @@ describe('MediaStateService', () => {
     service.medias$.subscribe((m) => emissions.push(m));
 
     service.loadMedias();
-    httpMock.expectOne('/api/medias').flush(mockMedias);
+    httpMock.expectOne('/api/medias/ids').flush(mockMedias);
 
     setTimeout(() => {
       expect(emissions.length).toBeGreaterThanOrEqual(2); // initial [] + loaded

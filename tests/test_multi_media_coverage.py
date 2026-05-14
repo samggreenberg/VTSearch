@@ -197,7 +197,7 @@ class TestMediasListingMultiMedia:
         try:
             for i in range(1, 4):
                 medias[i] = make_image_media(i)
-            resp = client.get("/api/medias")
+            resp = client.get("/api/medias/ids")
             assert resp.status_code == 200
             data = resp.get_json()
             assert len(data) == 3
@@ -215,7 +215,7 @@ class TestMediasListingMultiMedia:
         try:
             for i in range(1, 4):
                 medias[i] = make_text_media(i)
-            resp = client.get("/api/medias")
+            resp = client.get("/api/medias/ids")
             assert resp.status_code == 200
             data = resp.get_json()
             assert len(data) == 3
@@ -232,7 +232,7 @@ class TestMediasListingMultiMedia:
         try:
             for i in range(1, 4):
                 medias[i] = make_video_media(i)
-            resp = client.get("/api/medias")
+            resp = client.get("/api/medias/ids")
             assert resp.status_code == 200
             data = resp.get_json()
             assert len(data) == 3

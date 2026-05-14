@@ -296,38 +296,51 @@ class TestCustomMetadataMapInLoader:
         assert media["custom_metadata"]["source"] == "external_db"
 
 
-class TestListMedias:
+class TestListMediaIds:
+    """Tests for the lightweight ``GET /api/medias/ids`` listing.
+
+    This endpoint replaced the previous unpaginated ``GET /api/medias`` —
+    full per-item metadata now comes from ``POST /api/medias/batch`` for
+    just the IDs the viewport needs.
+    """
+
     def test_returns_all_medias(self, client):
-        resp = client.get("/api/medias")
+        resp = client.get("/api/medias/ids")
         assert resp.status_code == 200
         data = resp.get_json()
         assert len(data) == app_module.NUM_MEDIAS
 
-    def test_media_fields(self, client):
-        resp = client.get("/api/medias")
+    def test_stub_fields_only(self, client):
+        """Each stub carries id + type and (optionally) embedder — nothing else."""
+        resp = client.get("/api/medias/ids")
         data = resp.get_json()
+        allowed = {"id", "type", "embedder"}
         for media in data:
             assert "id" in media
-            assert "md5" in media
-            assert "filename" in media
-            assert "custom_metadata" in media
-            # Type-specific fields appear in custom_metadata
-            cm = media["custom_metadata"]
-            assert "Frequency" in cm
-            assert "Duration" in cm
-            assert "File Size" in cm
+            assert "type" in media
+            extra = set(media.keys()) - allowed
+            assert not extra, f"unexpected heavy fields in /ids response: {extra}"
 
-    def test_does_not_expose_media_bytes(self, client):
-        resp = client.get("/api/medias")
+    def test_does_not_expose_heavy_fields(self, client):
+        resp = client.get("/api/medias/ids")
         data = resp.get_json()
         for media in data:
-            assert "media_bytes" not in media
+            for heavy in (
+                "media_bytes",
+                "embedding",
+                "filename",
+                "md5",
+                "custom_metadata",
+                "thumbnail_bytes",
+                "description",
+                "origin_name",
+            ):
+                assert heavy not in media
 
-    def test_does_not_expose_embedding(self, client):
+    def test_unpaginated_endpoint_is_gone(self, client):
+        """The old ``GET /api/medias`` route no longer exists."""
         resp = client.get("/api/medias")
-        data = resp.get_json()
-        for media in data:
-            assert "embedding" not in media
+        assert resp.status_code == 404
 
 
 class TestBatchMedias:
@@ -339,7 +352,7 @@ class TestBatchMedias:
         returned_ids = {m["id"] for m in data}
         assert returned_ids == {1, 2}
 
-    def test_same_fields_as_list_medias(self, client):
+    def test_returns_full_metadata(self, client):
         resp = client.post("/api/medias/batch", json={"ids": [1]})
         data = resp.get_json()
         assert len(data) == 1
@@ -387,7 +400,7 @@ class TestMediaThumbnailBytes:
         assert thumb[:8] == b"\x89PNG\r\n\x1a\n"
 
     def test_thumbnail_bytes_not_exposed_in_api(self, client):
-        resp = client.get("/api/medias")
+        resp = client.post("/api/medias/batch", json={"ids": list(range(1, app_module.NUM_MEDIAS + 1))})
         data = resp.get_json()
         for media in data:
             assert "thumbnail_bytes" not in media

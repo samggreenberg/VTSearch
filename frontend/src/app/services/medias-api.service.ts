@@ -11,8 +11,13 @@ import {
 export class MediasApiService {
   constructor(private http: HttpClient) {}
 
-  getMedias(): Observable<MediaItem[]> {
-    return this.http.get<MediaItem[]>('/api/medias');
+  /**
+   * Lightweight listing of every media in the loaded dataset.  Returns
+   * only ``id``, ``type``, and ``embedder`` — the rest of the metadata is
+   * fetched on demand via {@link getMediasBatch}.
+   */
+  getMediaIds(): Observable<MediaItem[]> {
+    return this.http.get<MediaItem[]>('/api/medias/ids');
   }
 
   getMediasBatch(ids: number[]): Observable<MediaItem[]> {

@@ -6,13 +6,39 @@
 
 ## Medias
 
-### List medias
+### List media IDs
 
 ```
-GET /api/medias
+GET /api/medias/ids
 ```
 
-→ JSON array of media metadata objects:
+→ Lightweight JSON array of stubs, one per media in the loaded dataset:
+
+```json
+[
+  { "id": 0, "type": "audio", "embedder": "clap-fused" },
+  { "id": 1, "type": "audio", "embedder": "clap-fused" }
+]
+```
+
+Every stub carries `id` and `type`; `embedder` is included when the media
+has one.  Display-worthy metadata (`filename`, `md5`, `custom_metadata`,
+`origin_name`, `description`, `clip_*`) is fetched on demand for the IDs
+the client actually needs via [Batch fetch](#batch-fetch-metadata) — this
+keeps the listing payload bounded even for datasets with tens of
+thousands of items.
+
+### Batch fetch metadata
+
+```
+POST /api/medias/batch
+Content-Type: application/json
+
+{ "ids": [0, 1, 2] }
+```
+
+→ JSON array of full metadata objects for the requested IDs (unknown IDs
+are silently omitted):
 
 ```json
 [
@@ -33,10 +59,11 @@ GET /api/medias
 ]
 ```
 
-Every item contains `id`, `type`, `filename`, `md5`, and `custom_metadata`.
-The `custom_metadata` dict holds media-type-specific display fields (e.g.
-`duration`/`frequency` for audio, `width`/`height` for images, `word_count`
-for text). `origin_name` and `description` are included when present.
+Every returned item contains `id`, `type`, `filename`, `md5`, and
+`custom_metadata`.  The `custom_metadata` dict holds media-type-specific
+display fields (e.g.  `duration`/`frequency` for audio, `width`/`height`
+for images, `word_count` for text).  `origin_name`, `description`,
+`embedder`, and `clip_*` keys are included when present.
 
 ### Stream audio
 
@@ -243,18 +270,6 @@ POST /api/votes/seed-from-examples
 Seeds good votes from the active model's media examples.
 
 → `{"ok": true, "seeded": 5}`
-
-### Batch media metadata
-
-```
-POST /api/medias/batch
-```
-
-**Body:** `{"ids": [0, 1, 2], "offset": 0, "limit": 50}`
-
-Paginated media metadata retrieval.
-
-→ `{"medias": [...], "total": 500}`
 
 ### Label-file sort
 

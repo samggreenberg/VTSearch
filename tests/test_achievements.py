@@ -607,7 +607,7 @@ class TestAchievementsApi:
 class TestActionHooks:
     def test_vote_endpoint_increments_counter(self, client):
         # Find any media id from the test fixture.
-        listing = client.get("/api/medias").get_json()
+        listing = client.get("/api/medias/ids").get_json()
         media_id = listing[0]["id"]
         resp = client.post(f"/api/medias/{media_id}/vote", json={"vote": "good"})
         assert resp.status_code == 200
@@ -615,7 +615,7 @@ class TestActionHooks:
         assert _by_id(state, "votes_cast")["counter"] == 1
 
     def test_unvote_does_not_decrement(self, client):
-        listing = client.get("/api/medias").get_json()
+        listing = client.get("/api/medias/ids").get_json()
         media_id = listing[0]["id"]
         client.post(f"/api/medias/{media_id}/vote", json={"vote": "good"})
         client.post(f"/api/medias/{media_id}/vote", json={"vote": "good"})  # toggle off
