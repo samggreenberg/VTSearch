@@ -15,13 +15,17 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | [patch-embedder.md](patch-embedder.md) | **V1 + V2 shipped; V3 design only** | Six image embedders (DINOv2 / DINOv3 / EUPE × single+patch) are live; region voting via Shift-drag is live. V3 ("one text embedder + one patch embedder per dataset") is designed but not implemented — work plan still a sketch. |
 | [RCDatasetImporter.md](RCDatasetImporter.md) | **Scaffolds in place; awaiting client code** | ReCaller / DataWrest / PullWrest / Holder plugin scaffolds exist (`hidden_from_picker = True`); the API client stubs (`_rc_fetch_results`, `_dw_get_embedding`, `_pw_fetch_media`, `_holder_*`) still need real implementations. |
 | [extract-library.md](extract-library.md) | **Proposed** | Split VTSearch into a `vtscore` Python library plus the Flask/Angular app, gated on a CI job that runs the test suite without Flask installed. Not started. |
-| [gpu-batched-embedding.md](gpu-batched-embedding.md) | **Phase A + B shipped; C open** | PR #1341 shipped bulk image+text embedders and bulk patch_forward. Remaining: Phase C (clip re-embed bulk in `_fixup_clip_md5_and_embeddings`) plus deferred audio CLAP / video X-CLIP bulk overrides and the single-vector+patch fused forward. |
 | [openapi-schema.md](openapi-schema.md) | **Pilot shipped; rollout in progress** | flask-smorest plumbing + Swagger UI live; `settings/api.py` migrated. Remaining: frontend `SettingsApiService` rewired to the generated client, then the other blueprints (auth, achievements, main, labels, detectors, processors, media, datasets, sorting, eval, file_browser) — and finally delete the legacy permissive `/openapi.json`. |
 | [pyright-type-checking.md](pyright-type-checking.md) | **Stage 1 shipped; stages 2–6 open** | `pyrightconfig.json` gates `utils/`, `auth/`, `plugins/`, `sync/`, `concurrency/`, `exporters/`, `labels/`, `settings_io/`, `cli.py`, `config.py`. Remaining stages: 2 (`settings*`, `state/`, `security/`), 3 (`datasets/`, `detectors/`, `eval/`, `models/`), 4 (`routes/`, `converters/`), 5 (`media/`), 6 (whole `vtsearch/` — advisory job removed). |
 | [feature-brainstorm.md](feature-brainstorm.md) | **Backlog** | Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, experiments. Items graduate into their own plan doc as they mature. |
 
 ## Recently completed (removed)
 
+- **gpu-batched-embedding.md** — Phase A (image + text bulk overrides),
+  Phase B (bulk `patch_forward`), and Phase C (clip re-embed via
+  `embed_media_bulk` with no tempfile) all shipped. Remaining deferred
+  follow-ups (audio CLAP / video X-CLIP bulk overrides, fusing DINO
+  single-vector + patch forward) live under feature-brainstorm §12.2.
 - **combine-models-ui.md** — UI for combining two or more trainable
   models into a new one. Backend (`LabelSet.merge` + `POST
   /api/detectors/combine`) shipped earlier; the frontend
