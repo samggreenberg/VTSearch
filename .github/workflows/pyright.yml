@@ -29,7 +29,20 @@ jobs:
         run: npm install -g pyright@1.1.408
 
       - name: Pyright (gated scope)
-        run: pyright
+        run: |
+          set +e
+          pyright 2>&1 | tee /tmp/pyright-gated.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "## Pyright gated scope"
+            echo ""
+            echo "Exit status: \`$status\`"
+            echo ""
+            echo '```'
+            tail -c 60000 /tmp/pyright-gated.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
   # Advisory: full vtsearch/ package. Does not fail the build — its job
   # is to surface the residual error count so the next stage can size
