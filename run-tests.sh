@@ -22,6 +22,27 @@ cd "$(dirname "$0")"
 # Install deps if needed
 bash .claude/hooks/ensure-test-deps.sh
 
+# Ruff lint + format check (matches .github/workflows/lint.yml).
+# Runs early because it's fast (~1s) and catches mistakes the pytest /
+# frontend stages can't see, e.g. F401 unused-import on TYPE_CHECKING
+# imports whose only "use" is inside a string-form forward reference.
+echo "Running ruff check..."
+if ! ruff check . ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: ruff check failed"
+    echo "============================================================"
+    exit 1
+fi
+echo "Running ruff format --check..."
+if ! ruff format --check . ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: ruff format --check failed (run 'ruff format .')"
+    echo "============================================================"
+    exit 1
+fi
+
 # Split arguments into groups and extra pytest args
 TEST_GROUPS=()
 EXTRA_ARGS=()
