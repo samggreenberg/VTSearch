@@ -354,15 +354,33 @@ def train_model(
     # without it, float noise drifts the loss down forever and the early-stop
     # never fires.
     min_delta = 1e-4
+    # Mixed-precision: enable autocast + GradScaler only on CUDA, where
+    # tensor cores give a real speedup. CPU/MPS keep the FP32 path so
+    # deterministic training stays bit-for-bit reproducible.
+    from contextlib import nullcontext  # noqa: PLC0415
+
+    use_amp = device.type == "cuda"
+    # Prefer the modern ``torch.amp.GradScaler("cuda", ...)`` API; fall back
+    # to the legacy ``torch.cuda.amp.GradScaler`` on torch <2.3.
+    grad_scaler_cls = getattr(torch.amp, "GradScaler", None)
+    if grad_scaler_cls is not None:
+        scaler = grad_scaler_cls("cuda", enabled=use_amp)
+    else:
+        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    autocast_ctx = (
+        torch.autocast(device_type="cuda") if use_amp else nullcontext()
+    )
     with torch.random.fork_rng(), torch.enable_grad():
         torch.manual_seed(seed)
         for _ in range(epochs):
             optimizer.zero_grad()
-            logits = model(X_train)
-            losses = loss_fn(logits, y_train)
-            weighted_loss = (losses.squeeze() * weights).mean()
-            weighted_loss.backward()
-            optimizer.step()
+            with autocast_ctx:
+                logits = model(X_train)
+                losses = loss_fn(logits, y_train)
+                weighted_loss = (losses.squeeze() * weights).mean()
+            scaler.scale(weighted_loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             cur = weighted_loss.item()
             if cur < best_loss - min_delta:
                 best_loss = cur
