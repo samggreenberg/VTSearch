@@ -492,8 +492,8 @@ Every `PluginRegistry` now also scans an `importlib.metadata` entry-point group 
 ### 12.12 Ruff → Ruff format CI gate ★ XS
 We have ruff; add a CI step that fails on unformatted code.
 
-### 12.13 Type-checking with mypy/pyright ★ M
-Pyright in basic mode would catch a lot.
+### 12.13 Type-checking with mypy/pyright ★ M — **Stage 1 shipped; in progress**
+Pyright in basic mode is now a hard CI gate. Rolled out package-by-package per [pyright-type-checking.md](pyright-type-checking.md). Stage 1 (foundation: `auth`, `cli`, `concurrency`, `config`, `exporters`, `labels`, `plugins`, `settings_io`, `sync`, `utils`) shipped in PR #1349 along with an advisory job that reports residual error counts over the full `vtsearch/` package.
 
 ### 12.14 Async-friendly Flask routes ★ M (not recommended)
 Original idea: migrate hot paths (sorting, scoring) to Quart or FastAPI for true async; long-running training already uses background threads so impact is bounded — but the polling endpoints would benefit.
