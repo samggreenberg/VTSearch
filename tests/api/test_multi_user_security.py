@@ -375,7 +375,9 @@ class TestTrivialLoginEndpoints:
         """Login endpoint returns 400 when the trivial provider is not active."""
         resp = client.post("/api/auth/login", json={"username": "alice"})
         assert resp.status_code == 400
-        assert "not supported" in resp.get_json()["error"]
+        # flask-smorest emits its standard error envelope with the
+        # message under "message", not "error".
+        assert "not supported" in resp.get_json()["message"]
 
     def test_logout_rejected_with_default_provider(self, client):
         """Logout endpoint returns 400 when the trivial provider is not active."""
@@ -423,7 +425,8 @@ class TestTrivialLoginEndpoints:
         try:
             set_login_provider(TrivialLoginProvider())
             resp = client.post("/api/auth/login", json={"username": ""})
-            assert resp.status_code == 400
+            # Schema-level validation failure → 422 (flask-smorest).
+            assert resp.status_code == 422
         finally:
             set_login_provider(original)
 
@@ -432,7 +435,7 @@ class TestTrivialLoginEndpoints:
         try:
             set_login_provider(TrivialLoginProvider())
             resp = client.post("/api/auth/login", json={"username": "alice bob"})
-            assert resp.status_code == 400
+            assert resp.status_code == 422
         finally:
             set_login_provider(original)
 
@@ -441,7 +444,7 @@ class TestTrivialLoginEndpoints:
         try:
             set_login_provider(TrivialLoginProvider())
             resp = client.post("/api/auth/login", json={"username": "../etc"})
-            assert resp.status_code == 400
+            assert resp.status_code == 422
         finally:
             set_login_provider(original)
 

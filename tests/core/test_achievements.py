@@ -454,11 +454,13 @@ class TestReadmeReaderApi:
 
     def test_check_phrase_missing_body(self, client):
         resp = client.post("/api/achievements/check-phrase", json={})
-        assert resp.status_code == 400
+        # Schema validation: missing required "phrase" → 422.
+        assert resp.status_code == 422
 
     def test_check_phrase_non_string(self, client):
         resp = client.post("/api/achievements/check-phrase", json={"phrase": 42})
-        assert resp.status_code == 400
+        # Schema validation: "phrase" must be a string → 422.
+        assert resp.status_code == 422
 
     def test_docs_raw_returns_markdown(self, client):
         resp = client.get("/api/achievements/docs/readme/raw")
@@ -596,7 +598,8 @@ class TestAchievementsApi:
 
     def test_acknowledge_requires_tier_idx(self, client):
         resp = client.post("/api/achievements/votes_cast/acknowledge", json={})
-        assert resp.status_code == 400
+        # Schema validation: missing required "tier_idx" → 422.
+        assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
