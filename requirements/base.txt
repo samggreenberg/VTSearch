@@ -1,8 +1,9 @@
-# VTSearch — GPU dependencies
+# VTSearch — core dependencies
 #
-# Not used directly — install-gpu.sh handles the CUDA version selection
-# and pre-installs binary wheels to avoid source builds.
-# This file exists for reference and for Dockerfiles.
+# Install:  pip install -r requirements/base.txt
+#
+# This file pulls in all core libraries, CPU PyTorch, dev tools,
+# and every plugin's own requirements.txt (auto-discovered).
 
 # ── Core framework ───────────────────────────────────────────────────
 flask
@@ -18,12 +19,15 @@ pandas
 matplotlib
 scipy
 
-# ── PyTorch (GPU — CUDA version set via --extra-index-url at install time)
+# ── PyTorch (CPU) ────────────────────────────────────────────────────
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.0.0
 
 # ── Dev tools ────────────────────────────────────────────────────────
 pytest
+pytest-xdist
 ruff
 
 # ── Plugin dependencies (auto-discovered) ────────────────────────────
--r requirements-plugins.txt
+# Regenerate with:  bash scripts/install-plugin-deps.sh
+-r plugins.txt

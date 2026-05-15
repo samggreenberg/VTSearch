@@ -32,10 +32,7 @@ run-tests.sh
 frontend/
 
 # Docker files (no need to copy into the image)
-Dockerfile
-Dockerfile.gpu
-Dockerfile.siglip
-docker-compose*.yml
+docker/
 
 # Docs (not needed at runtime)
 docs/
@@ -46,7 +43,10 @@ README.md
 CLAUDE.md
 
 # Scripts (not needed at runtime)
-download_models.sh
+scripts/download_models.sh
+scripts/install-cpu.sh
+scripts/install-gpu.sh
+scripts/install-plugin-deps.sh
 
 # Local virtual environment
 venv/

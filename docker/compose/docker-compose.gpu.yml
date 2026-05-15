@@ -1,14 +1,16 @@
 # GPU deployment — use as an override on top of docker-compose.yml:
 #
-#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#   docker compose \
+#     -f docker/compose/docker-compose.yml \
+#     -f docker/compose/docker-compose.gpu.yml up
 #
 # Requires the NVIDIA Container Toolkit on the host.
 
 services:
   vtsearch:
     build:
-      context: .
-      dockerfile: Dockerfile.gpu
+      context: ../..
+      dockerfile: docker/Dockerfile.gpu
     deploy:
       resources:
         reservations:

@@ -44,7 +44,7 @@ Example – a minimal SFTP importer skeleton::
 
 If the importer needs extra packages, add them to a ``requirements.txt`` inside
 the importer's directory.  They will be auto-discovered and installed by
-``install-plugin-deps.sh``.
+``scripts/install-plugin-deps.sh``.
 """
 
 from __future__ import annotations

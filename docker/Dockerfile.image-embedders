@@ -59,8 +59,8 @@
 #   #   …or, EUPE only (no token needed):
 #   SKIP_DINOV3=1 ./scripts/cache_gated_models.sh
 #
-#   # 2. Build the image — no token, no secrets:
-#   docker build -f Dockerfile.image-embedders -t vtsearch:image-embedders .
+#   # 2. Build the image (from repo root) — no token, no secrets:
+#   docker build -f docker/Dockerfile.image-embedders -t vtsearch:image-embedders .
 #
 # Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:image-embedders
 #
@@ -72,8 +72,8 @@ FROM python:3.10-slim AS base
 
 WORKDIR /app
 
-# ---------- dependency layer (cached unless requirements*.txt change) ------
-COPY requirements-image-embedders.txt ./
+# ---------- dependency layer (cached unless requirements/*.txt change) ----
+COPY requirements/image-embedders.txt requirements/
 COPY pyproject.toml ./
 COPY vtsearch/__init__.py vtsearch/__init__.py
 
@@ -83,7 +83,7 @@ COPY vtsearch/ vtsearch/
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
         --prefer-binary \
-        -r requirements-image-embedders.txt && \
+        -r requirements/image-embedders.txt && \
     pip install --no-cache-dir --no-deps -e .
 
 # ---------- import-only canary -------------------------------------------

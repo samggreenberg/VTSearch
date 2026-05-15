@@ -151,8 +151,8 @@ requests>=2.28
 requests>=2.28
 ```
 
-Then run `bash install-plugin-deps.sh` to regenerate
-`requirements-plugins.txt`.
+Then run `bash scripts/install-plugin-deps.sh` to regenerate
+`requirements/plugins.txt`.
 
 ---
 
@@ -337,7 +337,7 @@ This enables origin-based matching when importing into an RC-loaded dataset.
 - [ ] Implement `_holder_write_entry()` in `exporters/holder/__init__.py`
 - [ ] Implement `_holder_read_folder()` in `labels/importers/holder/__init__.py`
 - [ ] Add `requirements.txt` to each plugin directory
-- [ ] Run `bash install-plugin-deps.sh`
+- [ ] Run `bash scripts/install-plugin-deps.sh`
 - [ ] Write unit tests with mocked API clients
 - [ ] Test with live services (import → vote → export → re-import)
 - [ ] Set `hidden_from_picker = False` on all four plugins

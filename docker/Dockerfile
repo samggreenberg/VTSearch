@@ -1,8 +1,10 @@
 # -----------------------------------------------------------------
 # VTSearch — CPU Docker image
 #
-# Build:  docker build -t vtsearch .
-# Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
+# Build (from repo root):
+#   docker build -f docker/Dockerfile -t vtsearch .
+# Run:
+#   docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 # -----------------------------------------------------------------
 
 FROM python:3.10-slim AS base
@@ -18,8 +20,8 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# ---------- dependency layer (cached unless requirements*.txt change) ------
-COPY requirements.txt requirements-plugins.txt ./
+# ---------- dependency layer (cached unless requirements/*.txt change) ----
+COPY requirements/ requirements/
 COPY pyproject.toml ./
 COPY vtsearch/__init__.py vtsearch/__init__.py
 
@@ -29,7 +31,7 @@ COPY vtsearch/ vtsearch/
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
         --prefer-binary \
-        -r requirements.txt && \
+        -r requirements/base.txt && \
     pip install --no-cache-dir --no-deps -e .
 
 # ---------- application layer ----------

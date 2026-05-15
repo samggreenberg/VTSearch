@@ -2,7 +2,7 @@
 
 Mirrors the patterns in ``test_new_embedders.py`` — verifies class properties,
 registration, ``to_dict`` shape, and ``supports_text`` reporting without
-downloading any model weights. The Dockerfile (``Dockerfile.image-embedders``)
+downloading any model weights. The Dockerfile (``docker/Dockerfile.image-embedders``)
 exercises the real weight downloads.
 """
 

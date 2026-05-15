@@ -6,19 +6,19 @@
 #   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
 #
 # DINOv3 (and optionally EUPE) are gated — populate ./model_cache/ on
-# the host BEFORE building. See Dockerfile.image-embedders.gpu for
-# details.
+# the host BEFORE building. See docker/Dockerfile.image-embedders.gpu
+# for details.
 #
 #   HF_TOKEN=hf_xxx ./scripts/cache_gated_models.sh   # one-time
-#   docker compose -f docker-compose.image-embedders.gpu.yml up
-#   docker compose -f docker-compose.image-embedders.gpu.yml up -d
-#   docker compose -f docker-compose.image-embedders.gpu.yml down
+#   docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml up
+#   docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml up -d
+#   docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml down
 
 services:
   vtsearch:
     build:
-      context: .
-      dockerfile: Dockerfile.image-embedders.gpu
+      context: ../..
+      dockerfile: docker/Dockerfile.image-embedders.gpu
     image: vtsearch:image-embedders-gpu
     ports:
       - "5000:5000"

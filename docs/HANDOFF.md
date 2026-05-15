@@ -61,7 +61,7 @@ deployments. Runs locally or in Docker.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-bash install-cpu.sh
+bash scripts/install-cpu.sh
 python app.py                # Flask dev server on 0.0.0.0:5000
 ```
 
@@ -71,11 +71,13 @@ For production, run under gunicorn instead:
 ### Docker (recommended for deployment)
 
 ```bash
-docker compose up -d         # CPU (full feature set)
+docker compose -f docker/compose/docker-compose.yml up -d         # CPU (full feature set)
 # or
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d  # GPU
+docker compose \
+  -f docker/compose/docker-compose.yml \
+  -f docker/compose/docker-compose.gpu.yml up -d                  # GPU
 # or
-docker compose -f docker-compose.labbench.yml up -d  # LabBench (SigLIP-only image search; smallest, weights baked in)
+docker compose -f docker/compose/docker-compose.labbench.yml up -d  # LabBench (SigLIP-only image search; smallest, weights baked in)
 ```
 
 Open `http://localhost:5000`, then use the hamburger menu to load a demo
@@ -183,14 +185,14 @@ graph, plugin directories — see
   `next_media_id`) for progress reporting and ID generation.
 - **Each plugin is self-contained** in its own subdirectory. Dependencies
   are declared in per-plugin `requirements.txt` files, auto-discovered
-  by `install-plugin-deps.sh`.
+  by `scripts/install-plugin-deps.sh`.
 
 ---
 
 ## Running the test suite
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements/base.txt
 
 # Fast CPU tests (~35s)
 python -m pytest tests/ -v
@@ -246,14 +248,14 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] Python 3.10+ available (or Docker installed)
 - [ ] System packages: `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`
-- [ ] `bash install-cpu.sh` (or build Docker image)
+- [ ] `bash scripts/install-cpu.sh` (or build Docker image)
 - [ ] `data/` directory writable (models, embeddings, settings stored here)
 - [ ] Port 5000 available (or configure as needed)
 - [ ] Run `python app.py` or `docker compose up`
 
 ### For offline / air-gapped environments
 
-- [ ] Pre-download models: `./download_models.sh /path/to/models`
+- [ ] Pre-download models: `./scripts/download_models.sh /path/to/models`
 - [ ] Set `HF_HUB_OFFLINE=1` and `VTSEARCH_MODELS_DIR=/path/to/models`
 - [ ] Prepare datasets locally (folder or pickle files)
 - [ ] If using Docker, bake models into the image or mount as a volume
@@ -262,7 +264,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] NVIDIA GPU with CUDA support available
 - [ ] NVIDIA Container Toolkit installed (for Docker)
-- [ ] Use `Dockerfile.gpu` or `bash install-gpu.sh`
+- [ ] Use `docker/Dockerfile.gpu` or `bash scripts/install-gpu.sh`
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for full details.
 

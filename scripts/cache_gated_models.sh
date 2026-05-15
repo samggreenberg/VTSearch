@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Cache image-embedder model weights to a local directory **once**, so that
-# Dockerfile.image-embedders can bake them into the image without ever needing
-# an HF token during ``docker build``.
+# docker/Dockerfile.image-embedders can bake them into the image without ever
+# needing an HF token during ``docker build``.
 #
 # Two embedders need a host-side cache step:
 #
@@ -42,7 +42,7 @@
 #
 # The cache directory is ``./model_cache/`` by default and is gitignored —
 # weights never end up in the repo or in a Docker image layer except via the
-# explicit COPY in Dockerfile.image-embedders.
+# explicit COPY in docker/Dockerfile.image-embedders.
 
 set -euo pipefail
 
@@ -147,4 +147,4 @@ PYEOF
 
 echo
 echo "Done. Now rebuild the image — no HF token needed:"
-echo "    docker build -f Dockerfile.image-embedders -t vtsearch:image-embedders ."
+echo "    docker build -f docker/Dockerfile.image-embedders -t vtsearch:image-embedders ."

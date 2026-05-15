@@ -8,7 +8,7 @@
 #   * DINOv3   (facebook/dinov3-vitb16-pretrain-lvd1689m) — image-only, gated
 #   * EUPE     (facebook/PE-Core-B16-224)               — image-only, gated
 #
-# Used by Dockerfile.image-embedders. Skips audio / video / text / document
+# Used by docker/Dockerfile.image-embedders. Skips audio / video / text / document
 # stacks so we still produce a slim image (only image-side deps are pulled in).
 
 # ── Core framework ───────────────────────────────────────────────────

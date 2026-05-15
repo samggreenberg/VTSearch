@@ -477,8 +477,8 @@ your `run()` expects non-string values (e.g. FileStorage objects).
 ### Wiring up dependencies
 
 Add any extra packages to a `requirements.txt` inside the plugin directory,
-then run `bash install-plugin-deps.sh` to regenerate the dependency tree.
-The next `pip install -r requirements.txt` will pick them up.
+then run `bash scripts/install-plugin-deps.sh` to regenerate the dependency
+tree. The next `pip install -r requirements/base.txt` will pick them up.
 
 ### Multi-media imports
 
@@ -762,8 +762,8 @@ endpoints:
 ### Wiring up dependencies
 
 Add any extra packages to a `requirements.txt` inside the plugin directory,
-then run `bash install-plugin-deps.sh` to regenerate the dependency tree.
-The next `pip install -r requirements.txt` will pick them up.
+then run `bash scripts/install-plugin-deps.sh` to regenerate the dependency
+tree. The next `pip install -r requirements/base.txt` will pick them up.
 
 ---
 
