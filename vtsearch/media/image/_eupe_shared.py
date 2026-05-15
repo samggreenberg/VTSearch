@@ -41,6 +41,7 @@ from vtsearch.media.embedder import (
     intercept_tqdm_progress,
     timed_progress,
 )
+from vtsearch.media.image._image_bulk import bulk_embed_image_files
 from vtsearch.media.patch_embed import PatchEmbedOutput, eupe_features_to_patch_output
 
 
@@ -147,6 +148,63 @@ class _EupeBase(MediaEmbedder):
         if features is None:
             return None
         return eupe_features_to_patch_output(features)
+
+    def _forward_pil_batch(self, images: list) -> np.ndarray:
+        """Run EUPE on a batch of PIL images, returning ``(N, D)`` CLS vectors."""
+        features = self._forward_features_batch(images)
+        if features is None:
+            raise RuntimeError("EUPE bulk forward returned no features")
+        cls = features["x_norm_clstoken"]  # (N, D)
+        arr = cls.detach().cpu().float().numpy()
+        norms = np.linalg.norm(arr, axis=-1, keepdims=True)
+        return (arr / np.maximum(norms, 1e-12)).astype(np.float32)
+
+    def _patch_forward_pil_batch(self, images: list) -> list[Optional[PatchEmbedOutput]]:
+        features = self._forward_features_batch(images)
+        if features is None:
+            raise RuntimeError("EUPE bulk forward returned no features")
+        return [
+            eupe_features_to_patch_output(features, batch_index=i)
+            for i in range(len(images))
+        ]
+
+    def _forward_features_batch(self, images: list):
+        """Run ``model.forward_features`` on a list of PIL images.
+
+        Returns the raw EUPE feature dict (with a leading batch dim) or
+        ``None`` on any failure.
+        """
+        if self._model is None:
+            self.load_models()
+        if self._model is None or self._preprocess is None:
+            return None
+        try:
+            import torch  # noqa: PLC0415
+
+            tensors = [self._preprocess(im.convert("RGB")) for im in images]
+            batch = torch.stack(tensors, dim=0)
+            device = next(self._model.parameters()).device
+            batch = batch.to(device)
+            with torch.no_grad():
+                features = self._model.forward_features(batch)
+            return features
+        except Exception:
+            logging.getLogger(__name__).exception("Error running EUPE bulk forward")
+            return None
+
+    def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        if self._model is None:
+            self.load_models()
+        if self._model is None or self._preprocess is None:
+            return [None] * len(medias)
+        with self._embed_lock:
+            return bulk_embed_image_files(
+                medias,
+                forward_pil_batch=self._forward_pil_batch,
+                batch_size=self.embed_batch_size,
+                on_progress=self._on_progress,
+                label="EUPE",
+            )
 
     def _forward_features(self, media: dict):
         """Run one ``model.forward_features`` pass on the media's image file.

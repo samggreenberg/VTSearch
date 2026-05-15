@@ -140,45 +140,35 @@ def _bulk_patch_forward_files(
     origin: dict[str, Any] | None = None,
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
 ) -> dict[Path, Any]:
-    """Run :meth:`MediaEmbedder.patch_forward` on every file in *media_files*.
+    """Run :meth:`MediaEmbedder.patch_forward_bulk` on every file in *media_files*.
 
     Only called when the active embedder reports
     ``supports_patch_regions == True``.  Returns a ``Path → PatchEmbedOutput``
     mapping; files whose patch forward returned ``None`` are omitted.
 
-    Per-image, not bulk-batched — there is no patch-forward batch API on
-    the embedder yet.  For v1 this means patch-capable embedders run two
-    forward passes per image (one in ``embed_media_bulk`` for the CLS
-    vector, one here for the full patch grid).  Acceptable for v1; a
-    follow-up can fuse the two passes when latency matters.
+    The embedder may batch the forward internally (DINOv2 / DINOv3 / EUPE
+    patch variants do) or fall back to per-item via the default loop
+    contract on :class:`MediaEmbedder`.
     """
-    pending: list[tuple[Path, dict[str, Any]]] = []
+    pending_paths: list[Path] = []
+    pending_medias: list[dict[str, Any]] = []
     for file_path in media_files:
-        pending.append((file_path, _make_embed_input(file_path, folder_path, origin, custom_metadata_map)))
+        pending_paths.append(file_path)
+        pending_medias.append(_make_embed_input(file_path, folder_path, origin, custom_metadata_map))
 
-    if not pending:
+    if not pending_paths:
         return {}
 
-    on_progress("embedding", f"Patch-embedding {len(pending)} {media_type} files...", 0, len(pending))
+    on_progress("embedding", f"Patch-embedding {len(pending_paths)} {media_type} files...", 0, len(pending_paths))
 
-    out: dict[Path, Any] = {}
     original_cb = emb._on_progress
     emb._on_progress = on_progress
     try:
-        for i, (file_path, media_dict) in enumerate(pending):
-            patch_out = emb.patch_forward(media_dict)
-            if patch_out is not None:
-                out[file_path] = patch_out
-            on_progress(
-                "embedding",
-                f"Patch-embedding {i + 1}/{len(pending)} {media_type} files...",
-                i + 1,
-                len(pending),
-            )
+        outputs = emb.patch_forward_bulk(pending_medias)
     finally:
         emb._on_progress = original_cb
 
-    return out
+    return {fp: out for fp, out in zip(pending_paths, outputs) if out is not None}
 
 
 def _attach_patch_regions(media_data: dict[str, Any], patch_out: Any) -> None:

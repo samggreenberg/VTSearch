@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import logging
+import os
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -15,6 +16,7 @@ import numpy as np
 from vtsearch.media.base import ProgressCallback, _noop_progress
 
 __all__ = [
+    "DEFAULT_EMBED_BATCH_SIZE",
     "MediaEmbedder",
     "embedder_load_setup",
     "extract_tensor",
@@ -22,8 +24,30 @@ __all__ = [
     "intercept_weight_loading_progress",
     "load_pretrained_local_first",
     "media_from_path",
+    "resolve_embed_batch_size",
     "timed_progress",
 ]
+
+
+DEFAULT_EMBED_BATCH_SIZE = 32
+
+
+def resolve_embed_batch_size(default: int = DEFAULT_EMBED_BATCH_SIZE) -> int:
+    """Return the configured GPU embed batch size.
+
+    Reads ``VTSEARCH_EMBED_BATCH_SIZE`` from the environment; non-positive
+    or unparseable values fall back to *default*.  Subclasses with tighter
+    VRAM constraints (e.g. video models with per-clip frame stacks) can
+    pass a smaller *default* without touching the env var.
+    """
+    raw = os.environ.get("VTSEARCH_EMBED_BATCH_SIZE", "").strip()
+    if not raw:
+        return max(1, default)
+    try:
+        val = int(raw)
+    except ValueError:
+        return max(1, default)
+    return val if val > 0 else max(1, default)
 
 
 def media_from_path(file_path: Any, origin: dict | None = None) -> dict:
@@ -448,6 +472,18 @@ class MediaEmbedder(ABC):
         return False
 
     @property
+    def embed_batch_size(self) -> int:
+        """How many items to forward through the model in one GPU call.
+
+        Default reads :envvar:`VTSEARCH_EMBED_BATCH_SIZE` (falling back to
+        :data:`DEFAULT_EMBED_BATCH_SIZE`).  Subclasses with tighter VRAM
+        budgets — typically video models that stack frames per clip —
+        should override to pass a smaller default to
+        :func:`resolve_embed_batch_size`.
+        """
+        return resolve_embed_batch_size()
+
+    @property
     def license_notice(self) -> Optional[str]:
         """User-facing licence warning shown before a user selects this embedder.
 
@@ -616,6 +652,38 @@ class MediaEmbedder(ABC):
         Default returns ``None``.  Patch-capable embedders override this.
         """
         return None
+
+    def patch_forward_bulk(self, medias: list[dict]) -> list[Optional["PatchEmbedOutput"]]:  # noqa: F821
+        """Return per-patch features for every image in *medias*.
+
+        Patch-capable embedders override :meth:`_patch_forward_bulk_impl`
+        to batch the forward pass through their backbone. The default
+        loops :meth:`patch_forward` per item and emits per-item progress
+        via :attr:`_on_progress` — matching the contract of
+        :meth:`embed_media_bulk`.
+
+        Positions where patch-forward returned ``None`` (failed decode,
+        unsupported, etc.) contain ``None``.
+        """
+        if not medias:
+            return []
+        return self._patch_forward_bulk_impl(medias)
+
+    def _patch_forward_bulk_impl(
+        self, medias: list[dict]
+    ) -> list[Optional["PatchEmbedOutput"]]:  # noqa: F821
+        """Subclass hook: bulk patch-forward.
+
+        Default: loop over :meth:`patch_forward`, emitting per-item
+        progress.  Override to fuse the per-image forward into a single
+        batched GPU call.
+        """
+        total = len(medias)
+        results: list[Optional["PatchEmbedOutput"]] = []  # noqa: F821
+        for i, m in enumerate(medias):
+            self._on_progress("embedding", f"Patch-embedding {i + 1}/{total}...", i + 1, total)
+            results.append(self.patch_forward(m))
+        return results
 
     @property
     def description_wrappers(self) -> list[str]:
