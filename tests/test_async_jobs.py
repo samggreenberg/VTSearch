@@ -16,9 +16,6 @@ The manager must guarantee:
 from __future__ import annotations
 
 import threading
-import time
-
-import pytest
 
 from vtsearch.utils.async_jobs import AsyncJob, JobManager
 
@@ -86,7 +83,7 @@ class TestCoalescing:
         first_started = threading.Event()
         ran: list = []
 
-        first = mgr.start("sig-A", _make_target(first_release, first_started, ran))
+        mgr.start("sig-A", _make_target(first_release, first_started, ran))
         assert first_started.wait(timeout=5)
 
         # Two more starts while first is running.
@@ -121,7 +118,7 @@ class TestCoalescing:
         first_started = threading.Event()
         ran: list = []
 
-        first = mgr.start("sig-0", _make_target(first_release, first_started, ran))
+        mgr.start("sig-0", _make_target(first_release, first_started, ran))
         assert first_started.wait(timeout=5)
 
         followups_release = threading.Event()
