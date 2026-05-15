@@ -79,8 +79,10 @@ VTSearch/
 │   ├── converters/                 Media type converters
 │   │   ├── base.py                 MediaConverter ABC
 │   │   ├── runner.py               Converter orchestration (run_converters_on_folder)
+│   │   ├── audio2image.py          Render audio as a mel/CQT spectrogram image
 │   │   ├── document2image.py       Render document pages as images
 │   │   ├── document2text.py        Extract text from documents
+│   │   ├── image2text.py           Extract text from images via OCR (PaddleOCR)
 │   │   ├── video2audio.py          Extract audio track from video
 │   │   └── video2image.py          Sample frames from video as images
 │   │

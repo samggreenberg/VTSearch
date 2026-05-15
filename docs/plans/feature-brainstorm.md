@@ -42,11 +42,11 @@ Niche but cool: **LaBraM**, **BENDR**. Probably blocked by data availability for
 
 ## 2. New MediaConverters
 
-### 2.1 `audio → image` (spectrogram) ★★★ S
-Mel-spectrogram or CQT plot as PNG. Unlocks SigLIP/DINOv3 over audio data — huge for cross-model ensembling and for users who want to *visually* spot recurring spectral patterns. Params: `n_mels`, `time_window_s`, `colormap`.
+### 2.1 `audio → image` (spectrogram) ★★★ S ✅ shipped
+Mel-spectrogram or CQT plot as PNG. Unlocks SigLIP/DINOv3 over audio data — huge for cross-model ensembling and for users who want to *visually* spot recurring spectral patterns. Params: `spectrogram_type` (mel/cqt), `n_mels`, `time_window_s`, `colormap`. See `vtsearch/converters/audio2image.py`.
 
-### 2.2 `image → text` (OCR) ★★★ S
-Tesseract or EasyOCR. Already partially implemented as a processor — extract it as a converter so it composes with text embedders cleanly. Lets you treat scanned pages, screenshots, infographics, comics as text.
+### 2.2 `image → text` (OCR) ★★★ S ✅ shipped
+PaddleOCR-backed converter that flattens detected text regions into a single text media. Params: `language`, `threshold`. See `vtsearch/converters/image2text.py`.
 
 ### 2.3 `audio → text` (ASR) ★★ M
 Whisper-tiny/base. Converts podcasts/voice-notes into searchable transcript. Param: `language`, `model_size`. Pairs with `video→audio→text` chain.

@@ -8,9 +8,11 @@ Built-in converters are auto-discovered via the ``CONVERTER`` sentinel
 attribute, just like exporters and importers.
 """
 
+from vtsearch.converters.audio2image import Audio2ImageMediaConverter
 from vtsearch.converters.base import MediaConverter
 from vtsearch.converters.document2image import Document2ImageMediaConverter
 from vtsearch.converters.document2text import Document2TextMediaConverter
+from vtsearch.converters.image2text import Image2TextMediaConverter
 from vtsearch.converters.video2audio import Video2AudioMediaConverter
 from vtsearch.converters.video2image import Video2ImageMediaConverter
 from vtsearch.plugins import PluginRegistry
@@ -49,8 +51,10 @@ def list_converters_for_source(source_type: str) -> list[MediaConverter]:
 
 __all__ = [
     "MediaConverter",
+    "Audio2ImageMediaConverter",
     "Document2ImageMediaConverter",
     "Document2TextMediaConverter",
+    "Image2TextMediaConverter",
     "Video2AudioMediaConverter",
     "Video2ImageMediaConverter",
     "list_converters",
