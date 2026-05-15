@@ -157,7 +157,7 @@ def clear_medias() -> None:
     cached models reference media embeddings.  Also clears the diversity tree
     and the dataset display name override.
     """
-    from vtsearch.models.progress import clear_progress_cache
+    from vtsearch.models.labeling_progress import clear_progress_cache
 
     with _state_lock:
         medias.clear()
@@ -210,7 +210,7 @@ def set_inclusion(value: int) -> None:
 
     with _state_lock:
         if value != _core._get_inclusion():
-            from vtsearch.models.progress import clear_progress_cache
+            from vtsearch.models.labeling_progress import clear_progress_cache
 
             clear_progress_cache()
         _core._set_inclusion(value)

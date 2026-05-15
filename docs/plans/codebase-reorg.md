@@ -29,7 +29,7 @@ on any of them if the rationale doesn't hold up.
 | Neural-net training (training, training_workflow, svm_training, region_similarity) | 4 | ~1,300 |
 | Embedding helpers (embeddings, embedding_matrix, loader) | 3 | ~330 |
 | Sampling (diversity_tree) | 1 | 311 |
-| Progress (progress) | 1 | 745 |
+| Labeling-session analyzer (labeling_progress) | 1 | 745 |
 
 `detector_*`, `labelset_*`, `label_*`, `resolver.py`, and
 `media_seeding.py` are tightly coupled with each other (they share
@@ -91,10 +91,13 @@ already a per-`DatasetContext` field) or leave it under
 `vtsearch/sampling/` only if more sampling code arrives. **Do not**
 create a one-file `sampling/` package today.
 
-`progress.py` (745 LOC) is the deferred merge with
-`vtsearch/concurrency/progress.py` from task #6 — it should land before
-or alongside this split so the package boundary doesn't end up
-referencing two progress modules.
+`labeling_progress.py` (745 LOC, formerly `progress.py`) was renamed
+out of the way ahead of this split — the original task-#6 "merge with
+`vtsearch/concurrency/progress.py`" turned out to be a misdiagnosis
+(the two files share nothing but the historical name; one is
+long-running-op infrastructure, the other is a per-step model cache
+and stopping-condition analyzer). The renamed file lives next to the
+detector cluster and should move into `vtsearch/detectors/` in step 1.
 
 ### Plan
 
@@ -105,8 +108,7 @@ referencing two progress modules.
 2. **Step 2 — split the remainder.** Cut `training.py` into
    `detectors/training.py` + `training/mlp.py` + `training/thresholds.py`,
    move `embeddings.py` / `embedding_matrix.py` / `loader.py` under
-   `embedding/`, move `diversity_tree.py`, finish the progress merge,
-   delete `vtsearch/models/`.
+   `embedding/`, move `diversity_tree.py`, delete `vtsearch/models/`.
 
 Run `./run-tests.sh` between steps. No behaviour change — pure moves.
 
@@ -265,9 +267,10 @@ expected to land there following the same pattern used by
 
 ## Suggested order of operations
 
-1. Finish the deferred `vtsearch/models/progress.py` ↔
-   `vtsearch/concurrency/progress.py` merge from task #6 (small,
-   unblocks #1).
+1. ~~Resolve the deferred `vtsearch/models/progress.py` ↔
+   `vtsearch/concurrency/progress.py` merge from task #6.~~ ✅ Done
+   in PR #1334 — turned out to be a misdiagnosis; resolved as a rename
+   of `models/progress.py` to `models/labeling_progress.py`.
 2. Carve out `vtsearch/detectors/` (#1 step 1).
 3. Split `routes/datasets/crud.py` (#2).
 4. Finish the `vtsearch/models/` split (#1 step 2).

@@ -38,7 +38,7 @@ Files to convert:
 - `vtsearch/datasets/load_pipeline.py`
 - `vtsearch/datasets/registry.py`
 - `vtsearch/models/loader.py`
-- `vtsearch/models/progress.py`
+- `vtsearch/models/labeling_progress.py`
 - `vtsearch/models/detector_store.py`
 - `vtsearch/state/__init__.py`
 - `vtsearch/sync/__init__.py`

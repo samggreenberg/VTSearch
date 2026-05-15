@@ -4,7 +4,7 @@ Validates that the ``_state_lock`` in ``vtsearch.state`` correctly
 serialises concurrent access to votes, click-times, label history, and
 autorun detectors.  Also validates the ``_settings_lock`` in
 ``vtsearch.settings`` and the ``_progress_lock`` in
-``vtsearch.models.progress``.
+``vtsearch.models.labeling_progress``.
 """
 
 import threading
@@ -28,7 +28,7 @@ from vtsearch.state import (
 import vtsearch.state as _state
 import vtsearch.state.core as _core
 import vtsearch.settings as _settings_mod
-import vtsearch.models.progress as _progress_mod
+import vtsearch.models.labeling_progress as _progress_mod
 
 
 class TestStateLock:

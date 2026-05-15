@@ -351,7 +351,7 @@ def register_detector_context(ctx: DetectorContext) -> None:
     Also clears the module-level progress cache so that stale training
     indicators from a previously-active detector are not reused.
     """
-    from vtsearch.models.progress import clear_progress_cache
+    from vtsearch.models.labeling_progress import clear_progress_cache
 
     with _state_lock:
         _detector_contexts[ctx.detector_id] = ctx
@@ -366,7 +366,7 @@ def unregister_detector_context(detector_id: str) -> DetectorContext | None:
     Also clears the progress cache so stale cached steps from the removed
     detector are not used by a subsequent detector.
     """
-    from vtsearch.models.progress import clear_progress_cache
+    from vtsearch.models.labeling_progress import clear_progress_cache
 
     with _state_lock:
         ctx = _detector_contexts.pop(detector_id, None)

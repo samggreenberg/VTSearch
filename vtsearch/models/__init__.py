@@ -15,7 +15,7 @@ from vtsearch.models.loader import (
     initialize_models,
     preload_autoload_media_types,
 )
-from vtsearch.models.progress import (
+from vtsearch.models.labeling_progress import (
     analyze_labeling_progress,
     calculate_diversity_level_over_time,
     calculate_error_cost_over_time,
