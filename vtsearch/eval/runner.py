@@ -47,7 +47,7 @@ def _run_text_sort_query(
 
     Returns a list of ``{"id": int, "similarity": float}`` sorted descending.
     """
-    from vtsearch.models.embeddings import embed_text_query
+    from vtsearch.embedding.helpers import embed_text_query
 
     text_vec = embed_text_query(query.text, media_type, enrich=enrich)
     if text_vec is None:
@@ -141,7 +141,7 @@ def eval_learned_sort(
     Returns:
         List of :class:`LearnedSortMetrics`, one per query.
     """
-    from vtsearch.models.training import train_and_score
+    from vtsearch.detectors.training import train_and_score
 
     rng = np.random.RandomState(seed)
     results: list[LearnedSortMetrics] = []

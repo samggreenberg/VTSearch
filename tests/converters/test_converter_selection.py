@@ -719,7 +719,9 @@ class TestFolderImporterWithConverters:
 
         mock_converter_medias = {1: {"id": 1, "type": "image"}}
 
-        def _fake_run_converters(folder, output_type, specs, medias, thin=False, recursive=True, folder_path_for_origin=""):
+        def _fake_run_converters(
+            folder, output_type, specs, medias, thin=False, recursive=True, folder_path_for_origin=""
+        ):
             if specs:
                 medias.update(mock_converter_medias)
 
@@ -728,9 +730,7 @@ class TestFolderImporterWithConverters:
                 "vtsearch.datasets.importers.server_folder.load_dataset_from_folder",
                 side_effect=ValueError("No images files found"),
             ),
-            patch(
-                "vtsearch.datasets.importers.server_folder._run_converter_specs", side_effect=_fake_run_converters
-            ),
+            patch("vtsearch.datasets.importers.server_folder._run_converter_specs", side_effect=_fake_run_converters),
         ):
             medias: dict = {}
             IMPORTER.run(
@@ -756,7 +756,7 @@ class TestFolderImporterWithConverters:
 class TestImportAPIConverters:
     def test_import_endpoint_passes_converters(self, client):
         """POST /api/dataset/import/server_folder passes converters to the importer."""
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={
@@ -773,7 +773,7 @@ class TestImportAPIConverters:
 
     def test_import_endpoint_without_converters(self, client):
         """Without converters, the field is not added."""
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={"path": "/tmp/test", "media_type": "image"},
@@ -822,18 +822,14 @@ class TestLegacyEffectiveSourceSpecs:
     def test_legacy_with_converters_csv(self):
         from vtsearch.datasets.importers.http_archive import IMPORTER
 
-        specs = IMPORTER.effective_source_specs(
-            {"media_type": "image", "converters": "video2image,document2image"}
-        )
+        specs = IMPORTER.effective_source_specs({"media_type": "image", "converters": "video2image,document2image"})
         assert [s.converter for s in specs] == [None, "video2image", "document2image"]
         assert [s.source_type for s in specs] == ["image", "video", "document"]
 
     def test_legacy_unknown_converter_is_skipped(self):
         from vtsearch.datasets.importers.http_archive import IMPORTER
 
-        specs = IMPORTER.effective_source_specs(
-            {"media_type": "image", "converters": "video2image,bogus"}
-        )
+        specs = IMPORTER.effective_source_specs({"media_type": "image", "converters": "video2image,bogus"})
         assert [s.converter for s in specs] == [None, "video2image"]
 
 
@@ -985,7 +981,7 @@ class TestConverterAcceptsParams:
 
 class TestImportAPISourceSpecs:
     def test_import_endpoint_passes_source_specs(self, client):
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={
@@ -1091,7 +1087,7 @@ class TestImportLocalFolderRouteForwardsSourceSpecs:
             ]
         )
 
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_bg:
+        with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_bg:
             # We don't care if the upload pipeline crashes after staging —
             # we only assert source_specs makes it to the importer.
             mock_bg.return_value = "task-1"

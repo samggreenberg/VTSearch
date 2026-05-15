@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import threading
 
-from vtsearch.utils.async_jobs import AsyncJob, JobManager
+from vtsearch.concurrency.async_jobs import AsyncJob, JobManager
 
 
 def _make_target(release: threading.Event, started: threading.Event, marker: list):
@@ -156,9 +156,7 @@ class TestCoalescing:
 
         second_release = threading.Event()
         second_release.set()
-        second = mgr.start(
-            "sig-B", _make_target(second_release, threading.Event(), ran)
-        )
+        second = mgr.start("sig-B", _make_target(second_release, threading.Event(), ran))
         assert second.status == "pending"
 
         first_release.set()

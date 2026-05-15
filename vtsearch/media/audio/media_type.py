@@ -470,7 +470,7 @@ class AudioMediaType(MediaType):
         import hashlib  # noqa: PLC0415
 
         if on_progress is None:
-            from vtsearch.utils import update_progress
+            from vtsearch.concurrency.progress import update_progress
 
             on_progress = update_progress
 

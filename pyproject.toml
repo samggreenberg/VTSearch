@@ -4,8 +4,8 @@ version = "0.1.0"
 requires-python = ">=3.10"
 description = "Media explorer for browsing and voting on audio, images, text, video, or documents"
 
-# All runtime dependencies live in requirements.txt (core) and per-plugin
-# requirements.txt files (auto-discovered by install-plugin-deps.sh).
+# All runtime dependencies live in requirements/base.txt (core) and per-plugin
+# requirements.txt files (auto-discovered by scripts/install-plugin-deps.sh).
 # This file is kept for editable installs (`pip install -e .`) and tool config.
 
 [tool.setuptools.packages.find]

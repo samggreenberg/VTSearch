@@ -196,6 +196,107 @@ describe('VoteStateService', () => {
     discardPeriodicTasks();
   }));
 
+  describe('undo / redo stack', () => {
+    it('records the previous polarity at click time and POSTs the inverse on undo', () => {
+      service.applyOptimisticVote(5, 'good'); // pretend a vote landed
+      service.recordVote(5, 'good', 'foo.wav'); // capture state BEFORE another click
+      // We just recorded that previously (before next click) it was 'good'.
+      // Simulate the click that would follow: toggle off.
+      service.applyOptimisticVote(5, 'good');
+
+      service.undo();
+      // Inverse direction should be the *previous* polarity, restoring 'good'.
+      const req = httpMock.expectOne('/api/medias/5/vote');
+      expect(req.request.body).toEqual({ vote: 'good' });
+      req.flush({ ok: true });
+      httpMock.expectOne('/api/votes').flush({ good: [5], bad: [], click_times: {}, learned_scores: {} });
+
+      expect(service.canRedo()).toBeTrue();
+      expect(service.canUndo()).toBeFalse();
+    });
+
+    it('redo replays the original clicked direction', () => {
+      service.recordVote(7, 'bad', 'bar.wav'); // previous = null
+      service.applyOptimisticVote(7, 'bad');
+
+      service.undo();
+      httpMock.expectOne('/api/medias/7/vote').flush({ ok: true });
+      httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+
+      service.redo();
+      const req = httpMock.expectOne('/api/medias/7/vote');
+      expect(req.request.body).toEqual({ vote: 'bad' });
+      req.flush({ ok: true });
+      httpMock.expectOne('/api/votes').flush({ good: [], bad: [7], click_times: {}, learned_scores: {} });
+
+      expect(service.canRedo()).toBeFalse();
+      expect(service.canUndo()).toBeTrue();
+    });
+
+    it('a new recordVote clears the redo stack', () => {
+      service.recordVote(1, 'good', 'a');
+      service.applyOptimisticVote(1, 'good');
+      service.undo();
+      httpMock.expectOne('/api/medias/1/vote').flush({ ok: true });
+      httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+      expect(service.canRedo()).toBeTrue();
+
+      service.recordVote(2, 'bad', 'b');
+      expect(service.canRedo()).toBeFalse();
+    });
+
+    it('undo with empty stack is a no-op', () => {
+      service.undo();
+      httpMock.expectNone('/api/medias/0/vote');
+      expect(service.canUndo()).toBeFalse();
+    });
+
+    it('emits a toast on undo and redo', () => {
+      const toasts: { action: string; mediaName: string }[] = [];
+      service.toast$.subscribe((t) => toasts.push(t));
+
+      service.recordVote(9, 'good', 'pic.png');
+      service.applyOptimisticVote(9, 'good');
+      service.undo();
+      httpMock.expectOne('/api/medias/9/vote').flush({ ok: true });
+      httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+
+      service.redo();
+      httpMock.expectOne('/api/medias/9/vote').flush({ ok: true });
+      httpMock.expectOne('/api/votes').flush({ good: [9], bad: [], click_times: {}, learned_scores: {} });
+
+      expect(toasts).toEqual([
+        { action: 'undo', mediaName: 'pic.png' },
+        { action: 'redo', mediaName: 'pic.png' },
+      ]);
+    });
+
+    it('caps the past stack at 20 entries', () => {
+      for (let i = 0; i < 25; i++) {
+        service.recordVote(i, 'good', `m${i}`);
+      }
+      // Undo as many times as the stack should hold. Each pops one and POSTs.
+      let popped = 0;
+      while (service.canUndo()) {
+        service.undo();
+        const req = httpMock.expectOne((r) => r.url.startsWith('/api/medias/') && r.url.endsWith('/vote'));
+        req.flush({ ok: true });
+        httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+        popped++;
+        if (popped > 30) throw new Error('runaway');
+      }
+      expect(popped).toBe(20);
+    });
+
+    it('clear() wipes the undo/redo stacks', () => {
+      service.recordVote(1, 'good', 'a');
+      expect(service.canUndo()).toBeTrue();
+      service.clear();
+      expect(service.canUndo()).toBeFalse();
+      expect(service.canRedo()).toBeFalse();
+    });
+  });
+
   it('goodVotes$ should emit on load', (done: DoneFn) => {
     const emissions: Set<number>[] = [];
     service.goodVotes$.subscribe((v) => emissions.push(v));

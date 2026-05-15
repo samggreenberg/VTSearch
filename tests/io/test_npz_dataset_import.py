@@ -265,21 +265,20 @@ class TestLocalUploadVectorsFile:
                 # Return an empty generator for the chunked path.
                 return iter(())
 
-            with patch.object(importer, "run", side_effect=_sniff), patch.object(
-                importer, "run_chunked", side_effect=_sniff
+            with (
+                patch.object(importer, "run", side_effect=_sniff),
+                patch.object(importer, "run_chunked", side_effect=_sniff),
             ):
                 load_fn({})
             return "task-fake-npz"
 
         return _fake_run
 
-    def test_upload_with_vectors_file_populates_importer_content_vectors(
-        self, client, tmp_path, monkeypatch
-    ):
+    def test_upload_with_vectors_file_populates_importer_content_vectors(self, client, tmp_path, monkeypatch):
         from vtsearch.datasets.importers import get_importer
 
         monkeypatch.setattr(
-            "vtsearch.routes.datasets.LOCAL_UPLOADS_DIR",
+            "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
             tmp_path / "uploads",
         )
 
@@ -294,7 +293,7 @@ class TestLocalUploadVectorsFile:
 
         observed: dict = {}
         with patch(
-            "vtsearch.routes.datasets._run_origin_load_in_background",
+            "vtsearch.routes.datasets.load._run_origin_load_in_background",
             side_effect=self._stub_run_and_observe(observed),
         ):
             resp = client.post(
@@ -316,17 +315,15 @@ class TestLocalUploadVectorsFile:
         # next upload doesn't inherit stale vectors.
         assert get_importer("server_folder").content_vectors == {}
 
-    def test_upload_without_vectors_file_leaves_importer_unchanged(
-        self, client, tmp_path, monkeypatch
-    ):
+    def test_upload_without_vectors_file_leaves_importer_unchanged(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "vtsearch.routes.datasets.LOCAL_UPLOADS_DIR",
+            "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
             tmp_path / "uploads",
         )
 
         observed: dict = {}
         with patch(
-            "vtsearch.routes.datasets._run_origin_load_in_background",
+            "vtsearch.routes.datasets.load._run_origin_load_in_background",
             side_effect=self._stub_run_and_observe(observed),
         ):
             resp = client.post(
@@ -346,7 +343,7 @@ class TestLocalUploadVectorsFile:
     def test_upload_rejects_invalid_vectors_file(self, client, tmp_path, monkeypatch):
         """A bogus ``vectors_file`` is rejected up front with a 400."""
         monkeypatch.setattr(
-            "vtsearch.routes.datasets.LOCAL_UPLOADS_DIR",
+            "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
             tmp_path / "uploads",
         )
         bogus = io.BytesIO(b"not really a npz archive")

@@ -8,11 +8,11 @@ across seeds.
 
 The headline metrics are rank-based on purpose: VTSearch never trusts
 the model's raw score as a probability — it derives the operating
-threshold via :func:`vtsearch.models.training.calculate_cross_calibration_threshold`
+threshold via :func:`vtsearch.training.thresholds.calculate_cross_calibration_threshold`
 and then applies it at inference.  So the relevant comparison is "how
 good is the ranking" (AUROC, AP, best-F1) plus "what F1 does the
 production cross-calibration path actually achieve" (``f1_at_xcal``,
-which uses :func:`vtsearch.models.training.find_optimal_threshold` on a
+which uses :func:`vtsearch.training.thresholds.find_optimal_threshold` on a
 held-out cal slice of the training labels).  Brier score and F1@0.5 are
 kept on every row as diagnostics but excluded from the default
 summary.
@@ -63,10 +63,10 @@ TrainerFn = Callable[[np.ndarray, np.ndarray, int], PredictFn]
 
 
 def _train_mlp(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
-    """Adapt :func:`vtsearch.models.training.train_model` to the sweep API."""
+    """Adapt :func:`vtsearch.training.mlp.train_model` to the sweep API."""
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.training import train_model
+    from vtsearch.training.mlp import train_model
 
     X_t = torch.from_numpy(np.asarray(X, dtype=np.float32))
     y_t = torch.from_numpy(np.asarray(y, dtype=np.float32)).unsqueeze(1)
@@ -85,7 +85,7 @@ def _train_svm_factory(kernel: str) -> TrainerFn:
     """Build a sweep-shaped trainer that fits an SVM with the given kernel."""
 
     def trainer(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
-        from vtsearch.models.svm_training import train_svm
+        from vtsearch.training.svm import train_svm
 
         clf = train_svm(X, y, kernel=kernel, seed=seed)  # type: ignore[arg-type]
         return clf.predict_proba
@@ -248,9 +248,7 @@ def _build_split_pool(
     sim_pos = _stack(sim_pos_ids)
     sim_neg = _stack(sim_neg_ids)
     test_X = np.concatenate([_stack(test_pos_ids), _stack(test_neg_ids)], axis=0)
-    test_y = np.concatenate(
-        [np.ones(test_pos_ids.size, dtype=np.int32), np.zeros(test_neg_ids.size, dtype=np.int32)]
-    )
+    test_y = np.concatenate([np.ones(test_pos_ids.size, dtype=np.int32), np.zeros(test_neg_ids.size, dtype=np.int32)])
     return _SplitPool(sim_pos=sim_pos, sim_neg=sim_neg, test_X=test_X, test_y=test_y)
 
 
@@ -353,7 +351,7 @@ def _cross_calibrated_threshold(
     Returns ``0.5`` when the label budget is too small to form valid
     splits (mirrors the production fallback).
     """
-    from vtsearch.models.training import find_optimal_threshold
+    from vtsearch.training.thresholds import find_optimal_threshold
 
     n = int(y_train.size)
     if n < 4:
@@ -575,8 +573,5 @@ def summarise(df: pd.DataFrame, *, include_diagnostics: bool = False) -> pd.Data
     grouped = df.groupby(["dataset", "category", "trainer", "n_labels"], sort=False)
     agg = grouped[metric_cols].agg(["mean", "std"]).reset_index()
     # Flatten MultiIndex columns: ("auroc", "mean") -> "auroc_mean".
-    agg.columns = [
-        f"{a}_{b}" if isinstance(b, str) and b else a
-        for a, b in agg.columns.to_flat_index()
-    ]
+    agg.columns = [f"{a}_{b}" if isinstance(b, str) and b else a for a, b in agg.columns.to_flat_index()]
     return agg

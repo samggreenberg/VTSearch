@@ -78,9 +78,7 @@ class TestSyntheticImporterValidation:
 
     def test_user_dataset_name_overrides_default(self):
         imp = SyntheticDatasetImporter()
-        out = imp.resolve_display_name(
-            {"media_type": "audio", "size": "7", "dataset_name": "My Tones"}
-        )
+        out = imp.resolve_display_name({"media_type": "audio", "size": "7", "dataset_name": "My Tones"})
         assert out == "My Tones"
 
 
@@ -282,7 +280,7 @@ class TestRunEndToEnd:
         being synthesised, instead of stalling on "Preparing new dataset…".
         """
         from vtsearch.datasets.importers import synthetic as syn  # noqa: PLC0415
-        from vtsearch.utils.progress import (  # noqa: PLC0415
+        from vtsearch.concurrency.progress import (  # noqa: PLC0415
             clear_thread_progress,
             set_thread_progress,
         )

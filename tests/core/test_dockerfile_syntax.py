@@ -7,7 +7,7 @@ embedded Python is invisible to ruff, pytest, and CI — it only surfaces
 when somebody actually runs ``docker build``, often after minutes of layer
 work.
 
-Approach: read each ``Dockerfile*``, join Docker's backslash-continued
+Approach: read each ``docker/Dockerfile*``, join Docker's backslash-continued
 lines, pull out every ``python ... -c "..."`` invocation, and run
 ``compile()`` on the contents. Pure-text work; no Docker daemon needed.
 """
@@ -44,7 +44,7 @@ def _find_python_c_snippets(dockerfile_text: str) -> list[str]:
 
 
 def _dockerfiles() -> list[Path]:
-    return sorted(REPO_ROOT.glob("Dockerfile*"))
+    return sorted((REPO_ROOT / "docker").glob("Dockerfile*"))
 
 
 @pytest.mark.parametrize("dockerfile", _dockerfiles(), ids=lambda p: p.name)
@@ -78,11 +78,7 @@ def test_parser_finds_simple_block() -> None:
 
 
 def test_parser_joins_backslash_continuations() -> None:
-    text = (
-        'RUN python -u -c "import os; \\\n'
-        "from sys import path; \\\n"
-        'print(path)"\n'
-    )
+    text = 'RUN python -u -c "import os; \\\nfrom sys import path; \\\nprint(path)"\n'
     snippets = _find_python_c_snippets(text)
     assert len(snippets) == 1
     assert "import os" in snippets[0]
@@ -92,13 +88,7 @@ def test_parser_joins_backslash_continuations() -> None:
 
 def test_parser_catches_inline_try_except_syntax_error() -> None:
     """Regression for the bug fixed in PR #1282."""
-    text = (
-        'RUN python -u -c "import os; \\\n'
-        "try: \\\n"
-        "    do_thing(); \\\n"
-        "except Exception: \\\n"
-        '    pass"\n'
-    )
+    text = 'RUN python -u -c "import os; \\\ntry: \\\n    do_thing(); \\\nexcept Exception: \\\n    pass"\n'
     snippets = _find_python_c_snippets(text)
     assert len(snippets) == 1
     with pytest.raises(SyntaxError):
@@ -107,13 +97,10 @@ def test_parser_catches_inline_try_except_syntax_error() -> None:
 
 def test_parser_skips_non_dash_c_python_invocations() -> None:
     """Real script files (``python scripts/foo.py``) are out of scope."""
-    text = (
-        "RUN python -u scripts/preload_siglip.py\n"
-        'RUN python -c "print(1)"\n'
-    )
+    text = 'RUN python -u scripts/preload_siglip.py\nRUN python -c "print(1)"\n'
     assert _find_python_c_snippets(text) == ["print(1)"]
 
 
 def test_repo_actually_has_dockerfiles() -> None:
     """Parametrize collects at runtime — make sure we found anything at all."""
-    assert _dockerfiles(), "expected at least one Dockerfile in the repo root"
+    assert _dockerfiles(), "expected at least one Dockerfile under docker/"

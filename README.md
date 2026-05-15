@@ -86,7 +86,7 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── SETUP.md                    # Setup instructions
 │   ├── USER_GUIDE.md               # End-user walkthrough (Autopilot, voting, sorting)
 │   ├── demos.md                    # Demo dataset listing
-│   ├── plan-sync-sources.md        # Sync sources design document (implemented)
+│   ├── plans/                      # Open design plans (see plans/README.md)
 │   └── design/                     # Architecture design documents
 └── pyproject.toml                  # Project metadata and dependencies
 ```

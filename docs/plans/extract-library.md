@@ -22,7 +22,7 @@ The expensive work is **introducing seams in the current monolith**. Once `vtsea
 
 The library cannot import Flask. Today the leakage outside `routes/` is small:
 
-- `vtsearch/utils/state_core.py` — proxy dicts read `flask.g`. **Fix**: keep the proxy class itself but parameterise the "current context" lookup via a pluggable resolver. Default resolver = thread-local. App registers a Flask-aware resolver at startup that reads `g`.
+- `vtsearch/state/core.py` — proxy dicts read `flask.g`. **Fix**: keep the proxy class itself but parameterise the "current context" lookup via a pluggable resolver. Default resolver = thread-local. App registers a Flask-aware resolver at startup that reads `g`.
 - `vtsearch/media/base.py` — uses Flask. **Fix**: identify what it actually needs (likely a URL builder or request URL); accept it as a constructor arg or move that concern to the route layer.
 - `vtsearch/models/training_workflow.py` — uses Flask. **Fix**: same approach; lift Flask-aware bits to a thin app-side wrapper.
 
@@ -38,10 +38,10 @@ Files to convert:
 - `vtsearch/datasets/load_pipeline.py`
 - `vtsearch/datasets/registry.py`
 - `vtsearch/models/loader.py`
-- `vtsearch/models/progress.py`
+- `vtsearch/models/labeling_progress.py`
 - `vtsearch/models/detector_store.py`
-- `vtsearch/utils/state.py`
-- `vtsearch/utils/sync_source.py`
+- `vtsearch/state/__init__.py`
+- `vtsearch/sync/__init__.py`
 
 Approach:
 
@@ -57,7 +57,7 @@ Currently `medias`, `good_votes`, `label_history`, etc. are module-level proxies
 
 - [ ] Audit every public library function and ensure it accepts a context object as a parameter (most already do via the proxy delegation; some implicitly read globals — make those explicit).
 - [ ] Keep the proxy module in the *app* layer, not the library. The library exports the context classes; the app exports the proxies that delegate to them via Flask `g` / thread-local.
-- [ ] Move `autorun_detectors`, `autorun_extractors`, `autorun_localizers` (currently global module state in `vtsearch/utils/state.py`) onto a context-or-config object the app owns.
+- [ ] Move `autorun_detectors`, `autorun_extractors`, `autorun_localizers` (currently global module state in `vtsearch/state/__init__.py`) onto a context-or-config object the app owns.
 
 **Exit criteria**: `grep -n "^medias\|^good_votes" vtscore-candidate-paths/` returns zero hits — those names exist only in the app shim.
 
@@ -78,7 +78,7 @@ The sentinel-based registry (`IMPORTER`, `EXPORTER`, `SETTINGS_SOURCE`, `LABELSE
 - [ ] Library exposes `vtscore.utils.registry.PluginRegistry` (already generic).
 - [ ] Library auto-discovers its own plugins (importers, exporters, label sources, etc.) at registry creation.
 - [ ] App registers app-only plugins (`settings_io/`, settings sources) on top of the library's registries at startup.
-- [ ] Add an `importlib.metadata` entry-point hook so third-party packages can register plugins without monkey-patching. (Stretch goal.)
+- [x] Add an `importlib.metadata` entry-point hook so third-party packages can register plugins without monkey-patching. (Landed ahead of the library split as feature-brainstorm §12.11 — `PluginRegistry(entry_point_group=…)` scans `vtsearch.<family>` groups. Built-ins win on name clashes; broken entry points warn and are skipped.)
 
 ## Phase 6 — Pickle compatibility
 

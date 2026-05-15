@@ -421,5 +421,3 @@ class TestMultiUserServerMediaFiles:
             assert resp.status_code == 400
         finally:
             set_login_provider(original)
-
-

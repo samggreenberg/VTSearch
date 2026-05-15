@@ -6,8 +6,8 @@ historically; pulling them here keeps the settings module focused on
 the cache, file I/O, and the spec-driven generation loops.
 
 The generated accessors close over :mod:`vtsearch.settings` state
-(``_settings_lock``, ``_ensure_loaded``, ``_save``, ``_DEFAULTS``) which
-they import lazily at call time to avoid an import cycle.
+(``_settings_lock``, ``_read_value``, ``_write_value``) which they
+import lazily at call time to avoid an import cycle.
 """
 
 from __future__ import annotations
@@ -55,18 +55,16 @@ def make_accessors(key: str, cast: type, coerce=None):
         coerce = cast
 
     def getter():
-        from vtsearch.settings import _DEFAULTS, _ensure_loaded, _settings_lock
+        from vtsearch.settings import _read_value, _settings_lock
 
         with _settings_lock:
-            return cast(_ensure_loaded().get(key, _DEFAULTS[key]))
+            return cast(_read_value(key))
 
     def setter(value):
-        from vtsearch.settings import _ensure_loaded, _save, _settings_lock
+        from vtsearch.settings import _settings_lock, _write_value
 
         with _settings_lock:
-            s = _ensure_loaded()
-            s[key] = coerce(value)
-            _save(s)
+            _write_value(key, coerce(value))
 
     getter.__name__ = f"get_{key}"
     setter.__name__ = f"set_{key}"
@@ -112,12 +110,12 @@ def make_per_side_setting(
         return tuple(all_type_ids())
 
     def _get_dict(key: str) -> dict[str, Any]:
-        from vtsearch.settings import _DEFAULTS, _ensure_loaded, _settings_lock
+        from vtsearch.settings import _read_value, _settings_lock
 
         side = key[len(key_base) + 1 :]  # strip "<key_base>_" prefix
         default_val = defaults.get(side, next(iter(defaults.values())))
         with _settings_lock:
-            raw = _ensure_loaded().get(key, _DEFAULTS[key])
+            raw = _read_value(key)
 
         types = _valid_media_types()
 
@@ -163,7 +161,7 @@ def make_per_side_setting(
     _validate_entry = _validate_int if value_type == "int" else _validate_str
 
     def _set_dict(key: str, value) -> None:
-        from vtsearch.settings import _ensure_loaded, _save, _settings_lock
+        from vtsearch.settings import _settings_lock, _write_value
 
         valid_types = _valid_media_types()
 
@@ -184,9 +182,7 @@ def make_per_side_setting(
             coerced[tid] = _validate_entry(v, key, tid)
 
         with _settings_lock:
-            s = _ensure_loaded()
-            s[key] = coerced
-            _save(s)
+            _write_value(key, coerced)
 
     def get_left():
         return _get_dict(f"{key_base}_left")

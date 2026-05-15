@@ -17,7 +17,11 @@ from __future__ import annotations
 import io
 import json
 
-from vtsearch.utils import good_votes, bad_votes, medias
+from vtsearch.state import (
+    good_votes,
+    bad_votes,
+    medias,
+)
 
 
 class TestInvalidRequestBodies:
@@ -164,6 +168,7 @@ class TestMissingRequiredFields:
     def test_textsort_suggestion_whitespace_text(self, client):
         resp = client.post("/api/textsort-suggestions", json={"text": "   "})
         assert resp.status_code == 400
+
 
 class TestTypeMismatches:
     """Routes should reject wrong-typed values."""
@@ -538,7 +543,6 @@ class TestSettingsEdgeCases:
         assert resp.status_code == 200
 
 
-
 class TestVoteEdgeCases:
     """Edge cases in voting behavior."""
 
@@ -610,4 +614,3 @@ class TestPathTraversalPrevention:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-

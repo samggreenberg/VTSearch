@@ -7,7 +7,7 @@ import numpy as np
 
 from tests import load_detector_and_wait as _load_detector_and_wait
 
-from vtsearch.utils.state_core import (
+from vtsearch.state.core import (
     DatasetContext,
     DetectorContext,
     _ProxyDict,
@@ -110,7 +110,7 @@ class TestProxyDict:
     """_ProxyDict delegates to the active context."""
 
     def test_proxy_dict_reflects_active_context(self):
-        from vtsearch.utils.state_core import medias
+        from vtsearch.state.core import medias
 
         # The reset_state fixture creates _test_default with test medias.
         # Create a second context and switch.
@@ -129,7 +129,7 @@ class TestProxyDict:
         assert len(medias) > 0  # test medias
 
     def test_proxy_dict_clear(self):
-        from vtsearch.utils.state_core import good_votes
+        from vtsearch.state.core import good_votes
 
         good_votes[1] = None
         assert 1 in good_votes
@@ -137,21 +137,21 @@ class TestProxyDict:
         assert len(good_votes) == 0
 
     def test_proxy_dict_pop(self):
-        from vtsearch.utils.state_core import bad_votes
+        from vtsearch.state.core import bad_votes
 
         bad_votes[5] = None
         assert bad_votes.pop(5, "missing") is None
         assert bad_votes.pop(5, "missing") == "missing"
 
     def test_proxy_dict_update(self):
-        from vtsearch.utils.state_core import last_learned_scores
+        from vtsearch.state.core import last_learned_scores
 
         last_learned_scores.update({1: 0.5, 2: 0.8})
         assert last_learned_scores[1] == 0.5
         assert last_learned_scores[2] == 0.8
 
     def test_proxy_dict_copy(self):
-        from vtsearch.utils.state_core import good_votes
+        from vtsearch.state.core import good_votes
 
         good_votes[10] = None
         c = good_votes.copy()
@@ -160,7 +160,7 @@ class TestProxyDict:
         assert 10 in c
 
     def test_proxy_dict_items_values_keys(self):
-        from vtsearch.utils.state_core import good_votes
+        from vtsearch.state.core import good_votes
 
         good_votes[1] = None
         good_votes[2] = None
@@ -169,12 +169,12 @@ class TestProxyDict:
         assert set(dict(good_votes.items()).keys()) == {1, 2}
 
     def test_proxy_dict_is_dict_instance(self):
-        from vtsearch.utils.state_core import medias
+        from vtsearch.state.core import medias
 
         assert isinstance(medias, dict)
 
     def test_proxy_dict_bool(self):
-        from vtsearch.utils.state_core import last_learned_scores
+        from vtsearch.state.core import last_learned_scores
 
         last_learned_scores.clear()
         assert not last_learned_scores
@@ -186,7 +186,7 @@ class TestProxyList:
     """_ProxyList delegates to the active context."""
 
     def test_proxy_list_append_and_iter(self):
-        from vtsearch.utils.state_core import textsort_suggestions
+        from vtsearch.state.core import textsort_suggestions
 
         textsort_suggestions.clear()
         textsort_suggestions.append("hello")
@@ -194,7 +194,7 @@ class TestProxyList:
         assert list(textsort_suggestions) == ["hello", "world"]
 
     def test_proxy_list_clear(self):
-        from vtsearch.utils.state_core import label_history
+        from vtsearch.state.core import label_history
 
         label_history.append((1, "good", 0.0))
         assert len(label_history) > 0
@@ -202,12 +202,12 @@ class TestProxyList:
         assert len(label_history) == 0
 
     def test_proxy_list_is_list_instance(self):
-        from vtsearch.utils.state_core import label_history
+        from vtsearch.state.core import label_history
 
         assert isinstance(label_history, list)
 
     def test_proxy_list_remove(self):
-        from vtsearch.utils.state_core import textsort_suggestions
+        from vtsearch.state.core import textsort_suggestions
 
         textsort_suggestions.clear()
         textsort_suggestions.append("a")
@@ -242,7 +242,7 @@ class TestMultiDatasetSwitching:
         }
 
     def test_switch_preserves_medias(self):
-        from vtsearch.utils import (
+        from vtsearch.state import (
             medias,
             register_context,
             set_thread_dataset_context,
@@ -271,7 +271,7 @@ class TestMultiDatasetSwitching:
 
     def test_switch_detectors_preserves_votes(self):
         """Votes are per-detector: switching detectors preserves each one's votes."""
-        from vtsearch.utils import (
+        from vtsearch.state import (
             good_votes,
             bad_votes,
             register_detector_context,
@@ -302,7 +302,7 @@ class TestMultiDatasetSwitching:
         assert 2 in bad_votes
 
     def test_switch_detectors_preserves_label_history(self):
-        from vtsearch.utils import (
+        from vtsearch.state import (
             label_history,
             register_detector_context,
             set_thread_detector_context,
@@ -329,7 +329,7 @@ class TestMultiDatasetSwitching:
         assert label_history[0][0] == 1
 
     def test_switch_detectors_preserves_learned_scores(self):
-        from vtsearch.utils import (
+        from vtsearch.state import (
             get_learned_scores,
             register_detector_context,
             set_thread_detector_context,
@@ -352,7 +352,7 @@ class TestMultiDatasetSwitching:
         assert get_learned_scores() == {1: 0.9, 2: 0.1}
 
     def test_unload_frees_context(self):
-        from vtsearch.utils import (
+        from vtsearch.state import (
             medias,
             register_context,
             set_thread_dataset_context,
@@ -457,7 +457,7 @@ class TestMultiDatasetAPI:
 
     def test_dataset_status_reflects_active(self, client):
         """GET /api/dataset/status shows the active dataset's medias."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         # Default context has test medias from conftest.
         resp = client.get("/api/dataset/status")
@@ -504,7 +504,7 @@ class TestScalarContextState:
 
     def test_click_counter_per_detector(self):
         """click_counter is per-detector (vote state)."""
-        from vtsearch.utils.state_core import _get_click_counter, _set_click_counter
+        from vtsearch.state.core import _get_click_counter, _set_click_counter
 
         det_a = DetectorContext("cc_det_a")
         register_detector_context(det_a)
@@ -523,7 +523,7 @@ class TestScalarContextState:
 
     def test_inclusion_per_detector(self):
         """inclusion is per-detector (training parameter)."""
-        from vtsearch.utils.state_core import _get_inclusion, _set_inclusion
+        from vtsearch.state.core import _get_inclusion, _set_inclusion
 
         det_a = DetectorContext("inc_det_a")
         register_detector_context(det_a)
@@ -540,7 +540,7 @@ class TestScalarContextState:
         assert _get_inclusion() == 5
 
     def test_display_name_per_dataset(self):
-        from vtsearch.utils.state_core import _get_dataset_display_name, _set_dataset_display_name
+        from vtsearch.state.core import _get_dataset_display_name, _set_dataset_display_name
 
         ctx_a = DatasetContext("dn_a")
         register_context(ctx_a)
@@ -566,14 +566,14 @@ class TestEmptyContextFallback:
     """When no context is active, proxies behave as empty containers."""
 
     def test_empty_medias_when_no_dataset(self):
-        from vtsearch.utils.state_core import medias
+        from vtsearch.state.core import medias
 
         set_thread_dataset_context(None)
         assert len(medias) == 0
         assert list(medias.keys()) == []
 
     def test_empty_votes_when_no_detector(self):
-        from vtsearch.utils.state_core import good_votes, bad_votes
+        from vtsearch.state.core import good_votes, bad_votes
 
         set_thread_detector_context(None)
         assert len(good_votes) == 0
@@ -594,11 +594,16 @@ class TestSyncLabelsAcrossDatasets:
         votes, preventing destruction of the model's saved labelset from a
         prior training session on a different dataset."""
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.detector_registry import add_loaded_detector_id, register_detector, reset_for_tests
-        from vtsearch.models.detector_store import _read_detector, _write_detector
+        from vtsearch.detectors.registry import add_loaded_detector_id, register_detector, reset_for_tests
+        from vtsearch.detectors.store import _read_detector, _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
-        from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
-        from vtsearch.utils.state_core import DetectorContext, register_detector_context
+        from vtsearch.state import (
+            bad_votes,
+            good_votes,
+            set_thread_detector_context,
+            snapshot_medias,
+        )
+        from vtsearch.state.core import DetectorContext, register_detector_context
 
         reset_for_tests()
 
@@ -660,11 +665,16 @@ class TestSyncLabelsAcrossDatasets:
         The model's saved labelset from Dataset A must survive the load
         even though Dataset B has no votes."""
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.detector_registry import add_loaded_detector_id, register_detector, reset_for_tests
-        from vtsearch.models.detector_store import _read_detector, _write_detector
+        from vtsearch.detectors.registry import add_loaded_detector_id, register_detector, reset_for_tests
+        from vtsearch.detectors.store import _read_detector, _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
-        from vtsearch.utils import bad_votes, good_votes, set_thread_detector_context, snapshot_medias
-        from vtsearch.utils.state_core import DetectorContext, register_detector_context
+        from vtsearch.state import (
+            bad_votes,
+            good_votes,
+            set_thread_detector_context,
+            snapshot_medias,
+        )
+        from vtsearch.state.core import DetectorContext, register_detector_context
 
         reset_for_tests()
 

@@ -600,11 +600,17 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
+    this.voteState.recordVote(event.id, event.vote, this.mediaDisplayName(event.id));
     this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
         this.onMediaVoted(event);
       },
     });
+  }
+
+  private mediaDisplayName(id: number): string {
+    const m = this.mediaState.medias.find((x) => x.id === id);
+    return m?.filename || m?.origin_name || `#${id}`;
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {

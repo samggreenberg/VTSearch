@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import torch
 
-from vtsearch.models.patch_regions import (
+from vtsearch.media.patch_embed import (
     PatchEmbedOutput,
     RegionVector,
     box_to_vote_vector,
@@ -30,7 +30,7 @@ from vtsearch.models.patch_regions import (
     propose_leaves,
     to_fp16,
 )
-from vtsearch.models.region_similarity import (
+from vtsearch.training.region_similarity import (
     cosine_sort_with_boxes,
     score_against_query,
 )
@@ -988,7 +988,10 @@ class TestVoteEndpointRegionBox:
     """
 
     def test_good_vote_with_region_box_persists_in_state(self, client):
-        from vtsearch.utils import good_votes, vote_region_boxes
+        from vtsearch.state import (
+            good_votes,
+            vote_region_boxes,
+        )
 
         resp = client.post(
             "/api/medias/1/vote",
@@ -999,7 +1002,10 @@ class TestVoteEndpointRegionBox:
         assert vote_region_boxes[1] == (0.1, 0.2, 0.7, 0.8)
 
     def test_good_vote_without_region_box_omits_from_state(self, client):
-        from vtsearch.utils import good_votes, vote_region_boxes
+        from vtsearch.state import (
+            good_votes,
+            vote_region_boxes,
+        )
 
         resp = client.post("/api/medias/1/vote", json={"vote": "good"})
         assert resp.status_code == 200
@@ -1010,7 +1016,10 @@ class TestVoteEndpointRegionBox:
         """No-votes are always image-level by design; sending a region_box
         with a bad-vote is a client bug and the endpoint refuses to silently
         drop it.  See the patch-embedder v2 interaction-design notes."""
-        from vtsearch.utils import bad_votes, vote_region_boxes
+        from vtsearch.state import (
+            bad_votes,
+            vote_region_boxes,
+        )
 
         resp = client.post(
             "/api/medias/1/vote",
@@ -1021,7 +1030,10 @@ class TestVoteEndpointRegionBox:
         assert 1 not in vote_region_boxes
 
     def test_bad_vote_without_region_box_unchanged(self, client):
-        from vtsearch.utils import bad_votes, vote_region_boxes
+        from vtsearch.state import (
+            bad_votes,
+            vote_region_boxes,
+        )
 
         resp = client.post("/api/medias/1/vote", json={"vote": "bad"})
         assert resp.status_code == 200
@@ -1054,7 +1066,10 @@ class TestVoteEndpointRegionBox:
         """Voting good twice toggles off the vote; the region_box must go
         with it so a subsequent fresh yes-vote isn't tagged with a stale
         annotation."""
-        from vtsearch.utils import good_votes, vote_region_boxes
+        from vtsearch.state import (
+            good_votes,
+            vote_region_boxes,
+        )
 
         client.post(
             "/api/medias/1/vote",
@@ -1068,7 +1083,11 @@ class TestVoteEndpointRegionBox:
     def test_switch_good_to_bad_clears_region_box(self, client):
         """A region annotation belongs to a yes-vote; flipping the same
         media to a no-vote drops it."""
-        from vtsearch.utils import bad_votes, good_votes, vote_region_boxes
+        from vtsearch.state import (
+            bad_votes,
+            good_votes,
+            vote_region_boxes,
+        )
 
         client.post(
             "/api/medias/1/vote",
@@ -1083,7 +1102,7 @@ class TestVoteEndpointRegionBox:
     def test_replacing_region_box_updates_value(self, client):
         """Re-voting good with a different box after toggling off the
         previous yes-vote stores the new box, not the previous one."""
-        from vtsearch.utils import vote_region_boxes
+        from vtsearch.state import vote_region_boxes
 
         client.post(
             "/api/medias/1/vote",
@@ -1143,7 +1162,7 @@ class TestLabelExportRegionBox:
         labels = resp.get_json()["labels"]
         by_md5 = {e["md5"]: e for e in labels}
         # Look up which md5 is which media id via the test medias.
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         rb_md5 = medias[1]["md5"]
         plain_md5 = medias[2]["md5"]
@@ -1160,7 +1179,11 @@ class TestLabelImportRegionBox:
     """
 
     def test_import_restores_region_box_on_good(self, client):
-        from vtsearch.utils import good_votes, medias, vote_region_boxes
+        from vtsearch.state import (
+            good_votes,
+            medias,
+            vote_region_boxes,
+        )
 
         md5 = medias[1]["md5"]
         resp = client.post(
@@ -1172,7 +1195,11 @@ class TestLabelImportRegionBox:
         assert vote_region_boxes[1] == (0.2, 0.3, 0.5, 0.6)
 
     def test_import_ignores_region_box_on_bad(self, client):
-        from vtsearch.utils import bad_votes, medias, vote_region_boxes
+        from vtsearch.state import (
+            bad_votes,
+            medias,
+            vote_region_boxes,
+        )
 
         md5 = medias[1]["md5"]
         # A no-vote in an imported labelset cannot carry a box (LabeledElement
@@ -1222,8 +1249,8 @@ class TestRegionAwareTraining:
     def test_train_and_score_uses_box_pooled_vec_when_grid_present(self):
         """A yes-vote with region_box on a media that has a patch_grid feeds
         the MLP with the *pooled* vector, not the CLS embedding."""
-        from vtsearch.models.patch_regions import box_to_vote_vector
-        from vtsearch.models.training import _training_vec_for_vote
+        from vtsearch.media.patch_embed import box_to_vote_vector
+        from vtsearch.detectors.training import _training_vec_for_vote
 
         media = self._media_with_patch_grid(0.99, cid=42)
         box = (0.0, 0.0, 0.5, 0.5)  # top-left quadrant: 4 cells (axes 0,1,4,5)
@@ -1237,7 +1264,7 @@ class TestRegionAwareTraining:
     def test_train_and_score_falls_back_to_cls_without_patch_grid(self):
         """Legacy / single-vector datasets have no ``patch_grid``; even with
         a stashed region_box, training must use the full-image CLS vector."""
-        from vtsearch.models.training import _training_vec_for_vote
+        from vtsearch.detectors.training import _training_vec_for_vote
 
         media = {
             "id": 1,
@@ -1249,7 +1276,7 @@ class TestRegionAwareTraining:
         np.testing.assert_array_equal(vec, media["embedding"])
 
     def test_train_and_score_falls_back_to_cls_when_no_region_box(self):
-        from vtsearch.models.training import _training_vec_for_vote
+        from vtsearch.detectors.training import _training_vec_for_vote
 
         media = self._media_with_patch_grid(0.99, cid=1)
         vec = _training_vec_for_vote(media, region_box=None)
@@ -1264,7 +1291,7 @@ class TestRegionAwareTraining:
         succeed by md5.  Conftest's ``reset_state`` wipes this between
         tests so there's no cross-test bleed.
         """
-        from vtsearch.utils.state_core import medias
+        from vtsearch.state.core import medias
 
         media = self._media_with_patch_grid(grid_value, cid=cid)
         medias[cid] = media
@@ -1276,10 +1303,10 @@ class TestRegionAwareTraining:
         ``patch_grid``.  The cache value matches ``box_to_vote_vector``
         on the same grid + box."""
         from vtsearch.datasets.labelset import LabeledElement, LabelSet
-        from vtsearch.models.labelset_elements import stable_element_id
-        from vtsearch.models.labelset_training import populate_label_embeddings
-        from vtsearch.models.patch_regions import box_to_vote_vector
-        from vtsearch.utils.state_core import DetectorContext
+        from vtsearch.detectors.labelset_elements import stable_element_id
+        from vtsearch.detectors.labelset_training import populate_label_embeddings
+        from vtsearch.media.patch_embed import box_to_vote_vector
+        from vtsearch.state.core import DetectorContext
 
         cid = 9001
         media = self._register_synthetic_image(cid)
@@ -1303,10 +1330,10 @@ class TestRegionAwareTraining:
         propagate without an explicit cache invalidation.  Image-level
         elements keep their cached vector across calls (fast path)."""
         from vtsearch.datasets.labelset import LabeledElement, LabelSet
-        from vtsearch.models.labelset_elements import stable_element_id
-        from vtsearch.models.labelset_training import populate_label_embeddings
-        from vtsearch.models.patch_regions import box_to_vote_vector
-        from vtsearch.utils.state_core import DetectorContext
+        from vtsearch.detectors.labelset_elements import stable_element_id
+        from vtsearch.detectors.labelset_training import populate_label_embeddings
+        from vtsearch.media.patch_embed import box_to_vote_vector
+        from vtsearch.state.core import DetectorContext
 
         cid = 9002
         media = self._register_synthetic_image(cid)
@@ -1333,9 +1360,9 @@ class TestRegionAwareTraining:
         """Plain image-level elements stay cached across calls — the fast
         path for non-region datasets is preserved."""
         from vtsearch.datasets.labelset import LabeledElement, LabelSet
-        from vtsearch.models.labelset_elements import stable_element_id
-        from vtsearch.models.labelset_training import populate_label_embeddings
-        from vtsearch.utils.state_core import DetectorContext
+        from vtsearch.detectors.labelset_elements import stable_element_id
+        from vtsearch.detectors.labelset_training import populate_label_embeddings
+        from vtsearch.state.core import DetectorContext
 
         cid = 9003
         media = self._register_synthetic_image(cid)

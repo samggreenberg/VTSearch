@@ -202,3 +202,23 @@
   font-size: 0.8rem;
   text-align: center;
 }
+
+.undo-toast {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15));
+  border-radius: 4px;
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.4));
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  text-align: center;
+  animation: undo-toast-fade 2s ease-out;
+}
+
+@keyframes undo-toast-fade {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}

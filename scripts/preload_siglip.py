@@ -1,6 +1,6 @@
 """Pre-download SigLIP weights into ``$VTSEARCH_MODELS_DIR``.
 
-Used by ``Dockerfile.labbench`` to bake weights into the image. Uses
+Used by ``docker/Dockerfile.labbench`` to bake weights into the image. Uses
 ``huggingface_hub.snapshot_download`` rather than
 ``SiglipModel.from_pretrained`` so the build step only downloads files —
 it does not import torch, does not construct the model, and does not

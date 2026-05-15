@@ -1,0 +1,79 @@
+# -----------------------------------------------------------------
+# VTSearch — GPU (CUDA) Docker image
+#
+# Build (from repo root):
+#   docker build -f docker/Dockerfile.gpu -t vtsearch:gpu .
+# Run:
+#   docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
+#
+# Requires the NVIDIA Container Toolkit on the host:
+#   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
+# -----------------------------------------------------------------
+
+FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+
+# Avoid interactive prompts during apt-get
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Python 3.10 + native libs for opencv, librosa, etc.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.10 \
+        python3.10-venv \
+        python3-pip \
+        libsndfile1 \
+        ffmpeg \
+        libgl1 \
+        libglib2.0-0 && \
+    rm -rf /var/lib/apt/lists/* && \
+    ln -sf /usr/bin/python3.10 /usr/bin/python
+
+WORKDIR /app
+
+# ---------- dependency layer ----------
+COPY requirements/ requirements/
+COPY pyproject.toml ./
+COPY vtsearch/__init__.py vtsearch/__init__.py
+
+# Copy all plugin requirements.txt files so -r references resolve.
+COPY vtsearch/ vtsearch/
+
+# Pre-install numpy/scipy as binary-only wheels so the PyTorch extra-index
+# cannot pull in source tarballs that require g++.
+RUN pip install --no-cache-dir --upgrade pip setuptools && \
+    pip install --no-cache-dir --only-binary :all: numpy scipy && \
+    pip install --no-cache-dir \
+        --extra-index-url https://download.pytorch.org/whl/cu121 \
+        --prefer-binary \
+        -r requirements/gpu.txt && \
+    pip install --no-cache-dir --no-deps -e .
+
+# ---------- application layer ----------
+COPY . .
+
+# Bake the version into the image. See Dockerfile for the pattern.
+ARG VTSEARCH_VERSION=
+RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
+
+RUN mkdir -p /app/data
+VOLUME /app/data
+
+# Run as a non-root user. See the CPU Dockerfile for the rationale and
+# the GID-0 / g=u perm pattern that lets arbitrary OpenShift UIDs write.
+RUN useradd --uid 1000 --gid 0 --create-home --home-dir /home/vtsearch vtsearch && \
+    chgrp -R 0 /app /home/vtsearch && \
+    chmod -R g=u /app /home/vtsearch
+
+ENV HOME=/home/vtsearch
+USER 1000
+
+EXPOSE 5000
+
+ENV OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    PYTHONUNBUFFERED=1 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    VTSEARCH_SERVER_INIT=1
+
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]

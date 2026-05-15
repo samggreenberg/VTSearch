@@ -46,7 +46,7 @@ from flask import Flask, g
 
 # Import refactored modules
 from vtsearch.auth import get_login_provider  # noqa: E402
-from vtsearch.models import initialize_models, preload_autoload_media_types  # noqa: E402
+from vtsearch.embedding import initialize_models, preload_autoload_media_types  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
     achievements_bp,
     auth_bp,
@@ -60,8 +60,12 @@ from vtsearch.routes import (  # noqa: E402
     labels_bp,
     media_server_bp,
     medias_bp,
-    datasets_bp,
+    datasets_listings_bp,
+    datasets_load_bp,
     datasets_registry_bp,
+    datasets_staging_bp,
+    datasets_status_bp,
+    datasets_ui_bp,
     exporters_bp,
     label_importers_bp,
     main_bp,
@@ -72,7 +76,7 @@ from vtsearch.routes import (  # noqa: E402
     sync_sources_bp,
 )
 from vtsearch.media import set_progress_callback  # noqa: E402
-from vtsearch.utils import update_progress  # noqa: E402
+from vtsearch.concurrency.progress import update_progress
 
 # Wire media types into the Flask app's progress reporting system.
 # Without this call, media types use a silent no-op callback and can run
@@ -133,7 +137,7 @@ def _set_request_context():
     the default (empty) context.
     """
     from flask import request
-    from vtsearch.utils.state_core import (
+    from vtsearch.state.core import (
         get_context,
         get_detector_context,
     )
@@ -162,7 +166,7 @@ def _set_request_context():
     # specific, so without this the left-pane shows stale cids from the
     # previous dataset as if they were votes in the current one.
     try:
-        from vtsearch.models.detector_dataset_sync import ensure_votes_match_active_dataset
+        from vtsearch.detectors.dataset_sync import ensure_votes_match_active_dataset
 
         ensure_votes_match_active_dataset()
     except Exception:
@@ -203,7 +207,11 @@ app.register_blueprint(main_bp)
 app.register_blueprint(medias_bp)
 app.register_blueprint(sorting_bp)
 app.register_blueprint(processors_bp)
-app.register_blueprint(datasets_bp)
+app.register_blueprint(datasets_listings_bp)
+app.register_blueprint(datasets_status_bp)
+app.register_blueprint(datasets_staging_bp)
+app.register_blueprint(datasets_load_bp)
+app.register_blueprint(datasets_ui_bp)
 app.register_blueprint(datasets_registry_bp)
 app.register_blueprint(exporters_bp)
 app.register_blueprint(label_importers_bp)
@@ -223,23 +231,22 @@ app.register_blueprint(embed_bp)
 
 
 def initialize_server(mode_label: str = "PRODUCTION") -> None:
-    """Load models, preload media types, and sync from settings source.
+    """Load models and preload media types.
 
     Called from ``__main__`` (when running ``python app.py``) and from
     gunicorn via ``VTSEARCH_SERVER_INIT=1`` at import time. Idempotent: safe
     to call multiple times; individual steps handle their own caching.
+
+    Per-user ``settings_source`` sync runs lazily on each user's first
+    settings access (see
+    :func:`vtsearch.settings._maybe_sync_from_source_locked`), not at
+    server boot — there is no server-wide user to sync for.
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
     initialize_models()
     preloaded = preload_autoload_media_types()
     if preloaded:
         print(f"✅ Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
-
-    from vtsearch.settings import sync_from_settings_source
-
-    imported = sync_from_settings_source()
-    if imported is not None:
-        print(f"\U0001f504 Synced {len(imported)} setting(s) from settings source", flush=True)
 
     print("✅ VTSearch is ready!", flush=True)
 
@@ -272,6 +279,45 @@ if __name__ == "__main__":
         "--autodetect",
         action="store_true",
         help="Run a detector on a dataset from the command line and print predicted-Good items",
+    )
+    parser.add_argument(
+        "--list-plugins",
+        action="store_true",
+        dest="list_plugins",
+        help=(
+            "List every auto-discovered plugin (importers, exporters, embedders, "
+            "converters, clippers, …) and exit. Useful for shell completion."
+        ),
+    )
+    parser.add_argument(
+        "--plugin-family",
+        type=str,
+        default=None,
+        dest="plugin_family",
+        help=(
+            "When given with --list-plugins, restrict output to this family "
+            "(e.g. importers, exporters). Combine with --format=names for "
+            "completion-friendly output."
+        ),
+    )
+    parser.add_argument(
+        "--format",
+        type=str,
+        default="plain",
+        choices=["plain", "json", "names"],
+        dest="output_format",
+        help=(
+            "Output format for --list-plugins / --openapi-schema. 'plain' is "
+            "human-readable, 'json' is machine-readable, 'names' emits bare "
+            "plugin names one per line (shell-completion friendly). "
+            "--openapi-schema only honours 'json' (default for that flag)."
+        ),
+    )
+    parser.add_argument(
+        "--openapi-schema",
+        action="store_true",
+        dest="openapi_schema",
+        help="Print the auto-generated OpenAPI 3.0 spec for the HTTP API and exit.",
     )
     parser.add_argument("--dataset", type=str, help="Path to a dataset pickle file (used with --autodetect)")
     parser.add_argument(
@@ -308,10 +354,7 @@ if __name__ == "__main__":
         type=str,
         default=None,
         dest="import_labels_into",
-        help=(
-            "Detector name to merge labels into before scoring. "
-            "Used with --autodetect plus --label-importer-file."
-        ),
+        help=("Detector name to merge labels into before scoring. Used with --autodetect plus --label-importer-file."),
     )
     parser.add_argument(
         "--label-importer",
@@ -331,6 +374,36 @@ if __name__ == "__main__":
     # Two-pass parsing: first pass gets --importer and --exporter names;
     # second pass adds their plugin-specific arguments and re-parses.
     args, remaining = parser.parse_known_args()
+
+    # ---- Early-exit informational flags --------------------------------
+    # These run before the autodetect / server paths so they don't trigger
+    # model loading or the full Flask app boot.
+    if args.list_plugins:
+        from vtsearch.plugins.inventory import format_json, format_names, format_plain, gather_plugins
+
+        inventory = gather_plugins()
+        if args.plugin_family:
+            if args.plugin_family not in inventory:
+                parser.error(f"Unknown plugin family: {args.plugin_family}. Available: {', '.join(inventory)}")
+            inventory = {args.plugin_family: inventory[args.plugin_family]}
+        if args.output_format == "json":
+            sys.stdout.write(format_json(inventory))
+            sys.stdout.write("\n")
+        elif args.output_format == "names":
+            sys.stdout.write(format_names(inventory, family=args.plugin_family))
+        else:
+            sys.stdout.write(format_plain(inventory))
+        sys.exit(0)
+
+    if args.openapi_schema:
+        import json as _json
+
+        from vtsearch.openapi import generate_openapi_spec
+
+        spec = generate_openapi_spec(app)
+        sys.stdout.write(_json.dumps(spec, indent=2))
+        sys.stdout.write("\n")
+        sys.exit(0)
 
     importer = None
     exporter = None

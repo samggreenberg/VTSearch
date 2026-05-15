@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import (
+from vtsearch.routes._shared import (
     format_exception_detail,
     get_embedder_for_medias,
     get_json_or_400,
@@ -15,14 +15,12 @@ from vtsearch.routes.helpers import (
 )
 
 from vtsearch.config import DATA_DIR
-import vtsearch.utils.paths as _paths
-from vtsearch.models import (
-    calculate_gmm_threshold,
-    embed_text_query,
-    inject_live_model,
-    train_and_score,
-)
-from vtsearch.utils import (
+import vtsearch.security.path_validation as _paths
+from vtsearch.detectors.labeling_progress import inject_live_model
+from vtsearch.detectors.training import train_and_score
+from vtsearch.embedding import embed_text_query
+from vtsearch.training.thresholds import calculate_gmm_threshold
+from vtsearch.state import (
     add_textsort_suggestion,
     bad_votes,
     diversity_tree_next_sample,
@@ -32,7 +30,6 @@ from vtsearch.utils import (
     get_inclusion,
     get_learned_scores,
     get_safe_thresholds,
-    get_sort_progress,
     get_textsort_suggestions,
     get_vote_click_times,
     good_votes,
@@ -40,8 +37,11 @@ from vtsearch.utils import (
     set_safe_thresholds,
     snapshot_medias,
     update_learned_scores,
-    update_sort_progress,
     vote_region_boxes,
+)
+from vtsearch.concurrency.progress import (
+    get_sort_progress,
+    update_sort_progress,
 )
 
 sorting_bp = Blueprint("sorting", __name__)
@@ -66,9 +66,9 @@ def _cosine_sort(query_vec):
     image coordinates ``[x0, y0, x1, y1]``.  Single-vector embedders
     take a fast vectorised numpy path with no per-result box.
 
-    Both paths live in :mod:`vtsearch.models.region_similarity`.
+    Both paths live in :mod:`vtsearch.training.region_similarity`.
     """
-    from vtsearch.models.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
+    from vtsearch.training.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
 
     snap = snapshot_medias()
     results, sims_list = cosine_sort_with_boxes(snap, query_vec)
@@ -210,11 +210,11 @@ def learned_sort():
     completes and receive the result inline.  The frontend leaves it false.
     """
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.models.detector_registry import get_detector
-    from vtsearch.models.detector_store import _detector_path, _read_detector
-    from vtsearch.models.labelset_training import labelset_train_and_score
-    from vtsearch.utils.async_jobs import learned_sort_jobs
-    from vtsearch.utils.state_core import (
+    from vtsearch.detectors.registry import get_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector
+    from vtsearch.detectors.labelset_training import labelset_train_and_score
+    from vtsearch.concurrency.async_jobs import learned_sort_jobs
+    from vtsearch.state.core import (
         _empty_detector_context,
         get_active_context,
         get_active_detector_context,
@@ -265,9 +265,7 @@ def learned_sort():
     # Signature: covers everything that changes the training output.  Re-sorts
     # with the same vote set + settings reuse the cached result.
     if labelset is not None:
-        labels_sig = tuple(
-            sorted((el.label, _stable_element_id_for_sig(el)) for el in labelset.elements)
-        )
+        labels_sig = tuple(sorted((el.label, _stable_element_id_for_sig(el)) for el in labelset.elements))
     else:
         labels_sig = (
             ("good", tuple(sorted(good_votes))),
@@ -332,7 +330,10 @@ def learned_sort():
             labelset_training_medias: dict[int, dict] | None = None
             labelset_has_cross_dataset = False
             if labelset is not None:
-                from vtsearch.utils import build_media_lookup, resolve_media_ids
+                from vtsearch.state import (
+                    build_media_lookup,
+                    resolve_media_ids,
+                )
 
                 origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
                 labelset_local_good = set()
@@ -341,9 +342,7 @@ def learned_sort():
                 for el in labelset.elements:
                     if el.label not in ("good", "bad"):
                         continue
-                    cids = resolve_media_ids(
-                        el.to_dict(), origin_lookup, md5_lookup, name_lookup
-                    )
+                    cids = resolve_media_ids(el.to_dict(), origin_lookup, md5_lookup, name_lookup)
                     if not cids:
                         labelset_has_cross_dataset = True
                         continue
@@ -406,7 +405,7 @@ def learned_sort():
 
 def _stable_element_id_for_sig(el) -> str:
     """Return a stable identifier for a labelset element for signature use."""
-    from vtsearch.models.labelset_elements import stable_element_id
+    from vtsearch.detectors.labelset_elements import stable_element_id
 
     return stable_element_id(el)
 
@@ -418,7 +417,7 @@ def learned_sort_result():
     Returns the same shape as the POST endpoint's ``done`` response when the
     job has finished, or a ``running`` snapshot otherwise.
     """
-    from vtsearch.utils.async_jobs import learned_sort_jobs
+    from vtsearch.concurrency.async_jobs import learned_sort_jobs
 
     job_id = request.args.get("job_id", "").strip()
     if not job_id:
@@ -429,18 +428,22 @@ def learned_sort_result():
         return jsonify({"status": "missing", "error": "Job not found"}), 404
 
     if job.status in ("running", "pending"):
-        return jsonify({
-            "job_id": job.job_id,
-            "status": "running",
-            "current": job.current,
-            "total": job.total,
-        })
+        return jsonify(
+            {
+                "job_id": job.job_id,
+                "status": "running",
+                "current": job.current,
+                "total": job.total,
+            }
+        )
     if job.status == "error":
-        return jsonify({
-            "job_id": job.job_id,
-            "status": "error",
-            "error": job.error or "learned-sort failed",
-        }), 500
+        return jsonify(
+            {
+                "job_id": job.job_id,
+                "status": "error",
+                "error": job.error or "learned-sort failed",
+            }
+        ), 500
     if job.status == "cancelled":
         return jsonify({"job_id": job.job_id, "status": "cancelled"})
     return jsonify(_learned_sort_done_payload(job))
@@ -448,7 +451,7 @@ def learned_sort_result():
 
 @sorting_bp.route("/api/votes")
 def get_votes():
-    from vtsearch.utils.state_core import _empty_detector_context, get_active_detector_context
+    from vtsearch.state.core import _empty_detector_context, get_active_detector_context
 
     click_times = get_vote_click_times()
     learned_scores = get_learned_scores()
@@ -478,7 +481,7 @@ def clear_votes_route():
     Used by the Label flow to reset votes before importing a model's labelset
     so that labels from a previous session don't contaminate the new model.
     """
-    from vtsearch.utils import clear_votes
+    from vtsearch.state import clear_votes
 
     clear_votes()
     return jsonify({"ok": True})
@@ -501,7 +504,7 @@ def seed_votes_from_examples():
 
         {"seeded": 2, "skipped": 1}
     """
-    from vtsearch.models.media_seeding import seed_good_votes_from_examples
+    from vtsearch.detectors.media_seeding import seed_good_votes_from_examples
 
     data = get_json_or_400()
     if not isinstance(data, dict):
@@ -515,7 +518,7 @@ def seed_votes_from_examples():
     skipped = len(examples) - seeded
 
     if seeded > 0:
-        from vtsearch.models.label_sync import sync_labels_to_loaded_detector
+        from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
 
         sync_labels_to_loaded_detector()
 
@@ -782,7 +785,7 @@ def label_file_sort():
             )
 
         # Check if we have both good and bad examples
-        from vtsearch.models.detector_training import validate_good_bad_split
+        from vtsearch.detectors.training import validate_good_bad_split
 
         try:
             validate_good_bad_split(y_list)
@@ -795,13 +798,13 @@ def label_file_sort():
         # Train MLP and compute threshold using the shared pipeline
         import torch  # noqa: PLC0415
 
-        from vtsearch.models.detector_training import train_and_threshold
+        from vtsearch.detectors.training import train_and_threshold
 
         snap = snapshot_medias()
         model, threshold = train_and_threshold(X_list, y_list, snap=snap)
 
         # Score every media in the dataset
-        from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+        from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
         all_ids, all_embs = get_embedding_matrix_for_snap(snap)
         X_all = torch.from_numpy(all_embs)

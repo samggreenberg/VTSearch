@@ -14,7 +14,7 @@ from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 
 
 def _get_progress():
-    from vtsearch.utils import update_progress
+    from vtsearch.concurrency.progress import update_progress
 
     return update_progress
 

@@ -1,21 +1,21 @@
 """Tests for thread-safe global state operations.
 
-Validates that the ``_state_lock`` in ``vtsearch.utils.state`` correctly
+Validates that the ``_state_lock`` in ``vtsearch.state`` correctly
 serialises concurrent access to votes, click-times, label history, and
 autorun detectors.  Also validates the ``_settings_lock`` in
 ``vtsearch.settings`` and the ``_progress_lock`` in
-``vtsearch.models.progress``.
+``vtsearch.detectors.labeling_progress``.
 """
 
 import threading
 
-from vtsearch.utils.state_core import (
+from vtsearch.state.core import (
     get_thread_dataset_context,
     get_thread_detector_context,
     set_thread_dataset_context,
     set_thread_detector_context,
 )
-from vtsearch.utils import (
+from vtsearch.state import (
     apply_label,
     apply_label_with_click_time,
     assign_click_time,
@@ -25,10 +25,10 @@ from vtsearch.utils import (
     toggle_vote,
     vote_click_times,
 )
-import vtsearch.utils.state as _state
-import vtsearch.utils.state_core as _core
+import vtsearch.state as _state
+import vtsearch.state.core as _core
 import vtsearch.settings as _settings_mod
-import vtsearch.models.progress as _progress_mod
+import vtsearch.detectors.labeling_progress as _progress_mod
 
 
 class TestStateLock:
@@ -412,7 +412,7 @@ class TestPluginRegistryLock:
     """Verify that PluginRegistry._ensure_discovered is thread-safe."""
 
     def test_registry_has_lock(self):
-        from vtsearch.utils.registry import PluginRegistry
+        from vtsearch.plugins import PluginRegistry
 
         reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter")
         assert isinstance(reg._lock, type(threading.Lock()))
@@ -420,7 +420,7 @@ class TestPluginRegistryLock:
     def test_concurrent_first_access_discovers_once(self):
         """Concurrent .list() calls should trigger _discover exactly once."""
         from unittest.mock import patch
-        from vtsearch.utils.registry import PluginRegistry
+        from vtsearch.plugins import PluginRegistry
 
         reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter")
         call_count = 0

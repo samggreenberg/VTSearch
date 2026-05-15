@@ -87,16 +87,16 @@ from vtsearch.datasets.registry import (
     register_dataset as _reg_register,
     add_loaded_id as _reg_add_loaded,
 )
-from vtsearch.utils import (
+from vtsearch.state import (
     DatasetContext,
     build_diversity_tree_for_context,
     clear_all,
     collapse_duplicates,
     register_context,
     snapshot_medias,
-    update_progress,
 )
-from vtsearch.utils.progress import (
+from vtsearch.concurrency.progress import update_progress
+from vtsearch.concurrency.progress import (
     CancelledError,
     clear_thread_progress,
     dataset_progress,
@@ -130,10 +130,10 @@ def _get_embedder_for_medias(media_dict: dict):
     """Resolve the embedder for *media_dict*.
 
     Imported lazily to avoid a circular dependency: this module sits under
-    ``vtsearch.datasets`` but ``vtsearch.routes.helpers`` lives in the
+    ``vtsearch.datasets`` but ``vtsearch.routes._shared`` lives in the
     routes layer, which itself imports from this module.
     """
-    from vtsearch.routes.helpers import get_embedder_for_medias as _impl
+    from vtsearch.routes._shared import get_embedder_for_medias as _impl
 
     return _impl(media_dict)
 
@@ -454,7 +454,7 @@ def _reembed_clip(clip: dict, content_bytes: bytes, media_type: str) -> None:
     from pathlib import Path
 
     try:
-        from vtsearch.models.resolver import embed_file
+        from vtsearch.detectors.resolver import embed_file
     except ImportError:
         return
 
@@ -620,7 +620,14 @@ def _run_origin_load_in_background(
     # Set initial progress synchronously so the first poll sees it.
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
+    # Snapshot the user that triggered the load so background per-user
+    # state (settings writes, settings_source sync) resolves correctly.
+    _request_user = created_by or get_current_user()
+
     def task():
+        from vtsearch.auth import set_thread_user
+
+        set_thread_user(_request_user)
         ctx = DatasetContext(task_id)
         context_id = task_id  # tracks the current context key (may change after migration)
 
@@ -790,14 +797,14 @@ def _run_origin_load_in_background(
 
             record_dataset_load(str(origin.get("importer", "")))
         except CancelledError:
-            from vtsearch.utils.state_core import unregister_context
+            from vtsearch.state.core import unregister_context
 
             unregister_context(context_id)
             gc.collect()
             tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
         except ImportError as e:
             traceback.print_exc()
-            from vtsearch.utils.state_core import unregister_context
+            from vtsearch.state.core import unregister_context
 
             unregister_context(context_id)
             gc.collect()
@@ -811,7 +818,7 @@ def _run_origin_load_in_background(
                 total_steps=None,
             )
         except MemoryError:
-            from vtsearch.utils.state_core import unregister_context
+            from vtsearch.state.core import unregister_context
 
             unregister_context(context_id)
             gc.collect()
@@ -826,7 +833,7 @@ def _run_origin_load_in_background(
             )
         except Exception as e:
             traceback.print_exc()
-            from vtsearch.utils.state_core import unregister_context
+            from vtsearch.state.core import unregister_context
 
             unregister_context(context_id)
             gc.collect()
@@ -840,6 +847,9 @@ def _run_origin_load_in_background(
             held_gate["name"] = None
             clear_thread_progress()
             loading_tasks.mark_finished(task_id)
+            from vtsearch.auth import set_thread_user as _clear_thread_user
+
+            _clear_thread_user(None)
 
     threading.Thread(target=task, daemon=True).start()
     return task_id
@@ -847,7 +857,7 @@ def _run_origin_load_in_background(
 
 def _migrate_context_id(old_id: str, new_id: str) -> None:
     """Re-key a context from *old_id* to *new_id* in the store."""
-    from vtsearch.utils.state_core import _contexts, _state_lock
+    from vtsearch.state.core import _contexts, _state_lock
 
     with _state_lock:
         ctx = _contexts.get(old_id)
@@ -968,7 +978,12 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     tracker when finished.
     """
 
+    _request_user = get_current_user()
+
     def stage_task():
+        from vtsearch.auth import set_thread_user
+
+        set_thread_user(_request_user)
         try:
             temp_medias: dict = {}
             importer.run(field_values, temp_medias)
@@ -1023,6 +1038,10 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             traceback.print_exc()
             error_msg = str(e) or repr(e) or "Unknown error during staging"
             update_progress("idle", "", 0, 0, error=error_msg)
+        finally:
+            from vtsearch.auth import set_thread_user as _clear_thread_user
+
+            _clear_thread_user(None)
 
     thread = threading.Thread(target=stage_task, daemon=True)
     thread.start()

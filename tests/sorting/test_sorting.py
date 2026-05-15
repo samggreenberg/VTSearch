@@ -118,14 +118,14 @@ class TestBuildModel:
     """Tests for the build_model helper."""
 
     def test_build_model_returns_sequential(self):
-        from vtsearch.models.training import build_model
+        from vtsearch.training.mlp import build_model
 
         model = build_model(64)
         assert isinstance(model, torch.nn.Sequential)
 
     def test_build_model_output_is_logits(self):
         """build_model should NOT include sigmoid — output can be outside [0,1]."""
-        from vtsearch.models.training import build_model
+        from vtsearch.training.mlp import build_model
 
         # Use a seeded generator so the random weights are deterministic —
         # without this, the test is flaky because random initialisation can
@@ -142,14 +142,14 @@ class TestBuildModel:
         assert logit < 0.0 or logit > 1.0, f"Expected unbounded logit outside [0,1] with extreme input, got {logit}"
 
     def test_build_model_has_no_sigmoid_layer(self):
-        from vtsearch.models.training import build_model
+        from vtsearch.training.mlp import build_model
 
         model = build_model(64)
         for layer in model:
             assert not isinstance(layer, torch.nn.Sigmoid)
 
     def test_build_model_state_dict_keys(self):
-        from vtsearch.models.training import build_model
+        from vtsearch.training.mlp import build_model
 
         model = build_model(128)
         keys = set(model.state_dict().keys())
@@ -162,7 +162,7 @@ class TestTrainModelConfig:
 
     def test_deterministic_training(self):
         """Same inputs should produce the same model (manual seed)."""
-        from vtsearch.models.training import train_model
+        from vtsearch.training.mlp import train_model
 
         rng = np.random.RandomState(0)
         X = torch.tensor(rng.randn(10, 32).astype(np.float32))
@@ -180,7 +180,7 @@ class TestTrainModelConfig:
     def test_weight_decay_is_applied(self):
         """Weight decay should keep weights smaller than without it."""
         import vtsearch.config as config
-        from vtsearch.models.training import _auto_hidden_dim, build_model
+        from vtsearch.training.mlp import _auto_hidden_dim, build_model
 
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 200
@@ -190,7 +190,7 @@ class TestTrainModelConfig:
             y = torch.tensor([1.0] * 10 + [0.0] * 10).unsqueeze(1)
 
             # Train with weight decay (default: 1e-4)
-            from vtsearch.models.training import train_model
+            from vtsearch.training.mlp import train_model
 
             model = train_model(X, y, 16)
 
@@ -219,7 +219,7 @@ class TestTrainModelConfig:
 
     def test_train_model_outputs_logits(self):
         """train_model should return a model that outputs raw logits."""
-        from vtsearch.models.training import train_model
+        from vtsearch.training.mlp import train_model
 
         rng = np.random.RandomState(5)
         X = torch.tensor(rng.randn(6, 16).astype(np.float32))
@@ -261,7 +261,7 @@ class TestTrainModelEpochs:
     def test_early_stop_fires_on_loss_plateau(self):
         """With a small patience, training stops well before TRAIN_EPOCHS."""
         import vtsearch.config as config
-        from vtsearch.models import training
+        from vtsearch.training import mlp
 
         saved_epochs = config.TRAIN_EPOCHS
         saved_patience = config.TRAIN_PATIENCE
@@ -275,10 +275,10 @@ class TestTrainModelEpochs:
             y = torch.tensor([1.0] * 8 + [0.0] * 8).unsqueeze(1)
 
             config.TRAIN_PATIENCE = 0
-            full_epochs = self._count_optimizer_steps(lambda: training.train_model(X, y, 16))
+            full_epochs = self._count_optimizer_steps(lambda: mlp.train_model(X, y, 16))
 
             config.TRAIN_PATIENCE = 5
-            stopped_epochs = self._count_optimizer_steps(lambda: training.train_model(X, y, 16))
+            stopped_epochs = self._count_optimizer_steps(lambda: mlp.train_model(X, y, 16))
 
             assert full_epochs == 500
             assert stopped_epochs < full_epochs
@@ -289,7 +289,7 @@ class TestTrainModelEpochs:
     def test_patience_zero_disables_early_stop(self):
         """``TRAIN_PATIENCE=0`` should always run the full ``TRAIN_EPOCHS``."""
         import vtsearch.config as config
-        from vtsearch.models import training
+        from vtsearch.training import mlp
 
         saved_epochs = config.TRAIN_EPOCHS
         saved_patience = config.TRAIN_PATIENCE
@@ -299,7 +299,7 @@ class TestTrainModelEpochs:
             rng = np.random.RandomState(2)
             X = torch.tensor(rng.randn(8, 16).astype(np.float32))
             y = torch.tensor([1.0] * 4 + [0.0] * 4).unsqueeze(1)
-            n_epochs = self._count_optimizer_steps(lambda: training.train_model(X, y, 16))
+            n_epochs = self._count_optimizer_steps(lambda: mlp.train_model(X, y, 16))
             assert n_epochs == 42
         finally:
             config.TRAIN_EPOCHS = saved_epochs
@@ -317,17 +317,18 @@ class TestCalibrationSkippedForTinyLabels:
     def test_skips_calibration_when_safe_and_under_six_labels(self):
         """With safe_thresholds=True and n_labels<6, calculate_cross_calibration_threshold
         must not be invoked — its output is entirely discarded by the blender."""
-        from vtsearch.models import training
+        from vtsearch.detectors import training as detector_training
+        from vtsearch.training import thresholds
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
 
         with unittest.mock.patch.object(
-            training,
+            thresholds,
             "calculate_cross_calibration_threshold",
             side_effect=AssertionError("calibration should be skipped for tiny label sets"),
         ) as patched:
-            _, threshold, _model = training.train_and_score(
+            _, threshold, _model = detector_training.train_and_score(
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
@@ -340,17 +341,18 @@ class TestCalibrationSkippedForTinyLabels:
         """With safe_thresholds=False and n_labels<6, calibration is still
         skipped — fold trainings are unreliable with so few labels, and the
         gate is purely a function of n_labels."""
-        from vtsearch.models import training
+        from vtsearch.detectors import training as detector_training
+        from vtsearch.training import thresholds
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4, 5]})
 
         with unittest.mock.patch.object(
-            training,
+            thresholds,
             "calculate_cross_calibration_threshold",
             side_effect=AssertionError("calibration should be skipped for tiny label sets"),
         ) as patched:
-            training.train_and_score(
+            detector_training.train_and_score(
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
@@ -360,17 +362,18 @@ class TestCalibrationSkippedForTinyLabels:
 
     def test_still_calibrates_when_enough_labels(self):
         """With safe_thresholds=True and n_labels>=6, calibration still runs."""
-        from vtsearch.models import training
+        from vtsearch.detectors import training as detector_training
+        from vtsearch.training import thresholds
 
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})  # 6 labels
 
         with unittest.mock.patch.object(
-            training,
+            thresholds,
             "calculate_cross_calibration_threshold",
-            wraps=training.calculate_cross_calibration_threshold,
+            wraps=thresholds.calculate_cross_calibration_threshold,
         ) as patched:
-            training.train_and_score(
+            detector_training.train_and_score(
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
@@ -394,7 +397,7 @@ class TestCalibrationCache:
     the cross-calibration trainings should be skipped on the second call."""
 
     def _det_ctx(self):
-        from vtsearch.utils.state_core import DetectorContext
+        from vtsearch.state.core import DetectorContext
 
         return DetectorContext("test-det")
 
@@ -405,12 +408,13 @@ class TestCalibrationCache:
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
 
     def test_second_call_with_same_inputs_skips_calibration(self):
-        from vtsearch.models import training
+        from vtsearch.detectors import training as detector_training
+        from vtsearch.training import thresholds
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
 
-        training.train_and_score(
+        detector_training.train_and_score(
             app_module.medias,
             app_module.good_votes,
             app_module.bad_votes,
@@ -419,11 +423,11 @@ class TestCalibrationCache:
         assert det_ctx.calibration_cache is not None
 
         with unittest.mock.patch.object(
-            training,
+            thresholds,
             "calculate_cross_calibration_threshold",
             side_effect=AssertionError("calibration should be cached on repeat call"),
         ) as patched:
-            training.train_and_score(
+            detector_training.train_and_score(
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
@@ -432,18 +436,18 @@ class TestCalibrationCache:
         patched.assert_not_called()
 
     def test_second_call_returns_same_threshold(self):
-        from vtsearch.models import training
+        from vtsearch.detectors import training as detector_training
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
 
-        _, t1, _ = training.train_and_score(
+        _, t1, _ = detector_training.train_and_score(
             app_module.medias,
             app_module.good_votes,
             app_module.bad_votes,
             det_ctx=det_ctx,
         )
-        _, t2, _ = training.train_and_score(
+        _, t2, _ = detector_training.train_and_score(
             app_module.medias,
             app_module.good_votes,
             app_module.bad_votes,
@@ -452,12 +456,13 @@ class TestCalibrationCache:
         assert t1 == t2
 
     def test_label_change_invalidates_cache(self):
-        from vtsearch.models import training
+        from vtsearch.detectors import training as detector_training
+        from vtsearch.training import thresholds
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
 
-        training.train_and_score(
+        detector_training.train_and_score(
             app_module.medias,
             app_module.good_votes,
             app_module.bad_votes,
@@ -470,11 +475,11 @@ class TestCalibrationCache:
         app_module.bad_votes[3] = None
 
         with unittest.mock.patch.object(
-            training,
+            thresholds,
             "calculate_cross_calibration_threshold",
-            wraps=training.calculate_cross_calibration_threshold,
+            wraps=thresholds.calculate_cross_calibration_threshold,
         ) as patched:
-            training.train_and_score(
+            detector_training.train_and_score(
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
@@ -484,12 +489,13 @@ class TestCalibrationCache:
         assert det_ctx.calibration_cache[0] != first_key
 
     def test_inclusion_change_invalidates_cache(self):
-        from vtsearch.models import training
+        from vtsearch.detectors import training as detector_training
+        from vtsearch.training import thresholds
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
 
-        training.train_and_score(
+        detector_training.train_and_score(
             app_module.medias,
             app_module.good_votes,
             app_module.bad_votes,
@@ -498,11 +504,11 @@ class TestCalibrationCache:
         )
 
         with unittest.mock.patch.object(
-            training,
+            thresholds,
             "calculate_cross_calibration_threshold",
-            wraps=training.calculate_cross_calibration_threshold,
+            wraps=thresholds.calculate_cross_calibration_threshold,
         ) as patched:
-            training.train_and_score(
+            detector_training.train_and_score(
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
@@ -513,21 +519,22 @@ class TestCalibrationCache:
 
     def test_no_cache_when_det_ctx_missing(self):
         """Without a det_ctx, every call must recompute calibration."""
-        from vtsearch.models import training
+        from vtsearch.detectors import training as detector_training
+        from vtsearch.training import thresholds
 
         self._seed_six_labels()
 
         with unittest.mock.patch.object(
-            training,
+            thresholds,
             "calculate_cross_calibration_threshold",
-            wraps=training.calculate_cross_calibration_threshold,
+            wraps=thresholds.calculate_cross_calibration_threshold,
         ) as patched:
-            training.train_and_score(
+            detector_training.train_and_score(
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
             )
-            training.train_and_score(
+            detector_training.train_and_score(
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
@@ -600,7 +607,7 @@ class TestLearnedSortAsync:
 
     def test_async_returns_job_id_then_polling_yields_result(self, client):
         from tests.conftest import _wait_for_job
-        from vtsearch.utils.async_jobs import learned_sort_jobs
+        from vtsearch.concurrency.async_jobs import learned_sort_jobs
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
@@ -623,7 +630,7 @@ class TestLearnedSortAsync:
 
     def test_unchanged_votes_short_circuit_to_cached(self, client):
         """The signature cache lets re-sorts skip training entirely."""
-        from vtsearch.utils.async_jobs import learned_sort_jobs
+        from vtsearch.concurrency.async_jobs import learned_sort_jobs
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
@@ -663,7 +670,7 @@ class TestEvalTrainAndScoreAsync:
     runs via the signature cache."""
 
     def _seed_history(self):
-        from vtsearch.utils import label_history
+        from vtsearch.state import label_history
 
         # A handful of "good" votes are enough to exercise the smart metric.
         for cid, lbl in [(1, "good"), (2, "good"), (3, "bad"), (4, "bad")]:
@@ -684,7 +691,7 @@ class TestEvalTrainAndScoreAsync:
 
     def test_async_polls_to_done(self, client):
         from tests.conftest import _wait_for_job
-        from vtsearch.utils.async_jobs import eval_jobs
+        from vtsearch.concurrency.async_jobs import eval_jobs
 
         self._seed_history()
         envelope = client.post("/api/eval/train-and-score", json={"metric": "stable"}).get_json()
@@ -792,7 +799,7 @@ class TestTextsortSuggestions:
         resp = client.get("/api/textsort-suggestions")
         assert len(resp.get_json()["suggestions"]) == 1
 
-        from vtsearch.utils import clear_votes
+        from vtsearch.state import clear_votes
 
         clear_votes()
 

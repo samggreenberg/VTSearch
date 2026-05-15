@@ -27,10 +27,10 @@ if TYPE_CHECKING:
     import pandas as pd
     import torch
 
-from vtsearch.models.training import (
+from vtsearch.training.mlp import train_model
+from vtsearch.training.thresholds import (
     calculate_cross_calibration_threshold,
     calculate_safe_threshold,
-    train_model,
 )
 
 

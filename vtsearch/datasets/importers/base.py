@@ -44,7 +44,7 @@ Example – a minimal SFTP importer skeleton::
 
 If the importer needs extra packages, add them to a ``requirements.txt`` inside
 the importer's directory.  They will be auto-discovered and installed by
-``install-plugin-deps.sh``.
+``scripts/install-plugin-deps.sh``.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ from dataclasses import dataclass, field as dc_field
 from pathlib import Path
 from typing import Any, Iterator
 
-from vtsearch.utils.registry import PluginBase, PluginField
+from vtsearch.plugins import PluginBase, PluginField
 
 # Backward-compatible alias — existing plugins import ``ImporterField``.
 ImporterField = PluginField
@@ -107,7 +107,7 @@ PickerView = str  # one of: "form", "demo", "server_folder", "local_folder"
 # in :meth:`DatasetImporter.to_dict`, so the frontend renders it generically
 # without each subclass having to duplicate the declaration.  The field is
 # extracted out of band by the import route handler — see
-# :func:`vtsearch.routes.datasets._extract_importer_fields`.
+# :func:`vtsearch.routes.datasets._helpers._extract_importer_fields`.
 DATASET_NAME_FIELD_KEY = "dataset_name"
 
 
@@ -371,9 +371,7 @@ class DatasetImporter(PluginBase):
         override :meth:`_fetch_records_bulk_impl` instead — the default
         bulk impl loops over this method.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__}.fetch_record() is not implemented"
-        )
+        raise NotImplementedError(f"{type(self).__name__}.fetch_record() is not implemented")
 
     def fetch_records_bulk(
         self,
@@ -405,12 +403,12 @@ class DatasetImporter(PluginBase):
         """Subclass hook: fetch a list of records.
 
         Default loops over :meth:`fetch_record`, emitting per-item progress
-        via :func:`vtsearch.utils.update_progress` so long imports stay
+        via :func:`vtsearch.concurrency.progress.update_progress` so long imports stay
         visible in the UI.  Override to replace the per-item loop with a
         single bulk request, batched HTTP, or a thread/async pool.  Bulk
         overrides are responsible for emitting their own progress updates.
         """
-        from vtsearch.utils import update_progress
+        from vtsearch.concurrency.progress import update_progress
 
         total = len(records)
         results: list[dict[str, Any] | None] = []
@@ -431,7 +429,7 @@ class DatasetImporter(PluginBase):
         """Return the dropdown options for *field_key* given current form values.
 
         Override this on importers that declare any
-        :class:`~vtsearch.utils.registry.PluginField` with
+        :class:`~vtsearch.plugins.PluginField` with
         ``dynamic_options=True``.  The frontend calls this via
         ``POST /api/dataset/import/<name>/options`` whenever a field listed
         in another field's ``depends_on`` changes — e.g. a ``query_id``

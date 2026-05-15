@@ -42,11 +42,11 @@ Niche but cool: **LaBraM**, **BENDR**. Probably blocked by data availability for
 
 ## 2. New MediaConverters
 
-### 2.1 `audio → image` (spectrogram) ★★★ S
-Mel-spectrogram or CQT plot as PNG. Unlocks SigLIP/DINOv3 over audio data — huge for cross-model ensembling and for users who want to *visually* spot recurring spectral patterns. Params: `n_mels`, `time_window_s`, `colormap`.
+### 2.1 `audio → image` (spectrogram) ★★★ S ✅ shipped
+Mel-spectrogram or CQT plot as PNG. Unlocks SigLIP/DINOv3 over audio data — huge for cross-model ensembling and for users who want to *visually* spot recurring spectral patterns. Params: `spectrogram_type` (mel/cqt), `n_mels`, `time_window_s`, `colormap`. See `vtsearch/converters/audio2image.py`.
 
-### 2.2 `image → text` (OCR) ★★★ S
-Tesseract or EasyOCR. Already partially implemented as a processor — extract it as a converter so it composes with text embedders cleanly. Lets you treat scanned pages, screenshots, infographics, comics as text.
+### 2.2 `image → text` (OCR) ★★★ S ✅ shipped
+PaddleOCR-backed converter that flattens detected text regions into a single text media. Params: `language`, `threshold`. See `vtsearch/converters/image2text.py`.
 
 ### 2.3 `audio → text` (ASR) ★★ M
 Whisper-tiny/base. Converts podcasts/voice-notes into searchable transcript. Param: `language`, `model_size`. Pairs with `video→audio→text` chain.
@@ -447,17 +447,17 @@ For speed-labelling, preload the next 3 items' previews.
 ### 12.7 Resume interrupted training ★ S
 Checkpoint MLP state every N epochs.
 
-### 12.8 Centralised plugin registry CLI ★ S
-`python app.py --list-plugins` showing every importer/exporter/embedder/converter/clipper. Useful for auto-completion in shell.
+### 12.8 Centralised plugin registry CLI ★ S — **shipped**
+`python app.py --list-plugins` shows every importer/exporter/embedder/converter/clipper across all auto-discovered plugin families. Supports `--format plain|json|names` and `--plugin-family <name>` for shell-completion scripts. Backed by `vtsearch.plugins.inventory.gather_plugins()`. See [CLI.md § Inspecting plugins and the API schema](../CLI.md#inspecting-plugins-and-the-api-schema).
 
-### 12.9 OpenAPI schema ★★ M
-Auto-generate from Flask routes (apispec/flask-smorest). Powers Swagger UI and a generated TS client. The frontend already manually maintains DTOs — generating them would prevent drift.
+### 12.9 OpenAPI schema ★★ M — **shipped (minimal)**
+`GET /openapi.json` and `python app.py --openapi-schema` return an OpenAPI 3.0 doc generated from Flask's `url_map` — every route, method, path parameter, and view docstring. Request/response schemas are intentionally left permissive (`{type: object}`); the route inventory alone is enough to power Swagger UI and a generated TS client and to gate API surface changes in CI. See [API.md § Machine-readable schema](../API.md#machine-readable-schema). Open question: do we want to add per-route Pydantic / `apispec` decorators later to fill in body schemas? Deferred until a real consumer needs them.
 
 ### 12.10 Python client library ★★ M
 `pip install vtsearch-client` so notebooks can drive the same endpoints headlessly.
 
-### 12.11 Plugin discovery via importlib.metadata ★★ M
-Already on the `vtscore` extraction roadmap; pull this forward — it's independently useful.
+### 12.11 Plugin discovery via importlib.metadata ★★ M — **shipped**
+Every `PluginRegistry` now also scans an `importlib.metadata` entry-point group (`vtsearch.importers`, `vtsearch.exporters`, …). Third-party packages can register plugins from their own `pyproject.toml` without monkey-patching `vtsearch`. Built-ins still win on name clashes; broken entry points warn and are skipped. See [EXTENDING-plugins.md § Third-party plugins via importlib.metadata entry points](../EXTENDING-plugins.md#third-party-plugins-via-importlibmetadata-entry-points).
 
 ### 12.12 Ruff → Ruff format CI gate ★ XS
 We have ruff; add a CI step that fails on unformatted code.

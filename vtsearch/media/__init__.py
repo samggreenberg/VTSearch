@@ -266,7 +266,7 @@ def _discover_embedders_in(media_type_dir: Path, package_name: str) -> None:
     symlinked directories are both loaded via
     :func:`importlib.util.spec_from_file_location` so that symlinks
     pointing outside the package are handled reliably (mirrors the same
-    approach used by :class:`vtsearch.utils.registry.PluginRegistry`).
+    approach used by :class:`vtsearch.plugins.PluginRegistry`).
     """
     for entry in sorted(media_type_dir.iterdir()):
         if entry.name.startswith((".", "_")):

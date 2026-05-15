@@ -50,9 +50,8 @@ deployments. Runs locally or in Docker.
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring index — splits into **[EXTENDING-plugins.md](EXTENDING-plugins.md)** (importers/exporters/sources), **[EXTENDING-media.md](EXTENDING-media.md)** (media types/embedders/clippers/converters), **[EXTENDING-processors.md](EXTENDING-processors.md)** (detectors/localizers/extractors). EXTENDING.md itself holds auth, dependencies, and checklists. |
 | [demos.md](demos.md) | Available demo datasets |
-| [plan-sync-sources.md](plan-sync-sources.md) | Sync sources design (**Implemented**, two enhancements pending) |
+| [plans/README.md](plans/README.md) | Index of open design plans (codebase reorg, multi-media import, patch embedders, extract-library, etc.) |
 | [design/cli-detector-converter.md](design/cli-detector-converter.md) | CLI autodetect with converters/clippers (**Design proposal**, not yet implemented) |
-| [RCDatasetImporter.plan.md](RCDatasetImporter.plan.md) | ReCaller dataset-importer scaffolding plan (**Planning**) |
 
 ---
 
@@ -62,7 +61,7 @@ deployments. Runs locally or in Docker.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-bash install-cpu.sh
+bash scripts/install-cpu.sh
 python app.py                # Flask dev server on 0.0.0.0:5000
 ```
 
@@ -72,11 +71,13 @@ For production, run under gunicorn instead:
 ### Docker (recommended for deployment)
 
 ```bash
-docker compose up -d         # CPU (full feature set)
+docker compose -f docker/compose/docker-compose.yml up -d         # CPU (full feature set)
 # or
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d  # GPU
+docker compose \
+  -f docker/compose/docker-compose.yml \
+  -f docker/compose/docker-compose.gpu.yml up -d                  # GPU
 # or
-docker compose -f docker-compose.labbench.yml up -d  # LabBench (SigLIP-only image search; smallest, weights baked in)
+docker compose -f docker/compose/docker-compose.labbench.yml up -d  # LabBench (SigLIP-only image search; smallest, weights baked in)
 ```
 
 Open `http://localhost:5000`, then use the hamburger menu to load a demo
@@ -96,8 +97,8 @@ All clips live in a global dict keyed by integer ID.
 
 Users vote clips as **good** or **bad**. Votes are stored as
 `dict[int, None]` (not sets) per-detector in `DetectorContext` objects
-(defined in `vtsearch/utils/state_core.py`, re-exported via
-`vtsearch/utils/state.py`). Votes drive both the learned-sort training
+(defined in `vtsearch/state/core.py`, re-exported via
+`vtsearch/state/__init__.py`). Votes drive both the learned-sort training
 and the label export.
 
 ### Media types
@@ -164,9 +165,9 @@ argument parsing. Key startup sequence:
 | What | Where |
 |------|-------|
 | Flask routes (REST API) | `vtsearch/routes/` |
-| Global state (medias, votes) | `vtsearch/utils/state_core.py` |
+| Global state (medias, votes) | `vtsearch/state/core.py` |
 | Persistent settings | `vtsearch/settings.py` → `data/settings.json` |
-| ML training, embedding models | `vtsearch/models/`, `vtsearch/media/*/embedder.py` |
+| ML training, embedding models | `vtsearch/training/`, `vtsearch/embedding/`, `vtsearch/media/*/embedder.py` |
 | Dataset loading, demo downloads | `vtsearch/datasets/` |
 | Frontend (Angular source / build output) | `frontend/` → `static/` |
 
@@ -184,14 +185,14 @@ graph, plugin directories — see
   `next_media_id`) for progress reporting and ID generation.
 - **Each plugin is self-contained** in its own subdirectory. Dependencies
   are declared in per-plugin `requirements.txt` files, auto-discovered
-  by `install-plugin-deps.sh`.
+  by `scripts/install-plugin-deps.sh`.
 
 ---
 
 ## Running the test suite
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements/base.txt
 
 # Fast CPU tests (~35s)
 python -m pytest tests/ -v
@@ -247,14 +248,14 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] Python 3.10+ available (or Docker installed)
 - [ ] System packages: `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`
-- [ ] `bash install-cpu.sh` (or build Docker image)
+- [ ] `bash scripts/install-cpu.sh` (or build Docker image)
 - [ ] `data/` directory writable (models, embeddings, settings stored here)
 - [ ] Port 5000 available (or configure as needed)
 - [ ] Run `python app.py` or `docker compose up`
 
 ### For offline / air-gapped environments
 
-- [ ] Pre-download models: `./download_models.sh /path/to/models`
+- [ ] Pre-download models: `./scripts/download_models.sh /path/to/models`
 - [ ] Set `HF_HUB_OFFLINE=1` and `VTSEARCH_MODELS_DIR=/path/to/models`
 - [ ] Prepare datasets locally (folder or pickle files)
 - [ ] If using Docker, bake models into the image or mount as a volume
@@ -263,7 +264,7 @@ Use this checklist when setting up VTSearch for a new environment.
 
 - [ ] NVIDIA GPU with CUDA support available
 - [ ] NVIDIA Container Toolkit installed (for Docker)
-- [ ] Use `Dockerfile.gpu` or `bash install-gpu.sh`
+- [ ] Use `docker/Dockerfile.gpu` or `bash scripts/install-gpu.sh`
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for full details.
 
@@ -326,8 +327,19 @@ ownership, and `get_user_data_dir()` supports per-user data directories.
 via `DatasetContext` and `DetectorContext` proxy objects (see
 [ARCHITECTURE.md](ARCHITECTURE.md#multi-dataset-support)). Each user
 can work with different datasets/models simultaneously via
-`X-Dataset-Id`/`X-Detector-Id` headers. Settings remain global (shared
-across all users).
+`X-Dataset-Id`/`X-Detector-Id` headers. Settings are split into two
+tiers: a small set of server-wide infrastructure keys
+(`saved_datasets_dir`, `detectors_dir`, `max_concurrent_*`,
+`autoload_media_embedders`, `autorun_detectors`) live in
+`data/settings.json` and are shared across users; everything else —
+theme, volume, view/focus/panel modes, autopilot config, achievements
+state, and the per-user `settings_source` — lives in
+`<get_user_data_dir(user)>/user_settings.json` and is isolated per
+user. Background threads spawned from a request handler propagate the
+user via `vtsearch.auth.set_thread_user()` so per-user writes (e.g.
+autopilot toggles, sync-source exports) land in the right file. Legacy
+single-file `data/settings.json` files that pre-date the split are
+migrated to the default user's file on first load.
 
 ### Memory usage
 

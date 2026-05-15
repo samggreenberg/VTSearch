@@ -20,7 +20,7 @@ def make_wav_bytes(frequency: float = 440.0, duration: float = 0.1) -> bytes:
     Supports variable ``frequency`` and ``duration`` — useful when tests
     need multiple distinct WAV files (e.g. different frequencies per media).
     """
-    from vtsearch.utils.audio_generator import generate_wav  # noqa: PLC0415
+    from vtsearch.media.audio.audio_generator import generate_wav  # noqa: PLC0415
 
     return generate_wav(frequency, duration)
 
@@ -29,7 +29,7 @@ def make_raw_wav_bytes() -> bytes:
     """Create a minimal valid WAV file (100 zero-samples) in memory.
 
     Lighter weight than :func:`make_wav_bytes` — does not depend on the
-    ``vtsearch.utils.audio_generator`` module.
+    ``vtsearch.media.audio.audio_generator`` module.
     """
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -282,8 +282,8 @@ def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type=
     registers the model so ``/api/detectors/registry`` lists it.
     """
     from vtsearch.datasets.labelset import LabelSet  # noqa: PLC0415
-    from vtsearch.models.detector_registry import register_detector  # noqa: PLC0415
-    from vtsearch.models.detector_store import _detector_path, _write_detector  # noqa: PLC0415
+    from vtsearch.detectors.registry import register_detector  # noqa: PLC0415
+    from vtsearch.detectors.store import _detector_path, _write_detector  # noqa: PLC0415
 
     good_votes_dict = {k: None for k in good_ids}
     bad_votes_dict = {k: None for k in bad_ids}

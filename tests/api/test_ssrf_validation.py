@@ -1,6 +1,6 @@
 """Tests for SSRF URL validation.
 
-Verifies that :func:`vtsearch.utils.url_validation.validate_url` blocks
+Verifies that :func:`vtsearch.security.url_validation.validate_url` blocks
 requests to private/internal network addresses while allowing public URLs.
 Also verifies that the HTTP archive importer and webhook exporter both
 call the validator.
@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from vtsearch.utils.url_validation import validate_url
+from vtsearch.security.url_validation import validate_url
 
 
 # ---------------------------------------------------------------------------
@@ -38,12 +38,12 @@ class TestValidateUrlScheme:
             validate_url("javascript:alert(1)")
 
     def test_accepts_http(self):
-        with mock.patch("vtsearch.utils.url_validation.socket.getaddrinfo") as mock_gai:
+        with mock.patch("vtsearch.security.url_validation.socket.getaddrinfo") as mock_gai:
             mock_gai.return_value = [(2, 1, 0, "", ("93.184.216.34", 0))]
             assert validate_url("http://example.com") == "http://example.com"
 
     def test_accepts_https(self):
-        with mock.patch("vtsearch.utils.url_validation.socket.getaddrinfo") as mock_gai:
+        with mock.patch("vtsearch.security.url_validation.socket.getaddrinfo") as mock_gai:
             mock_gai.return_value = [(2, 1, 0, "", ("93.184.216.34", 0))]
             assert validate_url("https://example.com") == "https://example.com"
 
@@ -71,7 +71,7 @@ class TestValidateUrlHostname:
 class TestValidateUrlPrivateIPs:
     def _mock_resolve(self, ip):
         return mock.patch(
-            "vtsearch.utils.url_validation.socket.getaddrinfo",
+            "vtsearch.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", (ip, 0))],
         )
 
@@ -107,7 +107,7 @@ class TestValidateUrlPrivateIPs:
 
     def test_blocks_ipv6_loopback(self):
         with mock.patch(
-            "vtsearch.utils.url_validation.socket.getaddrinfo",
+            "vtsearch.security.url_validation.socket.getaddrinfo",
             return_value=[(10, 1, 0, "", ("::1", 0, 0, 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
@@ -122,7 +122,7 @@ class TestValidateUrlPrivateIPs:
         import socket
 
         with mock.patch(
-            "vtsearch.utils.url_validation.socket.getaddrinfo",
+            "vtsearch.security.url_validation.socket.getaddrinfo",
             side_effect=socket.gaierror("Name or service not known"),
         ):
             with pytest.raises(ValueError, match="Could not resolve"):
@@ -136,7 +136,7 @@ class TestValidateUrlPrivateIPs:
     def test_checks_all_resolved_addresses(self):
         """If a hostname has multiple A records, block if ANY is private."""
         with mock.patch(
-            "vtsearch.utils.url_validation.socket.getaddrinfo",
+            "vtsearch.security.url_validation.socket.getaddrinfo",
             return_value=[
                 (2, 1, 0, "", ("93.184.216.34", 0)),
                 (2, 1, 0, "", ("127.0.0.1", 0)),
@@ -159,7 +159,7 @@ class TestHttpArchiveImporterSSRF:
 
         imp = HttpArchiveDatasetImporter()
         with mock.patch(
-            "vtsearch.utils.url_validation.socket.getaddrinfo",
+            "vtsearch.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("127.0.0.1", 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
@@ -177,7 +177,7 @@ class TestHttpArchiveImporterSSRF:
 
         imp = HttpArchiveDatasetImporter()
         with mock.patch(
-            "vtsearch.utils.url_validation.socket.getaddrinfo",
+            "vtsearch.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("10.0.0.5", 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
@@ -197,7 +197,7 @@ class TestWebhookExporterSSRF:
 
         exp = WebhookLabelsetExporter()
         with mock.patch(
-            "vtsearch.utils.url_validation.socket.getaddrinfo",
+            "vtsearch.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("192.168.1.1", 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
@@ -219,7 +219,7 @@ class TestWebhookExporterSSRF:
         mock_resp.raise_for_status.return_value = None
 
         with mock.patch(
-            "vtsearch.utils.url_validation.socket.getaddrinfo",
+            "vtsearch.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
         ):
             with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):

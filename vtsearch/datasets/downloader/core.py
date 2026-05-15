@@ -3,7 +3,7 @@
 All public functions accept an optional ``on_progress`` callback with the
 signature ``(status: str, message: str, current: int, total: int) -> None``.
 When omitted the functions fall back to the application-wide
-:func:`~vtsearch.utils.update_progress` reporter; pass an explicit callback
+:func:`~vtsearch.concurrency.progress.update_progress` reporter; pass an explicit callback
 to use these functions outside the Flask app (scripts, notebooks, tests).
 """
 
@@ -19,7 +19,7 @@ from urllib.parse import urljoin
 import requests
 
 from vtsearch.config import DATA_DIR
-from vtsearch.utils.url_validation import validate_url
+from vtsearch.security.url_validation import validate_url
 
 _MAX_REDIRECTS = 10
 
@@ -37,6 +37,9 @@ UCF101_SUBSET_URL = "https://huggingface.co/datasets/sayakpaul/ucf101-subset/res
 BBC_NEWS_URL = "http://mlg.ucd.ie/files/datasets/bbc-fulltext.zip"
 AG_NEWS_URL = "https://raw.githubusercontent.com/mhjabreel/CharCnn_Keras/master/data/ag_news_csv/train.csv"
 IMDB_URL = "https://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz"
+DBPEDIA_URL = "https://s3.amazonaws.com/fast-ai-nlp/dbpedia_csv.tgz"
+ARXIV_API_URL = "http://export.arxiv.org/api/query"
+REUTERS21578_URL = "http://kdd.ics.uci.edu/databases/reuters21578/reuters21578.tar.gz"
 GTZAN_URL = "https://huggingface.co/datasets/marsyas/gtzan/resolve/main/data/genres.tar.gz"
 SPEECH_COMMANDS_V2_URL = "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz"
 URBANSOUND8K_URL = "https://zenodo.org/records/1203745/files/UrbanSound8K.tar.gz"
@@ -76,6 +79,9 @@ UCF101_SUBSET_DOWNLOAD_SIZE_MB = 171
 BBC_NEWS_DOWNLOAD_SIZE_MB = 2
 AG_NEWS_DOWNLOAD_SIZE_MB = 30
 IMDB_DOWNLOAD_SIZE_MB = 84
+DBPEDIA_DOWNLOAD_SIZE_MB = 70
+ARXIV_DOWNLOAD_SIZE_MB = 30
+REUTERS21578_DOWNLOAD_SIZE_MB = 8
 GTZAN_DOWNLOAD_SIZE_MB = 1200
 SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB = 2300
 URBANSOUND8K_DOWNLOAD_SIZE_MB = 6000
@@ -94,12 +100,12 @@ ProgressCallback = Callable[[str, str, int, int], None]
 
 def _default_progress() -> ProgressCallback:
     """Lazily resolve the progress callback for the current thread."""
-    from vtsearch.utils.progress import get_thread_progress
+    from vtsearch.concurrency.progress import get_thread_progress
 
     cb = get_thread_progress()
     if cb is not None:
         return cb
-    from vtsearch.utils import update_progress
+    from vtsearch.concurrency.progress import update_progress
 
     return update_progress
 

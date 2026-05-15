@@ -26,18 +26,18 @@ from vtsearch.config import DATA_DIR
 from vtsearch.datasets.downloader import download_file_with_progress
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
 from vtsearch.datasets.loader import load_dataset_from_folder
-from vtsearch.utils.url_validation import validate_url
+from vtsearch.security.url_validation import validate_url
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
 
 def _default_progress() -> ProgressCallback:
-    from vtsearch.utils.progress import get_thread_progress
+    from vtsearch.concurrency.progress import get_thread_progress
 
     cb = get_thread_progress()
     if cb is not None:
         return cb
-    from vtsearch.utils import update_progress
+    from vtsearch.concurrency.progress import update_progress
 
     return update_progress
 

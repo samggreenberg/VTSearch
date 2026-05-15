@@ -2,22 +2,24 @@
 
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import get_json_or_400
-from vtsearch.models import (
+from vtsearch.routes._shared import get_json_or_400
+from vtsearch.detectors.labeling_progress import (
     analyze_labeling_progress,
     calculate_diversity_level_over_time,
     calculate_error_cost_over_time,
     calculate_prediction_stability_over_time,
     compute_labeling_status,
 )
-from vtsearch.utils import (
+from vtsearch.state import (
     bad_votes,
     get_diversity_tree,
-    get_eval_progress,
     get_inclusion,
     good_votes,
     label_history,
     snapshot_medias,
+)
+from vtsearch.concurrency.progress import (
+    get_eval_progress,
     update_eval_progress,
 )
 
@@ -128,8 +130,8 @@ def eval_train_and_score():
 
     Tests can pass ``{"wait": true}`` to block until the job completes.
     """
-    from vtsearch.utils.async_jobs import eval_jobs
-    from vtsearch.utils.state_core import (
+    from vtsearch.concurrency.async_jobs import eval_jobs
+    from vtsearch.state.core import (
         get_active_context,
         get_active_detector_context,
         set_thread_dataset_context,
@@ -207,7 +209,7 @@ def eval_train_and_score():
 @eval_bp.route("/api/eval/train-and-score/result", methods=["GET"])
 def eval_train_and_score_result():
     """Poll a background eval train-and-score job."""
-    from vtsearch.utils.async_jobs import eval_jobs
+    from vtsearch.concurrency.async_jobs import eval_jobs
 
     job_id = request.args.get("job_id", "").strip()
     if not job_id:
@@ -219,18 +221,22 @@ def eval_train_and_score_result():
 
     if job.status in ("running", "pending"):
         prog = get_eval_progress()
-        return jsonify({
-            "job_id": job.job_id,
-            "status": "running",
-            "current": prog.get("current", 0),
-            "total": prog.get("total", 0),
-        })
+        return jsonify(
+            {
+                "job_id": job.job_id,
+                "status": "running",
+                "current": prog.get("current", 0),
+                "total": prog.get("total", 0),
+            }
+        )
     if job.status == "error":
-        return jsonify({
-            "job_id": job.job_id,
-            "status": "error",
-            "error": job.error or "Evaluation computation failed",
-        }), 500
+        return jsonify(
+            {
+                "job_id": job.job_id,
+                "status": "error",
+                "error": job.error or "Evaluation computation failed",
+            }
+        ), 500
     if job.status == "cancelled":
         return jsonify({"job_id": job.job_id, "status": "cancelled"})
     return jsonify(_eval_done_payload(job))

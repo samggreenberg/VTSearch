@@ -2,7 +2,27 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject, timer } from 'rxjs';
 import { switchMap, takeUntil } from 'rxjs/operators';
 import { VotesResponse } from '../models/api.models';
+import { MediasApiService } from './medias-api.service';
 import { SortingApiService } from './sorting-api.service';
+
+/**
+ * One vote captured for Cmd/Ctrl-Z undo.  `previousPolarity` is the polarity
+ * the media had *before* the click that produced this entry, so undo can
+ * restore it with a single inverse POST to /api/medias/<id>/vote.
+ */
+export interface UndoEntry {
+  mediaId: number;
+  clickedDirection: 'good' | 'bad';
+  previousPolarity: 'good' | 'bad' | null;
+  mediaName: string;
+}
+
+export interface UndoToast {
+  action: 'undo' | 'redo';
+  mediaName: string;
+}
+
+const UNDO_STACK_MAX = 20;
 
 @Injectable({ providedIn: 'root' })
 export class VoteStateService implements OnDestroy {
@@ -18,14 +38,25 @@ export class VoteStateService implements OnDestroy {
   /** Tracks optimistic votes not yet confirmed by the server. */
   private pendingOptimistic = new Map<number, { vote: 'good' | 'bad'; clickTime: number }>();
 
+  /** Past votes available to undo, most-recent last.  Capped at UNDO_STACK_MAX. */
+  private past: UndoEntry[] = [];
+  /** Votes that have been undone and can be redone via Cmd/Ctrl-Shift-Z. */
+  private future: UndoEntry[] = [];
+  private readonly toastSubject = new Subject<UndoToast>();
+
   readonly goodVotes$ = this.goodVotesSubject.asObservable();
   readonly badVotes$ = this.badVotesSubject.asObservable();
   readonly clickTimes$ = this.clickTimesSubject.asObservable();
   readonly learnedScores$ = this.learnedScoresSubject.asObservable();
   readonly labelsetGoodCount$ = this.labelsetGoodCountSubject.asObservable();
   readonly labelsetBadCount$ = this.labelsetBadCountSubject.asObservable();
+  /** Emits a short message every time an undo or redo executes. */
+  readonly toast$ = this.toastSubject.asObservable();
 
-  constructor(private sortingApi: SortingApiService) {}
+  constructor(
+    private sortingApi: SortingApiService,
+    private mediasApi: MediasApiService,
+  ) {}
 
   ngOnDestroy(): void {
     this.destroy$.next();
@@ -151,6 +182,70 @@ export class VoteStateService implements OnDestroy {
     this.labelsetGoodCountSubject.next(0);
     this.labelsetBadCountSubject.next(0);
     this.pendingOptimistic.clear();
+    this.past = [];
+    this.future = [];
+  }
+
+  /**
+   * Snapshot the polarity *before* a vote click and push it onto the undo
+   * stack.  Must be called BEFORE applyOptimisticVote (otherwise the snapshot
+   * would already reflect the toggle).  Any pending redo entries are dropped,
+   * matching standard editor undo semantics.
+   */
+  recordVote(mediaId: number, clickedDirection: 'good' | 'bad', mediaName: string): void {
+    const previousPolarity: 'good' | 'bad' | null = this.goodVotesSubject.value.has(mediaId)
+      ? 'good'
+      : this.badVotesSubject.value.has(mediaId)
+        ? 'bad'
+        : null;
+    this.past.push({ mediaId, clickedDirection, previousPolarity, mediaName });
+    if (this.past.length > UNDO_STACK_MAX) this.past.shift();
+    this.future = [];
+  }
+
+  canUndo(): boolean {
+    return this.past.length > 0;
+  }
+
+  canRedo(): boolean {
+    return this.future.length > 0;
+  }
+
+  /**
+   * Reverse the most recent vote.  The inverse POST is:
+   *   - {@code previousPolarity} if non-null (restores prior state, including
+   *     polarity flips since /vote toggles mutual exclusion server-side), or
+   *   - {@code clickedDirection} if previousPolarity was null (toggles off).
+   *
+   * Side effects that aren't reversible (achievements, label_history append,
+   * click_counter monotonicity) are accepted — the user really did make the
+   * click; we just put the item back where it was.
+   */
+  undo(): void {
+    const entry = this.past.pop();
+    if (!entry) return;
+    this.future.push(entry);
+    const direction: 'good' | 'bad' = entry.previousPolarity ?? entry.clickedDirection;
+    this.applyOptimisticVote(entry.mediaId, direction);
+    this.mediasApi.vote(entry.mediaId, direction).subscribe({
+      next: () => this.loadVotes(),
+      error: () => this.loadVotes(),
+    });
+    this.toastSubject.next({ action: 'undo', mediaName: entry.mediaName });
+  }
+
+  /** Re-apply the most recently undone vote — POST the original direction. */
+  redo(): void {
+    const entry = this.future.pop();
+    if (!entry) return;
+    this.past.push(entry);
+    if (this.past.length > UNDO_STACK_MAX) this.past.shift();
+    this.applyOptimisticVote(entry.mediaId, entry.clickedDirection);
+    this.mediasApi.vote(entry.mediaId, entry.clickedDirection).subscribe({
+      next: () => this.loadVotes(),
+      error: () => this.loadVotes(),
+    });
+    this.toastSubject.next({ action: 'redo', mediaName: entry.mediaName });
   }
 
   private applyVotes(votes: VotesResponse): void {

@@ -122,12 +122,60 @@ class TextMediaType(MediaType):
 
     _IMDB_CATEGORIES = ["pos", "neg"]
 
+    _DBPEDIA_CATEGORIES = [
+        "Company",
+        "EducationalInstitution",
+        "Artist",
+        "Athlete",
+        "OfficeHolder",
+        "MeanOfTransportation",
+        "Building",
+        "NaturalPlace",
+        "Village",
+        "Animal",
+        "Plant",
+        "Album",
+        "Film",
+        "WrittenWork",
+    ]
+
+    _ARXIV_CATEGORIES = [
+        "cs.AI",
+        "cs.CV",
+        "cs.LG",
+        "cs.CL",
+        "cs.CR",
+        "math.AG",
+        "math.CO",
+        "math.PR",
+        "physics.gen-ph",
+        "q-bio.GN",
+        "astro-ph.CO",
+        "stat.ML",
+    ]
+
+    _REUTERS_CATEGORIES = [
+        "earn",
+        "acq",
+        "money-fx",
+        "grain",
+        "crude",
+        "trade",
+        "interest",
+        "ship",
+        "wheat",
+        "corn",
+    ]
+
     @property
     def demo_datasets(self) -> list:
         cats = self._DEMO_CATEGORIES
         ng_desc = "Early-1990s Usenet posts across technical and political topics."
         ag_desc = "Short news summaries across world, sports, business, tech."
         imdb_desc = "Long-form movie reviews with positive/negative sentiment labels."
+        wiki_desc = "Wikipedia abstracts across 14 DBpedia ontology topics — a bigger, cleaner cousin of 20 Newsgroups."
+        arxiv_desc = "arXiv paper titles + abstracts spanning CS, math, physics, biology, and astrophysics."
+        reuters_desc = "Reuters-21578 financial newswire — the historical baseline for text classification."
         return [
             DemoDataset(
                 id="20newsgroups_s",
@@ -272,6 +320,138 @@ class TextMediaType(MediaType):
                 items_per_category=25000,
                 download_size_mb=15,
             ),
+            DemoDataset(
+                id="wikipedia_topics_s",
+                label="Wikipedia Topics (S)",
+                description=wiki_desc,
+                categories=self._DBPEDIA_CATEGORIES,
+                source="dbpedia",
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 7,
+                items_per_category=40000,
+                download_size_mb=70,
+            ),
+            DemoDataset(
+                id="wikipedia_topics_m",
+                label="Wikipedia Topics (M)",
+                description=wiki_desc,
+                categories=self._DBPEDIA_CATEGORIES,
+                source="dbpedia",
+                slice_frac_start=1 / 7,
+                slice_frac_end=3 / 7,
+                items_per_category=40000,
+                download_size_mb=70,
+            ),
+            DemoDataset(
+                id="wikipedia_topics_l",
+                label="Wikipedia Topics (L)",
+                description=wiki_desc,
+                categories=self._DBPEDIA_CATEGORIES,
+                source="dbpedia",
+                slice_frac_start=3 / 7,
+                slice_frac_end=None,
+                items_per_category=40000,
+                download_size_mb=70,
+            ),
+            DemoDataset(
+                id="wikipedia_topics_a",
+                label="Wikipedia Topics (A)",
+                description=wiki_desc,
+                categories=self._DBPEDIA_CATEGORIES,
+                source="dbpedia",
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=40000,
+                download_size_mb=70,
+            ),
+            DemoDataset(
+                id="arxiv_abstracts_s",
+                label="arXiv Abstracts (S)",
+                description=arxiv_desc,
+                categories=self._ARXIV_CATEGORIES,
+                source="arxiv",
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 7,
+                items_per_category=2000,
+                download_size_mb=30,
+            ),
+            DemoDataset(
+                id="arxiv_abstracts_m",
+                label="arXiv Abstracts (M)",
+                description=arxiv_desc,
+                categories=self._ARXIV_CATEGORIES,
+                source="arxiv",
+                slice_frac_start=1 / 7,
+                slice_frac_end=3 / 7,
+                items_per_category=2000,
+                download_size_mb=30,
+            ),
+            DemoDataset(
+                id="arxiv_abstracts_l",
+                label="arXiv Abstracts (L)",
+                description=arxiv_desc,
+                categories=self._ARXIV_CATEGORIES,
+                source="arxiv",
+                slice_frac_start=3 / 7,
+                slice_frac_end=None,
+                items_per_category=2000,
+                download_size_mb=30,
+            ),
+            DemoDataset(
+                id="arxiv_abstracts_a",
+                label="arXiv Abstracts (A)",
+                description=arxiv_desc,
+                categories=self._ARXIV_CATEGORIES,
+                source="arxiv",
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=2000,
+                download_size_mb=30,
+            ),
+            DemoDataset(
+                id="reuters21578_s",
+                label="Reuters-21578 (S)",
+                description=reuters_desc,
+                categories=self._REUTERS_CATEGORIES,
+                source="reuters21578",
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 7,
+                items_per_category=4000,
+                download_size_mb=8,
+            ),
+            DemoDataset(
+                id="reuters21578_m",
+                label="Reuters-21578 (M)",
+                description=reuters_desc,
+                categories=self._REUTERS_CATEGORIES,
+                source="reuters21578",
+                slice_frac_start=1 / 7,
+                slice_frac_end=3 / 7,
+                items_per_category=4000,
+                download_size_mb=8,
+            ),
+            DemoDataset(
+                id="reuters21578_l",
+                label="Reuters-21578 (L)",
+                description=reuters_desc,
+                categories=self._REUTERS_CATEGORIES,
+                source="reuters21578",
+                slice_frac_start=3 / 7,
+                slice_frac_end=None,
+                items_per_category=4000,
+                download_size_mb=8,
+            ),
+            DemoDataset(
+                id="reuters21578_a",
+                label="Reuters-21578 (A)",
+                description=reuters_desc,
+                categories=self._REUTERS_CATEGORIES,
+                source="reuters21578",
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=4000,
+                download_size_mb=8,
+            ),
         ]
 
     # ------------------------------------------------------------------
@@ -294,7 +474,7 @@ class TextMediaType(MediaType):
         import hashlib  # noqa: PLC0415
 
         if on_progress is None:
-            from vtsearch.utils import update_progress
+            from vtsearch.concurrency.progress import update_progress
 
             on_progress = update_progress
 
@@ -377,6 +557,60 @@ class TextMediaType(MediaType):
                     slice_frac_end,
                 ):
                     selected_texts.append(review)
+                    selected_categories.append(cat_name)
+
+        elif source == "dbpedia":
+            from vtsearch.datasets.downloader import download_dbpedia  # noqa: PLC0415
+
+            categories_articles = download_dbpedia(on_progress=on_progress)
+
+            for cat_name in categories:
+                articles = categories_articles.get(cat_name, [])
+                for article in demo_slice(
+                    articles,
+                    slice_start,
+                    slice_end or len(articles),
+                    slice_frac_start,
+                    slice_frac_end,
+                ):
+                    selected_texts.append(article)
+                    selected_categories.append(cat_name)
+
+        elif source == "arxiv":
+            from vtsearch.datasets.downloader import download_arxiv_abstracts  # noqa: PLC0415
+
+            categories_papers = download_arxiv_abstracts(
+                categories=categories,
+                on_progress=on_progress,
+            )
+
+            for cat_name in categories:
+                papers = categories_papers.get(cat_name, [])
+                for paper in demo_slice(
+                    papers,
+                    slice_start,
+                    slice_end or len(papers),
+                    slice_frac_start,
+                    slice_frac_end,
+                ):
+                    selected_texts.append(paper)
+                    selected_categories.append(cat_name)
+
+        elif source == "reuters21578":
+            from vtsearch.datasets.downloader import download_reuters21578  # noqa: PLC0415
+
+            categories_articles = download_reuters21578(on_progress=on_progress)
+
+            for cat_name in categories:
+                articles = categories_articles.get(cat_name, [])
+                for article in demo_slice(
+                    articles,
+                    slice_start,
+                    slice_end or len(articles),
+                    slice_frac_start,
+                    slice_frac_end,
+                ):
+                    selected_texts.append(article)
                     selected_categories.append(cat_name)
 
         else:

@@ -4,7 +4,7 @@ To add a new media type:
 
 1. Create a subdirectory under ``vtsearch/media/`` (e.g. ``vtsearch/media/code/``).
 2. Add a ``requirements.txt`` listing any pip packages your embedder needs
-   (auto-discovered by ``install-plugin-deps.sh``).
+   (auto-discovered by ``scripts/install-plugin-deps.sh``).
 3. Implement a subclass of :class:`MediaType` in ``media_type.py``.
 4. Register it in ``vtsearch/media/__init__.py``::
 
@@ -28,7 +28,7 @@ import numpy as np
 
 # Type alias for progress callbacks.  Modules that accept an ``on_progress``
 # parameter use this signature so callers can report status without depending
-# on ``vtsearch.utils.progress``.
+# on ``vtsearch.concurrency.progress``.
 ProgressCallback = Callable[[str, str, int, int], None]
 
 __all__ = [

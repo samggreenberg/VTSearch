@@ -1,8 +1,9 @@
-"""Tests for runtime torch configuration in ``vtsearch.models.loader``.
+"""Tests for runtime torch configuration.
 
 Covers:
 - ``VTSEARCH_TORCH_THREADS`` env-var override drives ``torch.set_num_threads``
-  via :data:`vtsearch.config.TORCH_THREADS`.
+  via :data:`vtsearch.config.TORCH_THREADS` (read by
+  :func:`vtsearch.media.torch_setup.ensure_torch_configured`).
 - ``get_torch_device()`` selection delegates to
   :func:`vtsearch.config.resolve_device`, honouring ``VTSEARCH_DEVICE``.
 - ``train_model`` returning a model on the selected device.
@@ -21,11 +22,11 @@ import torch
 @pytest.fixture(autouse=True)
 def reset_torch_configured_flag():
     """Force ``ensure_torch_configured`` to re-run on each test."""
-    import vtsearch.models.loader as loader
+    import vtsearch.media.torch_setup as torch_setup
 
-    loader._torch_configured = False
+    torch_setup._torch_configured = False
     yield
-    loader._torch_configured = False
+    torch_setup._torch_configured = False
 
 
 def test_torch_threads_constant_default(monkeypatch):
@@ -55,18 +56,18 @@ def test_torch_threads_constant_clamps_to_one(monkeypatch):
 
 def test_ensure_torch_configured_applies_constant(monkeypatch):
     """``ensure_torch_configured`` passes ``TORCH_THREADS`` to torch."""
-    import vtsearch.models.loader as loader
+    import vtsearch.media.torch_setup as torch_setup
 
-    monkeypatch.setattr(loader, "TORCH_THREADS", 2)
+    monkeypatch.setattr(torch_setup, "TORCH_THREADS", 2)
     with mock.patch.object(torch, "set_num_threads") as set_threads:
-        loader.ensure_torch_configured()
+        torch_setup.ensure_torch_configured()
 
     set_threads.assert_called_once_with(2)
 
 
 def test_get_torch_device_falls_back_to_cpu_without_cuda(monkeypatch):
     """With no CUDA the resolved device is CPU."""
-    from vtsearch.models import loader
+    from vtsearch.embedding import loader
 
     monkeypatch.setenv("VTSEARCH_DEVICE", "auto")
     import vtsearch.config as config
@@ -83,7 +84,7 @@ def test_get_torch_device_honours_explicit_cpu(monkeypatch):
     """``VTSEARCH_DEVICE=cpu`` forces CPU even when CUDA is available."""
     monkeypatch.setenv("VTSEARCH_DEVICE", "cpu")
     import vtsearch.config as config
-    import vtsearch.models.loader as loader
+    import vtsearch.embedding.loader as loader
 
     importlib.reload(config)
     importlib.reload(loader)
@@ -97,7 +98,7 @@ def test_get_torch_device_returns_cuda_when_available(monkeypatch):
     """``auto`` resolves to cuda when torch reports CUDA is available."""
     monkeypatch.setenv("VTSEARCH_DEVICE", "auto")
     import vtsearch.config as config
-    import vtsearch.models.loader as loader
+    import vtsearch.embedding.loader as loader
 
     importlib.reload(config)
     importlib.reload(loader)
@@ -109,8 +110,8 @@ def test_get_torch_device_returns_cuda_when_available(monkeypatch):
 
 def test_train_model_places_model_on_selected_device(monkeypatch):
     """train_model must move the returned model onto ``get_torch_device()``."""
-    from vtsearch.models import loader
-    from vtsearch.models.training import train_model
+    from vtsearch.embedding import loader
+    from vtsearch.training.mlp import train_model
 
     fake_device = torch.device("cpu")
     monkeypatch.setattr(loader, "get_torch_device", lambda: fake_device)
@@ -126,6 +127,6 @@ def test_train_model_places_model_on_selected_device(monkeypatch):
 
 def test_imports_do_not_break():
     """Sanity check: reloading loader picks up changes without errors."""
-    import vtsearch.models.loader as loader
+    import vtsearch.embedding.loader as loader
 
     importlib.reload(loader)

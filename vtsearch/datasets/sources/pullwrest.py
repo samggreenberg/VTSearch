@@ -129,7 +129,7 @@ class PullWrestSource(MediaSource):
 
 
 class _PullWrestSourceFactory:
-    """Factory discovered by :class:`~vtsearch.utils.registry.PluginRegistry`."""
+    """Factory discovered by :class:`~vtsearch.plugins.PluginRegistry`."""
 
     name = "recaller"  # matches origin["importer"] from ReCaller imports
 

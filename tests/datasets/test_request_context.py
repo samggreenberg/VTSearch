@@ -7,7 +7,7 @@ dataset/model a request operates on, without mutating global "active" state.
 
 import numpy as np
 
-from vtsearch.utils.state_core import (
+from vtsearch.state.core import (
     DatasetContext,
     DetectorContext,
     get_active_context,
@@ -128,7 +128,7 @@ class TestRequestScopedModel:
         det_a.good_votes[1] = None
         det_b.good_votes[2] = None
 
-        from vtsearch.utils.state_core import get_detector_context
+        from vtsearch.state.core import get_detector_context
 
         set_thread_detector_context(get_detector_context("req_det_a"))
 
@@ -153,7 +153,7 @@ class TestRequestScopedModel:
         """If X-Detector-Id refers to a detector not in memory, fall back to global."""
         det = _make_detector("req_det_fb")
         det.good_votes[5] = None
-        from vtsearch.utils.state_core import get_detector_context
+        from vtsearch.state.core import get_detector_context
 
         set_thread_detector_context(get_detector_context("req_det_fb"))
 
@@ -168,7 +168,7 @@ class TestRequestScopedModel:
         det_b = _make_detector("req_det_ctx_b")
         det_a.good_votes[10] = None
         det_b.bad_votes[20] = None
-        from vtsearch.utils.state_core import get_detector_context
+        from vtsearch.state.core import get_detector_context
 
         set_thread_detector_context(get_detector_context("req_det_ctx_a"))
 
@@ -197,7 +197,7 @@ class TestRequestScopedBoth:
         det.good_votes[500] = None
 
         set_thread_dataset_context(get_context("req_both_ds"))
-        from vtsearch.utils.state_core import get_detector_context
+        from vtsearch.state.core import get_detector_context
 
         set_thread_detector_context(get_detector_context("req_both_det"))
 
@@ -289,7 +289,7 @@ class TestQueryParamContext:
         det_b = _make_detector("qp_det_b")
         det_a.good_votes[10] = None
         det_b.good_votes[20] = None
-        from vtsearch.utils.state_core import get_detector_context
+        from vtsearch.state.core import get_detector_context
 
         set_thread_detector_context(get_detector_context("qp_det_a"))
 

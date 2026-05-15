@@ -342,6 +342,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
     if (this.sortState.sortBusy) return;
+    const m = this.mediaState.medias.find((x) => x.id === event.id);
+    const name = m?.filename || m?.origin_name || `#${event.id}`;
+    this.voteState.recordVote(event.id, event.vote, name);
     this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
         this.onMediaVoted(event);

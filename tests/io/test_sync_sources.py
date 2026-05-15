@@ -519,7 +519,7 @@ class TestApplySettings:
 
     def test_apply_settings_available_from_routes(self):
         """The routes module re-exports _apply_settings from settings."""
-        from vtsearch.routes.settings_io import _apply_settings
+        from vtsearch.routes.settings.io import _apply_settings
         from vtsearch.settings import _apply_settings as canonical
 
         assert _apply_settings is canonical
@@ -585,13 +585,13 @@ class TestStartupAutoImport:
 
 class TestDetectorContextLabelsetSource:
     def test_default_is_none(self):
-        from vtsearch.utils.state_core import DetectorContext
+        from vtsearch.state.core import DetectorContext
 
         ctx = DetectorContext("test")
         assert ctx.labelset_source is None
 
     def test_can_set_and_read(self):
-        from vtsearch.utils.state_core import DetectorContext
+        from vtsearch.state.core import DetectorContext
 
         ctx = DetectorContext("test")
         ctx.labelset_source = {
@@ -620,13 +620,13 @@ class TestLabelsetSync:
 
     def test_sync_to_source_writes_labels(self, tmp_path):
         from vtsearch.labels.sync import sync_to_labelset_source
-        from vtsearch.utils.state_core import (
+        from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
             unregister_detector_context,
         )
-        from vtsearch.utils.state_core import medias, good_votes
+        from vtsearch.state.core import medias, good_votes
 
         # Create and register a detector context with a labelset source
         ctx = DetectorContext("test_sync", name="test_sync")
@@ -664,13 +664,13 @@ class TestLabelsetSync:
 
     def test_sync_from_source_applies_labels(self, tmp_path):
         from vtsearch.labels.sync import sync_from_labelset_source
-        from vtsearch.utils.state_core import (
+        from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
             unregister_detector_context,
         )
-        from vtsearch.utils.state_core import medias, good_votes
+        from vtsearch.state.core import medias, good_votes
 
         # Create a labels file with an md5 that matches a test media
         # Get an existing media's md5
@@ -813,7 +813,7 @@ class TestLabelsetSourcesAPI:
         assert resp.status_code == 404
 
     def test_set_unknown_labelset_source_returns_404(self, client):
-        from vtsearch.utils.state_core import (
+        from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
             unregister_detector_context,

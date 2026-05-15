@@ -4,7 +4,7 @@ VTSearch uses a small MLP (multi-layer perceptron) neural network to learn a bin
 
 ## Architecture
 
-The MLP is defined in `vtsearch/models/training.py` via `build_model()`:
+The MLP is defined in `vtsearch/training/mlp.py` via `build_model()`:
 
 ```
 Linear(input_dim, hidden_dim) -> ReLU -> Dropout(p) -> Linear(hidden_dim, 1)
@@ -64,7 +64,7 @@ For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 
 |---------|-------|-------|
 | `OMP_NUM_THREADS` | `app.py` | `1` |
 | `MKL_NUM_THREADS` | `app.py` | `1` |
-| `torch.set_num_threads` | `vtsearch/models/loader.py` | `1` |
+| `torch.set_num_threads` | `vtsearch/embedding/loader.py` | `1` |
 | dtype | `training.py` | `torch.float32` |
 | Device | default | CPU (GPU supported, see tests) |
 
@@ -109,8 +109,10 @@ Yes-votes may additionally carry an optional `region_box` (4-float normalised re
 
 ## Key Files
 
-- `vtsearch/models/training.py` — `build_model`, `train_model`, `train_and_score`, threshold functions
-- `vtsearch/models/progress.py` — Cached per-step training and stability analysis
-- `vtsearch/models/loader.py` — Model initialization and thread configuration
+- `vtsearch/training/mlp.py` — `build_model`, `train_model`, `build_model_from_weights`
+- `vtsearch/training/thresholds.py` — `calculate_cross_calibration_threshold`, `calculate_safe_threshold`, `calculate_gmm_threshold`, `find_optimal_threshold`
+- `vtsearch/detectors/training.py` — `train_and_score`, `train_and_threshold`, origin-based detector training
+- `vtsearch/detectors/labeling_progress.py` — Cached per-step training and stability analysis
+- `vtsearch/embedding/loader.py` — Model initialization and thread configuration
 - `vtsearch/eval/voting_iterations.py` — Voting simulation evaluation
 - `vtsearch/config.py` — `TRAIN_EPOCHS` and model IDs

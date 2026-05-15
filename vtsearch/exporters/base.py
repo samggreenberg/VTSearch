@@ -39,14 +39,14 @@ Example – a minimal SFTP exporter skeleton::
 
 If the exporter needs extra packages, add them to a ``requirements.txt`` inside
 the exporter's directory.  They will be auto-discovered and installed by
-``install-plugin-deps.sh``.
+``scripts/install-plugin-deps.sh``.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from vtsearch.utils.registry import PluginBase, PluginField
+from vtsearch.plugins import PluginBase, PluginField
 
 # Backward-compatible alias — existing plugins import ``ExporterField``.
 ExporterField = PluginField

@@ -617,15 +617,16 @@ class TestDemoListConverters:
         assert "video2image" in conv_names
         assert "video2audio" in conv_names
 
-    def test_demo_list_audio_demo_has_no_source_converters(self, client):
-        """Audio demos should have no source converters (no audio→X converters exist)."""
+    def test_demo_list_audio_demo_has_audio2image(self, client):
+        """Audio demos should list the audio2image (spectrogram) converter."""
         resp = client.get("/api/dataset/demo-list")
         demos = resp.get_json()["datasets"]
         audio_demos = [d for d in demos if d["media_type"] == "audio"]
         if not audio_demos:
             pytest.skip("No audio demo datasets registered")
         demo = audio_demos[0]
-        assert demo["available_converters"] == []
+        conv_names = [c["name"] for c in demo["available_converters"]]
+        assert "audio2image" in conv_names
 
 
 # ===========================================================================

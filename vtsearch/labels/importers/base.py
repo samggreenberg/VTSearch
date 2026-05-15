@@ -48,14 +48,14 @@ Example – a minimal database label importer skeleton::
 
 Then create ``vtsearch/labels/importers/postgres/requirements.txt`` containing
 ``psycopg2-binary``.  It will be auto-discovered and installed by
-``install-plugin-deps.sh``.
+``scripts/install-plugin-deps.sh``.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from vtsearch.utils.registry import PluginBase, PluginField
+from vtsearch.plugins import PluginBase, PluginField
 
 # Backward-compatible alias — existing plugins import ``LabelImporterField``.
 LabelImporterField = PluginField

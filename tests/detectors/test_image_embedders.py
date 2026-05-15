@@ -2,7 +2,7 @@
 
 Mirrors the patterns in ``test_new_embedders.py`` — verifies class properties,
 registration, ``to_dict`` shape, and ``supports_text`` reporting without
-downloading any model weights. The Dockerfile (``Dockerfile.image-embedders``)
+downloading any model weights. The Dockerfile (``docker/Dockerfile.image-embedders``)
 exercises the real weight downloads.
 """
 
@@ -422,10 +422,7 @@ class TestImageEupeSingleEmbedder:
         """
         from vtsearch.config import EUPE_MODEL_ID
 
-        assert (
-            EUPE_MODEL_ID
-            == "https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt"
-        )
+        assert EUPE_MODEL_ID == "https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt"
 
     def test_embed_media_returns_none_when_not_loaded(self):
         from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
@@ -552,7 +549,7 @@ class TestSortRouteRejectsTextWhenUnsupported:
     surfacing a generic 500."""
 
     def test_sort_rejects_text_for_dinov3(self, client):
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         # Seed a fake DINOv3-embedded media so the sort route picks up the
         # active embedder name. We don't need real vectors — the route

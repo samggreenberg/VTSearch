@@ -321,7 +321,7 @@ class TestResolverUsesSource:
         folder.mkdir()
         (folder / "clip.wav").write_bytes(b"audio")
 
-        from vtsearch.models.resolver import resolve_file_from_origin
+        from vtsearch.detectors.resolver import resolve_file_from_origin
 
         origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = resolve_file_from_origin(origin, origin_name="clip.wav")
@@ -359,7 +359,7 @@ class TestIngestViaSource:
             progress_calls.append((status, msg, current, total))
 
         fake_emb = np.zeros(512, dtype=np.float32)
-        with patch("vtsearch.models.resolver.embed_file", return_value=fake_emb):
+        with patch("vtsearch.detectors.resolver.embed_file", return_value=fake_emb):
             result = _ingest_via_source(origin, entries, medias, track_progress)
 
         assert result == 2
@@ -385,7 +385,7 @@ class TestIngestViaSource:
         ]
 
         medias: dict = {}
-        with patch("vtsearch.models.resolver.embed_file", return_value=None):
+        with patch("vtsearch.detectors.resolver.embed_file", return_value=None):
             result = _ingest_via_source(origin, entries, medias, lambda *a: None)
 
         assert result == -1
@@ -446,7 +446,7 @@ class TestExampleSortOriginEndpoint:
 
     def test_success(self, client, tmp_path):
         """A valid origin+key returns sorted results when medias are loaded."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         folder = tmp_path / "audio"
         folder.mkdir()

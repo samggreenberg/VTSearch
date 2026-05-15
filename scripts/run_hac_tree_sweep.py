@@ -39,7 +39,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-from vtsearch.models.patch_regions import (
+from vtsearch.media.patch_embed import (
     PatchEmbedOutput,
     RegionVector,
     build_region_tree,
@@ -209,8 +209,7 @@ def _render_cell_thumb(
     for r in range(h_grid):
         for c in range(w_grid):
             if cell_mask[r, c]:
-                full_mask[row_edges[r] : row_edges[r + 1],
-                          col_edges[c] : col_edges[c + 1]] = True
+                full_mask[row_edges[r] : row_edges[r + 1], col_edges[c] : col_edges[c + 1]] = True
 
     if not full_mask.any():
         canvas = Image.new("RGB", size, pad)
@@ -243,9 +242,7 @@ def _render_cell_thumb(
     return cell
 
 
-def _layout_tree(
-    regions: list[RegionVector], k: int
-) -> tuple[list[float], list[int], int]:
+def _layout_tree(regions: list[RegionVector], k: int) -> tuple[list[float], list[int], int]:
     """Assign each HAC node a (column, row) position — planar.
 
     Strategy: in-order DFS from the root.  Every binary tree admits a
@@ -264,9 +261,7 @@ def _layout_tree(
 
     # Leaf centroid x (image coords) — used only to decide left vs right
     # at each merge, never to override the tree structure.
-    leaf_cx: dict[int, float] = {
-        i: (hac[i].box[0] + hac[i].box[2]) / 2.0 for i in range(k)
-    }
+    leaf_cx: dict[int, float] = {i: (hac[i].box[0] + hac[i].box[2]) / 2.0 for i in range(k)}
     # min(leaf_cx) over each subtree, computed bottom-up over the HAC build
     # order (children always precede their parent).
     min_cx: dict[int, float] = dict(leaf_cx)
@@ -394,8 +389,7 @@ def render_config_tree(
         full = full_orig.resize((new_w, new_h), Image.LANCZOS)
         canvas.paste(full, (img_origin_x, img_origin_y))
         draw.rectangle(
-            (img_origin_x - 1, img_origin_y - 1,
-             img_origin_x + new_w, img_origin_y + new_h),
+            (img_origin_x - 1, img_origin_y - 1, img_origin_x + new_w, img_origin_y + new_h),
             outline=(60, 60, 60),
             width=1,
         )
@@ -548,7 +542,7 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
     # Compute "subtree leaf count" for each node so we can score balance.
     leaf_count = [1] * len(leaves) + [0] * len(internals)
     flat = regions[1:]  # leaves + internals as a flat list (children indices
-                       # in `regions` are 1-based because of the CLS node).
+    # in `regions` are 1-based because of the CLS node).
     balances: list[float] = []
     growths: list[float] = []
     n_cell_noop = 0
@@ -607,9 +601,7 @@ def diversity_tree_clusters(
     from sklearn.cluster import AgglomerativeClustering
 
     cls_l2 = cls_vectors / (np.linalg.norm(cls_vectors, axis=1, keepdims=True) + 1e-12)
-    model = AgglomerativeClustering(
-        n_clusters=n_clusters, metric="cosine", linkage="average"
-    )
+    model = AgglomerativeClustering(n_clusters=n_clusters, metric="cosine", linkage="average")
     assign = model.fit_predict(cls_l2)
     clusters: dict[int, list[str]] = {i: [] for i in range(n_clusters)}
     for lab, c in zip(labels, assign):
@@ -624,20 +616,22 @@ def diversity_tree_clusters(
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--places-dir", type=Path,
-                    default=Path("data/places365"))
-    ap.add_argument("--out-dir", type=Path,
-                    default=Path("docs/experiments/hac-tree-sweep"))
+    ap.add_argument("--places-dir", type=Path, default=Path("data/places365"))
+    ap.add_argument("--out-dir", type=Path, default=Path("docs/experiments/hac-tree-sweep"))
     ap.add_argument("--num-images", type=int, default=30)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--k-values", type=int, nargs="+", default=list(DEFAULT_K_VALUES))
     ap.add_argument("--alpha-values", type=float, nargs="+", default=list(DEFAULT_ALPHA_VALUES))
     ap.add_argument(
-        "--default-k", type=int, default=12,
+        "--default-k",
+        type=int,
+        default=12,
         help="K used for the single per-image tree render (the design's default).",
     )
     ap.add_argument(
-        "--default-alpha", type=float, default=0.5,
+        "--default-alpha",
+        type=float,
+        default=0.5,
         help="α used for the single per-image tree render.",
     )
     args = ap.parse_args()
@@ -651,6 +645,7 @@ def main() -> None:
     # Download Places365 val_256 (501 MB) + label file on first run.
     if not (args.places_dir / "val_256").is_dir() or not (args.places_dir / "places365_val.txt").is_file():
         from vtsearch.datasets.downloader import download_places365
+
         print(f"downloading Places365 to {args.places_dir.parent}…")
         download_places365()
 
@@ -703,9 +698,7 @@ def main() -> None:
         tree_path = args.out_dir / "trees" / f"{idx:02d}_{category}_{path.stem}.jpg"
         tree.save(tree_path, quality=88, optimize=True)
         print(
-            f"  [{idx}] {image_label}: "
-            f"{'cache' if cached else 'forward'} {timings[-1]:.2f}s, "
-            f"tree -> {tree_path.name}"
+            f"  [{idx}] {image_label}: {'cache' if cached else 'forward'} {timings[-1]:.2f}s, tree -> {tree_path.name}"
         )
 
     # ----- aggregate metrics ------------------------------------------------
@@ -814,7 +807,7 @@ def write_report(
         "scratch.  By construction every merge strictly grows the cell "
         "set (leaves are non-empty and disjoint, so the union always "
         "contains new patches relative to either child), so there are "
-        "no \"duplicate\" merges to flag — the loose bounding "
+        'no "duplicate" merges to flag — the loose bounding '
         "rectangle occasionally lands on a child's rectangle, but "
         "that's a rectangle artifact, not something the model sees."
     )
@@ -857,7 +850,7 @@ def write_report(
         "space); "
         "`cell_noop_rate` ≈ fraction of internal merges whose "
         "**patch-cell union** equals one of its children's cell set — "
-        "i.e. \"did the merge actually grow the region the MLP sees?\""
+        'i.e. "did the merge actually grow the region the MLP sees?"'
         "  Always 0 by construction (leaves are non-empty and disjoint, "
         "so the union strictly contains either child).  Published "
         "as a sanity invariant — if it ever drifts above 0 the "
@@ -934,7 +927,7 @@ def write_report(
         "binary tree); K=16 drops to ~0.62 (more chain-like).  This "
         "is the expected trade-off: with more leaves, the affinity "
         "matrix gets noisier and HAC can fall into a long chain when "
-        "one leaf keeps being the \"closest neighbour.\""
+        'one leaf keeps being the "closest neighbour."'
     )
     lines.append(
         "- **`root_area` is always 1.0** — every config recovers the "

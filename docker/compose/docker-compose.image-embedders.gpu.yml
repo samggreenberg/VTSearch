@@ -1,0 +1,37 @@
+# All-image-embedders GPU deployment — every supported image embedder
+# (SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3, EUPE) with weights baked in,
+# running on CUDA 12.1 so the embedders use the GPU at inference time.
+#
+# Requires the NVIDIA Container Toolkit on the host:
+#   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
+#
+# DINOv3 (and optionally EUPE) are gated — populate ./model_cache/ on
+# the host BEFORE building. See docker/Dockerfile.image-embedders.gpu
+# for details.
+#
+#   HF_TOKEN=hf_xxx ./scripts/cache_gated_models.sh   # one-time
+#   docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml up
+#   docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml up -d
+#   docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml down
+
+services:
+  vtsearch:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.image-embedders.gpu
+    image: vtsearch:image-embedders-gpu
+    ports:
+      - "5000:5000"
+    volumes:
+      - vtsearch-data:/app/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  vtsearch-data:

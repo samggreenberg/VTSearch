@@ -18,6 +18,7 @@ from vtsearch.media.embedder import (
     load_pretrained_local_first,
     timed_progress,
 )
+from vtsearch.media.image._image_bulk import bulk_embed_image_files
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -114,6 +115,31 @@ class ImageClipEmbedder(MediaEmbedder):
         except Exception:
             logging.getLogger(__name__).exception("Error embedding PIL image (CLIP)")
             return None
+
+    def _forward_pil_batch(self, images: list[Image.Image]) -> np.ndarray:
+        import torch  # noqa: PLC0415
+
+        rgb = [im.convert("RGB") for im in images]
+        inputs = self._processor(images=rgb, return_tensors="pt")
+        device = next(self._model.parameters()).device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        with torch.no_grad():
+            outputs = self._model.get_image_features(**inputs)
+            return _extract_tensor(outputs).detach().cpu().numpy()
+
+    def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        if self._model is None:
+            self.load_models()
+        if self._model is None or self._processor is None:
+            return [None] * len(medias)
+        with self._embed_lock:
+            return bulk_embed_image_files(
+                medias,
+                forward_pil_batch=self._forward_pil_batch,
+                batch_size=self.embed_batch_size,
+                on_progress=self._on_progress,
+                label="CLIP",
+            )
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         if self._model is None:

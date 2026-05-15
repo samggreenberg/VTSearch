@@ -12,7 +12,10 @@ These tests complement the existing functional tests by focusing on the
 
 from __future__ import annotations
 
-from vtsearch.utils import good_votes, bad_votes
+from vtsearch.state import (
+    good_votes,
+    bad_votes,
+)
 
 
 class TestMediasContract:

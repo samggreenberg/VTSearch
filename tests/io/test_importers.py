@@ -400,10 +400,7 @@ class TestImporterDatasetName:
 
     def test_resolve_display_name_prefers_user_value(self):
         imp = self._make_importer()
-        assert (
-            imp.resolve_display_name({"dataset_name": "My Pictures", "flavour": "blue"})
-            == "My Pictures"
-        )
+        assert imp.resolve_display_name({"dataset_name": "My Pictures", "flavour": "blue"}) == "My Pictures"
 
     def test_resolve_display_name_falls_back_to_default(self):
         imp = self._make_importer()
@@ -437,10 +434,7 @@ class TestImporterDefaultDisplayName:
         from vtsearch.datasets.importers.demo import IMPORTER
 
         first_name = next(iter(DEMO_DATASETS.keys()))
-        assert (
-            IMPORTER.resolve_display_name({"name": first_name, "dataset_name": "Override"})
-            == "Override"
-        )
+        assert IMPORTER.resolve_display_name({"name": first_name, "dataset_name": "Override"}) == "Override"
 
     def test_synthetic_default_name_matches_size_and_type(self):
         from vtsearch.datasets.importers.synthetic import IMPORTER
@@ -458,14 +452,8 @@ class TestImporterDefaultDisplayName:
     def test_http_archive_strips_archive_extension(self):
         from vtsearch.datasets.importers.http_archive import IMPORTER
 
-        assert (
-            IMPORTER.default_display_name({"url": "https://example.org/data/genres.tar.gz"})
-            == "genres"
-        )
-        assert (
-            IMPORTER.default_display_name({"url": "https://example.org/data/photos.zip"})
-            == "photos"
-        )
+        assert IMPORTER.default_display_name({"url": "https://example.org/data/genres.tar.gz"}) == "genres"
+        assert IMPORTER.default_display_name({"url": "https://example.org/data/photos.zip"}) == "photos"
         # No URL → falls back to display_name
         assert IMPORTER.default_display_name({}) == IMPORTER.display_name
 
@@ -484,9 +472,7 @@ class TestImporterDefaultDisplayName:
         it must NOT leak into origin params (which feed Detector reload)."""
         from vtsearch.datasets.importers.server_folder import IMPORTER
 
-        origin = IMPORTER.build_origin(
-            {"path": "/data/x", "media_type": "audio", "dataset_name": "My Set"}
-        )
+        origin = IMPORTER.build_origin({"path": "/data/x", "media_type": "audio", "dataset_name": "My Set"})
         assert "dataset_name" not in origin["params"]
 
 
@@ -715,14 +701,9 @@ class TestImporterBulkHooks:
 
         def fetch_bulk(records, _fv, _thin):
             # Pretend we did one batched call.
-            return [
-                {"type": "audio", "filename": f"bulk:{r}", "embedding": None}
-                for r in records
-            ]
+            return [{"type": "audio", "filename": f"bulk:{r}", "embedding": None} for r in records]
 
-        imp = self._make_importer(
-            records=["a", "b"], fetch_one=fetch_one, fetch_bulk=fetch_bulk
-        )
+        imp = self._make_importer(records=["a", "b"], fetch_one=fetch_one, fetch_bulk=fetch_bulk)
         medias: dict = {}
         imp.run({}, medias)
 
@@ -757,8 +738,13 @@ class TestReCallerBulkOverride:
         from vtsearch.datasets.importers import recaller as rc
 
         results = [
-            {"contentID": f"C{i}", "mediaID": f"M{i}", "media_url": f"http://pw/{i}",
-             "media_type": "audio", "md5": f"md5_{i}"}
+            {
+                "contentID": f"C{i}",
+                "mediaID": f"M{i}",
+                "media_url": f"http://pw/{i}",
+                "media_type": "audio",
+                "md5": f"md5_{i}",
+            }
             for i in range(3)
         ]
         monkeypatch.setattr(rc, "_rc_fetch_results", lambda _q: list(results))

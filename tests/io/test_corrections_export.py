@@ -10,7 +10,7 @@ Covers:
 from __future__ import annotations
 
 import app as app_module
-from vtsearch.utils import (
+from vtsearch.state import (
     get_find_initial_labels,
     set_find_initial_labels,
 )

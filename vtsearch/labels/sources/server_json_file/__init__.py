@@ -81,8 +81,8 @@ def _resolve_filepath(field_values: dict[str, Any]) -> str:
         raise ValueError("A file path is required.")
 
     if "{detector_id}" in filepath or "{detector_name}" in filepath:
-        from vtsearch.utils.paths import sanitize_template_value
-        from vtsearch.utils.state_core import get_active_detector_context
+        from vtsearch.security.path_validation import sanitize_template_value
+        from vtsearch.state.core import get_active_detector_context
 
         ctx = get_active_detector_context()
         if ctx is not None:

@@ -20,19 +20,19 @@ import hashlib
 import json
 from typing import Any, Callable, Optional
 
-from vtsearch.utils.state import next_media_id
-from vtsearch.utils.state_core import _state_lock
+from vtsearch.state import next_media_id
+from vtsearch.state.core import _state_lock
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
 
 def _default_progress() -> ProgressCallback:
-    from vtsearch.utils.progress import get_thread_progress
+    from vtsearch.concurrency.progress import get_thread_progress
 
     cb = get_thread_progress()
     if cb is not None:
         return cb
-    from vtsearch.utils import update_progress
+    from vtsearch.concurrency.progress import update_progress
 
     return update_progress
 
@@ -166,7 +166,7 @@ def _ingest_via_source(
     media_type_id = _media_type_from_origin(origin_dict)
     embedder_name = _embedder_name_for_type(medias, media_type_id) if media_type_id else ""
 
-    from vtsearch.models.resolver import embed_file
+    from vtsearch.detectors.resolver import embed_file
 
     ingested = 0
 
@@ -244,7 +244,7 @@ def _ingest_via_resolver(
 
     embedder_name = _embedder_name_for_type(medias, media_type_id)
 
-    from vtsearch.models.resolver import embed_file, resolve_file_context
+    from vtsearch.detectors.resolver import embed_file, resolve_file_context
 
     ingested = 0
 
@@ -264,7 +264,7 @@ def _ingest_via_resolver(
             # that re-ingested clipped media gets the correct (clipped)
             # embedding.
             if origin_dict.get("params", {}).get("clipper"):
-                from vtsearch.models.resolver import _apply_clip_and_embed
+                from vtsearch.detectors.resolver import _apply_clip_and_embed
 
                 embedding = _apply_clip_and_embed(file_path, media_type_id, origin_dict, embedder_name)
             else:
@@ -315,7 +315,7 @@ def ingest_missing_medias(
 
     1. If a :class:`~vtsearch.datasets.sources.base.MediaSource` is
        available, fetch only the needed files individually (fast path).
-    2. If :func:`~vtsearch.models.resolver.resolve_file_from_origin` can
+    2. If :func:`~vtsearch.detectors.resolver.resolve_file_from_origin` can
        locate individual files (e.g. demo datasets with files on disk),
        embed and ingest them one-by-one (medium path).
     3. Otherwise, fall back to running the full dataset importer and

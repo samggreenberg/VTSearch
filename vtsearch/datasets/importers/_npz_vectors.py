@@ -58,9 +58,7 @@ def read_npz_filenames_and_vectors(npz_path: Path) -> dict[str, np.ndarray]:
             names_arr = data[filenames_key]
             vecs_arr = data[vectors_key]
             if names_arr.ndim != 1:
-                raise ValueError(
-                    f"NPZ '{filenames_key}' array must be 1-D, got shape {names_arr.shape}"
-                )
+                raise ValueError(f"NPZ '{filenames_key}' array must be 1-D, got shape {names_arr.shape}")
             if len(vecs_arr) != len(names_arr):
                 raise ValueError(
                     f"NPZ '{filenames_key}' and '{vectors_key}' have mismatched lengths "

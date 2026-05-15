@@ -101,6 +101,41 @@ describe('KeyboardService', () => {
     document.body.removeChild(input);
   });
 
+  it('should emit undo on Cmd-Z and Ctrl-Z', () => {
+    service.start();
+    const actions: KeyboardAction[] = [];
+    service.action$.subscribe((a) => actions.push(a));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }));
+    expect(actions.length).toBe(2);
+    expect(actions[0].type).toBe('undo');
+    expect(actions[1].type).toBe('undo');
+  });
+
+  it('should emit redo on Cmd-Shift-Z', () => {
+    service.start();
+    const actions: KeyboardAction[] = [];
+    service.action$.subscribe((a) => actions.push(a));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Z', metaKey: true, shiftKey: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true }));
+    expect(actions.length).toBe(2);
+    expect(actions[0].type).toBe('redo');
+    expect(actions[1].type).toBe('redo');
+  });
+
+  it('should not emit undo when typing in an input', () => {
+    service.start();
+    const input = document.createElement('input');
+    input.type = 'text';
+    document.body.appendChild(input);
+    input.focus();
+    const actions: KeyboardAction[] = [];
+    service.action$.subscribe((a) => actions.push(a));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true }));
+    expect(actions.length).toBe(0);
+    document.body.removeChild(input);
+  });
+
   it('should not listen after stop()', () => {
     service.start();
     service.stop();

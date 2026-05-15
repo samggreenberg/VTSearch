@@ -459,7 +459,7 @@ class TestCombineEndpoint:
         _write_pickle_dataset(p2, ds2)
 
         # Mock the background loader to prevent it from clearing global medias
-        with patch("vtsearch.routes.datasets._run_importer_in_background"):
+        with patch("vtsearch.routes.datasets.staging._run_importer_in_background"):
             resp = client.post(
                 "/api/dataset/combine",
                 json={"datasets": [str(p1), str(p2)]},
@@ -597,7 +597,7 @@ class TestClearStagingEndpoint:
 
     def test_clear_staging_removes_files(self, client):
         """Staging files are actually removed."""
-        from vtsearch.routes.datasets import STAGING_DIR
+        from vtsearch.datasets.load_pipeline import STAGING_DIR
 
         STAGING_DIR.mkdir(parents=True, exist_ok=True)
         test_file = STAGING_DIR / "stage_test.pkl"
@@ -612,7 +612,7 @@ class TestClearStagingEndpoint:
 class TestProgressStagingResult:
     def test_staging_result_in_progress(self):
         """update_progress stores staging_result and get_progress returns it."""
-        from vtsearch.utils.progress import get_progress, update_progress
+        from vtsearch.concurrency.progress import get_progress, update_progress
 
         staging = {"path": "/tmp/test.pkl", "name": "test", "count": 5, "media_type": "audio"}
         update_progress("idle", "done", 100, 100, staging_result=staging)

@@ -15,11 +15,11 @@ import numpy as np
 import pytest
 
 import app as app_module
-from vtsearch.models.training import (
+from vtsearch.detectors.training import train_and_score
+from vtsearch.training.thresholds import (
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
     calculate_safe_threshold,
-    train_and_score,
 )
 
 
@@ -140,7 +140,7 @@ class TestSafeThresholdsSetting:
 
     def test_state_get_reads_from_settings(self):
         from vtsearch import settings
-        from vtsearch.utils.state import get_safe_thresholds
+        from vtsearch.state import get_safe_thresholds
 
         settings.set_safe_thresholds(True)
         assert get_safe_thresholds() is True
@@ -371,7 +371,7 @@ class TestCalibrationFractionSetting:
 
     def test_state_get_reads_from_settings(self):
         from vtsearch import settings
-        from vtsearch.utils.state import get_calibration_fraction
+        from vtsearch.state import get_calibration_fraction
 
         settings.set_calibration_fraction(0.25)
         assert get_calibration_fraction() == pytest.approx(0.25)

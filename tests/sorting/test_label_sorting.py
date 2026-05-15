@@ -8,9 +8,13 @@ from unittest.mock import patch
 import numpy as np
 
 import app as app_module
-import vtsearch.utils.state as _state
-import vtsearch.utils.state_core as _core
-from vtsearch.utils import medias, vote_click_times, last_learned_scores
+import vtsearch.state as _state
+import vtsearch.state.core as _core
+from vtsearch.state import (
+    medias,
+    vote_click_times,
+    last_learned_scores,
+)
 
 
 class TestClickTimeTracking:

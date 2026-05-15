@@ -20,6 +20,8 @@ All public symbols are re-exported here for backward compatibility so that
 from vtsearch.datasets.downloader.core import (
     AG_NEWS_DOWNLOAD_SIZE_MB,
     AG_NEWS_URL,
+    ARXIV_API_URL,
+    ARXIV_DOWNLOAD_SIZE_MB,
     BBC_NEWS_DOWNLOAD_SIZE_MB,
     BBC_NEWS_URL,
     CALTECH101_DOWNLOAD_SIZE_MB,
@@ -28,6 +30,8 @@ from vtsearch.datasets.downloader.core import (
     CALTECH256_URL,
     CIFAR10_DOWNLOAD_SIZE_MB,
     CIFAR10_URL,
+    DBPEDIA_DOWNLOAD_SIZE_MB,
+    DBPEDIA_URL,
     ESC50_DOWNLOAD_SIZE_MB,
     ESC50_URL,
     EUROSAT_DOWNLOAD_SIZE_MB,
@@ -41,6 +45,8 @@ from vtsearch.datasets.downloader.core import (
     IMAGE_DIR,
     IMDB_DOWNLOAD_SIZE_MB,
     IMDB_URL,
+    REUTERS21578_DOWNLOAD_SIZE_MB,
+    REUTERS21578_URL,
     KTH_ACTIONS,
     KTH_BASE_URL,
     KTH_DOWNLOAD_SIZE_MB,
@@ -104,11 +110,17 @@ from vtsearch.datasets.downloader.video import (
 
 # Text downloaders
 from vtsearch.datasets.downloader.text import (
+    ARXIV_DEFAULT_CATEGORIES,
+    DBPEDIA14_CLASSES,
+    REUTERS21578_TOP_TOPICS,
     _find_bbc_root,
     download_20newsgroups,
     download_ag_news,
+    download_arxiv_abstracts,
     download_bbc_news,
+    download_dbpedia,
     download_imdb,
+    download_reuters21578,
 )
 
 # Document downloaders
@@ -123,6 +135,9 @@ __all__ = [
     # Core
     "AG_NEWS_DOWNLOAD_SIZE_MB",
     "AG_NEWS_URL",
+    "ARXIV_API_URL",
+    "ARXIV_DEFAULT_CATEGORIES",
+    "ARXIV_DOWNLOAD_SIZE_MB",
     "BBC_NEWS_DOWNLOAD_SIZE_MB",
     "BBC_NEWS_URL",
     "CALTECH101_DOWNLOAD_SIZE_MB",
@@ -131,6 +146,9 @@ __all__ = [
     "CALTECH256_URL",
     "CIFAR10_DOWNLOAD_SIZE_MB",
     "CIFAR10_URL",
+    "DBPEDIA14_CLASSES",
+    "DBPEDIA_DOWNLOAD_SIZE_MB",
+    "DBPEDIA_URL",
     "ESC50_DOWNLOAD_SIZE_MB",
     "ESC50_URL",
     "EUROSAT_DOWNLOAD_SIZE_MB",
@@ -144,6 +162,9 @@ __all__ = [
     "IMAGE_DIR",
     "IMDB_DOWNLOAD_SIZE_MB",
     "IMDB_URL",
+    "REUTERS21578_DOWNLOAD_SIZE_MB",
+    "REUTERS21578_TOP_TOPICS",
+    "REUTERS21578_URL",
     "KTH_ACTIONS",
     "KTH_BASE_URL",
     "KTH_DOWNLOAD_SIZE_MB",
@@ -193,8 +214,11 @@ __all__ = [
     # Text
     "download_20newsgroups",
     "download_ag_news",
+    "download_arxiv_abstracts",
     "download_bbc_news",
+    "download_dbpedia",
     "download_imdb",
+    "download_reuters21578",
     "_find_bbc_root",
     # Documents
     "download_ucsf_documents",

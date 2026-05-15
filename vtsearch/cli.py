@@ -50,9 +50,9 @@ def _load_and_train_detectors(
     environment.
     """
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.models.detector_store import _detector_path, _read_detector
-    from vtsearch.models.labelset_training import train_from_labelset
-    from vtsearch.utils.state_core import DetectorContext
+    from vtsearch.detectors.store import _detector_path, _read_detector
+    from vtsearch.detectors.labelset_training import train_from_labelset
+    from vtsearch.state.core import DetectorContext
 
     out: dict[str, dict[str, Any]] = {}
     for det_name in detector_names:
@@ -63,8 +63,7 @@ def _load_and_train_detectors(
         det_media_type = det.get("media_type", "") or ""
         if media_type and det_media_type and det_media_type != media_type:
             print(
-                f"Skipping detector '{det_name}': media_type "
-                f"{det_media_type!r} doesn't match dataset {media_type!r}.",
+                f"Skipping detector '{det_name}': media_type {det_media_type!r} doesn't match dataset {media_type!r}.",
                 flush=True,
             )
             continue
@@ -103,7 +102,7 @@ def _score_medias_with_detectors(
 
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
     all_ids, all_embs = get_embedding_matrix_for_snap(medias)
     X_all = torch.from_numpy(all_embs)
@@ -188,7 +187,7 @@ def import_labels_into_detector_from_file(
     """Run a label importer against a single file and merge into a detector."""
     from vtsearch.datasets.labelset import LabeledElement, LabelSet
     from vtsearch.labels.importers import get_label_importer
-    from vtsearch.models.detector_store import _detector_path, _read_detector, _write_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
 
     path = _detector_path(det_name)
     data = _read_detector(path)
