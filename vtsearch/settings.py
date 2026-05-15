@@ -92,6 +92,7 @@ if TYPE_CHECKING:
     def set_panel_pct_left(value: dict[str, int] | int | float) -> None: ...
     def set_panel_pct_right(value: dict[str, int] | int | float) -> None: ...
 
+
 logger = logging.getLogger(__name__)
 
 #: Path to the server-tier settings file. Tests monkey-patch this; the CLI
