@@ -19,6 +19,8 @@ once these foundations land.
 - ✅ Test suite bucketed into `tests/<group>/` folders, path-based marker
   derivation, 11 previously-unmapped files now correctly grouped (commit ae6af11)
 - ✅ Shared text-embedder stubs extracted from download tests (commit c9ad6aa)
+- ✅ #8 — `docs/plans/sync-sources.md` deleted (design absorbed into
+  `EXTENDING-plugins.md`); `docs/plans/README.md` index added.
 
 ## Open items
 
@@ -149,30 +151,6 @@ scripts/
 **Blast radius.** Self-contained but spreads to docs and CI. Test by
 running `docker build` against each image variant before merging.
 
-### #8 — Delete `docs/plans/sync-sources.md` (implemented), add `docs/plans/README.md` index
-
-**Problem.** `docs/plans/` has 7 files. They all have explicit
-"Status:" headers, but:
-- `sync-sources.md` — Status: Implemented. The feature ships. The plan
-  is now reference material at best; should be deleted or its useful
-  bits absorbed into `docs/EXTENDING.md` (the sync-source pattern).
-- The rest are still active (combine-models-ui frontend in progress;
-  delete-detectors, extract-library, multi-media-import,
-  patch-embedder, RCDatasetImporter all proposed/in-progress).
-- There's no index — a user has to read the directory listing to know
-  these plans exist.
-
-**Steps.**
-1. Audit `sync-sources.md` for content worth preserving; fold any
-   still-relevant design notes into `docs/EXTENDING-plugins.md` (which
-   already documents the sync-source plugin pattern), then delete the
-   plan file.
-2. Create `docs/plans/README.md` listing the open plans with a
-   one-line status for each.
-3. Audit each remaining plan; mark stale ones for follow-up.
-
-**Blast radius.** Docs only. Low risk.
-
 ### #9 — Fix `media/` → `models/` backwards import (`PatchEmbedOutput`)
 
 **Problem.** Six files under `vtsearch/media/image/` import
@@ -218,13 +196,12 @@ available.
 
 These four are independent. Suggested merge order:
 
-1. **#8** (docs cleanup) — smallest, lowest risk, fastest win.
-2. **#9** (PatchEmbedOutput move) — small, fixes a real layering bug.
-3. **#7** (docker/requirements out of root) — touches CI + docs but
+1. **#9** (PatchEmbedOutput move) — small, fixes a real layering bug.
+2. **#7** (docker/requirements out of root) — touches CI + docs but
    self-contained.
-4. **#5** (route-folder bucketing) — bigger PR but pure mv + import
+3. **#5** (route-folder bucketing) — bigger PR but pure mv + import
    updates.
-5. **#6** (utils split) — last, because it's the most invasive and
+4. **#6** (utils split) — last, because it's the most invasive and
    benefits from doing #5 first (route files can move to their new
    homes without the simultaneous utils rename).
 
