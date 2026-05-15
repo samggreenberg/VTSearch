@@ -23,7 +23,18 @@ jobs:
           node-version: "20"
 
       - name: Install vtsearch + deps (CPU)
-        run: bash scripts/install-cpu.sh
+        run: |
+          set +e
+          bash scripts/install-cpu.sh 2>&1 | tee /tmp/install.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "## Install step (exit=$status)"
+            echo ""
+            echo '```'
+            tail -c 60000 /tmp/install.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: Install pyright
         run: npm install -g pyright@1.1.408
@@ -62,7 +73,18 @@ jobs:
           node-version: "20"
 
       - name: Install vtsearch + deps (CPU)
-        run: bash scripts/install-cpu.sh
+        run: |
+          set +e
+          bash scripts/install-cpu.sh 2>&1 | tee /tmp/install.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "## Install step (exit=$status)"
+            echo ""
+            echo '```'
+            tail -c 60000 /tmp/install.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: Install pyright
         run: npm install -g pyright@1.1.408
