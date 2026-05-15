@@ -864,12 +864,12 @@ class TestLoadDemoSourcePlaces365:
 
 
 class TestPlaces365CategoriesList:
-    """The hardcoded ``_PLACES365_CATEGORIES`` matches the upstream label space."""
+    """The hardcoded ``PLACES365_CATEGORIES`` matches the upstream label space."""
 
     def test_has_365_unique_entries(self):
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtsearch.media.image._demo_categories import PLACES365_CATEGORIES
 
-        cats = ImageMediaType._PLACES365_CATEGORIES
+        cats = PLACES365_CATEGORIES
         assert len(cats) == 365
         assert len(set(cats)) == 365
         # Spot-check entries near the index that previously had an off-by-one

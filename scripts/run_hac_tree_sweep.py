@@ -72,9 +72,9 @@ def sample_places365_paths(places_dir: Path, n: int, seed: int) -> list[tuple[Pa
     just ``val_256/`` for everything.
     """
     from vtsearch.datasets.metadata import load_places365_metadata
-    from vtsearch.media.image.media_type import _PLACES365_CATEGORIES_LIST
+    from vtsearch.media.image._demo_categories import PLACES365_CATEGORIES
 
-    metadata = load_places365_metadata(places_dir, _PLACES365_CATEGORIES_LIST)
+    metadata = load_places365_metadata(places_dir, PLACES365_CATEGORIES)
 
     by_cat: dict[str, list[tuple[Path, str]]] = {}
     for fname in sorted(metadata):
