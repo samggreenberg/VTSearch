@@ -97,7 +97,8 @@ import app as app_module
 from vtsearch.media.audio.audio_generator import GENERATOR_SAMPLE_RATE
 from tests.fixtures.medias import NUM_MEDIAS, init_medias
 from vtsearch.media.audio.audio_generator import generate_wav
-from vtsearch.models import initialize_models, train_and_score
+from vtsearch.embedding import initialize_models
+from vtsearch.detectors.training import train_and_score
 from vtsearch.detectors.labeling_progress import clear_progress_cache
 from vtsearch.state import (
     bad_votes,

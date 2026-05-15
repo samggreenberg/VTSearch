@@ -129,7 +129,7 @@ def cosine_sort_with_boxes(
     # original _cosine_sort, retained verbatim so SigLIP / CLIP /
     # SigLIP2 datasets see zero overhead from this refactor.  The matrix
     # is reused from the active DatasetContext cache when available.
-    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap
 
     all_ids, all_embs = get_embedding_matrix_for_snap(snap)
     q_norm = np.linalg.norm(query_vec)

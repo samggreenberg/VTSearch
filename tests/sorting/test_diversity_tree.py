@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from vtsearch.models.diversity_tree import DiversityTree
+from vtsearch.state.diversity_tree import DiversityTree
 
 
 # ---------------------------------------------------------------------------
@@ -608,7 +608,7 @@ class TestKmeansProgress:
         calls = []
         DiversityTree(vecs, k=2, min_node_size=10, on_progress=lambda c, t: calls.append((c, t)))
         total = calls[0][1]
-        from vtsearch.models.diversity_tree import _N_INIT
+        from vtsearch.state.diversity_tree import _N_INIT
 
         # With k=2, 200 vectors, min_node_size=10 → 5 levels.
         # Estimated total = 5 * 200 * _N_INIT = 10000.

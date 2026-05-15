@@ -69,7 +69,7 @@ def apply_and_retrain(
 
         trained = False
         if good_votes and bad_votes:
-            from vtsearch.models.training import train_and_score
+            from vtsearch.detectors.training import train_and_score
             from vtsearch.state import (
                 get_calibrate_count,
                 get_calibration_fraction,

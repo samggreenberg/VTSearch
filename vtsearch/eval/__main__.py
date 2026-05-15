@@ -28,7 +28,7 @@ import argparse
 import sys
 
 # Ensure models are initialised (creates cache dirs, sets thread counts)
-from vtsearch.models import initialize_models
+from vtsearch.embedding import initialize_models
 
 initialize_models()
 

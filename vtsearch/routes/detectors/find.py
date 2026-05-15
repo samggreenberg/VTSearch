@@ -276,7 +276,7 @@ def multi_find():
             first_media = next(iter(temp_medias.values()), {})
             detected_media_type = first_media.get("type", "")
 
-        from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+        from vtsearch.embedding.matrix import get_embedding_matrix_for_snap
 
         all_ids, all_embs = get_embedding_matrix_for_snap(temp_medias)
         X_all = torch.from_numpy(all_embs)

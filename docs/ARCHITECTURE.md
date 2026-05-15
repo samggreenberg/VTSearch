@@ -86,18 +86,30 @@ VTSearch/
 │   │   ├── video2audio.py          Extract audio track from video
 │   │   └── video2image.py          Sample frames from video as images
 │   │
-│   ├── models/                     ML model wrappers
-│   │   ├── training.py             MLP training, GMM thresholds (pure PyTorch)
-│   │   ├── progress.py             Labelling-progress cache & analysis
-│   │   ├── embeddings.py           Thin wrappers around media-type embed()
-│   │   ├── loader.py               Model initialisation (delegates to media)
-│   │   ├── diversity_tree.py       Hierarchical k-means tree for diverse sampling
-│   │   ├── registry.py             Persistent model registry/manifest management
+│   ├── training/                   Generic learned-sort primitives
+│   │   ├── mlp.py                  MLP build/train (pure PyTorch)
+│   │   ├── thresholds.py           Cross-cal/GMM/safe threshold helpers
+│   │   ├── svm.py                  SVM trainer prototype
+│   │   └── region_similarity.py    Region-aware cosine similarity scoring
+│   │
+│   ├── embedding/                  Embedder façades and torch runtime
+│   │   ├── helpers.py              Thin wrappers around media-type embed()
+│   │   ├── matrix.py               Cached contiguous embedding matrix
+│   │   └── loader.py               Model initialisation (delegates to media)
+│   │
+│   ├── detectors/                  Detector lifecycle + resolve→embed→train
+│   │   ├── registry.py             In-memory detector registry
+│   │   ├── store.py                On-disk labelset/query store
+│   │   ├── training.py             Vote-aware training, origin-based training
+│   │   ├── workflow.py             apply-labels-and-retrain orchestration
 │   │   ├── resolver.py             Label resolution by following origin trails
+│   │   ├── label_sync.py           Sync labels to loaded detector
+│   │   ├── label_restoration.py    Label restoration
+│   │   ├── labelset_elements.py    Labelset element materialisation
+│   │   ├── labelset_training.py    Cross-dataset MLP training
+│   │   ├── dataset_sync.py         Dataset/detector sync on load
 │   │   ├── media_seeding.py        Media seeding utilities
-│   │   ├── label_restoration.py    Label restoration functionality
-│   │   ├── training_workflow.py    Training workflow orchestration
-│   │   └── weights_compat.py       Origin-based detector weight normalization
+│   │   └── labeling_progress.py    Labelling-progress cache & stability analysis
 │   │
 │   ├── datasets/                   Dataset loading & downloading
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
@@ -240,7 +252,7 @@ modules on the right.
 │                                                            │
 │  app.py ──► auth, routes/* ──► utils/state, utils/progress │
 │                │                                           │
-│                ├──► models/embeddings, models/training     │
+│                ├──► embedding/, training/, detectors/      │
 │                ├──► datasets/loader, datasets/load_pipeline │
 │                ├──► exporters (registry)                   │
 │                ├──► labels/importers (registry)            │
@@ -250,13 +262,13 @@ modules on the right.
         │               │                   │
         ▼               ▼                   ▼
 ┌──────────────┐ ┌────────────┐ ┌────────────────────┐
-│ media/*      │ │ models/    │ │ datasets/          │
-│              │ │            │ │                    │
-│ audio    ─┐  │ │ training   │ │ loader ──► media/* │
-│ image    ─┤  │ │ progress   │ │ downloader/        │
-│ text     ─┤  │ │ embeddings │ │ importers/*        │
-│ video    ─┤  │ │ loader     │ │                    │
-│ document ─┘  │ │            │ │                    │
+│ media/*      │ │ training/  │ │ datasets/          │
+│              │ │ embedding/ │ │                    │
+│ audio    ─┐  │ │ detectors/ │ │ loader ──► media/* │
+│ image    ─┤  │ │            │ │ downloader/        │
+│ text     ─┤  │ │ mlp        │ │ importers/*        │
+│ video    ─┤  │ │ thresholds │ │                    │
+│ document ─┘  │ │ loader     │ │                    │
 │   │          │ │   │        │ │                    │
 │   ▼          │ │   ▼        │ └────────────────────┘
 │ config.py    │ │ media/*    │
@@ -303,10 +315,11 @@ modules on the right.
 
 - **media types do NOT import Flask.**  They return a `MediaResponse`
   dataclass; the route layer converts it to a Flask response.
-- **Most of models/ does NOT import Flask or global state** — core
-  functions in `training.py`, `progress.py`, `embeddings.py` accept
-  parameters only.  The exception is `training_workflow.py`, which
-  imports `flask.g` for request-scoped context resolution.
+- **Most of training/ and embedding/ do NOT import Flask or global state**
+  — core functions in `training/mlp.py`, `training/thresholds.py`,
+  `embedding/helpers.py` accept parameters only.  The exception is
+  `detectors/workflow.py`, which imports `flask.g` for request-scoped
+  context resolution.
 - **exporters, label importers, processor importers, and sync sources
   are fully standalone.**  They receive a plain dict and return a plain
   dict/list.  Zero framework coupling.  Sync sources (`SettingsSource`
@@ -328,8 +341,8 @@ modules on the right.
 
 | Module | Flask? | Global state? | Can extract standalone? |
 |--------|--------|---------------|-------------------------|
-| `models/training.py` | No | No (params) | **Yes** — pure PyTorch/sklearn |
-| `models/labeling_progress.py` | No | No (params) | **Yes** — pure torch/numpy |
+| `training/mlp.py` + `training/thresholds.py` | No | No (params) | **Yes** — pure PyTorch/sklearn |
+| `detectors/labeling_progress.py` | No | No (params) | **Yes** — pure torch/numpy |
 | `exporters/base.py` + all exporters | No | No | **Yes** — pure data processing |
 | `labels/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
 | `processors/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
@@ -357,7 +370,7 @@ modules on the right.
 
 ### The ML training pipeline
 
-**Files:** `vtsearch/models/training.py`, `vtsearch/config.py` (for `TRAIN_EPOCHS`)
+**Files:** `vtsearch/training/mlp.py` / `vtsearch/training/thresholds.py`, `vtsearch/config.py` (for `TRAIN_EPOCHS`)
 
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
@@ -369,7 +382,8 @@ trade-off via an `inclusion` parameter.  A separate
 thresholds.
 
 ```python
-from vtsearch.models.training import train_model, find_optimal_threshold
+from vtsearch.training.mlp import train_model
+from vtsearch.training.thresholds import find_optimal_threshold
 
 model = train_model(X_train, y_train, input_dim=512, inclusion_value=0)
 threshold = find_optimal_threshold(scores, labels, inclusion_value=0)

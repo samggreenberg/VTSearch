@@ -91,7 +91,7 @@ class DatasetContext:
         "dataset_display_name",
         # Cached contiguous (N, D) float32 embedding matrix and the sorted
         # media-id list it corresponds to.  Built lazily on first access by
-        # ``vtsearch.models.embedding_matrix.get_embedding_matrix`` and reused
+        # ``vtsearch.embedding.matrix.get_embedding_matrix`` and reused
         # across cosine sort, MLP scoring, and diversity-tree construction so
         # we don't rebuild a 10k-row matrix per call.
         "_emb_matrix_ids",

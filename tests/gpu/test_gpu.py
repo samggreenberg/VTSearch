@@ -73,7 +73,7 @@ class TestTrainModelGPU:
     """Verify ``train_model`` works when tensors and model live on CUDA."""
 
     def test_model_trains_on_gpu(self, device):
-        from vtsearch.models.training import train_model
+        from vtsearch.training.mlp import train_model
 
         dim = 64
         X = torch.randn(10, dim, device=device)
@@ -89,7 +89,7 @@ class TestTrainModelGPU:
         assert scores.device.type == "cuda"
 
     def test_gpu_trained_scores_between_zero_and_one(self, device):
-        from vtsearch.models.training import train_model
+        from vtsearch.training.mlp import train_model
 
         dim = 64
         X = torch.randn(10, dim, device=device)
@@ -108,7 +108,7 @@ class TestTrainModelGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 100
         try:
-            from vtsearch.models.training import train_model
+            from vtsearch.training.mlp import train_model
 
             rng = np.random.RandomState(0)
             dim = 32
@@ -133,7 +133,7 @@ class TestTrainModelGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 100
         try:
-            from vtsearch.models.training import train_model
+            from vtsearch.training.mlp import train_model
 
             dim = 32
             rng = np.random.RandomState(1)
@@ -170,7 +170,7 @@ class TestCrossCalibrationGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 30
         try:
-            from vtsearch.models.training import calculate_cross_calibration_threshold
+            from vtsearch.training.thresholds import calculate_cross_calibration_threshold
 
             dim = 64
             rng = np.random.RandomState(7)
@@ -188,7 +188,7 @@ class TestCrossCalibrationGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 30
         try:
-            from vtsearch.models.training import calculate_cross_calibration_threshold
+            from vtsearch.training.thresholds import calculate_cross_calibration_threshold
 
             dim = 64
             rng = np.random.RandomState(8)
@@ -218,7 +218,7 @@ class TestTrainAndScoreGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 30
         try:
-            from vtsearch.models.training import train_and_score
+            from vtsearch.detectors.training import train_and_score
 
             clips_dict = _make_clips_dict(20, dim=64)
             good, bad = _make_votes([1, 2, 3], [18, 19, 20])
@@ -238,7 +238,7 @@ class TestTrainAndScoreGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 30
         try:
-            from vtsearch.models.training import train_and_score
+            from vtsearch.detectors.training import train_and_score
 
             clips_dict = _make_clips_dict(20, dim=64)
             good, bad = _make_votes([1, 2, 3], [18, 19, 20])
@@ -254,7 +254,7 @@ class TestTrainAndScoreGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 30
         try:
-            from vtsearch.models.training import train_and_score
+            from vtsearch.detectors.training import train_and_score
 
             clips_dict = _make_clips_dict(20, dim=64)
             good, bad = _make_votes([1, 2], [3, 4])
@@ -270,7 +270,7 @@ class TestTrainAndScoreGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 50
         try:
-            from vtsearch.models.training import train_and_score
+            from vtsearch.detectors.training import train_and_score
 
             # Use separable embeddings so the model can learn
             dim = 64
@@ -295,7 +295,7 @@ class TestTrainAndScoreGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 30
         try:
-            from vtsearch.models.training import train_and_score
+            from vtsearch.detectors.training import train_and_score
 
             clips_dict = _make_clips_dict(20, dim=64)
             good, bad = _make_votes([1, 2, 3], [18, 19, 20])
@@ -320,7 +320,7 @@ class TestDetectorGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 30
         try:
-            from vtsearch.models.training import train_model
+            from vtsearch.training.mlp import train_model
 
             dim = 64
             clips_dict = _make_clips_dict(20, dim)
@@ -346,7 +346,7 @@ class TestDetectorGPU:
             weights = {k: v.tolist() for k, v in state_dict.items()}
 
             # Reconstruct on GPU (as a GPU-aware detector-sort would)
-            from vtsearch.models.training import build_model_from_weights
+            from vtsearch.training.mlp import build_model_from_weights
 
             gpu_model = build_model_from_weights(weights).to(device)
 
@@ -369,7 +369,7 @@ class TestDetectorGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 30
         try:
-            from vtsearch.models.training import train_model
+            from vtsearch.training.mlp import train_model
 
             dim = 64
             clips_dict = _make_clips_dict(20, dim, seed=123)
@@ -413,7 +413,7 @@ class TestDetectorGPU:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 30
         try:
-            from vtsearch.models.training import train_model
+            from vtsearch.training.mlp import train_model
 
             dim = 64
             clips_dict = _make_clips_dict(20, dim)
@@ -654,7 +654,7 @@ class TestGPUMemoryCleanup:
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 30
         try:
-            from vtsearch.models.training import train_model
+            from vtsearch.training.mlp import train_model
 
             torch.cuda.reset_peak_memory_stats(device)
             initial_mem = torch.cuda.memory_allocated(device)

@@ -332,7 +332,7 @@ class TestEvalTextSort:
                 return cat_dir.copy()
             return dog_dir.copy()
 
-        with patch("vtsearch.models.embeddings.embed_text_query", side_effect=mock_embed):
+        with patch("vtsearch.embedding.helpers.embed_text_query", side_effect=mock_embed):
             results = eval_text_sort(medias, queries, "image", k_values=[5, 10])
 
         assert len(results) == 2
@@ -345,7 +345,7 @@ class TestEvalTextSort:
         medias, cat_dir, _ = self._make_synthetic_clips()
         queries = [EvalQuery("a cat", "cat")]
 
-        with patch("vtsearch.models.embeddings.embed_text_query", return_value=cat_dir.copy()):
+        with patch("vtsearch.embedding.helpers.embed_text_query", return_value=cat_dir.copy()):
             results = eval_text_sort(medias, queries, "image", k_values=[5])
 
         qm = results[0]
@@ -359,7 +359,7 @@ class TestEvalTextSort:
         """Without start_time, elapsed_seconds defaults to 0."""
         medias, cat_dir, _ = self._make_synthetic_clips()
         queries = [EvalQuery("a cat", "cat")]
-        with patch("vtsearch.models.embeddings.embed_text_query", return_value=cat_dir.copy()):
+        with patch("vtsearch.embedding.helpers.embed_text_query", return_value=cat_dir.copy()):
             results = eval_text_sort(medias, queries, "image", k_values=[5])
         assert results[0].elapsed_seconds == 0.0
 
@@ -374,7 +374,7 @@ class TestEvalTextSort:
             return cat_dir.copy()
 
         start = time.monotonic()
-        with patch("vtsearch.models.embeddings.embed_text_query", side_effect=mock_embed):
+        with patch("vtsearch.embedding.helpers.embed_text_query", side_effect=mock_embed):
             results = eval_text_sort(medias, queries, "image", k_values=[5], start_time=start)
         for qm in results:
             assert qm.elapsed_seconds >= 0.0

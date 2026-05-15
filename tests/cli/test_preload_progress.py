@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 
 from vtsearch.media.embedder import intercept_weight_loading_progress, load_pretrained_local_first, timed_progress
-from vtsearch.models.loader import _make_console_progress, preload_autoload_media_types
+from vtsearch.embedding.loader import _make_console_progress, preload_autoload_media_types
 
 
 class TestMakeConsoleProgress:

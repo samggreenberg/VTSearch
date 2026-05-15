@@ -30,7 +30,7 @@ from vtsearch.media.patch_embed import (
     propose_leaves,
     to_fp16,
 )
-from vtsearch.models.region_similarity import (
+from vtsearch.training.region_similarity import (
     cosine_sort_with_boxes,
     score_against_query,
 )
@@ -1250,7 +1250,7 @@ class TestRegionAwareTraining:
         """A yes-vote with region_box on a media that has a patch_grid feeds
         the MLP with the *pooled* vector, not the CLS embedding."""
         from vtsearch.media.patch_embed import box_to_vote_vector
-        from vtsearch.models.training import _training_vec_for_vote
+        from vtsearch.detectors.training import _training_vec_for_vote
 
         media = self._media_with_patch_grid(0.99, cid=42)
         box = (0.0, 0.0, 0.5, 0.5)  # top-left quadrant: 4 cells (axes 0,1,4,5)
@@ -1264,7 +1264,7 @@ class TestRegionAwareTraining:
     def test_train_and_score_falls_back_to_cls_without_patch_grid(self):
         """Legacy / single-vector datasets have no ``patch_grid``; even with
         a stashed region_box, training must use the full-image CLS vector."""
-        from vtsearch.models.training import _training_vec_for_vote
+        from vtsearch.detectors.training import _training_vec_for_vote
 
         media = {
             "id": 1,
@@ -1276,7 +1276,7 @@ class TestRegionAwareTraining:
         np.testing.assert_array_equal(vec, media["embedding"])
 
     def test_train_and_score_falls_back_to_cls_when_no_region_box(self):
-        from vtsearch.models.training import _training_vec_for_vote
+        from vtsearch.detectors.training import _training_vec_for_vote
 
         media = self._media_with_patch_grid(0.99, cid=1)
         vec = _training_vec_for_vote(media, region_box=None)

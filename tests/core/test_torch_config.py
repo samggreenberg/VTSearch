@@ -67,7 +67,7 @@ def test_ensure_torch_configured_applies_constant(monkeypatch):
 
 def test_get_torch_device_falls_back_to_cpu_without_cuda(monkeypatch):
     """With no CUDA the resolved device is CPU."""
-    from vtsearch.models import loader
+    from vtsearch.embedding import loader
 
     monkeypatch.setenv("VTSEARCH_DEVICE", "auto")
     import vtsearch.config as config
@@ -84,7 +84,7 @@ def test_get_torch_device_honours_explicit_cpu(monkeypatch):
     """``VTSEARCH_DEVICE=cpu`` forces CPU even when CUDA is available."""
     monkeypatch.setenv("VTSEARCH_DEVICE", "cpu")
     import vtsearch.config as config
-    import vtsearch.models.loader as loader
+    import vtsearch.embedding.loader as loader
 
     importlib.reload(config)
     importlib.reload(loader)
@@ -98,7 +98,7 @@ def test_get_torch_device_returns_cuda_when_available(monkeypatch):
     """``auto`` resolves to cuda when torch reports CUDA is available."""
     monkeypatch.setenv("VTSEARCH_DEVICE", "auto")
     import vtsearch.config as config
-    import vtsearch.models.loader as loader
+    import vtsearch.embedding.loader as loader
 
     importlib.reload(config)
     importlib.reload(loader)
@@ -110,8 +110,8 @@ def test_get_torch_device_returns_cuda_when_available(monkeypatch):
 
 def test_train_model_places_model_on_selected_device(monkeypatch):
     """train_model must move the returned model onto ``get_torch_device()``."""
-    from vtsearch.models import loader
-    from vtsearch.models.training import train_model
+    from vtsearch.embedding import loader
+    from vtsearch.training.mlp import train_model
 
     fake_device = torch.device("cpu")
     monkeypatch.setattr(loader, "get_torch_device", lambda: fake_device)
@@ -127,6 +127,6 @@ def test_train_model_places_model_on_selected_device(monkeypatch):
 
 def test_imports_do_not_break():
     """Sanity check: reloading loader picks up changes without errors."""
-    import vtsearch.models.loader as loader
+    import vtsearch.embedding.loader as loader
 
     importlib.reload(loader)
