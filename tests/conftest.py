@@ -8,137 +8,25 @@ import pytest
 import vtsearch.config as config
 
 # ---------------------------------------------------------------------------
-# Auto-assign test group markers based on filename so tests can be run by
-# area: pytest -m core, pytest -m sorting, pytest -m datasets, etc.
+# Auto-assign test group markers based on the test file's parent directory,
+# so tests can be run by area: pytest -m core, pytest -m sorting, etc.
+#
+# Layout: tests/<group>/test_*.py — the folder name IS the group. New test
+# files automatically inherit their group from where they live, so the old
+# registry-drift bug class (a file added without an entry in _TEST_GROUPS
+# was silently excluded from `./run-tests.sh <group>`) is gone.
 # ---------------------------------------------------------------------------
 
-_TEST_GROUPS = {
-    "core": [
-        "test_audio",
-        "test_medias",
-        "test_votes",
-        "test_inclusion",
-        "test_settings",
-        "test_settings_api_routes",
-        "test_settings_directories",
-        "test_frontend",
-        "test_resize_handle_centering",
-        "test_achievements",
-        "test_dockerfile_syntax",
-    ],
-    "api": [
-        "test_api_contracts",
-        "test_error_recovery",
-        "test_dashboard",
-        "test_file_browser",
-        "test_path_validation",
-        "test_multi_user_security",
-        "test_multi_user_dataset_access",
-        "test_ssrf_validation",
-    ],
-    "sorting": [
-        "test_sorting",
-        "test_label_sorting",
-        "test_safe_thresholds",
-        "test_enrich_descriptions",
-        "test_diversity_tree",
-        "test_diversity_tree_integration",
-    ],
-    "datasets": [
-        "test_datasets",
-        "test_dataset_split",
-        "test_combine_datasets",
-        "test_creation_info",
-        "test_duplicates",
-        "test_origin_labelset",
-        "test_extension_scaffolds",
-        "test_synthetic_importer",
-        "test_thin_loading",
-        "test_chunked_loading",
-        "test_memory_errors",
-        "test_pickle_safety",
-        "test_media_sources",
-        "test_multi_dataset",
-        "test_request_context",
-        "test_parallel_loading",
-    ],
-    "io": [
-        "test_exporters",
-        "test_csv_webhook_exporters",
-        "test_export_options",
-        "test_importers",
-        "test_importer_loading",
-        "test_importer_symlinks",
-        "test_dataset_importer_media",
-        "test_label_importers",
-        "test_label_import_endpoint",
-        "test_label_import_ingestion",
-        "test_labels",
-        "test_pdf_import",
-        "test_corrections_export",
-        "test_settings_io",
-        "test_sync_sources",
-        "test_bulk_embedding",
-        "test_npz_dataset_import",
-    ],
-    "detectors": [
-        "test_find_label",
-        "test_extractors",
-        "test_processors",
-        "test_detectors",
-        "test_multi_detector",
-        "test_clippers",
-        "test_clipper_workflow",
-        "test_eval",
-        "test_eval_visualize",
-        "test_eval_voting_iterations",
-        "test_label_curve",
-        "test_svm_training",
-        "test_resolver",
-        "test_new_embedders",
-        "test_labelset_elements_api",
-    ],
-    "downloads": [
-        "test_ag_news_download",
-        "test_bbc_news_download",
-        "test_gtzan_download",
-        "test_image_sources_download",
-        "test_imdb_download",
-        "test_ucsf_documents_download",
-        "test_download_and_extract",
-        "test_video_datasets_download",
-    ],
-    "integration": [
-        "test_thread_safety",
-        "test_multi_media_coverage",
-    ],
-    "cli": [
-        "test_cli_detectors",
-        "test_load_sort_window",
-        "test_preload_progress",
-        "test_tqdm_progress",
-    ],
-    "converters": [
-        "test_document_and_converters",
-        "test_converter_selection",
-    ],
-}
-
-# Build reverse map: filename -> group name
-_FILE_TO_GROUP = {}
-for group, files in _TEST_GROUPS.items():
-    for fname in files:
-        _FILE_TO_GROUP[fname] = group
+# Folders that are not test groups (no marker should be added for items in them).
+_NON_GROUP_DIRS = {"tests", "fixtures", "__pycache__"}
 
 
 def pytest_collection_modifyitems(items, config):
-    """Auto-assign group markers to tests based on their filename."""
+    """Auto-assign group markers based on the test file's parent directory."""
     for item in items:
-        # Extract test_xxx from the file path
-        fname = item.fspath.purebasename  # e.g. "test_sorting"
-        group = _FILE_TO_GROUP.get(fname)
-        if group:
-            item.add_marker(getattr(pytest.mark, group))
+        parent = item.fspath.dirpath().basename
+        if parent and parent not in _NON_GROUP_DIRS and not parent.startswith("_"):
+            item.add_marker(getattr(pytest.mark, parent))
 
 
 # Reduce training epochs for faster tests (default is 200; 30 is sufficient
@@ -189,7 +77,7 @@ def _fake_embed_text(text):
 
 
 # Patch embed_audio_file so init_medias() never triggers CLAP model loading.
-_patch_embed_audio = patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio)
+_patch_embed_audio = patch("tests.fixtures.medias.embed_audio_file", side_effect=_fake_embed_audio)
 _patch_embed_audio.start()
 
 # Create a default dataset context so init_medias() has somewhere to write,
@@ -207,7 +95,7 @@ import app as app_module
 
 # Import refactored modules and make them accessible through app_module
 from vtsearch.utils.audio_generator import GENERATOR_SAMPLE_RATE
-from vtsearch.medias import NUM_MEDIAS
+from tests.fixtures.medias import NUM_MEDIAS, init_medias
 from vtsearch.utils.audio_generator import generate_wav
 from vtsearch.models import initialize_models, train_and_score
 from vtsearch.models.progress import clear_progress_cache
@@ -225,10 +113,11 @@ app_module.train_and_score = train_and_score
 app_module.medias = medias
 app_module.good_votes = good_votes
 app_module.bad_votes = bad_votes
+app_module.init_medias = init_medias  # legacy attribute used by some tests
 
 # Initialize models and medias
 initialize_models()
-app_module.init_medias()
+init_medias()
 
 # Save the test medias so we can replay them into each test's fresh context.
 _test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
@@ -301,7 +190,7 @@ def _stub_embedding_models():
     from contextlib import ExitStack
 
     stack = ExitStack()
-    stack.enter_context(patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio))
+    stack.enter_context(patch("tests.fixtures.medias.embed_audio_file", side_effect=_fake_embed_audio))
     for mt in _ALL_MEDIA_TYPES:
         stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_embed_text))
         stack.enter_context(patch.object(mt, "load_models"))

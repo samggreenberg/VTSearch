@@ -408,7 +408,7 @@ class TestReadmeReaderDocsDriftGuard:
     """
 
     def test_each_doc_contains_its_phrase(self):
-        repo_root = pathlib.Path(__file__).resolve().parent.parent
+        repo_root = pathlib.Path(__file__).resolve().parents[2]
         for doc in achievements._DOCS_RAW:
             text = (repo_root / doc["path"]).read_text(encoding="utf-8")
             assert achievements._normalize_phrase(doc["phrase"]) in achievements._normalize_phrase(text), (

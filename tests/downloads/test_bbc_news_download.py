@@ -144,37 +144,18 @@ class TestDownloadBbcNews:
 class TestLoadDemoSourceBbcNews:
     """TextMediaType.load_demo_source with source='bbc_news'."""
 
-    def _make_text_media_type(self):
-        from vtsearch.media.text.media_type import TextMediaType
-
-        mt = TextMediaType()
-        stub_model = MagicMock()
-        stub_model.encode.return_value = [0.1] * 768
-        mt._model = stub_model
-        return mt
-
-    def _make_fake_embedder(self):
-        import numpy as np
-
-        emb = MagicMock()
-        emb.name = "e5"
-        emb.media_type_id = "text"
-        emb._model = True
-        emb._on_progress = lambda *a: None
-        emb.embed_text_passage.return_value = np.zeros(768)
-        return emb
-
     def test_bbc_news_source_populates_clips(self, tmp_path):
         """load_demo_source with source='bbc_news' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
+        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
             "business": ["Business article one.", "Business article two."],
             "sport": ["Sport article one.", "Sport article two."],
         }
 
-        mt = self._make_text_media_type()
-        emb = self._make_fake_embedder()
+        mt = make_text_media_type_stub()
+        emb = make_text_embedder_stub()
         clips: dict = {}
 
         with patch.object(dl_module, "download_bbc_news", return_value=fake_articles):
@@ -195,13 +176,14 @@ class TestLoadDemoSourceBbcNews:
     def test_bbc_news_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits articles per category."""
         from vtsearch.datasets import downloader as dl_module
+        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
             "tech": [f"Tech article {i}." for i in range(10)],
         }
 
-        mt = self._make_text_media_type()
-        emb = self._make_fake_embedder()
+        mt = make_text_media_type_stub()
+        emb = make_text_embedder_stub()
         clips: dict = {}
 
         with patch.object(dl_module, "download_bbc_news", return_value=fake_articles):
