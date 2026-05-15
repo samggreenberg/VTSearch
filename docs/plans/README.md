@@ -16,6 +16,7 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | [patch-embedder.md](patch-embedder.md) | **In progress** | Six image embedders (DINOv2 / DINOv3 / EUPE × single+patch). Single-vector variants shipped via PR #1250; patch-region variants and hierarchical region search are the open work. |
 | [RCDatasetImporter.md](RCDatasetImporter.md) | **Scaffolds in place; awaiting client code** | ReCaller / DataWrest / PullWrest / Holder plugin scaffolds exist (`hidden_from_picker = True`); the API client stubs need real implementations. |
 | [extract-library.md](extract-library.md) | **Proposed** | Split VTSearch into a `vtscore` Python library plus the Flask/Angular app, gated on a CI job that runs the test suite without Flask installed. |
+| [gpu-batched-embedding.md](gpu-batched-embedding.md) | **In progress** | Override `_embed_media_bulk_impl` on image + text embedders to batch the GPU forward pass; add `patch_forward_bulk` for the DINO/EUPE patch variants. Targets feature-brainstorm §12.2. |
 | [feature-brainstorm.md](feature-brainstorm.md) | **Backlog** | Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, experiments. Items graduate into their own plan doc as they mature. |
 
 ## Recently completed (removed)
