@@ -31,7 +31,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from vtsearch.models.patch_regions import (
+from vtsearch.media.patch_embed import (
     PatchEmbedOutput,
     build_region_tree,
 )

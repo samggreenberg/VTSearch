@@ -26,14 +26,14 @@ def _training_vec_for_vote(
 
     When *region_box* is set **and** *media* has a stored ``patch_grid``,
     pool the box on-the-fly via
-    :func:`vtsearch.models.patch_regions.box_to_vote_vector`.  Otherwise
+    :func:`vtsearch.media.patch_embed.box_to_vote_vector`.  Otherwise
     fall back to ``media["embedding"]`` — the v1/legacy image-level vector.
     Patch-embedder v2.
     """
     if region_box is not None:
         grid = media.get("patch_grid")
         if grid is not None:
-            from vtsearch.models.patch_regions import box_to_vote_vector  # noqa: PLC0415
+            from vtsearch.media.patch_embed import box_to_vote_vector  # noqa: PLC0415
 
             return box_to_vote_vector(np.asarray(grid), region_box)
     return media["embedding"]
@@ -614,7 +614,7 @@ def train_and_score(
             yes-votes that designated a region.  When set and the source
             media has a stored ``patch_grid``, the training vector for that
             vote is pooled on-the-fly via
-            :func:`vtsearch.models.patch_regions.box_to_vote_vector` instead
+            :func:`vtsearch.media.patch_embed.box_to_vote_vector` instead
             of using ``media["embedding"]``.  Falls back to the full-image
             vector when the media lacks a patch grid (legacy datasets,
             single-vector embedders) or when the box is missing.  Patch-

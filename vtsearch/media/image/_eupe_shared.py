@@ -21,7 +21,7 @@ EUPE's attention path uses ``torch.nn.functional.scaled_dot_product_attention``
 which **does not return weights**, so we don't have a real CLS→patch
 attention map — :attr:`patch_saliency` falls back to a CLS-cosine-similarity
 proxy (softmax of each patch's cosine similarity to the CLS vector).
-See :func:`vtsearch.models.patch_regions.eupe_features_to_patch_output`
+See :func:`vtsearch.media.patch_embed.eupe_features_to_patch_output`
 for the adapter.
 """
 
@@ -41,7 +41,7 @@ from vtsearch.media.embedder import (
     intercept_tqdm_progress,
     timed_progress,
 )
-from vtsearch.models.patch_regions import PatchEmbedOutput, eupe_features_to_patch_output
+from vtsearch.media.patch_embed import PatchEmbedOutput, eupe_features_to_patch_output
 
 
 # ImageNet normalisation, matching EUPE's eval transform.

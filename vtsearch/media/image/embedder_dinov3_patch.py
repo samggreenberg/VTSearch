@@ -26,14 +26,14 @@ from __future__ import annotations
 from typing import Optional
 
 from vtsearch.media.image._dinov3_shared import _Dinov3Base
-from vtsearch.models.patch_regions import PatchEmbedOutput
+from vtsearch.media.patch_embed import PatchEmbedOutput
 
 
 class ImageDinov3PatchEmbedder(_Dinov3Base):
     """Embeds images using DINOv3 ViT-B/16 with CLS pooling + patch regions.
 
     Output dimension: 768.  Per-image side-channel: HAC region tree +
-    14 × 14 patch grid (see :func:`vtsearch.models.patch_regions`).
+    14 × 14 patch grid (see :func:`vtsearch.media.patch_embed`).
     """
 
     @property

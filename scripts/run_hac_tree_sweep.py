@@ -39,7 +39,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-from vtsearch.models.patch_regions import (
+from vtsearch.media.patch_embed import (
     PatchEmbedOutput,
     RegionVector,
     build_region_tree,

@@ -24,7 +24,7 @@ MODELS_CACHE_DIR = (
 # additional thread allocates its own scratch buffers.  Override with
 # ``VTSEARCH_TORCH_THREADS`` on bigger boxes where embedding throughput
 # matters more than RSS.  Consumed by ``app.py`` (OMP/MKL env vars set
-# before torch import) and ``vtsearch.models.loader.ensure_torch_configured``
+# before torch import) and ``vtsearch.media.torch_setup.ensure_torch_configured``
 # (``torch.set_num_threads``).
 TORCH_THREADS = max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1")))
 
