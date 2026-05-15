@@ -189,7 +189,7 @@ def _fake_embed_text(text):
 
 
 # Patch embed_audio_file so init_medias() never triggers CLAP model loading.
-_patch_embed_audio = patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio)
+_patch_embed_audio = patch("tests.fixtures.medias.embed_audio_file", side_effect=_fake_embed_audio)
 _patch_embed_audio.start()
 
 # Create a default dataset context so init_medias() has somewhere to write,
@@ -207,7 +207,7 @@ import app as app_module
 
 # Import refactored modules and make them accessible through app_module
 from vtsearch.utils.audio_generator import GENERATOR_SAMPLE_RATE
-from vtsearch.medias import NUM_MEDIAS
+from tests.fixtures.medias import NUM_MEDIAS, init_medias
 from vtsearch.utils.audio_generator import generate_wav
 from vtsearch.models import initialize_models, train_and_score
 from vtsearch.models.progress import clear_progress_cache
@@ -225,10 +225,11 @@ app_module.train_and_score = train_and_score
 app_module.medias = medias
 app_module.good_votes = good_votes
 app_module.bad_votes = bad_votes
+app_module.init_medias = init_medias  # legacy attribute used by some tests
 
 # Initialize models and medias
 initialize_models()
-app_module.init_medias()
+init_medias()
 
 # Save the test medias so we can replay them into each test's fresh context.
 _test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
@@ -301,7 +302,7 @@ def _stub_embedding_models():
     from contextlib import ExitStack
 
     stack = ExitStack()
-    stack.enter_context(patch("vtsearch.medias.embed_audio_file", side_effect=_fake_embed_audio))
+    stack.enter_context(patch("tests.fixtures.medias.embed_audio_file", side_effect=_fake_embed_audio))
     for mt in _ALL_MEDIA_TYPES:
         stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_embed_text))
         stack.enter_context(patch.object(mt, "load_models"))
