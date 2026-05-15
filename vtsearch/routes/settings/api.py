@@ -182,15 +182,6 @@ def update_settings():
         except (TypeError, ValueError):
             return jsonify({"error": "autopilot_goal_diversity must be a number"}), 400
 
-    if "autoload_media_embedders" in body:
-        val = body["autoload_media_embedders"]
-        if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
-            return jsonify({"error": "autoload_media_embedders must be a list of strings"}), 400
-        try:
-            settings.set_autoload_media_embedders(val)
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
-
     if "autorun_detectors" in body:
         val = body["autorun_detectors"]
         if not isinstance(val, list) or not all(isinstance(v, str) for v in val):

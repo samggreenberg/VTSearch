@@ -369,8 +369,6 @@ export interface AppSettings {
   focus_mode_right?: Record<string, 'click' | 'hover'>;
   panel_pct_left?: Record<string, number>;
   panel_pct_right?: Record<string, number>;
-  autoload_media_types?: string[];
-  autoload_media_embedders?: string[];
   autorun_detectors?: string[];
   autopilot_enabled?: boolean;
   hide_autopilot?: boolean;

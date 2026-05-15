@@ -1,6 +1,6 @@
 """Tests for console progress output during embedding model preloading.
 
-Verifies that ``preload_autoload_media_types`` prints intermediate status
+Verifies that ``preload_predicted_embedders`` prints intermediate status
 messages and download progress bars to stdout so the user can see what is
 happening during the (potentially long) startup phase.
 
@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 
 from vtsearch.media.embedder import intercept_weight_loading_progress, load_pretrained_local_first, timed_progress
-from vtsearch.embedding.loader import _make_console_progress, preload_autoload_media_types
+from vtsearch.embedding.loader import _make_console_progress, predict_embedders_to_preload, preload_predicted_embedders
 
 
 class TestMakeConsoleProgress:
@@ -112,12 +112,12 @@ class TestMakeConsoleProgress:
 
 
 class TestPreloadConsoleOutput:
-    """Integration-style tests for console output during preload_autoload_media_types."""
+    """Integration-style tests for console output during preload_predicted_embedders."""
 
-    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=["clap"])
+    @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
     @patch("vtsearch.media.get_embedder")
-    def test_prints_preloading_banner_and_progress(self, mock_get_embedder, mock_emb_favs, capsys):
-        """preload_autoload_media_types should print the banner and forward progress to console."""
+    def test_prints_preloading_banner_and_progress(self, mock_get_embedder, mock_predict, capsys):
+        """preload_predicted_embedders should print the banner and forward progress to console."""
         mock_emb = MagicMock()
         mock_emb.name = "clap"
         mock_emb._on_progress = lambda *a, **kw: None
@@ -134,7 +134,7 @@ class TestPreloadConsoleOutput:
         mock_emb.load_models = fake_load_models
         mock_get_embedder.return_value = mock_emb
 
-        result = preload_autoload_media_types()
+        result = preload_predicted_embedders()
 
         captured = capsys.readouterr()
         assert result == ["clap"]
@@ -143,9 +143,9 @@ class TestPreloadConsoleOutput:
         assert "model.safetensors" in captured.out
         assert "Warming up audio pipeline: importing libraries..." in captured.out
 
-    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=["clap"])
+    @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
     @patch("vtsearch.media.get_embedder")
-    def test_restores_original_callback_after_load(self, mock_get_embedder, mock_emb_favs):
+    def test_restores_original_callback_after_load(self, mock_get_embedder, mock_predict):
         """The original _on_progress callback should be restored after load_models."""
         original_cb = MagicMock()
         mock_emb = MagicMock()
@@ -154,13 +154,13 @@ class TestPreloadConsoleOutput:
         mock_emb.load_models = MagicMock()
         mock_get_embedder.return_value = mock_emb
 
-        preload_autoload_media_types()
+        preload_predicted_embedders()
 
         assert mock_emb._on_progress is original_cb
 
-    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=["clap"])
+    @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
     @patch("vtsearch.media.get_embedder")
-    def test_restores_callback_on_exception(self, mock_get_embedder, mock_emb_favs, capsys):
+    def test_restores_callback_on_exception(self, mock_get_embedder, mock_predict, capsys):
         """The original callback should be restored even when load_models raises."""
         original_cb = MagicMock()
         mock_emb = MagicMock()
@@ -169,21 +169,85 @@ class TestPreloadConsoleOutput:
         mock_emb.load_models.side_effect = RuntimeError("boom")
         mock_get_embedder.return_value = mock_emb
 
-        result = preload_autoload_media_types()
+        result = preload_predicted_embedders()
 
         assert mock_emb._on_progress is original_cb
         assert result == []
         captured = capsys.readouterr()
         assert "Warning" in captured.out
 
-    @patch("vtsearch.settings.get_autoload_media_embedders", return_value=[])
-    def test_no_autoload_embedders_produces_no_output(self, mock_emb_favs, capsys):
-        """When there are no autoload embedders, nothing should be printed."""
-        result = preload_autoload_media_types()
+    @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=[])
+    def test_no_predicted_embedders_produces_no_output(self, mock_predict, capsys):
+        """When there are no predicted embedders, nothing should be printed."""
+        result = preload_predicted_embedders()
 
         assert result == []
         captured = capsys.readouterr()
         assert captured.out == ""
+
+
+class TestPredictEmbeddersToPreload:
+    """Smart-preload prediction derived from dataset + detector registries."""
+
+    def test_empty_registries_predict_nothing(self):
+        with (
+            patch("vtsearch.datasets.registry.list_datasets", return_value=[]),
+            patch("vtsearch.detectors.registry.list_detectors", return_value=[]),
+        ):
+            assert predict_embedders_to_preload() == []
+
+    def test_dataset_with_explicit_embedder_is_preloaded(self):
+        with (
+            patch(
+                "vtsearch.datasets.registry.list_datasets", return_value=[{"media_type": "audio", "embedder": "clap"}]
+            ),
+            patch("vtsearch.detectors.registry.list_detectors", return_value=[]),
+        ):
+            assert predict_embedders_to_preload() == ["clap"]
+
+    def test_dataset_without_embedder_uses_media_type_default(self):
+        fake_default = MagicMock()
+        fake_default.name = "siglip"
+        with (
+            patch("vtsearch.datasets.registry.list_datasets", return_value=[{"media_type": "image", "embedder": ""}]),
+            patch("vtsearch.detectors.registry.list_detectors", return_value=[]),
+            patch("vtsearch.media.embedders_for_type", return_value=[fake_default]),
+        ):
+            assert predict_embedders_to_preload() == ["siglip"]
+
+    def test_unique_embedders_only_no_duplicates(self):
+        with (
+            patch(
+                "vtsearch.datasets.registry.list_datasets",
+                return_value=[
+                    {"media_type": "audio", "embedder": "clap"},
+                    {"media_type": "audio", "embedder": "clap"},
+                    {"media_type": "image", "embedder": "siglip"},
+                ],
+            ),
+            patch("vtsearch.detectors.registry.list_detectors", return_value=[]),
+        ):
+            assert predict_embedders_to_preload() == ["clap", "siglip"]
+
+    def test_detectors_contribute_default_embedder(self):
+        fake_default = MagicMock()
+        fake_default.name = "e5"
+        with (
+            patch("vtsearch.datasets.registry.list_datasets", return_value=[]),
+            patch("vtsearch.detectors.registry.list_detectors", return_value=[{"media_type": "text"}]),
+            patch("vtsearch.media.embedders_for_type", return_value=[fake_default]),
+        ):
+            assert predict_embedders_to_preload() == ["e5"]
+
+    def test_unregistered_embedder_name_filtered_out(self):
+        # entry["embedder"] = "ghost" is not in the embedder registry → dropped.
+        with (
+            patch(
+                "vtsearch.datasets.registry.list_datasets", return_value=[{"media_type": "audio", "embedder": "ghost"}]
+            ),
+            patch("vtsearch.detectors.registry.list_detectors", return_value=[]),
+        ):
+            assert predict_embedders_to_preload() == []
 
 
 class TestInterceptWeightLoadingProgress:

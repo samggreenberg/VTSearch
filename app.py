@@ -46,7 +46,7 @@ from flask import Flask, g
 
 # Import refactored modules
 from vtsearch.auth import get_login_provider  # noqa: E402
-from vtsearch.embedding import initialize_models, preload_autoload_media_types  # noqa: E402
+from vtsearch.embedding import initialize_models, preload_predicted_embedders  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
     achievements_bp,
     auth_bp,
@@ -244,9 +244,9 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
     initialize_models()
-    preloaded = preload_autoload_media_types()
+    preloaded = preload_predicted_embedders()
     if preloaded:
-        print(f"✅ Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
+        print(f"✅ Preloaded embedders: {', '.join(preloaded)}", flush=True)
 
     print("✅ VTSearch is ready!", flush=True)
 

@@ -11,7 +11,7 @@ import { AchievementsTabComponent } from '../../achievements-tab/achievements-ta
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { AppSettings, EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
+import { AppSettings, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 
 @Component({
@@ -26,7 +26,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   @Output() closed = new EventEmitter<void>();
 
   settings: AppSettings = { volume: 50 };
-  embedders: EmbedderInfo[] = [];
   mediaTypes: MediaTypeInfo[] = [];
   activeSettingsTab = 'appearance';
   activeViewTab = '';
@@ -53,7 +52,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     forkJoin({
       settings: this.settingsApi.getSettings(),
-      embedders: this.settingsApi.getEmbedders(),
       mediaTypes: this.datasetsApi.getMediaTypes(),
       version: this.settingsApi.getVersion(),
     })
@@ -62,9 +60,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.settings = res.settings;
         this.version = res.version.version;
-        this.embedders = (res.embedders.embedders || []).sort(
-          (a, b) => a.media_type_id.localeCompare(b.media_type_id) || a.name.localeCompare(b.name),
-        );
         this.mediaTypes = res.mediaTypes.media_types || [];
         if (this.mediaTypes.length > 0) {
           const preselected = this.preselectedViewTab;
@@ -141,25 +136,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   onStringChange(key: string, value: string): void {
     (this.settings as Record<string, unknown>)[key] = value;
-    this.save();
-  }
-
-  getMediaTypeIcon(typeId: string): string {
-    const mt = this.mediaTypes.find((m) => m.type_id === typeId);
-    return mt?.icon || '';
-  }
-
-  isEmbedderAutoloaded(embedder: EmbedderInfo): boolean {
-    return (this.settings.autoload_media_embedders || []).includes(embedder.name);
-  }
-
-  toggleEmbedder(embedder: EmbedderInfo): void {
-    const current = this.settings.autoload_media_embedders || [];
-    if (current.includes(embedder.name)) {
-      this.settings.autoload_media_embedders = current.filter((e) => e !== embedder.name);
-    } else {
-      this.settings.autoload_media_embedders = [...current, embedder.name];
-    }
     this.save();
   }
 

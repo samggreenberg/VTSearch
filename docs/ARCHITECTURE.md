@@ -565,7 +565,7 @@ auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
 `inclusion`, `enrich_descriptions`, `safe_thresholds`, `calibrate_count`,
 `calibration_fraction`, `audio_playing`, `swipe_animation`,
 `show_metadata`, `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`,
-`panel_pct_*` (per-media-type layout), `autoload_media_embedders`,
+`panel_pct_*` (per-media-type layout),
 `autopilot_enabled`, `hide_autopilot`, `autopilot_top_greens`,
 `autopilot_hard_reds`, `autopilot_goal_diversity`,
 `autorun_detectors`, and infrastructure directories

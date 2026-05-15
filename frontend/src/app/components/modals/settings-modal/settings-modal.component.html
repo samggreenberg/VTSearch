@@ -14,14 +14,6 @@
         </button>
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'autoload'"
-          (click)="activeSettingsTab = 'autoload'"
-          title="Choose which embedding models to load automatically when a dataset is opened">
-          <vt-icon type="cloud-upload" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'autoload'"></vt-icon>
-          Autoload
-        </button>
-        <button
-          class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'autopilot'"
           (click)="activeSettingsTab = 'autopilot'"
           title="Configure the guided autopilot labeling workflow">
@@ -199,28 +191,6 @@
             <input type="number" class="form-input" [ngModel]="settings.autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
           </div>
 
-        }
-
-        <!-- Autoload -->
-        @if (activeSettingsTab === 'autoload') {
-          <h3>Autoload Embedders</h3>
-          @if (embedders.length > 0) {
-            <div class="embedder-grid">
-              <div class="embedder-grid-header">
-                <span title="Name of the embedding model (e.g. CLIP, CLAP, E5)">Embedder</span>
-                <span title="Which media type this embedder processes (audio, image, text, video, document)">Media Type</span>
-              </div>
-              @for (embedder of embedders; track embedder.name) {
-                <label class="embedder-row">
-                  <input type="checkbox" [checked]="isEmbedderAutoloaded(embedder)" (change)="toggleEmbedder(embedder)" />
-                  <span class="embedder-name">{{ embedder.name }}</span>
-                  <span class="embedder-media-type"><vt-icon [icon]="getMediaTypeIcon(embedder.media_type_id)" class="embedder-media-type-icon"></vt-icon>{{ embedder.media_type_id }}</span>
-                </label>
-              }
-            </div>
-          } @else {
-            <p class="empty-state">No embedders available.</p>
-          }
         }
 
         <!-- Achievements -->
