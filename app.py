@@ -99,6 +99,30 @@ if _MAX_UPLOAD_MB > 0:
 
 
 # ---------------------------------------------------------------------------
+# OpenAPI / Swagger UI (flask-smorest)
+# ---------------------------------------------------------------------------
+# The API spec is served at /api/openapi.json and a browsable Swagger UI
+# at /api/docs. See docs/plans/openapi-schema.md for the migration plan.
+# Blueprints registered via ``api.register_blueprint`` contribute to the
+# spec when they use ``flask_smorest.Blueprint``; plain Flask Blueprints
+# still register but are absent from the spec until migrated.
+
+from vtsearch import __version__ as _vtsearch_version  # noqa: E402
+
+app.config["API_TITLE"] = "VTSearch API"
+app.config["API_VERSION"] = _vtsearch_version
+app.config["OPENAPI_VERSION"] = "3.0.3"
+app.config["OPENAPI_URL_PREFIX"] = "/api"
+app.config["OPENAPI_JSON_PATH"] = "openapi.json"
+app.config["OPENAPI_SWAGGER_UI_PATH"] = "/docs"
+app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
+
+from flask_smorest import Api  # noqa: E402
+
+api = Api(app)
+
+
+# ---------------------------------------------------------------------------
 # Per-request user context
 # ---------------------------------------------------------------------------
 
@@ -215,7 +239,10 @@ app.register_blueprint(datasets_ui_bp)
 app.register_blueprint(datasets_registry_bp)
 app.register_blueprint(exporters_bp)
 app.register_blueprint(label_importers_bp)
-app.register_blueprint(settings_bp)
+# settings_bp is a flask-smorest Blueprint (OpenAPI pilot); register
+# it via the Api so its routes appear in /api/openapi.json. Other
+# blueprints stay on the plain Flask path until migrated.
+api.register_blueprint(settings_bp)
 app.register_blueprint(settings_io_bp)
 app.register_blueprint(sync_sources_bp)
 app.register_blueprint(detectors_bp)

@@ -1,0 +1,226 @@
+# OpenAPI schema + generated TS client
+
+Status: in progress (pilot landing alongside this doc). Tracking issue: feature-brainstorm.md §12.9.
+
+## The problem
+
+The Flask backend and the Angular frontend agree on JSON shapes by
+**convention only**. Every endpoint in `vtsearch/routes/` returns hand-
+assembled dicts (`return jsonify({"good_applied": ..., "results": ...})`)
+and every consumer in `frontend/src/app/` reads them through a hand-
+written TypeScript interface in `frontend/src/app/models/api.models.ts`.
+
+Nothing ties the two together. When a route adds, renames, or removes a
+field, the matching DTO has to be updated by hand — and when it isn't,
+the bug is silent. TypeScript's structural typing happily accepts a
+response that "looks close enough" and the mismatch surfaces as a
+runtime undefined-access or a quietly-missing UI element. The settings
+PUT endpoint is the worst offender: ~200 lines of nearly-identical
+type-coerce-then-validate-then-set blocks, none of which is reflected
+anywhere the frontend can see.
+
+## Goals
+
+1. **Single source of truth.** The shape of every request body, query
+   string, and response is declared once, in a schema, and that
+   declaration is *load-bearing* — it parses and validates incoming
+   requests and serialises outgoing responses. Drift between docs and
+   code becomes impossible by construction.
+2. **Self-documenting API.** A Swagger UI at `/api/docs` lets a
+   developer (or third-party integrator) browse every endpoint, see the
+   request/response shapes, and try requests live.
+3. **Generated frontend client.** A TypeScript client generated from
+   the OpenAPI spec replaces `frontend/src/app/models/api.models.ts`'s
+   hand-maintained interfaces. Backend changes that aren't reflected in
+   the frontend become **compile errors**, not runtime surprises.
+4. **Pythonic validation.** Routes stop hand-parsing `request.json`
+   with try/except towers. Bad input gets a standardised 422 response
+   instead of a custom 400 message.
+
+## Non-goals
+
+- **No backwards-compatibility shim for old error envelopes.** The
+  frontend reads `response.error.error` (a single string) today.
+  flask-smorest emits a richer envelope (see below). The frontend's
+  error handlers will be updated in lockstep — no compatibility layer
+  in either direction. This is acceptable per the project's BC policy.
+- **No incremental "documentation-only" pass.** The whole point is to
+  make schemas load-bearing; declaring schemas without using them for
+  parsing/serialisation just moves the drift problem down one level
+  (now the schema disagrees with the route body).
+- **Not migrating CLI entry points.** `python app.py --autodetect`
+  produces JSON via the exporter system, which is already typed at its
+  own boundary. The OpenAPI schema covers the HTTP API only.
+
+## Approach
+
+### Library: flask-smorest (+ marshmallow)
+
+`flask-smorest` extends Flask's `Blueprint` with two decorators:
+
+- `@blp.arguments(SomeSchema, location="json"|"query"|"form")` — parses
+  the request, validates it against the schema, raises 422 on failure,
+  and injects the result as a kwarg.
+- `@blp.response(status, SomeSchema)` — runs the route's return value
+  through the schema's `dump()`, guaranteeing the response matches the
+  declared shape (extra keys are dropped, missing required keys raise).
+
+Schemas are written in **marshmallow** (flask-smorest's native dialect).
+We considered Pydantic v2 — flask-smorest has experimental support via
+`apispec-pydantic-plugin` — but marshmallow's integration is older and
+more battle-tested, and the schemas are small enough that porting later
+(if §12.17 pulls us toward Pydantic for `_SETTING_SPECS`) is mechanical.
+
+### Where schemas live
+
+`vtsearch/schemas/` — a new sibling of `vtsearch/routes/`, mirroring the
+route sub-package layout:
+
+```
+vtsearch/schemas/
+    __init__.py
+    common.py        # ErrorResponse, OK, pagination helpers
+    settings.py      # AppSettingsSchema, SettingsUpdateSchema, ...
+    labels.py        # LabelExportSchema, LabelImportSchema, ...
+    datasets/        # mirrors vtsearch/routes/datasets/
+    ...
+```
+
+Schemas are imported into the route module that uses them. There is no
+global registry — flask-smorest discovers them through the decorator
+chain.
+
+### Swagger UI and spec endpoint
+
+flask-smorest's `Api` object serves both:
+
+- `/api/openapi.json` — the OpenAPI 3.x spec (machine-readable).
+- `/api/docs` — Swagger UI (human-browsable).
+
+Config goes in `app.py` alongside blueprint registration.
+
+### Error envelope
+
+flask-smorest's default `abort()` emits:
+
+```json
+{
+  "code": 422,
+  "status": "Unprocessable Entity",
+  "errors": {"json": {"volume": ["Not a valid number."]}},
+  "message": "Validation error"
+}
+```
+
+vs. today's:
+
+```json
+{"error": "volume must be a number"}
+```
+
+The frontend's error pipeline (`HttpErrorResponse → error.error`) will
+read `errors` (per-field) when present and fall back to `message`. The
+hand-rolled `jsonify({"error": "..."})` patterns in route bodies are
+replaced by `abort(400, message=...)` calls that produce the same
+envelope as validation failures, so the frontend has one shape to
+handle, not two.
+
+### TS client generation
+
+```
+npm run generate-api-client
+```
+
+A new script under `frontend/scripts/` calls
+`openapi-typescript-codegen` (or `openapi-fetch`) against
+`/api/openapi.json` (or a checked-in snapshot for CI determinism) and
+writes typed clients + DTOs into
+`frontend/src/app/generated/api-client/`. The existing
+`SettingsApiService` and friends are rewritten to thin wrappers around
+the generated client; the hand-maintained interfaces in
+`frontend/src/app/models/api.models.ts` are deleted blueprint-by-
+blueprint as the corresponding backend route migrates.
+
+CI guards drift two ways:
+1. A `regenerate-and-diff` job rebuilds the spec from a running Flask
+   instance and diffs against the checked-in snapshot. Mismatch fails
+   the build (you forgot to regenerate after changing a schema).
+2. `npm run build:prod` already typechecks every consumer; renaming a
+   field that the frontend reads now breaks compilation immediately.
+
+## Migration strategy
+
+Blueprint by blueprint. Each blueprint migration is one PR:
+
+1. Write schemas under `vtsearch/schemas/<area>.py`.
+2. Replace `flask.Blueprint` with `flask_smorest.Blueprint` in the
+   route module. Add `@blp.arguments` / `@blp.response` decorators.
+3. Delete the hand-rolled validation and `jsonify` boilerplate.
+4. Regenerate the TS client. Rewrite the matching Angular service to
+   use it.
+5. Delete the corresponding hand-maintained DTOs from
+   `frontend/src/app/models/api.models.ts`.
+6. Run `./run-tests.sh core api` and verify Swagger UI renders the
+   migrated endpoints.
+
+### Order (smallest → biggest)
+
+1. **`settings/api.py`** (pilot, this PR) — 3 routes, ~230 LOC, the
+   most repetitive validation in the codebase. High-leverage proof of
+   concept.
+2. **`auth.py`, `achievements.py`, `main.py`** — tiny, mostly GETs.
+3. **`labels/`** — vote.py, importers.py, exporters.py.
+4. **`detectors/`** — store.py, registry.py, scoring.py, find.py.
+5. **`processors/`** — crud.py, scoring.py.
+6. **`media/`** — list.py, server.py, embed.py.
+7. **`datasets/`** — crud.py, registry.py, ui.py.
+8. **`sorting.py`, `eval.py`, `file_browser.py`** — last because they
+   have the loosest schemas (free-form sort results, eval JSON).
+
+After each blueprint migration, the corresponding section of
+`api.models.ts` is deleted.
+
+### Concrete deletion targets
+
+When the migration completes, these files should not exist:
+
+- `frontend/src/app/models/api.models.ts` — every interface moves to
+  `generated/api-client/`.
+- Most of `vtsearch/routes/_shared.py`'s `get_json_or_400`,
+  `get_json_safe`, `extract_plugin_fields`, `validate_required_fields`
+  — replaced by `@blp.arguments` decorators. Helpers that operate on
+  *plugin* fields (`extract_plugin_fields`, `validate_required_fields`)
+  may survive in some form, since plugin field schemas are dynamic per-
+  plugin and don't lend themselves to a static marshmallow schema.
+
+## Open questions
+
+- **Plugin field endpoints** (`/api/exporters/<name>`,
+  `/api/importers/<name>/run`, etc.) have request shapes that depend on
+  the plugin's declared `fields`. Static schemas don't fit. Options:
+  (a) leave these routes on the legacy pattern, (b) emit a generic
+  `additionalProperties: true` schema and validate inside the handler,
+  or (c) generate per-plugin schemas at startup from each plugin's
+  `fields` declaration. Decision deferred until the plugin-CRUD routes
+  are reached in the migration order.
+- **Pagination.** flask-smorest has a built-in pagination helper. Some
+  list endpoints (`/api/medias`) could adopt it for consistency, but
+  it'd change the response shape (envelope with `data`/`meta`).
+  Decision deferred — keep current shapes for now.
+- **Spec snapshot.** Should `frontend/src/app/generated/api-client/`
+  and/or a copy of `openapi.json` be checked in? Pros: deterministic
+  builds, easy diff review, no need to run Flask in frontend CI. Cons:
+  noisy diffs on every API change. Tentatively: yes, check both in;
+  the diff *is* the API change review.
+
+## Status
+
+- [x] Plan written
+- [x] `flask-smorest` + `marshmallow` added to `requirements/base.txt`
+- [x] `Api` instance configured in `app.py`; `/api/openapi.json` and
+      `/api/docs` serve the spec / Swagger UI
+- [x] `vtsearch/schemas/` package created
+- [x] Pilot: `settings/api.py` migrated to flask-smorest
+- [ ] Frontend `SettingsApiService` rewired to generated client
+- [ ] `frontend/src/app/models/api.models.ts` settings section deleted
+- [ ] Remaining blueprints (see Order above)
