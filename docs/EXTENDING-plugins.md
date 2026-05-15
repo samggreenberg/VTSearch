@@ -100,21 +100,64 @@ Most plugin families use sub-packages, which pair well with per-plugin
 (`vtsearch.datasets.sources`), which use flat `.py` modules
 (`local_folder.py`, `http_archive.py`, `pullwrest.py`).
 
-| Plugin Family       | Package                            | Sentinel              | Base Class          |
-|---------------------|------------------------------------|-----------------------|---------------------|
-| Data Importers      | `vtsearch.datasets.importers`      | `IMPORTER`            | `DatasetImporter`   |
-| Results Exporters   | `vtsearch.exporters`               | `EXPORTER`            | `LabelsetExporter`  |
-| Label Importers     | `vtsearch.labels.importers`        | `LABEL_IMPORTER`      | `LabelImporter`     |
-| Processor Importers | `vtsearch.processors.importers`    | `PROCESSOR_IMPORTER`  | `ProcessorImporter` |
-| Settings Importers  | `vtsearch.settings_io.importers`   | `SETTINGS_IMPORTER`   | `SettingsImporter`  |
-| Settings Exporters  | `vtsearch.settings_io.exporters`   | `SETTINGS_EXPORTER`   | `SettingsExporter`  |
-| Settings Sources    | `vtsearch.settings_io.sources`     | `SETTINGS_SOURCE`     | `SettingsSource`    |
-| Labelset Sources    | `vtsearch.labels.sources`          | `LABELSET_SOURCE`     | `LabelsetSource`    |
-| Media Converters    | `vtsearch.converters`              | `CONVERTER`           | `MediaConverter`    |
-| Media Sources       | `vtsearch.datasets.sources`        | `SOURCE`              | `MediaSource`       |
+| Plugin Family       | Package                            | Sentinel              | Base Class          | Entry-point group              |
+|---------------------|------------------------------------|-----------------------|---------------------|--------------------------------|
+| Data Importers      | `vtsearch.datasets.importers`      | `IMPORTER`            | `DatasetImporter`   | `vtsearch.importers`           |
+| Results Exporters   | `vtsearch.exporters`               | `EXPORTER`            | `LabelsetExporter`  | `vtsearch.exporters`           |
+| Label Importers     | `vtsearch.labels.importers`        | `LABEL_IMPORTER`      | `LabelImporter`     | `vtsearch.label_importers`     |
+| Processor Importers | `vtsearch.processors.importers`    | `PROCESSOR_IMPORTER`  | `ProcessorImporter` | —                              |
+| Settings Importers  | `vtsearch.settings_io.importers`   | `SETTINGS_IMPORTER`   | `SettingsImporter`  | `vtsearch.settings_importers`  |
+| Settings Exporters  | `vtsearch.settings_io.exporters`   | `SETTINGS_EXPORTER`   | `SettingsExporter`  | `vtsearch.settings_exporters`  |
+| Settings Sources    | `vtsearch.settings_io.sources`     | `SETTINGS_SOURCE`     | `SettingsSource`    | `vtsearch.settings_sources`    |
+| Labelset Sources    | `vtsearch.labels.sources`          | `LABELSET_SOURCE`     | `LabelsetSource`    | `vtsearch.labelset_sources`    |
+| Media Converters    | `vtsearch.converters`              | `CONVERTER`           | `MediaConverter`    | `vtsearch.converters`          |
+| Media Sources       | `vtsearch.datasets.sources`        | `SOURCE`              | `MediaSource`       | `vtsearch.media_sources`       |
 
 Failed imports emit a warning but do not break the application — a missing
 optional dependency gracefully disables that plugin.
+
+### Third-party plugins via `importlib.metadata` entry points
+
+Plugins don't have to live inside the `vtsearch` source tree. Any installed
+Python distribution can register a plugin by declaring an entry point in
+the family's group (see the rightmost column above). For example, a
+third-party importer would add this to its `pyproject.toml`:
+
+```toml
+[project.entry-points."vtsearch.importers"]
+my_importer = "my_pkg.importer:IMPORTER"
+```
+
+The value (`my_pkg.importer:IMPORTER`) must resolve to an already-instantiated
+plugin object — the same shape that the in-tree sentinel attribute holds.
+After `pip install` of the third-party package, the plugin appears in
+`list_importers()`, the relevant `/api/...` endpoint, and `python app.py
+--list-plugins` without any changes to the core repo.
+
+Built-in plugins take precedence: if an entry point's `name` clashes with
+a name already registered by the package scan, it is skipped and a warning
+is emitted. A broken entry point (import error, missing `name` attribute)
+warns and is skipped — it cannot block discovery of other plugins.
+
+### Listing every registered plugin
+
+`python app.py --list-plugins` prints every auto-discovered plugin
+across all families — useful both for humans (`--format plain`, the
+default) and for shell completion scripts (`--format names`). Add
+`--plugin-family <name>` to scope the output, e.g.
+`python app.py --list-plugins --plugin-family importers --format names`
+emits one importer name per line.
+
+Output formats:
+
+| Flag value      | Use case                                                |
+|-----------------|---------------------------------------------------------|
+| `plain` (default) | Human-readable grouped table                          |
+| `json`          | Machine-readable; full `{name, display_name, description}` for each plugin |
+| `names`         | One name per line; with a family, bare names — without one, `family:name` pairs |
+
+The same inventory is also available programmatically as
+`vtsearch.plugins.inventory.gather_plugins()`.
 
 ---
 

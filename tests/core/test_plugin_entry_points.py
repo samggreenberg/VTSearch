@@ -164,8 +164,11 @@ def test_built_in_registries_declare_entry_point_groups(module_path, registry_va
     import importlib
 
     mod = importlib.import_module(module_path)
-    # The registry is private but the closure on `list_*` keeps a reference.
     list_fn = getattr(mod, registry_var)
-    # ``list_fn`` is ``registry.list`` — pull the bound registry off it.
-    registry = list_fn.__self__
+    # ``list_*`` is either a bound method on the registry (from
+    # ``make_plugin_registry``) or a free function that delegates to a
+    # private module-level ``_registry``.
+    registry = getattr(list_fn, "__self__", None)
+    if registry is None:
+        registry = mod._registry
     assert registry._entry_point_group == expected_group

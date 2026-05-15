@@ -343,16 +343,14 @@ class PluginRegistry(Generic[T]):
                 plugin = ep.load()
             except Exception as exc:
                 warnings.warn(
-                    f"Failed to load {self._label} entry point "
-                    f"{ep.name!r} from {ep.value!r}: {exc}",
+                    f"Failed to load {self._label} entry point {ep.name!r} from {ep.value!r}: {exc}",
                     stacklevel=2,
                 )
                 continue
             plugin_name = getattr(plugin, "name", None)
             if not plugin_name:
                 warnings.warn(
-                    f"{self._label} entry point {ep.name!r} from "
-                    f"{ep.value!r} has no 'name' attribute; skipped",
+                    f"{self._label} entry point {ep.name!r} from {ep.value!r} has no 'name' attribute; skipped",
                     stacklevel=2,
                 )
                 continue

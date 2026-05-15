@@ -354,10 +354,7 @@ if __name__ == "__main__":
         type=str,
         default=None,
         dest="import_labels_into",
-        help=(
-            "Detector name to merge labels into before scoring. "
-            "Used with --autodetect plus --label-importer-file."
-        ),
+        help=("Detector name to merge labels into before scoring. Used with --autodetect plus --label-importer-file."),
     )
     parser.add_argument(
         "--label-importer",
@@ -387,10 +384,7 @@ if __name__ == "__main__":
         inventory = gather_plugins()
         if args.plugin_family:
             if args.plugin_family not in inventory:
-                parser.error(
-                    f"Unknown plugin family: {args.plugin_family}. "
-                    f"Available: {', '.join(inventory)}"
-                )
+                parser.error(f"Unknown plugin family: {args.plugin_family}. Available: {', '.join(inventory)}")
             inventory = {args.plugin_family: inventory[args.plugin_family]}
         if args.output_format == "json":
             sys.stdout.write(format_json(inventory))

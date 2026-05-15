@@ -78,7 +78,7 @@ The sentinel-based registry (`IMPORTER`, `EXPORTER`, `SETTINGS_SOURCE`, `LABELSE
 - [ ] Library exposes `vtscore.utils.registry.PluginRegistry` (already generic).
 - [ ] Library auto-discovers its own plugins (importers, exporters, label sources, etc.) at registry creation.
 - [ ] App registers app-only plugins (`settings_io/`, settings sources) on top of the library's registries at startup.
-- [ ] Add an `importlib.metadata` entry-point hook so third-party packages can register plugins without monkey-patching. (Stretch goal.)
+- [x] Add an `importlib.metadata` entry-point hook so third-party packages can register plugins without monkey-patching. (Landed ahead of the library split as feature-brainstorm §12.11 — `PluginRegistry(entry_point_group=…)` scans `vtsearch.<family>` groups. Built-ins win on name clashes; broken entry points warn and are skipped.)
 
 ## Phase 6 — Pickle compatibility
 
