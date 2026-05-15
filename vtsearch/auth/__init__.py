@@ -11,11 +11,18 @@ The active provider is set once at startup via :func:`set_login_provider`.
 from __future__ import annotations
 
 import logging
+import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Thread-local fallback used when no Flask request context is available.
+# Background threads spawned by request handlers should call
+# :func:`set_thread_user` to propagate the user that triggered them; tests
+# can use the same hook to pin a user without a request context.
+_thread_local = threading.local()
 
 
 # ---------------------------------------------------------------------------
@@ -172,9 +179,12 @@ def get_login_provider() -> LoginProvider:
 def get_current_user() -> str:
     """Return the username for the current request.
 
-    Inside a Flask request context this reads ``g.user`` (set by the
-    ``before_request`` middleware in ``app.py``).  Outside a request
-    context (e.g. CLI, tests) it falls back to ``"default"``.
+    Resolution order:
+
+    1. ``g.user`` (set by the ``before_request`` middleware in ``app.py``).
+    2. Thread-local fallback (set by :func:`set_thread_user` — background
+       threads spawned from a request handler use this).
+    3. ``"default"`` (CLI, tests, threads with no explicit user).
     """
     try:
         from flask import g
@@ -182,7 +192,27 @@ def get_current_user() -> str:
         return g.user  # type: ignore[attr-defined]
     except (AttributeError, RuntimeError):
         # No Flask request context (CLI mode, background thread, etc.)
-        return "default"
+        pass
+    tl_user = getattr(_thread_local, "user", None)
+    if tl_user:
+        return tl_user
+    return "default"
+
+
+def set_thread_user(username: str | None) -> None:
+    """Set the thread-local user for the current thread.
+
+    Background threads that need :func:`get_current_user` to resolve to a
+    specific user (rather than ``"default"``) should snapshot the request
+    user before ``Thread.start()`` and call this from the thread's target.
+    Pass ``None`` to clear.
+    """
+    _thread_local.user = username
+
+
+def get_thread_user() -> str | None:
+    """Return the thread-local user, or ``None`` if unset."""
+    return getattr(_thread_local, "user", None)
 
 
 def get_user_data_dir(username: str | None = None) -> Path:

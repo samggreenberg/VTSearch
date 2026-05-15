@@ -620,7 +620,14 @@ def _run_origin_load_in_background(
     # Set initial progress synchronously so the first poll sees it.
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
+    # Snapshot the user that triggered the load so background per-user
+    # state (settings writes, settings_source sync) resolves correctly.
+    _request_user = created_by or get_current_user()
+
     def task():
+        from vtsearch.auth import set_thread_user
+
+        set_thread_user(_request_user)
         ctx = DatasetContext(task_id)
         context_id = task_id  # tracks the current context key (may change after migration)
 
@@ -840,6 +847,9 @@ def _run_origin_load_in_background(
             held_gate["name"] = None
             clear_thread_progress()
             loading_tasks.mark_finished(task_id)
+            from vtsearch.auth import set_thread_user as _clear_thread_user
+
+            _clear_thread_user(None)
 
     threading.Thread(target=task, daemon=True).start()
     return task_id
@@ -968,7 +978,12 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     tracker when finished.
     """
 
+    _request_user = get_current_user()
+
     def stage_task():
+        from vtsearch.auth import set_thread_user
+
+        set_thread_user(_request_user)
         try:
             temp_medias: dict = {}
             importer.run(field_values, temp_medias)
@@ -1023,6 +1038,10 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
             traceback.print_exc()
             error_msg = str(e) or repr(e) or "Unknown error during staging"
             update_progress("idle", "", 0, 0, error=error_msg)
+        finally:
+            from vtsearch.auth import set_thread_user as _clear_thread_user
+
+            _clear_thread_user(None)
 
     thread = threading.Thread(target=stage_task, daemon=True)
     thread.start()

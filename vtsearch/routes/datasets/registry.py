@@ -125,7 +125,15 @@ def load_registered_dataset(dataset_id: str):
         tracker.check_cancelled()
         tracker.update(status, message, current, total, step=1, total_steps=_LOAD_STEPS)
 
+    # Snapshot the user that triggered this load so background settings
+    # writes (e.g. autopilot toggles) and settings_source syncs resolve
+    # to the right per-user file.
+    _request_user = get_current_user()
+
     def load_task():
+        from vtsearch.auth import set_thread_user
+
+        set_thread_user(_request_user)
         try:
             tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
             # Create a fresh context for this dataset (don't activate yet).
@@ -211,6 +219,7 @@ def load_registered_dataset(dataset_id: str):
         finally:
             clear_thread_progress()
             _loading_tasks.mark_finished(task_id)
+            set_thread_user(None)
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()

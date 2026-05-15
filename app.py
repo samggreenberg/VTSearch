@@ -223,23 +223,22 @@ app.register_blueprint(embed_bp)
 
 
 def initialize_server(mode_label: str = "PRODUCTION") -> None:
-    """Load models, preload media types, and sync from settings source.
+    """Load models and preload media types.
 
     Called from ``__main__`` (when running ``python app.py``) and from
     gunicorn via ``VTSEARCH_SERVER_INIT=1`` at import time. Idempotent: safe
     to call multiple times; individual steps handle their own caching.
+
+    Per-user ``settings_source`` sync runs lazily on each user's first
+    settings access (see
+    :func:`vtsearch.settings._maybe_sync_from_source_locked`), not at
+    server boot — there is no server-wide user to sync for.
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
     initialize_models()
     preloaded = preload_autoload_media_types()
     if preloaded:
         print(f"✅ Preloaded autoload media types: {', '.join(preloaded)}", flush=True)
-
-    from vtsearch.settings import sync_from_settings_source
-
-    imported = sync_from_settings_source()
-    if imported is not None:
-        print(f"\U0001f504 Synced {len(imported)} setting(s) from settings source", flush=True)
 
     print("✅ VTSearch is ready!", flush=True)
 

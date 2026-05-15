@@ -1,7 +1,9 @@
 """Achievement system: persistent per-user milestone tracking.
 
-State lives inside ``data/settings.json`` under the ``achievement_state`` key,
-so it round-trips through the settings sync source like every other setting.
+State lives in the current user's per-user settings file under the
+``achievement_state`` key, so milestones are isolated per user and
+round-trip through that user's settings sync source like every other
+per-user setting.
 
 Categories and their tier thresholds are declared statically in
 :data:`ACHIEVEMENTS`.  Counters are incremented from hook points across the
@@ -19,7 +21,18 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from vtsearch.settings import _ensure_loaded, _save, _settings_lock
+from vtsearch.auth import get_current_user
+from vtsearch.settings import _ensure_user_loaded, _save_user, _settings_lock
+
+
+def _load_state_dict() -> dict[str, Any]:
+    """Return the current user's settings cache dict (lock held by caller)."""
+    return _ensure_user_loaded(get_current_user())
+
+
+def _persist_state() -> None:
+    """Persist the current user's settings cache (lock held by caller)."""
+    _save_user(get_current_user())
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +262,7 @@ def record_vote(
     hour = dt.hour
 
     with _settings_lock:
-        s = _ensure_loaded()
+        s = _load_state_dict()
         state = _ensure_state(s)
         counters = state["counters"]
 
@@ -287,7 +300,7 @@ def record_vote(
         if current > counters["vote_streak"]:
             counters["vote_streak"] = current
 
-        _save(s)
+        _persist_state()
 
 
 def record_dataset_load(importer_name: str) -> None:
@@ -295,10 +308,10 @@ def record_dataset_load(importer_name: str) -> None:
     if importer_name in EXCLUDED_DATASET_IMPORTERS:
         return
     with _settings_lock:
-        s = _ensure_loaded()
+        s = _load_state_dict()
         state = _ensure_state(s)
         state["counters"]["datasets_loaded"] += 1
-        _save(s)
+        _persist_state()
 
 
 def record_detector_import(detector_id: str) -> None:
@@ -306,14 +319,14 @@ def record_detector_import(detector_id: str) -> None:
     if not detector_id:
         return
     with _settings_lock:
-        s = _ensure_loaded()
+        s = _load_state_dict()
         state = _ensure_state(s)
         imported = state["imported_detector_ids"]
         if detector_id in imported:
             return
         imported.append(detector_id)
         state["counters"]["detectors_imported"] += 1
-        _save(s)
+        _persist_state()
 
 
 def record_find(n_scored: int) -> None:
@@ -321,10 +334,10 @@ def record_find(n_scored: int) -> None:
     if n_scored <= 0:
         return
     with _settings_lock:
-        s = _ensure_loaded()
+        s = _load_state_dict()
         state = _ensure_state(s)
         state["counters"]["find_media"] += int(n_scored)
-        _save(s)
+        _persist_state()
 
 
 def record_doc_phrase(phrase: str) -> dict[str, Any]:
@@ -353,7 +366,7 @@ def record_doc_phrase(phrase: str) -> dict[str, Any]:
 
     doc = _DOC_BY_ID[matched_id]
     with _settings_lock:
-        s = _ensure_loaded()
+        s = _load_state_dict()
         state = _ensure_state(s)
         read_ids = state["docs_read_ids"]
         if matched_id in read_ids:
@@ -365,7 +378,7 @@ def record_doc_phrase(phrase: str) -> dict[str, Any]:
             }
         read_ids.append(matched_id)
         state["counters"]["docs_read"] = len(read_ids)
-        _save(s)
+        _persist_state()
 
     return {
         "matched": True,
@@ -414,7 +427,7 @@ def get_full_state() -> dict[str, Any]:
         }
     """
     with _settings_lock:
-        s = _ensure_loaded()
+        s = _load_state_dict()
         state = _ensure_state(s)
         achievements: list[dict[str, Any]] = []
         pending: list[dict[str, Any]] = []
@@ -472,11 +485,11 @@ def acknowledge(category_id: str, tier_idx: int) -> bool:
     if tier_idx < 0 or tier_idx >= len(TIER_NAMES):
         return False
     with _settings_lock:
-        s = _ensure_loaded()
+        s = _load_state_dict()
         state = _ensure_state(s)
         prev = int(state["announced"].get(category_id, -1))
         if tier_idx <= prev:
             return False
         state["announced"][category_id] = tier_idx
-        _save(s)
+        _persist_state()
         return True

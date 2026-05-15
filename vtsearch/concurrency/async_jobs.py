@@ -49,6 +49,9 @@ class AsyncJob:
     finished_at: float = 0.0
     cancel_event: threading.Event = field(default_factory=threading.Event)
     done_event: threading.Event = field(default_factory=threading.Event)
+    # Username of the request that spawned this job, captured at start()
+    # time so the worker thread can resolve per-user settings correctly.
+    user: str | None = None
 
     @property
     def is_cancelled(self) -> bool:
@@ -132,6 +135,12 @@ class JobManager:
         ``job.result`` before returning.  Raising propagates as
         ``status = "error"``.
         """
+        # Capture the user that triggered this start() so background work
+        # touching per-user settings resolves to the right user.
+        from vtsearch.auth import get_current_user
+
+        current_user = get_current_user()
+
         spawn_job: AsyncJob | None = None
         with self._lock:
             prev = self._jobs.get(self._current_id) if self._current_id else None
@@ -141,12 +150,14 @@ class JobManager:
                     # callers waiting on this job_id receive the latest run.
                     self._pending.signature = signature
                     self._pending_target = target
+                    self._pending.user = current_user
                     return self._pending
                 job = AsyncJob(
                     job_id=uuid.uuid4().hex,
                     signature=signature,
                     status="pending",
                     started_at=time.time(),
+                    user=current_user,
                 )
                 self._jobs[job.job_id] = job
                 self._pending = job
@@ -159,6 +170,7 @@ class JobManager:
                 signature=signature,
                 status="running",
                 started_at=time.time(),
+                user=current_user,
             )
             self._jobs[job.job_id] = job
             self._current_id = job.job_id
@@ -177,6 +189,16 @@ class JobManager:
         ).start()
 
     def _run(self, job: AsyncJob, target: Callable[[AsyncJob], Any]) -> None:
+        from vtsearch.auth import set_thread_user
+
+        if job.user is not None:
+            set_thread_user(job.user)
+        try:
+            self._run_inner(job, target)
+        finally:
+            set_thread_user(None)
+
+    def _run_inner(self, job: AsyncJob, target: Callable[[AsyncJob], Any]) -> None:
         try:
             target(job)
         except Exception as exc:  # noqa: BLE001
