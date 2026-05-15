@@ -54,7 +54,7 @@ from dataclasses import dataclass, field as dc_field
 from pathlib import Path
 from typing import Any, Iterator
 
-from vtsearch.utils.registry import PluginBase, PluginField
+from vtsearch.plugins import PluginBase, PluginField
 
 # Backward-compatible alias — existing plugins import ``ImporterField``.
 ImporterField = PluginField
@@ -405,12 +405,12 @@ class DatasetImporter(PluginBase):
         """Subclass hook: fetch a list of records.
 
         Default loops over :meth:`fetch_record`, emitting per-item progress
-        via :func:`vtsearch.utils.update_progress` so long imports stay
+        via :func:`vtsearch.concurrency.progress.update_progress` so long imports stay
         visible in the UI.  Override to replace the per-item loop with a
         single bulk request, batched HTTP, or a thread/async pool.  Bulk
         overrides are responsible for emitting their own progress updates.
         """
-        from vtsearch.utils import update_progress
+        from vtsearch.concurrency.progress import update_progress
 
         total = len(records)
         results: list[dict[str, Any] | None] = []
@@ -431,7 +431,7 @@ class DatasetImporter(PluginBase):
         """Return the dropdown options for *field_key* given current form values.
 
         Override this on importers that declare any
-        :class:`~vtsearch.utils.registry.PluginField` with
+        :class:`~vtsearch.plugins.PluginField` with
         ``dynamic_options=True``.  The frontend calls this via
         ``POST /api/dataset/import/<name>/options`` whenever a field listed
         in another field's ``depends_on`` changes — e.g. a ``query_id``

@@ -38,14 +38,14 @@ from vtsearch.datasets.registry import (
     update_dataset as _reg_update,
 )
 from vtsearch.routes._shared import get_json_safe
-from vtsearch.utils import (
+from vtsearch.state import (
     DatasetContext,
     collapse_duplicates,
     register_context,
     unregister_context,
 )
-from vtsearch.utils.progress import CancelledError
-from vtsearch.utils.progress import loading_tasks as _loading_tasks
+from vtsearch.concurrency.progress import CancelledError
+from vtsearch.concurrency.progress import loading_tasks as _loading_tasks
 
 datasets_registry_bp = Blueprint("datasets_registry", __name__)
 
@@ -90,8 +90,8 @@ def load_registered_dataset(dataset_id: str):
     (made the current UI-facing dataset) without re-reading the pkl.
     """
     from vtsearch.auth import get_current_user
-    from vtsearch.utils.progress import clear_thread_progress, set_thread_progress
-    from vtsearch.utils import build_diversity_tree_for_context
+    from vtsearch.concurrency.progress import clear_thread_progress, set_thread_progress
+    from vtsearch.state import build_diversity_tree_for_context
 
     entry = _reg_get(dataset_id)
     if entry is None:
@@ -270,7 +270,7 @@ def rename_registered_dataset(dataset_id: str):
         return jsonify({"error": "Dataset not found"}), 404
     # Also update display name if this dataset is loaded
     if _reg_is_loaded(dataset_id):
-        from vtsearch.utils import get_context
+        from vtsearch.state import get_context
 
         ctx = get_context(dataset_id)
         if ctx is not None:

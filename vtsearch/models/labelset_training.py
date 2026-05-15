@@ -3,7 +3,7 @@
 The detector's saved labelset on disk is origin-keyed and dataset-agnostic.
 At load time we resolve every element to a file via its origin importer,
 embed it, and cache the resulting vector on
-:attr:`~vtsearch.utils.state_core.DetectorContext.label_embeddings`.  MLP
+:attr:`~vtsearch.state.core.DetectorContext.label_embeddings`.  MLP
 training (load-time and during interactive learned-sort) then iterates the
 labelset directly, so labels from datasets that aren't currently loaded
 still contribute.

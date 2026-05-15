@@ -8,15 +8,19 @@ import pytest
 
 import app as app_module
 from vtsearch.datasets.config import DEMO_DATASETS
-from vtsearch.utils import medias, get_progress, update_progress
-from vtsearch.utils.state import clear_medias
+from vtsearch.state import medias
+from vtsearch.concurrency.progress import (
+    get_progress,
+    update_progress,
+)
+from vtsearch.state import clear_medias
 
 
 class TestClearClipsGarbageCollection:
     """clear_medias() should call gc.collect() to free old dataset memory."""
 
     def test_clear_medias_calls_gc_collect(self):
-        with mock.patch("vtsearch.utils.state.gc.collect") as mock_gc:
+        with mock.patch("vtsearch.state.gc.collect") as mock_gc:
             clear_medias()
             mock_gc.assert_called_once()
 

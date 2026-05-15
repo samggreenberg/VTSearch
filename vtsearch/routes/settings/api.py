@@ -53,7 +53,7 @@ def update_settings():
                 return jsonify({"error": "inclusion must be a number"}), 400
             clamped = int(max(-10, min(10, int(val))))
             # Update runtime state (which also persists to settings file)
-            from vtsearch.utils import set_inclusion
+            from vtsearch.state import set_inclusion
 
             set_inclusion(clamped)
         except (TypeError, ValueError):
@@ -198,7 +198,7 @@ def update_settings():
         settings.set_autorun_detectors(val)
 
     # Directory path settings
-    import vtsearch.utils.paths as _paths
+    import vtsearch.security.path_validation as _paths
 
     _dir_base = _paths.get_file_access_base_dir()
     for dir_key, setter in (

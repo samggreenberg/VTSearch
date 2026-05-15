@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from vtsearch.converters.base import MediaConverter
-from vtsearch.utils.registry import PluginField
+from vtsearch.plugins import PluginField
 
 
 class Video2ImageMediaConverter(MediaConverter):

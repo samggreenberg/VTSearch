@@ -15,7 +15,10 @@ from __future__ import annotations
 import app as app_module
 from vtsearch.datasets.labelset import LabelSet, LabeledElement
 from vtsearch.datasets.origin import Origin
-from vtsearch.utils import build_media_lookup, resolve_media_ids
+from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
 
 # ---------------------------------------------------------------------------

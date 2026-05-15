@@ -13,7 +13,7 @@ All public functions that perform I/O accept an optional ``on_progress``
 callback with the signature
 ``(status: str, message: str, current: int, total: int) -> None``.
 When omitted the functions fall back to the application-wide
-:func:`~vtsearch.utils.update_progress` reporter; pass an explicit callback
+:func:`~vtsearch.concurrency.progress.update_progress` reporter; pass an explicit callback
 to use these functions outside the Flask app.
 """
 
@@ -39,7 +39,7 @@ from vtsearch.datasets.metadata import (  # noqa: F401  — re-exported for cons
     load_urbansound8k_metadata,
     load_video_metadata_from_folders,
 )
-from vtsearch.datasets.pickle_security import (  # noqa: F401  — re-exported for consumers
+from vtsearch.security.pickle import (  # noqa: F401  — re-exported for consumers
     RestrictedUnpickler,
     _PICKLE_SAFE_CLASSES,
     safe_pickle_load,
@@ -59,12 +59,12 @@ def _default_progress() -> ProgressCallback:
     Checks for a per-thread callback first (set during parallel dataset
     loading) and falls back to the global singleton.
     """
-    from vtsearch.utils.progress import get_thread_progress
+    from vtsearch.concurrency.progress import get_thread_progress
 
     cb = get_thread_progress()
     if cb is not None:
         return cb
-    from vtsearch.utils import update_progress
+    from vtsearch.concurrency.progress import update_progress
 
     return update_progress
 

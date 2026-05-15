@@ -87,16 +87,16 @@ from vtsearch.datasets.registry import (
     register_dataset as _reg_register,
     add_loaded_id as _reg_add_loaded,
 )
-from vtsearch.utils import (
+from vtsearch.state import (
     DatasetContext,
     build_diversity_tree_for_context,
     clear_all,
     collapse_duplicates,
     register_context,
     snapshot_medias,
-    update_progress,
 )
-from vtsearch.utils.progress import (
+from vtsearch.concurrency.progress import update_progress
+from vtsearch.concurrency.progress import (
     CancelledError,
     clear_thread_progress,
     dataset_progress,
@@ -790,14 +790,14 @@ def _run_origin_load_in_background(
 
             record_dataset_load(str(origin.get("importer", "")))
         except CancelledError:
-            from vtsearch.utils.state_core import unregister_context
+            from vtsearch.state.core import unregister_context
 
             unregister_context(context_id)
             gc.collect()
             tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
         except ImportError as e:
             traceback.print_exc()
-            from vtsearch.utils.state_core import unregister_context
+            from vtsearch.state.core import unregister_context
 
             unregister_context(context_id)
             gc.collect()
@@ -811,7 +811,7 @@ def _run_origin_load_in_background(
                 total_steps=None,
             )
         except MemoryError:
-            from vtsearch.utils.state_core import unregister_context
+            from vtsearch.state.core import unregister_context
 
             unregister_context(context_id)
             gc.collect()
@@ -826,7 +826,7 @@ def _run_origin_load_in_background(
             )
         except Exception as e:
             traceback.print_exc()
-            from vtsearch.utils.state_core import unregister_context
+            from vtsearch.state.core import unregister_context
 
             unregister_context(context_id)
             gc.collect()
@@ -847,7 +847,7 @@ def _run_origin_load_in_background(
 
 def _migrate_context_id(old_id: str, new_id: str) -> None:
     """Re-key a context from *old_id* to *new_id* in the store."""
-    from vtsearch.utils.state_core import _contexts, _state_lock
+    from vtsearch.state.core import _contexts, _state_lock
 
     with _state_lock:
         ctx = _contexts.get(old_id)

@@ -46,7 +46,7 @@ def ensure_votes_match_active_dataset() -> None:
     file mtime on the detector context so subsequent requests within the
     same (dataset, file-mtime) tuple are no-ops.
     """
-    from vtsearch.utils.state_core import (
+    from vtsearch.state.core import (
         _state_lock,
         get_active_context,
         get_active_detector_context,

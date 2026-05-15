@@ -7,7 +7,7 @@ from unittest import mock
 import numpy as np
 import pytest
 
-from vtsearch.utils.progress import (
+from vtsearch.concurrency.progress import (
     CancelledError,
     LoadingTasksTracker,
     get_progress,
@@ -241,7 +241,7 @@ class TestGetProgressWithLoadingTasks:
 
     def test_falls_back_to_global(self):
         """With no loading tasks, get_progress() returns the global tracker."""
-        from vtsearch.utils.progress import update_progress
+        from vtsearch.concurrency.progress import update_progress
 
         update_progress("idle", "Ready")
         progress = get_progress()
@@ -484,7 +484,7 @@ class TestResetCancelSafety:
 
     def test_reset_cancel_skipped_when_tasks_active(self):
         """dataset_progress.reset_cancel() must not fire when loads are in progress."""
-        from vtsearch.utils.progress import dataset_progress
+        from vtsearch.concurrency.progress import dataset_progress
 
         # Create an active task
         pt = loading_tasks.create_task("active_task", "Running")
@@ -514,7 +514,7 @@ class TestResetCancelSafety:
 
     def test_reset_cancel_allowed_when_no_tasks_active(self):
         """dataset_progress.reset_cancel() fires when no loads are in progress."""
-        from vtsearch.utils.progress import dataset_progress
+        from vtsearch.concurrency.progress import dataset_progress
 
         dataset_progress.cancel()
         assert dataset_progress.is_cancelled
@@ -884,8 +884,8 @@ class TestBuildDiversityTreeForContext:
     """Test the context-specific diversity tree builder."""
 
     def test_builds_tree_on_context(self):
-        from vtsearch.utils.state_core import DatasetContext
-        from vtsearch.utils.state_diversity import build_diversity_tree_for_context
+        from vtsearch.state.core import DatasetContext
+        from vtsearch.state.diversity import build_diversity_tree_for_context
 
         rng = np.random.default_rng(42)
         ctx = DatasetContext("test_diversity")
@@ -899,8 +899,8 @@ class TestBuildDiversityTreeForContext:
         assert ctx.diversity_tree is not None
 
     def test_empty_context_sets_none(self):
-        from vtsearch.utils.state_core import DatasetContext
-        from vtsearch.utils.state_diversity import build_diversity_tree_for_context
+        from vtsearch.state.core import DatasetContext
+        from vtsearch.state.diversity import build_diversity_tree_for_context
 
         ctx = DatasetContext("test_empty")
         build_diversity_tree_for_context(ctx)

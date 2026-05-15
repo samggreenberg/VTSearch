@@ -13,7 +13,7 @@ Usage::
         print(imp.name, imp.display_name)
 """
 
-from vtsearch.utils.registry import make_plugin_registry
+from vtsearch.plugins import make_plugin_registry
 
 get_settings_importer, list_settings_importers = make_plugin_registry(
     package=__name__,

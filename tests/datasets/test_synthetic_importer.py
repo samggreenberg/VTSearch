@@ -282,7 +282,7 @@ class TestRunEndToEnd:
         being synthesised, instead of stalling on "Preparing new dataset…".
         """
         from vtsearch.datasets.importers import synthetic as syn  # noqa: PLC0415
-        from vtsearch.utils.progress import (  # noqa: PLC0415
+        from vtsearch.concurrency.progress import (  # noqa: PLC0415
             clear_thread_progress,
             set_thread_progress,
         )

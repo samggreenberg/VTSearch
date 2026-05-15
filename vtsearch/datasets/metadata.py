@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from vtsearch.datasets.pickle_security import safe_pickle_load
+from vtsearch.security.pickle import safe_pickle_load
 
 
 def load_esc50_metadata(esc50_dir: Path) -> dict[str, dict[str, Any]]:

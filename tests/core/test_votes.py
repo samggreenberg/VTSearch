@@ -9,7 +9,10 @@ from vtsearch.models.progress import (
     inject_live_model,
     invalidate_progress_cache_from,
 )
-from vtsearch.utils import medias, label_history
+from vtsearch.state import (
+    medias,
+    label_history,
+)
 
 
 class TestVoteClip:

@@ -15,8 +15,12 @@ import io
 
 import numpy as np
 
-from vtsearch.utils.audio_generator import generate_wav
-from vtsearch.utils import medias, good_votes, bad_votes
+from vtsearch.media.audio.audio_generator import generate_wav
+from vtsearch.state import (
+    medias,
+    good_votes,
+    bad_votes,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +209,7 @@ class TestApplyClipperMD5:
     def test_dedup_preserves_all_clips(self):
         """collapse_duplicates should NOT merge clips from the same parent."""
         from vtsearch.datasets.load_pipeline import _apply_clipper
-        from vtsearch.utils import collapse_duplicates
+        from vtsearch.state import collapse_duplicates
 
         clips_dict = {1: _make_audio_media(1, duration=5.1)}
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
@@ -433,7 +437,7 @@ class TestLabelImportWithClips:
 
     def test_origin_lookup_matches_clipped_media(self):
         from vtsearch.datasets.load_pipeline import _apply_clipper
-        from vtsearch.utils.state_media_lookup import build_media_lookup, resolve_media_ids
+        from vtsearch.state.media_lookup import build_media_lookup, resolve_media_ids
 
         clips_dict = {1: _make_audio_media(1, duration=5.0)}
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
@@ -452,7 +456,7 @@ class TestLabelImportWithClips:
 
     def test_md5_lookup_matches_clipped_media(self):
         from vtsearch.datasets.load_pipeline import _apply_clipper
-        from vtsearch.utils.state_media_lookup import build_media_lookup, resolve_media_ids
+        from vtsearch.state.media_lookup import build_media_lookup, resolve_media_ids
 
         clips_dict = {1: _make_audio_media(1, duration=5.0)}
         _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})

@@ -3,11 +3,10 @@
 from flask import Blueprint, jsonify, request
 
 from vtsearch.routes._shared import get_json_or_400, get_json_safe
-from vtsearch.utils import (
+from vtsearch.state import (
     apply_label,
     apply_label_with_click_time,
     bad_votes,
-    build_media_hit,
     build_media_lookup,
     get_media,
     good_votes,
@@ -15,6 +14,7 @@ from vtsearch.utils import (
     snapshot_medias,
     vote_region_boxes,
 )
+from vtsearch.utils.hits import build_media_hit
 
 labels_bp = Blueprint("labels", __name__)
 
@@ -38,7 +38,7 @@ def export_labels():
             ``custom_metadata`` and a top-level ``available_columns`` list.
     """
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import get_find_initial_labels
+    from vtsearch.state import get_find_initial_labels
 
     label_filter = request.args.get("label_filter", "").lower()
     corrections_only = label_filter == "corrections"

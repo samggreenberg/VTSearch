@@ -3,7 +3,7 @@
 import app as app_module  # noqa: F401 — triggers conftest side effects
 from vtsearch.datasets.registry import register_dataset
 from vtsearch.models.detector_registry import register_detector
-from vtsearch.utils import medias
+from vtsearch.state import medias
 
 
 class TestDashboardDatasetInfo:
@@ -194,7 +194,7 @@ class TestGuessMediaEmbedder:
 
     def test_loading_task_includes_embedder(self, client):
         """Loading tasks expose the embedder field for in-progress guessing."""
-        from vtsearch.utils.progress import loading_tasks
+        from vtsearch.concurrency.progress import loading_tasks
 
         tracker = loading_tasks.create_task("test_emb_task", "test-ds", media_type="image", embedder="siglip")
         tracker.update("loading", "Embedding...", 0, 10)
@@ -204,7 +204,7 @@ class TestGuessMediaEmbedder:
 
     def test_loading_task_omits_empty_embedder(self, client):
         """Loading tasks without an embedder do not include the field."""
-        from vtsearch.utils.progress import loading_tasks
+        from vtsearch.concurrency.progress import loading_tasks
 
         tracker = loading_tasks.create_task("test_no_emb", "test-ds", media_type="image")
         tracker.update("loading", "Loading...", 0, 10)
@@ -741,7 +741,7 @@ class TestFindProgress:
         import numpy as np
 
         from helpers import setup_trainable_model_in_registry
-        from vtsearch.utils.progress import find_progress
+        from vtsearch.concurrency.progress import find_progress
 
         # Create a dataset pkl with three items whose md5s match a labelset.
         ds_medias = {}
@@ -813,7 +813,7 @@ class TestFindProgress:
 
     def test_find_progress_resets_on_error(self, client):
         """Progress resets to idle when Find returns an error."""
-        from vtsearch.utils.progress import find_progress
+        from vtsearch.concurrency.progress import find_progress
 
         resp = client.post("/api/find", json={"dataset_ids": [], "detector_ids": []})
         assert resp.status_code == 400

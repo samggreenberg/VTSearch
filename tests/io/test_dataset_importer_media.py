@@ -800,7 +800,7 @@ class TestImporterMediasInSorting:
 
     def test_api_medias_shows_importer_md5(self, client, tmp_path):
         """POST /api/medias/batch should expose the importer-supplied MD5."""
-        from vtsearch.utils import medias as app_medias
+        from vtsearch.state import medias as app_medias
 
         loaded, _, md5s = self._load_importer_medias_into_app(tmp_path, num_files=3)
 
@@ -823,7 +823,10 @@ class TestImporterMediasInSorting:
 
     def test_label_export_uses_importer_md5(self, client, tmp_path):
         """Label export should include the importer-supplied MD5 in the labelset."""
-        from vtsearch.utils import good_votes, medias as app_medias
+        from vtsearch.state import (
+    good_votes,
+    medias as app_medias,
+)
 
         loaded, _, md5s = self._load_importer_medias_into_app(tmp_path, num_files=3)
 

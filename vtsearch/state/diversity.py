@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from vtsearch.utils.state_core import (
+from vtsearch.state.core import (
     DatasetContext,
     _get_diversity_tree,
     _set_diversity_tree,

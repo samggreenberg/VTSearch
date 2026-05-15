@@ -1,7 +1,7 @@
 """Blueprint for detector-registry routes (the in-memory detector catalog).
 
 Every registered detector is backed by a labelset file on disk and an MLP
-that lives only in :class:`~vtsearch.utils.DetectorContext` once the user
+that lives only in :class:`~vtsearch.state.DetectorContext` once the user
 loads the detector.
 
 Endpoints
@@ -240,13 +240,13 @@ def load_detector_route():
         get_detector,
         is_detector_loaded,
     )
-    from vtsearch.utils import (
-        DetectorContext,
-        bad_votes,
-        get_active_detector_context,
-        good_votes,
-        register_detector_context,
-    )
+    from vtsearch.state import (
+    DetectorContext,
+    bad_votes,
+    get_active_detector_context,
+    good_votes,
+    register_detector_context,
+)
 
     data = request.get_json(force=True, silent=True) or {}
     detector_id = data.get("detector_id")
@@ -265,7 +265,7 @@ def load_detector_route():
         det_ctx = get_active_detector_context()
         prev_id = det_ctx.detector_id if det_ctx.detector_id else None
         if prev_id:
-            from vtsearch.utils import unregister_detector_context
+            from vtsearch.state import unregister_detector_context
 
             unregister_detector_context(prev_id)
             remove_loaded_detector_id(prev_id)
@@ -275,7 +275,7 @@ def load_detector_route():
     if is_detector_loaded(detector_id):
         return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
 
-    from vtsearch.utils.progress import CancelledError, detector_loading_tasks
+    from vtsearch.concurrency.progress import CancelledError, detector_loading_tasks
 
     det_ctx = DetectorContext(
         detector_id,
@@ -296,13 +296,13 @@ def load_detector_route():
 
     det_name = entry.get("name", "")
 
-    from vtsearch.utils import get_active_context
+    from vtsearch.state import get_active_context
 
     _thread_ds_ctx = get_active_context()
 
     def load_task():
         from vtsearch.models.detector_registry import add_loaded_detector_id, remove_loaded_detector_id
-        from vtsearch.utils.state_core import set_thread_dataset_context, set_thread_detector_context
+        from vtsearch.state.core import set_thread_dataset_context, set_thread_detector_context
 
         set_thread_dataset_context(_thread_ds_ctx)
         set_thread_detector_context(det_ctx)
@@ -345,7 +345,7 @@ def load_detector_route():
 
                     from vtsearch.datasets.labelset import LabelSet
                     from vtsearch.models.labelset_training import train_from_labelset
-                    from vtsearch.utils import snapshot_medias as _snap_medias
+                    from vtsearch.state import snapshot_medias as _snap_medias
 
                     labelset = LabelSet.from_dict(det_data.get("labelset") or {})
                     media_type = det_data.get("media_type", "") or ""
@@ -389,7 +389,7 @@ def load_detector_route():
             add_loaded_detector_id(detector_id)
             tracker.update("idle", "", 0, 0, step=None, total_steps=None)
         except CancelledError:
-            from vtsearch.utils import unregister_detector_context as _unreg
+            from vtsearch.state import unregister_detector_context as _unreg
 
             _unreg(detector_id)
             remove_loaded_detector_id(detector_id)
@@ -398,7 +398,7 @@ def load_detector_route():
             import traceback as _tb
 
             _tb.print_exc()
-            from vtsearch.utils import unregister_detector_context as _unreg
+            from vtsearch.state import unregister_detector_context as _unreg
 
             _unreg(detector_id)
             remove_loaded_detector_id(detector_id)
@@ -422,12 +422,12 @@ def load_detector_route():
 def unload_detector_route(detector_id: str):
     """Unload a detector from memory (frees its DetectorContext)."""
     from vtsearch.models.detector_registry import get_detector, is_detector_loaded, remove_loaded_detector_id
-    from vtsearch.utils import (
-        bad_votes,
-        get_active_detector_context,
-        good_votes,
-        unregister_detector_context,
-    )
+    from vtsearch.state import (
+    bad_votes,
+    get_active_detector_context,
+    good_votes,
+    unregister_detector_context,
+)
 
     entry = get_detector(detector_id)
     if entry is None:
@@ -465,7 +465,7 @@ def delete_registered_detector(detector_id: str):
 
     try:
         from vtsearch.models.detector_registry import is_detector_loaded, remove_loaded_detector_id
-        from vtsearch.utils import unregister_detector_context
+        from vtsearch.state import unregister_detector_context
 
         if is_detector_loaded(detector_id):
             unregister_detector_context(detector_id)
@@ -488,7 +488,7 @@ def delete_registered_detector(detector_id: str):
 @detectors_registry_bp.route("/api/detectors/loading-tasks")
 def detector_loading_tasks_endpoint():
     """Return all active detector loading tasks with their progress."""
-    from vtsearch.utils.progress import detector_loading_tasks
+    from vtsearch.concurrency.progress import detector_loading_tasks
 
     return jsonify({"tasks": detector_loading_tasks.list_tasks()})
 
@@ -496,7 +496,7 @@ def detector_loading_tasks_endpoint():
 @detectors_registry_bp.route("/api/detectors/cancel/<task_id>", methods=["POST"])
 def cancel_detector_loading_task(task_id: str):
     """Cancel a specific detector loading task."""
-    from vtsearch.utils.progress import detector_loading_tasks
+    from vtsearch.concurrency.progress import detector_loading_tasks
 
     ok = detector_loading_tasks.cancel_task(task_id)
     if not ok:

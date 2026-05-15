@@ -25,12 +25,12 @@ def apply_and_retrain(
     from flask import g
 
     from vtsearch.models.label_sync import sync_labels_to_loaded_detector
-    from vtsearch.utils import (
-        apply_label,
-        build_media_lookup,
-        resolve_media_ids,
-        snapshot_medias,
-    )
+    from vtsearch.state import (
+    apply_label,
+    build_media_lookup,
+    resolve_media_ids,
+    snapshot_medias,
+)
 
     # Override the request-scoped detector context so vote proxies resolve to
     # this detector's context for the duration of this call.
@@ -61,17 +61,21 @@ def apply_and_retrain(
         sync_labels_to_loaded_detector()
 
         # Retrain MLP if we have at least one good and one bad vote.
-        from vtsearch.utils import bad_votes, good_votes, vote_region_boxes
+        from vtsearch.state import (
+    bad_votes,
+    good_votes,
+    vote_region_boxes,
+)
 
         trained = False
         if good_votes and bad_votes:
             from vtsearch.models.training import train_and_score
-            from vtsearch.utils import (
-                get_calibrate_count,
-                get_calibration_fraction,
-                get_inclusion,
-                get_safe_thresholds,
-            )
+            from vtsearch.state import (
+    get_calibrate_count,
+    get_calibration_fraction,
+    get_inclusion,
+    get_safe_thresholds,
+)
 
             _, threshold, model = train_and_score(
                 snap,

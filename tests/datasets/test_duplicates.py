@@ -14,7 +14,7 @@ import numpy as np
 
 import app as app_module
 from vtsearch.datasets.labelset import LabelSet
-from vtsearch.utils.state import collapse_duplicates, get_dupe_count
+from vtsearch.state import collapse_duplicates, get_dupe_count
 
 
 def _make_media(cid, md5="unique", origin_importer="test", filename=None, category="cat"):

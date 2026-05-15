@@ -19,14 +19,14 @@ class TestSymlinkedImporterDiscovery:
         import os
         import sys
 
-        from vtsearch.utils.registry import PluginRegistry
+        from vtsearch.plugins import PluginRegistry
 
         # Create a minimal importer package outside the importers tree.
         ext_pkg = tmp_path / "my_custom_importer"
         ext_pkg.mkdir()
         (ext_pkg / "__init__.py").write_text(
             "from vtsearch.datasets.importers.base import DatasetImporter\n"
-            "from vtsearch.utils.registry import PluginField\n"
+            "from vtsearch.plugins import PluginField\n"
             "\n"
             "class _Imp(DatasetImporter):\n"
             '    name = "symlink_test_imp"\n'
@@ -69,14 +69,14 @@ class TestSymlinkedImporterDiscovery:
         import os
         import sys
 
-        from vtsearch.utils.registry import PluginRegistry
+        from vtsearch.plugins import PluginRegistry
 
         # Create a valid importer package.
         ext_pkg = tmp_path / "dotted_imp"
         ext_pkg.mkdir()
         (ext_pkg / "__init__.py").write_text(
             "from vtsearch.datasets.importers.base import DatasetImporter\n"
-            "from vtsearch.utils.registry import PluginField\n"
+            "from vtsearch.plugins import PluginField\n"
             "\n"
             "class _Imp(DatasetImporter):\n"
             '    name = "dotted_symlink_test"\n'
@@ -117,13 +117,13 @@ class TestSymlinkedImporterDiscovery:
         import os
         import sys
 
-        from vtsearch.utils.registry import PluginRegistry
+        from vtsearch.plugins import PluginRegistry
 
         ext_pkg = tmp_path / "attr_check_importer"
         ext_pkg.mkdir()
         (ext_pkg / "__init__.py").write_text(
             "from vtsearch.datasets.importers.base import DatasetImporter\n"
-            "from vtsearch.utils.registry import PluginField\n"
+            "from vtsearch.plugins import PluginField\n"
             "\n"
             "class _Imp(DatasetImporter):\n"
             '    name = "attr_check_imp"\n'
@@ -168,7 +168,7 @@ class TestSymlinkedImporterDiscovery:
         import os
         import sys
 
-        from vtsearch.utils.registry import PluginRegistry
+        from vtsearch.plugins import PluginRegistry
 
         # Create an external .py module with a sentinel.
         ext_module = tmp_path / "my_flat_source.py"
@@ -208,7 +208,7 @@ class TestRglobFollowSymlinks:
     """rglob_follow_symlinks should descend into symlinked directories."""
 
     def test_finds_files_through_symlinked_directory(self, tmp_path):
-        from vtsearch.utils.paths import rglob_follow_symlinks
+        from vtsearch.security.path_validation import rglob_follow_symlinks
 
         root = tmp_path / "root"
         root.mkdir()
@@ -226,7 +226,7 @@ class TestRglobFollowSymlinks:
         assert "b.wav" in names
 
     def test_no_matches_returns_empty(self, tmp_path):
-        from vtsearch.utils.paths import rglob_follow_symlinks
+        from vtsearch.security.path_validation import rglob_follow_symlinks
 
         root = tmp_path / "empty"
         root.mkdir()
@@ -237,7 +237,7 @@ class TestGlobTopLevelSymlinks:
     """glob_top_level should pick up symlinked files at the top level."""
 
     def test_finds_symlinked_file_at_top_level(self, tmp_path):
-        from vtsearch.utils.paths import glob_top_level
+        from vtsearch.security.path_validation import glob_top_level
 
         external = tmp_path / "external"
         external.mkdir()
@@ -259,7 +259,7 @@ class TestGlobTopLevelSymlinks:
         result set — only top-level *files* (real or symlinked) are
         returned.
         """
-        from vtsearch.utils.paths import glob_top_level
+        from vtsearch.security.path_validation import glob_top_level
 
         external = tmp_path / "external"
         external.mkdir()

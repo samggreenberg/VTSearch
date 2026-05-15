@@ -2,7 +2,7 @@
 
 Covers:
 
-- :class:`~vtsearch.utils.registry.PluginField` ``dynamic_options`` /
+- :class:`~vtsearch.plugins.PluginField` ``dynamic_options`` /
   ``depends_on`` attributes serialise via ``to_dict``.
 - :meth:`DatasetImporter.get_field_options` default raises
   ``NotImplementedError``.
@@ -18,7 +18,7 @@ from __future__ import annotations
 import pytest
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.utils.registry import PluginField
+from vtsearch.plugins import PluginField
 
 
 class _StubImporter(DatasetImporter):

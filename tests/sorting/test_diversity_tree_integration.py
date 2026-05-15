@@ -2,7 +2,7 @@
 
 import pytest
 
-from vtsearch.utils import (
+from vtsearch.state import (
     add_label_to_history,
     bad_votes,
     build_diversity_tree,

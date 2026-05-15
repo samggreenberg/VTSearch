@@ -26,14 +26,14 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
     import hashlib
 
     from vtsearch.config import DATA_DIR
-    from vtsearch.utils import (
-        _state_lock,
-        apply_label,
-        build_media_lookup,
-        medias,
-        next_media_id,
-        snapshot_medias,
-    )
+    from vtsearch.state import (
+    _state_lock,
+    apply_label,
+    build_media_lookup,
+    medias,
+    next_media_id,
+    snapshot_medias,
+)
 
     media_examples = [
         ex for ex in examples if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip()

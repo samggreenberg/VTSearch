@@ -426,7 +426,10 @@ class TestEnrichedExportOriginParams:
 
     def test_origin_params_in_enriched_export(self, client):
         """Origin params like contentID appear in custom_metadata and available_columns."""
-        from vtsearch.utils import medias, good_votes
+        from vtsearch.state import (
+    medias,
+    good_votes,
+)
 
         saved = dict(medias)
         medias.clear()
@@ -478,7 +481,10 @@ class TestEnrichedExportOriginParams:
 
     def test_custom_metadata_overrides_origin_params(self, client):
         """custom_metadata values take precedence over same-named origin params."""
-        from vtsearch.utils import medias, good_votes
+        from vtsearch.state import (
+    medias,
+    good_votes,
+)
 
         saved = dict(medias)
         medias.clear()

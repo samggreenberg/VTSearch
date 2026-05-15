@@ -28,7 +28,7 @@ import numpy as np
 
 # Type alias for progress callbacks.  Modules that accept an ``on_progress``
 # parameter use this signature so callers can report status without depending
-# on ``vtsearch.utils.progress``.
+# on ``vtsearch.concurrency.progress``.
 ProgressCallback = Callable[[str, str, int, int], None]
 
 __all__ = [

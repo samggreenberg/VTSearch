@@ -13,7 +13,7 @@ from vtsearch.converters.document2image import Document2ImageMediaConverter
 from vtsearch.converters.document2text import Document2TextMediaConverter
 from vtsearch.converters.video2audio import Video2AudioMediaConverter
 from vtsearch.converters.video2image import Video2ImageMediaConverter
-from vtsearch.utils.registry import PluginRegistry
+from vtsearch.plugins import PluginRegistry
 
 # ---------------------------------------------------------------------------
 # Converter registry (auto-discovered via CONVERTER sentinel)

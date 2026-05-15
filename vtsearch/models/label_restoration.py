@@ -25,12 +25,12 @@ def restore_labels_from_detector(det_data: dict) -> int:
     Returns the number of labels successfully restored.
     """
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import (
-        apply_label,
-        build_media_lookup,
-        resolve_media_ids,
-        snapshot_medias,
-    )
+    from vtsearch.state import (
+    apply_label,
+    build_media_lookup,
+    resolve_media_ids,
+    snapshot_medias,
+)
 
     labelset_dict = det_data.get("labelset")
     if not labelset_dict:

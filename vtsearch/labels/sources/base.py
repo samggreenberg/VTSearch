@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from vtsearch.utils.registry import PluginField
-from vtsearch.utils.sync_source import SyncSource
+from vtsearch.plugins import PluginField
+from vtsearch.sync import SyncSource
 
 if TYPE_CHECKING:
     pass

@@ -6,7 +6,7 @@ This module is a re-export facade.  The actual state variables live in
 ``state_media_lookup``.  Remaining functions (clear_medias, clear_all,
 settings wrappers) live here.
 
-All public names are importable from ``vtsearch.utils.state`` exactly
+All public names are importable from ``vtsearch.state`` exactly
 as before, so no call-sites need to change.
 """
 
@@ -16,7 +16,7 @@ import gc
 from typing import Any
 
 # Re-export all state variables from state_core --------------------------
-from vtsearch.utils.state_core import (  # noqa: F401
+from vtsearch.state.core import (  # noqa: F401
     _state_lock,
     autorun_extractors,
     autorun_localizers,
@@ -31,7 +31,7 @@ from vtsearch.utils.state_core import (  # noqa: F401
 )
 
 # Re-export context management functions ---------------------------------
-from vtsearch.utils.state_core import (  # noqa: F401
+from vtsearch.state.core import (  # noqa: F401
     DatasetContext,
     clear_all_contexts,
     get_active_context,
@@ -44,7 +44,7 @@ from vtsearch.utils.state_core import (  # noqa: F401
 )
 
 # Detector context management -----------------------------------------------
-from vtsearch.utils.state_core import (  # noqa: F401
+from vtsearch.state.core import (  # noqa: F401
     DetectorContext,
     clear_all_detector_contexts,
     get_active_detector_context,
@@ -57,21 +57,21 @@ from vtsearch.utils.state_core import (  # noqa: F401
 )
 
 # Scoped context managers ---------------------------------------------------
-from vtsearch.utils.state_core import (  # noqa: F401
+from vtsearch.state.core import (  # noqa: F401
     with_dataset_context,
     with_detector_context,
 )
-import vtsearch.utils.state_core as _core  # noqa: F401 — for conftest direct access
+import vtsearch.state.core as _core  # noqa: F401 — for conftest direct access
 
 # Re-export click tracking ------------------------------------------------
-from vtsearch.utils.state_clicks import (  # noqa: F401
+from vtsearch.state.clicks import (  # noqa: F401
     assign_click_time,
     get_vote_click_times,
     remove_click_time,
 )
 
 # Re-export vote/label operations -----------------------------------------
-from vtsearch.utils.state_votes import (  # noqa: F401
+from vtsearch.state.votes import (  # noqa: F401
     add_label_to_history,
     add_textsort_suggestion,
     apply_label,
@@ -87,7 +87,7 @@ from vtsearch.utils.state_votes import (  # noqa: F401
 )
 
 # Re-export processor CRUD -------------------------------------------------
-from vtsearch.utils.state_processors import (  # noqa: F401
+from vtsearch.state.processors import (  # noqa: F401
     add_autorun_extractor,
     add_autorun_localizer,
     get_autorun_extractors,
@@ -101,7 +101,7 @@ from vtsearch.utils.state_processors import (  # noqa: F401
 )
 
 # Re-export diversity tree --------------------------------------------------
-from vtsearch.utils.state_diversity import (  # noqa: F401
+from vtsearch.state.diversity import (  # noqa: F401
     build_diversity_tree,
     build_diversity_tree_for_context,
     diversity_tree_label,
@@ -111,7 +111,7 @@ from vtsearch.utils.state_diversity import (  # noqa: F401
 )
 
 # Re-export media lookup ----------------------------------------------------
-from vtsearch.utils.state_media_lookup import (  # noqa: F401
+from vtsearch.state.media_lookup import (  # noqa: F401
     _origin_key,
     build_media_lookup,
     collapse_duplicates,

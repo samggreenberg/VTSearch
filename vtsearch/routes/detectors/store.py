@@ -280,7 +280,12 @@ def save_detector_labels(name: str):
         return jsonify({"error": f"Detector '{name}' not found"}), 404
 
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils import bad_votes, good_votes, snapshot_medias, vote_region_boxes
+    from vtsearch.state import (
+    bad_votes,
+    good_votes,
+    snapshot_medias,
+    vote_region_boxes,
+)
 
     labelset = LabelSet.from_clips_and_votes(
         snapshot_medias(),
@@ -416,7 +421,7 @@ def import_labels_into_detector(name: str, importer_name: str):
     resolved = 0
     trained = False
     if applied > 0 and reg_entry:
-        from vtsearch.utils.state_core import get_detector_context
+        from vtsearch.state.core import get_detector_context
 
         det_ctx = get_detector_context(reg_entry["id"])
         if det_ctx is not None:
@@ -792,7 +797,7 @@ def thumbnail_detector_label(name: str, element_id: str):
         resolve_current_dataset_cid,
         resolve_element_to_path,
     )
-    from vtsearch.utils import get_media
+    from vtsearch.state import get_media
 
     path = _detector_path(name)
     data = _read_detector(path)
@@ -836,7 +841,7 @@ def vote_detector_label(name: str, element_id: str):
 
     Body: ``{"vote": "good"}`` or ``{"vote": "bad"}``.
 
-    Toggle semantics mirror :func:`~vtsearch.utils.toggle_vote`: the same
+    Toggle semantics mirror :func:`~vtsearch.state.toggle_vote`: the same
     vote on an element with that label removes the element; the opposite
     vote flips it.  When the element resolves into the active dataset, the
     detector's in-memory ``good_votes`` / ``bad_votes`` are kept in sync so
@@ -877,7 +882,7 @@ def vote_detector_label(name: str, element_id: str):
     # Mirror into in-memory votes when the element resolves into the active
     # dataset, so the MLP and learned-sort stay aligned with the labelset.
     if cid_before is not None:
-        from vtsearch.utils import toggle_vote
+        from vtsearch.state import toggle_vote
 
         toggle_vote(cid_before, vote)
 

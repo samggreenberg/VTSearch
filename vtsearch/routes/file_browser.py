@@ -18,7 +18,7 @@ from flask import Blueprint, jsonify, request
 
 from vtsearch.routes._shared import format_mtime
 
-import vtsearch.utils.paths as _paths
+import vtsearch.security.path_validation as _paths
 
 file_browser_bp = Blueprint("file_browser", __name__)
 

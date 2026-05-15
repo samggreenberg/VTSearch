@@ -180,7 +180,7 @@ class TestCustomMetadataMapInLoader:
     def test_md5_from_custom_metadata_map_used(self, tmp_path):
         """When custom_metadata_map provides md5, the loader uses it."""
         from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.utils.audio_generator import generate_wav
+        from vtsearch.media.audio.audio_generator import generate_wav
 
         # Create a WAV file in tmp_path
         wav_path = tmp_path / "test.wav"
@@ -208,7 +208,7 @@ class TestCustomMetadataMapInLoader:
     def test_empty_md5_in_custom_metadata_map_falls_through(self, tmp_path):
         """When custom_metadata_map has empty md5, the loader computes it."""
         from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.utils.audio_generator import generate_wav
+        from vtsearch.media.audio.audio_generator import generate_wav
 
         wav_path = tmp_path / "test.wav"
         wav_bytes = generate_wav(440, 0.5)
@@ -233,7 +233,7 @@ class TestCustomMetadataMapInLoader:
     def test_no_custom_metadata_map_computes_md5(self, tmp_path):
         """Without custom_metadata_map, md5 is computed normally."""
         from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.utils.audio_generator import generate_wav
+        from vtsearch.media.audio.audio_generator import generate_wav
 
         wav_path = tmp_path / "test.wav"
         wav_bytes = generate_wav(440, 0.5)
@@ -250,7 +250,7 @@ class TestCustomMetadataMapInLoader:
     def test_custom_metadata_map_with_relative_path_key(self, tmp_path):
         """custom_metadata_map keys can be relative paths (subdir/file.wav)."""
         from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.utils.audio_generator import generate_wav
+        from vtsearch.media.audio.audio_generator import generate_wav
 
         subdir = tmp_path / "sub"
         subdir.mkdir()
@@ -274,7 +274,7 @@ class TestCustomMetadataMapInLoader:
     def test_uppercase_md5_key_in_custom_metadata_map(self, tmp_path):
         """When custom_metadata_map provides MD5 (uppercase), the loader uses it."""
         from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.utils.audio_generator import generate_wav
+        from vtsearch.media.audio.audio_generator import generate_wav
 
         wav_path = tmp_path / "test.wav"
         wav_path.write_bytes(generate_wav(440, 0.5))

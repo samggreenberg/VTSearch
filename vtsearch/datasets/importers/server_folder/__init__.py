@@ -27,7 +27,7 @@ from typing import Any, Iterator
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
-from vtsearch.utils.paths import glob_top_level, rglob_follow_symlinks
+from vtsearch.security.path_validation import glob_top_level, rglob_follow_symlinks
 
 
 def _coerce_recursive(field_values: dict[str, Any]) -> bool:

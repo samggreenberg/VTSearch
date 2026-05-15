@@ -6,7 +6,7 @@ the detector in the dashboard grid.
 
 Every entry is backed by a labelset file at ``data/detectors/<name>.json``.
 The MLP that scores the detector is trained on demand from the labelset and
-lives only in RAM (see :class:`~vtsearch.utils.DetectorContext`).
+lives only in RAM (see :class:`~vtsearch.state.DetectorContext`).
 
 Multiple detectors can be *loaded* into memory simultaneously.  Which detector
 the UI interacts with is determined per-request via the ``X-Detector-Id``

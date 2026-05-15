@@ -43,7 +43,7 @@ from vtsearch.routes._shared import (
     validate_filepath_field,
     validate_required_fields,
 )
-from vtsearch.utils import (
+from vtsearch.state import (
     apply_label,
     build_media_lookup,
     medias,
@@ -180,7 +180,7 @@ def run_label_import(importer_name: str):
         sync_to_labelset_source()
 
         from vtsearch.achievements import record_detector_import
-        from vtsearch.utils.state_core import get_active_detector_context
+        from vtsearch.state.core import get_active_detector_context
 
         record_detector_import(get_active_detector_context().detector_id)
 

@@ -1078,7 +1078,7 @@ class TestLoadProgressRaceCondition:
         """After POST to load a registered dataset, progress must not be 'idle'."""
         import time
 
-        from vtsearch.utils.progress import get_progress
+        from vtsearch.concurrency.progress import get_progress
 
         # Register the current medias as a dataset entry so we can load it
         saved = dict(app_module.medias)
@@ -1106,7 +1106,7 @@ class TestLoadProgressRaceCondition:
             dataset_id = entry["id"]
 
             # Set progress to idle (simulating a previous completed load)
-            from vtsearch.utils.progress import update_progress
+            from vtsearch.concurrency.progress import update_progress
 
             update_progress("idle", "Ready")
 
@@ -1139,7 +1139,7 @@ class TestLoadProgressRaceCondition:
         """_run_origin_load_in_background must clear old error on new load."""
         from unittest.mock import patch
 
-        from vtsearch.utils.progress import get_progress, update_progress
+        from vtsearch.concurrency.progress import get_progress, update_progress
 
         # Simulate a previous load that left a stale error
         update_progress("idle", "", error="Previous load failed", step=None, total_steps=None)
@@ -1168,7 +1168,7 @@ class TestLoadProgressRaceCondition:
         from unittest.mock import patch
 
         from vtsearch.routes.datasets.crud import _load_embedder_for_clips
-        from vtsearch.utils.progress import update_progress
+        from vtsearch.concurrency.progress import update_progress
 
         # _load_embedder_for_clips inspects medias to find the embedder.
         # The conftest-populated medias dict provides this automatically.
@@ -1201,7 +1201,7 @@ class TestCancelIngest:
 
     def test_cancel_sets_event(self, client):
         """POST /api/dataset/cancel should set the cancellation event."""
-        from vtsearch.utils.progress import dataset_progress
+        from vtsearch.concurrency.progress import dataset_progress
 
         dataset_progress.reset_cancel()
         assert not dataset_progress.is_cancelled
@@ -1217,7 +1217,7 @@ class TestCancelIngest:
         import threading
         import time
 
-        from vtsearch.utils.progress import dataset_progress, get_progress
+        from vtsearch.concurrency.progress import dataset_progress, get_progress
 
         saved = dict(app_module.medias)
         try:
@@ -1267,7 +1267,7 @@ class TestCancelIngest:
         """Starting a new load should clear any previous cancellation."""
         from unittest.mock import patch
 
-        from vtsearch.utils.progress import dataset_progress
+        from vtsearch.concurrency.progress import dataset_progress
 
         # Set cancel from a previous operation
         dataset_progress.cancel()

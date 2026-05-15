@@ -257,7 +257,7 @@ class TestSaveLabels:
 
     def test_save_labels_with_votes(self, client):
         """Save labels after casting votes — labelset should contain the voted medias."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         if not medias:
             pytest.skip("No medias loaded for this test")
@@ -305,7 +305,7 @@ class TestSaveLabels:
         """
         import copy
 
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         if not medias:
             pytest.skip("No medias loaded for this test")
@@ -353,7 +353,11 @@ class TestLabelVoteIsolation:
         Simulates the Label-button flow: clear votes, then import a model's
         labels.  Without the clear, votes from a prior session leak in.
         """
-        from vtsearch.utils import good_votes, bad_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    bad_votes,
+    medias,
+)
 
         ids = list(medias.keys())
         if len(ids) < 4:
@@ -383,7 +387,11 @@ class TestLabelVoteIsolation:
 
     def test_import_after_clear_only_has_model_labels(self, client):
         """After clearing + importing, only the target model's labels are active."""
-        from vtsearch.utils import good_votes, bad_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    bad_votes,
+    medias,
+)
 
         ids = list(medias.keys())
         if len(ids) < 4:
@@ -504,7 +512,11 @@ class TestLoadModelEndpoint:
 
     def test_load_clears_previous_labels(self, client):
         """Loading model B must not carry over labels from model A."""
-        from vtsearch.utils import bad_votes, good_votes, medias
+        from vtsearch.state import (
+    bad_votes,
+    good_votes,
+    medias,
+)
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -542,7 +554,10 @@ class TestLoadModelEndpoint:
 
     def test_load_restores_saved_labels(self, client):
         """Loading a model that has a saved labelset should restore its labels."""
-        from vtsearch.utils import good_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    medias,
+)
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -583,14 +598,14 @@ class TestLoadModelEndpoint:
         import numpy as np
 
         from vtsearch.models.detector_dataset_sync import ensure_votes_match_active_dataset
-        from vtsearch.utils import (
-            DatasetContext,
-            bad_votes,
-            good_votes,
-            medias,
-            register_context,
-            set_thread_dataset_context,
-        )
+        from vtsearch.state import (
+    DatasetContext,
+    bad_votes,
+    good_votes,
+    medias,
+    register_context,
+    set_thread_dataset_context,
+)
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -658,7 +673,7 @@ class TestVoteSyncsToLoadedModel:
     def test_vote_updates_model_labels(self, client):
         """Casting a vote with a loaded model should persist labels and update registry stats."""
         from vtsearch.models.detector_registry import get_detector
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -694,7 +709,7 @@ class TestVoteSyncsToLoadedModel:
 
     def test_vote_toggle_off_updates_model(self, client):
         """Toggling a vote off should update the model labelset to reflect removal."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -723,7 +738,7 @@ class TestVoteSyncsToLoadedModel:
 
     def test_no_sync_without_loaded_model(self, client):
         """Voting with no loaded model should not create/update any model files."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -743,7 +758,7 @@ class TestVoteSyncsToLoadedModel:
     def test_label_import_syncs_to_loaded_model(self, client):
         """Importing labels with a loaded model should persist to the model."""
         from vtsearch.models.detector_registry import get_detector
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -781,7 +796,7 @@ class TestSeedVotesFromExamples:
     @pytest.fixture(autouse=True)
     def _restore_medias(self):
         """Remove any media items inserted by seeding after each test."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         saved = dict(medias)
         yield
@@ -803,7 +818,10 @@ class TestSeedVotesFromExamples:
 
     def test_seed_endpoint_adds_good_votes(self, client):
         """Media examples whose MD5 matches a loaded media should become good votes."""
-        from vtsearch.utils import good_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    medias,
+)
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -848,7 +866,10 @@ class TestSeedVotesFromExamples:
 
     def test_seed_unmatched_inserts_new_media(self, client):
         """A media example not in the dataset should be embedded and inserted as a new media."""
-        from vtsearch.utils import good_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    medias,
+)
 
         original_count = len(medias)
 
@@ -879,7 +900,7 @@ class TestSeedVotesFromExamples:
 
     def test_seed_preserves_original_origins(self, client):
         """Seeded medias should keep their original dataset origins."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -901,7 +922,7 @@ class TestSeedVotesFromExamples:
 
     def test_seed_appears_in_label_export(self, client):
         """Seeded good votes should appear in the label export."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -944,7 +965,11 @@ class TestSeedVotesFromExamples:
 
     def test_new_example_usable_in_training(self, client):
         """Inserted examples should have embeddings usable by learned-sort."""
-        from vtsearch.utils import good_votes, bad_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    bad_votes,
+    medias,
+)
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -976,7 +1001,10 @@ class TestSeedVotesFromExamples:
 
     def test_load_model_seeds_from_media_examples(self, client):
         """Loading a model with media examples should auto-seed good votes."""
-        from vtsearch.utils import good_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    medias,
+)
 
         if not medias:
             pytest.skip("No medias loaded")
@@ -1018,7 +1046,7 @@ class TestSeedVotesFromExamples:
 
     def test_load_model_without_examples_seeds_nothing(self, client):
         """Loading a text-only model should seed 0 examples."""
-        from vtsearch.utils import good_votes
+        from vtsearch.state import good_votes
 
         client.post(
             "/api/detectors",
@@ -1046,7 +1074,10 @@ class TestSeedVotesFromExamples:
         This tests the backend side: enough media examples seed enough
         good_votes that ``goodCount >= autopilot_top_greens``.
         """
-        from vtsearch.utils import good_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    medias,
+)
 
         ids = list(medias.keys())
         if len(ids) < 4:
@@ -1082,7 +1113,10 @@ class TestSeedVotesFromExamples:
 
     def test_load_model_seeds_novel_example(self, client):
         """Loading a model with a non-dataset example should embed and insert it."""
-        from vtsearch.utils import good_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    medias,
+)
 
         original_count = len(medias)
         fname = self._create_example_file(b"novel-load-bytes", "novel_load.wav")
@@ -1147,7 +1181,11 @@ class TestLoadModelCrossDatasetResolution:
         from vtsearch.models.detector_registry import register_detector, reset_for_tests
         from vtsearch.models.detector_store import _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
-        from vtsearch.utils import good_votes, bad_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    bad_votes,
+    medias,
+)
 
         reset_for_tests()
 
@@ -1258,7 +1296,10 @@ class TestLoadModelCrossDatasetResolution:
         from vtsearch.models.detector_registry import register_detector, reset_for_tests
         from vtsearch.models.detector_store import _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
-        from vtsearch.utils import good_votes, medias
+        from vtsearch.state import (
+    good_votes,
+    medias,
+)
 
         reset_for_tests()
 
@@ -1495,7 +1536,10 @@ class TestRegisterModelFromLabelset:
     def test_loading_after_creation_restores_labels(self, client, tmp_path):
         """Loading the newly-created model resolves labels into the active dataset."""
         import app as app_module
-        from vtsearch.utils import bad_votes, good_votes
+        from vtsearch.state import (
+    bad_votes,
+    good_votes,
+)
 
         md5_good = app_module.medias[1]["md5"]
         md5_bad = app_module.medias[2]["md5"]

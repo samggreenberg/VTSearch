@@ -52,7 +52,7 @@ def _load_and_train_detectors(
     from vtsearch.datasets.labelset import LabelSet
     from vtsearch.models.detector_store import _detector_path, _read_detector
     from vtsearch.models.labelset_training import train_from_labelset
-    from vtsearch.utils.state_core import DetectorContext
+    from vtsearch.state.core import DetectorContext
 
     out: dict[str, dict[str, Any]] = {}
     for det_name in detector_names:

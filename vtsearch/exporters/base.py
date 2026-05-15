@@ -46,7 +46,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtsearch.utils.registry import PluginBase, PluginField
+from vtsearch.plugins import PluginBase, PluginField
 
 # Backward-compatible alias — existing plugins import ``ExporterField``.
 ExporterField = PluginField

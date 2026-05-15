@@ -8,12 +8,12 @@ from flask import Blueprint, jsonify
 
 from vtsearch.routes._shared import get_json_or_400
 from vtsearch.routes.processors.crud import _build_extractor, _build_localizer
-from vtsearch.utils import (
+from vtsearch.state import (
     get_autorun_extractors_by_media,
     get_autorun_localizers_by_media,
     snapshot_medias,
 )
-from vtsearch.utils.memory_budget import cap_workers_by_memory
+from vtsearch.concurrency.memory_budget import cap_workers_by_memory
 
 processors_scoring_bp = Blueprint("processors_scoring", __name__)
 
