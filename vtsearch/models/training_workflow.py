@@ -82,6 +82,7 @@ def apply_and_retrain(
                 calibrate_count=get_calibrate_count(),
                 calibration_fraction=get_calibration_fraction(),
                 vote_region_boxes=dict(vote_region_boxes),
+                det_ctx=det_ctx,
             )
             if model is not None:
                 det_ctx.model = model
