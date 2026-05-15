@@ -13,22 +13,13 @@ _torch_threads = str(max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1"))))
 os.environ["OMP_NUM_THREADS"] = _torch_threads
 os.environ["MKL_NUM_THREADS"] = _torch_threads
 
-# Configure logging — respects VTSEARCH_LOG_LEVEL env var.
-# Default is WARNING.  Set to INFO or DEBUG for resolver diagnostics:
-#   VTSEARCH_LOG_LEVEL=INFO python app.py
-#   VTSEARCH_LOG_LEVEL=DEBUG python app.py
-_log_level = os.environ.get("VTSEARCH_LOG_LEVEL", "WARNING").upper()
-logging.basicConfig(
-    level=getattr(logging, _log_level, logging.WARNING),
-    format="%(levelname)s %(name)s: %(message)s",
-)
+# Configure structured logging — JSON lines by default with per-record
+# request_id / dataset_id / detector_id / user fields. Override via:
+#   VTSEARCH_LOG_LEVEL=INFO   (default WARNING)
+#   VTSEARCH_LOG_FORMAT=text  (default json — switch to text for local dev)
+from vtsearch.logging_config import new_request_id, setup_logging  # noqa: E402
 
-# Suppress Werkzeug request logging (GET/POST lines) — only show errors
-logging.getLogger("werkzeug").setLevel(logging.ERROR)
-# Suppress huggingface_hub "unauthenticated requests" console warning —
-# all models we use are public, so no token is needed.
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
+setup_logging()
 
 # All HF models we use are public — no token needed.  Each from_pretrained()
 # call passes token=False to signal this explicitly.  The env var + warnings
@@ -129,6 +120,24 @@ api = Api(app)
 
 
 @app.before_request
+def _set_request_id():
+    """Assign a unique request id to every request.
+
+    The id is exposed on ``g.request_id`` so log records produced during
+    the request automatically carry it (via the structured-logging
+    ContextFilter), and echoed back in the ``X-Request-Id`` response
+    header so clients can quote it in bug reports. If the caller supplied
+    their own ``X-Request-Id`` header we trust it (truncated to 64 chars
+    to bound log line size), which lets gateways/load balancers propagate
+    end-to-end trace ids.
+    """
+    from flask import request
+
+    inbound = request.headers.get("X-Request-Id")
+    g.request_id = inbound[:64] if inbound else new_request_id()
+
+
+@app.before_request
 def _set_user_context():
     """Populate ``g.user`` from the active LoginProvider on every request.
 
@@ -215,6 +224,15 @@ def _no_cache_api(response):
 
     if request.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.after_request
+def _echo_request_id(response):
+    """Surface the per-request id on every response so clients can quote it."""
+    rid = getattr(g, "request_id", None)
+    if rid:
+        response.headers["X-Request-Id"] = rid
     return response
 
 
