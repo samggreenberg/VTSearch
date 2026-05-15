@@ -117,11 +117,7 @@ def update_settings(body: dict):
             continue
 
         if key in ("saved_datasets_dir", "detectors_dir"):
-            setter = (
-                settings.set_saved_datasets_dir
-                if key == "saved_datasets_dir"
-                else settings.set_detectors_dir
-            )
+            setter = settings.set_saved_datasets_dir if key == "saved_datasets_dir" else settings.set_detectors_dir
             _apply_dir(key, value, setter)
             continue
 
