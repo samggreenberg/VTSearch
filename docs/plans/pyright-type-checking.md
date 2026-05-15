@@ -65,6 +65,25 @@ shell. CI installs them via `requirements/base.txt`, so import errors
 will resolve there. **Local dev needs `bash scripts/install-cpu.sh`
 for clean reports.**
 
+### Post-Stage-2 advisory count
+
+After Stage 2 shipped, `pyright vtsearch/` with deps installed reports
+**174 errors** across the remaining out-of-gate scopes:
+
+| Dir | Errors |
+|---|---:|
+| `media/` | 96 |
+| `routes/` | 37 |
+| `datasets/` | 19 |
+| `detectors/` | 12 |
+| `converters/` | 3 |
+| `embedding/` | 3 |
+| `eval/` | 2 |
+| `training/` | 2 |
+
+(`models/` no longer exists — its contents were redistributed into
+`detectors/`, `training/`, and `embedding/` during a separate reorg.)
+
 ## Stages
 
 Each stage is a separate PR. The "errors to fix" column counts real
@@ -75,10 +94,10 @@ Each stage is a separate PR. The "errors to fix" column counts real
 | 0 | (no scope; config + advisory CI only) | 0 | ✅ shipped (PR #1349) |
 | 1 | `utils/`, `auth/`, `plugins/`, `sync/`, `concurrency/`, `exporters/`, `labels/`, `settings_io/`, `cli.py`, `config.py` | 4 | ✅ shipped (PR #1349) |
 | 2 | `settings.py`, `settings_factory.py`, `state/`, `security/` | 31 | ✅ shipped |
-| **3** | `datasets/`, `detectors/`, `eval/`, `models/` | ~30 | ⏳ next |
-| 4 | `routes/`, `converters/` | ~58 | 📋 |
-| 5 | `media/` (heaviest — may need `.pyi` stubs or per-file `# pyright: ignore`) | ~68 | 📋 |
-| 6 | Whole `vtsearch/` — advisory job removed | 0 | 📋 |
+| **3** | `datasets/`, `detectors/`, `eval/`, `embedding/`, `training/` | ~38 | ⏳ next |
+| 4 | `routes/`, `converters/` | ~40 | 📋 |
+| 5 | `media/` (heaviest — may need `.pyi` stubs or per-file `# pyright: ignore`) | ~96 | 📋 |
+| 6 | Whole `vtsearch/` (incl. `achievements.py`, `logging_config.py`, `openapi.py`, `schemas/`) — advisory job removed | 0 | 📋 |
 | 7 *(optional)* | `tests/` | TBD | 📋 |
 
 **Stage 0 + Stage 1 landed together in PR #1349.** Subsequent stages are
