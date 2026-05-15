@@ -333,7 +333,7 @@ class TestImportEndpointsReturnTaskId:
 
         demo_name = list(DEMO_DATASETS.keys())[0]
 
-        with mock.patch("vtsearch.routes.datasets.crud._run_importer_in_background", return_value="test_task_123"):
+        with mock.patch("vtsearch.routes.datasets.load._run_importer_in_background", return_value="test_task_123"):
             resp = client.post(
                 "/api/dataset/load-demo",
                 json={"name": demo_name},
@@ -348,7 +348,7 @@ class TestImportEndpointsReturnTaskId:
         folder.mkdir()
         (folder / "test.wav").write_bytes(b"fake")
 
-        with mock.patch("vtsearch.routes.datasets.crud._run_importer_in_background", return_value="folder_task"):
+        with mock.patch("vtsearch.routes.datasets.load._run_importer_in_background", return_value="folder_task"):
             resp = client.post(
                 "/api/dataset/load-folder",
                 json={"path": str(folder), "media_type": "audio"},
