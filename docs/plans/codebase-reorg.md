@@ -136,11 +136,11 @@ After the routes-by-domain reorg, three files are still ≥800 LOC:
   Each ends up ~250 LOC. The shared helpers (`_extract_clipper_params`,
   `_extract_importer_fields`, `_safe_relative_upload_path`) move into
   `routes/datasets/_helpers.py` next to `_shared.py`.
-- **`detectors/store.py` — split.** Two clear seams:
-  - `detectors.py` — detector CRUD (list/create/get/delete/rename/examples/combine).
+- **`detectors/store.py` — split.** ✅ Done — split into:
+  - `crud.py` — detector CRUD (list/create/get/delete/rename/examples/combine).
   - `labels.py` — label CRUD + import + labels-detail + preview/thumbnail/vote.
-  Each ends up ~450 LOC and matches how the frontend hits these
-  endpoints (the detector page and the label page are separate views).
+  Each module owns its own Blueprint (`detectors_crud_bp` /
+  `detectors_labels_bp`), registered directly on the app.
 - **`sorting.py` — leave it.** 876 LOC across 16 closely-related routes
   (sort, learned-sort, votes, textsort, inclusion, safe-thresholds) that
   share `_cosine_sort`, `_get_embedder_for_loaded_data`,
@@ -288,7 +288,12 @@ expected to land there following the same pattern used by
    `vtsearch/detectors/` (the vote-aware `train_and_score`,
    `train_detector_from_origins`, `collect_media_origins`, plus the
    apply-and-retrain workflow), and `vtsearch/state/diversity_tree.py`.
-5. Split `routes/detectors/store.py` (#2).
+5. ~~Split `routes/detectors/store.py` (#2).~~ ✅ Done — split into
+   `crud.py` (detector CRUD: list/create/get/delete/rename/examples/combine)
+   and `labels.py` (labelset save/import/labels-detail/preview/thumbnail/vote).
+   Each new module owns its own Blueprint (`detectors_crud_bp` /
+   `detectors_labels_bp`), registered directly on the app; the old
+   `detectors_bp` name is gone.
 6. Audit `image/media_type.py` (#3).
 7. Split `dashboard.component.ts` (#5).
 
