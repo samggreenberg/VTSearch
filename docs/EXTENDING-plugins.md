@@ -33,7 +33,7 @@ Ten plugin systems — data importers, results exporters, label
 importers, processor importers, settings importers, settings exporters,
 settings sources, labelset sources, media converters, and media
 sources — share the same architecture built on two base classes in
-`vtsearch/utils/registry.py`:
+`vtsearch/plugins/__init__.py`:
 
 ### PluginField
 
@@ -190,7 +190,7 @@ class S3Importer(DatasetImporter):
         import boto3
         from pathlib import Path
         from vtsearch.config import DATA_DIR
-        from vtsearch.utils import update_progress
+        from vtsearch.concurrency.progress import update_progress
 
         bucket = field_values["bucket"]
         prefix = field_values.get("prefix", "")
@@ -458,7 +458,7 @@ errors directly to the user.
 ### Progress reporting
 
 ```python
-from vtsearch.utils import update_progress
+from vtsearch.concurrency.progress import update_progress
 update_progress("downloading", "Downloading file 3/10", 3, 10)
 ```
 
@@ -565,7 +565,7 @@ user-configurable parameters as a list of `PluginField`s on the class.
 
 ```python
 from vtsearch.converters.base import MediaConverter
-from vtsearch.utils.registry import PluginField
+from vtsearch.plugins import PluginField
 
 
 class Image2TextMediaConverter(MediaConverter):

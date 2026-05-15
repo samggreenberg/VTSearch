@@ -316,7 +316,7 @@ modules on the right.
   When `None`, they lazily resolve the app's `update_progress`; when
   provided, they use the caller's callback.
 - **`routes/*` is the primary consumer of global state** from
-  `vtsearch.utils.state`.  A few non-route modules also import specific
+  `vtsearch.state`.  A few non-route modules also import specific
   helpers (e.g. `update_progress`, `next_media_id`) for progress
   reporting and ID generation during dataset loading.
 
@@ -452,7 +452,7 @@ load_dataset_from_folder(
 
 ### Progress tracking
 
-**Files:** `vtsearch/utils/progress.py`
+**Files:** `vtsearch/concurrency/progress.py`
 
 A thread-safe progress tracker with no framework dependencies.  Uses
 `threading.Lock` and module-level dicts.  Can be dropped into any
@@ -468,7 +468,7 @@ All plugin systems (dataset importers, exporters, label importers,
 processor importers, settings importers/exporters/sources, labelset
 sources, media converters, and media sources) share a common
 `PluginBase` / `PluginField` / `PluginRegistry` architecture in
-`vtsearch/utils/registry.py`:
+`vtsearch/plugins/__init__.py`:
 
 1. **Base class** (`PluginBase`) defines `name`, `display_name`, `fields`,
    and an abstract `run()`/`export()`/`load()`/`save()` method.
@@ -515,7 +515,7 @@ register function.  See `EXTENDING.md` (in this directory) for full examples.
 
 ## State management
 
-Application state is exposed through `vtsearch/utils/state.py` (a
+Application state is exposed through `vtsearch/state/__init__.py` (a
 re-export facade over the `state_*.py` submodules). The module-level
 names below are **proxy objects** that delegate to a per-request
 `DatasetContext` or `DetectorContext` — see
