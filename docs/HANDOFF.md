@@ -50,9 +50,8 @@ deployments. Runs locally or in Docker.
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring index — splits into **[EXTENDING-plugins.md](EXTENDING-plugins.md)** (importers/exporters/sources), **[EXTENDING-media.md](EXTENDING-media.md)** (media types/embedders/clippers/converters), **[EXTENDING-processors.md](EXTENDING-processors.md)** (detectors/localizers/extractors). EXTENDING.md itself holds auth, dependencies, and checklists. |
 | [demos.md](demos.md) | Available demo datasets |
-| [plan-sync-sources.md](plan-sync-sources.md) | Sync sources design (**Implemented**, two enhancements pending) |
+| [plans/README.md](plans/README.md) | Index of open design plans (codebase reorg, multi-media import, patch embedders, extract-library, etc.) |
 | [design/cli-detector-converter.md](design/cli-detector-converter.md) | CLI autodetect with converters/clippers (**Design proposal**, not yet implemented) |
-| [RCDatasetImporter.plan.md](RCDatasetImporter.plan.md) | ReCaller dataset-importer scaffolding plan (**Planning**) |
 
 ---
 
