@@ -54,6 +54,31 @@ def _emit(stream: io.StringIO, fmt: str, fn) -> list[dict]:
     return lines  # type: ignore[return-value]
 
 
+def _emit_with_empty_context(stream: io.StringIO, fmt: str, fn):
+    """Like ``_emit`` but clears the test-default dataset/detector thread-locals
+    for the duration of the call. The autouse ``reset_state`` fixture installs
+    ``_test_default`` contexts; tests that assert *absence* of context need
+    those out of the way."""
+    from vtsearch.auth import set_thread_user
+    from vtsearch.state.core import (
+        get_thread_dataset_context,
+        get_thread_detector_context,
+        set_thread_dataset_context,
+        set_thread_detector_context,
+    )
+
+    prior_ds = get_thread_dataset_context()
+    prior_det = get_thread_detector_context()
+    set_thread_dataset_context(None)
+    set_thread_detector_context(None)
+    set_thread_user(None)
+    try:
+        return _emit(stream, fmt, fn)
+    finally:
+        set_thread_dataset_context(prior_ds)
+        set_thread_detector_context(prior_det)
+
+
 # ---------------------------------------------------------------------------
 # Formatter unit tests
 # ---------------------------------------------------------------------------
@@ -73,10 +98,11 @@ class TestJsonFormatter:
     def test_no_context_outside_request(self):
         """Context fields should be absent (not null) when no context exists."""
         stream = io.StringIO()
-        records = _emit(stream, "json", lambda: logging.getLogger("vtsearch.test").info("no ctx"))
+        records = _emit_with_empty_context(stream, "json", lambda: logging.getLogger("vtsearch.test").info("no ctx"))
         assert "request_id" not in records[0]
         assert "dataset_id" not in records[0]
         assert "detector_id" not in records[0]
+        assert "user" not in records[0]
 
     def test_extra_fields_included(self):
         stream = io.StringIO()
@@ -116,10 +142,32 @@ class TestJsonFormatter:
 
 
 class TestTextFormatter:
-    def test_basic_line(self):
+    def test_basic_line_no_context(self):
         stream = io.StringIO()
-        lines = _emit(stream, "text", lambda: logging.getLogger("vtsearch.test").warning("hi"))
+        lines = _emit_with_empty_context(stream, "text", lambda: logging.getLogger("vtsearch.test").warning("hi"))
         assert lines == ["WARNING vtsearch.test: hi"]
+
+    def test_basic_line_with_thread_local_context(self):
+        """When thread-local context is set, the bracketed tags appear."""
+        from vtsearch.state.core import (
+            DatasetContext,
+            get_thread_dataset_context,
+            get_thread_detector_context,
+            set_thread_dataset_context,
+            set_thread_detector_context,
+        )
+
+        prior_ds = get_thread_dataset_context()
+        prior_det = get_thread_detector_context()
+        try:
+            set_thread_dataset_context(DatasetContext("my-ds"))
+            set_thread_detector_context(None)
+            stream = io.StringIO()
+            lines = _emit(stream, "text", lambda: logging.getLogger("vtsearch.test").warning("hi"))
+            assert lines == ["WARNING vtsearch.test [ds=my-ds]: hi"]
+        finally:
+            set_thread_dataset_context(prior_ds)
+            set_thread_detector_context(prior_det)
 
 
 # ---------------------------------------------------------------------------
@@ -130,45 +178,24 @@ class TestTextFormatter:
 class TestRequestContext:
     """When inside a Flask request, log records inherit g.* fields."""
 
-    def test_request_id_and_user_on_record(self, client):
-        # The /api/auth/status endpoint is a safe always-available GET.
-        # We swap in a handler and emit a log line from within a request.
+    def test_request_id_and_user_on_record(self):
+        """A log line emitted inside a Flask request context carries
+        request_id and user pulled from ``g``."""
         import app as app_module
+        from flask import g
 
         stream = io.StringIO()
-        captured: list[dict] = []
+        with app_module.app.test_request_context("/api/auth/status"):
+            g.request_id = new_request_id()
+            g.user = "alice"
+            expected_rid = g.request_id
+            records = _emit(stream, "json", lambda: logging.getLogger("vtsearch.test.probe").warning("inside request"))
 
-        # Register a one-shot before_request that logs and records what gets
-        # attached to the record. We can't simply emit from the test thread
-        # since g doesn't exist there.
-        seen: dict = {}
-
-        @app_module.app.before_request
-        def _log_probe():  # type: ignore[unused-ignore]
-            handler = _build_handler(stream, fmt="json")
-            root = logging.getLogger()
-            root.addHandler(handler)
-            try:
-                logging.getLogger("vtsearch.test.probe").warning("inside request")
-            finally:
-                root.removeHandler(handler)
-            seen["lines"] = [json.loads(ln) for ln in stream.getvalue().splitlines() if ln.strip()]
-
-        try:
-            resp = client.get("/api/auth/status")
-            assert resp.status_code == 200
-        finally:
-            # Remove the one-shot hook so subsequent tests aren't affected.
-            funcs = app_module.app.before_request_funcs.get(None, [])
-            if _log_probe in funcs:
-                funcs.remove(_log_probe)
-
-        captured = seen["lines"]
-        assert len(captured) == 1
-        rec = captured[0]
-        assert "request_id" in rec and len(rec["request_id"]) >= 8
-        # DefaultLoginProvider returns "default"
-        assert rec["user"] == "default"
+        assert len(records) == 1
+        rec = records[0]
+        assert rec["request_id"] == expected_rid
+        assert len(rec["request_id"]) == 12
+        assert rec["user"] == "alice"
 
     def test_response_carries_x_request_id_header(self, client):
         resp = client.get("/api/auth/status")
@@ -188,6 +215,12 @@ class TestRequestContext:
         # Bounded to <= 64 chars.
         assert len(resp.headers["X-Request-Id"]) <= 64
         assert resp.headers["X-Request-Id"] == huge[:64]
+
+    def test_unknown_api_route_still_gets_request_id_header(self, client):
+        """Even 404s should carry X-Request-Id so clients can quote it in bug reports."""
+        resp = client.get("/api/no-such-endpoint-asdf")
+        assert resp.status_code == 404
+        assert resp.headers.get("X-Request-Id") is not None
 
 
 class TestThreadLocalContext:
