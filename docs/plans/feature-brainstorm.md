@@ -495,8 +495,17 @@ We have ruff; add a CI step that fails on unformatted code.
 ### 12.13 Type-checking with mypy/pyright ★ M
 Pyright in basic mode would catch a lot.
 
-### 12.14 Async-friendly Flask routes ★ M
-Migrate hot paths (sorting, scoring) to Quart or FastAPI for true async. Long-running training already uses background threads so impact is bounded — but the polling endpoints would benefit.
+### 12.14 Async-friendly Flask routes ★ M (not recommended)
+Original idea: migrate hot paths (sorting, scoring) to Quart or FastAPI for true async; long-running training already uses background threads so impact is bounded — but the polling endpoints would benefit.
+
+**Assessment: not worth doing as currently scoped.** The benefit is thin and the migration cost is real:
+
+- Sort/score are CPU-bound (embedding dot products, MLP inference, ranking). Async only helps a handler yield during I/O waits — there is no I/O to wait on here, so true async produces no speedup on the named hot paths.
+- Training and dataset loading are already off the request thread (`JobManager`, background threads in `vtsearch/concurrency/`). Async wouldn't change that either.
+- The "polling endpoints would benefit" argument only matters under many concurrent clients starving Flask's thread pool. VTSearch is a single-user / small-team tool; threaded Flask (or a modest gunicorn worker count) handles `/api/progress/*` polling without issue.
+- Migration cost is non-trivial: per-request context (`g.dataset_context`, `g.detector_context`) set in `before_request`, the `_ProxyDict`/`_ProxyList` proxies in `vtsearch/state/core.py` with their `g`-first / thread-local-fallback logic, `_state_lock` (a sync `RLock`), every blueprint, every `request.json` call — all built around sync Flask semantics. Quart is the cheaper port but still requires auditing every handler and lock; FastAPI is closer to a rewrite.
+
+**Revisit if:** VTSearch grows into a multi-tenant hosted service with hundreds of concurrent pollers, or genuinely I/O-bound routes appear (streaming LLM calls, fan-out to remote vector DBs). Until then, leave as-is.
 
 ### 12.15 Structured logging + request IDs ★★ S
 Today logs are print-style. JSON logs with `dataset_id`/`detector_id`/`request_id` make production debugging tractable.
