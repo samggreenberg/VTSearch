@@ -1,9 +1,9 @@
 # VTSearch — All image embedders (GPU / CUDA)
 #
-# GPU twin of requirements-image-embedders.txt. Identical Python deps; the
+# GPU twin of requirements/image-embedders.txt. Identical Python deps; the
 # only difference is that the CPU PyTorch extra-index-url is omitted so the
 # Dockerfile can pass --extra-index-url https://download.pytorch.org/whl/cu121
-# at install time. Used by Dockerfile.image-embedders.gpu.
+# at install time. Used by docker/Dockerfile.image-embedders.gpu.
 
 # ── Core framework ───────────────────────────────────────────────────
 flask

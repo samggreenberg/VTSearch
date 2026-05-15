@@ -146,25 +146,25 @@ When activated, you'll see `(venv)` at the start of your terminal prompt.
 
 ## Installing dependencies
 
-All dependencies live in `requirements.txt` files. Core deps are in the top-level `requirements.txt`; each plugin (media type, importer, exporter) has its own `requirements.txt` in its directory. A script auto-discovers them all into a cascading tree.
+All dependencies live in `requirements.txt` files under `requirements/` (core, GPU, image-embedders, labbench, plugins). Each plugin (media type, importer, exporter) has its own `requirements.txt` in its directory. A script auto-discovers them all into a cascading tree (`requirements/plugins.txt`).
 
 **For CPU only** (recommended if you don't have a compatible GPU):
 
 ```bash
-bash install-cpu.sh
+bash scripts/install-cpu.sh
 ```
 
 **For GPU** (NVIDIA CUDA-compatible systems):
 
 ```bash
-bash install-gpu.sh          # defaults to CUDA 11.8 (cu118)
-bash install-gpu.sh cu121    # for CUDA 12.1
-bash install-gpu.sh cu124    # for CUDA 12.4
+bash scripts/install-gpu.sh          # defaults to CUDA 11.8 (cu118)
+bash scripts/install-gpu.sh cu121    # for CUDA 12.1
+bash scripts/install-gpu.sh cu124    # for CUDA 12.4
 ```
 
-Both scripts are all-in-one — they run `install-plugin-deps.sh` automatically, install all dependencies, and do the editable install. No extra steps needed.
+Both scripts are all-in-one — they run `scripts/install-plugin-deps.sh` automatically, install all dependencies, and do the editable install. No extra steps needed.
 
-The CPU `requirements.txt` includes `--extra-index-url` for the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB).
+The CPU `requirements/base.txt` includes `--extra-index-url` for the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB).
 
 ## Building the frontend
 
@@ -243,18 +243,18 @@ Install [Docker](https://docs.docker.com/get-docker/) (includes Docker Compose).
 
 ### CPU (default)
 
-Using Docker Compose (recommended):
+Using Docker Compose (recommended — run from the repo root):
 
 ```bash
-docker compose up            # build & run (foreground)
-docker compose up -d         # build & run (detached)
-docker compose down          # stop & remove
+docker compose -f docker/compose/docker-compose.yml up            # build & run (foreground)
+docker compose -f docker/compose/docker-compose.yml up -d         # build & run (detached)
+docker compose -f docker/compose/docker-compose.yml down          # stop & remove
 ```
 
-Or with plain Docker:
+Or with plain Docker (from the repo root):
 
 ```bash
-docker build -t vtsearch .
+docker build -f docker/Dockerfile -t vtsearch .
 docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 ```
 
@@ -268,32 +268,34 @@ docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 Using Docker Compose:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+docker compose \
+  -f docker/compose/docker-compose.yml \
+  -f docker/compose/docker-compose.gpu.yml up
 ```
 
 Or with plain Docker:
 
 ```bash
-docker build -f Dockerfile.gpu -t vtsearch:gpu .
+docker build -f docker/Dockerfile.gpu -t vtsearch:gpu .
 docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
 ```
 
 ### LabBench (SigLIP-only image search)
 
 For the LabBench deployment — browsing/voting on images with the SigLIP
-embedder — use the streamlined `Dockerfile.labbench` variant. It skips audio,
-video, document, text, and extractor plugin dependencies, and **bakes the
-SigLIP model weights into the image at build time** so the container is
+embedder — use the streamlined `docker/Dockerfile.labbench` variant. It skips
+audio, video, document, text, and extractor plugin dependencies, and **bakes
+the SigLIP model weights into the image at build time** so the container is
 ready to serve immediately on first run (no Hugging Face download).
 
 ```bash
-docker compose -f docker-compose.labbench.yml up
+docker compose -f docker/compose/docker-compose.labbench.yml up
 ```
 
 Or with plain Docker:
 
 ```bash
-docker build -f Dockerfile.labbench -t vtsearch:labbench .
+docker build -f docker/Dockerfile.labbench -t vtsearch:labbench .
 docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
 ```
 
@@ -313,19 +315,21 @@ docker run -p 5000:5000 -v /path/on/host:/app/data vtsearch
 After pulling new code, rebuild the image:
 
 ```bash
-docker compose build           # CPU
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml build  # GPU
-docker compose -f docker-compose.labbench.yml build                    # LabBench (SigLIP-only)
+docker compose -f docker/compose/docker-compose.yml build           # CPU
+docker compose \
+  -f docker/compose/docker-compose.yml \
+  -f docker/compose/docker-compose.gpu.yml build                    # GPU
+docker compose -f docker/compose/docker-compose.labbench.yml build  # LabBench (SigLIP-only)
 ```
 
 Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
 
 ## Running the tests
 
-Install dependencies (pytest and ruff are included in `requirements.txt`):
+Install dependencies (pytest and ruff are included in `requirements/base.txt`):
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements/base.txt
 ```
 
 The recommended way to run tests uses the helper script, which installs

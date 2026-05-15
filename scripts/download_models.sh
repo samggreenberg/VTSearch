@@ -2,7 +2,7 @@
 # Pre-download all VTSearch embedding models for offline use.
 #
 # Usage:
-#   ./download_models.sh [CACHE_DIR]
+#   ./scripts/download_models.sh [CACHE_DIR]
 #
 # CACHE_DIR defaults to $VTSEARCH_MODELS_DIR if set, otherwise data/models.
 #

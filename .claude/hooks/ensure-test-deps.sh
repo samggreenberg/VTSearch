@@ -29,12 +29,12 @@ pip install --upgrade setuptools -q
 # uninstall it).  Force-installing a fresh copy lets Flask pick it up.
 pip install --ignore-installed blinker -q
 
-# Regenerate requirements-plugins.txt from discovered plugin files.
-bash "$REPO_DIR/install-plugin-deps.sh" --dry-run
+# Regenerate requirements/plugins.txt from discovered plugin files.
+bash "$REPO_DIR/scripts/install-plugin-deps.sh" --dry-run
 
 # Install all dependencies (core + plugins) with CPU PyTorch.
 pip install --prefer-binary \
-  -r "$REPO_DIR/requirements.txt" \
+  -r "$REPO_DIR/requirements/base.txt" \
   -q
 
 # Editable install so 'import vtsearch' works.

@@ -9,7 +9,7 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 
 | Plan | Status | Summary |
 |------|--------|---------|
-| [codebase-reorg.md](codebase-reorg.md) | **In progress** | Mid-sized refactors: route bucketing, `utils/` split, `docker/`/`requirements/` out of root, `media → models` import flip, this docs cleanup. |
+| [codebase-reorg.md](codebase-reorg.md) | **Complete** | Mid-sized refactors: route bucketing (#5), `utils/` split (#6), `docker/`/`requirements/` out of root (#7), docs cleanup (#8), `media → models` import flip (#9). All landed. |
 | [combine-models-ui.md](combine-models-ui.md) | Backend shipped; **frontend in progress** | `LabelSet.merge` + `POST /api/detectors/combine` are live; the UI for picking source models and conflict policy is still to build. |
 | [multi-media-import.md](multi-media-import.md) | **In progress** | Importers can mix multiple source media types via `effective_source_specs()`. Several importers migrated; `pickle`, `combine_datasets`, `synthetic`, `http_archive`, `recaller`, `demo` remain on the legacy shim. |
 | [delete-detectors.md](delete-detectors.md) | **Proposed** | Cleanup follow-up: collapse legacy "detector" concept into trainable models only, origins-as-source-of-truth, MLPs RAM-only. |

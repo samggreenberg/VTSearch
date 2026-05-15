@@ -4,7 +4,7 @@
 # on an image dataset with the SigLIP embedder. Skips audio, video,
 # document, text, and extractor deps to keep the image small.
 #
-# Used by Dockerfile.labbench.
+# Used by docker/Dockerfile.labbench.
 
 # ── Core framework ───────────────────────────────────────────────────
 flask

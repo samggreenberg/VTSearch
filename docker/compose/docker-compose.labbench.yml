@@ -4,15 +4,15 @@
 # with the SigLIP embedder. The SigLIP weights are baked into the image
 # at build time, so the container is ready to serve on first run.
 #
-#   docker compose -f docker-compose.labbench.yml up
-#   docker compose -f docker-compose.labbench.yml up -d
-#   docker compose -f docker-compose.labbench.yml down
+#   docker compose -f docker/compose/docker-compose.labbench.yml up
+#   docker compose -f docker/compose/docker-compose.labbench.yml up -d
+#   docker compose -f docker/compose/docker-compose.labbench.yml down
 
 services:
   vtsearch:
     build:
-      context: .
-      dockerfile: Dockerfile.labbench
+      context: ../..
+      dockerfile: docker/Dockerfile.labbench
     image: vtsearch:labbench
     ports:
       - "5000:5000"

@@ -32,8 +32,8 @@
 #   #   …or, EUPE only (no token needed):
 #   SKIP_DINOV3=1 ./scripts/cache_gated_models.sh
 #
-#   # 2. Build the image — no token, no secrets:
-#   docker build -f Dockerfile.image-embedders.gpu \
+#   # 2. Build the image (from repo root) — no token, no secrets:
+#   docker build -f docker/Dockerfile.image-embedders.gpu \
 #                -t vtsearch:image-embedders-gpu .
 #
 # Run:
@@ -67,8 +67,8 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# ---------- dependency layer (cached unless requirements*.txt change) ------
-COPY requirements-image-embedders-gpu.txt ./
+# ---------- dependency layer (cached unless requirements/*.txt change) ----
+COPY requirements/image-embedders-gpu.txt requirements/
 COPY pyproject.toml ./
 COPY vtsearch/__init__.py vtsearch/__init__.py
 
@@ -82,7 +82,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
         --extra-index-url https://download.pytorch.org/whl/cu121 \
         --prefer-binary \
-        -r requirements-image-embedders-gpu.txt && \
+        -r requirements/image-embedders-gpu.txt && \
     pip install --no-cache-dir --no-deps -e .
 
 # ---------- pre-download every image embedder's weights ------------------

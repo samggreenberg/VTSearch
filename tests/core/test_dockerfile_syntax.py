@@ -7,7 +7,7 @@ embedded Python is invisible to ruff, pytest, and CI — it only surfaces
 when somebody actually runs ``docker build``, often after minutes of layer
 work.
 
-Approach: read each ``Dockerfile*``, join Docker's backslash-continued
+Approach: read each ``docker/Dockerfile*``, join Docker's backslash-continued
 lines, pull out every ``python ... -c "..."`` invocation, and run
 ``compile()`` on the contents. Pure-text work; no Docker daemon needed.
 """
@@ -44,7 +44,7 @@ def _find_python_c_snippets(dockerfile_text: str) -> list[str]:
 
 
 def _dockerfiles() -> list[Path]:
-    return sorted(REPO_ROOT.glob("Dockerfile*"))
+    return sorted((REPO_ROOT / "docker").glob("Dockerfile*"))
 
 
 @pytest.mark.parametrize("dockerfile", _dockerfiles(), ids=lambda p: p.name)
@@ -116,4 +116,4 @@ def test_parser_skips_non_dash_c_python_invocations() -> None:
 
 def test_repo_actually_has_dockerfiles() -> None:
     """Parametrize collects at runtime — make sure we found anything at all."""
-    assert _dockerfiles(), "expected at least one Dockerfile in the repo root"
+    assert _dockerfiles(), "expected at least one Dockerfile under docker/"

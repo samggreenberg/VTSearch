@@ -9,13 +9,14 @@ set -euo pipefail
 # requirements, avoiding the need for a C++ compiler.
 #
 # Usage:
-#   bash install-gpu.sh              # defaults to cu118
-#   bash install-gpu.sh cu121        # for CUDA 12.1
-#   bash install-gpu.sh cu124        # for CUDA 12.4
+#   bash scripts/install-gpu.sh              # defaults to cu118
+#   bash scripts/install-gpu.sh cu121        # for CUDA 12.1
+#   bash scripts/install-gpu.sh cu124        # for CUDA 12.4
 
 CUDA_TAG="${1:-cu118}"
 EXTRA_INDEX="https://download.pytorch.org/whl/${CUDA_TAG}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "Installing VTSearch GPU dependencies (CUDA tag: ${CUDA_TAG})..."
 
@@ -28,17 +29,17 @@ pip install --only-binary :all: \
   "scipy" \
   -q
 
-# Step 2: Regenerate requirements-plugins.txt from discovered plugin files.
+# Step 2: Regenerate requirements/plugins.txt from discovered plugin files.
 bash "$SCRIPT_DIR/install-plugin-deps.sh" --dry-run
 
 # Step 3: Install all dependencies (core + plugins) with GPU PyTorch.
 echo "Installing all dependencies..."
 pip install --extra-index-url "$EXTRA_INDEX" \
   --prefer-binary \
-  -r requirements-gpu.txt \
+  -r "$REPO_ROOT/requirements/gpu.txt" \
   -q
 
 # Step 4: Editable install so 'import vtsearch' works.
-pip install --no-deps -e . -q
+pip install --no-deps -e "$REPO_ROOT" -q
 
 echo "GPU dependencies installed successfully."

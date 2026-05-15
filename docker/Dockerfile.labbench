@@ -7,16 +7,18 @@
 # weights into the image at build time so the container is ready to
 # serve immediately on first run (no Hugging Face download needed).
 #
-# Build:  docker build -f Dockerfile.labbench -t vtsearch:labbench .
-# Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
+# Build (from repo root):
+#   docker build -f docker/Dockerfile.labbench -t vtsearch:labbench .
+# Run:
+#   docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
 # -----------------------------------------------------------------
 
 FROM python:3.10-slim AS base
 
 WORKDIR /app
 
-# ---------- dependency layer (cached unless requirements*.txt change) ------
-COPY requirements-labbench.txt ./
+# ---------- dependency layer (cached unless requirements/*.txt change) ----
+COPY requirements/labbench.txt requirements/
 COPY pyproject.toml ./
 COPY vtsearch/__init__.py vtsearch/__init__.py
 
@@ -26,7 +28,7 @@ COPY vtsearch/ vtsearch/
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
         --prefer-binary \
-        -r requirements-labbench.txt && \
+        -r requirements/labbench.txt && \
     pip install --no-cache-dir --no-deps -e .
 
 # ---------- pre-download SigLIP weights into the image ----------
