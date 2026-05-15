@@ -26,6 +26,7 @@ _registry: PluginRegistry[MediaConverter] = PluginRegistry(
     sentinel="CONVERTER",
     label="media converter",
     discover_modules=True,
+    entry_point_group="vtsearch.converters",
 )
 
 

@@ -19,6 +19,7 @@ get_importer, list_importers = make_plugin_registry(
     package=__name__,
     sentinel="IMPORTER",
     label="dataset importer",
+    entry_point_group="vtsearch.importers",
 )
 
 __all__ = ["get_importer", "list_importers"]

@@ -22,14 +22,20 @@ from typing import Any
 from vtsearch.datasets.sources.base import MediaItem, MediaSource
 from vtsearch.plugins import PluginRegistry
 
-__all__ = ["MediaItem", "MediaSource", "get_source_for_origin"]
+__all__ = ["MediaItem", "MediaSource", "get_source_for_origin", "list_media_sources"]
 
 _registry: PluginRegistry = PluginRegistry(
     package="vtsearch.datasets.sources",
     sentinel="SOURCE",
     label="media source",
     discover_modules=True,
+    entry_point_group="vtsearch.media_sources",
 )
+
+
+def list_media_sources() -> list:
+    """Return all registered media source factories."""
+    return _registry.list()
 
 
 def get_source_for_origin(origin: dict[str, Any] | None) -> MediaSource | None:

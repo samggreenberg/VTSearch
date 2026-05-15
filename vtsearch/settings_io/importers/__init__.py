@@ -19,6 +19,7 @@ get_settings_importer, list_settings_importers = make_plugin_registry(
     package=__name__,
     sentinel="SETTINGS_IMPORTER",
     label="settings importer",
+    entry_point_group="vtsearch.settings_importers",
 )
 
 __all__ = ["get_settings_importer", "list_settings_importers"]

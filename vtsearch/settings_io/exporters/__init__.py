@@ -19,6 +19,7 @@ get_settings_exporter, list_settings_exporters = make_plugin_registry(
     package=__name__,
     sentinel="SETTINGS_EXPORTER",
     label="settings exporter",
+    entry_point_group="vtsearch.settings_exporters",
 )
 
 __all__ = ["get_settings_exporter", "list_settings_exporters"]

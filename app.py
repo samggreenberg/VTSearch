@@ -280,6 +280,45 @@ if __name__ == "__main__":
         action="store_true",
         help="Run a detector on a dataset from the command line and print predicted-Good items",
     )
+    parser.add_argument(
+        "--list-plugins",
+        action="store_true",
+        dest="list_plugins",
+        help=(
+            "List every auto-discovered plugin (importers, exporters, embedders, "
+            "converters, clippers, …) and exit. Useful for shell completion."
+        ),
+    )
+    parser.add_argument(
+        "--plugin-family",
+        type=str,
+        default=None,
+        dest="plugin_family",
+        help=(
+            "When given with --list-plugins, restrict output to this family "
+            "(e.g. importers, exporters). Combine with --format=names for "
+            "completion-friendly output."
+        ),
+    )
+    parser.add_argument(
+        "--format",
+        type=str,
+        default="plain",
+        choices=["plain", "json", "names"],
+        dest="output_format",
+        help=(
+            "Output format for --list-plugins / --openapi-schema. 'plain' is "
+            "human-readable, 'json' is machine-readable, 'names' emits bare "
+            "plugin names one per line (shell-completion friendly). "
+            "--openapi-schema only honours 'json' (default for that flag)."
+        ),
+    )
+    parser.add_argument(
+        "--openapi-schema",
+        action="store_true",
+        dest="openapi_schema",
+        help="Print the auto-generated OpenAPI 3.0 spec for the HTTP API and exit.",
+    )
     parser.add_argument("--dataset", type=str, help="Path to a dataset pickle file (used with --autodetect)")
     parser.add_argument(
         "--settings",
@@ -338,6 +377,39 @@ if __name__ == "__main__":
     # Two-pass parsing: first pass gets --importer and --exporter names;
     # second pass adds their plugin-specific arguments and re-parses.
     args, remaining = parser.parse_known_args()
+
+    # ---- Early-exit informational flags --------------------------------
+    # These run before the autodetect / server paths so they don't trigger
+    # model loading or the full Flask app boot.
+    if args.list_plugins:
+        from vtsearch.plugins.inventory import format_json, format_names, format_plain, gather_plugins
+
+        inventory = gather_plugins()
+        if args.plugin_family:
+            if args.plugin_family not in inventory:
+                parser.error(
+                    f"Unknown plugin family: {args.plugin_family}. "
+                    f"Available: {', '.join(inventory)}"
+                )
+            inventory = {args.plugin_family: inventory[args.plugin_family]}
+        if args.output_format == "json":
+            sys.stdout.write(format_json(inventory))
+            sys.stdout.write("\n")
+        elif args.output_format == "names":
+            sys.stdout.write(format_names(inventory, family=args.plugin_family))
+        else:
+            sys.stdout.write(format_plain(inventory))
+        sys.exit(0)
+
+    if args.openapi_schema:
+        import json as _json
+
+        from vtsearch.openapi import generate_openapi_spec
+
+        spec = generate_openapi_spec(app)
+        sys.stdout.write(_json.dumps(spec, indent=2))
+        sys.stdout.write("\n")
+        sys.exit(0)
 
     importer = None
     exporter = None
