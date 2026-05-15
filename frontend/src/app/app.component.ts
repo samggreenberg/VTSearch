@@ -5,6 +5,7 @@ import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
 import { AchievementUnlockHostComponent } from './components/achievement-unlock-host/achievement-unlock-host.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
+import { KeyboardHelpModalComponent } from './components/modals/keyboard-help-modal/keyboard-help-modal.component';
 import { LoginComponent } from './components/login/login.component';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
@@ -15,7 +16,7 @@ import { AchievementsService } from './services/achievements.service';
 import { ThemeService } from './services/theme.service';
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterOutlet, DialogHostComponent, AchievementUnlockHostComponent, SettingsModalComponent, LoginComponent],
+  imports: [CommonModule, RouterOutlet, DialogHostComponent, AchievementUnlockHostComponent, SettingsModalComponent, KeyboardHelpModalComponent, LoginComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
@@ -23,6 +24,7 @@ export class AppComponent {
   title = 'VTSearch';
   menuOpen = false;
   showSettings = false;
+  showKeyboardHelp = false;
   gearClosing = false;
   isOnLabelView = false;
   settingsViewTab = '';
@@ -81,6 +83,32 @@ export class AppComponent {
     if (this.menuOpen) {
       this.menuOpen = false;
     }
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onDocumentKeydown(event: KeyboardEvent): void {
+    if (event.key !== '?') return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (this.isTypingTarget(event.target)) return;
+    event.preventDefault();
+    this.showKeyboardHelp = !this.showKeyboardHelp;
+  }
+
+  private isTypingTarget(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    const tag = el.tagName;
+    if (tag === 'INPUT') {
+      const type = (el as HTMLInputElement).type;
+      if (type !== 'checkbox' && type !== 'radio' && type !== 'range') return true;
+    }
+    if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }
+
+  onKeyboardHelpClosed(): void {
+    this.showKeyboardHelp = false;
   }
 
   onMenuKeydown(event: KeyboardEvent): void {

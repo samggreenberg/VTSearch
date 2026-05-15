@@ -160,6 +160,34 @@ header {
   flex: 1;
 }
 
+.help-btn {
+  background: transparent;
+  border: 1px solid var(--header-btn-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  padding: var(--space-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+
+  svg {
+    width: 20px;
+    height: 20px;
+    color: var(--header-text-dim);
+  }
+
+  &:hover {
+    background: var(--header-btn-hover-bg);
+    border-color: var(--header-btn-hover-border);
+
+    svg {
+      color: var(--header-text);
+    }
+  }
+}
+
 .settings-btn {
   background: transparent;
   border: 1px solid var(--header-btn-border);
