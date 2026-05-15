@@ -159,22 +159,39 @@ After the routes-by-domain reorg, three files are still ≥800 LOC:
 
 ---
 
-## 3. Split `vtsearch/media/image/media_type.py` (1641 LOC) — **Maybe (audit first)**
+## 3. Split `vtsearch/media/image/media_type.py` (1641 LOC) — **Done**
 
-`image/media_type.py` is the single largest file in `vtsearch/`. Before
-splitting, audit it: if it really is one `MediaType` class with a long
-list of methods (decode, thumbnail, crop, serve, serialize), splitting
-forces a fake module boundary inside a single class. If the file
-contains free-standing helpers (PIL conversions, format detection,
-EXIF/orientation, thumbnail rendering, cropping logic) that don't touch
-the class, those should peel off.
+Audit produced clear seams: **84% of the file was demo-dataset code**,
+not core `MediaType` logic. Breakdown of the original 1641 LOC:
 
-Concrete next step: produce a one-page audit of `image/media_type.py`
-listing top-level functions and their callers, and decide split vs. no-
-split based on the audit. Defer the actual split until the audit shows
-clear seams. Same audit applies to `video/media_type.py` (851 LOC) and
-`audio/media_type.py` (696 LOC), but those are smaller and lower
-priority.
+| Slice | Lines | What |
+|---|---|---|
+| Core `MediaType` | ~120 | Identity properties, `display_metadata`, `loops`, `load_media_data`, `media_response` |
+| Demo category constants | ~870 | `_PLACES365_*` raw text + parser, six `_DEMO_CATEGORIES_*` lists (Caltech-101/256, Oxford Flowers, Food-101, EuroSAT, Stanford Dogs, UCSF Documents) — pure data |
+| `demo_datasets` property | ~303 | Builds 23 `DemoDataset` entries — no instance state used beyond the category constants |
+| `load_demo_source` method | ~379 | Per-source download + embed dispatcher — only used `self.type_id` (literal `"image"`) and the category constants |
+
+The demo code is split out into two private helper modules:
+
+- `vtsearch/media/image/_demo_categories.py` (814 LOC) — Places365 raw
+  text + `_parse_places365_categories` + the seven category lists,
+  exposed as module-level `PLACES365_CATEGORIES`,
+  `DEMO_CATEGORIES_CALTECH101`, etc.
+- `vtsearch/media/image/_demo_sources.py` (716 LOC) —
+  `build_demo_datasets()` returning the catalog and
+  `load_demo_source()` as a module-level function (the latter takes
+  `clips` and the embedder as arguments instead of using `self`).
+
+`media_type.py` is now 173 LOC — `ImageMediaType` delegates
+`demo_datasets` and `load_demo_source` to the helper module. No
+behaviour change; the only external touch-ups were swapping
+`scripts/run_hac_tree_sweep.py`'s `_PLACES365_CATEGORIES_LIST` import
+and one test's `ImageMediaType._PLACES365_CATEGORIES` class-attribute
+reference to read the new module-level constant.
+
+`video/media_type.py` (851 LOC) and `audio/media_type.py` (696 LOC) are
+smaller and were not audited as part of this step. Apply the same
+audit pattern if either grows further.
 
 ---
 
@@ -294,7 +311,12 @@ expected to land there following the same pattern used by
    Each new module owns its own Blueprint (`detectors_crud_bp` /
    `detectors_labels_bp`), registered directly on the app; the old
    `detectors_bp` name is gone.
-6. Audit `image/media_type.py` (#3).
+6. ~~Audit `image/media_type.py` (#3).~~ ✅ Done — the audit showed
+   demo-dataset code was 84% of the file, so it was split out in the
+   same PR. `media_type.py` is now 173 LOC; the demo category
+   constants live in `_demo_categories.py` and the
+   `build_demo_datasets()` + `load_demo_source()` helpers live in
+   `_demo_sources.py`.
 7. Split `dashboard.component.ts` (#5).
 
 Each step is its own PR. Don't batch — every move is a large mechanical
