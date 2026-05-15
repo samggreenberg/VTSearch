@@ -429,8 +429,24 @@ Draw a sketch, use it as image-sort query. CLIP+sketch models exist.
 ### 12.1 Streaming embeddings (lazy) ★★ L
 Today everything is in RAM. Memory-mapped or DB-backed embedding store (DuckDB / LanceDB / Qdrant) so we can hold 1M items. Important for the HF / S3 importers (§7) to be useful.
 
-### 12.2 GPU batched embedding ★★ M
-Currently many embedders embed one-at-a-time. Batch within a converter run + within a clipper run; expect 5-10× speedup on GPU.
+### 12.2 GPU batched embedding ★★ M — **mostly DONE**
+Phase A (image + text bulk overrides), Phase B (bulk `patch_forward`),
+and Phase C (clip re-embed via `embed_media_bulk` with no tempfile)
+all landed. Deferred follow-ups:
+
+- **Audio CLAP + CLAP-Music bulk override.** Decode is the bottleneck
+  and adds I/O complexity; smaller GPU win than image but still
+  meaningful for big audio imports. `librosa` is happy to decode a
+  list serially while the model batches.
+- **Video X-CLIP / LanguageBind bulk override.** Tricky because
+  X-CLIP at batch 32 with 8 frames each is ~640 MB of activations
+  and can OOM on 8 GB cards. Likely wants a smaller default
+  `embed_batch_size` (e.g. 8) on the video embedders.
+- **Fuse single-vector + patch forward on DINOv2/DINOv3/EUPE.** Today
+  the backbone runs twice per image (once for `embed_media_bulk`,
+  once for `patch_forward_bulk`). Fusing requires changing the loader
+  to call a single combined hook and split the outputs — worth it if
+  profiling shows the backbone forward is the dominant cost.
 
 ### 12.3 Mixed-precision training ★ XS
 `torch.cuda.amp` for the MLP; trivial change.
