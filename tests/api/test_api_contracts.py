@@ -579,10 +579,14 @@ class TestErrorResponseFormat:
         assert "error" in data
 
     def test_400_settings_error_is_json(self, client):
+        # The settings blueprint now returns flask-smorest's standard
+        # error envelope: type mismatches surface as 422 with a
+        # per-field ``errors`` dict, not the legacy ``{"error": str}``
+        # shape. Keeping the test name for grep continuity.
         resp = client.put("/api/settings", json={"volume": "not_a_number"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
         data = resp.get_json()
-        assert "error" in data
+        assert "errors" in data
 
     def test_400_learned_sort_no_votes_is_json(self, client):
         resp = client.post("/api/learned-sort", json={"wait": True})
