@@ -240,13 +240,18 @@ def _echo_request_id(response):
 # Register Blueprints
 # ---------------------------------------------------------------------------
 
-app.register_blueprint(achievements_bp)
-app.register_blueprint(auth_bp)
+# achievements_bp, auth_bp, and main_bp are flask-smorest Blueprints
+# (OpenAPI migration); register them via the Api so their decorated
+# routes appear in /api/openapi.json. Their undecorated routes (e.g.
+# main_bp's SPA-serving paths, achievements_bp's raw-markdown stream)
+# attach to Flask normally and are simply absent from the spec.
+api.register_blueprint(achievements_bp)
+api.register_blueprint(auth_bp)
 app.register_blueprint(eval_bp)
 app.register_blueprint(file_browser_bp)
 app.register_blueprint(labels_bp)
 app.register_blueprint(media_server_bp)
-app.register_blueprint(main_bp)
+api.register_blueprint(main_bp)
 app.register_blueprint(medias_bp)
 app.register_blueprint(sorting_bp)
 app.register_blueprint(processors_bp)

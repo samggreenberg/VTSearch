@@ -248,6 +248,11 @@ request/response gates getting in the way during their migration.
       `/api/docs` serve the spec / Swagger UI
 - [x] `vtsearch/schemas/` package created
 - [x] Pilot: `settings/api.py` migrated to flask-smorest
+- [x] `auth.py`, `achievements.py`, `main.py` (`/api/version`) migrated
+      to flask-smorest. Raw-markdown + SPA-serving routes stay
+      undecorated on the same `flask_smorest.Blueprint` (regular Flask
+      routing, simply absent from the spec since they don't return
+      JSON).
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
 - [ ] Remaining blueprints (see Order above)

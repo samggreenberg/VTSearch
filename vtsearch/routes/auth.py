@@ -1,62 +1,56 @@
-"""Authentication status and login/logout routes."""
+"""Authentication status and login/logout routes.
+
+Migrated to ``flask_smorest`` so the routes are described in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+"""
 
 from __future__ import annotations
 
-import re
-
-from flask import Blueprint, jsonify, request, session
+from flask import request, session
+from flask_smorest import Blueprint, abort
 
 from vtsearch.auth import TrivialLoginProvider, get_login_provider
+from vtsearch.schemas.auth import AuthStatusSchema, LoginRequestSchema
 
-auth_bp = Blueprint("auth", __name__)
+auth_bp = Blueprint(
+    "auth",
+    __name__,
+    description="Authentication status, login, and logout.",
+)
 
-# Username constraints for the trivial provider.
-_USERNAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+def _trivial_or_400() -> TrivialLoginProvider:
+    """Return the active provider if it's the trivial one, else 400."""
+    provider = get_login_provider()
+    if not isinstance(provider, TrivialLoginProvider):
+        abort(400, message="Login/logout not supported by the active provider")
+    return provider
 
 
 @auth_bp.route("/api/auth/status", methods=["GET"])
+@auth_bp.response(200, AuthStatusSchema)
 def auth_status():
-    """Return the current authentication state.
-
-    Response shape::
-
-        {
-            "provider": "default",
-            "user": "default",
-            "authenticated": true,
-            "login_required": false
-        }
-    """
+    """Return the current authentication state."""
     provider = get_login_provider()
-    return jsonify(provider.status_dict(request))
+    return provider.status_dict(request)
 
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
-def auth_login():
-    """Set the session username (trivial provider only).
-
-    Expects JSON ``{"username": "alice"}``.  Returns the updated auth
-    status dict on success.
-    """
-    provider = get_login_provider()
-    if not isinstance(provider, TrivialLoginProvider):
-        return jsonify({"error": "Login not supported by the active provider"}), 400
-
-    body = request.get_json(silent=True) or {}
-    username = (body.get("username") or "").strip()
-    if not username or not _USERNAME_RE.match(username):
-        return jsonify({"error": "Username must be 1-64 alphanumeric/dash/underscore characters"}), 400
-
-    session[TrivialLoginProvider._COOKIE_KEY] = username
-    return jsonify(provider.status_dict(request))
+@auth_bp.arguments(LoginRequestSchema)
+@auth_bp.response(200, AuthStatusSchema)
+@auth_bp.alt_response(400, description="Active login provider does not support login.")
+def auth_login(body: dict):
+    """Set the session username (trivial provider only)."""
+    provider = _trivial_or_400()
+    session[TrivialLoginProvider._COOKIE_KEY] = body["username"]
+    return provider.status_dict(request)
 
 
 @auth_bp.route("/api/auth/logout", methods=["POST"])
+@auth_bp.response(200, AuthStatusSchema)
+@auth_bp.alt_response(400, description="Active login provider does not support logout.")
 def auth_logout():
     """Clear the session username (trivial provider only)."""
-    provider = get_login_provider()
-    if not isinstance(provider, TrivialLoginProvider):
-        return jsonify({"error": "Logout not supported by the active provider"}), 400
-
+    provider = _trivial_or_400()
     session.pop(TrivialLoginProvider._COOKIE_KEY, None)
-    return jsonify(provider.status_dict(request))
+    return provider.status_dict(request)
