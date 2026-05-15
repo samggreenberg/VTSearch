@@ -66,8 +66,10 @@ class TestInvalidRequestBodies:
 
     def test_settings_put_with_empty_body(self, client):
         resp = client.put("/api/settings", json={})
-        # Empty dict is falsy → route rejects with 400
-        assert resp.status_code == 400
+        # Empty dict is a legitimate no-op PUT — schema declares every
+        # field optional, so the request succeeds and returns the
+        # current settings dict.
+        assert resp.status_code == 200
 
     def test_settings_put_with_null_body(self, client):
         resp = client.put(
@@ -75,7 +77,8 @@ class TestInvalidRequestBodies:
             data="null",
             content_type="application/json",
         )
-        assert resp.status_code == 400
+        # ``null`` is not a valid object for the SettingsUpdate schema.
+        assert resp.status_code == 422
 
     def test_textsort_suggestion_with_null_body(self, client):
         resp = client.post(
@@ -192,27 +195,29 @@ class TestTypeMismatches:
 
     def test_settings_volume_string(self, client):
         resp = client.put("/api/settings", json={"volume": "loud"})
-        assert resp.status_code == 400
+        # Type validation runs in the SettingsUpdate schema → 422.
+        assert resp.status_code == 422
 
     def test_settings_theme_invalid(self, client):
         resp = client.put("/api/settings", json={"theme": "neon"})
-        assert resp.status_code == 400
+        # OneOf validator in the SettingsUpdate schema → 422.
+        assert resp.status_code == 422
 
     def test_settings_calibration_fraction_string(self, client):
         resp = client.put("/api/settings", json={"calibration_fraction": "half"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_settings_calibrate_count_string(self, client):
         resp = client.put("/api/settings", json={"calibrate_count": "ten"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_settings_autopilot_top_greens_string(self, client):
         resp = client.put("/api/settings", json={"autopilot_top_greens": "many"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_settings_autopilot_hard_reds_string(self, client):
         resp = client.put("/api/settings", json={"autopilot_hard_reds": "few"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_fill_from_sort_threshold_string(self, client):
         resp = client.post(

@@ -59,14 +59,15 @@ class TestSettingsAPI:
             "/api/settings",
             json={"inclusion": "not a number"},
         )
-        assert res.status_code == 400
+        # SettingsUpdate schema catches the type mismatch → 422.
+        assert res.status_code == 422
 
     def test_update_volume_invalid(self, client):
         res = client.put(
             "/api/settings",
             json={"volume": "not a number"},
         )
-        assert res.status_code == 400
+        assert res.status_code == 422
 
     def test_update_calibrate_count(self, client):
         res = client.put("/api/settings", json={"calibrate_count": 5})
@@ -85,7 +86,7 @@ class TestSettingsAPI:
 
     def test_update_calibrate_count_invalid(self, client):
         res = client.put("/api/settings", json={"calibrate_count": "not a number"})
-        assert res.status_code == 400
+        assert res.status_code == 422
 
     def test_update_empty_body(self, client):
         res = client.put(
@@ -93,7 +94,10 @@ class TestSettingsAPI:
             data="",
             content_type="application/json",
         )
-        assert res.status_code == 400
+        # Empty body is a legitimate no-op PUT under the new schema —
+        # every key is optional, so nothing to apply. Returns 200 with
+        # the current settings dict.
+        assert res.status_code == 200
 
     def test_update_autorun_detectors(self, client):
         res = client.put(
@@ -109,7 +113,8 @@ class TestSettingsAPI:
             "/api/settings",
             json={"autorun_detectors": "not a list"},
         )
-        assert res.status_code == 400
+        # List-of-string validation runs in the schema → 422.
+        assert res.status_code == 422
 
     def test_get_defaults(self, client):
         res = client.get("/api/settings/defaults")
@@ -380,7 +385,7 @@ class TestSettingsAPI:
 
     def test_update_autopilot_top_greens_invalid(self, client):
         res = client.put("/api/settings", json={"autopilot_top_greens": "not a number"})
-        assert res.status_code == 400
+        assert res.status_code == 422
 
     def test_update_autopilot_hard_reds(self, client):
         res = client.put("/api/settings", json={"autopilot_hard_reds": 15})
@@ -397,7 +402,7 @@ class TestSettingsAPI:
 
     def test_update_autopilot_hard_reds_invalid(self, client):
         res = client.put("/api/settings", json={"autopilot_hard_reds": "not a number"})
-        assert res.status_code == 400
+        assert res.status_code == 422
 
     def test_update_autopilot_enabled(self, client):
         res = client.put("/api/settings", json={"autopilot_enabled": False})
@@ -428,7 +433,7 @@ class TestSettingsAPI:
 
     def test_update_autopilot_goal_diversity_invalid(self, client):
         res = client.put("/api/settings", json={"autopilot_goal_diversity": "not a number"})
-        assert res.status_code == 400
+        assert res.status_code == 422
 
     def test_get_settings_includes_autopilot(self, client):
         res = client.get("/api/settings")

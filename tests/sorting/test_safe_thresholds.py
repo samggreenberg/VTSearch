@@ -393,9 +393,10 @@ class TestCalibrationFractionAPI:
         data = resp.get_json()
         assert data["calibration_fraction"] == pytest.approx(0.3)
 
-    def test_put_invalid_type_returns_400(self, client):
+    def test_put_invalid_type_returns_422(self, client):
         resp = client.put("/api/settings", json={"calibration_fraction": "bad"})
-        assert resp.status_code == 400
+        # Type validation runs in the SettingsUpdate schema → 422.
+        assert resp.status_code == 422
 
     def test_put_persists(self, client):
         client.put("/api/settings", json={"calibration_fraction": 0.15})

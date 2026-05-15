@@ -259,7 +259,9 @@ class TestMultiUserFileRestriction:
                 json={"saved_datasets_dir": "/tmp/evil"},
             )
             assert resp.status_code == 400
-            assert "must be within" in resp.get_json()["error"]
+            # New error envelope: human-readable text lives under
+            # ``message`` (the legacy ``error`` key is gone).
+            assert "must be within" in resp.get_json()["message"]
         finally:
             from vtsearch.auth import set_login_provider
 
