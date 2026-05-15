@@ -252,18 +252,101 @@ def reset_state():
     _reset_model_reg()
 
 
+class _MergedSettingsPath:
+    """Path-like helper that bridges the two settings tiers in tests.
+
+    Settings used to live in a single ``data/settings.json`` file, and
+    test code reads/writes it via ``isolated_settings.read_text()`` /
+    ``.write_text(...)``.  With the two-tier layout, per-user keys live
+    in ``users/default/user_settings.json`` while server-tier keys stay
+    in ``settings.json``. This wrapper preserves the legacy API by:
+
+    * ``read_text()`` — returns the merged JSON of both files (per-user
+      values win over server values on key collisions, which matches the
+      runtime behaviour of ``settings.get_all()``).
+    * ``write_text(text)`` — parses *text* as JSON, splits the keys by
+      tier, and writes each subset to the right file. Non-JSON text is
+      treated as a "corrupt the file" probe and goes to the server file
+      so the existing corruption tests still see invalid JSON on load.
+    * ``exists()`` / ``__fspath__()`` / ``__str__()`` resolve to the
+      server-tier file for the rare tests that pass the fixture to APIs
+      expecting a real path.
+    """
+
+    def __init__(self, server_path, user_default_path) -> None:
+        self._server = server_path
+        self._user = user_default_path
+
+    def read_text(self, *args, **kwargs) -> str:
+        import json as _json
+
+        merged: dict = {}
+        for p in (self._server, self._user):
+            if p.exists():
+                try:
+                    data = _json.loads(p.read_text(*args, **kwargs))
+                    if isinstance(data, dict):
+                        merged.update(data)
+                except Exception:
+                    pass
+        return _json.dumps(merged)
+
+    def write_text(self, content: str, *args, **kwargs) -> int:
+        import json as _json
+        from vtsearch import settings as _settings
+
+        try:
+            data = _json.loads(content)
+        except Exception:
+            # Non-JSON content: simulate a corrupt server-tier file.
+            self._server.parent.mkdir(parents=True, exist_ok=True)
+            return self._server.write_text(content, *args, **kwargs)
+
+        if not isinstance(data, dict):
+            self._server.parent.mkdir(parents=True, exist_ok=True)
+            return self._server.write_text(content, *args, **kwargs)
+
+        server_data = {k: v for k, v in data.items() if k in _settings._SERVER_KEYS}
+        user_data = {k: v for k, v in data.items() if k not in _settings._SERVER_KEYS}
+
+        self._server.parent.mkdir(parents=True, exist_ok=True)
+        self._server.write_text(_json.dumps(server_data, indent=2) + "\n")
+        self._user.parent.mkdir(parents=True, exist_ok=True)
+        self._user.write_text(_json.dumps(user_data, indent=2) + "\n")
+        # Force the in-memory caches to re-read on next access.
+        _settings.reset()
+        return len(content)
+
+    def exists(self) -> bool:
+        return self._server.exists() or self._user.exists()
+
+    def __fspath__(self) -> str:
+        return str(self._server)
+
+    def __str__(self) -> str:
+        return str(self._server)
+
+
 @pytest.fixture(autouse=True)
 def isolated_settings(tmp_path, monkeypatch):
-    """Redirect the settings file to a temp directory for each test.
+    """Redirect both settings tiers to a temp directory for each test.
 
     Without this, tests that write settings (inclusion, safe_thresholds,
-    volume, etc.) would mutate the shared ``data/settings.json`` on disk,
-    leaking values into subsequent tests that lazy-load from that file.
+    volume, etc.) would mutate the shared ``data/settings.json`` and the
+    per-user files under ``data/<user>/user_settings.json``, leaking
+    values into subsequent tests that lazy-load from those files.
+
+    Yields a :class:`_MergedSettingsPath` so legacy tests that call
+    ``isolated_settings.read_text()`` / ``.write_text(...)`` continue to
+    see a merged view of both tiers.
     """
     from vtsearch import settings as settings_mod
 
     test_settings_path = tmp_path / "settings.json"
+    user_default_path = tmp_path / "users" / "default" / "user_settings.json"
     monkeypatch.setattr(settings_mod, "SETTINGS_PATH", test_settings_path)
+    # Redirect per-user settings files under tmp_path/users/<username>/.
+    settings_mod.set_user_data_dir_override(tmp_path / "users")
     settings_mod.reset()
 
     # Also redirect dataset and detector registries to temp paths
@@ -280,8 +363,9 @@ def isolated_settings(tmp_path, monkeypatch):
     ds_reg_mod.reset_for_tests()
     det_reg_mod.reset_for_tests()
 
-    yield test_settings_path
+    yield _MergedSettingsPath(test_settings_path, user_default_path)
     settings_mod.reset()
+    settings_mod.set_user_data_dir_override(None)
     ds_reg_mod.reset_for_tests()
     det_reg_mod.reset_for_tests()
 

@@ -138,7 +138,9 @@ def run_settings_export():
     if err:
         return err
 
-    settings_data = settings.get_all()
+    # Export only the current user's per-user settings, not the merged
+    # view (which would also carry shared server-tier infra keys).
+    settings_data = settings.get_user_settings()
 
     try:
         outcome = exporter.export(settings_data, field_values)

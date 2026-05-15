@@ -327,8 +327,19 @@ ownership, and `get_user_data_dir()` supports per-user data directories.
 via `DatasetContext` and `DetectorContext` proxy objects (see
 [ARCHITECTURE.md](ARCHITECTURE.md#multi-dataset-support)). Each user
 can work with different datasets/models simultaneously via
-`X-Dataset-Id`/`X-Detector-Id` headers. Settings remain global (shared
-across all users).
+`X-Dataset-Id`/`X-Detector-Id` headers. Settings are split into two
+tiers: a small set of server-wide infrastructure keys
+(`saved_datasets_dir`, `detectors_dir`, `max_concurrent_*`,
+`autoload_media_embedders`, `autorun_detectors`) live in
+`data/settings.json` and are shared across users; everything else —
+theme, volume, view/focus/panel modes, autopilot config, achievements
+state, and the per-user `settings_source` — lives in
+`<get_user_data_dir(user)>/user_settings.json` and is isolated per
+user. Background threads spawned from a request handler propagate the
+user via `vtsearch.auth.set_thread_user()` so per-user writes (e.g.
+autopilot toggles, sync-source exports) land in the right file. Legacy
+single-file `data/settings.json` files that pre-date the split are
+migrated to the default user's file on first load.
 
 ### Memory usage
 
