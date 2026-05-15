@@ -1,7 +1,7 @@
 """Tests for AG News dataset download and load_demo_source integration."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 # ---------------------------------------------------------------------------

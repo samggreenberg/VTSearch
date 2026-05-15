@@ -11,7 +11,7 @@ import io
 from pathlib import PurePosixPath
 from unittest.mock import patch
 
-from vtsearch.routes.datasets import _safe_relative_upload_path
+from vtsearch.routes.datasets.crud import _safe_relative_upload_path
 
 
 class TestSafeRelativeUploadPath:
@@ -98,7 +98,7 @@ class TestImportLocalFolderEndpoint:
         # Redirect the upload temp root into the test's tmp_path so we can
         # inspect the resulting layout without polluting the repo's data dir.
         monkeypatch.setattr(
-            "vtsearch.routes.datasets.LOCAL_UPLOADS_DIR",
+            "vtsearch.routes.datasets.crud.LOCAL_UPLOADS_DIR",
             tmp_path / "uploads",
         )
 
@@ -120,7 +120,7 @@ class TestImportLocalFolderEndpoint:
             return "task-fake-1"
 
         with patch(
-            "vtsearch.routes.datasets._run_origin_load_in_background",
+            "vtsearch.routes.datasets.crud._run_origin_load_in_background",
             side_effect=_fake_run,
         ):
             resp = client.post(
@@ -150,7 +150,7 @@ class TestImportLocalFolderEndpoint:
     def test_path_traversal_filenames_dropped(self, client, tmp_path, monkeypatch):
         """Files whose multipart filename tries to escape the tempdir are skipped."""
         monkeypatch.setattr(
-            "vtsearch.routes.datasets.LOCAL_UPLOADS_DIR",
+            "vtsearch.routes.datasets.crud.LOCAL_UPLOADS_DIR",
             tmp_path / "uploads",
         )
 
@@ -176,7 +176,7 @@ class TestImportLocalFolderEndpoint:
             return "task-fake-2"
 
         with patch(
-            "vtsearch.routes.datasets._run_origin_load_in_background",
+            "vtsearch.routes.datasets.crud._run_origin_load_in_background",
             side_effect=_fake_run,
         ):
             resp = client.post(

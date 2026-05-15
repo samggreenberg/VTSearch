@@ -35,7 +35,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify
 
 from vtsearch.labels.importers import get_label_importer, list_label_importers
-from vtsearch.routes.helpers import (
+from vtsearch.routes._shared import (
     extract_plugin_fields,
     get_json_safe,
     get_plugin_or_404,

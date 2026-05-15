@@ -636,7 +636,7 @@ class TestExportEndpoint:
         """An OSError from an exporter should return 500 and log the full traceback."""
         import logging
 
-        with caplog.at_level(logging.ERROR, logger="vtsearch.routes.exporters"):
+        with caplog.at_level(logging.ERROR, logger="vtsearch.routes.labels.exporters"):
             with patch(
                 "vtsearch.exporters.server_json_file.ServerJsonLabelsetExporter.export",
                 side_effect=OSError("No space left on device"),
@@ -660,7 +660,7 @@ class TestExportEndpoint:
         """A PermissionError from an exporter should return 500 and log the full traceback."""
         import logging
 
-        with caplog.at_level(logging.ERROR, logger="vtsearch.routes.exporters"):
+        with caplog.at_level(logging.ERROR, logger="vtsearch.routes.labels.exporters"):
             with patch(
                 "vtsearch.exporters.server_json_file.ServerJsonLabelsetExporter.export",
                 side_effect=PermissionError("Permission denied"),

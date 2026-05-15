@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify
 
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes._shared import get_json_or_400
 from vtsearch.utils import (
     add_autorun_extractor,
     add_autorun_localizer,

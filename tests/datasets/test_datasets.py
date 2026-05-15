@@ -99,7 +99,7 @@ class TestDatasetEndpoints:
         fake_info = dict(DEMO_DATASETS[name])
         fake_info["required_folder"] = tmp_path
 
-        with patch.dict("vtsearch.routes.datasets_ui.DEMO_DATASETS", {name: fake_info}):
+        with patch.dict("vtsearch.routes.datasets.ui.DEMO_DATASETS", {name: fake_info}):
             resp = client.get(f"/api/browse-media-files?source=demo:{name}&path=")
             assert resp.status_code == 200
             data = resp.get_json()
@@ -133,7 +133,7 @@ class TestDatasetEndpoints:
         fake_info = dict(DEMO_DATASETS[name])
         fake_info["required_folder"] = tmp_path
 
-        with patch.dict("vtsearch.routes.datasets_ui.DEMO_DATASETS", {name: fake_info}):
+        with patch.dict("vtsearch.routes.datasets.ui.DEMO_DATASETS", {name: fake_info}):
             resp = client.post(
                 "/api/browse-media-files/select",
                 json={"source": f"demo:{name}", "path": "pick_me.wav"},
@@ -162,7 +162,7 @@ class TestDatasetEndpoints:
         fake_info = dict(DEMO_DATASETS[name])
         fake_info["required_folder"] = tmp_path
 
-        with patch.dict("vtsearch.routes.datasets_ui.DEMO_DATASETS", {name: fake_info}):
+        with patch.dict("vtsearch.routes.datasets.ui.DEMO_DATASETS", {name: fake_info}):
             resp = client.post(
                 "/api/browse-media-files/select",
                 json={"source": f"demo:{name}", "path": "../../etc/passwd"},
@@ -639,7 +639,7 @@ class TestLoadEmbedderForClips:
         from unittest.mock import patch
 
         from vtsearch.media import embedders_for_type
-        from vtsearch.routes.datasets import _load_embedder_for_clips
+        from vtsearch.routes.datasets.crud import _load_embedder_for_clips
 
         emb = embedders_for_type("audio")[0]
         with patch.object(emb, "embed_text", wraps=emb.embed_text) as mock_embed:
@@ -649,7 +649,7 @@ class TestLoadEmbedderForClips:
     def test_text_encoder_produces_valid_embedding_after_load(self):
         """After _load_embedder_for_clips, embed_text returns a real vector."""
         from vtsearch.media import embedders_for_type
-        from vtsearch.routes.datasets import _load_embedder_for_clips
+        from vtsearch.routes.datasets.crud import _load_embedder_for_clips
 
         _load_embedder_for_clips()
         emb = embedders_for_type("audio")[0]
@@ -1167,7 +1167,7 @@ class TestLoadProgressRaceCondition:
         """
         from unittest.mock import patch
 
-        from vtsearch.routes.datasets import _load_embedder_for_clips
+        from vtsearch.routes.datasets.crud import _load_embedder_for_clips
         from vtsearch.utils.progress import update_progress
 
         # _load_embedder_for_clips inspects medias to find the embedder.

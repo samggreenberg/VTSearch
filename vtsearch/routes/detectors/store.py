@@ -342,7 +342,7 @@ def import_labels_into_detector(name: str, importer_name: str):
         return jsonify({"error": f"Detector '{name}' not found"}), 404
 
     from vtsearch.labels.importers import get_label_importer, list_label_importers
-    from vtsearch.routes.helpers import (
+    from vtsearch.routes._shared import (
         extract_plugin_fields,
         get_plugin_or_404,
         run_plugin_or_error,
@@ -779,7 +779,7 @@ def _origin_thumbnail_response(file_path: Path, media_type: str, elem):
 def thumbnail_detector_label(name: str, element_id: str):
     """Stream a small thumbnail image for a saved labelset element.
 
-    Mirrors :func:`vtsearch.routes.medias.media_image` for the right pane:
+    Mirrors :func:`vtsearch.routes.media.list.media_image` for the right pane:
     audio elements get a waveform PNG, video elements a mid-frame PNG, image
     elements get the file bytes. When the element resolves into the active
     dataset we serve the cached in-memory ``thumbnail_bytes`` (fast path);

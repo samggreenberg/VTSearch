@@ -24,7 +24,7 @@ from flask import Blueprint, jsonify
 from vtsearch import settings
 
 logger = logging.getLogger(__name__)
-from vtsearch.routes.helpers import (
+from vtsearch.routes._shared import (
     extract_plugin_fields,
     get_json_safe,
     get_plugin_or_404,

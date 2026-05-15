@@ -3,8 +3,8 @@
 This module covers media-type/clipper/converter listings, dataset import and
 staging, demo dataset loading, and origin reload.  Closely related blueprints:
 
-* :mod:`vtsearch.routes.datasets_ui` — Dashboard, demo list, display name
-* :mod:`vtsearch.routes.datasets_registry` — Registry CRUD (load/unload/rename/etc.)
+* :mod:`vtsearch.routes.datasets.ui` — Dashboard, demo list, display name
+* :mod:`vtsearch.routes.datasets.registry` — Registry CRUD (load/unload/rename/etc.)
 * :mod:`vtsearch.datasets.load_pipeline` — Background loading, staging, origin management
 """
 
@@ -19,7 +19,7 @@ from uuid import uuid4
 from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
-from vtsearch.routes.helpers import (
+from vtsearch.routes._shared import (
     format_exception_detail,
     get_json_or_400,
     get_json_safe,
@@ -58,7 +58,7 @@ from vtsearch.datasets.load_pipeline import (  # noqa: F401
     _stage_importer_in_background,
     clear_dataset,
 )
-from vtsearch.routes.datasets_ui import datasets_ui_bp  # noqa: F401
+from vtsearch.routes.datasets.ui import datasets_ui_bp  # noqa: F401
 
 datasets_bp = Blueprint("datasets", __name__)
 

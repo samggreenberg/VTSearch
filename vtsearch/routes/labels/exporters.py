@@ -25,7 +25,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify
 
 from vtsearch.exporters import get_exporter, list_exporters
-from vtsearch.routes.helpers import (
+from vtsearch.routes._shared import (
     get_json_safe,
     get_plugin_or_404,
     run_plugin_or_error,

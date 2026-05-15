@@ -12,7 +12,7 @@ from typing import Any
 from flask import Blueprint, Response, jsonify, make_response, request, send_file
 
 from vtsearch.media.base import MediaResponse
-from vtsearch.routes.helpers import get_json_or_400
+from vtsearch.routes._shared import get_json_or_400
 from vtsearch.utils.ffmpeg import get_ffmpeg_exe
 from vtsearch.utils import (
     _state_lock,
