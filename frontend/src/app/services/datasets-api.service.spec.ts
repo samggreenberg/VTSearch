@@ -31,13 +31,6 @@ describe('DatasetsApiService', () => {
     req.flush({ loaded: true, num_medias: 10, has_votes: false });
   });
 
-  it('getProgress should GET', () => {
-    service.getProgress().subscribe();
-    const req = httpMock.expectOne('/api/dataset/progress');
-    expect(req.request.method).toBe('GET');
-    req.flush({});
-  });
-
   it('getImporters should GET', () => {
     service.getImporters().subscribe(data => expect(data.importers).toBeDefined());
     const req = httpMock.expectOne('/api/dataset/importers');

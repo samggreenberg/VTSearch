@@ -32,13 +32,6 @@ describe('SortingApiService', () => {
     req.flush({ results: [{ id: 1, similarity: 0.9 }], threshold: 0.5 });
   });
 
-  it('getSortProgress should GET', () => {
-    service.getSortProgress().subscribe();
-    const req = httpMock.expectOne('/api/sort/progress');
-    expect(req.request.method).toBe('GET');
-    req.flush({});
-  });
-
   it('learnedSort should POST and return a job envelope', () => {
     service.learnedSort().subscribe(data => {
       expect(data.job_id).toBeDefined();

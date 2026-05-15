@@ -4,12 +4,9 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
   DatasetStatus,
-  DatasetProgress,
   DatasetStatsResponse,
   ImportersResponse,
   DemoListResponse,
-  LoadingTask,
-  LoadingTasksResponse,
   MediaTypesResponse,
   DatasetRegistryResponse,
   ClipperInfo,
@@ -27,10 +24,6 @@ export class DatasetsApiService {
 
   getStatus(): Observable<DatasetStatus> {
     return this.http.get<DatasetStatus>('/api/dataset/status');
-  }
-
-  getProgress(): Observable<DatasetProgress> {
-    return this.http.get<DatasetProgress>('/api/dataset/progress');
   }
 
   getImporters(): Observable<ImportersResponse> {
@@ -185,12 +178,6 @@ export class DatasetsApiService {
 
   combineDatasets(params: Record<string, unknown>): Observable<unknown> {
     return this.http.post('/api/dataset/combine', params);
-  }
-
-  getLoadingTasks(): Observable<LoadingTask[]> {
-    return this.http.get<LoadingTasksResponse>('/api/dataset/loading-tasks').pipe(
-      map((res) => res.tasks),
-    );
   }
 
   cancelIngest(): Observable<OkResponse> {

@@ -2,7 +2,7 @@
 
 import time
 import threading
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 _UNSET = object()  # sentinel for "caller did not provide this argument"
 
@@ -23,6 +23,11 @@ class ProgressTracker:
     the background thread to raise :class:`CancelledError` when the flag is
     set.
 
+    Subscribers (registered via :meth:`subscribe`) are invoked with a
+    snapshot of the data dict on every :meth:`update`. The SSE event
+    endpoint uses this to push progress to connected clients without
+    polling.
+
     Args:
         extra_fields: Mapping of extra field names to their default values.
             These fields can be set via keyword arguments in :meth:`update`
@@ -40,6 +45,8 @@ class ProgressTracker:
             "total": 0,
             **{k: v for k, v in self._extra_defaults.items()},
         }
+        self._subscribers: list[Callable[[dict[str, Any]], None]] = []
+        self._subscribers_lock = threading.Lock()
 
     def update(
         self,
@@ -67,6 +74,36 @@ class ProgressTracker:
             for key in self._extra_defaults:
                 if key in kwargs:
                     self._data[key] = kwargs[key]
+            snapshot = dict(self._data)
+        self._notify(snapshot)
+
+    def subscribe(self, callback: Callable[[dict[str, Any]], None]) -> None:
+        """Register a callback fired with a snapshot after every update.
+
+        The callback runs synchronously on the thread that called
+        :meth:`update`, *outside* the tracker's lock. Subscribers must be
+        non-blocking and exception-safe; any exception they raise is
+        swallowed so a misbehaving subscriber cannot break the producer.
+        """
+        with self._subscribers_lock:
+            self._subscribers.append(callback)
+
+    def unsubscribe(self, callback: Callable[[dict[str, Any]], None]) -> None:
+        """Remove a previously-registered subscriber. No-op if not present."""
+        with self._subscribers_lock:
+            try:
+                self._subscribers.remove(callback)
+            except ValueError:
+                pass
+
+    def _notify(self, snapshot: dict[str, Any]) -> None:
+        with self._subscribers_lock:
+            subs = list(self._subscribers)
+        for cb in subs:
+            try:
+                cb(snapshot)
+            except Exception:
+                pass
 
     def cancel(self) -> None:
         """Signal the background operation to stop.
@@ -152,6 +189,35 @@ class LoadingTasksTracker:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._tasks: dict[str, dict[str, Any]] = {}
+        self._subscribers: list[Callable[[list[dict[str, Any]]], None]] = []
+        self._subscribers_lock = threading.Lock()
+
+    def subscribe(self, callback: Callable[[list[dict[str, Any]]], None]) -> None:
+        """Register a callback fired with the task list after every change.
+
+        Same semantics as :meth:`ProgressTracker.subscribe`: invoked
+        synchronously, outside locks, exceptions swallowed.
+        """
+        with self._subscribers_lock:
+            self._subscribers.append(callback)
+
+    def unsubscribe(self, callback: Callable[[list[dict[str, Any]]], None]) -> None:
+        """Remove a previously-registered subscriber. No-op if not present."""
+        with self._subscribers_lock:
+            try:
+                self._subscribers.remove(callback)
+            except ValueError:
+                pass
+
+    def _notify(self) -> None:
+        snapshot = self.list_tasks()
+        with self._subscribers_lock:
+            subs = list(self._subscribers)
+        for cb in subs:
+            try:
+                cb(snapshot)
+            except Exception:
+                pass
 
     def create_task(
         self,
@@ -167,6 +233,7 @@ class LoadingTasksTracker:
         Returns the per-task :class:`ProgressTracker` instance.
         """
         tracker = ProgressTracker(extra_fields={"error": None, "step": None, "total_steps": None})
+        tracker.subscribe(lambda _snapshot: self._notify())
         with self._lock:
             self._tasks[task_id] = {
                 "tracker": tracker,
@@ -178,14 +245,23 @@ class LoadingTasksTracker:
                 "detector_id": detector_id,
                 "embedder": embedder,
             }
+        self._notify()
         return tracker
 
     def mark_finished(self, task_id: str) -> None:
         """Record the time a task finished (for deferred cleanup)."""
+        delay: float | None = None
         with self._lock:
             entry = self._tasks.get(task_id)
             if entry:
                 entry["finished_at"] = time.time()
+                has_error = bool(entry["tracker"].get().get("error"))
+                delay = (30 if has_error else 5) + 0.5
+        self._notify()
+        if delay is not None:
+            t = threading.Timer(delay, self._notify)
+            t.daemon = True
+            t.start()
 
     def get_tracker(self, task_id: str) -> ProgressTracker | None:
         """Return the ProgressTracker for *task_id*, or ``None``."""
@@ -214,11 +290,13 @@ class LoadingTasksTracker:
             entry = self._tasks.get(task_id)
             if entry:
                 entry["dataset_id"] = dataset_id
+        self._notify()
 
     def remove_task(self, task_id: str) -> None:
         """Remove a completed/cancelled task from the tracker."""
         with self._lock:
             self._tasks.pop(task_id, None)
+        self._notify()
 
     def list_tasks(self) -> list[dict[str, Any]]:
         """Return a snapshot of all active loading tasks.

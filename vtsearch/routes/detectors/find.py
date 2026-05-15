@@ -15,7 +15,7 @@ from flask import Blueprint, jsonify
 
 from vtsearch.detectors.training import train_and_threshold
 from vtsearch.routes._shared import get_json_safe
-from vtsearch.concurrency.progress import get_find_progress, update_find_progress
+from vtsearch.concurrency.progress import update_find_progress
 
 detector_find_bp = Blueprint("detector_find", __name__)
 
@@ -114,12 +114,6 @@ def find_check_labels():
             )
 
     return jsonify({"warnings": warnings})
-
-
-@detector_find_bp.route("/api/find/progress")
-def find_progress_endpoint():
-    """Return the current progress of the Find operation."""
-    return jsonify(get_find_progress())
 
 
 @detector_find_bp.route("/api/find", methods=["POST"])

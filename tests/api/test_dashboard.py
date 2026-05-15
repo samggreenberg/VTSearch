@@ -722,13 +722,13 @@ class TestFindButtonValidation:
 
 
 class TestFindProgress:
-    """Tests for the /api/find/progress endpoint and progress reporting."""
+    """Tests for the find_progress tracker (streamed via the SSE `find` channel)."""
 
     def test_find_progress_returns_idle_by_default(self, client):
-        """GET /api/find/progress returns idle state when no Find is running."""
-        resp = client.get("/api/find/progress")
-        assert resp.status_code == 200
-        data = resp.get_json()
+        """The find_progress tracker is idle when no Find is running."""
+        from vtsearch.concurrency.progress import find_progress
+
+        data = find_progress.get()
         assert data["status"] == "idle"
         assert data["message"] == ""
         assert data["step"] is None

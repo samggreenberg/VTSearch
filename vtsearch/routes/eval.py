@@ -123,7 +123,8 @@ def eval_train_and_score():
     every step, which used to block every other request on the gthread
     pool.  We now run it on a background daemon thread and return a
     ``job_id``; clients poll ``/api/eval/train-and-score/result`` for the
-    metric data and ``/api/eval/voting-iterations`` for progress.
+    metric data; the ``eval`` SSE channel on ``/api/events`` carries
+    live progress.
 
     A signature cache keyed by ``(metric, history, votes, inclusion,
     dataset, detector)`` short-circuits identical re-runs.
@@ -242,20 +243,3 @@ def eval_train_and_score_result():
     return jsonify(_eval_done_payload(job))
 
 
-@eval_bp.route("/api/eval/voting-iterations", methods=["GET"])
-def eval_voting_iterations():
-    """Return progress of the current eval computation.
-
-    Returns::
-
-        {"progress": <int>, "total": <int>, "done": <bool>}
-    """
-    prog = get_eval_progress()
-    done = prog["status"] == "idle" and prog["total"] > 0 and prog["current"] >= prog["total"]
-    return jsonify(
-        {
-            "progress": prog["current"],
-            "total": prog["total"],
-            "done": done,
-        }
-    )
