@@ -89,6 +89,10 @@
       </div>
     }
 
+    @if (undoToastText) {
+      <div class="undo-toast" role="status" aria-live="polite">{{ undoToastText }}</div>
+    }
+
     <vt-voting-overlay
       [isGood]="isGood"
       [isBad]="isBad"

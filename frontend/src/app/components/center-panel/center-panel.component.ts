@@ -46,6 +46,10 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   swipeClass = '';
   spinningVote: 'good' | 'bad' | null = null;
 
+  /** Transient text shown after Cmd/Ctrl-Z; auto-cleared after a short delay. */
+  undoToastText: string | null = null;
+  private undoToastTimer: ReturnType<typeof setTimeout> | null = null;
+
   // Bad-vote-with-box state: drawing a box is real work, so a stray ← shouldn't
   // throw it away. The first ← arms a sticky discard-confirm state (no timeout);
   // the second ← throws the box away and votes no. Esc, a mousedown on the box,
@@ -83,6 +87,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     this.keyboard.stop();
     this.subs.forEach((s) => s.unsubscribe());
     if (this.spinTimer) clearTimeout(this.spinTimer);
+    if (this.undoToastTimer) clearTimeout(this.undoToastTimer);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
   }
 
@@ -133,9 +138,26 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
               else this.imageViewer.rotateRight();
             }
             break;
+          case 'undo':
+            if (!this.disabled && !this.isVoting) this.voteState.undo();
+            break;
+          case 'redo':
+            if (!this.disabled && !this.isVoting) this.voteState.redo();
+            break;
         }
       }),
+      this.voteState.toast$.subscribe((t) => this.showUndoToast(t.action, t.mediaName)),
     );
+  }
+
+  private showUndoToast(action: 'undo' | 'redo', mediaName: string): void {
+    const verb = action === 'undo' ? 'Undid vote on' : 'Redid vote on';
+    this.undoToastText = `${verb} ${mediaName}`;
+    if (this.undoToastTimer) clearTimeout(this.undoToastTimer);
+    this.undoToastTimer = setTimeout(() => {
+      this.undoToastText = null;
+      this.undoToastTimer = null;
+    }, 2000);
   }
 
   get mediaType(): string {
@@ -154,6 +176,11 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     if (!this.media) return {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (this.media as any)['custom_metadata'] as Record<string, unknown> || {};
+  }
+
+  /** Human-readable label for an item used in undo toasts. */
+  private mediaDisplayName(media: MediaItem): string {
+    return media.filename || media.origin_name || `#${media.id}`;
   }
 
   formatMetadataValue(label: string, value: unknown): string {
@@ -192,6 +219,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     const regionBox = vote === 'good' ? this.currentRegionBox : null;
     this.pendingBadConfirm = false;
     this.isVoting = true;
+    this.voteState.recordVote(this.media.id, vote, this.mediaDisplayName(this.media));
 
     this.mediasApi.vote(this.media.id, vote, regionBox).subscribe({
       next: () => {
