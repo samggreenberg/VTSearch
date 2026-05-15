@@ -428,7 +428,7 @@ def learned_sort_result():
     if job is None:
         return jsonify({"status": "missing", "error": "Job not found"}), 404
 
-    if job.status == "running":
+    if job.status in ("running", "pending"):
         return jsonify({
             "job_id": job.job_id,
             "status": "running",
