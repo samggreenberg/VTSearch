@@ -19,6 +19,7 @@ get_label_importer, list_label_importers = make_plugin_registry(
     package=__name__,
     sentinel="LABEL_IMPORTER",
     label="label importer",
+    entry_point_group="vtsearch.label_importers",
 )
 
 __all__ = ["get_label_importer", "list_label_importers"]

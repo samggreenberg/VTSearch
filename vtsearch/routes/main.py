@@ -17,6 +17,15 @@ def version() -> Response:
     return jsonify({"version": __version__})
 
 
+@main_bp.route("/openapi.json")
+def openapi_json() -> Response:
+    """Return the auto-generated OpenAPI 3.0 spec for this Flask app."""
+    from vtsearch.openapi import generate_openapi_spec
+
+    spec = generate_openapi_spec(current_app, version=__version__)
+    return jsonify(spec)
+
+
 def _static_dir() -> Path:
     """Return the static directory path."""
     return Path(current_app.root_path) / "static"

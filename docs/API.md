@@ -38,6 +38,27 @@ Status codes follow standard HTTP semantics: 200 OK, 201 Created, 204 No
 Content, 400 Bad Request, 404 Not Found, 409 Conflict, 500 Internal Server
 Error.
 
+## Machine-readable schema
+
+`GET /openapi.json` returns an auto-generated OpenAPI 3.0 document
+describing every route on the running app — every URL, HTTP method, path
+parameter, and the view function's docstring. It's regenerated on each
+request, so it always matches the running code. Use it to:
+
+- Point a Swagger UI / Redoc instance at the running server.
+- Generate a TypeScript / Python client.
+- Diff against a snapshot in CI to catch unintended API surface changes.
+
+You can also dump the spec without starting the server:
+
+```bash
+python app.py --openapi-schema > openapi.json
+```
+
+The spec intentionally keeps request/response **schemas** permissive —
+this page is still the canonical reference for body shapes. The OpenAPI
+doc's job is to keep the *route inventory* honest.
+
 ---
 
 *Readme Reader code phrase:* `json all the way down`

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import importlib.metadata
 import importlib.util
 import sys
 import threading
@@ -243,13 +244,34 @@ class PluginRegistry(Generic[T]):
         When ``True``, also scan flat ``.py`` files (not just sub-packages)
         for the sentinel.  Useful for plugin families where each plugin is
         a single module rather than a sub-package (e.g. converters, sources).
+    entry_point_group:
+        Optional :mod:`importlib.metadata` entry-point group to scan after
+        the local package scan, e.g. ``"vtsearch.importers"``.  Third-party
+        packages can register a plugin by adding an entry to this group in
+        their own ``pyproject.toml`` / ``setup.cfg``::
+
+            [project.entry-points."vtsearch.importers"]
+            my_importer = "my_pkg.my_module:IMPORTER"
+
+        The entry point must resolve to an already-instantiated plugin
+        object (same shape as a sentinel attribute) — typically you point
+        directly at the module's ``IMPORTER`` / ``EXPORTER`` / ... sentinel.
     """
 
-    def __init__(self, package: str, sentinel: str, label: str, *, discover_modules: bool = False) -> None:
+    def __init__(
+        self,
+        package: str,
+        sentinel: str,
+        label: str,
+        *,
+        discover_modules: bool = False,
+        entry_point_group: str | None = None,
+    ) -> None:
         self._package = package
         self._sentinel = sentinel
         self._label = label
         self._discover_modules = discover_modules
+        self._entry_point_group = entry_point_group
         self._items: dict[str, T] = {}
         self._discovered = False
         self._discovering = False
@@ -291,6 +313,56 @@ class PluginRegistry(Generic[T]):
                 if entry.name in ("__init__.py", "base.py"):
                     continue
                 self._try_load(entry.stem, file_path=entry if entry.is_symlink() else None)
+
+        if self._entry_point_group:
+            self._discover_entry_points()
+
+    def _discover_entry_points(self) -> None:
+        """Load third-party plugins registered via :mod:`importlib.metadata`.
+
+        Each entry point in :attr:`_entry_point_group` is resolved to an
+        object that's treated like a sentinel value — its ``.name`` is the
+        registry key.  Failures are surfaced as warnings so a single bad
+        third-party plugin can't break the rest of the registry.
+
+        Built-in plugins (discovered by the package scan above) take
+        precedence: an entry point whose name clashes with a built-in is
+        skipped.  This prevents an installed third-party package from
+        accidentally shadowing a core plugin.
+        """
+        try:
+            eps = importlib.metadata.entry_points(group=self._entry_point_group)
+        except Exception as exc:  # pragma: no cover
+            warnings.warn(
+                f"Failed to read entry-point group {self._entry_point_group!r}: {exc}",
+                stacklevel=2,
+            )
+            return
+        for ep in eps:
+            try:
+                plugin = ep.load()
+            except Exception as exc:
+                warnings.warn(
+                    f"Failed to load {self._label} entry point {ep.name!r} from {ep.value!r}: {exc}",
+                    stacklevel=2,
+                )
+                continue
+            plugin_name = getattr(plugin, "name", None)
+            if not plugin_name:
+                warnings.warn(
+                    f"{self._label} entry point {ep.name!r} from {ep.value!r} has no 'name' attribute; skipped",
+                    stacklevel=2,
+                )
+                continue
+            if plugin_name in self._items:
+                warnings.warn(
+                    f"{self._label} entry point {ep.name!r} from "
+                    f"{ep.value!r} clashes with built-in plugin "
+                    f"{plugin_name!r}; skipped",
+                    stacklevel=2,
+                )
+                continue
+            self._items[plugin_name] = plugin
 
     def _try_load(self, module_name: str, *, file_path: Path | None = None) -> None:
         """Import *module_name* under this registry's package and register its sentinel.
@@ -373,6 +445,7 @@ def make_plugin_registry(
     label: str,
     *,
     discover_modules: bool = False,
+    entry_point_group: str | None = None,
 ) -> tuple[Callable[[str], Any], Callable[[], list[Any]]]:
     """Create a :class:`PluginRegistry` and return its ``(get, list)`` accessors.
 
@@ -384,6 +457,7 @@ def make_plugin_registry(
             package=__name__,
             sentinel="IMPORTER",
             label="dataset importer",
+            entry_point_group="vtsearch.importers",
         )
 
     Parameters are forwarded to :class:`PluginRegistry`.
@@ -393,5 +467,6 @@ def make_plugin_registry(
         sentinel=sentinel,
         label=label,
         discover_modules=discover_modules,
+        entry_point_group=entry_point_group,
     )
     return registry.get, registry.list

@@ -109,6 +109,35 @@ python app.py --login trivial    # multi-user mode with simple username auth
 
 Without `--login`, the app uses `DefaultLoginProvider` (single-user, always authenticated).
 
+## Inspecting plugins and the API schema
+
+`python app.py --list-plugins` enumerates every auto-discovered plugin —
+dataset importers, exporters, label importers/sources, settings I/O,
+media converters/types/embedders/clippers, and media sources — and
+exits without starting the server. Three output formats:
+
+```bash
+python app.py --list-plugins                          # human-readable
+python app.py --list-plugins --format json            # machine-readable
+python app.py --list-plugins --format names           # one "family:name" per line
+python app.py --list-plugins --plugin-family importers --format names
+                                                      # one bare name per line — completion-friendly
+```
+
+Use `--format names --plugin-family <family>` from a shell-completion
+script to suggest valid values for `--importer`, `--exporter`, etc.
+
+`python app.py --openapi-schema` prints an OpenAPI 3.0 document for the
+HTTP API to stdout and exits — same content as `GET /openapi.json` on
+the running server:
+
+```bash
+python app.py --openapi-schema > openapi.json
+```
+
+See [API.md § Machine-readable schema](API.md#machine-readable-schema)
+for what's covered and what's intentionally left permissive.
+
 ---
 
 *Readme Reader code phrase:* `command palette unlocked`

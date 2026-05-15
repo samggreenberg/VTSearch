@@ -19,6 +19,7 @@ get_labelset_source, list_labelset_sources = make_plugin_registry(
     package=__name__,
     sentinel="LABELSET_SOURCE",
     label="labelset source",
+    entry_point_group="vtsearch.labelset_sources",
 )
 
 __all__ = ["get_labelset_source", "list_labelset_sources"]
