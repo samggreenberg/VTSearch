@@ -435,8 +435,14 @@ Currently many embedders embed one-at-a-time. Batch within a converter run + wit
 ### 12.3 Mixed-precision training ★ XS
 `torch.cuda.amp` for the MLP; trivial change.
 
-### 12.4 Model preload manager ★★ S
-Setting exists; could be smarter — predict which embedder is needed next from active dataset metadata.
+### 12.4 Model preload manager ★★ S — **DONE**
+Replaced the static `autoload_media_embedders` setting with
+`preload_predicted_embedders()` in `vtsearch/embedding/loader.py`. Startup
+walks the dataset and detector registries and warms each unique embedder
+referenced (`entry["embedder"]`, falling back to the default embedder
+for `entry["media_type"]`). `register_dataset()` also fires
+`smart_preload_in_background()` so a newly-implied embedder is warmed
+mid-session. Empty registry preloads nothing.
 
 ### 12.5 WebSocket for live progress ★★ M
 Today progress is polled via REST. WebSocket = lower latency, less server load, smoother UI.
@@ -524,7 +530,7 @@ Per-detector dashboard: precision/recall/F1 from a held-out vote split, calibrat
 Add synthetic label noise, measure detector quality degradation. Inform UI for "warn user when their vote disagrees with a confident model prediction" feature.
 
 ### 13.12 Cross-embedder ensembling ★★ M
-Train one MLP per embedder, average. Often beats best single embedder. Pairs with `autoload_media_embedders`.
+Train one MLP per embedder, average. Often beats best single embedder. Pairs with the smart-preload manager (§12.4) so every used embedder is already warm.
 
 ---
 

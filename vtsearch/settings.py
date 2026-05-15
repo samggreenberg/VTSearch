@@ -57,7 +57,6 @@ _SERVER_DEFAULTS: dict[str, Any] = {
     "detectors_dir": str(DATA_DIR / "detectors"),
     "max_concurrent_dataset_downloads": 1,
     "max_concurrent_dataset_embeddings": 1,
-    "autoload_media_embedders": [],
     "autorun_detectors": [],
 }
 
@@ -538,50 +537,6 @@ get_panel_pct_left, get_panel_pct_right, set_panel_pct_left, set_panel_pct_right
     None,
     value_type="int",
 )
-
-
-def _valid_embedder_names() -> tuple[str, ...]:
-    """Return the names of all registered embedders (lazy import to avoid circular deps)."""
-    from vtsearch.media import all_embedders
-
-    return tuple(e.name for e in all_embedders())
-
-
-def get_autoload_media_embedders() -> list[str]:
-    """Return the list of autoload embedder names (empty list if none set)."""
-    with _settings_lock:
-        raw = _ensure_server_loaded().get("autoload_media_embedders", _SERVER_DEFAULTS["autoload_media_embedders"])
-        if isinstance(raw, list):
-            valid = _valid_embedder_names()
-            return [v for v in raw if v in valid]
-        return []
-
-
-def set_autoload_media_embedders(value: list[str]) -> None:
-    """Set and persist the full list of autoload embedder names."""
-    valid = _valid_embedder_names()
-    for v in value:
-        if v not in valid:
-            raise ValueError(f"Invalid embedder: {v!r}")
-    with _settings_lock:
-        cache = _ensure_server_loaded()
-        cache["autoload_media_embedders"] = list(dict.fromkeys(value))
-        _save_server()
-
-
-def toggle_autoload_media_embedder(embedder_name: str) -> list[str]:
-    """Toggle a single embedder's autoload status.  Returns the updated list."""
-    valid = _valid_embedder_names()
-    if embedder_name not in valid:
-        raise ValueError(f"Invalid embedder: {embedder_name!r}")
-    with _settings_lock:
-        current = get_autoload_media_embedders()
-        if embedder_name in current:
-            current.remove(embedder_name)
-        else:
-            current.append(embedder_name)
-        set_autoload_media_embedders(current)
-        return current
 
 
 def get_autorun_detectors() -> list[str]:

@@ -30,7 +30,6 @@ GET /api/settings
   "grid_icon_size_right": {},
   "panel_pct_left": {},
   "panel_pct_right": {},
-  "autoload_media_embedders": [],
   "autorun_detectors": [],
   "autopilot_enabled": true,
   "hide_autopilot": false,
@@ -67,7 +66,7 @@ Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `show_metadata` (bool), `view_mode_left` (dict), `view_mode_right` (dict),
 `focus_mode_left` (dict), `focus_mode_right` (dict), `grid_icon_size_left`
 (dict), `grid_icon_size_right` (dict), `panel_pct_left` (dict),
-`panel_pct_right` (dict), `autoload_media_embedders` (list of strings),
+`panel_pct_right` (dict),
 `autopilot_enabled` (bool),
 `hide_autopilot` (bool), `autopilot_top_greens` (int),
 `autopilot_hard_reds` (int), `autopilot_resort_interval` (int),

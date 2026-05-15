@@ -84,25 +84,69 @@ def _make_console_progress(original_callback):
     return _callback
 
 
-def preload_autoload_media_types() -> list[str]:
-    """Eagerly load embedding models for autoload embedders (and legacy media types).
+def predict_embedders_to_preload() -> list[str]:
+    """Predict which embedders are likely to be needed next, from active metadata.
 
-    Reads ``autoload_media_embedders`` from persisted settings and calls
-    :meth:`~vtsearch.media.base.MediaEmbedder.load_models` on each one so
-    that models are warm before the user opens the GUI.
+    Walks the dataset registry and detector registry and returns the unique
+    list of embedder names the user is likely to need:
 
+    - For each registered dataset: ``entry["embedder"]`` if set, otherwise
+      the default embedder for ``entry["media_type"]``.
+    - For each registered detector: the default embedder for
+      ``entry["media_type"]``.
+
+    Names not matching a registered embedder are filtered out. Order
+    reflects discovery order (datasets first, then detectors), so the
+    output is stable across runs.
+    """
+    from vtsearch.datasets.registry import list_datasets
+    from vtsearch.detectors.registry import list_detectors
+    from vtsearch.media import all_embedders, embedders_for_type
+
+    valid = {e.name for e in all_embedders()}
+    predictions: list[str] = []
+    seen: set[str] = set()
+
+    def _add(name: str) -> None:
+        if name and name in valid and name not in seen:
+            seen.add(name)
+            predictions.append(name)
+
+    def _default_for(media_type: str) -> str:
+        if not media_type:
+            return ""
+        opts = embedders_for_type(media_type)
+        return opts[0].name if opts else ""
+
+    for entry in list_datasets():
+        emb = entry.get("embedder", "") or ""
+        _add(emb if emb else _default_for(entry.get("media_type", "")))
+
+    for entry in list_detectors():
+        _add(_default_for(entry.get("media_type", "")))
+
+    return predictions
+
+
+def preload_predicted_embedders() -> list[str]:
+    """Eagerly load embedding models predicted by :func:`predict_embedders_to_preload`.
+
+    Calls :meth:`~vtsearch.media.base.MediaEmbedder.load_models` on each
+    predicted embedder so it is warm before the user opens the GUI.
     Prints intermediate status messages and download progress bars to
-    the console so that the user can see what is happening during the
-    (potentially long) model loading phase.
+    the console while models load.
 
     Returns the list of embedder names that were preloaded.
     """
     from vtsearch.media import get_embedder
-    from vtsearch.settings import get_autoload_media_embedders
 
+    targets = predict_embedders_to_preload()
+    if not targets:
+        return []
+
+    print(f"  Predicted embedders to preload: {', '.join(targets)}", flush=True)
     preloaded: list[str] = []
-
-    for emb_name in get_autoload_media_embedders():
+    for emb_name in targets:
         try:
             emb = get_embedder(emb_name)
             print(f"  Preloading {emb_name} embedder...", flush=True)
@@ -116,6 +160,30 @@ def preload_autoload_media_types() -> list[str]:
         except Exception as exc:
             print(f"  Warning: failed to preload {emb_name}: {exc}", flush=True)
     return preloaded
+
+
+def smart_preload_in_background() -> None:
+    """Kick a daemon thread that warms any predicted embedders not yet loaded.
+
+    Idempotent: embedders whose model is already in memory are skipped.
+    Failures are swallowed because this is a best-effort optimisation —
+    the real load path will retry on first use.
+    """
+    import threading
+
+    def _run() -> None:
+        from vtsearch.media import get_embedder
+
+        for emb_name in predict_embedders_to_preload():
+            try:
+                emb = get_embedder(emb_name)
+                if getattr(emb, "_model", None) is not None:
+                    continue
+                emb.load_models()
+            except Exception:
+                pass
+
+    threading.Thread(target=_run, name="smart-preload", daemon=True).start()
 
 
 # ---------------------------------------------------------------------------

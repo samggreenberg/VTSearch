@@ -125,9 +125,12 @@ more efficient for that traffic.
 ### Embedding models (HuggingFace Hub)
 
 VTSearch downloads four embedding models on first use. Each model is
-lazy-loaded when a dataset of the corresponding media type is opened for the
-first time (or at startup if `autoload_media_embedders` is configured in
-settings).
+lazy-loaded when a dataset of the corresponding media type is opened for
+the first time. At startup, VTSearch also runs a smart-preload pass that
+warms every embedder referenced by the dataset and detector registries
+(see `predict_embedders_to_preload()` in `vtsearch/embedding/loader.py`),
+so the first request that uses each embedder doesn't pay the cold-load
+cost. On an empty registry, nothing is preloaded.
 
 | Model | Media type | HuggingFace ID | Approx. size |
 |-------|-----------|----------------|-------------|
@@ -327,7 +330,6 @@ and auto-saved on every change. Schema:
   "grid_icon_size_right": {},
   "panel_pct_left": {},
   "panel_pct_right": {},
-  "autoload_media_embedders": [],
   "autorun_detectors": [],
   "autopilot_enabled": true,
   "hide_autopilot": false,
@@ -344,9 +346,6 @@ and auto-saved on every change. Schema:
 
 Notable fields:
 
-- `autoload_media_embedders` — embedders to preload at startup (e.g.
-  `["clap", "siglip"]`); triggers model downloads if not yet cached.
-  Leave empty to defer loading until each media type is first used.
 - `autorun_detectors` — list of registered detector names
   to run during `/api/auto-detect` and the CLI `--autodetect` flow.
   Toggle a model's flag through the UI or
@@ -526,10 +525,10 @@ pre-download models with `./scripts/download_models.sh` and set
 
 **Symptom**: Process killed or `torch.cuda.OutOfMemoryError`.
 
-**Fix**: Load fewer media types simultaneously. Set
-`autoload_media_embedders` in settings to only the embedders you need,
-so unused models aren't preloaded. For GPU, ensure adequate VRAM (4+ GB
-recommended).
+**Fix**: Load fewer media types simultaneously. The smart-preload pass
+at startup warms every embedder referenced by the dataset and detector
+registries — unregister datasets you no longer use so their embedders
+aren't preloaded. For GPU, ensure adequate VRAM (4+ GB recommended).
 
 ### Docker build fails on pip install
 

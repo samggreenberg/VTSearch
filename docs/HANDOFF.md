@@ -157,7 +157,7 @@ argument parsing. Key startup sequence:
 1. Create `data/` directory structure
 2. Initialize model cache directory
 3. Load persistent settings from `data/settings.json`
-4. Preload embedders listed in `autoload_media_embedders` (if configured)
+4. Smart-preload predicted embedders (`predict_embedders_to_preload()` in `vtsearch/embedding/loader.py`) — walks the dataset and detector registries and warms each unique embedder referenced
 5. Start Flask server (or run CLI autodetect workflow)
 
 ### Where things live (quick lookup)
@@ -330,7 +330,7 @@ can work with different datasets/models simultaneously via
 `X-Dataset-Id`/`X-Detector-Id` headers. Settings are split into two
 tiers: a small set of server-wide infrastructure keys
 (`saved_datasets_dir`, `detectors_dir`, `max_concurrent_*`,
-`autoload_media_embedders`, `autorun_detectors`) live in
+`autorun_detectors`) live in
 `data/settings.json` and are shared across users; everything else —
 theme, volume, view/focus/panel modes, autopilot config, achievements
 state, and the per-user `settings_source` — lives in

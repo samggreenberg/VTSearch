@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { AppSettings, EmbeddersResponse } from '../models/api.models';
+import { AppSettings } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
 export class SettingsApiService {
@@ -17,10 +17,6 @@ export class SettingsApiService {
 
   getDefaults(): Observable<AppSettings> {
     return this.http.get<AppSettings>('/api/settings/defaults');
-  }
-
-  getEmbedders(): Observable<EmbeddersResponse> {
-    return this.http.get<EmbeddersResponse>('/api/embedders');
   }
 
   getVersion(): Observable<{ version: string }> {
