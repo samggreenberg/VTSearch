@@ -62,7 +62,10 @@ class TestInvalidRequestBodies:
             data="null",
             content_type="application/json",
         )
-        assert resp.status_code == 400
+        # Marshmallow-validated route: a JSON ``null`` body fails the
+        # ``labels`` required check and surfaces as 422 with the standard
+        # flask-smorest error envelope.
+        assert resp.status_code == 422
 
     def test_settings_put_with_empty_body(self, client):
         resp = client.put("/api/settings", json={})
@@ -149,7 +152,8 @@ class TestMissingRequiredFields:
                 "sort_results": [{"id": 1, "score": 0.5}],
             },
         )
-        assert resp.status_code == 400
+        # Required-field validation runs in the FillFromSort schema → 422.
+        assert resp.status_code == 422
 
     def test_fill_from_sort_missing_sort_results(self, client):
         resp = client.post(
@@ -158,7 +162,8 @@ class TestMissingRequiredFields:
                 "threshold": 0.5,
             },
         )
-        assert resp.status_code == 400
+        # Required-field validation runs in the FillFromSort schema → 422.
+        assert resp.status_code == 422
 
     def test_exporter_missing_name(self, client):
         resp = client.post("/api/exporters/export", json={})
@@ -227,7 +232,8 @@ class TestTypeMismatches:
                 "threshold": "high",
             },
         )
-        assert resp.status_code == 400
+        # Type-coercion failures surface from the schema as 422.
+        assert resp.status_code == 422
 
     def test_fill_from_sort_invalid_sides(self, client):
         resp = client.post(
@@ -238,15 +244,18 @@ class TestTypeMismatches:
                 "sides": "left",
             },
         )
-        assert resp.status_code == 400
+        # OneOf validation runs in the schema → 422.
+        assert resp.status_code == 422
 
     def test_labels_import_labels_not_list(self, client):
         resp = client.post("/api/labels/import", json={"labels": "not a list"})
-        assert resp.status_code == 400
+        # ``labels`` must be a list per the schema → 422.
+        assert resp.status_code == 422
 
     def test_labels_import_labels_is_dict(self, client):
         resp = client.post("/api/labels/import", json={"labels": {"1": "good"}})
-        assert resp.status_code == 400
+        # ``labels`` must be a list per the schema → 422.
+        assert resp.status_code == 422
 
 
 class TestNonexistentResources:

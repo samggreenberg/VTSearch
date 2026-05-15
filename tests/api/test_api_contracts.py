@@ -563,10 +563,14 @@ class TestErrorResponseFormat:
         assert "error" in data
 
     def test_400_labels_import_error_is_json(self, client):
+        # The labels blueprint now returns flask-smorest's standard
+        # error envelope: type mismatches surface as 422 with a
+        # per-field ``errors`` dict, not the legacy ``{"error": str}``
+        # shape. Keeping the test name for grep continuity.
         resp = client.post("/api/labels/import", json={"labels": "not_a_list"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
         data = resp.get_json()
-        assert "error" in data
+        assert "errors" in data
 
     def test_400_settings_error_is_json(self, client):
         # The settings blueprint now returns flask-smorest's standard
