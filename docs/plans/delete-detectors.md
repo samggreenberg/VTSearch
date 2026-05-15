@@ -1,8 +1,10 @@
 # Plan: Delete Detectors, Keep Only Trainable Models
 
-> **Status: Proposed.** Companion to PR #1224 (right pane labelset-driven; CLI
-> autorun detectors). Captures the cleanup we agreed to do *after* that
-> PR lands. Origins-as-source-of-truth, MLPs-in-RAM-only.
+> **Status: Mostly shipped.** Companion to PR #1224 (right pane
+> labelset-driven; CLI autorun detectors). Origins-as-source-of-truth,
+> MLPs-in-RAM-only. Steps 1, 2, 4, 5, and 6 are done; step 3 has one
+> loose end (`detectors_dir` setting still present); step 7 (docs pass)
+> hasn't run yet. See the per-step annotations below.
 
 ## Problem
 
@@ -111,14 +113,14 @@ Detector routes fold into detector / model-registry routes:
 
 Each step is independently committable; each leaves the suite green.
 
-### Step 1 — Stop writing weights anywhere
+### Step 1 — Stop writing weights anywhere ✅ DONE
 
 - Remove the `weights` field from `add_autorun_detector()` (`state_processors.py`). The dict still exists in RAM, but the field becomes lazy-derived from `det_ctx.model` only.
 - Delete the `fallback_weights` branch in `weights_compat.normalize_detector_weights()`. If origins can't resolve, raise — that's correct semantics under the new principle.
 - Delete `GET /api/autorun-detectors/<name>/export`. Update `load-sort-modal.component.ts:121` to fetch `/api/detectors/<name>` instead.
 - Tests: update `test_detector_export.py`, `test_detectors.py`, `test_multi_detector.py` to assert origins-only.
 
-### Step 2 — Collapse autorun_detectors into DetectorContext
+### Step 2 — Collapse autorun_detectors into DetectorContext ✅ DONE
 
 - Delete `state_processors.py:add_autorun_detector / remove_autorun_detector / rename_autorun_detector / get_autorun_detectors`.
 - Delete the `autorun_detectors` global at `state_core.py:685`.
@@ -126,41 +128,41 @@ Each step is independently committable; each leaves the suite green.
 - Trigger `train_from_labelset` for any registry-listed autorun model that doesn't yet have a `DetectorContext` loaded.
 - Tests: rewrite `test_detectors.py::TestAutoDetect` to seed via the detector registry instead of `autorun_detectors`.
 
-### Step 3 — Delete detector-on-disk format
+### Step 3 — Delete detector-on-disk format ⚠️ MOSTLY DONE
 
-- Delete `data/detectors/` references from settings, file-browser, etc.
-- Delete `vtsearch/processors/importers/server_detector_file/`.
-- Delete `vtsearch/models/weights_compat.py`.
-- Delete `/api/detector/export-server`, `/api/detector/server-files`, `/api/detector/server-files/<n>`.
-- Delete `POST /api/autorun-detectors/import-pkl`.
-- Delete `vtsearch/settings.py:detectors_dir` setting.
-- Tests: delete `test_detector_export.py`; trim `test_processor_importers.py`.
+- ✅ Delete `data/detectors/` references from settings, file-browser, etc.
+- ✅ Delete `vtsearch/processors/importers/server_detector_file/`.
+- ✅ Delete `vtsearch/models/weights_compat.py` (the whole `vtsearch/models/` package is gone after the codebase-reorg split).
+- ✅ Delete `/api/detector/export-server`, `/api/detector/server-files`, `/api/detector/server-files/<n>`.
+- ✅ Delete `POST /api/autorun-detectors/import-pkl`.
+- ❌ **Still TODO:** delete the `detectors_dir` setting in `vtsearch/settings.py` (still present in `_SERVER_DEFAULTS`, `_EXCLUDE_FROM_DEFAULTS`, and the `get_detectors_dir()` / `set_detectors_dir()` accessors).
+- ✅ Tests: delete `test_detector_export.py`; trim `test_processor_importers.py`.
 
-### Step 4 — Collapse autorun_processors into autorun_detectors
+### Step 4 — Collapse autorun_processors into autorun_detectors ✅ DONE
 
 - Delete `autorun_processors`, `autorun_detector_names`, related getters/setters/UI bindings.
 - The CLI's `_import_autorun_processors` becomes a no-op; remove it.
 - Move any autorun-discovery logic to use `autorun_detectors` exclusively.
 - Tests: update `test_settings.py`, `test_cli_autodetect.py`.
 
-### Step 5 — Folding routes into detectors surface
+### Step 5 — Folding routes into detectors surface ✅ DONE
 
-- Move the still-useful endpoints from `detectors_*.py` (e.g. examples, autorun-flag toggle) onto the detector / model-registry blueprints.
+- Move the still-useful endpoints from `detectors_*.py` (e.g. examples, autorun-flag toggle) onto the detector / model-registry blueprints. The detector routes now live under `vtsearch/routes/detectors/{store,registry,scoring,find}.py`.
 - Delete `detectors_crud.py`, `detectors_training.py` (extractors/localizers stay, in their own files now).
 - Update frontend `DetectorsApiService` → renamed `ModelsApiService` (or merged into existing `DetectorsApiService`).
 - Tests: rename / migrate `test_detectors.py` content.
 
-### Step 6 — Drop trainable/detector_name distinction in registry
+### Step 6 — Drop trainable/detector_name distinction in registry ✅ DONE
 
 - `model_registry.py`: every entry is now a detector. Drop `trainable: bool` and `detector_name`. Replace with `autorun: bool`.
 - Update `/api/find-label`'s resolution order: cached `det_ctx.model` → train_from_labelset on demand. Drop the `tm_data["weights"]` and `det_name` branches entirely (`detectors_scoring.py:158-191`).
 - Tests: simplify multi-detector tests.
 
-### Step 7 — Documentation pass
+### Step 7 — Documentation pass ❌ TODO
 
 - Update `docs/ML.md`, `docs/CLI.md`, `docs/EXTENDING.md`, `docs/api/*.md` to describe a single "detector" concept.
 - Update CLAUDE.md's "Architecture" section: remove detector references; add a one-line summary of the model registry.
-- Delete `docs/plans/structural-detectors.md` if obsolete (likely written assuming the two-concept world).
+- Delete `docs/plans/structural-detectors.md` if obsolete (likely written assuming the two-concept world). *(Already gone — file no longer exists under `docs/plans/`.)*
 
 ## Test Plan
 
