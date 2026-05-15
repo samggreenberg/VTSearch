@@ -405,22 +405,30 @@ def client():
 
 
 def _wait_for_job(job_manager, *, timeout: float = 30.0) -> None:
-    """Block until the current job in *job_manager* (if any) is done.
+    """Block until the running job (and any coalesced pending follow-up) finish.
 
-    Test helper that the route-level ``wait=true`` flag relies on so tests
-    can call the async endpoints synchronously without sprinkling poll
-    loops everywhere.
+    With the coalescing job manager, a ``start()`` issued while a job is
+    running ends up in the pending slot and gets promoted automatically
+    when the runner finishes.  Tests that issue several requests need to
+    wait for the whole chain to drain, not just the first job.
     """
     import time as _time
 
-    job = job_manager.current()
-    if job is None:
-        return
     deadline = _time.monotonic() + timeout
-    while job.status == "running" and _time.monotonic() < deadline:
-        job.done_event.wait(timeout=0.05)
-    if job.status == "running":
-        raise TimeoutError(f"Job {job.job_id} did not finish within {timeout}s")
+    while _time.monotonic() < deadline:
+        job = job_manager.current()
+        if job is None:
+            return
+        if job.status in ("running", "pending"):
+            job.done_event.wait(timeout=0.05)
+            continue
+        # Current is finished.  Yield briefly so any pending promotion
+        # spawned from _run can replace current before we re-check.
+        _time.sleep(0.01)
+        follow = job_manager.current()
+        if follow is None or follow.job_id == job.job_id:
+            return
+    raise TimeoutError(f"Job manager did not drain within {timeout}s")
 
 
 @pytest.hookimpl(trylast=True)

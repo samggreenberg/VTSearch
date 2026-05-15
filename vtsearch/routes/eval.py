@@ -217,7 +217,7 @@ def eval_train_and_score_result():
     if job is None:
         return jsonify({"status": "missing", "error": "Job not found"}), 404
 
-    if job.status == "running":
+    if job.status in ("running", "pending"):
         prog = get_eval_progress()
         return jsonify({
             "job_id": job.job_id,
