@@ -92,7 +92,7 @@ If a failure is genuinely outside the scope of the current task (e.g. a flaky ne
 - `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing, per-request user context via `before_request` middleware, per-request dataset/model context resolution from `X-Dataset-Id`/`X-Detector-Id` headers
 - `vtsearch/auth/` — Authentication: `LoginProvider` ABC, `DefaultLoginProvider` (single-user, no-op), `get_current_user()`, `get_user_data_dir()`, `set_login_provider()`
 - `vtsearch/config.py` — Constants (CLAP_SAMPLE_RATE, paths, model IDs)
-- `vtsearch/medias.py` — Test media generation and embedding cache management
+- `tests/fixtures/medias.py` — Test media generation and embedding cache management (loaded by `tests/conftest.py`; not part of the runtime app)
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
 - `vtsearch/settings.py` — Persistent settings (volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, grid_icon_size_left, grid_icon_size_right, panel_pct_left, panel_pct_right, autoload_media_embedders, autorun_detectors, autopilot_enabled, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_resort_interval, autopilot_goal_diversity, saved_datasets_dir, detectors_dir, max_concurrent_dataset_downloads, max_concurrent_dataset_embeddings, settings_source); auto-saves to `data/settings.json`. When a `settings_source` is configured, every save also syncs to the source (with a `_syncing` guard to prevent circular re-export during import). At startup, `sync_from_settings_source()` auto-imports from the active source. Also contains `_apply_settings()` for applying a settings dict via `set_*` functions
 - `vtsearch/routes/` — Flask blueprints: `auth.py`, `eval.py`, `file_browser.py`, `labels.py`, `media_server.py`, `main.py`, `medias.py`, `sorting.py`, `processors.py` (extractor/localizer/pregen-processor CRUD + execution; sub-modules `processors_crud.py` and `processors_scoring.py`), `detector_scoring.py` (`/api/auto-detect`, `/api/find-label` against detector labelsets), `detector_find.py` (multi-dataset Find), `datasets.py` (with sub-module `datasets_ui.py`), `datasets_registry.py` (dataset registry CRUD at `/api/datasets/registry/*`), `exporters.py`, `label_importers.py`, `settings.py`, `settings_io.py`, `sync_sources.py`, `detectors.py` (on-disk labelset+query store at `/api/detectors/*`), `detectors_registry.py` (in-memory model registry at `/api/detectors/registry/*`, autorun toggle); shared utilities in `helpers.py`. Note: dataset-load orchestration lives at `vtsearch/datasets/load_pipeline.py` (background-task helpers, ConcurrencyGate, clip fix-up).
@@ -110,110 +110,30 @@ If a failure is genuinely outside the scope of the current task (e.g. a flaky ne
 - `frontend/` — Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`. `ActiveContextService` tracks which dataset/model the user selected; `activeContextInterceptor` attaches `X-Dataset-Id`/`X-Detector-Id` headers to every API request
 - `static/` — Angular build output (index.html, main.js, polyfills.js, styles.css) and assets (favicons, logo.svg, logo.png)
 - `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md + EXTENDING-plugins.md + EXTENDING-media.md + EXTENDING-processors.md, HANDOFF.md, ML.md, SETUP.md, USER_GUIDE.md, demos.md, design/cli-detector-converter.md, plans/sync-sources.md, plans/combine-models-ui.md, plans/extract-library.md, plans/RCDatasetImporter.md, plans/delete-detectors.md, plans/multi-media-import.md)
-- `tests/` — Test suite split by module:
-  - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client)
-  - `test_api_contracts.py` — API response shape verification: status codes, content types, required keys, error format consistency
-  - `test_ssrf_validation.py` — SSRF URL validation: blocking private/internal network addresses, public URL allowlisting, integration with HTTP archive importer and webhook exporter
-  - `test_path_validation.py` — Server file-path validation: path traversal prevention
-  - `test_dockerfile_syntax.py` — Static syntax check for Python embedded in `python -c "..."` blocks inside every `Dockerfile*`. Catches SyntaxErrors (e.g. compound statements flattened with semicolons) without invoking `docker build`.
-  - `test_audio.py` — WAV generation
-  - `test_medias.py` — Media init, listing, audio endpoint, MD5
-  - `test_votes.py` — Voting and vote retrieval
-  - `test_sorting.py` — Text sort, learned sort, example sort, train_and_score
-  - `test_labels.py` — Label export/import (via /api/labels/export and /api/labels/import)
-  - `test_label_importers.py` — Label importer base class, registry, built-in server json_file/csv_file importers, GET /api/label-importers endpoint
-  - `test_label_import_endpoint.py` — Label import POST endpoint, resolve_media_ids, find_missing_entries, next_media_id, missing element handling
-  - `test_label_import_ingestion.py` — Label import ingestion: ingest-missing endpoint, _group_by_origin, _media_type_from_origin, _ingest_via_resolver
-  - `test_inclusion.py` — Inclusion GET/POST
-  - `test_find_label.py` — POST /api/find-label and /api/auto-detect against detector registry entries
-  - `test_multi_detector.py` — Model registry multi-loaded support, activate/unload endpoints, MLP caching
-  - `test_clippers.py` — MediaClipper ABC tests and concrete clipper implementations
-  - `test_clipper_workflow.py` — Clipper integration in dataset-loading pipeline
-  - `test_new_embedders.py` — Alternative embedder class properties and registration (SigLIP, CLAP Music, BGE) without downloading model weights
-  - `test_resolver.py` — Media file resolution from origin trails: ResolvedLabels and resolve_file_from_origin
-  - `test_datasets.py` — Dataset endpoints, startup state, importers
-  - `test_dataset_split.py` — Train/test dataset splitting
-  - `test_csv_webhook_exporters.py` — CSV and Webhook exporter metadata, CLI args, export logic
-  - `test_dashboard.py` — Dashboard API endpoint tests
-  - `test_exporters.py` — Results exporter base classes, registry, built-in exporters, API routes
-  - `test_importers.py` — Importer base class, HTTP archive/folder importer metadata, archive extraction
-  - `test_dynamic_field_options.py` — Dynamic-options importer fields: PluginField `dynamic_options`/`depends_on` serialisation, `DatasetImporter.get_field_options` default + override, `POST /api/dataset/import/<name>/options` route, ReCaller `query_id` dynamic dropdown
-  - `test_importer_loading.py` — Folder loader: content_vectors, skip_embedding, custom-metadata flow
-  - `test_importer_symlinks.py` — Symlinked importer discovery, rglob following symlinks
-  - `test_dataset_importer_media.py` — End-to-end folder/pickle importer paths into media types
-  - `test_file_browser.py` — File browser API endpoints for directory navigation
-  - `test_extractors.py` — Image class extractor
-  - `test_processors.py` — Media processor tests (extractor + localizer factories from `vtsearch.routes.processors`)
-  - `test_origin_labelset.py` — Origin class, LabeledElement, LabelSet, build_origin(), label export/import with origins, integration
-  - `test_combine_datasets.py` — Combine-datasets importer: metadata, dedup, media type validation, CLI, API routes
-  - `test_synthetic_importer.py` — SyntheticDatasetImporter: discovery, metadata (factory icon), field validation, audio/image/video generators, deterministic seeding, idempotent caching, origin round-trip, resolve_file
-  - `test_server_files_importer.py` — ServerFilesDatasetImporter: paths-file parsing, symlink staging, origin rewrite to original absolute paths, resolve_file
-  - `test_npz_dataset_import.py` — `.npz` paths-file support: NPZ reader helper (`filenames`+`vectors` and per-key layouts), server_files end-to-end with NPZ vectors, local-folder upload endpoint's optional `vectors_file` multipart field
-  - `test_corrections_export.py` — Corrections tracking: _find_initial_labels state, is_correction annotation on label export, label_filter=corrections filtering
-  - `test_creation_info.py` — Legacy creation_info handling in pickle datasets
-  - `test_parallel_loading.py` — Parallel dataset loading: LoadingTasksTracker, thread-local progress, per-task cancel, loading-tasks API endpoints, build_diversity_tree_for_context
-  - `test_pickle_safety.py` — Restricted pickle unpickler: RCE prevention while allowing legitimate VTSearch dataset pickles
-  - `test_duplicates.py` — Duplicate-content collapsing: collapse_duplicates function, dupe counting, label export/import integration
-  - `test_enrich_descriptions.py` — Enriched text-sort description embedding
-  - `test_error_recovery.py` — Error handling and edge cases: invalid requests, missing fields, type mismatches, empty state, nonexistent resources
-  - `test_eval.py` — Evaluation framework runner and metrics
-  - `test_eval_visualize.py` — Evaluation visualisation chart generation
-  - `test_eval_voting_iterations.py` — Voting iterations evaluation
-  - `test_safe_thresholds.py` — Safe threshold blending
-  - `test_settings.py` — Settings persistence (volume, inclusion, theme, swipe_animation, show_metadata, view_mode_left, view_mode_right, focus_mode_left, focus_mode_right, hide_autopilot, autopilot_top_greens, autopilot_hard_reds, autopilot_resort_interval, autorun_detectors)
-  - `test_settings_api_routes.py` — Flask API routes: GET/PUT /api/settings, individual setting endpoints
-  - `test_settings_directories.py` — Directory-path settings (saved_datasets_dir, detectors_dir)
-  - `test_settings_io.py` — Settings import/export plugin system: SettingsImporter/SettingsExporter base classes, registries, local_json_file and server_json_file plugins, API endpoints
-  - `test_sync_sources.py` — Sync sources: SettingsSource/LabelsetSource base classes, registries, server_json_file round-trips, settings sync-on-change, circular guard, template resolution, DetectorContext.labelset_source, API routes
-  - `test_thin_loading.py` — Thin (lazy) dataset loading mode for CLI
-  - `test_chunked_loading.py` — Chunked (piecewise) dataset loading: folder/pickle chunked loaders, importer run_chunked interface, merge helper
-  - `test_label_sorting.py` — Label sorting features: click-time tracking, learned-sort score storage, enriched /api/votes response
-  - `test_diversity_tree.py` — DiversityTree: hierarchical k-means clustering, seen tracking, diversity level, next sample
-  - `test_diversity_tree_integration.py` — DiversityTree integration with Flask app: build, rebuild, voting, diversity-level endpoint
-  - `test_document_and_converters.py` — Document media type and media converters (document→image, document→text, video→audio, video→image)
-  - `test_converter_selection.py` — ConverterChooser: converter registry, API, importer integration, run_converters_on_folder
-  - `test_download_and_extract.py` — Generic _download_and_extract() helper: tar.gz, zip, nested archives
-  - `test_tqdm_progress.py` — tqdm-based progress bar tracking
-  - `test_ag_news_download.py` — AG News dataset download and load_demo_source integration
-  - `test_bbc_news_download.py` — BBC News dataset download and load_demo_source integration
-  - `test_export_options.py` — Export boolean options, negative_hits in CLI scoring, fill-from-sort
-  - `test_frontend.py` — Frontend serving: Angular SPA entry point, static files (main.js, polyfills.js, styles.css), favicon variants, logo, legacy /ng/ redirect, content types
-  - `test_gtzan_download.py` — GTZAN dataset download and load_demo_source integration
-  - `test_image_sources_download.py` — Image dataset downloads: Oxford Flowers 102, Food-101, EuroSAT, Stanford Dogs, Places365, and load_demo_source integration
-  - `test_video_datasets_download.py` — Video dataset downloads (UCF-101 subset) and load_demo_source integration
-  - `test_multi_media_coverage.py` — Cross-media-type smoke (text sort, learned sort, vote, label export/import) for each registered media type
-  - `test_imdb_download.py` — IMDB dataset download and load_demo_source integration
-  - `test_load_sort_window.py` — Load Sort window endpoints: example-sort, server-media-files, model registry listing
-  - `test_media_sources.py` — MediaSource abstraction: get_source_for_origin, LocalFolderSource, HTTP archive source
-  - `test_multi_dataset.py` — Multi-dataset support: DatasetContext, proxy dicts/lists, context store, switching preserves votes/history/scores, load/unload API endpoints, scalar state isolation, empty context fallback
-  - `test_request_context.py` — Request-scoped context resolution: X-Dataset-Id / X-Detector-Id headers, proxy override per-request, fallback to global active, isolation between requests
-  - `test_memory_errors.py` — Graceful MemoryError handling during dataset loading
-  - `test_multi_user_dataset_access.py` — Multi-user dataset access control: readers list, access filtering, ownership checks, PUT readers endpoint
-  - `test_multi_user_security.py` — LoginProvider ABC, DefaultLoginProvider, g.user middleware, created_by ownership, auth status endpoint, user data dir isolation
-  - `test_pdf_import.py` — PDF-to-image import: render_pdf_pages conversion, folder importer PDF handling, origin tracking
-  - `test_preload_progress.py` — Console progress output during embedding model preloading
-  - `test_thread_safety.py` — Thread-safe global state operations: _state_lock verification, concurrent vote/click-time/label history access
-  - `test_detectors.py` — Trainable models CRUD API: create, list, get, delete, rename, save labels, examples
-  - `test_ucsf_documents_download.py` — UCSF Industry Documents demo dataset download and load_demo_source integration
-  - `test_extension_scaffolds.py` — Extension support: LabeledElement metadata round-trip, media_url lazy-fetch, plugin discovery (ReCaller/Holder/PullWrest), enriched export origin.params flattening, helper functions
-  - `test_gpu.py` — GPU tests: training, cross-calibration, detectors, embedding models (CLAP/CLIP/X-CLIP/E5), CPU↔GPU equivalence, memory cleanup (skipped without CUDA)
+- `tests/` — Test suite. Files are bucketed by group folder; the folder name **is** the pytest marker (`tests/core/test_*.py` → marker `core`). New test files inherit their group from where they live — no registry to update.
+  - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client). Also stubs all embedders so tests never download real model weights.
+  - `helpers.py` — Shared helpers (`make_wav_bytes`, `make_dataset_file`, media-builder fns) — imported as `from helpers import ...` via the `pythonpath = ["tests"]` in `pyproject.toml`.
+  - `fixtures/medias.py` — Test media generation + per-worker embedding cache, loaded by conftest.
+  - `tests/__init__.py` — Test-package helpers (`load_detector_and_wait`).
+  - Test groups (folders): `core/`, `api/`, `sorting/`, `datasets/`, `io/`, `detectors/`, `downloads/`, `integration/`, `cli/`, `converters/`, `gpu/`. To find tests for an area, look in the corresponding folder; to add a new test, drop it in the folder that matches its concern.
 
 ## Test Groups
 
-Tests are auto-grouped by area. Run a focused subset instead of the full suite:
+Tests are grouped by folder under `tests/`. Each folder is a pytest marker — `./run-tests.sh <group>` runs all tests in `tests/<group>/`. New tests inherit their group from the folder they're added to.
 
-| Group | Files | Description |
-|-------|-------|-------------|
-| `core` | audio, medias, votes, inclusion, settings, settings_api_routes, settings_directories, frontend | Basic app functionality |
-| `api` | api_contracts, error_recovery, dashboard, file_browser, path_validation, multi_user_security, multi_user_dataset_access, ssrf_validation | API contracts, error handling, security |
-| `sorting` | sorting, label_sorting, safe_thresholds, enrich_descriptions, diversity_tree* | Sort algorithms and diversity |
-| `datasets` | datasets, dataset_split, combine_datasets, creation_info, duplicates, origin_labelset, extension_scaffolds, synthetic_importer, thin/chunked_loading, memory_errors, pickle_safety, media_sources, multi_dataset, request_context, parallel_loading | Dataset loading and management |
-| `io` | exporters, csv_webhook_exporters, export_options, importers, importer_loading, importer_symlinks, dataset_importer_media, label_importers, labels, processor_importers, pdf_import, corrections_export, settings_io, sync_sources | Import/export and sync |
-| `models` | detectors, detector_find, detector_export, extractors, processors, detectors, multi_detector, clippers, clipper_workflow, eval*, resolver, new_embedders | ML models and evaluation |
-| `downloads` | ag_news, bbc_news, gtzan, image_sources, imdb, ucsf, download_and_extract, video_datasets | Demo dataset downloads |
-| `integration` | integration, slow_integration, thread_safety, multi_media_coverage | End-to-end workflows |
-| `cli` | cli_autodetect, load_sort_window, preload_progress, tqdm_progress | CLI and progress |
-| `converters` | document_and_converters, converter_selection | Media converters |
+| Group | Description |
+|-------|-------------|
+| `core` | Basic app functionality (audio, medias, votes, inclusion, settings, frontend, torch config) |
+| `api` | API contracts, error handling, security, dashboard, embed |
+| `sorting` | Sort algorithms, diversity, safe thresholds, enriched text sort |
+| `datasets` | Dataset loading, splitting, dedup, parallel/chunked/thin loading, multi-dataset context |
+| `io` | Importers, exporters, label I/O, settings I/O, sync sources, PDF/NPZ import |
+| `detectors` | Detectors, embedders, clippers, eval, processors, training |
+| `downloads` | Demo dataset downloads (AG News, BBC, GTZAN, IMDB, image sources, UCSF, video, generic extract) |
+| `integration` | End-to-end workflows, thread safety, async jobs |
+| `cli` | CLI autodetect, load sort window, progress bars |
+| `converters` | Media converters (document, video, image) |
+| `gpu` | CUDA-only tests (excluded by default) |
 
 **Recommended workflow**: Run `./run-tests.sh <group>` for the area you changed, then `./run-tests.sh` for the full suite.
 

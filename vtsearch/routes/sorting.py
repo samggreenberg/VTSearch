@@ -317,6 +317,7 @@ def learned_sort():
                     calibrate_count=calibrate_count_value,
                     calibration_fraction=calibration_fraction_value,
                     vote_region_boxes=region_boxes_snapshot,
+                    det_ctx=det_ctx,
                 )
 
             # Store scores so the /api/votes endpoint can provide confidence info.
@@ -427,7 +428,7 @@ def learned_sort_result():
     if job is None:
         return jsonify({"status": "missing", "error": "Job not found"}), 404
 
-    if job.status == "running":
+    if job.status in ("running", "pending"):
         return jsonify({
             "job_id": job.job_id,
             "status": "running",

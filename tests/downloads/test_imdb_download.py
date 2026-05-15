@@ -94,37 +94,18 @@ class TestDownloadImdb:
 class TestLoadDemoSourceImdb:
     """TextMediaType.load_demo_source with source='imdb'."""
 
-    def _make_text_media_type(self):
-        from vtsearch.media.text.media_type import TextMediaType
-
-        mt = TextMediaType()
-        stub_model = MagicMock()
-        stub_model.encode.return_value = [0.1] * 768
-        mt._model = stub_model
-        return mt
-
-    def _make_fake_embedder(self):
-        import numpy as np
-
-        emb = MagicMock()
-        emb.name = "e5"
-        emb.media_type_id = "text"
-        emb._model = True
-        emb._on_progress = lambda *a: None
-        emb.embed_text_passage.return_value = np.zeros(768)
-        return emb
-
     def test_imdb_source_populates_clips(self):
         """load_demo_source with source='imdb' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
+        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_reviews = {
             "pos": ["Great movie!", "Loved it!"],
             "neg": ["Terrible film.", "Hated it."],
         }
 
-        mt = self._make_text_media_type()
-        emb = self._make_fake_embedder()
+        mt = make_text_media_type_stub()
+        emb = make_text_embedder_stub()
         clips: dict = {}
 
         with patch.object(dl_module, "download_imdb", return_value=fake_reviews):
@@ -145,13 +126,14 @@ class TestLoadDemoSourceImdb:
     def test_imdb_slice_is_applied(self):
         """slice_start/slice_end limits reviews per category."""
         from vtsearch.datasets import downloader as dl_module
+        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_reviews = {
             "pos": [f"Positive review {i}." for i in range(10)],
         }
 
-        mt = self._make_text_media_type()
-        emb = self._make_fake_embedder()
+        mt = make_text_media_type_stub()
+        emb = make_text_embedder_stub()
         clips: dict = {}
 
         with patch.object(dl_module, "download_imdb", return_value=fake_reviews):

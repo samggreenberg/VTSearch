@@ -7,8 +7,11 @@
 #   ./run-tests.sh sorting      # run only sorting group
 #   ./run-tests.sh core sorting # run core + sorting groups + frontend build check
 #
-# Available groups: core, api, sorting, datasets, io, models,
+# Available groups: core, api, sorting, datasets, io, detectors,
 #                   downloads, integration, cli, converters
+#
+# Each group is a folder under tests/. Marker assignment is automatic:
+# any file at tests/<group>/test_*.py gets marked <group> by conftest.
 #
 # Extra pytest args can follow a '--':
 #   ./run-tests.sh core -- -x --tb=short

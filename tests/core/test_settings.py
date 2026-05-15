@@ -131,7 +131,7 @@ class TestSettingsModule:
         assert settings_mod.get_calibrate_count() == 1
 
     def test_calibrate_count_default(self):
-        assert settings_mod.get_calibrate_count() == 2
+        assert settings_mod.get_calibrate_count() == 1
 
     def test_calibrate_count_persists_across_reset(self, isolated_settings):
         settings_mod.set_calibrate_count(10)
@@ -467,7 +467,7 @@ class TestSettingsModule:
         defaults = settings_mod.get_defaults()
         assert defaults["volume"] == 1.0
         assert defaults["theme"] == "dark"
-        assert defaults["calibrate_count"] == 2
+        assert defaults["calibrate_count"] == 1
         assert defaults["calibration_fraction"] == 0.5
         assert defaults["safe_thresholds"] is False
         assert defaults["show_metadata"] is True

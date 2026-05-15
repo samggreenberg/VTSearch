@@ -117,7 +117,7 @@ class TestSettingsAPI:
         data = res.get_json()
         assert data["volume"] == 1.0
         assert data["theme"] == "dark"
-        assert data["calibrate_count"] == 2
+        assert data["calibrate_count"] == 1
         assert data["calibration_fraction"] == 0.5
         assert data["safe_thresholds"] is False
         assert isinstance(data["focus_mode_left"], dict)
