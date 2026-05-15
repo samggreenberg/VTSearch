@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import app as app_module
 from helpers import setup_trainable_model_in_registry
-from vtsearch.utils import snapshot_medias
+from vtsearch.state import snapshot_medias
 
 
 class TestFindLabel:

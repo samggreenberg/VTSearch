@@ -26,7 +26,7 @@ def sync_labels_to_loaded_detector() -> None:
     """
     from vtsearch.models.detector_registry import get_detector, is_find_mode, update_detector
     from vtsearch.models.detector_store import _detector_path, _read_detector, _write_detector
-    from vtsearch.utils import get_active_detector_context
+    from vtsearch.state import get_active_detector_context
 
     if is_find_mode():
         return
@@ -47,7 +47,12 @@ def sync_labels_to_loaded_detector() -> None:
         return
 
     from vtsearch.datasets.labelset import LabelSet, element_key, media_element_key
-    from vtsearch.utils import bad_votes, good_votes, snapshot_medias, vote_region_boxes
+    from vtsearch.state import (
+    bad_votes,
+    good_votes,
+    snapshot_medias,
+    vote_region_boxes,
+)
 
     snap = snapshot_medias()
     current_ls = LabelSet.from_clips_and_votes(

@@ -15,14 +15,14 @@ from vtsearch.routes._shared import (
 )
 
 from vtsearch.config import DATA_DIR
-import vtsearch.utils.paths as _paths
+import vtsearch.security.path_validation as _paths
 from vtsearch.models import (
     calculate_gmm_threshold,
     embed_text_query,
     inject_live_model,
     train_and_score,
 )
-from vtsearch.utils import (
+from vtsearch.state import (
     add_textsort_suggestion,
     bad_votes,
     diversity_tree_next_sample,
@@ -32,7 +32,6 @@ from vtsearch.utils import (
     get_inclusion,
     get_learned_scores,
     get_safe_thresholds,
-    get_sort_progress,
     get_textsort_suggestions,
     get_vote_click_times,
     good_votes,
@@ -40,8 +39,11 @@ from vtsearch.utils import (
     set_safe_thresholds,
     snapshot_medias,
     update_learned_scores,
-    update_sort_progress,
     vote_region_boxes,
+)
+from vtsearch.concurrency.progress import (
+    get_sort_progress,
+    update_sort_progress,
 )
 
 sorting_bp = Blueprint("sorting", __name__)
@@ -213,8 +215,8 @@ def learned_sort():
     from vtsearch.models.detector_registry import get_detector
     from vtsearch.models.detector_store import _detector_path, _read_detector
     from vtsearch.models.labelset_training import labelset_train_and_score
-    from vtsearch.utils.async_jobs import learned_sort_jobs
-    from vtsearch.utils.state_core import (
+    from vtsearch.concurrency.async_jobs import learned_sort_jobs
+    from vtsearch.state.core import (
         _empty_detector_context,
         get_active_context,
         get_active_detector_context,
@@ -332,7 +334,10 @@ def learned_sort():
             labelset_training_medias: dict[int, dict] | None = None
             labelset_has_cross_dataset = False
             if labelset is not None:
-                from vtsearch.utils import build_media_lookup, resolve_media_ids
+                from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
                 origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
                 labelset_local_good = set()
@@ -418,7 +423,7 @@ def learned_sort_result():
     Returns the same shape as the POST endpoint's ``done`` response when the
     job has finished, or a ``running`` snapshot otherwise.
     """
-    from vtsearch.utils.async_jobs import learned_sort_jobs
+    from vtsearch.concurrency.async_jobs import learned_sort_jobs
 
     job_id = request.args.get("job_id", "").strip()
     if not job_id:
@@ -448,7 +453,7 @@ def learned_sort_result():
 
 @sorting_bp.route("/api/votes")
 def get_votes():
-    from vtsearch.utils.state_core import _empty_detector_context, get_active_detector_context
+    from vtsearch.state.core import _empty_detector_context, get_active_detector_context
 
     click_times = get_vote_click_times()
     learned_scores = get_learned_scores()
@@ -478,7 +483,7 @@ def clear_votes_route():
     Used by the Label flow to reset votes before importing a model's labelset
     so that labels from a previous session don't contaminate the new model.
     """
-    from vtsearch.utils import clear_votes
+    from vtsearch.state import clear_votes
 
     clear_votes()
     return jsonify({"ok": True})

@@ -20,7 +20,7 @@ from vtsearch.datasets.loader import (
     _pop_md5_key,
     _streaming_md5,
 )
-from vtsearch.utils.paths import glob_top_level, rglob_follow_symlinks
+from vtsearch.security.path_validation import glob_top_level, rglob_follow_symlinks
 
 
 def _scan_files(folder: Path, pattern: str, recursive: bool) -> list[Path]:

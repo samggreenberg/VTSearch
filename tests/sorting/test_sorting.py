@@ -394,7 +394,7 @@ class TestCalibrationCache:
     the cross-calibration trainings should be skipped on the second call."""
 
     def _det_ctx(self):
-        from vtsearch.utils.state_core import DetectorContext
+        from vtsearch.state.core import DetectorContext
 
         return DetectorContext("test-det")
 
@@ -600,7 +600,7 @@ class TestLearnedSortAsync:
 
     def test_async_returns_job_id_then_polling_yields_result(self, client):
         from tests.conftest import _wait_for_job
-        from vtsearch.utils.async_jobs import learned_sort_jobs
+        from vtsearch.concurrency.async_jobs import learned_sort_jobs
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
@@ -623,7 +623,7 @@ class TestLearnedSortAsync:
 
     def test_unchanged_votes_short_circuit_to_cached(self, client):
         """The signature cache lets re-sorts skip training entirely."""
-        from vtsearch.utils.async_jobs import learned_sort_jobs
+        from vtsearch.concurrency.async_jobs import learned_sort_jobs
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
@@ -663,7 +663,7 @@ class TestEvalTrainAndScoreAsync:
     runs via the signature cache."""
 
     def _seed_history(self):
-        from vtsearch.utils import label_history
+        from vtsearch.state import label_history
 
         # A handful of "good" votes are enough to exercise the smart metric.
         for cid, lbl in [(1, "good"), (2, "good"), (3, "bad"), (4, "bad")]:
@@ -684,7 +684,7 @@ class TestEvalTrainAndScoreAsync:
 
     def test_async_polls_to_done(self, client):
         from tests.conftest import _wait_for_job
-        from vtsearch.utils.async_jobs import eval_jobs
+        from vtsearch.concurrency.async_jobs import eval_jobs
 
         self._seed_history()
         envelope = client.post("/api/eval/train-and-score", json={"metric": "stable"}).get_json()
@@ -792,7 +792,7 @@ class TestTextsortSuggestions:
         resp = client.get("/api/textsort-suggestions")
         assert len(resp.get_json()["suggestions"]) == 1
 
-        from vtsearch.utils import clear_votes
+        from vtsearch.state import clear_votes
 
         clear_votes()
 

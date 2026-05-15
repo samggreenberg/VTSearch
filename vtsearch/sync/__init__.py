@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Generic, TypeVar
 
-from vtsearch.utils.registry import PluginBase, PluginField
+from vtsearch.plugins import PluginBase, PluginField
 
 LoadT = TypeVar("LoadT")
 SaveT = TypeVar("SaveT")

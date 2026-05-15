@@ -16,7 +16,7 @@ import pytest
 import app as app_module
 from helpers import make_dataset_file as _make_dataset_file
 from vtsearch.settings import get_detectors_dir
-from vtsearch.utils.audio_generator import generate_wav
+from vtsearch.media.audio.audio_generator import generate_wav
 
 
 @pytest.fixture(autouse=True)

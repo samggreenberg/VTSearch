@@ -2,7 +2,7 @@
 
 Run selected detectors against selected datasets and return merged hit/miss
 results.  Each detector's MLP is sourced from its in-memory
-:class:`~vtsearch.utils.DetectorContext` (when loaded) or trained on demand
+:class:`~vtsearch.state.DetectorContext` (when loaded) or trained on demand
 from its on-disk labelset.
 """
 
@@ -15,7 +15,7 @@ from flask import Blueprint, jsonify
 
 from vtsearch.models.detector_training import train_and_threshold
 from vtsearch.routes._shared import get_json_safe
-from vtsearch.utils.progress import get_find_progress, update_find_progress
+from vtsearch.concurrency.progress import get_find_progress, update_find_progress
 
 detector_find_bp = Blueprint("detector_find", __name__)
 
@@ -80,7 +80,10 @@ def find_check_labels():
             except Exception:
                 continue
 
-            from vtsearch.utils import build_media_lookup, resolve_media_ids
+            from vtsearch.state import (
+                build_media_lookup,
+                resolve_media_ids,
+            )
 
             origin_lookup, md5_lookup, _ = build_media_lookup(temp_medias)
             matched = 0
@@ -193,7 +196,7 @@ def multi_find():
             total_steps=_FIND_STEPS,
         )
 
-        from vtsearch.utils.state_core import get_detector_context
+        from vtsearch.state.core import get_detector_context
 
         det_ctx = get_detector_context(d["id"])
         if det_ctx is not None and det_ctx.model is not None:
@@ -333,7 +336,10 @@ def multi_find():
                 labels = det_data.get("labelset", {}).get("labels", [])
 
                 try:
-                    from vtsearch.utils import build_media_lookup, resolve_media_ids
+                    from vtsearch.state import (
+                        build_media_lookup,
+                        resolve_media_ids,
+                    )
 
                     origin_lookup, md5_lookup, _ = build_media_lookup(temp_medias)
                     good_ids, bad_ids = [], []

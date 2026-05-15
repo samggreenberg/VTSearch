@@ -10,7 +10,7 @@ from typing import Any
 import requests
 
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
-from vtsearch.utils.url_validation import validate_url
+from vtsearch.security.url_validation import validate_url
 
 
 class WebhookLabelsetExporter(LabelsetExporter):

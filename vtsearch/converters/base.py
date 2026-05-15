@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from vtsearch.utils.registry import PluginBase, PluginField
+from vtsearch.plugins import PluginBase, PluginField
 
 
 class MediaConverter(PluginBase, ABC):
@@ -22,7 +22,7 @@ class MediaConverter(PluginBase, ABC):
     ------------------------
     Converters can declare user-configurable parameters via the
     :attr:`fields` class attribute (a list of
-    :class:`~vtsearch.utils.registry.PluginField`) — the same mechanism
+    :class:`~vtsearch.plugins.PluginField`) — the same mechanism
     every other plugin family uses.  Values flow in through the ``params``
     dict on :meth:`convert`.  When no params are supplied (or an unknown
     key is passed), the field's declared :attr:`default` applies.

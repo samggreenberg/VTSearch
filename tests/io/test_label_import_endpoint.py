@@ -209,7 +209,7 @@ class TestLabelImportEndpoint:
         add_loaded_detector_id(entry["id"])
 
         # Set active detector so sync_labels_to_loaded_detector() can find it
-        from vtsearch.utils.state_core import DetectorContext, register_detector_context, set_thread_detector_context
+        from vtsearch.state.core import DetectorContext, register_detector_context, set_thread_detector_context
 
         det_ctx = DetectorContext(entry["id"])
         register_detector_context(det_ctx)
@@ -257,7 +257,10 @@ class TestResolveClipIdsUnion:
     """Test that resolve_media_ids returns the union of origin+name and md5 matches."""
 
     def test_md5_match_only(self):
-        from vtsearch.utils import build_media_lookup, resolve_media_ids
+        from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
         # Entry with only md5, no origin — should match by md5
         md5 = app_module.medias[1]["md5"]
@@ -267,7 +270,10 @@ class TestResolveClipIdsUnion:
         assert 1 in cids
 
     def test_origin_match_only(self):
-        from vtsearch.utils import build_media_lookup, resolve_media_ids
+        from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         media = app_module.medias[1]
@@ -277,7 +283,10 @@ class TestResolveClipIdsUnion:
 
     def test_union_of_origin_and_md5(self):
         """When origin matches media A and md5 matches media B, both are returned."""
-        from vtsearch.utils import build_media_lookup, resolve_media_ids
+        from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
         # Give media 2 the same md5 as media 1 (simulate content-duplicate under different origin)
         orig_md5 = app_module.medias[2]["md5"]
@@ -299,7 +308,10 @@ class TestResolveClipIdsUnion:
             app_module.medias[2]["md5"] = orig_md5
 
     def test_no_match_returns_empty(self):
-        from vtsearch.utils import build_media_lookup, resolve_media_ids
+        from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entry = {
@@ -313,7 +325,10 @@ class TestResolveClipIdsUnion:
 
     def test_name_fallback_matches_by_origin_name(self):
         """Bare entry (no md5, no origin) matches by origin_name via name_lookup."""
-        from vtsearch.utils import build_media_lookup, resolve_media_ids
+        from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         origin_name = app_module.medias[1].get("origin_name", "")
@@ -328,7 +343,10 @@ class TestResolveClipIdsUnion:
 
     def test_name_fallback_uses_filename_when_no_origin_name(self):
         """name_lookup falls back to 'filename' key when origin_name is absent."""
-        from vtsearch.utils import build_media_lookup, resolve_media_ids
+        from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         origin_name = app_module.medias[1].get("origin_name", "")
@@ -339,7 +357,10 @@ class TestResolveClipIdsUnion:
 
     def test_name_fallback_skipped_when_md5_matches(self):
         """Name fallback is NOT used when md5 already matches (avoids false positives)."""
-        from vtsearch.utils import build_media_lookup, resolve_media_ids
+        from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         md5 = app_module.medias[1]["md5"]
@@ -354,7 +375,10 @@ class TestResolveClipIdsUnion:
         a detector trained on dataset B against dataset C would silently
         mislabel any C file with a colliding basename.
         """
-        from vtsearch.utils import build_media_lookup, resolve_media_ids
+        from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         origin_name = app_module.medias[1].get("origin_name", "")
@@ -371,7 +395,10 @@ class TestResolveClipIdsUnion:
         entry whose full origin+name key doesn't match must not fall back
         to bare-name matching.
         """
-        from vtsearch.utils import build_media_lookup, resolve_media_ids
+        from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+)
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         origin_name = app_module.medias[1].get("origin_name", "")
@@ -392,7 +419,10 @@ class TestResolveClipIdsUnion:
 
 class TestFindMissingEntries:
     def test_all_present_returns_empty(self):
-        from vtsearch.utils import build_media_lookup, find_missing_entries
+        from vtsearch.state import (
+    build_media_lookup,
+    find_missing_entries,
+)
 
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [{"md5": app_module.medias[i]["md5"], "label": "good"} for i in [1, 2, 3]]
@@ -400,7 +430,10 @@ class TestFindMissingEntries:
         assert missing == []
 
     def test_unknown_entries_returned(self):
-        from vtsearch.utils import build_media_lookup, find_missing_entries
+        from vtsearch.state import (
+    build_media_lookup,
+    find_missing_entries,
+)
 
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [
@@ -412,7 +445,10 @@ class TestFindMissingEntries:
         assert missing[0]["md5"] == "totally_unknown"
 
     def test_invalid_labels_excluded(self):
-        from vtsearch.utils import build_media_lookup, find_missing_entries
+        from vtsearch.state import (
+    build_media_lookup,
+    find_missing_entries,
+)
 
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [
@@ -430,12 +466,12 @@ class TestFindMissingEntries:
 
 class TestNextClipId:
     def test_empty_dict_returns_1(self):
-        from vtsearch.utils.state import next_media_id
+        from vtsearch.state import next_media_id
 
         assert next_media_id({}) == 1
 
     def test_returns_max_plus_one(self):
-        from vtsearch.utils.state import next_media_id
+        from vtsearch.state import next_media_id
 
         assert next_media_id(app_module.medias) == max(app_module.medias) + 1
 

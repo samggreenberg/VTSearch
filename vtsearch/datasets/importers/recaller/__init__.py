@@ -247,7 +247,7 @@ class ReCallerDatasetImporter(DatasetImporter):
         """
         from concurrent.futures import ThreadPoolExecutor
 
-        from vtsearch.utils import update_progress
+        from vtsearch.concurrency.progress import update_progress
 
         media_type = field_values.get("media_type", "audio")
         total = len(records)

@@ -80,7 +80,7 @@ class LocalFolderSource(MediaSource):
 
 
 class _LocalFolderSourceFactory:
-    """Factory for auto-discovery by :class:`~vtsearch.utils.registry.PluginRegistry`.
+    """Factory for auto-discovery by :class:`~vtsearch.plugins.PluginRegistry`.
 
     Resolves origins emitted by the :mod:`server_folder` dataset importer.
     """

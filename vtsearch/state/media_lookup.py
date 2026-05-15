@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
-from vtsearch.utils.state_core import _state_lock, medias
+from vtsearch.state.core import _state_lock, medias
 
 
 def _origin_key(origin: dict[str, Any], origin_name: str) -> str:

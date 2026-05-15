@@ -42,7 +42,7 @@ SAMPLE_RESULTS = {
 class TestFillFromSortDryRun:
     def _sort_results(self):
         """Build a simple sort_results list with all media ids."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         results = []
         for i, cid in enumerate(sorted(medias.keys())):
@@ -114,7 +114,7 @@ class TestFillFromSortDryRun:
         )
         data = resp.get_json()
         total = data["good_count"] + data["bad_count"]
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         assert total == len(medias) - 3
 
@@ -147,7 +147,7 @@ class TestFillFromSortDryRun:
 
 class TestFillFromSortConfirm:
     def _sort_results(self):
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         results = []
         for i, cid in enumerate(sorted(medias.keys())):
@@ -174,7 +174,7 @@ class TestFillFromSortConfirm:
 
         # Verify labels were actually applied
         total_applied = data["good_applied"] + data["bad_applied"]
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         assert total_applied == len(medias)  # all were unlabeled
         assert len(app_module.good_votes) == data["good_applied"]
@@ -217,7 +217,7 @@ class TestFillFromSortConfirm:
             },
         )
         data = resp.get_json()
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         total_applied = data["good_applied"] + data["bad_applied"]
         assert total_applied == len(medias) - 2  # 2 already voted
@@ -266,7 +266,10 @@ class TestCliScoringNegativeHits:
         from vtsearch.cli import _score_medias_with_detectors
         from vtsearch.models import build_model_from_weights
         from vtsearch.models.detector_training import serialize_weights, train_and_threshold
-        from vtsearch.utils import medias, snapshot_medias
+        from vtsearch.state import (
+    medias,
+    snapshot_medias,
+)
 
         snap = snapshot_medias()
         good_ids = [1, 2, 3]
@@ -394,7 +397,7 @@ class TestExportWithFilteredResults:
 
     def test_fill_from_sort_results_exportable(self, client):
         """Results from fill-from-sort should be exportable via the file exporter."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         sort_results = [{"id": cid, "score": round(0.9 - (i * 0.04), 4)} for i, cid in enumerate(sorted(medias.keys()))]
 

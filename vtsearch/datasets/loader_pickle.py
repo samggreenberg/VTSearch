@@ -19,7 +19,7 @@ from PIL import Image
 from vtsearch.datasets.loader import (
     ProgressCallback,
 )
-from vtsearch.datasets.pickle_security import safe_pickle_load
+from vtsearch.security.pickle import safe_pickle_load
 
 
 def load_dataset_from_pickle(

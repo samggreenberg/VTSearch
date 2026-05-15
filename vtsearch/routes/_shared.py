@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 from flask import jsonify, request
 
 if TYPE_CHECKING:
-    from vtsearch.utils.registry import PluginBase
+    from vtsearch.plugins import PluginBase
 
-import vtsearch.utils.paths as _paths
+import vtsearch.security.path_validation as _paths
 
 logger = logging.getLogger(__name__)
 

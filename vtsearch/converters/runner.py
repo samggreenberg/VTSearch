@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from vtsearch.converters import get_converter
-from vtsearch.utils.paths import glob_top_level, rglob_follow_symlinks
+from vtsearch.security.path_validation import glob_top_level, rglob_follow_symlinks
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -65,12 +65,12 @@ def _normalise_converter_specs(
 
 
 def _default_progress() -> ProgressCallback:
-    from vtsearch.utils.progress import get_thread_progress
+    from vtsearch.concurrency.progress import get_thread_progress
 
     cb = get_thread_progress()
     if cb is not None:
         return cb
-    from vtsearch.utils import update_progress
+    from vtsearch.concurrency.progress import update_progress
 
     return update_progress
 

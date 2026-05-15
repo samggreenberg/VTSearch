@@ -77,7 +77,7 @@ def _resolve_filepath(field_values: dict[str, Any]) -> str:
 
     if "{username}" in filepath:
         from vtsearch.auth import get_current_user
-        from vtsearch.utils.paths import sanitize_template_value
+        from vtsearch.security.path_validation import sanitize_template_value
 
         username = get_current_user() or "default"
         filepath = filepath.replace("{username}", sanitize_template_value(username))

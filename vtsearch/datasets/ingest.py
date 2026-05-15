@@ -20,19 +20,19 @@ import hashlib
 import json
 from typing import Any, Callable, Optional
 
-from vtsearch.utils.state import next_media_id
-from vtsearch.utils.state_core import _state_lock
+from vtsearch.state import next_media_id
+from vtsearch.state.core import _state_lock
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
 
 def _default_progress() -> ProgressCallback:
-    from vtsearch.utils.progress import get_thread_progress
+    from vtsearch.concurrency.progress import get_thread_progress
 
     cb = get_thread_progress()
     if cb is not None:
         return cb
-    from vtsearch.utils import update_progress
+    from vtsearch.concurrency.progress import update_progress
 
     return update_progress
 

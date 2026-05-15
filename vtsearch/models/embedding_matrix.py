@@ -20,10 +20,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from vtsearch.utils.state_core import _state_lock
+from vtsearch.state.core import _state_lock
 
 if TYPE_CHECKING:
-    from vtsearch.utils.state_core import DatasetContext
+    from vtsearch.state.core import DatasetContext
 
 
 def get_embedding_matrix(ctx: "DatasetContext") -> tuple[list[int], np.ndarray]:
@@ -77,7 +77,7 @@ def get_embedding_matrix_for_snap(
     or a temp dict from cross-dataset Find) the matrix is built fresh
     without populating the cache.
     """
-    from vtsearch.utils.state_core import get_active_context
+    from vtsearch.state.core import get_active_context
 
     sorted_ids = sorted(snap.keys())
     if not sorted_ids:

@@ -30,7 +30,7 @@ def sync_to_labelset_source() -> None:
     a labelset source attached.  Skips silently if no source is configured
     or if we are already inside a sync-from-source import.
     """
-    from vtsearch.utils.state_core import get_active_detector_context
+    from vtsearch.state.core import get_active_detector_context
 
     ctx = get_active_detector_context()
     if ctx is None or not ctx.labelset_source:
@@ -51,7 +51,7 @@ def sync_to_labelset_source() -> None:
     field_values = cfg.get("field_values", {})
 
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.utils.state_core import good_votes, bad_votes, medias, vote_region_boxes
+    from vtsearch.state.core import good_votes, bad_votes, medias, vote_region_boxes
 
     # Serialize against any in-progress sync_from on another thread.
     # Re-check the flag inside the lock so we never push partial state
@@ -82,7 +82,7 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
         The imported label list, or ``None`` if no source is configured
         or the source file doesn't exist yet.
     """
-    from vtsearch.utils.state_core import get_active_detector_context, get_detector_context
+    from vtsearch.state.core import get_active_detector_context, get_detector_context
 
     if detector_id is not None:
         ctx = get_detector_context(detector_id)
@@ -123,7 +123,7 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
     with _sync_lock:
         _syncing = True
         try:
-            from vtsearch.utils.state_votes import apply_label
+            from vtsearch.state.votes import apply_label
 
             for entry in labels:
                 label = entry.get("label")
@@ -132,7 +132,7 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
                     continue
 
                 # Find media by md5
-                from vtsearch.utils.state_core import medias
+                from vtsearch.state.core import medias
 
                 for mid, media in medias.items():
                     if media.get("md5") == md5:

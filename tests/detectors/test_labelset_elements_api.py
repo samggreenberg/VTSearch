@@ -54,7 +54,7 @@ def _seed_cross_dataset_model(tm_name: str = "cross-ds-model", *, mark_loaded: b
         reset_for_tests,
     )
     from vtsearch.models.detector_store import _detector_path, _write_detector
-    from vtsearch.utils.state_core import (
+    from vtsearch.state.core import (
         DetectorContext,
         register_detector_context,
         set_thread_detector_context,
@@ -248,7 +248,7 @@ class TestCrossDatasetVoteDoesNotWipeLabels:
     def test_vote_in_active_dataset_merges_with_saved_labelset(self, client):
         from vtsearch.models.label_sync import sync_labels_to_loaded_detector
         from vtsearch.models.detector_store import _detector_path, _read_detector
-        from vtsearch.utils import good_votes
+        from vtsearch.state import good_votes
 
         _seed_cross_dataset_model()
 
@@ -294,7 +294,7 @@ class TestCrossDatasetMLPTraining:
         from contextlib import contextmanager
         from pathlib import Path
 
-        from vtsearch.utils.audio_generator import generate_wav
+        from vtsearch.media.audio.audio_generator import generate_wav
 
         files: dict[str, Path] = {}
         for name, freq in (("alpha.wav", 220), ("beta.wav", 330), ("gamma.wav", 440)):
@@ -322,7 +322,7 @@ class TestCrossDatasetMLPTraining:
 
     def test_load_resolves_and_embeds_cross_dataset_labels(self, client, tmp_path, monkeypatch):
         from vtsearch.models.labelset_elements import stable_element_id
-        from vtsearch.utils.state_core import get_detector_context
+        from vtsearch.state.core import get_detector_context
 
         detector_id = self._seed_with_resolvable_labelset(tmp_path, monkeypatch)
 
@@ -370,7 +370,7 @@ def _load_detector_and_wait_local(client, detector_id, timeout=5.0):
     """
     import time
 
-    from vtsearch.utils.state_core import get_detector_context, set_thread_detector_context
+    from vtsearch.state.core import get_detector_context, set_thread_detector_context
 
     res = client.post("/api/detectors/registry/load", json={"detector_id": detector_id})
     assert res.status_code in (200, 202), res.get_data(as_text=True)

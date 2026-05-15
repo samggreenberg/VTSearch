@@ -49,7 +49,11 @@ def resolve_current_dataset_cid(elem: LabeledElement) -> int | None:
     Matches by origin+name first, then by MD5.  Only consults the dataset
     snapshot — does not trigger origin-file resolution.
     """
-    from vtsearch.utils import build_media_lookup, resolve_media_ids, snapshot_medias
+    from vtsearch.state import (
+    build_media_lookup,
+    resolve_media_ids,
+    snapshot_medias,
+)
 
     snap = snapshot_medias()
     if not snap:
@@ -121,7 +125,7 @@ def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
 
     Returns ``{"good": [...], "bad": [...], "media_type": "..."}``.
     """
-    from vtsearch.utils import get_active_detector_context
+    from vtsearch.state import get_active_detector_context
 
     media_type = detector_data.get("media_type", "") or ""
     labelset = LabelSet.from_dict(detector_data.get("labelset") or {})
@@ -161,7 +165,7 @@ def apply_element_vote_in_data(
     * ``action`` is one of ``"removed"``, ``"flipped"``, ``"unchanged"``,
       or ``"not_found"``.
 
-    Toggle semantics mirror :func:`~vtsearch.utils.toggle_vote`:
+    Toggle semantics mirror :func:`~vtsearch.state.toggle_vote`:
 
     * Same vote on the same element → remove the element from the labelset.
     * Opposite vote → flip the element's label.

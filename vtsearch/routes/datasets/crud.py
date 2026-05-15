@@ -27,23 +27,25 @@ from vtsearch.routes._shared import (
     get_request_field,
 )
 from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
-from vtsearch.datasets.pickle_security import peek_pickle_dataset_summary
+from vtsearch.security.pickle import peek_pickle_dataset_summary
 from vtsearch.datasets.registry import (
     list_datasets as _reg_list_all,
     remove_loaded_id as _reg_remove_loaded,
 )
-from vtsearch.utils import (
+from vtsearch.state import (
     bad_votes,
-    cancel_dataset_progress,
     get_dataset_display_name,
     get_dupe_count,
-    get_progress,
     good_votes,
     snapshot_medias,
     unregister_context,
 )
-from vtsearch.utils.progress import loading_tasks as _loading_tasks
-import vtsearch.utils.paths as _paths
+from vtsearch.concurrency.progress import (
+    cancel_dataset_progress,
+    get_progress,
+)
+from vtsearch.concurrency.progress import loading_tasks as _loading_tasks
+import vtsearch.security.path_validation as _paths
 
 # Re-export loading helpers so existing importers keep working.
 from vtsearch.datasets.load_pipeline import (  # noqa: F401
@@ -901,7 +903,7 @@ def clear_dataset_route():
     Uses the ``X-Dataset-Id`` header (via ``get_active_context()``) to
     determine which dataset to clear.
     """
-    from vtsearch.utils import get_active_context
+    from vtsearch.state import get_active_context
 
     ctx = get_active_context()
     ds_id = ctx.dataset_id if ctx.dataset_id else None

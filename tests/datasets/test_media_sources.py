@@ -446,7 +446,7 @@ class TestExampleSortOriginEndpoint:
 
     def test_success(self, client, tmp_path):
         """A valid origin+key returns sorted results when medias are loaded."""
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         folder = tmp_path / "audio"
         folder.mkdir()

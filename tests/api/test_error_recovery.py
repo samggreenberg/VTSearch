@@ -17,7 +17,11 @@ from __future__ import annotations
 import io
 import json
 
-from vtsearch.utils import good_votes, bad_votes, medias
+from vtsearch.state import (
+    good_votes,
+    bad_votes,
+    medias,
+)
 
 
 class TestInvalidRequestBodies:

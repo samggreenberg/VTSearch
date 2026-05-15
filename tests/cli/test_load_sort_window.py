@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 import app as app_module
-from vtsearch.utils import medias
+from vtsearch.state import medias
 
 
 class TestExampleSort:

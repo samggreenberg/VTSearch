@@ -6,7 +6,7 @@ coordinate across vote dicts, click tracking, and the diversity tree.
 
 from __future__ import annotations
 
-from vtsearch.utils.state_core import (
+from vtsearch.state.core import (
     _state_lock,
     bad_votes,
     good_votes,
@@ -16,15 +16,15 @@ from vtsearch.utils.state_core import (
     vote_click_times,
     vote_region_boxes,
 )
-from vtsearch.utils.state_core import (
+from vtsearch.state.core import (
     _get_click_counter,
     _get_diversity_tree,
     _set_click_counter,
 )
-from vtsearch.utils.state_clicks import assign_click_time, remove_click_time
-from vtsearch.utils.state_diversity import diversity_tree_label, diversity_tree_unlabel
+from vtsearch.state.clicks import assign_click_time, remove_click_time
+from vtsearch.state.diversity import diversity_tree_label, diversity_tree_unlabel
 
-from vtsearch.utils.state_core import get_active_detector_context
+from vtsearch.state.core import get_active_detector_context
 
 
 def clear_votes() -> None:

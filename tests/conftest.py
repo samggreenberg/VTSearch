@@ -82,7 +82,7 @@ _patch_embed_audio.start()
 
 # Create a default dataset context so init_medias() has somewhere to write,
 # and a default detector context so vote proxies have somewhere to delegate.
-import vtsearch.utils.state_core as _state_core
+import vtsearch.state.core as _state_core
 
 _startup_ctx = _state_core.DatasetContext("_startup")
 _state_core.register_context(_startup_ctx)
@@ -94,12 +94,12 @@ _state_core.set_thread_detector_context(_startup_det)
 import app as app_module
 
 # Import refactored modules and make them accessible through app_module
-from vtsearch.utils.audio_generator import GENERATOR_SAMPLE_RATE
+from vtsearch.media.audio.audio_generator import GENERATOR_SAMPLE_RATE
 from tests.fixtures.medias import NUM_MEDIAS, init_medias
-from vtsearch.utils.audio_generator import generate_wav
+from vtsearch.media.audio.audio_generator import generate_wav
 from vtsearch.models import initialize_models, train_and_score
 from vtsearch.models.progress import clear_progress_cache
-from vtsearch.utils import (
+from vtsearch.state import (
     bad_votes,
     medias,
     good_votes,
@@ -159,7 +159,7 @@ def _allow_test_tmp_paths(monkeypatch):
     import tempfile
     from pathlib import Path
 
-    import vtsearch.utils.paths as paths_mod
+    import vtsearch.security.path_validation as paths_mod
 
     _original = paths_mod.validate_server_filepath
 
@@ -202,8 +202,8 @@ def _stub_embedding_models():
     stack.close()
 
 
-import vtsearch.utils.state_core as _core
-from vtsearch.utils.progress import (
+import vtsearch.state.core as _core
+from vtsearch.concurrency.progress import (
     dataset_progress as _dataset_progress,
     eval_progress as _eval_progress,
     find_progress as _find_progress,
@@ -242,7 +242,7 @@ def reset_state():
     _loading_tasks.reset_for_tests()
     _model_loading_tasks.reset_for_tests()
 
-    from vtsearch.utils.async_jobs import reset_all_async_jobs_for_tests
+    from vtsearch.concurrency.async_jobs import reset_all_async_jobs_for_tests
 
     reset_all_async_jobs_for_tests()
 

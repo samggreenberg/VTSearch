@@ -9,7 +9,7 @@ importers).
 
 Usage — creating a registry::
 
-    from vtsearch.utils.registry import PluginRegistry
+    from vtsearch.plugins import PluginRegistry
 
     _registry: PluginRegistry[MyPlugin] = PluginRegistry(
         package="vtsearch.exporters",
@@ -22,7 +22,7 @@ Usage — creating a registry::
 
 Usage — defining a field / base class::
 
-    from vtsearch.utils.registry import PluginBase, PluginField
+    from vtsearch.plugins import PluginBase, PluginField
 
     class MyExporter(PluginBase):
         ...
@@ -378,7 +378,7 @@ def make_plugin_registry(
 
     Shorthand for the boilerplate repeated across every plugin ``__init__.py``::
 
-        from vtsearch.utils.registry import make_plugin_registry
+        from vtsearch.plugins import make_plugin_registry
 
         get_importer, list_importers = make_plugin_registry(
             package=__name__,

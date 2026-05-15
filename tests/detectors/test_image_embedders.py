@@ -552,7 +552,7 @@ class TestSortRouteRejectsTextWhenUnsupported:
     surfacing a generic 500."""
 
     def test_sort_rejects_text_for_dinov3(self, client):
-        from vtsearch.utils import medias
+        from vtsearch.state import medias
 
         # Seed a fake DINOv3-embedded media so the sort route picks up the
         # active embedder name. We don't need real vectors — the route

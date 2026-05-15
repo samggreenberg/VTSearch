@@ -114,7 +114,7 @@ def list_labelset_sources_route():
 @sync_sources_bp.route("/api/detectors/<detector_name>/labelset-source", methods=["GET"])
 def get_detector_labelset_source(detector_name: str):
     """Return the labelset source config for a loaded detector, or null."""
-    from vtsearch.utils.state_core import get_detector_context
+    from vtsearch.state.core import get_detector_context
 
     ctx = get_detector_context(detector_name)
     if ctx is None:
@@ -134,7 +134,7 @@ def set_detector_labelset_source(detector_name: str):
     Send ``null`` or ``{}`` to clear the source.
     """
     from vtsearch.labels.sources import get_labelset_source
-    from vtsearch.utils.state_core import get_detector_context
+    from vtsearch.state.core import get_detector_context
 
     ctx = get_detector_context(detector_name)
     if ctx is None:
@@ -164,7 +164,7 @@ def set_detector_labelset_source(detector_name: str):
 def sync_detector_labelset_from_source(detector_name: str):
     """Force a manual import from the detector's labelset source."""
     from vtsearch.labels.sync import sync_from_labelset_source
-    from vtsearch.utils.state_core import get_detector_context
+    from vtsearch.state.core import get_detector_context
 
     ctx = get_detector_context(detector_name)
     if ctx is None:

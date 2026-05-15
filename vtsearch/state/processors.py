@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtsearch.utils.state_core import (
+from vtsearch.state.core import (
     _state_lock,
     autorun_extractors,
     autorun_localizers,

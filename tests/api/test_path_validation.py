@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from vtsearch.utils.paths import get_file_access_base_dir, validate_server_filepath
+from vtsearch.security.path_validation import get_file_access_base_dir, validate_server_filepath
 
 
 class TestValidateServerFilepath:

@@ -612,7 +612,7 @@ class TestClearStagingEndpoint:
 class TestProgressStagingResult:
     def test_staging_result_in_progress(self):
         """update_progress stores staging_result and get_progress returns it."""
-        from vtsearch.utils.progress import get_progress, update_progress
+        from vtsearch.concurrency.progress import get_progress, update_progress
 
         staging = {"path": "/tmp/test.pkl", "name": "test", "count": 5, "media_type": "audio"}
         update_progress("idle", "done", 100, 100, staging_result=staging)

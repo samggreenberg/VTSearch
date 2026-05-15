@@ -13,9 +13,9 @@ from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, jsonify, request
 
 from vtsearch.routes._shared import get_json_safe
-from vtsearch.utils import snapshot_medias
-from vtsearch.utils.memory_budget import cap_workers_by_memory
-from vtsearch.utils.progress import update_find_progress
+from vtsearch.state import snapshot_medias
+from vtsearch.concurrency.memory_budget import cap_workers_by_memory
+from vtsearch.concurrency.progress import update_find_progress
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def _resolve_or_train_detector(
     origin importer.  Returns ``(None, _, diag)`` when training is not
     possible.
     """
-    from vtsearch.utils.state_core import get_detector_context
+    from vtsearch.state.core import get_detector_context
 
     det_ctx = get_detector_context(detector_id)
     if det_ctx is not None and det_ctx.model is not None:
@@ -178,7 +178,7 @@ def find_label():
 
     from vtsearch.models.detector_registry import get_detector as reg_get_detector
     from vtsearch.models.detector_store import _detector_path, _read_detector
-    from vtsearch.utils import (
+    from vtsearch.state import (
         apply_labels_bulk_with_click_time,
         set_find_initial_labels,
     )
@@ -197,7 +197,7 @@ def find_label():
     dataset_id = body.get("dataset_id")
     if dataset_id:
         from flask import g
-        from vtsearch.utils import get_context
+        from vtsearch.state import get_context
 
         ctx = get_context(dataset_id)
         if ctx is not None:

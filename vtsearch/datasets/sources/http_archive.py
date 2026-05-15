@@ -70,7 +70,7 @@ class HttpArchiveSource(MediaSource):
 
         from vtsearch.datasets.downloader import download_file_with_progress
         from vtsearch.datasets.importers.http_archive import _extract_archive
-        from vtsearch.utils.url_validation import validate_url
+        from vtsearch.security.url_validation import validate_url
 
         validate_url(self._url)
         DATA_DIR.mkdir(exist_ok=True)
@@ -143,7 +143,7 @@ class HttpArchiveSource(MediaSource):
 
 
 class _HttpArchiveSourceFactory:
-    """Factory for auto-discovery by :class:`~vtsearch.utils.registry.PluginRegistry`."""
+    """Factory for auto-discovery by :class:`~vtsearch.plugins.PluginRegistry`."""
 
     name = "http_archive"
 

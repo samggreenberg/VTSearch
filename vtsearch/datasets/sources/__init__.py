@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from vtsearch.datasets.sources.base import MediaItem, MediaSource
-from vtsearch.utils.registry import PluginRegistry
+from vtsearch.plugins import PluginRegistry
 
 __all__ = ["MediaItem", "MediaSource", "get_source_for_origin"]
 

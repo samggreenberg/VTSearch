@@ -195,7 +195,7 @@ class TestProgressTrackerUpdate:
 
     def test_update_preserves_unspecified_extra_fields(self):
         """Calling update() without an extra field should not reset it."""
-        from vtsearch.utils.progress import ProgressTracker
+        from vtsearch.concurrency.progress import ProgressTracker
 
         tracker = ProgressTracker(extra_fields={"error": None, "staging_result": None})
         tracker.update("loading", error="something broke")
@@ -206,7 +206,7 @@ class TestProgressTrackerUpdate:
 
     def test_update_can_explicitly_overwrite_extra_field(self):
         """Passing an extra field explicitly should overwrite the previous value."""
-        from vtsearch.utils.progress import ProgressTracker
+        from vtsearch.concurrency.progress import ProgressTracker
 
         tracker = ProgressTracker(extra_fields={"error": None})
         tracker.update("loading", error="first error")
@@ -215,7 +215,7 @@ class TestProgressTrackerUpdate:
 
     def test_update_can_explicitly_clear_extra_field(self):
         """Passing None for an extra field should clear it."""
-        from vtsearch.utils.progress import ProgressTracker
+        from vtsearch.concurrency.progress import ProgressTracker
 
         tracker = ProgressTracker(extra_fields={"error": None})
         tracker.update("loading", error="oops")
@@ -224,7 +224,7 @@ class TestProgressTrackerUpdate:
 
     def test_update_preserves_multiple_extra_fields_independently(self):
         """Each extra field is preserved independently when not specified."""
-        from vtsearch.utils.progress import ProgressTracker
+        from vtsearch.concurrency.progress import ProgressTracker
 
         tracker = ProgressTracker(extra_fields={"error": None, "staging_result": None})
         tracker.update("idle", staging_result={"path": "/tmp/x"})
@@ -235,7 +235,7 @@ class TestProgressTrackerUpdate:
 
     def test_free_function_preserves_extra_fields(self):
         """The update_progress() wrapper should also preserve unspecified extras."""
-        from vtsearch.utils.progress import dataset_progress, get_progress, update_progress
+        from vtsearch.concurrency.progress import dataset_progress, get_progress, update_progress
 
         # Set error via the free function
         update_progress("loading", error="whoops")

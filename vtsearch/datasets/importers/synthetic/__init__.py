@@ -87,7 +87,7 @@ class SyntheticDatasetImporter(DatasetImporter):
 
     def _generate(self, media_type: str, size: int) -> Path:
         """Render files into the cache dir, return the dir path."""
-        from vtsearch.utils.progress import get_thread_progress  # noqa: PLC0415
+        from vtsearch.concurrency.progress import get_thread_progress  # noqa: PLC0415
 
         on_progress = get_thread_progress()
         out_dir = _cache_dir(media_type, size)

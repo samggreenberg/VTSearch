@@ -95,8 +95,8 @@ All clips live in a global dict keyed by integer ID.
 
 Users vote clips as **good** or **bad**. Votes are stored as
 `dict[int, None]` (not sets) per-detector in `DetectorContext` objects
-(defined in `vtsearch/utils/state_core.py`, re-exported via
-`vtsearch/utils/state.py`). Votes drive both the learned-sort training
+(defined in `vtsearch/state/core.py`, re-exported via
+`vtsearch/state/__init__.py`). Votes drive both the learned-sort training
 and the label export.
 
 ### Media types
@@ -163,7 +163,7 @@ argument parsing. Key startup sequence:
 | What | Where |
 |------|-------|
 | Flask routes (REST API) | `vtsearch/routes/` |
-| Global state (medias, votes) | `vtsearch/utils/state_core.py` |
+| Global state (medias, votes) | `vtsearch/state/core.py` |
 | Persistent settings | `vtsearch/settings.py` → `data/settings.json` |
 | ML training, embedding models | `vtsearch/models/`, `vtsearch/media/*/embedder.py` |
 | Dataset loading, demo downloads | `vtsearch/datasets/` |

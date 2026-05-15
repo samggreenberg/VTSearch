@@ -72,7 +72,7 @@ from vtsearch.routes import (  # noqa: E402
     sync_sources_bp,
 )
 from vtsearch.media import set_progress_callback  # noqa: E402
-from vtsearch.utils import update_progress  # noqa: E402
+from vtsearch.concurrency.progress import update_progress
 
 # Wire media types into the Flask app's progress reporting system.
 # Without this call, media types use a silent no-op callback and can run
@@ -133,7 +133,7 @@ def _set_request_context():
     the default (empty) context.
     """
     from flask import request
-    from vtsearch.utils.state_core import (
+    from vtsearch.state.core import (
         get_context,
         get_detector_context,
     )

@@ -24,7 +24,11 @@ from helpers import (
     make_png_bytes,
     make_wav_bytes,
 )
-from vtsearch.utils import good_votes, bad_votes, medias
+from vtsearch.state import (
+    good_votes,
+    bad_votes,
+    medias,
+)
 
 
 # ---------------------------------------------------------------------------

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from vtsearch.utils.state_core import _state_lock, vote_click_times
+from vtsearch.state.core import _state_lock, vote_click_times
 
 # Import context-aware accessors for scalar state.
-from vtsearch.utils.state_core import _get_click_counter, _set_click_counter
+from vtsearch.state.core import _get_click_counter, _set_click_counter
 
 
 def assign_click_time(media_id: int) -> int:

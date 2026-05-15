@@ -16,7 +16,7 @@ from vtsearch.datasets.loader import load_dataset_from_pickle, load_dataset_from
 
 
 def _get_progress():
-    from vtsearch.utils import update_progress
+    from vtsearch.concurrency.progress import update_progress
 
     return update_progress
 

@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from vtsearch.converters.base import MediaConverter
-from vtsearch.utils.ffmpeg import get_ffmpeg_exe
-from vtsearch.utils.registry import PluginField
+from vtsearch.media.audio.ffmpeg import get_ffmpeg_exe
+from vtsearch.plugins import PluginField
 
 
 class Video2AudioMediaConverter(MediaConverter):
