@@ -1,0 +1,25 @@
+<vt-modal title="Keyboard shortcuts" [open]="true" (closed)="close()">
+  <div class="kbd-help">
+    @for (group of groups; track group.title) {
+      <section class="kbd-group">
+        <h3 class="kbd-group-title">{{ group.title }}</h3>
+        <ul class="kbd-list">
+          @for (sc of group.shortcuts; track sc.description) {
+            <li class="kbd-row">
+              <span class="kbd-keys">
+                @for (k of sc.keys; track k; let last = $last) {
+                  <kbd class="kbd-key">{{ k }}</kbd>
+                  @if (!last) {
+                    <span class="kbd-plus">+</span>
+                  }
+                }
+              </span>
+              <span class="kbd-desc">{{ sc.description }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+    <p class="kbd-hint">Press <kbd class="kbd-key">?</kbd> any time to open this sheet.</p>
+  </div>
+</vt-modal>
