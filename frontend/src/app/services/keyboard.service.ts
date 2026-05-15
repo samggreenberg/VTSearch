@@ -6,7 +6,7 @@ export type ZoomDirection = 'in' | 'out';
 export type RotateDirection = 'left' | 'right';
 
 export interface KeyboardAction {
-  type: 'vote' | 'volume' | 'playback' | 'zoom' | 'rotate';
+  type: 'vote' | 'volume' | 'playback' | 'zoom' | 'rotate' | 'undo' | 'redo';
   direction?: VoteDirection;
   volumeDelta?: number;
   zoomDirection?: ZoomDirection;
@@ -49,6 +49,16 @@ export class KeyboardService implements OnDestroy {
 
     // Skip when typing in text fields
     if (this.isTyping()) return;
+
+    // Cmd/Ctrl-Z (undo) and Cmd/Ctrl-Shift-Z (redo) are the only modifier
+    // shortcuts; everything below this point requires no modifiers.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      (document.activeElement as HTMLElement)?.blur();
+      const type = e.shiftKey ? 'redo' : 'undo';
+      this.zone.run(() => this.action$.next({ type }));
+      return;
+    }
 
     // Skip when modifier keys are held
     if (e.ctrlKey || e.metaKey || e.altKey) return;
