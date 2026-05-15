@@ -329,7 +329,7 @@ modules on the right.
 | Module | Flask? | Global state? | Can extract standalone? |
 |--------|--------|---------------|-------------------------|
 | `models/training.py` | No | No (params) | **Yes** — pure PyTorch/sklearn |
-| `models/progress.py` | No | No (params) | **Yes** — pure torch/numpy |
+| `models/labeling_progress.py` | No | No (params) | **Yes** — pure torch/numpy |
 | `exporters/base.py` + all exporters | No | No | **Yes** — pure data processing |
 | `labels/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
 | `processors/importers/base.py` + all importers | No | No | **Yes** — pure data processing |

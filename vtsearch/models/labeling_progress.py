@@ -1,8 +1,14 @@
-"""Progress tracking and stopping condition analysis.
+"""Labeling-session analyzer: per-step model cache and stopping-condition metrics.
 
-Caches trained models and stability metrics per labelling step so that
+Caches trained MLPs and stability metrics per labelling step so that
 repeated queries (the progress button, the auto-indicator) never retrain
 models that have already been computed.
+
+Unrelated to :mod:`vtsearch.concurrency.progress`, which is the
+infrastructure for tracking and cancelling long-running operations
+(``ProgressTracker`` and the dataset/sort/eval/find singletons).  The
+two modules used to share the ``progress.py`` name; this one was
+renamed to make the distinction obvious.
 """
 
 from __future__ import annotations

@@ -34,7 +34,7 @@ def clear_votes() -> None:
     ``label_history`` in place. Does not affect the ``medias`` dict.
     Also clears the progress model cache and click-time / score tracking.
     """
-    from vtsearch.models.progress import clear_progress_cache
+    from vtsearch.models.labeling_progress import clear_progress_cache
 
     with _state_lock:
         good_votes.clear()
@@ -153,7 +153,7 @@ def toggle_vote(
             Ignored for no-votes (which are always image-level — see the
             patch-embedder v2 design).  Patch-embedder v2.
     """
-    from vtsearch.models.progress import invalidate_progress_cache_from
+    from vtsearch.models.labeling_progress import invalidate_progress_cache_from
 
     added = False
     with _state_lock:

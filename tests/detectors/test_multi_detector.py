@@ -111,7 +111,7 @@ class TestDetectorContextStore:
     def test_register_clears_progress_cache(self):
         """Registering a new detector must clear the progress cache so stale
         training indicators from a previous detector don't carry over."""
-        from vtsearch.models.progress import _cached_steps, clear_progress_cache
+        from vtsearch.models.labeling_progress import _cached_steps, clear_progress_cache
         from vtsearch.state.core import DetectorContext, register_detector_context
 
         # Seed the cache with a fake entry (simulating a previous detector's training)
@@ -126,7 +126,7 @@ class TestDetectorContextStore:
     def test_unregister_clears_progress_cache(self):
         """Unregistering a detector must clear the progress cache so stale
         training indicators don't leak to the next detector."""
-        from vtsearch.models.progress import _cached_steps
+        from vtsearch.models.labeling_progress import _cached_steps
         from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
@@ -461,7 +461,7 @@ class TestLabelingStatusResetOnDetectorSwitch:
     def test_labeling_status_not_green_after_detector_switch(self, client):
         """After building up cached progress on detector A, switching to
         a fresh detector B must NOT return green smart/stable status."""
-        from vtsearch.models.progress import _cached_steps, _progress_lock
+        from vtsearch.models.labeling_progress import _cached_steps, _progress_lock
         from vtsearch.state import (
     good_votes,
     bad_votes,

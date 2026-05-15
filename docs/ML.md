@@ -110,7 +110,7 @@ Yes-votes may additionally carry an optional `region_box` (4-float normalised re
 ## Key Files
 
 - `vtsearch/models/training.py` — `build_model`, `train_model`, `train_and_score`, threshold functions
-- `vtsearch/models/progress.py` — Cached per-step training and stability analysis
+- `vtsearch/models/labeling_progress.py` — Cached per-step training and stability analysis
 - `vtsearch/models/loader.py` — Model initialization and thread configuration
 - `vtsearch/eval/voting_iterations.py` — Voting simulation evaluation
 - `vtsearch/config.py` — `TRAIN_EPOCHS` and model IDs
