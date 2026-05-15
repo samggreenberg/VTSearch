@@ -290,6 +290,8 @@ class PluginRegistry(Generic[T]):
         (excluding ``__init__.py`` and ``base.py``) for the sentinel.
         """
         parent = importlib.import_module(self._package)
+        if parent.__file__ is None:
+            raise RuntimeError(f"Cannot discover plugins under namespace package {self._package!r}")
         package_dir = Path(parent.__file__).parent
         for entry in sorted(package_dir.iterdir()):
             if entry.name.startswith((".", "_")):
@@ -330,8 +332,11 @@ class PluginRegistry(Generic[T]):
         skipped.  This prevents an installed third-party package from
         accidentally shadowing a core plugin.
         """
+        group = self._entry_point_group
+        if group is None:
+            return
         try:
-            eps = importlib.metadata.entry_points(group=self._entry_point_group)
+            eps = importlib.metadata.entry_points(group=group)
         except Exception as exc:  # pragma: no cover
             warnings.warn(
                 f"Failed to read entry-point group {self._entry_point_group!r}: {exc}",

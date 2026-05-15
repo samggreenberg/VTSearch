@@ -17,7 +17,10 @@ from vtsearch.plugins import PluginField
 from vtsearch.sync import SyncSource
 
 if TYPE_CHECKING:
-    pass
+    # Imported for the `"LabelSet"` forward reference in the generic
+    # subscription below. Ruff can't see string-based references, so the
+    # noqa suppresses an otherwise-correct F401.
+    from vtsearch.datasets.labelset import LabelSet  # noqa: F401
 
 LabelsetSourceField = PluginField
 
