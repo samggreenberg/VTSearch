@@ -86,17 +86,16 @@ POST /api/find
 }
 ```
 
-### Find progress
+### Find progress (SSE)
 
-```
-GET /api/find/progress
-```
+Find progress streams on the `find` channel of
+[`/api/events`](events.md):
 
-→ ```json
+```json
 {
   "status": "running",
   "message": "Scoring with \"ModelName\" on \"DatasetName\"...",
-  "cur": 150,
+  "current": 150,
   "total": 300,
   "step": 2,
   "total_steps": 3,

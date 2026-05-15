@@ -438,8 +438,32 @@ Currently many embedders embed one-at-a-time. Batch within a converter run + wit
 ### 12.4 Model preload manager ★★ S
 Setting exists; could be smarter — predict which embedder is needed next from active dataset metadata.
 
-### 12.5 WebSocket for live progress ★★ M
-Today progress is polled via REST. WebSocket = lower latency, less server load, smoother UI.
+### 12.5 ~~WebSocket~~ SSE for live progress ★★ M — **DONE**
+Was: progress polled via REST (`/api/dataset/progress`, `/api/sort/progress`,
+`/api/find/progress`, `/api/dataset/loading-tasks`,
+`/api/detectors/loading-tasks`, `/api/eval/voting-iterations`).
+
+Replaced by a single Server-Sent Events stream at **`GET /api/events`**
+(see [`docs/api/events.md`](../api/events.md)). Channels: `dataset`,
+`sort`, `find`, `eval`, `loading-tasks`, `detector-loading-tasks`. The
+first frame on every channel is the current snapshot, so clients don't
+need a bootstrap REST call.
+
+**Why SSE over WebSocket:**
+- Progress is one-way (server → client), text-only — exactly SSE's
+  sweet spot, where WebSocket's bidirectionality is wasted.
+- Flask is sync/WSGI — SSE works as a plain streaming response, no
+  `flask-sock` / ASGI / Upgrade-handshake surface area.
+- Auth, per-request context, and proxy compatibility come for free
+  because it's still an HTTP GET.
+- `EventSource` reconnects automatically; we don't have to build
+  heartbeat / resume / backoff.
+
+WebSocket can be revisited later if a genuinely bidirectional feature
+(live multi-user voting, presence) lands.
+
+The old §18.9 ("SSE event stream") is subsumed by this item — they
+referred to the same idea.
 
 ### 12.6 Background prefetch of next likely media ★ S
 For speed-labelling, preload the next 3 items' previews.
@@ -667,8 +691,11 @@ Apple Silicon + Graviton tier deployments.
 ### 18.8 Model-cache warmer init container ★ S
 Compose pattern that pulls model weights once, sidecar reuses.
 
-### 18.9 SSE event stream ★ M
-`/api/events?since=...` for the progress + activity feed (§16.5) without WebSocket.
+### 18.9 ~~SSE event stream~~ — **subsumed by §12.5 (DONE)**
+The progress feed shipped as `GET /api/events` — see §12.5 and
+[`docs/api/events.md`](../api/events.md). An "activity feed" channel
+(votes, label changes, etc.) for §16.5 can be added as another event
+name on the same endpoint when needed.
 
 ---
 

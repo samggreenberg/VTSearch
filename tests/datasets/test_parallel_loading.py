@@ -254,7 +254,7 @@ class TestGetProgressWithLoadingTasks:
 # ---------------------------------------------------------------------------
 
 
-class TestLoadingTasksTracker:
+class TestLoadingTasksTrackerEndpoint:
     """Test the loading_tasks tracker (streamed via the SSE `loading-tasks` channel)."""
 
     def test_returns_empty_when_no_tasks(self, client):

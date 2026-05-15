@@ -27,10 +27,11 @@ from vtsearch.concurrency.progress import (
     sort_progress,
 )
 
-#: Snapshot interval used as a fallback when no events arrive — also doubles
-#: as the SSE heartbeat (comment line) cadence so proxies / load balancers
-#: don't drop idle connections.
-HEARTBEAT_SECONDS = 15.0
+#: SSE heartbeat cadence. Also drives the periodic re-emit of task
+#: channels so finished tasks vanish from clients once they pass the
+#: ``LoadingTasksTracker`` stale-prune window without us having to
+#: schedule a background timer for every finish.
+HEARTBEAT_SECONDS = 5.0
 
 #: Single-channel trackers (key = SSE event name).
 _TRACKER_CHANNELS: dict[str, ProgressTracker] = {
@@ -120,6 +121,10 @@ def stream_progress_events(
                 yield _format_sse(name, snapshot)
             except queue.Empty:
                 yield ": heartbeat\n\n"
+                # Re-emit task channels so clients see finished tasks
+                # disappear once their stale-prune window elapses.
+                for name, tasks_tracker in _TASK_CHANNELS.items():
+                    yield _format_sse(name, tasks_tracker.list_tasks())
                 last_heartbeat = time.monotonic()
     finally:
         for subject, handler in subscriptions:

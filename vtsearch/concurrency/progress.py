@@ -249,19 +249,17 @@ class LoadingTasksTracker:
         return tracker
 
     def mark_finished(self, task_id: str) -> None:
-        """Record the time a task finished (for deferred cleanup)."""
-        delay: float | None = None
+        """Record the time a task finished (for deferred cleanup).
+
+        ``list_tasks()`` prunes stale finished entries the next time it is
+        called; SSE streams call it on every heartbeat tick so a
+        background timer here is unnecessary.
+        """
         with self._lock:
             entry = self._tasks.get(task_id)
             if entry:
                 entry["finished_at"] = time.time()
-                has_error = bool(entry["tracker"].get().get("error"))
-                delay = (30 if has_error else 5) + 0.5
         self._notify()
-        if delay is not None:
-            t = threading.Timer(delay, self._notify)
-            t.daemon = True
-            t.start()
 
     def get_tracker(self, task_id: str) -> ProgressTracker | None:
         """Return the ProgressTracker for *task_id*, or ``None``."""
