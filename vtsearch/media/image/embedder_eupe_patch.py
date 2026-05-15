@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Optional
 
 from vtsearch.media.image._eupe_shared import _EupeBase
+from vtsearch.media.image._image_bulk import bulk_patch_forward_image_files
 from vtsearch.media.patch_embed import PatchEmbedOutput
 
 
@@ -41,6 +42,20 @@ class ImageEupePatchEmbedder(_EupeBase):
 
     def _patch_forward_impl(self, media: dict) -> Optional[PatchEmbedOutput]:
         return self._compute_patch_output(media)
+
+    def _patch_forward_bulk_impl(self, medias: list[dict]) -> list[Optional[PatchEmbedOutput]]:
+        if self._model is None:
+            self.load_models()
+        if self._model is None or self._preprocess is None:
+            return [None] * len(medias)
+        with self._embed_lock:
+            return bulk_patch_forward_image_files(
+                medias,
+                forward_pil_batch=self._patch_forward_pil_batch,
+                batch_size=self.embed_batch_size,
+                on_progress=self._on_progress,
+                label="EUPE patch",
+            )
 
 
 EMBEDDER = ImageEupePatchEmbedder()

@@ -158,6 +158,7 @@ def hf_vit_to_patch_output(
     outputs,
     *,
     num_register_tokens: int = 0,
+    batch_index: int = 0,
 ) -> Optional[PatchEmbedOutput]:
     """Turn a HuggingFace ViT ``ModelOutput`` into a :class:`PatchEmbedOutput`.
 
@@ -168,13 +169,16 @@ def hf_vit_to_patch_output(
     ``outputs`` must have ``last_hidden_state`` and ``attentions`` set —
     pass ``output_attentions=True`` to the model forward call.
 
+    *batch_index* selects which image in a batched forward to extract
+    (default 0 preserves the single-image call sites).
+
     Returns ``None`` if the patch grid isn't square (the loader treats
     that as "no regions for this image", same as a forward-pass failure).
     """
     import torch  # noqa: PLC0415
 
-    hidden = outputs.last_hidden_state[0]  # (T, D)
-    attn = outputs.attentions[-1][0]  # (heads, T, T) — last block
+    hidden = outputs.last_hidden_state[batch_index]  # (T, D)
+    attn = outputs.attentions[-1][batch_index]  # (heads, T, T) — last block
     skip = 1 + num_register_tokens
     cls_vec = hidden[0]
     patch_tokens = hidden[skip:]
@@ -200,7 +204,11 @@ def _norm_torch(t: "torch.Tensor") -> np.ndarray:
     return v / np.maximum(n, 1e-12)
 
 
-def eupe_features_to_patch_output(features: dict) -> Optional[PatchEmbedOutput]:
+def eupe_features_to_patch_output(
+    features: dict,
+    *,
+    batch_index: int = 0,
+) -> Optional[PatchEmbedOutput]:
     """Turn a :func:`facebookresearch/EUPE`-style ``forward_features`` dict
     into a :class:`PatchEmbedOutput`.
 
@@ -208,6 +216,9 @@ def eupe_features_to_patch_output(features: dict) -> Optional[PatchEmbedOutput]:
     into named keys (``x_norm_clstoken``, ``x_storage_tokens``,
     ``x_norm_patchtokens``), so we don't need a register-token slice — the
     storage tokens are already absent from ``x_norm_patchtokens``.
+
+    *batch_index* selects which image in a batched forward to extract
+    (default 0 preserves the single-image call sites).
 
     Saliency is the **CLS-cosine-similarity proxy**: each patch's softmaxed
     cosine similarity to the CLS vector.  EUPE's attention path uses
@@ -221,8 +232,8 @@ def eupe_features_to_patch_output(features: dict) -> Optional[PatchEmbedOutput]:
     """
     import torch  # noqa: PLC0415
 
-    cls = features["x_norm_clstoken"][0]  # (D,)
-    patches = features["x_norm_patchtokens"][0]  # (N, D)
+    cls = features["x_norm_clstoken"][batch_index]  # (D,)
+    patches = features["x_norm_patchtokens"][batch_index]  # (N, D)
     num_patches = patches.shape[0]
     side = int(round(num_patches**0.5))
     if side * side != num_patches:

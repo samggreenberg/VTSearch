@@ -31,6 +31,7 @@ from vtsearch.media.embedder import (
     load_pretrained_local_first,
     timed_progress,
 )
+from vtsearch.media.image._image_bulk import bulk_embed_image_files
 from vtsearch.media.patch_embed import PatchEmbedOutput, hf_vit_to_patch_output
 
 if TYPE_CHECKING:
@@ -120,6 +121,43 @@ class _Dinov2Base(MediaEmbedder):
         except Exception:
             logging.getLogger(__name__).exception("Error embedding PIL image (DINOv2)")
             return None
+
+    def _forward_pil_batch(self, images: list["Image.Image"]) -> np.ndarray:
+        import torch  # noqa: PLC0415
+
+        rgb = [im.convert("RGB") for im in images]
+        inputs = self._processor(images=rgb, return_tensors="pt")
+        device = next(self._model.parameters()).device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        with torch.no_grad():
+            outputs = self._model(**inputs)
+            cls = outputs.last_hidden_state[:, 0]
+            return cls.detach().cpu().numpy()
+
+    def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        if self._model is None:
+            self.load_models()
+        if self._model is None or self._processor is None:
+            return [None] * len(medias)
+        with self._embed_lock:
+            return bulk_embed_image_files(
+                medias,
+                forward_pil_batch=self._forward_pil_batch,
+                batch_size=self.embed_batch_size,
+                on_progress=self._on_progress,
+                label="DINOv2",
+            )
+
+    def _patch_forward_pil_batch(self, images: list["Image.Image"]) -> list[Optional[PatchEmbedOutput]]:
+        import torch  # noqa: PLC0415
+
+        rgb = [im.convert("RGB") for im in images]
+        inputs = self._processor(images=rgb, return_tensors="pt")
+        device = next(self._model.parameters()).device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        with torch.no_grad():
+            outputs = self._model(**inputs, output_attentions=True)
+        return [hf_vit_to_patch_output(outputs, num_register_tokens=0, batch_index=i) for i in range(len(images))]
 
     def _compute_patch_output(self, media: dict) -> Optional[PatchEmbedOutput]:
         """Return CLS + per-patch grid + CLS→patch attention saliency.

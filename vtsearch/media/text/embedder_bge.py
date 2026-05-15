@@ -104,6 +104,51 @@ class TextBGEEmbedder(MediaEmbedder):
             logging.getLogger(__name__).exception("Error embedding %s", file_path)
             return None
 
+    def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
+        """Batch-encode every text file through sentence-transformers in one call."""
+        if self._model is None:
+            self.load_models()
+        if self._model is None:
+            return [None] * len(medias)
+
+        passages: list[Optional[str]] = []
+        for media in medias:
+            file_path = media.get("media_path")
+            if not file_path:
+                passages.append(None)
+                continue
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    text = f.read().strip()
+            except Exception:
+                logging.getLogger(__name__).exception("Error reading %s", file_path)
+                passages.append(None)
+                continue
+            passages.append(text if text else None)
+
+        ready_indices = [i for i, p in enumerate(passages) if p is not None]
+        if not ready_indices:
+            return [None] * len(medias)
+
+        total = len(medias)
+        self._on_progress("embedding", f"Embedding BGE {len(ready_indices)}/{total}...", 0, total)
+        with self._embed_lock:
+            try:
+                vectors = self._model.encode(
+                    [passages[i] for i in ready_indices],
+                    normalize_embeddings=True,
+                    batch_size=self.embed_batch_size,
+                )
+            except Exception:
+                logging.getLogger(__name__).exception("BGE bulk encode failed")
+                return [None] * len(medias)
+
+        results: list[Optional[np.ndarray]] = [None] * len(medias)
+        for slot, vec in zip(ready_indices, vectors):
+            results[slot] = np.asarray(vec)
+        self._on_progress("embedding", f"Embedding BGE {total}/{total}...", total, total)
+        return results
+
     def embed_text_passage(self, text: str) -> Optional[np.ndarray]:
         """Embed *text* as a passage (used when loading demo datasets in-memory)."""
         if self._model is None:
