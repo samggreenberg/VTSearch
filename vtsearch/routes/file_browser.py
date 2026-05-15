@@ -16,7 +16,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import format_mtime
+from vtsearch.routes._shared import format_mtime
 
 import vtsearch.utils.paths as _paths
 

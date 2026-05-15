@@ -223,7 +223,7 @@ class TestImportRouteAutoChunked:
     """
 
     def test_route_invokes_pipeline(self, client):
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.crud._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={"path": "/tmp/test", "media_type": "image"},
@@ -234,7 +234,7 @@ class TestImportRouteAutoChunked:
             assert "chunk_size" not in mock_run.call_args.kwargs
 
     def test_user_supplied_chunk_size_is_ignored(self, client):
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.crud._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={"path": "/tmp/test", "media_type": "image", "chunk_size": 99},
@@ -256,7 +256,7 @@ class TestImportRouteClipperParams:
     """
 
     def test_clipper_params_passed_through_json(self, client):
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.crud._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={
@@ -272,7 +272,7 @@ class TestImportRouteClipperParams:
             assert field_values["clipper_params"] == {"duration": 1.0, "min_overlap": 0.0}
 
     def test_no_clipper_params_when_omitted(self, client):
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.crud._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={"path": "/tmp/test", "media_type": "image"},
@@ -282,7 +282,7 @@ class TestImportRouteClipperParams:
             assert "clipper_params" not in field_values
 
     def test_invalid_clipper_params_returns_400(self, client):
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.crud._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={
@@ -307,7 +307,7 @@ class TestLocalFolderRouteChunked:
     """
 
     def test_auto_chunked_dispatch_for_audio(self, client, tmp_path, monkeypatch):
-        monkeypatch.setattr("vtsearch.routes.datasets.LOCAL_UPLOADS_DIR", tmp_path / "uploads")
+        monkeypatch.setattr("vtsearch.routes.datasets.crud.LOCAL_UPLOADS_DIR", tmp_path / "uploads")
 
         captured: dict[str, Any] = {}
 
@@ -338,7 +338,7 @@ class TestLocalFolderRouteChunked:
             return "task-fake-chunked"
 
         with patch(
-            "vtsearch.routes.datasets._run_origin_load_in_background",
+            "vtsearch.routes.datasets.crud._run_origin_load_in_background",
             side_effect=_fake_origin_load,
         ):
             resp = client.post(

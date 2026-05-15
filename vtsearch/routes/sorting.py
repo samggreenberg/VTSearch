@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import (
+from vtsearch.routes._shared import (
     format_exception_detail,
     get_embedder_for_medias,
     get_json_or_400,

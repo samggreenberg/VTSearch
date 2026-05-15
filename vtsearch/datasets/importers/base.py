@@ -107,7 +107,7 @@ PickerView = str  # one of: "form", "demo", "server_folder", "local_folder"
 # in :meth:`DatasetImporter.to_dict`, so the frontend renders it generically
 # without each subclass having to duplicate the declaration.  The field is
 # extracted out of band by the import route handler — see
-# :func:`vtsearch.routes.datasets._extract_importer_fields`.
+# :func:`vtsearch.routes.datasets.crud._extract_importer_fields`.
 DATASET_NAME_FIELD_KEY = "dataset_name"
 
 

@@ -756,7 +756,7 @@ class TestFolderImporterWithConverters:
 class TestImportAPIConverters:
     def test_import_endpoint_passes_converters(self, client):
         """POST /api/dataset/import/server_folder passes converters to the importer."""
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.crud._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={
@@ -773,7 +773,7 @@ class TestImportAPIConverters:
 
     def test_import_endpoint_without_converters(self, client):
         """Without converters, the field is not added."""
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.crud._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={"path": "/tmp/test", "media_type": "image"},
@@ -985,7 +985,7 @@ class TestConverterAcceptsParams:
 
 class TestImportAPISourceSpecs:
     def test_import_endpoint_passes_source_specs(self, client):
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_run:
+        with patch("vtsearch.routes.datasets.crud._run_importer_in_background") as mock_run:
             resp = client.post(
                 "/api/dataset/import/server_folder",
                 json={
@@ -1091,7 +1091,7 @@ class TestImportLocalFolderRouteForwardsSourceSpecs:
             ]
         )
 
-        with patch("vtsearch.routes.datasets._run_importer_in_background") as mock_bg:
+        with patch("vtsearch.routes.datasets.crud._run_importer_in_background") as mock_bg:
             # We don't care if the upload pipeline crashes after staging —
             # we only assert source_specs makes it to the importer.
             mock_bg.return_value = "task-1"

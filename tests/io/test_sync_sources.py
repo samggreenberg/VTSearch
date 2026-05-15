@@ -519,7 +519,7 @@ class TestApplySettings:
 
     def test_apply_settings_available_from_routes(self):
         """The routes module re-exports _apply_settings from settings."""
-        from vtsearch.routes.settings_io import _apply_settings
+        from vtsearch.routes.settings.io import _apply_settings
         from vtsearch.settings import _apply_settings as canonical
 
         assert _apply_settings is canonical

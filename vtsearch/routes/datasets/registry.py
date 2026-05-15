@@ -37,7 +37,7 @@ from vtsearch.datasets.registry import (
     unregister_dataset as _reg_unregister,
     update_dataset as _reg_update,
 )
-from vtsearch.routes.helpers import get_json_safe
+from vtsearch.routes._shared import get_json_safe
 from vtsearch.utils import (
     DatasetContext,
     collapse_duplicates,

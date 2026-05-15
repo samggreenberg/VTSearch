@@ -290,7 +290,7 @@ class TestExampleSortServer:
 
     def test_nonexistent_file_returns_404(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "vtsearch.routes.media_server._get_server_media_dir",
+            "vtsearch.routes.media.server._get_server_media_dir",
             lambda: tmp_path,
         )
         resp = client.post("/api/example-sort-server", json={"filename": "nope.wav"})
@@ -298,7 +298,7 @@ class TestExampleSortServer:
 
     def test_path_traversal_rejected(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "vtsearch.routes.media_server._get_server_media_dir",
+            "vtsearch.routes.media.server._get_server_media_dir",
             lambda: tmp_path,
         )
         resp = client.post("/api/example-sort-server", json={"filename": "../../etc/passwd"})
@@ -306,7 +306,7 @@ class TestExampleSortServer:
 
     def test_valid_file_returns_results(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "vtsearch.routes.media_server._get_server_media_dir",
+            "vtsearch.routes.media.server._get_server_media_dir",
             lambda: tmp_path,
         )
         wav_path = tmp_path / "test.wav"

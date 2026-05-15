@@ -6,7 +6,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request, send_file
 
 from vtsearch.config import DATA_DIR
-from vtsearch.routes.helpers import format_exception_detail, get_json_or_400
+from vtsearch.routes._shared import format_exception_detail, get_json_or_400
 from vtsearch.utils import snapshot_medias
 
 media_server_bp = Blueprint("media_server", __name__)

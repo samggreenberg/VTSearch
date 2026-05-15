@@ -2,7 +2,7 @@
 
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import get_json_or_400, get_json_safe
+from vtsearch.routes._shared import get_json_or_400, get_json_safe
 from vtsearch.utils import (
     apply_label,
     apply_label_with_click_time,

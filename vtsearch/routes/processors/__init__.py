@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from flask import Blueprint
 
-from vtsearch.routes.processors_crud import (  # noqa: F401
+from vtsearch.routes.processors.crud import (  # noqa: F401
     _EXTRACTOR_FACTORIES,
     _LOCALIZER_FACTORIES,
     _build_extractor,
@@ -13,7 +13,7 @@ from vtsearch.routes.processors_crud import (  # noqa: F401
     _ensure_localizer_factories,
     processors_crud_bp,
 )
-from vtsearch.routes.processors_scoring import processors_scoring_bp  # noqa: F401
+from vtsearch.routes.processors.scoring import processors_scoring_bp  # noqa: F401
 
 processors_bp = Blueprint("processors", __name__)
 

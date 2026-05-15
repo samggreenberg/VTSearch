@@ -14,7 +14,7 @@ import numpy as np
 from flask import Blueprint, jsonify
 
 from vtsearch.models.detector_training import train_and_threshold
-from vtsearch.routes.helpers import get_json_safe
+from vtsearch.routes._shared import get_json_safe
 from vtsearch.utils.progress import get_find_progress, update_find_progress
 
 detector_find_bp = Blueprint("detector_find", __name__)

@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from flask import Blueprint, jsonify, request
 
-from vtsearch.routes.helpers import get_json_safe
+from vtsearch.routes._shared import get_json_safe
 from vtsearch.utils import snapshot_medias
 from vtsearch.utils.memory_budget import cap_workers_by_memory
 from vtsearch.utils.progress import update_find_progress

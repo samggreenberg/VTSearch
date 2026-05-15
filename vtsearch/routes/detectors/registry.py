@@ -123,7 +123,7 @@ def register_detector_from_labelset(importer_name: str):
     from vtsearch.datasets.labelset import LabeledElement, LabelSet
     from vtsearch.labels.importers import get_label_importer, list_label_importers
     from vtsearch.models.detector_registry import register_detector, update_detector
-    from vtsearch.routes.helpers import (
+    from vtsearch.routes._shared import (
         extract_plugin_fields,
         get_plugin_or_404,
         get_request_field,

@@ -113,7 +113,7 @@ class TestServerMediaFiles:
 
     @pytest.fixture(autouse=True)
     def _setup_media_dir(self, tmp_path, monkeypatch):
-        from vtsearch.routes import media_server as media_server_module
+        from vtsearch.routes.media import server as media_server_module
 
         self._media_dir = tmp_path / "example_media"
         monkeypatch.setattr(media_server_module, "SERVER_MEDIA_DIR", self._media_dir)
@@ -162,7 +162,7 @@ class TestServerMediaFileThumbnail:
 
     @pytest.fixture(autouse=True)
     def _setup_media_dir(self, tmp_path, monkeypatch):
-        from vtsearch.routes import media_server as media_server_module
+        from vtsearch.routes.media import server as media_server_module
 
         self._media_dir = tmp_path / "example_media"
         self._media_dir.mkdir(parents=True, exist_ok=True)
@@ -218,7 +218,7 @@ class TestExampleSortServer:
 
     @pytest.fixture(autouse=True)
     def _setup_media_dir(self, tmp_path, monkeypatch):
-        from vtsearch.routes import media_server as media_server_module
+        from vtsearch.routes.media import server as media_server_module
 
         self._media_dir = tmp_path / "example_media"
         self._media_dir.mkdir(parents=True, exist_ok=True)

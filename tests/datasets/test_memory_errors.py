@@ -216,7 +216,7 @@ class TestBackgroundImportMemoryError:
 
     def test_importer_background_oom_reports_error(self, client):
         """When an importer OOMs, the progress endpoint shows a user-friendly error."""
-        from vtsearch.routes.datasets import _run_importer_in_background
+        from vtsearch.routes.datasets.crud import _run_importer_in_background
 
         mock_importer = mock.MagicMock()
         mock_importer.supports_chunked = False
