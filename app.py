@@ -315,10 +315,7 @@ if __name__ == "__main__":
         type=str,
         default=None,
         dest="import_labels_into",
-        help=(
-            "Detector name to merge labels into before scoring. "
-            "Used with --autodetect plus --label-importer-file."
-        ),
+        help=("Detector name to merge labels into before scoring. Used with --autodetect plus --label-importer-file."),
     )
     parser.add_argument(
         "--label-importer",

@@ -73,9 +73,7 @@ def _assign_cells_to_leaves(saliency: np.ndarray, k: int) -> list[set[tuple[int,
 
 def analyse_one(rng: np.random.Generator, grid: int, k: int, dim: int) -> TreeStats:
     patch_grid = rng.standard_normal((grid, grid, dim)).astype(np.float32)
-    patch_grid = patch_grid / np.maximum(
-        np.linalg.norm(patch_grid, axis=-1, keepdims=True), 1e-12
-    )
+    patch_grid = patch_grid / np.maximum(np.linalg.norm(patch_grid, axis=-1, keepdims=True), 1e-12)
     raw_sal = rng.random((grid, grid)).astype(np.float32)
     saliency = raw_sal / raw_sal.sum()
     cls_vec = rng.standard_normal(dim).astype(np.float32)
@@ -179,12 +177,18 @@ def main() -> None:
     print(f"# internal HAC nodes (per image):          {T // args.n} (K-1={args.k - 1})")
     print(f"# internals total:                         {T}")
     print()
-    print(f"box == one of own children's box:          {totals['box_eq_child']:>6} "
-          f"({100 * totals['box_eq_child'] / T:.1f}%)")
-    print(f"box == some earlier region's box:          {totals['box_eq_any_earlier']:>6} "
-          f"({100 * totals['box_eq_any_earlier'] / T:.1f}%)")
-    print(f"underlying cell set == earlier region's:   {totals['cells_eq_earlier']:>6} "
-          f"({100 * totals['cells_eq_earlier'] / T:.1f}%)")
+    print(
+        f"box == one of own children's box:          {totals['box_eq_child']:>6} "
+        f"({100 * totals['box_eq_child'] / T:.1f}%)"
+    )
+    print(
+        f"box == some earlier region's box:          {totals['box_eq_any_earlier']:>6} "
+        f"({100 * totals['box_eq_any_earlier'] / T:.1f}%)"
+    )
+    print(
+        f"underlying cell set == earlier region's:   {totals['cells_eq_earlier']:>6} "
+        f"({100 * totals['cells_eq_earlier'] / T:.1f}%)"
+    )
     print()
     print("of the box-equal pairs:")
     print(f"  cells also equal (true duplicates):      {totals['cells_eq_box_eq']}")

@@ -371,9 +371,7 @@ class DatasetImporter(PluginBase):
         override :meth:`_fetch_records_bulk_impl` instead — the default
         bulk impl loops over this method.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__}.fetch_record() is not implemented"
-        )
+        raise NotImplementedError(f"{type(self).__name__}.fetch_record() is not implemented")
 
     def fetch_records_bulk(
         self,

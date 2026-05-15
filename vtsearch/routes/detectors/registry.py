@@ -241,12 +241,12 @@ def load_detector_route():
         is_detector_loaded,
     )
     from vtsearch.state import (
-    DetectorContext,
-    bad_votes,
-    get_active_detector_context,
-    good_votes,
-    register_detector_context,
-)
+        DetectorContext,
+        bad_votes,
+        get_active_detector_context,
+        good_votes,
+        register_detector_context,
+    )
 
     data = request.get_json(force=True, silent=True) or {}
     detector_id = data.get("detector_id")
@@ -423,11 +423,11 @@ def unload_detector_route(detector_id: str):
     """Unload a detector from memory (frees its DetectorContext)."""
     from vtsearch.detectors.registry import get_detector, is_detector_loaded, remove_loaded_detector_id
     from vtsearch.state import (
-    bad_votes,
-    get_active_detector_context,
-    good_votes,
-    unregister_detector_context,
-)
+        bad_votes,
+        get_active_detector_context,
+        good_votes,
+        unregister_detector_context,
+    )
 
     entry = get_detector(detector_id)
     if entry is None:

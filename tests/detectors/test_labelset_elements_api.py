@@ -228,9 +228,7 @@ class TestLabelElementThumbnail:
         _seed_cross_dataset_model()
         detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         target = detail["good"][0]
-        res = client.get(
-            f"/api/detectors/cross-ds-model/labels/{target['id']}/thumbnail"
-        )
+        res = client.get(f"/api/detectors/cross-ds-model/labels/{target['id']}/thumbnail")
         assert res.status_code == 404
 
 

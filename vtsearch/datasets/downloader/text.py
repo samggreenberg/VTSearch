@@ -401,9 +401,7 @@ def download_dbpedia(
     classes_path = extract_dir / "classes.txt"
     class_names: list[str]
     if classes_path.exists():
-        class_names = [
-            line.strip() for line in classes_path.read_text(encoding="utf-8").splitlines() if line.strip()
-        ]
+        class_names = [line.strip() for line in classes_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     else:
         class_names = list(DBPEDIA14_CLASSES)
 
@@ -658,7 +656,9 @@ def download_reuters21578(
             topics_match = _REUTERS_TOPICS_RE.search(block)
             if not topics_match:
                 continue
-            topics = [t.decode("latin-1", errors="replace").strip() for t in _REUTERS_D_RE.findall(topics_match.group(1))]
+            topics = [
+                t.decode("latin-1", errors="replace").strip() for t in _REUTERS_D_RE.findall(topics_match.group(1))
+            ]
             topics = [t for t in topics if t]
             if not topics:
                 continue

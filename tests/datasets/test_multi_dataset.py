@@ -243,10 +243,10 @@ class TestMultiDatasetSwitching:
 
     def test_switch_preserves_medias(self):
         from vtsearch.state import (
-    medias,
-    register_context,
-    set_thread_dataset_context,
-)
+            medias,
+            register_context,
+            set_thread_dataset_context,
+        )
 
         # Setup context A with medias
         ctx_a = DatasetContext("switch_a")
@@ -272,11 +272,11 @@ class TestMultiDatasetSwitching:
     def test_switch_detectors_preserves_votes(self):
         """Votes are per-detector: switching detectors preserves each one's votes."""
         from vtsearch.state import (
-    good_votes,
-    bad_votes,
-    register_detector_context,
-    set_thread_detector_context,
-)
+            good_votes,
+            bad_votes,
+            register_detector_context,
+            set_thread_detector_context,
+        )
 
         det_a = DetectorContext("det_a")
         register_detector_context(det_a)
@@ -303,11 +303,11 @@ class TestMultiDatasetSwitching:
 
     def test_switch_detectors_preserves_label_history(self):
         from vtsearch.state import (
-    label_history,
-    register_detector_context,
-    set_thread_detector_context,
-    toggle_vote,
-)
+            label_history,
+            register_detector_context,
+            set_thread_detector_context,
+            toggle_vote,
+        )
 
         det_a = DetectorContext("hist_det_a")
         register_detector_context(det_a)
@@ -330,11 +330,11 @@ class TestMultiDatasetSwitching:
 
     def test_switch_detectors_preserves_learned_scores(self):
         from vtsearch.state import (
-    get_learned_scores,
-    register_detector_context,
-    set_thread_detector_context,
-    update_learned_scores,
-)
+            get_learned_scores,
+            register_detector_context,
+            set_thread_detector_context,
+            update_learned_scores,
+        )
 
         det_a = DetectorContext("scores_det_a")
         register_detector_context(det_a)
@@ -353,11 +353,11 @@ class TestMultiDatasetSwitching:
 
     def test_unload_frees_context(self):
         from vtsearch.state import (
-    medias,
-    register_context,
-    set_thread_dataset_context,
-    unregister_context,
-)
+            medias,
+            register_context,
+            set_thread_dataset_context,
+            unregister_context,
+        )
 
         ctx = DatasetContext("unload_me")
         ctx.medias[100] = self._make_test_media(100)
@@ -598,11 +598,11 @@ class TestSyncLabelsAcrossDatasets:
         from vtsearch.detectors.store import _read_detector, _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.state import (
-    bad_votes,
-    good_votes,
-    set_thread_detector_context,
-    snapshot_medias,
-)
+            bad_votes,
+            good_votes,
+            set_thread_detector_context,
+            snapshot_medias,
+        )
         from vtsearch.state.core import DetectorContext, register_detector_context
 
         reset_for_tests()
@@ -669,11 +669,11 @@ class TestSyncLabelsAcrossDatasets:
         from vtsearch.detectors.store import _read_detector, _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.state import (
-    bad_votes,
-    good_votes,
-    set_thread_detector_context,
-    snapshot_medias,
-)
+            bad_votes,
+            good_votes,
+            set_thread_detector_context,
+            snapshot_medias,
+        )
         from vtsearch.state.core import DetectorContext, register_detector_context
 
         reset_for_tests()

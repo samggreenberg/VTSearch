@@ -17,9 +17,7 @@ _ENTRY_TEMPLATE = """<entry>
 
 
 def _make_atom_feed(entries: list[tuple[str, str]]) -> bytes:
-    body = "\n".join(
-        _ENTRY_TEMPLATE.format(title=t, summary=s) for t, s in entries
-    )
+    body = "\n".join(_ENTRY_TEMPLATE.format(title=t, summary=s) for t, s in entries)
     return _ATOM_TEMPLATE.format(entries=body).encode("utf-8")
 
 

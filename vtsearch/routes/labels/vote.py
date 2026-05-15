@@ -159,11 +159,7 @@ def import_labels():
         # already coerces list↔tuple, so we just check shape and pass through.
         rb_raw = entry.get("region_box") if label == "good" else None
         region_box: tuple[float, float, float, float] | None = None
-        if (
-            isinstance(rb_raw, (list, tuple))
-            and len(rb_raw) == 4
-            and all(isinstance(v, (int, float)) for v in rb_raw)
-        ):
+        if isinstance(rb_raw, (list, tuple)) and len(rb_raw) == 4 and all(isinstance(v, (int, float)) for v in rb_raw):
             region_box = (float(rb_raw[0]), float(rb_raw[1]), float(rb_raw[2]), float(rb_raw[3]))
 
         for cid in cids:

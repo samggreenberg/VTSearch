@@ -250,9 +250,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
         d["available_converters_by_media_type"] = converters_by_target
         return d
 
-    def _stage_paths(
-        self, field_values: dict[str, Any]
-    ) -> tuple[Path, dict[str, Path], dict[str, Any]]:
+    def _stage_paths(self, field_values: dict[str, Any]) -> tuple[Path, dict[str, Path], dict[str, Any]]:
         """Read the paths file and symlink each entry into a fresh temp dir.
 
         Returns ``(staging_dir, name_to_source, content_vectors)`` where:
@@ -364,7 +362,10 @@ class ServerFilesDatasetImporter(DatasetImporter):
                     target_media_type=output_type,
                     medias=medias,
                     thin=thin,
-                    base_origin={"importer": self.name, "params": {"paths_file": str(field_values.get("paths_file", ""))}},
+                    base_origin={
+                        "importer": self.name,
+                        "params": {"paths_file": str(field_values.get("paths_file", ""))},
+                    },
                 )
 
             self._rewrite_origins(medias, name_to_source, self.build_origin(field_values))
@@ -436,7 +437,10 @@ class ServerFilesDatasetImporter(DatasetImporter):
                     target_media_type=output_type,
                     medias=converter_chunk,
                     thin=thin,
-                    base_origin={"importer": self.name, "params": {"paths_file": str(field_values.get("paths_file", ""))}},
+                    base_origin={
+                        "importer": self.name,
+                        "params": {"paths_file": str(field_values.get("paths_file", ""))},
+                    },
                 )
                 if converter_chunk:
                     # Converter-origin medias keep their converter origin

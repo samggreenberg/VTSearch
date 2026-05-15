@@ -119,9 +119,7 @@ class _EupeBase(MediaEmbedder):
         # standard ImageNet eval transform inline.
         self._preprocess = transforms.Compose(
             [
-                transforms.Resize(
-                    256, interpolation=transforms.InterpolationMode.BICUBIC
-                ),
+                transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=list(_IMAGENET_MEAN), std=list(_IMAGENET_STD)),

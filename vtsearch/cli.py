@@ -63,8 +63,7 @@ def _load_and_train_detectors(
         det_media_type = det.get("media_type", "") or ""
         if media_type and det_media_type and det_media_type != media_type:
             print(
-                f"Skipping detector '{det_name}': media_type "
-                f"{det_media_type!r} doesn't match dataset {media_type!r}.",
+                f"Skipping detector '{det_name}': media_type {det_media_type!r} doesn't match dataset {media_type!r}.",
                 flush=True,
             )
             continue

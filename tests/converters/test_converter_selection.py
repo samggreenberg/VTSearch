@@ -719,7 +719,9 @@ class TestFolderImporterWithConverters:
 
         mock_converter_medias = {1: {"id": 1, "type": "image"}}
 
-        def _fake_run_converters(folder, output_type, specs, medias, thin=False, recursive=True, folder_path_for_origin=""):
+        def _fake_run_converters(
+            folder, output_type, specs, medias, thin=False, recursive=True, folder_path_for_origin=""
+        ):
             if specs:
                 medias.update(mock_converter_medias)
 
@@ -728,9 +730,7 @@ class TestFolderImporterWithConverters:
                 "vtsearch.datasets.importers.server_folder.load_dataset_from_folder",
                 side_effect=ValueError("No images files found"),
             ),
-            patch(
-                "vtsearch.datasets.importers.server_folder._run_converter_specs", side_effect=_fake_run_converters
-            ),
+            patch("vtsearch.datasets.importers.server_folder._run_converter_specs", side_effect=_fake_run_converters),
         ):
             medias: dict = {}
             IMPORTER.run(
@@ -822,18 +822,14 @@ class TestLegacyEffectiveSourceSpecs:
     def test_legacy_with_converters_csv(self):
         from vtsearch.datasets.importers.http_archive import IMPORTER
 
-        specs = IMPORTER.effective_source_specs(
-            {"media_type": "image", "converters": "video2image,document2image"}
-        )
+        specs = IMPORTER.effective_source_specs({"media_type": "image", "converters": "video2image,document2image"})
         assert [s.converter for s in specs] == [None, "video2image", "document2image"]
         assert [s.source_type for s in specs] == ["image", "video", "document"]
 
     def test_legacy_unknown_converter_is_skipped(self):
         from vtsearch.datasets.importers.http_archive import IMPORTER
 
-        specs = IMPORTER.effective_source_specs(
-            {"media_type": "image", "converters": "video2image,bogus"}
-        )
+        specs = IMPORTER.effective_source_specs({"media_type": "image", "converters": "video2image,bogus"})
         assert [s.converter for s in specs] == [None, "video2image"]
 
 

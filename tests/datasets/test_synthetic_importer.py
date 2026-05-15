@@ -78,9 +78,7 @@ class TestSyntheticImporterValidation:
 
     def test_user_dataset_name_overrides_default(self):
         imp = SyntheticDatasetImporter()
-        out = imp.resolve_display_name(
-            {"media_type": "audio", "size": "7", "dataset_name": "My Tones"}
-        )
+        out = imp.resolve_display_name({"media_type": "audio", "size": "7", "dataset_name": "My Tones"})
         assert out == "My Tones"
 
 

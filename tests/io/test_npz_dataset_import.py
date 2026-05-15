@@ -265,17 +265,16 @@ class TestLocalUploadVectorsFile:
                 # Return an empty generator for the chunked path.
                 return iter(())
 
-            with patch.object(importer, "run", side_effect=_sniff), patch.object(
-                importer, "run_chunked", side_effect=_sniff
+            with (
+                patch.object(importer, "run", side_effect=_sniff),
+                patch.object(importer, "run_chunked", side_effect=_sniff),
             ):
                 load_fn({})
             return "task-fake-npz"
 
         return _fake_run
 
-    def test_upload_with_vectors_file_populates_importer_content_vectors(
-        self, client, tmp_path, monkeypatch
-    ):
+    def test_upload_with_vectors_file_populates_importer_content_vectors(self, client, tmp_path, monkeypatch):
         from vtsearch.datasets.importers import get_importer
 
         monkeypatch.setattr(
@@ -316,9 +315,7 @@ class TestLocalUploadVectorsFile:
         # next upload doesn't inherit stale vectors.
         assert get_importer("server_folder").content_vectors == {}
 
-    def test_upload_without_vectors_file_leaves_importer_unchanged(
-        self, client, tmp_path, monkeypatch
-    ):
+    def test_upload_without_vectors_file_leaves_importer_unchanged(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
             "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
             tmp_path / "uploads",

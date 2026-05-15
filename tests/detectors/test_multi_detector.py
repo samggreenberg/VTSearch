@@ -153,9 +153,9 @@ class TestVoteIsolation:
 
     def test_votes_isolated_between_detectors(self):
         from vtsearch.state import (
-    bad_votes,
-    good_votes,
-)
+            bad_votes,
+            good_votes,
+        )
         from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
@@ -184,9 +184,9 @@ class TestVoteIsolation:
 
     def test_toggle_vote_goes_to_active_detector(self):
         from vtsearch.state import (
-    good_votes,
-    toggle_vote,
-)
+            good_votes,
+            toggle_vote,
+        )
         from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
@@ -203,9 +203,9 @@ class TestVoteIsolation:
 
     def test_clear_votes_only_clears_active_detector(self):
         from vtsearch.state import (
-    clear_votes,
-    good_votes,
-)
+            clear_votes,
+            good_votes,
+        )
         from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
@@ -393,9 +393,9 @@ class TestMLPCaching:
 
     def test_learned_sort_caches_model(self, client):
         from vtsearch.state import (
-    good_votes,
-    bad_votes,
-)
+            good_votes,
+            bad_votes,
+        )
         from vtsearch.state.core import get_active_detector_context, _empty_detector_context
 
         # Vote to enable training
@@ -417,9 +417,9 @@ class TestMLPCaching:
 
     def test_cached_model_updates_on_retrain(self, client):
         from vtsearch.state import (
-    good_votes,
-    bad_votes,
-)
+            good_votes,
+            bad_votes,
+        )
         from vtsearch.state.core import get_active_detector_context
 
         good_votes[1] = None
@@ -463,10 +463,10 @@ class TestLabelingStatusResetOnDetectorSwitch:
         a fresh detector B must NOT return green smart/stable status."""
         from vtsearch.detectors.labeling_progress import _cached_steps, _progress_lock
         from vtsearch.state import (
-    good_votes,
-    bad_votes,
-    label_history,
-)
+            good_votes,
+            bad_votes,
+            label_history,
+        )
         from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,

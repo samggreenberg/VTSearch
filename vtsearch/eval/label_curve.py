@@ -248,9 +248,7 @@ def _build_split_pool(
     sim_pos = _stack(sim_pos_ids)
     sim_neg = _stack(sim_neg_ids)
     test_X = np.concatenate([_stack(test_pos_ids), _stack(test_neg_ids)], axis=0)
-    test_y = np.concatenate(
-        [np.ones(test_pos_ids.size, dtype=np.int32), np.zeros(test_neg_ids.size, dtype=np.int32)]
-    )
+    test_y = np.concatenate([np.ones(test_pos_ids.size, dtype=np.int32), np.zeros(test_neg_ids.size, dtype=np.int32)])
     return _SplitPool(sim_pos=sim_pos, sim_neg=sim_neg, test_X=test_X, test_y=test_y)
 
 
@@ -575,8 +573,5 @@ def summarise(df: pd.DataFrame, *, include_diagnostics: bool = False) -> pd.Data
     grouped = df.groupby(["dataset", "category", "trainer", "n_labels"], sort=False)
     agg = grouped[metric_cols].agg(["mean", "std"]).reset_index()
     # Flatten MultiIndex columns: ("auroc", "mean") -> "auroc_mean".
-    agg.columns = [
-        f"{a}_{b}" if isinstance(b, str) and b else a
-        for a, b in agg.columns.to_flat_index()
-    ]
+    agg.columns = [f"{a}_{b}" if isinstance(b, str) and b else a for a, b in agg.columns.to_flat_index()]
     return agg

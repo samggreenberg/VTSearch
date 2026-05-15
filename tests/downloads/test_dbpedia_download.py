@@ -25,6 +25,7 @@ def _make_dbpedia_tgz(tmp_path: Path, articles_per_class: int = 3) -> Path:
 
     archive_path = tmp_path / "dbpedia_csv.tgz"
     with tarfile.open(archive_path, "w:gz") as tar:
+
         def _add_text(name: str, body: str) -> None:
             data = body.encode("utf-8")
             info = tarfile.TarInfo(name=name)
@@ -95,9 +96,7 @@ class TestDownloadDbpedia:
         extract_dir = tmp_path / "dbpedia_csv"
         extract_dir.mkdir()
         (extract_dir / "classes.txt").write_text("Alpha\nBeta\n", encoding="utf-8")
-        (extract_dir / "train.csv").write_text(
-            '"1","First","Hello."\n"2","Second","World."\n', encoding="utf-8"
-        )
+        (extract_dir / "train.csv").write_text('"1","First","Hello."\n"2","Second","World."\n', encoding="utf-8")
 
         with patch.object(dl_module.core, "DATA_DIR", tmp_path):
             result = dl_module.download_dbpedia(on_progress=lambda *a: None)

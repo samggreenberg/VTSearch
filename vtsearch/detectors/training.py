@@ -55,11 +55,11 @@ def train_and_threshold(
         train_model,
     )
     from vtsearch.state import (
-    get_calibrate_count,
-    get_calibration_fraction,
-    get_inclusion,
-    get_safe_thresholds,
-)
+        get_calibrate_count,
+        get_calibration_fraction,
+        get_inclusion,
+        get_safe_thresholds,
+    )
 
     X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
