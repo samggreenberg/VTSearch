@@ -60,8 +60,12 @@ from vtsearch.routes import (  # noqa: E402
     labels_bp,
     media_server_bp,
     medias_bp,
-    datasets_bp,
+    datasets_listings_bp,
+    datasets_load_bp,
     datasets_registry_bp,
+    datasets_staging_bp,
+    datasets_status_bp,
+    datasets_ui_bp,
     exporters_bp,
     label_importers_bp,
     main_bp,
@@ -203,7 +207,11 @@ app.register_blueprint(main_bp)
 app.register_blueprint(medias_bp)
 app.register_blueprint(sorting_bp)
 app.register_blueprint(processors_bp)
-app.register_blueprint(datasets_bp)
+app.register_blueprint(datasets_listings_bp)
+app.register_blueprint(datasets_status_bp)
+app.register_blueprint(datasets_staging_bp)
+app.register_blueprint(datasets_load_bp)
+app.register_blueprint(datasets_ui_bp)
 app.register_blueprint(datasets_registry_bp)
 app.register_blueprint(exporters_bp)
 app.register_blueprint(label_importers_bp)
