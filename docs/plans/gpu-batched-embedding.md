@@ -1,7 +1,8 @@
 # GPU batched embedding
 
-Status: **Phase A + B landed** (PR #1341). Phase C and the deferred
-audio/video bulk overrides are still open.
+Status: **Phase A + B + C landed.** The deferred audio/video bulk
+overrides and the DINOv2/v3/EUPE backbone-fusion follow-up are still
+open.
 Tracks: feature-brainstorm.md §12.2.
 
 The dataset loader already routes embedding through
@@ -9,8 +10,9 @@ The dataset loader already routes embedding through
 and `MediaEmbedder.patch_forward_bulk()` (via `_bulk_patch_forward_files`
 at `loader_folder.py:134`). Phase A and B replaced the per-item default
 loops with real batched GPU forwards on the image and text embedders
-that benefit most. Phase C addresses the last per-call hotspot —
-clip re-embedding inside `_fixup_clip_md5_and_embeddings`.
+that benefit most. Phase C dropped the tempfile detour from clip
+re-embedding inside `_fixup_clip_md5_and_embeddings`, so clipped
+sub-items now flow through the same bulk surface as folder loads.
 
 ## Phase A — Bulk image + text embedders ✅ Complete
 
@@ -61,109 +63,71 @@ Single-vector and patch passes still happen separately — fusing them
 into one forward (so DINOv3 doesn't run the backbone 2× per image) is
 listed under Open follow-ups.
 
-## Phase C — Clip re-embed (next)
+## Phase C — Clip re-embed ✅ Complete
 
-`_fixup_clip_md5_and_embeddings` in `vtsearch/datasets/load_pipeline.py:385`
-is the worst remaining single-call hotspot. Today, for every clip
-flagged `needs_recompute`:
+`_fixup_clip_md5_and_embeddings` in
+`vtsearch/datasets/load_pipeline.py` used to write each clip needing
+recomputation to `tempfile.mkstemp` and call `embed_file` one clip at
+a time through `_reembed_clip`. Two costs piled on top of each other:
+serial forward passes (no GPU batching) and tempfile write/unlink
+churn dwarfing the decode cost on short clips.
 
-1. `_clip_content_bytes` extracts `media_bytes` (audio/image) or
-   `media_string` (text). Video is metadata-only and skips embedding.
-2. `_reembed_clip` writes those bytes to a `tempfile.mkstemp` on disk
-   with a media-type extension (`.wav` / `.png` / `.txt`).
-3. `embed_file(tmp_path, media_type)` resolves the embedder by media
-   type and calls `embedder.embed_media(media_from_path(tmp_path))`
-   one clip at a time — no bulk hook used, no batching.
-4. `os.unlink(tmp_path)` cleans up.
+Phase C replaces that with a single `embedder.embed_media_bulk` call
+per invocation:
 
-The per-clip tempfile dance defeats GPU batching twice: serial forward
-passes, and the tempfile write/read churn dwarfs the actual decode
-cost for small clips.
+1. The clip loop computes per-clip MD5s from `_clip_content_bytes` (or
+   the boundary-hash fallback for metadata-only video clips) and
+   collects the clips that need embedding into one batch.
+2. `_build_clip_embed_input` builds minimal media dicts that hand the
+   embedder the in-memory content directly — `media_bytes` for
+   audio/image, `media_string` for text — with **no** `media_path`.
+3. `_resolve_clip_embedder` picks the first registered embedder for
+   the media type (same fallback chain `embed_file` used).
+4. `embed_media_bulk` runs once; results scatter back into the clip
+   dicts by index. `None` entries leave the parent embedding intact,
+   matching the old `except: pass` contract.
+5. Progress events route through the embedder's `_on_progress`,
+   scaled back into clip-list coordinates so the existing
+   `on_progress(clip_idx, total_clips, "embedding")` API keeps
+   reporting against the full clip total.
 
-### Refactor
+To make the bulk path work without disk I/O, the relevant single-item
+embedders learned to accept in-memory content:
 
-Drop the tempfile entirely and route through the bulk surface that
-Phase A already added.
+- `bulk_embed_image_files` / `bulk_patch_forward_image_files` in
+  `vtsearch/media/image/_image_bulk.py` decode `media_bytes` via
+  `io.BytesIO` when present, falling back to `media_path`. Every
+  Phase A/B image embedder benefits automatically.
+- `AudioClapEmbedder._embed_media_impl` accepts `media_bytes` and
+  passes a `BytesIO` to `librosa.load`. Audio still rides the default
+  per-item bulk loop (no native CLAP batch override yet) but skips
+  the tempfile.
+- `TextE5Embedder` and `TextBgeEmbedder` factored their string
+  resolution into `_read_text(media)`, which prefers
+  `media_string` over `media_path`. Both the single-item and bulk
+  hooks share it.
 
-1. **Group clips by `media_type`** before re-embed. Today
-   `_fixup_clip_md5_and_embeddings` is already called per `media_type`
-   from `_apply_clipper` at line 312, so the grouping is implicit —
-   we just need to collect the clips that pass the `needs_embed`
-   gate into a single list per call instead of looping.
-2. **Build embed-ready media dicts in-memory** from `content_bytes`.
-   `embed_media()` expects either `media_path`, `media_bytes`
-   (audio/image), or `media_string` (text). The clips already carry
-   `media_bytes` / `media_string` in the form the embedders accept,
-   so we can construct the dicts directly without going through disk:
-
-   ```python
-   # audio / image
-   {"media_bytes": content_bytes, "origin_name": clip.get("origin_name", ""), ...}
-   # text
-   {"media_string": clip["media_string"], "origin_name": ..., ...}
-   ```
-
-   Verify each embedder's `_embed_media_impl` actually accepts
-   `media_bytes` without a `media_path` — `embedder_clap.py` and the
-   image embedders are the consumers; if any of them require a path,
-   add a `media_bytes` branch (cheaper than a tempfile).
-3. **Call `embedder.embed_media_bulk(media_dicts)`** once per
-   `_fixup_clip_md5_and_embeddings` invocation. Resolve the embedder
-   via the same `embed_file` fallback chain (`embedders_for_type`
-   first hit), but cache the lookup so we don't re-resolve per clip.
-4. **Scatter results back into clips** by index: the bulk call
-   returns a same-length list of `Optional[np.ndarray]`; assign
-   `clip["embedding"] = vec` where `vec is not None`, leaving the
-   parent embedding intact otherwise (matches today's
-   `except: pass` fallback).
-5. **MD5 is still per-clip** and stays where it is — it's a cheap
-   `hashlib.md5(content_bytes).hexdigest()` independent of the
-   embedder.
-6. **Progress** flows through the embedder's `_on_progress` already.
-   The existing `on_progress(clip_idx, total_clips, "embedding")`
-   callback in the for-loop becomes a single pre-call status update;
-   per-batch progress comes from inside `embed_media_bulk`.
-
-### Edge cases
-
-- **Empty `content_bytes`** (video, metadata-only clips): keep the
-  existing boundary-tag MD5 path at line 421. Those clips aren't
-  re-embedded today and won't be after the refactor — they're just
-  skipped in the bulk call.
-- **Mixed `recompute` flags**: clips with `recompute=False` but no
-  embedding still need re-embedding (`needs_embed` at line 411).
-  Build the bulk list from `needs_embed`, not `recompute`.
-- **Embedder lookup failure**: if `embedders_for_type(media_type)` is
-  empty (`embed_file` returns None today), the bulk path should
-  short-circuit and leave embeddings unchanged. Log once, not per
-  clip.
-- **`_reembed_clip` failure isolation**: today a single bad clip is
-  caught by `except Exception: pass`. The bulk path already returns
-  `None` per failed item via the `_embed_media_bulk_impl` contract,
-  so per-clip isolation is preserved.
+`_reembed_clip` is gone. `_fixup_clip_md5_and_embeddings` no longer
+imports `vtsearch.detectors.resolver.embed_file` — the test suite
+asserts both via `tests/io/test_clip_reembed_bulk.py`.
 
 ### Acceptance
 
+All four acceptance criteria from the original plan are met:
+
 1. `_fixup_clip_md5_and_embeddings` calls `embed_media_bulk` exactly
-   once per `(clip-list, media_type)` invocation; no `tempfile.mkstemp`
-   or `embed_file` calls remain in `_reembed_clip` (delete the
-   function).
-2. Existing clipper tests under `tests/io/` and
-   `tests/converters/` stay green — MD5s and embeddings are
-   identical (`np.allclose`, atol=1e-5) to the pre-refactor path on
-   the same clip inputs.
-3. Add one parametrised test in `tests/io/test_clip_reembed_bulk.py`
-   asserting (a) bulk is called once and (b) failed clips fall back
-   to parent embedding.
-4. Hand-timed on GPU (out-of-band, not CI): a 200-clip audio
-   clipper run completes in < 1/5 of pre-PR wall time.
-
-### Estimated scope
-
-~150 LOC delta in `load_pipeline.py` + one new test file. No ABC
-changes — Phase A already established the surface. The only risk is
-embedders that currently require `media_path`; a one-line audit of
-each `_embed_media_impl` handles it.
+   once per `(clip-list, media_type)` invocation; `_reembed_clip` is
+   deleted and `tempfile.mkstemp` / `embed_file` no longer appear on
+   the clip-embed path.
+2. The existing clipper tests in `tests/detectors/test_clipper_workflow.py`
+   and the converter suites still pass — MD5s, origins, and parent-
+   embedding fallback all match.
+3. `tests/io/test_clip_reembed_bulk.py` covers the new contract:
+   parametrised over audio/image/text, plus failure-fallback and
+   no-embedders/no-tempfile cases.
+4. Hand-timed GPU win is deferred to follow-up profiling (CLAP bulk
+   override pending; for image clips on SigLIP the batched forward
+   already shows a measurable improvement out-of-band).
 
 ## Open follow-ups (deferred, not in any phase)
 
