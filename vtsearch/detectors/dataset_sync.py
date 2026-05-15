@@ -61,9 +61,9 @@ def ensure_votes_match_active_dataset() -> None:
         # request that happens to omit the dataset header doesn't wipe state.
         return
 
-    from vtsearch.models.detector_registry import get_detector
-    from vtsearch.models.detector_store import _detector_path, _read_detector
-    from vtsearch.models.label_restoration import restore_labels_from_detector
+    from vtsearch.detectors.registry import get_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector
+    from vtsearch.detectors.label_restoration import restore_labels_from_detector
 
     entry = get_detector(det_ctx.detector_id)
     if not entry or not entry.get("name"):

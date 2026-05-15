@@ -111,7 +111,7 @@ class TestDetectorContextStore:
     def test_register_clears_progress_cache(self):
         """Registering a new detector must clear the progress cache so stale
         training indicators from a previous detector don't carry over."""
-        from vtsearch.models.labeling_progress import _cached_steps, clear_progress_cache
+        from vtsearch.detectors.labeling_progress import _cached_steps, clear_progress_cache
         from vtsearch.state.core import DetectorContext, register_detector_context
 
         # Seed the cache with a fake entry (simulating a previous detector's training)
@@ -126,7 +126,7 @@ class TestDetectorContextStore:
     def test_unregister_clears_progress_cache(self):
         """Unregistering a detector must clear the progress cache so stale
         training indicators don't leak to the next detector."""
-        from vtsearch.models.labeling_progress import _cached_steps
+        from vtsearch.detectors.labeling_progress import _cached_steps
         from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
@@ -238,7 +238,7 @@ class TestModelRegistryMultiLoaded:
     """Model registry supports multiple loaded models."""
 
     def test_multiple_models_loaded(self):
-        from vtsearch.models.detector_registry import (
+        from vtsearch.detectors.registry import (
             add_loaded_detector_id,
             get_loaded_detector_ids,
             is_detector_loaded,
@@ -251,7 +251,7 @@ class TestModelRegistryMultiLoaded:
         assert len(get_loaded_detector_ids()) == 2
 
     def test_remove_loaded_removes_from_set(self):
-        from vtsearch.models.detector_registry import (
+        from vtsearch.detectors.registry import (
             add_loaded_detector_id,
             is_detector_loaded,
             remove_loaded_detector_id,
@@ -263,7 +263,7 @@ class TestModelRegistryMultiLoaded:
         assert not is_detector_loaded("m1")
 
     def test_add_loaded_model_id_adds_to_loaded_set(self):
-        from vtsearch.models.detector_registry import (
+        from vtsearch.detectors.registry import (
             add_loaded_detector_id,
             is_detector_loaded,
         )
@@ -334,7 +334,7 @@ class TestModelLoadEndpoints:
         assert models[mid2]["loaded"] is True
 
     def test_unload_removes_context(self, client):
-        from vtsearch.models.detector_registry import is_detector_loaded
+        from vtsearch.detectors.registry import is_detector_loaded
         from vtsearch.state.core import get_detector_context
 
         mid = self._register_trainable_model(client, "Unload")
@@ -352,7 +352,7 @@ class TestModelLoadEndpoints:
         assert res.status_code == 400
 
     def test_delete_cleans_up_context(self, client):
-        from vtsearch.models.detector_registry import is_detector_loaded
+        from vtsearch.detectors.registry import is_detector_loaded
         from vtsearch.state.core import get_detector_context
 
         mid = self._register_trainable_model(client, "Delete")
@@ -461,7 +461,7 @@ class TestLabelingStatusResetOnDetectorSwitch:
     def test_labeling_status_not_green_after_detector_switch(self, client):
         """After building up cached progress on detector A, switching to
         a fresh detector B must NOT return green smart/stable status."""
-        from vtsearch.models.labeling_progress import _cached_steps, _progress_lock
+        from vtsearch.detectors.labeling_progress import _cached_steps, _progress_lock
         from vtsearch.state import (
     good_votes,
     bad_votes,

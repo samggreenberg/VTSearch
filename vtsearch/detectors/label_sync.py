@@ -24,8 +24,8 @@ def sync_labels_to_loaded_detector() -> None:
     because the global votes reflect scoring results on a different dataset,
     not the detector's original training labels.
     """
-    from vtsearch.models.detector_registry import get_detector, is_find_mode, update_detector
-    from vtsearch.models.detector_store import _detector_path, _read_detector, _write_detector
+    from vtsearch.detectors.registry import get_detector, is_find_mode, update_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
     from vtsearch.state import get_active_detector_context
 
     if is_find_mode():

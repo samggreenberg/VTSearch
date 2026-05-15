@@ -282,8 +282,8 @@ def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type=
     registers the model so ``/api/detectors/registry`` lists it.
     """
     from vtsearch.datasets.labelset import LabelSet  # noqa: PLC0415
-    from vtsearch.models.detector_registry import register_detector  # noqa: PLC0415
-    from vtsearch.models.detector_store import _detector_path, _write_detector  # noqa: PLC0415
+    from vtsearch.detectors.registry import register_detector  # noqa: PLC0415
+    from vtsearch.detectors.store import _detector_path, _write_detector  # noqa: PLC0415
 
     good_votes_dict = {k: None for k in good_ids}
     bad_votes_dict = {k: None for k in bad_ids}

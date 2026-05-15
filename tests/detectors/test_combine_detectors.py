@@ -133,7 +133,7 @@ def _create_model(client, name, *, media_type="audio", text_query="q"):
 
 def _save_labelset(client, name, labelset_dict):
     """Directly write a labelset onto an existing detector on disk."""
-    from vtsearch.models.detector_store import _detector_path, _read_detector, _write_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
 
     p = _detector_path(name)
     data = _read_detector(p)

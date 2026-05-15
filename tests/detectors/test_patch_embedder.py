@@ -1303,8 +1303,8 @@ class TestRegionAwareTraining:
         ``patch_grid``.  The cache value matches ``box_to_vote_vector``
         on the same grid + box."""
         from vtsearch.datasets.labelset import LabeledElement, LabelSet
-        from vtsearch.models.labelset_elements import stable_element_id
-        from vtsearch.models.labelset_training import populate_label_embeddings
+        from vtsearch.detectors.labelset_elements import stable_element_id
+        from vtsearch.detectors.labelset_training import populate_label_embeddings
         from vtsearch.media.patch_embed import box_to_vote_vector
         from vtsearch.state.core import DetectorContext
 
@@ -1330,8 +1330,8 @@ class TestRegionAwareTraining:
         propagate without an explicit cache invalidation.  Image-level
         elements keep their cached vector across calls (fast path)."""
         from vtsearch.datasets.labelset import LabeledElement, LabelSet
-        from vtsearch.models.labelset_elements import stable_element_id
-        from vtsearch.models.labelset_training import populate_label_embeddings
+        from vtsearch.detectors.labelset_elements import stable_element_id
+        from vtsearch.detectors.labelset_training import populate_label_embeddings
         from vtsearch.media.patch_embed import box_to_vote_vector
         from vtsearch.state.core import DetectorContext
 
@@ -1360,8 +1360,8 @@ class TestRegionAwareTraining:
         """Plain image-level elements stay cached across calls — the fast
         path for non-region datasets is preserved."""
         from vtsearch.datasets.labelset import LabeledElement, LabelSet
-        from vtsearch.models.labelset_elements import stable_element_id
-        from vtsearch.models.labelset_training import populate_label_embeddings
+        from vtsearch.detectors.labelset_elements import stable_element_id
+        from vtsearch.detectors.labelset_training import populate_label_embeddings
         from vtsearch.state.core import DetectorContext
 
         cid = 9003

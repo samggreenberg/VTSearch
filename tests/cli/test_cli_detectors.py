@@ -31,7 +31,7 @@ def _clean_tm_dir():
 
 
 def _write_trainable_model(name: str, labelset: dict) -> Path:
-    from vtsearch.models.detector_store import _detector_path, _write_detector
+    from vtsearch.detectors.store import _detector_path, _write_detector
 
     path = _detector_path(name)
     _write_detector(
@@ -51,7 +51,7 @@ def _stub_resolve(monkeypatch, file_map: dict[str, Path]) -> None:
     """Patch ``resolve_file_context`` to look up *file_map* by origin name."""
     from contextlib import contextmanager
 
-    import vtsearch.models.resolver as resolver_mod
+    import vtsearch.detectors.resolver as resolver_mod
 
     @contextmanager
     def _fake_ctx(origin, origin_name="", filename=""):
@@ -145,7 +145,7 @@ class TestAutorunDetectorsCLI:
         # Stub yields None for everything (simulates labels from local_folder).
         from contextlib import contextmanager
 
-        import vtsearch.models.resolver as resolver_mod
+        import vtsearch.detectors.resolver as resolver_mod
 
         @contextmanager
         def _fake_ctx(*_a, **_kw):
@@ -220,7 +220,7 @@ class TestImportLabelsIntoDetectorCLI:
 
         from vtsearch.cli import import_labels_into_detector_from_file
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.detector_store import _detector_path, _read_detector
+        from vtsearch.detectors.store import _detector_path, _read_detector
 
         applied, skipped = import_labels_into_detector_from_file(
             "import-tm",

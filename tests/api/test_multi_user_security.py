@@ -215,7 +215,7 @@ class TestOwnershipMetadata:
         assert entry["created_by"] == "default"
 
     def test_model_registry_has_created_by(self):
-        from vtsearch.models.detector_registry import register_detector
+        from vtsearch.detectors.registry import register_detector
 
         entry = register_detector(
             name="test_model",
@@ -225,7 +225,7 @@ class TestOwnershipMetadata:
         assert entry["created_by"] == "carol"
 
     def test_model_registry_default_created_by(self):
-        from vtsearch.models.detector_registry import register_detector
+        from vtsearch.detectors.registry import register_detector
 
         entry = register_detector(
             name="test_model2",
