@@ -18,7 +18,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
-from vtsearch.models.training import find_optimal_threshold, train_model
+from vtsearch.training.mlp import train_model
+from vtsearch.training.thresholds import find_optimal_threshold
 
 if TYPE_CHECKING:
     import torch.nn as nn
@@ -145,7 +146,7 @@ def _build_diversity_tree(clips_dict: dict[int, dict[str, Any]]) -> Any:
     }
     if not vectors:
         return None
-    from vtsearch.models.diversity_tree import DiversityTree  # noqa: PLC0415
+    from vtsearch.state.diversity_tree import DiversityTree  # noqa: PLC0415
 
     return DiversityTree(vectors, k=3)
 

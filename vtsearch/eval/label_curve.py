@@ -8,11 +8,11 @@ across seeds.
 
 The headline metrics are rank-based on purpose: VTSearch never trusts
 the model's raw score as a probability — it derives the operating
-threshold via :func:`vtsearch.models.training.calculate_cross_calibration_threshold`
+threshold via :func:`vtsearch.training.thresholds.calculate_cross_calibration_threshold`
 and then applies it at inference.  So the relevant comparison is "how
 good is the ranking" (AUROC, AP, best-F1) plus "what F1 does the
 production cross-calibration path actually achieve" (``f1_at_xcal``,
-which uses :func:`vtsearch.models.training.find_optimal_threshold` on a
+which uses :func:`vtsearch.training.thresholds.find_optimal_threshold` on a
 held-out cal slice of the training labels).  Brier score and F1@0.5 are
 kept on every row as diagnostics but excluded from the default
 summary.
@@ -63,10 +63,10 @@ TrainerFn = Callable[[np.ndarray, np.ndarray, int], PredictFn]
 
 
 def _train_mlp(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
-    """Adapt :func:`vtsearch.models.training.train_model` to the sweep API."""
+    """Adapt :func:`vtsearch.training.mlp.train_model` to the sweep API."""
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.training import train_model
+    from vtsearch.training.mlp import train_model
 
     X_t = torch.from_numpy(np.asarray(X, dtype=np.float32))
     y_t = torch.from_numpy(np.asarray(y, dtype=np.float32)).unsqueeze(1)
@@ -85,7 +85,7 @@ def _train_svm_factory(kernel: str) -> TrainerFn:
     """Build a sweep-shaped trainer that fits an SVM with the given kernel."""
 
     def trainer(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
-        from vtsearch.models.svm_training import train_svm
+        from vtsearch.training.svm import train_svm
 
         clf = train_svm(X, y, kernel=kernel, seed=seed)  # type: ignore[arg-type]
         return clf.predict_proba
@@ -351,7 +351,7 @@ def _cross_calibrated_threshold(
     Returns ``0.5`` when the label budget is too small to form valid
     splits (mirrors the production fallback).
     """
-    from vtsearch.models.training import find_optimal_threshold
+    from vtsearch.training.thresholds import find_optimal_threshold
 
     n = int(y_train.size)
     if n < 4:

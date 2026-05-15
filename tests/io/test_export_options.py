@@ -264,7 +264,7 @@ class TestCliScoringNegativeHits:
         import torch
 
         from vtsearch.cli import _score_medias_with_detectors
-        from vtsearch.models import build_model_from_weights
+        from vtsearch.training import build_model_from_weights
         from vtsearch.detectors.training import serialize_weights, train_and_threshold
         from vtsearch.state import (
             medias,

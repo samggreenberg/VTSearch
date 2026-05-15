@@ -609,7 +609,7 @@ class TestLiveModelReuse:
         import torch
 
         from vtsearch.detectors.labeling_progress import clear_progress_cache
-        from vtsearch.models.training import train_model
+        from vtsearch.training.mlp import train_model
 
         clear_progress_cache()
 
@@ -650,7 +650,7 @@ class TestLiveModelReuse:
         import torch
 
         from vtsearch.detectors.labeling_progress import clear_progress_cache
-        from vtsearch.models.training import train_model
+        from vtsearch.training.mlp import train_model
 
         clear_progress_cache()
 
@@ -687,7 +687,7 @@ class TestLiveModelReuse:
         import torch
 
         from vtsearch.detectors.labeling_progress import clear_progress_cache
-        from vtsearch.models.training import train_model
+        from vtsearch.training.mlp import train_model
 
         rng = np.random.RandomState(44)
         X = torch.tensor(rng.randn(2, 8).astype(np.float32))
@@ -725,7 +725,7 @@ class TestLiveModelReuse:
         import torch
 
         from vtsearch.detectors.labeling_progress import clear_progress_cache
-        from vtsearch.models.training import train_model
+        from vtsearch.training.mlp import train_model
 
         clear_progress_cache()
 

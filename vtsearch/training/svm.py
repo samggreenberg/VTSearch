@@ -140,7 +140,7 @@ def train_svm(
 ) -> SVMClassifier:
     """Fit an SVM classifier and return a score-emitting wrapper.
 
-    Mirrors the call shape of :func:`vtsearch.models.training.train_model`
+    Mirrors the call shape of :func:`vtsearch.training.mlp.train_model`
     (features, labels, inclusion bias, seed) and returns an object whose
     ``predict_proba`` produces a monotone score directly comparable to
     ``torch.sigmoid(mlp(X))`` for ranking and threshold-finding purposes.
@@ -149,7 +149,7 @@ def train_svm(
     ``decision_function``.  This is deliberate.  Production VTSearch
     treats the MLP's sigmoid output as an *uncalibrated score* and picks
     a threshold via cross-calibration (see
-    :func:`vtsearch.models.training.calculate_cross_calibration_threshold`)
+    :func:`vtsearch.training.thresholds.calculate_cross_calibration_threshold`)
     rather than trusting it as a probability.  Wrapping the SVM in
     ``CalibratedClassifierCV`` would burn training data on k-fold CV
     (strictly less data per fold than fitting once on all of it) and

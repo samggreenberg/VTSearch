@@ -898,5 +898,5 @@ def vote_detector_label(name: str, element_id: str):
     return jsonify({"ok": True, "action": action})
 
 
-# Canonical location: vtsearch.models.training_workflow
-from vtsearch.models.training_workflow import apply_and_retrain as _apply_and_retrain  # noqa: E402
+# Canonical location: vtsearch.detectors.workflow
+from vtsearch.detectors.workflow import apply_and_retrain as _apply_and_retrain  # noqa: E402

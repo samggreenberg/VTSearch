@@ -653,7 +653,7 @@ class TestImporterCustomMetadataEmbedding:
         """Embeddings from custom_metadata_map should work in train_and_score."""
 
         from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.models.training import train_and_score
+        from vtsearch.detectors.training import train_and_score
 
         rng = np.random.default_rng(42)
         names = [f"s{i}.wav" for i in range(6)]
@@ -778,7 +778,7 @@ class TestImporterMediasInSorting:
     def test_train_and_score_uses_importer_embeddings(self, tmp_path):
         """train_and_score should work with importer-provided embeddings."""
 
-        from vtsearch.models.training import train_and_score
+        from vtsearch.detectors.training import train_and_score
 
         medias, _, _ = self._load_importer_medias_into_app(tmp_path)
 

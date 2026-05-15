@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Lazy-init models so the eval script doesn't pay the startup cost
     # when the user just runs --help.
-    from vtsearch.models import initialize_models
+    from vtsearch.embedding import initialize_models
 
     initialize_models()
 

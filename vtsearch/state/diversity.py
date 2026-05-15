@@ -31,7 +31,7 @@ def build_diversity_tree(
     """
     import numpy as np
 
-    from vtsearch.models.diversity_tree import DiversityTree
+    from vtsearch.state.diversity_tree import DiversityTree
 
     with _state_lock:
         source = media_dict if media_dict is not None else medias
@@ -69,7 +69,7 @@ def build_diversity_tree_for_context(
     """
     import numpy as np
 
-    from vtsearch.models.diversity_tree import DiversityTree
+    from vtsearch.state.diversity_tree import DiversityTree
 
     vectors: dict[int, np.ndarray] = {}
     for cid, media in ctx.medias.items():

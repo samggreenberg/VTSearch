@@ -281,7 +281,13 @@ expected to land there following the same pattern used by
    `_helpers.py`. Each new module owns its own Blueprint (registered
    directly on the app, matching `routes/detectors/`); the old
    `datasets_bp` re-export shim is gone.
-4. Finish the `vtsearch/models/` split (#1 step 2).
+4. ~~Finish the `vtsearch/models/` split (#1 step 2).~~ ✅ Done —
+   `vtsearch/models/` is gone. Its contents now live under
+   `vtsearch/training/` (MLP/SVM/thresholds/region-similarity),
+   `vtsearch/embedding/` (helpers, matrix, loader),
+   `vtsearch/detectors/` (the vote-aware `train_and_score`,
+   `train_detector_from_origins`, `collect_media_origins`, plus the
+   apply-and-retrain workflow), and `vtsearch/state/diversity_tree.py`.
 5. Split `routes/detectors/store.py` (#2).
 6. Audit `image/media_type.py` (#3).
 7. Split `dashboard.component.ts` (#5).

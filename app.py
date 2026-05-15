@@ -46,7 +46,7 @@ from flask import Flask, g
 
 # Import refactored modules
 from vtsearch.auth import get_login_provider  # noqa: E402
-from vtsearch.models import initialize_models, preload_autoload_media_types  # noqa: E402
+from vtsearch.embedding import initialize_models, preload_autoload_media_types  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
     achievements_bp,
     auth_bp,

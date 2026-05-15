@@ -15,11 +15,11 @@ import numpy as np
 import pytest
 
 import app as app_module
-from vtsearch.models.training import (
+from vtsearch.detectors.training import train_and_score
+from vtsearch.training.thresholds import (
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
     calculate_safe_threshold,
-    train_and_score,
 )
 
 

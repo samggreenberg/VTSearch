@@ -143,7 +143,7 @@ This script evaluates learned-sort quality at different train/test split ratios:
 #!/usr/bin/env python
 """Sweep train_fraction and plot learned-sort F1."""
 
-from vtsearch.models import initialize_models
+from vtsearch.embedding import initialize_models
 initialize_models()
 
 from vtsearch.eval.runner import run_eval
@@ -182,7 +182,7 @@ Evaluate multiple random seeds to measure variance:
 #!/usr/bin/env python
 """Run evaluation across multiple seeds to measure stability."""
 
-from vtsearch.models import initialize_models
+from vtsearch.embedding import initialize_models
 initialize_models()
 
 from vtsearch.eval.runner import run_eval
@@ -222,7 +222,7 @@ The voting-iterations evaluation measures how classification quality improves as
 
 from pathlib import Path
 
-from vtsearch.models import initialize_models
+from vtsearch.embedding import initialize_models
 initialize_models()
 
 from vtsearch.datasets.loader import load_demo_dataset
@@ -267,7 +267,7 @@ If you have pre-exported dataset pickle files, load them directly:
 #!/usr/bin/env python
 """Run voting iterations eval from pre-exported pickle files."""
 
-from vtsearch.models import initialize_models
+from vtsearch.embedding import initialize_models
 initialize_models()
 
 from vtsearch.eval.visualize import plot_voting_iterations

@@ -42,7 +42,7 @@ class TestInitMedias:
     def test_deterministic_embeddings(self):
         """CLAP embeddings should be deterministic for the same input audio."""
         from vtsearch.config import DATA_DIR
-        from vtsearch.models import embed_audio_file
+        from vtsearch.embedding import embed_audio_file
 
         media = app_module.medias[1]
         # Re-embed the same WAV and verify the result matches

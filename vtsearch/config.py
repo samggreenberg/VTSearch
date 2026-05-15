@@ -94,7 +94,7 @@ MAX_UPLOAD_MB = max(0, int(os.environ.get("VTSEARCH_MAX_UPLOAD_MB", "0")))
 
 # Training
 #
-# ``TRAIN_EPOCHS`` is an *upper bound* — :func:`vtsearch.models.training.train_model`
+# ``TRAIN_EPOCHS`` is an *upper bound* — :func:`vtsearch.training.mlp.train_model`
 # also short-circuits on a loss plateau (see ``TRAIN_PATIENCE``).  Override with
 # ``VTSEARCH_TRAIN_EPOCHS`` for benchmarking or to disable early-stop entirely
 # by pairing with ``VTSEARCH_TRAIN_PATIENCE=0``.

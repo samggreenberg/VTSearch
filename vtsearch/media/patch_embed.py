@@ -24,7 +24,7 @@ the embedders run the model forward pass and hand us numpy arrays.
 
 This module does *not* score regions, store them on disk, or care about
 ``MediaEmbedder`` registration — those concerns live in the loader pipeline
-and in :mod:`vtsearch.models.region_similarity`.
+and in :mod:`vtsearch.training.region_similarity`.
 """
 
 from __future__ import annotations

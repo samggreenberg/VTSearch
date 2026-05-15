@@ -167,7 +167,7 @@ argument parsing. Key startup sequence:
 | Flask routes (REST API) | `vtsearch/routes/` |
 | Global state (medias, votes) | `vtsearch/state/core.py` |
 | Persistent settings | `vtsearch/settings.py` → `data/settings.json` |
-| ML training, embedding models | `vtsearch/models/`, `vtsearch/media/*/embedder.py` |
+| ML training, embedding models | `vtsearch/training/`, `vtsearch/embedding/`, `vtsearch/media/*/embedder.py` |
 | Dataset loading, demo downloads | `vtsearch/datasets/` |
 | Frontend (Angular source / build output) | `frontend/` → `static/` |
 

@@ -224,18 +224,15 @@ def labelset_train_and_score(
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
     """Train an MLP on the full labelset, then score every media in *clips_dict*.
 
-    Replacement for :func:`~vtsearch.models.training.train_and_score` that
+    Replacement for :func:`~vtsearch.detectors.training.train_and_score` that
     trains on cross-dataset labels.  Scoring is still scoped to the active
     dataset's media, since that is what the user is sorting in the UI.
     """
     import torch
 
-    from vtsearch.models import (
+    from vtsearch.training.mlp import _auto_hidden_dim, train_model
+    from vtsearch.training.thresholds import (
         calculate_safe_threshold,
-        train_model,
-    )
-    from vtsearch.models.training import (
-        _auto_hidden_dim,
         cross_calibration_threshold_cached,
     )
 
@@ -271,7 +268,7 @@ def labelset_train_and_score(
 
     model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
 
-    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap
 
     all_ids, all_embs = get_embedding_matrix_for_snap(clips_dict)
     if not all_ids:

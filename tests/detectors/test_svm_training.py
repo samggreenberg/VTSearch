@@ -1,11 +1,11 @@
-"""Tests for the SVM trainer prototype (vtsearch.models.svm_training)."""
+"""Tests for the SVM trainer prototype (vtsearch.training.svm)."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from vtsearch.models.svm_training import (
+from vtsearch.training.svm import (
     SVMClassifier,
     _effective_calibration,
     train_svm,

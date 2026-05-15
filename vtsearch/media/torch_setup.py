@@ -2,7 +2,7 @@
 
 Lives in ``vtsearch/media/`` because every embedder (the bottom layer of the
 sort/training stack) must run :func:`ensure_torch_configured` before invoking
-torch.  Higher layers (``vtsearch.models``) call it via the same hook.
+torch.  Higher layers (``vtsearch.training``) call it via the same hook.
 """
 
 import sys

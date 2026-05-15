@@ -280,7 +280,7 @@ def find_label():
         total_steps=_FIND_LABEL_STEPS,
     )
 
-    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap
 
     all_ids, all_embs = get_embedding_matrix_for_snap(snap)
     X_all = torch.from_numpy(all_embs).to(next(mlp.parameters()).device)
@@ -416,7 +416,7 @@ def auto_detect():
     if not detectors_to_run:
         return jsonify({"error": f"No autorun detectors found for media type: {media_type}"}), 400
 
-    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap
+    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap
 
     all_ids, all_embs = get_embedding_matrix_for_snap(snap)
     X_all = torch.from_numpy(all_embs)

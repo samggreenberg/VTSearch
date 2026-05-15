@@ -102,7 +102,7 @@ def _score_medias_with_detectors(
 
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
     all_ids, all_embs = get_embedding_matrix_for_snap(medias)
     X_all = torch.from_numpy(all_embs)

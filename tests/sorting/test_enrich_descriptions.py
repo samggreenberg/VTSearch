@@ -23,7 +23,7 @@ from vtsearch.media.embedder import MediaEmbedder
 from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
 from vtsearch.media.text.embedder_e5 import TextE5Embedder
 from vtsearch.media.video.embedder_xclip import VideoXClipEmbedder
-from vtsearch.models.embeddings import embed_text_query
+from vtsearch.embedding.helpers import embed_text_query
 
 
 # =====================================================================
@@ -218,7 +218,7 @@ class TestEmbedTextQueryEnrich:
             def embed_text_enriched(self, text):
                 raise AssertionError("Should not be called")
 
-        with patch("vtsearch.models.embeddings._get_embedder_for_media_type", return_value=FakeEmbedder()):
+        with patch("vtsearch.embedding.helpers._get_embedder_for_media_type", return_value=FakeEmbedder()):
             result = embed_text_query("test", "audio", enrich=False)
         np.testing.assert_array_equal(result, mock_vec)
 
@@ -235,7 +235,7 @@ class TestEmbedTextQueryEnrich:
             def embed_text_enriched(self, text):
                 return mock_vec
 
-        with patch("vtsearch.models.embeddings._get_embedder_for_media_type", return_value=FakeEmbedder()):
+        with patch("vtsearch.embedding.helpers._get_embedder_for_media_type", return_value=FakeEmbedder()):
             result = embed_text_query("test", "audio", enrich=True)
         np.testing.assert_array_equal(result, mock_vec)
 
@@ -348,7 +348,7 @@ class TestEvalTextSortEnrich:
                 return cat_dir.copy()
             return dog_dir.copy()
 
-        with patch("vtsearch.models.embeddings.embed_text_query", side_effect=mock_embed):
+        with patch("vtsearch.embedding.helpers.embed_text_query", side_effect=mock_embed):
             results = eval_text_sort(medias, queries, "image", k_values=[5], enrich=True)
 
         assert len(results) == 1
@@ -365,7 +365,7 @@ class TestEvalTextSortEnrich:
             call_kwargs.append({"enrich": enrich})
             return cat_dir.copy()
 
-        with patch("vtsearch.models.embeddings.embed_text_query", side_effect=mock_embed):
+        with patch("vtsearch.embedding.helpers.embed_text_query", side_effect=mock_embed):
             eval_text_sort(medias, queries, "image", k_values=[5], enrich=False)
 
         assert all(kw["enrich"] is False for kw in call_kwargs)

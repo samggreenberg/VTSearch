@@ -17,11 +17,9 @@ from vtsearch.routes._shared import (
 from vtsearch.config import DATA_DIR
 import vtsearch.security.path_validation as _paths
 from vtsearch.detectors.labeling_progress import inject_live_model
-from vtsearch.models import (
-    calculate_gmm_threshold,
-    embed_text_query,
-    train_and_score,
-)
+from vtsearch.detectors.training import train_and_score
+from vtsearch.embedding import embed_text_query
+from vtsearch.training.thresholds import calculate_gmm_threshold
 from vtsearch.state import (
     add_textsort_suggestion,
     bad_votes,
@@ -68,9 +66,9 @@ def _cosine_sort(query_vec):
     image coordinates ``[x0, y0, x1, y1]``.  Single-vector embedders
     take a fast vectorised numpy path with no per-result box.
 
-    Both paths live in :mod:`vtsearch.models.region_similarity`.
+    Both paths live in :mod:`vtsearch.training.region_similarity`.
     """
-    from vtsearch.models.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
+    from vtsearch.training.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
 
     snap = snapshot_medias()
     results, sims_list = cosine_sort_with_boxes(snap, query_vec)
@@ -806,7 +804,7 @@ def label_file_sort():
         model, threshold = train_and_threshold(X_list, y_list, snap=snap)
 
         # Score every media in the dataset
-        from vtsearch.models.embedding_matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+        from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
         all_ids, all_embs = get_embedding_matrix_for_snap(snap)
         X_all = torch.from_numpy(all_embs)
