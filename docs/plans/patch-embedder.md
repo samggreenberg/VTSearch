@@ -340,7 +340,7 @@ schema level.
   - `EUPE_MODEL_ID` in `vtsearch/config.py` updates to refer to the real EUPE weights (URL or HF path determined by the probe).
 - **License surfacing**: `MediaEmbedder.license_notice: Optional[str] = None` is added next to `supports_text` / `supports_patch_regions`. `to_dict` includes it. The frontend embedder picker shows a small warning chip when an embedder reports a notice, and the dataset-create flow surfaces the same notice inline when the user picks an embedder with one. We don't gate selection behind an acceptance click — users who object simply pick a different embedder.
 - **Capability flag**: `MediaEmbedder.supports_patch_regions: bool = False` lives next to `supports_text` in `vtsearch/media/embedder.py`. The metadata dict returned by `MediaEmbedder.to_dict()` surfaces it under `supports_patch_regions`, matching the `supports_text` convention already in place.
-- **Region builder**: new module `vtsearch/models/patch_regions.py` — pure functions `propose_leaves(patch_grid, saliency, k) -> list[Leaf]` and `build_hac_tree(leaves, alpha) -> list[RegionVector]`. No torch dependency; takes numpy arrays.
+- **Region builder**: new module `vtsearch/media/patch_embed.py` — pure functions `propose_leaves(patch_grid, saliency, k) -> list[Leaf]` and `build_hac_tree(leaves, alpha) -> list[RegionVector]`. No torch dependency; takes numpy arrays.
 - **Loader hook**: `vtsearch/datasets/loader_pickle.py` and `loader_folder.py` already call `embedder.embed_media`/`embed_media_bulk`. We add a sibling pass that, *only if `embedder.supports_patch_regions`*, runs `_patch_forward` and `build_hac_tree`, then stores `media["patch_regions"]` (and in v2, also `media["patch_grid"]`).
 - **Similarity helper**: single helper function `score_against_query(media, q) -> (score, box)` in `vtsearch/models/region_similarity.py` is the one place that knows the max-over-regions rule. Used by sort, find-label, example-sort.
 - **MLP training & scoring**: `vtsearch/models/detector_training.py` and `vtsearch/models/training_workflow.py` adopt the region-aware *scoring* path. Training stays image-level in v1; `LabeledElement` is unchanged.
@@ -465,7 +465,7 @@ was independent so they could be picked up in any order.
    - Sweep ran via `scripts/run_hac_tree_sweep.py` (kept in-tree so
      the same sweep can be re-run on a different dataset without
      having to reconstruct the harness).  Code under
-     `vtsearch/models/patch_regions.py` is parameterised on `K` and
+     `vtsearch/media/patch_embed.py` is parameterised on `K` and
      `α` per the same goal.
 
 4. **FP16 ↔ FP32 rank-stability check — DONE.**
@@ -503,7 +503,7 @@ voting" above; closeout summary below.
      optional `region_box: tuple[float, float, float, float] | None`
      that round-trips through the dict-serialisation path used by
      label export/import.
-   - `vtsearch/models/patch_regions.py::box_to_vote_vector(patch_grid,
+   - `vtsearch/media/patch_embed.py::box_to_vote_vector(patch_grid,
      box)` does the on-the-fly pooling: select grid cells whose
      centers fall inside the normalised box, uniform-mean their
      vectors, L2-normalise.  Uniform mean is the only rule that keeps

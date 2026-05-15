@@ -1,8 +1,9 @@
-"""Tests for runtime torch configuration in ``vtsearch.models.loader``.
+"""Tests for runtime torch configuration.
 
 Covers:
 - ``VTSEARCH_TORCH_THREADS`` env-var override drives ``torch.set_num_threads``
-  via :data:`vtsearch.config.TORCH_THREADS`.
+  via :data:`vtsearch.config.TORCH_THREADS` (read by
+  :func:`vtsearch.media.torch_setup.ensure_torch_configured`).
 - ``get_torch_device()`` selection delegates to
   :func:`vtsearch.config.resolve_device`, honouring ``VTSEARCH_DEVICE``.
 - ``train_model`` returning a model on the selected device.
@@ -21,11 +22,11 @@ import torch
 @pytest.fixture(autouse=True)
 def reset_torch_configured_flag():
     """Force ``ensure_torch_configured`` to re-run on each test."""
-    import vtsearch.models.loader as loader
+    import vtsearch.media.torch_setup as torch_setup
 
-    loader._torch_configured = False
+    torch_setup._torch_configured = False
     yield
-    loader._torch_configured = False
+    torch_setup._torch_configured = False
 
 
 def test_torch_threads_constant_default(monkeypatch):
@@ -55,11 +56,11 @@ def test_torch_threads_constant_clamps_to_one(monkeypatch):
 
 def test_ensure_torch_configured_applies_constant(monkeypatch):
     """``ensure_torch_configured`` passes ``TORCH_THREADS`` to torch."""
-    import vtsearch.models.loader as loader
+    import vtsearch.media.torch_setup as torch_setup
 
-    monkeypatch.setattr(loader, "TORCH_THREADS", 2)
+    monkeypatch.setattr(torch_setup, "TORCH_THREADS", 2)
     with mock.patch.object(torch, "set_num_threads") as set_threads:
-        loader.ensure_torch_configured()
+        torch_setup.ensure_torch_configured()
 
     set_threads.assert_called_once_with(2)
 

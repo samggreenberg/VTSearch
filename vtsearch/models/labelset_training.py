@@ -63,7 +63,7 @@ def _pool_box_from_media(
 
     When *region_box* is set **and** the media has a stored ``patch_grid``,
     pool the box on-the-fly via
-    :func:`vtsearch.models.patch_regions.box_to_vote_vector` and return that
+    :func:`vtsearch.media.patch_embed.box_to_vote_vector` and return that
     vector.  Otherwise return ``None`` so the caller can fall back to
     ``media["embedding"]`` — i.e. the legacy image-level training vector for
     image-level votes, single-vector embedders, and patch datasets that
@@ -74,7 +74,7 @@ def _pool_box_from_media(
     grid = media.get("patch_grid")
     if grid is None:
         return None
-    from vtsearch.models.patch_regions import box_to_vote_vector
+    from vtsearch.media.patch_embed import box_to_vote_vector
 
     return box_to_vote_vector(np.asarray(grid), region_box)
 

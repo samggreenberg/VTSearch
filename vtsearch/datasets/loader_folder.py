@@ -197,7 +197,7 @@ def _attach_patch_regions(media_data: dict[str, Any], patch_out: Any) -> None:
     """
     import numpy as np  # noqa: PLC0415
 
-    from vtsearch.models.patch_regions import build_region_tree, to_fp16  # noqa: PLC0415
+    from vtsearch.media.patch_embed import build_region_tree, to_fp16  # noqa: PLC0415
 
     regions = build_region_tree(patch_out, k=12, alpha=0.5)
     media_data["patch_regions"] = to_fp16(regions)

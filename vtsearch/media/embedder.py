@@ -118,7 +118,7 @@ def embedder_load_setup(on_progress: ProgressCallback, message: str) -> str:
     3. Returns the model cache directory as a string.
     """
     from vtsearch.config import MODELS_CACHE_DIR  # noqa: PLC0415
-    from vtsearch.models.loader import ensure_torch_configured  # noqa: PLC0415
+    from vtsearch.media.torch_setup import ensure_torch_configured  # noqa: PLC0415
 
     ensure_torch_configured()
     on_progress("loading", message, 0, 0)
@@ -591,7 +591,7 @@ class MediaEmbedder(ABC):
         """Return per-patch features for one image.
 
         Patch-based image encoders (DINOv2, DINOv3, EUPE) override this to
-        return a :class:`~vtsearch.models.patch_regions.PatchEmbedOutput`
+        return a :class:`~vtsearch.media.patch_embed.PatchEmbedOutput`
         carrying the CLS vector, the per-patch grid, and a per-patch saliency
         map.  Single-vector embedders leave the default in place and the
         loader pipeline skips the patch-region step for their datasets.
@@ -605,7 +605,7 @@ class MediaEmbedder(ABC):
 
         Returns ``None`` if the media can't be loaded.
         """
-        from vtsearch.models.patch_regions import PatchEmbedOutput  # noqa: F401, PLC0415
+        from vtsearch.media.patch_embed import PatchEmbedOutput  # noqa: F401, PLC0415
 
         with self._embed_lock:
             return self._patch_forward_impl(media)

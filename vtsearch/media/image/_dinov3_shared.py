@@ -32,7 +32,7 @@ from vtsearch.media.embedder import (
     load_pretrained_local_first,
     timed_progress,
 )
-from vtsearch.models.patch_regions import PatchEmbedOutput, hf_vit_to_patch_output
+from vtsearch.media.patch_embed import PatchEmbedOutput, hf_vit_to_patch_output
 
 if TYPE_CHECKING:
     from PIL import Image

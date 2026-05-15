@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import torch
 
-from vtsearch.models.patch_regions import (
+from vtsearch.media.patch_embed import (
     PatchEmbedOutput,
     RegionVector,
     box_to_vote_vector,
@@ -1222,7 +1222,7 @@ class TestRegionAwareTraining:
     def test_train_and_score_uses_box_pooled_vec_when_grid_present(self):
         """A yes-vote with region_box on a media that has a patch_grid feeds
         the MLP with the *pooled* vector, not the CLS embedding."""
-        from vtsearch.models.patch_regions import box_to_vote_vector
+        from vtsearch.media.patch_embed import box_to_vote_vector
         from vtsearch.models.training import _training_vec_for_vote
 
         media = self._media_with_patch_grid(0.99, cid=42)
@@ -1278,7 +1278,7 @@ class TestRegionAwareTraining:
         from vtsearch.datasets.labelset import LabeledElement, LabelSet
         from vtsearch.models.labelset_elements import stable_element_id
         from vtsearch.models.labelset_training import populate_label_embeddings
-        from vtsearch.models.patch_regions import box_to_vote_vector
+        from vtsearch.media.patch_embed import box_to_vote_vector
         from vtsearch.utils.state_core import DetectorContext
 
         cid = 9001
@@ -1305,7 +1305,7 @@ class TestRegionAwareTraining:
         from vtsearch.datasets.labelset import LabeledElement, LabelSet
         from vtsearch.models.labelset_elements import stable_element_id
         from vtsearch.models.labelset_training import populate_label_embeddings
-        from vtsearch.models.patch_regions import box_to_vote_vector
+        from vtsearch.media.patch_embed import box_to_vote_vector
         from vtsearch.utils.state_core import DetectorContext
 
         cid = 9002
