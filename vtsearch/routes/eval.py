@@ -221,18 +221,22 @@ def eval_train_and_score_result():
 
     if job.status in ("running", "pending"):
         prog = get_eval_progress()
-        return jsonify({
-            "job_id": job.job_id,
-            "status": "running",
-            "current": prog.get("current", 0),
-            "total": prog.get("total", 0),
-        })
+        return jsonify(
+            {
+                "job_id": job.job_id,
+                "status": "running",
+                "current": prog.get("current", 0),
+                "total": prog.get("total", 0),
+            }
+        )
     if job.status == "error":
-        return jsonify({
-            "job_id": job.job_id,
-            "status": "error",
-            "error": job.error or "Evaluation computation failed",
-        }), 500
+        return jsonify(
+            {
+                "job_id": job.job_id,
+                "status": "error",
+                "error": job.error or "Evaluation computation failed",
+            }
+        ), 500
     if job.status == "cancelled":
         return jsonify({"job_id": job.job_id, "status": "cancelled"})
     return jsonify(_eval_done_payload(job))

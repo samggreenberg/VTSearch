@@ -50,10 +50,10 @@ def resolve_current_dataset_cid(elem: LabeledElement) -> int | None:
     snapshot — does not trigger origin-file resolution.
     """
     from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-    snapshot_medias,
-)
+        build_media_lookup,
+        resolve_media_ids,
+        snapshot_medias,
+    )
 
     snap = snapshot_medias()
     if not snap:

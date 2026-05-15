@@ -48,11 +48,11 @@ def sync_labels_to_loaded_detector() -> None:
 
     from vtsearch.datasets.labelset import LabelSet, element_key, media_element_key
     from vtsearch.state import (
-    bad_votes,
-    good_votes,
-    snapshot_medias,
-    vote_region_boxes,
-)
+        bad_votes,
+        good_votes,
+        snapshot_medias,
+        vote_region_boxes,
+    )
 
     snap = snapshot_medias()
     current_ls = LabelSet.from_clips_and_votes(

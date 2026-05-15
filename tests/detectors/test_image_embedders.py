@@ -422,10 +422,7 @@ class TestImageEupeSingleEmbedder:
         """
         from vtsearch.config import EUPE_MODEL_ID
 
-        assert (
-            EUPE_MODEL_ID
-            == "https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt"
-        )
+        assert EUPE_MODEL_ID == "https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt"
 
     def test_embed_media_returns_none_when_not_loaded(self):
         from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder

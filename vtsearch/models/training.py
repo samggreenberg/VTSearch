@@ -138,7 +138,12 @@ def cross_calibration_threshold_cached(
     """
     if det_ctx is not None:
         key = _calibration_cache_key(
-            X_list, y_list, inclusion_value, calibrate_count, calibration_fraction, hidden_dim,
+            X_list,
+            y_list,
+            inclusion_value,
+            calibrate_count,
+            calibration_fraction,
+            hidden_dim,
         )
         cached = getattr(det_ctx, "calibration_cache", None)
         if cached is not None and cached[0] == key:
@@ -367,9 +372,7 @@ def train_model(
         scaler = grad_scaler_cls("cuda", enabled=use_amp)
     else:
         scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
-    autocast_ctx = (
-        torch.autocast(device_type="cuda") if use_amp else nullcontext()
-    )
+    autocast_ctx = torch.autocast(device_type="cuda") if use_amp else nullcontext()
     with torch.random.fork_rng(), torch.enable_grad():
         torch.manual_seed(seed)
         for _ in range(epochs):

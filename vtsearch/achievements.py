@@ -34,6 +34,7 @@ def _persist_state() -> None:
     """Persist the current user's settings cache (lock held by caller)."""
     _save_user(get_current_user())
 
+
 logger = logging.getLogger(__name__)
 
 #: Tier display names, indexed 0..3.
@@ -181,9 +182,7 @@ def _hash_phrase(phrase: str) -> str:
 _DOC_HASHES: dict[str, str] = {d["id"]: _hash_phrase(d["phrase"]) for d in _DOCS_RAW}
 
 #: Public, phrase-free copy of the doc list for serialisation.
-DOCS: list[dict[str, str]] = [
-    {"id": d["id"], "name": d["name"], "path": d["path"]} for d in _DOCS_RAW
-]
+DOCS: list[dict[str, str]] = [{"id": d["id"], "name": d["name"], "path": d["path"]} for d in _DOCS_RAW]
 _DOC_BY_ID: dict[str, dict[str, str]] = {d["id"]: d for d in DOCS}
 
 
@@ -436,9 +435,7 @@ def get_full_state() -> dict[str, Any]:
             counter = int(state["counters"].get(cid, 0))
             tier_idx = _current_tier_idx(cid, counter)
             announced_idx = int(state["announced"].get(cid, -1))
-            next_threshold: int | None = (
-                a["tiers"][tier_idx + 1] if tier_idx + 1 < len(a["tiers"]) else None
-            )
+            next_threshold: int | None = a["tiers"][tier_idx + 1] if tier_idx + 1 < len(a["tiers"]) else None
             achievements.append(
                 {
                     "id": cid,
@@ -463,10 +460,7 @@ def get_full_state() -> dict[str, Any]:
                     }
                 )
         read_ids = set(state.get("docs_read_ids", []))
-        docs = [
-            {"id": d["id"], "name": d["name"], "path": d["path"], "read": d["id"] in read_ids}
-            for d in DOCS
-        ]
+        docs = [{"id": d["id"], "name": d["name"], "path": d["path"], "read": d["id"] in read_ids} for d in DOCS]
         return {
             "tier_names": list(TIER_NAMES),
             "achievements": achievements,

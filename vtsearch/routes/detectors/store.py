@@ -281,11 +281,11 @@ def save_detector_labels(name: str):
 
     from vtsearch.datasets.labelset import LabelSet
     from vtsearch.state import (
-    bad_votes,
-    good_votes,
-    snapshot_medias,
-    vote_region_boxes,
-)
+        bad_votes,
+        good_votes,
+        snapshot_medias,
+        vote_region_boxes,
+    )
 
     labelset = LabelSet.from_clips_and_votes(
         snapshot_medias(),
@@ -509,7 +509,9 @@ def combine_detectors():
 
     media_types = {s.get("media_type", "") for s in sources}
     if len(media_types) > 1:
-        return jsonify({"error": f"All source detectors must share the same media_type; got {sorted(media_types)}"}), 400
+        return jsonify(
+            {"error": f"All source detectors must share the same media_type; got {sorted(media_types)}"}
+        ), 400
     media_type = next(iter(media_types))
     if not media_type or media_type == "any":
         return jsonify({"error": "Source detectors must have a specific media_type (not empty or 'any')"}), 400

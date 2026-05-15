@@ -267,9 +267,7 @@ def learned_sort():
     # Signature: covers everything that changes the training output.  Re-sorts
     # with the same vote set + settings reuse the cached result.
     if labelset is not None:
-        labels_sig = tuple(
-            sorted((el.label, _stable_element_id_for_sig(el)) for el in labelset.elements)
-        )
+        labels_sig = tuple(sorted((el.label, _stable_element_id_for_sig(el)) for el in labelset.elements))
     else:
         labels_sig = (
             ("good", tuple(sorted(good_votes))),
@@ -335,9 +333,9 @@ def learned_sort():
             labelset_has_cross_dataset = False
             if labelset is not None:
                 from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+                    build_media_lookup,
+                    resolve_media_ids,
+                )
 
                 origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
                 labelset_local_good = set()
@@ -346,9 +344,7 @@ def learned_sort():
                 for el in labelset.elements:
                     if el.label not in ("good", "bad"):
                         continue
-                    cids = resolve_media_ids(
-                        el.to_dict(), origin_lookup, md5_lookup, name_lookup
-                    )
+                    cids = resolve_media_ids(el.to_dict(), origin_lookup, md5_lookup, name_lookup)
                     if not cids:
                         labelset_has_cross_dataset = True
                         continue
@@ -434,18 +430,22 @@ def learned_sort_result():
         return jsonify({"status": "missing", "error": "Job not found"}), 404
 
     if job.status in ("running", "pending"):
-        return jsonify({
-            "job_id": job.job_id,
-            "status": "running",
-            "current": job.current,
-            "total": job.total,
-        })
+        return jsonify(
+            {
+                "job_id": job.job_id,
+                "status": "running",
+                "current": job.current,
+                "total": job.total,
+            }
+        )
     if job.status == "error":
-        return jsonify({
-            "job_id": job.job_id,
-            "status": "error",
-            "error": job.error or "learned-sort failed",
-        }), 500
+        return jsonify(
+            {
+                "job_id": job.job_id,
+                "status": "error",
+                "error": job.error or "learned-sort failed",
+            }
+        ), 500
     if job.status == "cancelled":
         return jsonify({"job_id": job.job_id, "status": "cancelled"})
     return jsonify(_learned_sort_done_payload(job))

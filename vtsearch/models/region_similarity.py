@@ -139,9 +139,6 @@ def cosine_sort_with_boxes(
     similarities = np.dot(all_embs, query_vec) / safe_norms
     similarities = np.where(norm_products == 0, 0.0, similarities)
     sims_list = similarities.tolist()
-    results = [
-        {"id": cid, "similarity": round(float(sim), 4)}
-        for cid, sim in zip(all_ids, similarities)
-    ]
+    results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities)]
     results.sort(key=lambda x: x["similarity"], reverse=True)
     return results, sims_list

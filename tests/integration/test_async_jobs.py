@@ -156,9 +156,7 @@ class TestCoalescing:
 
         second_release = threading.Event()
         second_release.set()
-        second = mgr.start(
-            "sig-B", _make_target(second_release, threading.Event(), ran)
-        )
+        second = mgr.start("sig-B", _make_target(second_release, threading.Event(), ran))
         assert second.status == "pending"
 
         first_release.set()

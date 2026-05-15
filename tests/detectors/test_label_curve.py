@@ -250,10 +250,19 @@ class TestRunLabelCurveEval:
         # trainers x label_counts x seeds = 2 * 2 * 2 = 8 per category → 16 rows total.
         assert len(df) == 2 * 2 * 2 * 2
         assert set(df.columns) >= {
-            "dataset", "category", "trainer", "n_labels", "seed",
-            "auroc", "average_precision", "best_f1",
-            "xcal_threshold", "f1_at_xcal", "train_seconds",
-            "brier", "f1_at_0.5",
+            "dataset",
+            "category",
+            "trainer",
+            "n_labels",
+            "seed",
+            "auroc",
+            "average_precision",
+            "best_f1",
+            "xcal_threshold",
+            "f1_at_xcal",
+            "train_seconds",
+            "brier",
+            "f1_at_0.5",
         }
         assert set(df["trainer"]) == {"svm_linear", "mlp"}
         assert set(df["dataset"]) == {"synth"}

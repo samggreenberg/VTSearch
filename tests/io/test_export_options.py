@@ -267,9 +267,9 @@ class TestCliScoringNegativeHits:
         from vtsearch.models import build_model_from_weights
         from vtsearch.detectors.training import serialize_weights, train_and_threshold
         from vtsearch.state import (
-    medias,
-    snapshot_medias,
-)
+            medias,
+            snapshot_medias,
+        )
 
         snap = snapshot_medias()
         good_ids = [1, 2, 3]

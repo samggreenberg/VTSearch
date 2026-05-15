@@ -258,9 +258,9 @@ class TestResolveClipIdsUnion:
 
     def test_md5_match_only(self):
         from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+            build_media_lookup,
+            resolve_media_ids,
+        )
 
         # Entry with only md5, no origin — should match by md5
         md5 = app_module.medias[1]["md5"]
@@ -271,9 +271,9 @@ class TestResolveClipIdsUnion:
 
     def test_origin_match_only(self):
         from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+            build_media_lookup,
+            resolve_media_ids,
+        )
 
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         media = app_module.medias[1]
@@ -284,9 +284,9 @@ class TestResolveClipIdsUnion:
     def test_union_of_origin_and_md5(self):
         """When origin matches media A and md5 matches media B, both are returned."""
         from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+            build_media_lookup,
+            resolve_media_ids,
+        )
 
         # Give media 2 the same md5 as media 1 (simulate content-duplicate under different origin)
         orig_md5 = app_module.medias[2]["md5"]
@@ -309,9 +309,9 @@ class TestResolveClipIdsUnion:
 
     def test_no_match_returns_empty(self):
         from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+            build_media_lookup,
+            resolve_media_ids,
+        )
 
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entry = {
@@ -326,9 +326,9 @@ class TestResolveClipIdsUnion:
     def test_name_fallback_matches_by_origin_name(self):
         """Bare entry (no md5, no origin) matches by origin_name via name_lookup."""
         from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+            build_media_lookup,
+            resolve_media_ids,
+        )
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         origin_name = app_module.medias[1].get("origin_name", "")
@@ -344,9 +344,9 @@ class TestResolveClipIdsUnion:
     def test_name_fallback_uses_filename_when_no_origin_name(self):
         """name_lookup falls back to 'filename' key when origin_name is absent."""
         from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+            build_media_lookup,
+            resolve_media_ids,
+        )
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         origin_name = app_module.medias[1].get("origin_name", "")
@@ -358,9 +358,9 @@ class TestResolveClipIdsUnion:
     def test_name_fallback_skipped_when_md5_matches(self):
         """Name fallback is NOT used when md5 already matches (avoids false positives)."""
         from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+            build_media_lookup,
+            resolve_media_ids,
+        )
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         md5 = app_module.medias[1]["md5"]
@@ -376,9 +376,9 @@ class TestResolveClipIdsUnion:
         mislabel any C file with a colliding basename.
         """
         from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+            build_media_lookup,
+            resolve_media_ids,
+        )
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         origin_name = app_module.medias[1].get("origin_name", "")
@@ -396,9 +396,9 @@ class TestResolveClipIdsUnion:
         to bare-name matching.
         """
         from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+            build_media_lookup,
+            resolve_media_ids,
+        )
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
         origin_name = app_module.medias[1].get("origin_name", "")
@@ -420,9 +420,9 @@ class TestResolveClipIdsUnion:
 class TestFindMissingEntries:
     def test_all_present_returns_empty(self):
         from vtsearch.state import (
-    build_media_lookup,
-    find_missing_entries,
-)
+            build_media_lookup,
+            find_missing_entries,
+        )
 
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [{"md5": app_module.medias[i]["md5"], "label": "good"} for i in [1, 2, 3]]
@@ -431,9 +431,9 @@ class TestFindMissingEntries:
 
     def test_unknown_entries_returned(self):
         from vtsearch.state import (
-    build_media_lookup,
-    find_missing_entries,
-)
+            build_media_lookup,
+            find_missing_entries,
+        )
 
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [
@@ -446,9 +446,9 @@ class TestFindMissingEntries:
 
     def test_invalid_labels_excluded(self):
         from vtsearch.state import (
-    build_media_lookup,
-    find_missing_entries,
-)
+            build_media_lookup,
+            find_missing_entries,
+        )
 
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [

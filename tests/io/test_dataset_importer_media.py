@@ -824,9 +824,9 @@ class TestImporterMediasInSorting:
     def test_label_export_uses_importer_md5(self, client, tmp_path):
         """Label export should include the importer-supplied MD5 in the labelset."""
         from vtsearch.state import (
-    good_votes,
-    medias as app_medias,
-)
+            good_votes,
+            medias as app_medias,
+        )
 
         loaded, _, md5s = self._load_importer_medias_into_app(tmp_path, num_files=3)
 
