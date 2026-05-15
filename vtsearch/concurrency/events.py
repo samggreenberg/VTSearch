@@ -63,9 +63,7 @@ def initial_snapshot() -> list[str]:
     return frames
 
 
-def stream_progress_events(
-    *, heartbeat_seconds: float = HEARTBEAT_SECONDS, max_queue: int = 1024
-) -> Iterator[str]:
+def stream_progress_events(*, heartbeat_seconds: float = HEARTBEAT_SECONDS, max_queue: int = 1024) -> Iterator[str]:
     """Yield SSE-formatted strings for every progress channel until disconnect.
 
     Each connected client gets a private bounded queue; tracker subscriptions

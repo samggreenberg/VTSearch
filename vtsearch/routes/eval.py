@@ -241,5 +241,3 @@ def eval_train_and_score_result():
     if job.status == "cancelled":
         return jsonify({"job_id": job.job_id, "status": "cancelled"})
     return jsonify(_eval_done_payload(job))
-
-
