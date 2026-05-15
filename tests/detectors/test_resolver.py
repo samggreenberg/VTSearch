@@ -1,4 +1,4 @@
-"""Tests for vtsearch.models.resolver — media file resolution from origin trails."""
+"""Tests for vtsearch.detectors.resolver — media file resolution from origin trails."""
 
 from pathlib import Path
 from unittest.mock import patch
@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from vtsearch.models.resolver import (
+from vtsearch.detectors.resolver import (
     ResolvedLabels,
     resolve_file_from_origin,
     resolve_label_embeddings,
@@ -397,7 +397,7 @@ class TestResolveLabelEmbeddings:
         ]
 
         fake_emb = np.zeros(512, dtype=np.float32)
-        with patch("vtsearch.models.resolver.embed_file", return_value=fake_emb):
+        with patch("vtsearch.detectors.resolver.embed_file", return_value=fake_emb):
             result = resolve_label_embeddings(labels, "audio")
 
         assert result.resolved_count == 2
@@ -419,7 +419,7 @@ class TestResolveLabelEmbeddings:
         ]
 
         fake_emb = np.zeros(512, dtype=np.float32)
-        with patch("vtsearch.models.resolver.embed_file", return_value=fake_emb):
+        with patch("vtsearch.detectors.resolver.embed_file", return_value=fake_emb):
             result = resolve_label_embeddings(labels, "audio")
 
         assert result.resolved_count == 1
@@ -445,7 +445,7 @@ class TestResolveLabelEmbeddings:
             {"label": "good", "origin": origin, "origin_name": "clip.wav", "md5": "aaa", "filename": "clip.wav"},
         ]
 
-        with patch("vtsearch.models.resolver.embed_file", return_value=None):
+        with patch("vtsearch.detectors.resolver.embed_file", return_value=None):
             result = resolve_label_embeddings(labels, "audio")
 
         assert result.resolved_count == 0
@@ -464,7 +464,7 @@ class TestMultiFindCrossDatasetFallback:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.detector_registry import register_detector
+        from vtsearch.detectors.registry import register_detector
 
         # Create a folder with media files for the detector's labels
         label_folder = tmp_path / "label_audio"
@@ -500,7 +500,7 @@ class TestMultiFindCrossDatasetFallback:
 
         # Create a detector with labels from label_folder
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder), "media_type": "audio"}}
-        from vtsearch.models.detector_store import _detector_path, _write_detector
+        from vtsearch.detectors.store import _detector_path, _write_detector
 
         tm_name = "Test Cross Detector"
         tm_path = _detector_path(tm_name)
@@ -548,7 +548,7 @@ class TestMultiFindCrossDatasetFallback:
                 return good_emb
             return bad_emb
 
-        with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
+        with patch("vtsearch.detectors.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find",
                 data=json.dumps(
@@ -578,7 +578,7 @@ class TestMultiFindCrossDatasetFallback:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.detector_registry import register_detector
+        from vtsearch.detectors.registry import register_detector
 
         # Create a target dataset pkl
         target_medias = {}
@@ -607,7 +607,7 @@ class TestMultiFindCrossDatasetFallback:
         (label_folder / "bad.wav").write_bytes(b"bad_content")
 
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder)}}
-        from vtsearch.models.detector_store import _detector_path, _write_detector
+        from vtsearch.detectors.store import _detector_path, _write_detector
 
         tm_name = "Test MT Detector"
         tm_data = {
@@ -649,7 +649,7 @@ class TestMultiFindCrossDatasetFallback:
         def fake_embed(path, media_type):
             return good_emb if "good" in Path(path).name else bad_emb
 
-        with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
+        with patch("vtsearch.detectors.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find",
                 data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
@@ -667,7 +667,7 @@ class TestMultiFindCrossDatasetFallback:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.detector_registry import register_detector
+        from vtsearch.detectors.registry import register_detector
 
         # Create a target dataset pkl
         target_medias = {}
@@ -696,7 +696,7 @@ class TestMultiFindCrossDatasetFallback:
         (label_folder / "bad.jpg").write_bytes(b"bad_content")
 
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder)}}
-        from vtsearch.models.detector_store import _detector_path, _write_detector
+        from vtsearch.detectors.store import _detector_path, _write_detector
 
         tm_name = "Test NR Detector"
         tm_data = {
@@ -738,7 +738,7 @@ class TestMultiFindCrossDatasetFallback:
         def fake_embed(path, media_type):
             return good_emb if "good" in Path(path).name else bad_emb
 
-        with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
+        with patch("vtsearch.detectors.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find",
                 data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
@@ -779,8 +779,8 @@ class TestFindCheckLabels:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.detector_registry import register_detector
-        from vtsearch.models.detector_store import _detector_path, _write_detector
+        from vtsearch.detectors.registry import register_detector
+        from vtsearch.detectors.store import _detector_path, _write_detector
 
         # Create a dataset where labels match by md5
         medias = {}
@@ -838,8 +838,8 @@ class TestFindCheckLabels:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.detector_registry import register_detector
-        from vtsearch.models.detector_store import _detector_path, _write_detector
+        from vtsearch.detectors.registry import register_detector
+        from vtsearch.detectors.store import _detector_path, _write_detector
 
         # Create a target dataset (no overlap with labels)
         medias = {}
@@ -924,8 +924,8 @@ class TestFindCheckLabels:
         import time
 
         from vtsearch.datasets.registry import register_dataset
-        from vtsearch.models.detector_registry import register_detector
-        from vtsearch.models.detector_store import _detector_path, _write_detector
+        from vtsearch.detectors.registry import register_detector
+        from vtsearch.detectors.store import _detector_path, _write_detector
 
         # Create a target dataset (no overlap with labels)
         medias = {}
@@ -991,7 +991,7 @@ class TestFindCheckLabels:
         def fake_embed(path, media_type):
             return good_emb
 
-        with patch("vtsearch.models.resolver.embed_file", side_effect=fake_embed):
+        with patch("vtsearch.detectors.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find/check-labels",
                 data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
@@ -1035,7 +1035,7 @@ class TestResolutionWarningLogs:
                 "filename": "b.wav",
             },
         ]
-        with caplog.at_level(logging.WARNING, logger="vtsearch.models.resolver"):
+        with caplog.at_level(logging.WARNING, logger="vtsearch.detectors.resolver"):
             result = resolve_label_embeddings(labels, "audio")
 
         assert result.resolved_count == 0
@@ -1062,8 +1062,8 @@ class TestResolutionWarningLogs:
 
         dummy_emb = np.zeros(10)
         with (
-            caplog.at_level(logging.WARNING, logger="vtsearch.models.resolver"),
-            patch("vtsearch.models.resolver.embed_file", return_value=dummy_emb),
+            caplog.at_level(logging.WARNING, logger="vtsearch.detectors.resolver"),
+            patch("vtsearch.detectors.resolver.embed_file", return_value=dummy_emb),
         ):
             result = resolve_label_embeddings(labels, "audio")
 
@@ -1086,7 +1086,7 @@ class TestResolveFileContextLifetime:
     def test_source_cleanup_deferred_to_context_exit(self, tmp_path, monkeypatch):
         from contextlib import ExitStack
 
-        from vtsearch.models import resolver as resolver_mod
+        from vtsearch.detectors import resolver as resolver_mod
 
         staging = tmp_path / "staging"
         staging.mkdir()
@@ -1137,7 +1137,7 @@ class TestResolveFileContextLifetime:
         """
         from contextlib import ExitStack
 
-        from vtsearch.models import resolver as resolver_mod
+        from vtsearch.detectors import resolver as resolver_mod
 
         cleaned: list[bool] = []
 

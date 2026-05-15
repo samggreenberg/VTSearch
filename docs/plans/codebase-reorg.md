@@ -271,7 +271,11 @@ expected to land there following the same pattern used by
    `vtsearch/concurrency/progress.py` merge from task #6.~~ ✅ Done
    in PR #1334 — turned out to be a misdiagnosis; resolved as a rename
    of `models/progress.py` to `models/labeling_progress.py`.
-2. Carve out `vtsearch/detectors/` (#1 step 1).
+2. ~~Carve out `vtsearch/detectors/` (#1 step 1).~~ ✅ Done — the 10
+   detector-cluster files plus `labeling_progress.py` now live under
+   `vtsearch/detectors/`. `vtsearch/models/` keeps embedders, the torch
+   model loader, neural-net training, and the diversity tree until #1
+   step 2.
 3. Split `routes/datasets/crud.py` (#2).
 4. Finish the `vtsearch/models/` split (#1 step 2).
 5. Split `routes/detectors/store.py` (#2).

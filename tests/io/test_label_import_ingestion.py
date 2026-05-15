@@ -162,8 +162,8 @@ class TestIngestMissingClips:
 
         with (
             patch("vtsearch.datasets.ingest._media_type_from_origin", return_value="image"),
-            patch("vtsearch.models.resolver.resolve_file_context", _fake_resolve_ctx),
-            patch("vtsearch.models.resolver.embed_file", return_value=fake_embedding),
+            patch("vtsearch.detectors.resolver.resolve_file_context", _fake_resolve_ctx),
+            patch("vtsearch.detectors.resolver.embed_file", return_value=fake_embedding),
         ):
             result = _ingest_via_resolver(origin, entries, existing, noop_progress)
 

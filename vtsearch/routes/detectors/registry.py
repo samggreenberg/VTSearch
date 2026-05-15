@@ -26,16 +26,16 @@ import time
 from flask import Blueprint, jsonify, request
 
 from vtsearch.auth import get_current_user
-from vtsearch.models.detector_store import (
+from vtsearch.detectors.store import (
     _detector_path,
     _read_detector,
     _write_detector,
 )
-from vtsearch.models.label_restoration import (
+from vtsearch.detectors.label_restoration import (
     restore_labels_from_detector as _restore_labels_from_detector,
 )
-from vtsearch.models.label_sync import sync_labels_to_loaded_detector
-from vtsearch.models.media_seeding import seed_good_votes_from_examples as _seed_good_votes_from_examples
+from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+from vtsearch.detectors.media_seeding import seed_good_votes_from_examples as _seed_good_votes_from_examples
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ detectors_registry_bp = Blueprint("detectors_registry", __name__)
 @detectors_registry_bp.route("/api/detectors/registry")
 def list_registered_detectors():
     """Return all registered detectors with their loaded state and autorun flag."""
-    from vtsearch.models.detector_registry import get_loaded_detector_ids, list_detectors
+    from vtsearch.detectors.registry import get_loaded_detector_ids, list_detectors
     from vtsearch.settings import get_autorun_detectors
 
     entries = list_detectors()
@@ -72,7 +72,7 @@ def register_detector_route():
             "text_query": "dog barking sounds"
         }
     """
-    from vtsearch.models.detector_registry import register_detector
+    from vtsearch.detectors.registry import register_detector
 
     data = request.get_json(force=True, silent=True) or {}
     name = data.get("name", "").strip()
@@ -122,7 +122,7 @@ def register_detector_from_labelset(importer_name: str):
     from vtsearch.datasets.ingest import _media_type_from_origin
     from vtsearch.datasets.labelset import LabeledElement, LabelSet
     from vtsearch.labels.importers import get_label_importer, list_label_importers
-    from vtsearch.models.detector_registry import register_detector, update_detector
+    from vtsearch.detectors.registry import register_detector, update_detector
     from vtsearch.routes._shared import (
         extract_plugin_fields,
         get_plugin_or_404,
@@ -236,7 +236,7 @@ def register_detector_from_labelset(importer_name: str):
 @detectors_registry_bp.route("/api/detectors/registry/load", methods=["POST"])
 def load_detector_route():
     """Load a detector into memory and make it active."""
-    from vtsearch.models.detector_registry import (
+    from vtsearch.detectors.registry import (
         get_detector,
         is_detector_loaded,
     )
@@ -260,7 +260,7 @@ def load_detector_route():
         sync_labels_to_loaded_detector()
 
     if detector_id is None:
-        from vtsearch.models.detector_registry import remove_loaded_detector_id, set_find_mode
+        from vtsearch.detectors.registry import remove_loaded_detector_id, set_find_mode
 
         det_ctx = get_active_detector_context()
         prev_id = det_ctx.detector_id if det_ctx.detector_id else None
@@ -301,7 +301,7 @@ def load_detector_route():
     _thread_ds_ctx = get_active_context()
 
     def load_task():
-        from vtsearch.models.detector_registry import add_loaded_detector_id, remove_loaded_detector_id
+        from vtsearch.detectors.registry import add_loaded_detector_id, remove_loaded_detector_id
         from vtsearch.state.core import set_thread_dataset_context, set_thread_detector_context
 
         set_thread_dataset_context(_thread_ds_ctx)
@@ -344,7 +344,7 @@ def load_detector_route():
                     )
 
                     from vtsearch.datasets.labelset import LabelSet
-                    from vtsearch.models.labelset_training import train_from_labelset
+                    from vtsearch.detectors.labelset_training import train_from_labelset
                     from vtsearch.state import snapshot_medias as _snap_medias
 
                     labelset = LabelSet.from_dict(det_data.get("labelset") or {})
@@ -421,7 +421,7 @@ def load_detector_route():
 @detectors_registry_bp.route("/api/detectors/registry/<detector_id>/unload", methods=["POST"])
 def unload_detector_route(detector_id: str):
     """Unload a detector from memory (frees its DetectorContext)."""
-    from vtsearch.models.detector_registry import get_detector, is_detector_loaded, remove_loaded_detector_id
+    from vtsearch.detectors.registry import get_detector, is_detector_loaded, remove_loaded_detector_id
     from vtsearch.state import (
     bad_votes,
     get_active_detector_context,
@@ -448,7 +448,7 @@ def unload_detector_route(detector_id: str):
 @detectors_registry_bp.route("/api/detectors/registry/<detector_id>", methods=["DELETE"])
 def delete_registered_detector(detector_id: str):
     """Remove a detector from the registry, including its labelset file."""
-    from vtsearch.models.detector_registry import get_detector, unregister_detector
+    from vtsearch.detectors.registry import get_detector, unregister_detector
 
     entry = get_detector(detector_id)
     if entry is None:
@@ -464,7 +464,7 @@ def delete_registered_detector(detector_id: str):
         logger.exception("Failed to delete detector file for %s", detector_id)
 
     try:
-        from vtsearch.models.detector_registry import is_detector_loaded, remove_loaded_detector_id
+        from vtsearch.detectors.registry import is_detector_loaded, remove_loaded_detector_id
         from vtsearch.state import unregister_detector_context
 
         if is_detector_loaded(detector_id):
@@ -507,7 +507,7 @@ def cancel_detector_loading_task(task_id: str):
 @detectors_registry_bp.route("/api/detectors/registry/<detector_id>/rename", methods=["PUT"])
 def rename_registered_detector(detector_id: str):
     """Rename a registered detector and its on-disk labelset file."""
-    from vtsearch.models.detector_registry import get_detector, rename_detector
+    from vtsearch.detectors.registry import get_detector, rename_detector
 
     data = request.get_json(force=True, silent=True) or {}
     new_name = data.get("name", "").strip()
@@ -554,7 +554,7 @@ def set_detector_autorun(detector_id: str):
     CLI's ``--autodetect`` flow and the active-dataset ``/api/auto-detect``
     route both see it.
     """
-    from vtsearch.models.detector_registry import get_detector
+    from vtsearch.detectors.registry import get_detector
     from vtsearch.settings import (
         add_autorun_detector,
         remove_autorun_detector,

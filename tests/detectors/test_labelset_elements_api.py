@@ -48,12 +48,12 @@ def _seed_cross_dataset_model(tm_name: str = "cross-ds-model", *, mark_loaded: b
     entry are created, so a subsequent ``POST /api/detectors/registry/load``
     triggers the full load task.
     """
-    from vtsearch.models.detector_registry import (
+    from vtsearch.detectors.registry import (
         add_loaded_detector_id,
         register_detector,
         reset_for_tests,
     )
-    from vtsearch.models.detector_store import _detector_path, _write_detector
+    from vtsearch.detectors.store import _detector_path, _write_detector
     from vtsearch.state.core import (
         DetectorContext,
         register_detector_context,
@@ -246,8 +246,8 @@ class TestCrossDatasetVoteDoesNotWipeLabels:
     """
 
     def test_vote_in_active_dataset_merges_with_saved_labelset(self, client):
-        from vtsearch.models.label_sync import sync_labels_to_loaded_detector
-        from vtsearch.models.detector_store import _detector_path, _read_detector
+        from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+        from vtsearch.detectors.store import _detector_path, _read_detector
         from vtsearch.state import good_votes
 
         _seed_cross_dataset_model()
@@ -309,8 +309,8 @@ class TestCrossDatasetMLPTraining:
         # labelset_training imports resolve_file_context inside _embed_one,
         # so patching the resolver symbol is enough — the function-level
         # import picks the patched value.
-        import vtsearch.models.labelset_training as lt_mod
-        import vtsearch.models.resolver as resolver_mod
+        import vtsearch.detectors.labelset_training as lt_mod
+        import vtsearch.detectors.resolver as resolver_mod
 
         monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_resolve_ctx)
         # Defensive: patch the binding inside labelset_training too in case
@@ -321,7 +321,7 @@ class TestCrossDatasetMLPTraining:
         return _seed_cross_dataset_model(mark_loaded=False)
 
     def test_load_resolves_and_embeds_cross_dataset_labels(self, client, tmp_path, monkeypatch):
-        from vtsearch.models.labelset_elements import stable_element_id
+        from vtsearch.detectors.labelset_elements import stable_element_id
         from vtsearch.state.core import get_detector_context
 
         detector_id = self._seed_with_resolvable_labelset(tmp_path, monkeypatch)
@@ -339,7 +339,7 @@ class TestCrossDatasetMLPTraining:
         # Verify the cache is keyed by stable_element_id (so subsequent
         # lookups find the right vector).
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.detector_store import _detector_path, _read_detector
+        from vtsearch.detectors.store import _detector_path, _read_detector
 
         saved = _read_detector(_detector_path("cross-ds-model"))
         ls = LabelSet.from_dict(saved["labelset"])

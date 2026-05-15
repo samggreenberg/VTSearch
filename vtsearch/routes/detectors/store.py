@@ -34,7 +34,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request, send_file
 
-from vtsearch.models.detector_store import (
+from vtsearch.detectors.store import (
     _detector_path,
     _read_detector,
     _write_detector,
@@ -209,7 +209,7 @@ def rename_detector(name: str):
         old_path.unlink(missing_ok=True)
 
     # Update the detector registry entry that references this detector
-    from vtsearch.models.detector_registry import find_by_name, rename_detector as _rename_in_registry
+    from vtsearch.detectors.registry import find_by_name, rename_detector as _rename_in_registry
 
     reg_entry = find_by_name(name)
     if reg_entry:
@@ -298,7 +298,7 @@ def save_detector_labels(name: str):
     _write_detector(path, data)
 
     # Also update the detector registry entry if one exists
-    from vtsearch.models.detector_registry import find_by_name, update_detector
+    from vtsearch.detectors.registry import find_by_name, update_detector
 
     import time as _time
 
@@ -409,7 +409,7 @@ def import_labels_into_detector(name: str, importer_name: str):
     _write_detector(path, data)
 
     # Update the detector registry entry
-    from vtsearch.models.detector_registry import find_by_name, update_detector
+    from vtsearch.detectors.registry import find_by_name, update_detector
 
     reg_entry = find_by_name(name)
     if reg_entry:
@@ -591,7 +591,7 @@ def get_detector_labels_detail(name: str):
     ``/api/votes`` it is *not* gated on the loaded dataset, so detector
     labels survive across dataset switches.
     """
-    from vtsearch.models.labelset_elements import build_labels_detail
+    from vtsearch.detectors.labelset_elements import build_labels_detail
 
     path = _detector_path(name)
     data = _read_detector(path)
@@ -618,7 +618,7 @@ def preview_detector_label(name: str, element_id: str):
     is unknown or its file cannot be located.
     """
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.models.labelset_elements import find_element_by_id, resolve_element_to_path
+    from vtsearch.detectors.labelset_elements import find_element_by_id, resolve_element_to_path
 
     path = _detector_path(name)
     data = _read_detector(path)
@@ -792,7 +792,7 @@ def thumbnail_detector_label(name: str, element_id: str):
     on the fly. Much smaller than ``/preview`` (which serves the full file).
     """
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.models.labelset_elements import (
+    from vtsearch.detectors.labelset_elements import (
         find_element_by_id,
         resolve_current_dataset_cid,
         resolve_element_to_path,
@@ -847,7 +847,7 @@ def vote_detector_label(name: str, element_id: str):
     detector's in-memory ``good_votes`` / ``bad_votes`` are kept in sync so
     MLP retraining and learned-sort see the change.
     """
-    from vtsearch.models.labelset_elements import (
+    from vtsearch.detectors.labelset_elements import (
         apply_element_vote_in_data,
         resolve_current_dataset_cid,
     )
@@ -863,7 +863,7 @@ def vote_detector_label(name: str, element_id: str):
         return jsonify({"error": f"Detector '{name}' not found"}), 404
 
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.models.labelset_elements import find_element_by_id
+    from vtsearch.detectors.labelset_elements import find_element_by_id
 
     pre_labelset = LabelSet.from_dict(data.get("labelset") or {})
     pre_found = find_element_by_id(pre_labelset.elements, element_id)
@@ -886,7 +886,7 @@ def vote_detector_label(name: str, element_id: str):
 
         toggle_vote(cid_before, vote)
 
-    from vtsearch.models.detector_registry import find_by_name, update_detector
+    from vtsearch.detectors.registry import find_by_name, update_detector
 
     reg_entry = find_by_name(name)
     if reg_entry:

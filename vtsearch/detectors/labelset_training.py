@@ -10,7 +10,7 @@ still contribute.
 
 This module is the single place that knows how to (re-)build the
 ``label_embeddings`` cache, build ``(X_list, y_list)`` from it, and run
-:func:`~vtsearch.models.detector_training.train_and_threshold`.
+:func:`~vtsearch.detectors.training.train_and_threshold`.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def _embedder_for_active_dataset(snap: dict[int, dict[str, Any]] | None) -> str:
 
 def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> np.ndarray | None:
     """Resolve *elem*'s origin file and embed it.  Returns ``None`` on failure."""
-    from vtsearch.models.resolver import (
+    from vtsearch.detectors.resolver import (
         _apply_clip_and_embed,
         embed_file,
         resolve_file_context,
@@ -102,7 +102,7 @@ def populate_label_embeddings(
     Returns the number of elements that have a cached vector after this
     pass.
     """
-    from vtsearch.models.labelset_elements import (
+    from vtsearch.detectors.labelset_elements import (
         resolve_current_dataset_cid,
         stable_element_id,
     )
@@ -160,7 +160,7 @@ def build_xy_from_labelset(
     labelset: LabelSet,
 ) -> tuple[list[np.ndarray], list[float]]:
     """Build ``(X_list, y_list)`` from the cached embeddings on *det_ctx*."""
-    from vtsearch.models.labelset_elements import stable_element_id
+    from vtsearch.detectors.labelset_elements import stable_element_id
 
     cache: dict[str, np.ndarray] = det_ctx.label_embeddings
     X_list: list[np.ndarray] = []
@@ -203,7 +203,7 @@ def train_from_labelset(
     if not any(y == 1.0 for y in y_list) or not any(y == 0.0 for y in y_list):
         return False
 
-    from vtsearch.models.detector_training import train_and_threshold
+    from vtsearch.detectors.training import train_and_threshold
 
     mlp, threshold = train_and_threshold(X_list, y_list, snap=snap)
     det_ctx.model = mlp
@@ -303,7 +303,7 @@ def update_cache_for_cid(
     represented in the labelset (e.g. the element was just removed).
     """
     from vtsearch.datasets.labelset import element_key, media_element_key
-    from vtsearch.models.labelset_elements import stable_element_id
+    from vtsearch.detectors.labelset_elements import stable_element_id
 
     media = snap.get(cid)
     if not media:

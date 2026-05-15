@@ -68,8 +68,8 @@ def _resolve_or_train_detector(
         total_steps=progress_total_steps,
     )
 
-    from vtsearch.models.detector_training import train_and_threshold
-    from vtsearch.models.resolver import resolve_label_embeddings
+    from vtsearch.detectors.training import train_and_threshold
+    from vtsearch.detectors.resolver import resolve_label_embeddings
 
     X_list: list = []
     y_list: list[float] = []
@@ -176,8 +176,8 @@ def find_label():
     """
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.detector_registry import get_detector as reg_get_detector
-    from vtsearch.models.detector_store import _detector_path, _read_detector
+    from vtsearch.detectors.registry import get_detector as reg_get_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector
     from vtsearch.state import (
         apply_labels_bulk_with_click_time,
         set_find_initial_labels,
@@ -326,7 +326,7 @@ def find_label():
 
     set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
 
-    from vtsearch.models.detector_registry import set_find_mode
+    from vtsearch.detectors.registry import set_find_mode
 
     set_find_mode(True)
 
@@ -372,11 +372,11 @@ def auto_detect():
     """
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.detector_registry import (
+    from vtsearch.detectors.registry import (
         find_by_name,
         list_detectors,
     )
-    from vtsearch.models.detector_store import _detector_path, _read_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector
     from vtsearch.settings import get_autorun_detectors
 
     snap = snapshot_medias()

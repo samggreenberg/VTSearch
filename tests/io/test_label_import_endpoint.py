@@ -180,16 +180,16 @@ class TestLabelImportEndpoint:
 
     def test_import_syncs_model_registry_num_training(self, client, tmp_path):
         """Importing labels should update the loaded model's num_training in the registry."""
-        from vtsearch.models.detector_registry import add_loaded_detector_id, get_detector, register_detector, reset_for_tests
+        from vtsearch.detectors.registry import add_loaded_detector_id, get_detector, register_detector, reset_for_tests
         from vtsearch.settings import set_detectors_dir
-        from vtsearch.models.detector_store import _write_detector
+        from vtsearch.detectors.store import _write_detector
 
         reset_for_tests()
         set_detectors_dir(str(tmp_path / "models"))
 
         # Create a detector file on disk
         tm_name = "Import Sync Test"
-        from vtsearch.models.detector_store import _detector_path
+        from vtsearch.detectors.store import _detector_path
 
         _write_detector(
             _detector_path(tm_name),

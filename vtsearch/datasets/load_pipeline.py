@@ -454,7 +454,7 @@ def _reembed_clip(clip: dict, content_bytes: bytes, media_type: str) -> None:
     from pathlib import Path
 
     try:
-        from vtsearch.models.resolver import embed_file
+        from vtsearch.detectors.resolver import embed_file
     except ImportError:
         return
 

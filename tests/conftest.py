@@ -98,7 +98,7 @@ from vtsearch.media.audio.audio_generator import GENERATOR_SAMPLE_RATE
 from tests.fixtures.medias import NUM_MEDIAS, init_medias
 from vtsearch.media.audio.audio_generator import generate_wav
 from vtsearch.models import initialize_models, train_and_score
-from vtsearch.models.labeling_progress import clear_progress_cache
+from vtsearch.detectors.labeling_progress import clear_progress_cache
 from vtsearch.state import (
     bad_votes,
     medias,
@@ -213,7 +213,7 @@ from vtsearch.concurrency.progress import (
 )
 from vtsearch.auth import DefaultLoginProvider as _DefaultLoginProvider, set_login_provider as _set_login_provider
 from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg
-from vtsearch.models.detector_registry import reset_for_tests as _reset_model_reg
+from vtsearch.detectors.registry import reset_for_tests as _reset_model_reg
 
 
 @pytest.fixture(autouse=True)
@@ -268,7 +268,7 @@ def isolated_settings(tmp_path, monkeypatch):
 
     # Also redirect dataset and detector registries to temp paths
     from vtsearch.datasets import registry as ds_reg_mod
-    from vtsearch.models import detector_registry as det_reg_mod
+    from vtsearch.detectors import registry as det_reg_mod
 
     monkeypatch.setattr(ds_reg_mod, "REGISTRY_PATH", tmp_path / "dataset_registry.json")
     monkeypatch.setattr(det_reg_mod, "REGISTRY_PATH", tmp_path / "detector_registry.json")

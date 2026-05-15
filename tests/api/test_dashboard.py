@@ -2,7 +2,7 @@
 
 import app as app_module  # noqa: F401 — triggers conftest side effects
 from vtsearch.datasets.registry import register_dataset
-from vtsearch.models.detector_registry import register_detector
+from vtsearch.detectors.registry import register_detector
 from vtsearch.state import medias
 
 
@@ -575,7 +575,7 @@ class TestDashboardModelRegistryColumns:
 
     def test_model_registry_detector_loaded_follows_loaded(self, client):
         """detector_loaded reflects whether a DetectorContext is registered."""
-        from vtsearch.models.detector_registry import add_loaded_detector_id
+        from vtsearch.detectors.registry import add_loaded_detector_id
 
         entry = register_detector(name="train-ld", media_type="audio")
         resp = client.get("/api/detectors/registry")
@@ -598,7 +598,7 @@ class TestDashboardModelRegistryColumns:
 
     def test_model_registry_last_trained_at_set_on_label_save(self, client):
         """Saving labels updates last_trained_at to a timestamp."""
-        from vtsearch.models.detector_registry import register_detector as reg_model, update_detector
+        from vtsearch.detectors.registry import register_detector as reg_model, update_detector
 
         entry = reg_model(name="lt-save", media_type="audio")
         import time

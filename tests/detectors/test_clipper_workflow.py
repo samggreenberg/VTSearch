@@ -480,7 +480,7 @@ class TestCrossDatasetClipEmbedding:
 
     def test_apply_clip_and_embed_audio(self, tmp_path):
         """Audio clip params cause the resolver to slice before embedding."""
-        from vtsearch.models.resolver import _apply_clip_and_embed
+        from vtsearch.detectors.resolver import _apply_clip_and_embed
 
         wav = generate_wav(440, 5.0)
         wav_path = tmp_path / "test.wav"
@@ -508,7 +508,7 @@ class TestCrossDatasetClipEmbedding:
         """Image clip params cause the resolver to crop before embedding."""
         from PIL import Image
 
-        from vtsearch.models.resolver import _apply_clip_and_embed
+        from vtsearch.detectors.resolver import _apply_clip_and_embed
 
         img = Image.new("RGB", (300, 100), color=(255, 0, 0))
         img_path = tmp_path / "test.png"
@@ -529,7 +529,7 @@ class TestCrossDatasetClipEmbedding:
 
     def test_apply_clip_and_embed_text(self, tmp_path):
         """Text clip params cause the resolver to extract the sentence before embedding."""
-        from vtsearch.models.resolver import _apply_clip_and_embed
+        from vtsearch.detectors.resolver import _apply_clip_and_embed
 
         text = "First sentence. Second sentence. Third sentence."
         text_path = tmp_path / "test.txt"
@@ -548,7 +548,7 @@ class TestCrossDatasetClipEmbedding:
 
     def test_apply_clip_and_embed_no_clipper_is_passthrough(self, tmp_path):
         """Without clipper params, behaves like normal embed_file."""
-        from vtsearch.models.resolver import _apply_clip_and_embed
+        from vtsearch.detectors.resolver import _apply_clip_and_embed
 
         wav = generate_wav(440, 2.0)
         wav_path = tmp_path / "test.wav"

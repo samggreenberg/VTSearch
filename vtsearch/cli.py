@@ -50,8 +50,8 @@ def _load_and_train_detectors(
     environment.
     """
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.models.detector_store import _detector_path, _read_detector
-    from vtsearch.models.labelset_training import train_from_labelset
+    from vtsearch.detectors.store import _detector_path, _read_detector
+    from vtsearch.detectors.labelset_training import train_from_labelset
     from vtsearch.state.core import DetectorContext
 
     out: dict[str, dict[str, Any]] = {}
@@ -188,7 +188,7 @@ def import_labels_into_detector_from_file(
     """Run a label importer against a single file and merge into a detector."""
     from vtsearch.datasets.labelset import LabeledElement, LabelSet
     from vtsearch.labels.importers import get_label_importer
-    from vtsearch.models.detector_store import _detector_path, _read_detector, _write_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
 
     path = _detector_path(det_name)
     data = _read_detector(path)

@@ -170,7 +170,7 @@ def import_labels():
             apply_label(cid, label, region_box=region_box)
         applied += 1
 
-    from vtsearch.models.label_sync import sync_labels_to_loaded_detector
+    from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
 
     sync_labels_to_loaded_detector()
 
@@ -286,7 +286,7 @@ def fill_labels_from_sort():
         },
     }
 
-    from vtsearch.models.label_sync import sync_labels_to_loaded_detector
+    from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
 
     sync_labels_to_loaded_detector()
 

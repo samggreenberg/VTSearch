@@ -594,8 +594,8 @@ class TestSyncLabelsAcrossDatasets:
         votes, preventing destruction of the model's saved labelset from a
         prior training session on a different dataset."""
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.detector_registry import add_loaded_detector_id, register_detector, reset_for_tests
-        from vtsearch.models.detector_store import _read_detector, _write_detector
+        from vtsearch.detectors.registry import add_loaded_detector_id, register_detector, reset_for_tests
+        from vtsearch.detectors.store import _read_detector, _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.state import (
     bad_votes,
@@ -665,8 +665,8 @@ class TestSyncLabelsAcrossDatasets:
         The model's saved labelset from Dataset A must survive the load
         even though Dataset B has no votes."""
         from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.models.detector_registry import add_loaded_detector_id, register_detector, reset_for_tests
-        from vtsearch.models.detector_store import _read_detector, _write_detector
+        from vtsearch.detectors.registry import add_loaded_detector_id, register_detector, reset_for_tests
+        from vtsearch.detectors.store import _read_detector, _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.state import (
     bad_votes,

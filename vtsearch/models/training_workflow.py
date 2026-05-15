@@ -24,7 +24,7 @@ def apply_and_retrain(
     """
     from flask import g
 
-    from vtsearch.models.label_sync import sync_labels_to_loaded_detector
+    from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
     from vtsearch.state import (
     apply_label,
     build_media_lookup,

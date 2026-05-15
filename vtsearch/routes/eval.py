@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 
 from vtsearch.routes._shared import get_json_or_400
-from vtsearch.models import (
+from vtsearch.detectors.labeling_progress import (
     analyze_labeling_progress,
     calculate_diversity_level_over_time,
     calculate_error_cost_over_time,

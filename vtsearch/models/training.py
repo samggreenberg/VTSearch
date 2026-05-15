@@ -822,7 +822,7 @@ def train_detector_from_origins(
     """
     import torch  # noqa: PLC0415
 
-    from vtsearch.models.resolver import embed_file, resolve_file_context
+    from vtsearch.detectors.resolver import embed_file, resolve_file_context
 
     X_list: list = []
     y_list: list[float] = []

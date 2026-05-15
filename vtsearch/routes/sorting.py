@@ -16,10 +16,10 @@ from vtsearch.routes._shared import (
 
 from vtsearch.config import DATA_DIR
 import vtsearch.security.path_validation as _paths
+from vtsearch.detectors.labeling_progress import inject_live_model
 from vtsearch.models import (
     calculate_gmm_threshold,
     embed_text_query,
-    inject_live_model,
     train_and_score,
 )
 from vtsearch.state import (
@@ -212,9 +212,9 @@ def learned_sort():
     completes and receive the result inline.  The frontend leaves it false.
     """
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.models.detector_registry import get_detector
-    from vtsearch.models.detector_store import _detector_path, _read_detector
-    from vtsearch.models.labelset_training import labelset_train_and_score
+    from vtsearch.detectors.registry import get_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector
+    from vtsearch.detectors.labelset_training import labelset_train_and_score
     from vtsearch.concurrency.async_jobs import learned_sort_jobs
     from vtsearch.state.core import (
         _empty_detector_context,
@@ -411,7 +411,7 @@ def learned_sort():
 
 def _stable_element_id_for_sig(el) -> str:
     """Return a stable identifier for a labelset element for signature use."""
-    from vtsearch.models.labelset_elements import stable_element_id
+    from vtsearch.detectors.labelset_elements import stable_element_id
 
     return stable_element_id(el)
 
@@ -506,7 +506,7 @@ def seed_votes_from_examples():
 
         {"seeded": 2, "skipped": 1}
     """
-    from vtsearch.models.media_seeding import seed_good_votes_from_examples
+    from vtsearch.detectors.media_seeding import seed_good_votes_from_examples
 
     data = get_json_or_400()
     if not isinstance(data, dict):
@@ -520,7 +520,7 @@ def seed_votes_from_examples():
     skipped = len(examples) - seeded
 
     if seeded > 0:
-        from vtsearch.models.label_sync import sync_labels_to_loaded_detector
+        from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
 
         sync_labels_to_loaded_detector()
 
@@ -787,7 +787,7 @@ def label_file_sort():
             )
 
         # Check if we have both good and bad examples
-        from vtsearch.models.detector_training import validate_good_bad_split
+        from vtsearch.detectors.training import validate_good_bad_split
 
         try:
             validate_good_bad_split(y_list)
@@ -800,7 +800,7 @@ def label_file_sort():
         # Train MLP and compute threshold using the shared pipeline
         import torch  # noqa: PLC0415
 
-        from vtsearch.models.detector_training import train_and_threshold
+        from vtsearch.detectors.training import train_and_threshold
 
         snap = snapshot_medias()
         model, threshold = train_and_threshold(X_list, y_list, snap=snap)

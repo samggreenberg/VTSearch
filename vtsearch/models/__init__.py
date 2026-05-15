@@ -1,4 +1,11 @@
-"""Model loading, embeddings, and training utilities."""
+"""Model loading, embeddings, and training utilities.
+
+The detector lifecycle (registry, store, training-glue, label-sync, the
+resolve→embed pipeline, and the labeling-session analyzer) lives in
+:mod:`vtsearch.detectors`. This package now owns only embedding helpers,
+torch model loaders, neural-net training, and the diversity tree —
+step 2 of the codebase reorg will split those out too.
+"""
 
 from vtsearch.models.diversity_tree import DiversityTree
 from vtsearch.models.embeddings import (
@@ -14,20 +21,6 @@ from vtsearch.models.loader import (
     get_xclip_model,
     initialize_models,
     preload_autoload_media_types,
-)
-from vtsearch.models.labeling_progress import (
-    analyze_labeling_progress,
-    calculate_diversity_level_over_time,
-    calculate_error_cost_over_time,
-    calculate_prediction_stability_over_time,
-    clear_progress_cache,
-    compute_labeling_status,
-    inject_live_model,
-)
-from vtsearch.models.detector_training import (
-    serialize_weights,
-    train_and_threshold,
-    validate_good_bad_split,
 )
 from vtsearch.models.training import (
     build_model,
@@ -57,10 +50,6 @@ __all__ = [
     "get_clap_model",
     "get_xclip_model",
     "get_e5_model",
-    # Detector training helpers
-    "serialize_weights",
-    "train_and_threshold",
-    "validate_good_bad_split",
     # Training
     "build_model",
     "build_model_from_weights",
@@ -72,12 +61,4 @@ __all__ = [
     "calculate_safe_threshold",
     "find_optimal_threshold",
     "calculate_cross_calibration_threshold",
-    # Progress
-    "analyze_labeling_progress",
-    "calculate_diversity_level_over_time",
-    "calculate_error_cost_over_time",
-    "calculate_prediction_stability_over_time",
-    "clear_progress_cache",
-    "compute_labeling_status",
-    "inject_live_model",
 ]

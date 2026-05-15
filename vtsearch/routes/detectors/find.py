@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 from flask import Blueprint, jsonify
 
-from vtsearch.models.detector_training import train_and_threshold
+from vtsearch.detectors.training import train_and_threshold
 from vtsearch.routes._shared import get_json_safe
 from vtsearch.concurrency.progress import get_find_progress, update_find_progress
 
@@ -34,8 +34,8 @@ def find_check_labels():
     """
     from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
-    from vtsearch.models.detector_registry import get_detector as reg_get_detector
-    from vtsearch.models.detector_store import _detector_path, _read_detector
+    from vtsearch.detectors.registry import get_detector as reg_get_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector
 
     body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
@@ -97,7 +97,7 @@ def find_check_labels():
         if any_direct_match:
             continue
 
-        from vtsearch.models.resolver import resolve_label_embeddings
+        from vtsearch.detectors.resolver import resolve_label_embeddings
 
         media_type = det_data.get("media_type", "audio")
         resolved = resolve_label_embeddings(labels, media_type)
@@ -142,8 +142,8 @@ def multi_find():
 
     from vtsearch.datasets.loader import safe_pickle_load
     from vtsearch.datasets.registry import get_dataset as reg_get_ds
-    from vtsearch.models.detector_registry import get_detector as reg_get_detector
-    from vtsearch.models.detector_store import _detector_path, _read_detector
+    from vtsearch.detectors.registry import get_detector as reg_get_detector
+    from vtsearch.detectors.store import _detector_path, _read_detector
 
     body = get_json_safe()
     dataset_ids = body.get("dataset_ids", [])
@@ -358,7 +358,7 @@ def multi_find():
                         X_list = good_embs + bad_embs
                         y_list = [1.0] * len(good_embs) + [0.0] * len(bad_embs)
                     else:
-                        from vtsearch.models.resolver import resolve_label_embeddings
+                        from vtsearch.detectors.resolver import resolve_label_embeddings
 
                         media_type = det_data.get("media_type", "audio")
                         resolved = resolve_label_embeddings(labels, media_type)

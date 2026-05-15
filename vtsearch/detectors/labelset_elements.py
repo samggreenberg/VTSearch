@@ -78,7 +78,7 @@ def resolve_element_to_path(elem: LabeledElement) -> Iterator[Path | None]:
     Callers must read bytes (or otherwise finish with the file) inside
     the block.
     """
-    from vtsearch.models.resolver import resolve_file_context
+    from vtsearch.detectors.resolver import resolve_file_context
 
     with resolve_file_context(elem.origin, elem.origin_name, elem.filename) as p:
         yield p

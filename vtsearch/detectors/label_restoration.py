@@ -68,7 +68,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
         import hashlib
         import logging
 
-        from vtsearch.models.resolver import resolve_file_context
+        from vtsearch.detectors.resolver import resolve_file_context
 
         _log = logging.getLogger(__name__)
 

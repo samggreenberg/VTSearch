@@ -162,7 +162,7 @@ def _set_request_context():
     # specific, so without this the left-pane shows stale cids from the
     # previous dataset as if they were votes in the current one.
     try:
-        from vtsearch.models.detector_dataset_sync import ensure_votes_match_active_dataset
+        from vtsearch.detectors.dataset_sync import ensure_votes_match_active_dataset
 
         ensure_votes_match_active_dataset()
     except Exception:
