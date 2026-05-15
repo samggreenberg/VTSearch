@@ -238,9 +238,7 @@ def _stub_image_embedder(emb, dim: int = 3):
     # Replace the per-class _forward_pil_batch so we never touch torch.
     def fake_forward(images):
         # Position-based vectors so we can assert slot alignment.
-        return np.stack(
-            [np.full(dim, float(i), dtype=np.float32) for i in range(len(images))]
-        )
+        return np.stack([np.full(dim, float(i), dtype=np.float32) for i in range(len(images))])
 
     emb._forward_pil_batch = fake_forward
 
@@ -361,9 +359,7 @@ class TestEupeBulkOverride:
         # EUPE's bulk goes through _forward_pil_batch as well — same shortcut.
 
         def fake_forward(images):
-            return np.stack(
-                [np.full(3, float(i), dtype=np.float32) for i in range(len(images))]
-            )
+            return np.stack([np.full(3, float(i), dtype=np.float32) for i in range(len(images))])
 
         emb._forward_pil_batch = fake_forward
 
@@ -531,7 +527,5 @@ class TestLoaderRoutesToPatchForwardBulk:
 
         assert emb.patch_forward_bulk.call_count == 1
         sent = emb.patch_forward_bulk.call_args.args[0]
-        assert sorted(Path(m["media_path"]).name for m in sent) == sorted(
-            p.name for p in paths
-        )
+        assert sorted(Path(m["media_path"]).name for m in sent) == sorted(p.name for p in paths)
         assert set(out.keys()) == set(paths)

@@ -48,9 +48,7 @@ class ImageDinov3PatchEmbedder(_Dinov3Base):
     def _patch_forward_impl(self, media: dict) -> Optional[PatchEmbedOutput]:
         return self._compute_patch_output(media)
 
-    def _patch_forward_bulk_impl(
-        self, medias: list[dict]
-    ) -> list[Optional[PatchEmbedOutput]]:
+    def _patch_forward_bulk_impl(self, medias: list[dict]) -> list[Optional[PatchEmbedOutput]]:
         if self._model is None:
             self.load_models()
         if self._model is None or self._processor is None:

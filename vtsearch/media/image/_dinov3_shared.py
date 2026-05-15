@@ -161,9 +161,7 @@ class _Dinov3Base(MediaEmbedder):
                 label="DINOv3",
             )
 
-    def _patch_forward_pil_batch(
-        self, images: list["Image.Image"]
-    ) -> list[Optional[PatchEmbedOutput]]:
+    def _patch_forward_pil_batch(self, images: list["Image.Image"]) -> list[Optional[PatchEmbedOutput]]:
         """Return per-image :class:`PatchEmbedOutput` for *images*."""
         import torch  # noqa: PLC0415
 
@@ -205,9 +203,7 @@ class _Dinov3Base(MediaEmbedder):
             inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 outputs = self._model(**inputs, output_attentions=True)
-            return hf_vit_to_patch_output(
-                outputs, num_register_tokens=_DINOV3_NUM_REGISTER_TOKENS
-            )
+            return hf_vit_to_patch_output(outputs, num_register_tokens=_DINOV3_NUM_REGISTER_TOKENS)
         except Exception:
             logging.getLogger(__name__).exception("Error patch-embedding %s (DINOv3)", file_path)
             return None

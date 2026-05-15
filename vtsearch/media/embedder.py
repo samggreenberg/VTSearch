@@ -669,9 +669,7 @@ class MediaEmbedder(ABC):
             return []
         return self._patch_forward_bulk_impl(medias)
 
-    def _patch_forward_bulk_impl(
-        self, medias: list[dict]
-    ) -> list[Optional["PatchEmbedOutput"]]:  # noqa: F821
+    def _patch_forward_bulk_impl(self, medias: list[dict]) -> list[Optional["PatchEmbedOutput"]]:  # noqa: F821
         """Subclass hook: bulk patch-forward.
 
         Default: loop over :meth:`patch_forward`, emitting per-item

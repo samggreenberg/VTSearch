@@ -148,9 +148,7 @@ class _Dinov2Base(MediaEmbedder):
                 label="DINOv2",
             )
 
-    def _patch_forward_pil_batch(
-        self, images: list["Image.Image"]
-    ) -> list[Optional[PatchEmbedOutput]]:
+    def _patch_forward_pil_batch(self, images: list["Image.Image"]) -> list[Optional[PatchEmbedOutput]]:
         import torch  # noqa: PLC0415
 
         rgb = [im.convert("RGB") for im in images]
@@ -159,10 +157,7 @@ class _Dinov2Base(MediaEmbedder):
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
             outputs = self._model(**inputs, output_attentions=True)
-        return [
-            hf_vit_to_patch_output(outputs, num_register_tokens=0, batch_index=i)
-            for i in range(len(images))
-        ]
+        return [hf_vit_to_patch_output(outputs, num_register_tokens=0, batch_index=i) for i in range(len(images))]
 
     def _compute_patch_output(self, media: dict) -> Optional[PatchEmbedOutput]:
         """Return CLS + per-patch grid + CLS→patch attention saliency.

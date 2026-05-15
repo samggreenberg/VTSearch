@@ -120,9 +120,7 @@ class _EupeBase(MediaEmbedder):
         # standard ImageNet eval transform inline.
         self._preprocess = transforms.Compose(
             [
-                transforms.Resize(
-                    256, interpolation=transforms.InterpolationMode.BICUBIC
-                ),
+                transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=list(_IMAGENET_MEAN), std=list(_IMAGENET_STD)),
@@ -163,10 +161,7 @@ class _EupeBase(MediaEmbedder):
         features = self._forward_features_batch(images)
         if features is None:
             raise RuntimeError("EUPE bulk forward returned no features")
-        return [
-            eupe_features_to_patch_output(features, batch_index=i)
-            for i in range(len(images))
-        ]
+        return [eupe_features_to_patch_output(features, batch_index=i) for i in range(len(images))]
 
     def _forward_features_batch(self, images: list):
         """Run ``model.forward_features`` on a list of PIL images.
