@@ -13,7 +13,8 @@ from vtsearch.routes.datasets import (
 from vtsearch.routes.detectors import (
     detector_find_bp,
     detector_scoring_bp,
-    detectors_bp,
+    detectors_crud_bp,
+    detectors_labels_bp,
     detectors_registry_bp,
 )
 from vtsearch.routes.eval import eval_bp
@@ -37,7 +38,8 @@ __all__ = [
     "datasets_ui_bp",
     "detector_find_bp",
     "detector_scoring_bp",
-    "detectors_bp",
+    "detectors_crud_bp",
+    "detectors_labels_bp",
     "detectors_registry_bp",
     "embed_bp",
     "eval_bp",

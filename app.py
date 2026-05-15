@@ -43,7 +43,8 @@ from vtsearch.routes import (  # noqa: E402
     auth_bp,
     detector_find_bp,
     detector_scoring_bp,
-    detectors_bp,
+    detectors_crud_bp,
+    detectors_labels_bp,
     detectors_registry_bp,
     embed_bp,
     eval_bp,
@@ -264,7 +265,8 @@ app.register_blueprint(label_importers_bp)
 api.register_blueprint(settings_bp)
 app.register_blueprint(settings_io_bp)
 app.register_blueprint(sync_sources_bp)
-app.register_blueprint(detectors_bp)
+app.register_blueprint(detectors_crud_bp)
+app.register_blueprint(detectors_labels_bp)
 app.register_blueprint(detectors_registry_bp)
 app.register_blueprint(detector_scoring_bp)
 app.register_blueprint(detector_find_bp)
