@@ -193,6 +193,33 @@ When the migration completes, these files should not exist:
   may survive in some form, since plugin field schemas are dynamic per-
   plugin and don't lend themselves to a static marshmallow schema.
 
+## Relationship to the pre-existing permissive spec
+
+The previous OpenAPI work (feature-brainstorm §12.9, shipped in commit
+`44e9657`) added a separate, lighter-weight implementation:
+`vtsearch.openapi.generate_openapi_spec` walks `app.url_map` and emits
+a permissive spec (every route/method/path-param/docstring, but
+`{type: object}` for every body and response). It's served at
+`/openapi.json` and dumpable via `python app.py --openapi-schema`.
+
+This plan's flask-smorest implementation serves a richer spec at
+`/api/openapi.json` (plus Swagger UI at `/api/docs`) with real
+request/response schemas. The two coexist today — same routes, two
+specs. Once enough blueprints have migrated that the flask-smorest
+spec covers the surface the permissive one does, **delete**:
+
+- `vtsearch/openapi/` — the url-map walker.
+- The `/openapi.json` Flask route registration in `app.py`.
+- The `--openapi-schema` CLI flag in `app.py`'s argparse setup.
+- The `--openapi-schema` references in `docs/CLI.md` and
+  `docs/API.md § Machine-readable schema`.
+
+The point of consolidation is "enough blueprints" — concretely, every
+blueprint listed in the migration order below. Until then, both
+endpoints are useful: integrators who only need the route inventory
+can read `/openapi.json` without flask-smorest's typed
+request/response gates getting in the way during their migration.
+
 ## Open questions
 
 - **Plugin field endpoints** (`/api/exporters/<name>`,
@@ -224,3 +251,6 @@ When the migration completes, these files should not exist:
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
 - [ ] Remaining blueprints (see Order above)
+- [ ] Delete the pre-existing permissive `/openapi.json` +
+      `--openapi-schema` once flask-smorest covers every blueprint
+      (see "Relationship to the pre-existing permissive spec" above)
