@@ -16,6 +16,7 @@ import { SortStateService, SortMode, SelectMode, SortedItem } from '../../servic
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { ProgressEventsService } from '../../services/progress-events.service';
 import { DetectorRegistryEntry } from '../../models/api.models';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
@@ -100,6 +101,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private settingsState: SettingsStateService,
     private autopilotStateService: AutopilotStateService,
     private activeContext: ActiveContextService,
+    private progressEvents: ProgressEventsService,
   ) {}
 
   ngOnInit(): void {
@@ -455,11 +457,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private startScoringProgressPoll(): void {
     this.stopScoringProgressPoll();
-    this.scoringProgressPoll$ = timer(200, 500)
-      .pipe(
-        switchMap(() => this.detectorsApi.getFindProgress()),
-        takeUntil(this.destroy$),
-      )
+    this.scoringProgressPoll$ = this.progressEvents.find$
+      .pipe(takeUntil(this.destroy$))
       .subscribe((prog: any) => {
         if (prog.status === 'running') {
           const msg = prog.message || 'Scoring with detector…';

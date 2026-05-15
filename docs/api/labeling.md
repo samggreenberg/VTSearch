@@ -95,13 +95,17 @@ POST /api/eval/train-and-score
 → `{"error_cost": [...]}` (smart), `{"stability": [...]}` (stable), or
 `{"diversity": [...]}` (diverse).
 
-### Evaluation progress
+### Evaluation progress (SSE)
 
-```
-GET /api/eval/voting-iterations
+Eval progress streams on the `eval` channel of
+[`/api/events`](events.md):
+
+```json
+{"status": "running", "message": "Computing smart...", "current": 5, "total": 10}
 ```
 
-→ `{"progress": 5, "total": 10, "done": false}`
+`status` is `"idle"` or `"running"`; the operation is done once `status`
+is back to `"idle"` and `current >= total`.
 
 ---
 

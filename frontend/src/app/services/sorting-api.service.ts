@@ -15,12 +15,10 @@ import {
   FillFromSortConfirmResponse,
   TextsortSuggestionsResponse,
   OkResponse,
-  SortProgressResponse,
   LabelingStatusResponse,
   DiversityTreeNextResponse,
   ServerMediaFilesResponse,
   EvalTrainAndScoreJobResponse,
-  VotingIterationsResponse,
   IndicatorScoreHistoryResponse,
 } from '../models/api.models';
 
@@ -30,10 +28,6 @@ export class SortingApiService {
 
   sort(params: { text: string }): Observable<SortResponse> {
     return this.http.post<SortResponse>('/api/sort', params);
-  }
-
-  getSortProgress(): Observable<SortProgressResponse> {
-    return this.http.get<SortProgressResponse>('/api/sort/progress');
   }
 
   /** Kick off a learned-sort training job.  The response will be ``done``
@@ -182,7 +176,4 @@ export class SortingApiService {
     });
   }
 
-  getVotingIterations(): Observable<VotingIterationsResponse> {
-    return this.http.get<VotingIterationsResponse>('/api/eval/voting-iterations');
-  }
 }

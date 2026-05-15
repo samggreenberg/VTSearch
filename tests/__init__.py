@@ -12,6 +12,8 @@ def load_detector_and_wait(client, detector_id, timeout=5.0):
     """
     import time
 
+    from vtsearch.concurrency.progress import detector_loading_tasks
+
     res = client.post("/api/detectors/registry/load", json={"detector_id": detector_id})
     if detector_id is None:
         from vtsearch.state.core import set_thread_detector_context
@@ -20,9 +22,7 @@ def load_detector_and_wait(client, detector_id, timeout=5.0):
         return res
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        tasks_res = client.get("/api/detectors/loading-tasks")
-        tasks = tasks_res.get_json().get("tasks", [])
-        active = [t for t in tasks if t.get("status") != "idle"]
+        active = [t for t in detector_loading_tasks.list_tasks() if t.get("status") != "idle"]
         if not active:
             break
         time.sleep(0.05)

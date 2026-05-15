@@ -26,7 +26,7 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | **Body** | JSON request body (Content-Type `application/json`) |
 | **Form** | `multipart/form-data` |
 | `→` | Response body |
-| Async endpoints | Return immediately; poll `GET /api/dataset/progress` |
+| Async endpoints | Return immediately; subscribe to the `dataset` channel on `GET /api/events` (SSE) for progress |
 
 **Common error shape:**
 

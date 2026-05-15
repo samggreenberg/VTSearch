@@ -485,14 +485,6 @@ def delete_registered_detector(detector_id: str):
     return jsonify({"ok": True})
 
 
-@detectors_registry_bp.route("/api/detectors/loading-tasks")
-def detector_loading_tasks_endpoint():
-    """Return all active detector loading tasks with their progress."""
-    from vtsearch.concurrency.progress import detector_loading_tasks
-
-    return jsonify({"tasks": detector_loading_tasks.list_tasks()})
-
-
 @detectors_registry_bp.route("/api/detectors/cancel/<task_id>", methods=["POST"])
 def cancel_detector_loading_task(task_id: str):
     """Cancel a specific detector loading task."""

@@ -39,18 +39,9 @@ from vtsearch.state import (
     update_learned_scores,
     vote_region_boxes,
 )
-from vtsearch.concurrency.progress import (
-    get_sort_progress,
-    update_sort_progress,
-)
+from vtsearch.concurrency.progress import update_sort_progress
 
 sorting_bp = Blueprint("sorting", __name__)
-
-
-@sorting_bp.route("/api/sort/progress")
-def sort_progress():
-    """Return the current progress of a text sort operation."""
-    return jsonify(get_sort_progress())
 
 
 def _cosine_sort(query_vec):

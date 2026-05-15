@@ -7,6 +7,7 @@ import { ProgressBarComponent } from '../../progress-bar/progress-bar.component'
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ChartsService } from '../../../services/charts.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
+import { ProgressEventsService } from '../../../services/progress-events.service';
 import {
   ErrorCostDataPoint,
   StabilityDataPoint,
@@ -40,6 +41,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     private sortingApi: SortingApiService,
     private chartsService: ChartsService,
     private settingsState: SettingsStateService,
+    private progressEvents: ProgressEventsService,
   ) {}
 
   get title(): string {
@@ -88,19 +90,16 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     this.analyzing = true;
     this.analysisProgress = 0;
 
-    // Poll progress
-    timer(0, 500)
-      .pipe(
-        takeUntil(this.destroy$),
-        switchMap(() => this.sortingApi.getVotingIterations()),
-      )
+    // Progress comes from the `eval` SSE channel on /api/events.
+    this.progressEvents.votingIterations$
+      .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
           if (res.total > 0) {
             this.analysisProgress = Math.round((res.progress / res.total) * 100);
           }
           if (res.done) {
-            this.destroy$.next(); // stop polling
+            this.destroy$.next(); // stop watching
           }
         },
       });

@@ -423,16 +423,6 @@ class TestTextsortSuggestionsContract:
         assert "my suggestion" in data["suggestions"]
 
 
-class TestSortProgressContract:
-    """GET /api/sort/progress response shape."""
-
-    def test_returns_json(self, client):
-        resp = client.get("/api/sort/progress")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert isinstance(data, dict)
-
-
 class TestDiversityTreeContract:
     """GET/POST /api/diversity-tree/next response shape."""
 
@@ -613,10 +603,6 @@ class TestApiCacheControl:
 
     def test_datasets_registry_no_store(self, client):
         resp = client.get("/api/datasets/registry")
-        assert resp.headers.get("Cache-Control") == "no-store"
-
-    def test_loading_tasks_no_store(self, client):
-        resp = client.get("/api/dataset/loading-tasks")
         assert resp.headers.get("Cache-Control") == "no-store"
 
     def test_dataset_status_no_store(self, client):

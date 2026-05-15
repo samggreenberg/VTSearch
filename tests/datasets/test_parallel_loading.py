@@ -254,24 +254,19 @@ class TestGetProgressWithLoadingTasks:
 # ---------------------------------------------------------------------------
 
 
-class TestLoadingTasksEndpoint:
-    """Test the /api/dataset/loading-tasks endpoint."""
+class TestLoadingTasksTrackerEndpoint:
+    """Test the loading_tasks tracker (streamed via the SSE `loading-tasks` channel)."""
 
     def test_returns_empty_when_no_tasks(self, client):
-        resp = client.get("/api/dataset/loading-tasks")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["tasks"] == []
+        assert loading_tasks.list_tasks() == []
 
     def test_returns_active_tasks(self, client):
         pt = loading_tasks.create_task("api_test", "API Test DS")
         pt.update("loading", "Processing", 25, 50)
         try:
-            resp = client.get("/api/dataset/loading-tasks")
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert len(data["tasks"]) == 1
-            task = data["tasks"][0]
+            tasks = loading_tasks.list_tasks()
+            assert len(tasks) == 1
+            task = tasks[0]
             assert task["task_id"] == "api_test"
             assert task["name"] == "API Test DS"
             assert task["status"] == "loading"
@@ -281,26 +276,23 @@ class TestLoadingTasksEndpoint:
 
 
 class TestLoadingTasksMediaType:
-    """Test that /api/dataset/loading-tasks exposes media_type."""
+    """Test that the loading_tasks tracker exposes media_type."""
 
-    def test_api_returns_media_type(self, client):
+    def test_tasks_include_media_type(self, client):
         pt = loading_tasks.create_task("mt_test", "Image DS", media_type="image")
         pt.update("loading", "Working", 10, 100)
         try:
-            resp = client.get("/api/dataset/loading-tasks")
-            assert resp.status_code == 200
-            tasks = resp.get_json()["tasks"]
+            tasks = loading_tasks.list_tasks()
             assert len(tasks) == 1
             assert tasks[0]["media_type"] == "image"
         finally:
             loading_tasks.remove_task("mt_test")
 
-    def test_api_omits_empty_media_type(self, client):
+    def test_tasks_omit_empty_media_type(self, client):
         pt = loading_tasks.create_task("mt_test2", "Unknown DS")
         pt.update("loading", "Working", 10, 100)
         try:
-            resp = client.get("/api/dataset/loading-tasks")
-            tasks = resp.get_json()["tasks"]
+            tasks = loading_tasks.list_tasks()
             assert len(tasks) == 1
             assert "media_type" not in tasks[0]
         finally:
@@ -442,15 +434,14 @@ class TestErrorVisibility:
         tasks = loading_tasks.list_tasks()
         assert len(tasks) == 0
 
-    def test_errored_task_in_api_response(self, client):
-        """GET /api/dataset/loading-tasks returns errored tasks."""
+    def test_errored_task_listed_after_finish(self, client):
+        """list_tasks() returns errored tasks until the stale window elapses."""
         pt = loading_tasks.create_task("api_err", "API Err DS")
         pt.update("idle", "", 0, 0, error="Load failed")
         loading_tasks.mark_finished("api_err")
         try:
-            resp = client.get("/api/dataset/loading-tasks")
-            data = resp.get_json()
-            errored = [t for t in data["tasks"] if t.get("error")]
+            tasks = loading_tasks.list_tasks()
+            errored = [t for t in tasks if t.get("error")]
             assert len(errored) == 1
             assert errored[0]["error"] == "Load failed"
         finally:
