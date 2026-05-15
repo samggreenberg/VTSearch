@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 # Both dashboard tables (datagrid) and the shared importer-picker demo table
 # (used by both the Add Dataset and New Model > Browse Media modals) host
 # their own copies of the resize-handle rule.  The picker version lives in
