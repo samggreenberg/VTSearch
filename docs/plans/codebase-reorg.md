@@ -276,7 +276,11 @@ expected to land there following the same pattern used by
    `vtsearch/detectors/`. `vtsearch/models/` keeps embedders, the torch
    model loader, neural-net training, and the diversity tree until #1
    step 2.
-3. Split `routes/datasets/crud.py` (#2).
+3. ~~Split `routes/datasets/crud.py` (#2).~~ ✅ Done — split into
+   `listings.py`, `status.py`, `staging.py`, `load.py`, and a shared
+   `_helpers.py`. Each new module owns its own Blueprint (registered
+   directly on the app, matching `routes/detectors/`); the old
+   `datasets_bp` re-export shim is gone.
 4. Finish the `vtsearch/models/` split (#1 step 2).
 5. Split `routes/detectors/store.py` (#2).
 6. Audit `image/media_type.py` (#3).
