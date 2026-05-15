@@ -160,6 +160,15 @@ class DetectorContext:
         "cached_labelset_media_type",  # str
         # Sync source
         "labelset_source",  # dict | None — {"source_name": "...", "field_values": {...}}
+        # Calibration threshold cache.  Holds ``(key, threshold)`` where *key*
+        # is a deterministic fingerprint of the inputs to
+        # :func:`calculate_cross_calibration_threshold` (training vectors,
+        # labels, inclusion, calibrate_count, calibration_fraction,
+        # hidden_dim).  Reusing the cached threshold is safe iff *key*
+        # matches — calibration is a deterministic function of these inputs
+        # (seeded RNG), so a hit is a pure memoization, not a stale carry-
+        # over from a previously trained model.
+        "calibration_cache",  # tuple[Any, float] | None
     )
 
     def __init__(self, detector_id: str = "", *, name: str = "", media_type: str = "", embedder: str = "") -> None:
@@ -200,6 +209,7 @@ class DetectorContext:
         self.cached_labelset_media_type: str = ""
         # Sync source
         self.labelset_source: dict[str, Any] | None = None
+        self.calibration_cache: tuple[Any, float] | None = None
 
 
 # ---------------------------------------------------------------------------

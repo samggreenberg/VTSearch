@@ -388,6 +388,152 @@ class TestCalibrateCountEnvDefault:
         assert isinstance(config.DEFAULT_CALIBRATE_COUNT, int)
         assert config.DEFAULT_CALIBRATE_COUNT >= 1
 
+
+class TestCalibrationCache:
+    """When the same labels are passed twice in a row with the same settings,
+    the cross-calibration trainings should be skipped on the second call."""
+
+    def _det_ctx(self):
+        from vtsearch.utils.state_core import DetectorContext
+
+        return DetectorContext("test-det")
+
+    def _seed_six_labels(self):
+        # Six labels puts us above the ``< 6`` skip floor so calibration
+        # actually runs (and can therefore be cached).
+        app_module.good_votes.update({k: None for k in [1, 2, 3]})
+        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
+
+    def test_second_call_with_same_inputs_skips_calibration(self):
+        from vtsearch.models import training
+
+        self._seed_six_labels()
+        det_ctx = self._det_ctx()
+
+        training.train_and_score(
+            app_module.medias,
+            app_module.good_votes,
+            app_module.bad_votes,
+            det_ctx=det_ctx,
+        )
+        assert det_ctx.calibration_cache is not None
+
+        with unittest.mock.patch.object(
+            training,
+            "calculate_cross_calibration_threshold",
+            side_effect=AssertionError("calibration should be cached on repeat call"),
+        ) as patched:
+            training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+                det_ctx=det_ctx,
+            )
+        patched.assert_not_called()
+
+    def test_second_call_returns_same_threshold(self):
+        from vtsearch.models import training
+
+        self._seed_six_labels()
+        det_ctx = self._det_ctx()
+
+        _, t1, _ = training.train_and_score(
+            app_module.medias,
+            app_module.good_votes,
+            app_module.bad_votes,
+            det_ctx=det_ctx,
+        )
+        _, t2, _ = training.train_and_score(
+            app_module.medias,
+            app_module.good_votes,
+            app_module.bad_votes,
+            det_ctx=det_ctx,
+        )
+        assert t1 == t2
+
+    def test_label_change_invalidates_cache(self):
+        from vtsearch.models import training
+
+        self._seed_six_labels()
+        det_ctx = self._det_ctx()
+
+        training.train_and_score(
+            app_module.medias,
+            app_module.good_votes,
+            app_module.bad_votes,
+            det_ctx=det_ctx,
+        )
+        first_key = det_ctx.calibration_cache[0]
+
+        # Flip one media's label — calibration must recompute.
+        app_module.good_votes.pop(3)
+        app_module.bad_votes[3] = None
+
+        with unittest.mock.patch.object(
+            training,
+            "calculate_cross_calibration_threshold",
+            wraps=training.calculate_cross_calibration_threshold,
+        ) as patched:
+            training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+                det_ctx=det_ctx,
+            )
+        assert patched.call_count == 1
+        assert det_ctx.calibration_cache[0] != first_key
+
+    def test_inclusion_change_invalidates_cache(self):
+        from vtsearch.models import training
+
+        self._seed_six_labels()
+        det_ctx = self._det_ctx()
+
+        training.train_and_score(
+            app_module.medias,
+            app_module.good_votes,
+            app_module.bad_votes,
+            inclusion_value=0,
+            det_ctx=det_ctx,
+        )
+
+        with unittest.mock.patch.object(
+            training,
+            "calculate_cross_calibration_threshold",
+            wraps=training.calculate_cross_calibration_threshold,
+        ) as patched:
+            training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+                inclusion_value=2,
+                det_ctx=det_ctx,
+            )
+        assert patched.call_count == 1
+
+    def test_no_cache_when_det_ctx_missing(self):
+        """Without a det_ctx, every call must recompute calibration."""
+        from vtsearch.models import training
+
+        self._seed_six_labels()
+
+        with unittest.mock.patch.object(
+            training,
+            "calculate_cross_calibration_threshold",
+            wraps=training.calculate_cross_calibration_threshold,
+        ) as patched:
+            training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+            )
+            training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+            )
+        assert patched.call_count == 2
+
     def test_settings_default_matches_config(self):
         from vtsearch import config, settings
 

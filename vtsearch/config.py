@@ -105,8 +105,11 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # Default ``calibrate_count`` baked into ``data/settings.json`` on first run.
 # Each unit adds one full fold-training pass per learned-sort; lower it to
 # trade calibration quality for latency.  Min 1 (clamped in
-# :mod:`vtsearch.settings`).
-DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "2")))
+# :mod:`vtsearch.settings`).  The default is 1: with
+# ``calibration_fraction=0.5`` a single fold already trains on half the
+# labels, and a second fold mostly averages out per-split noise — bumping
+# back up is a one-setting change when the noise actually matters.
+DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "1")))
 MLP_HIDDEN_MIN = 4
 MLP_HIDDEN_MAX = 32
 MLP_DROPOUT = 0.5

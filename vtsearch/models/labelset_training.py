@@ -231,11 +231,13 @@ def labelset_train_and_score(
     import torch
 
     from vtsearch.models import (
-        calculate_cross_calibration_threshold,
         calculate_safe_threshold,
         train_model,
     )
-    from vtsearch.models.training import _auto_hidden_dim
+    from vtsearch.models.training import (
+        _auto_hidden_dim,
+        cross_calibration_threshold_cached,
+    )
 
     populate_label_embeddings(det_ctx, labelset, media_type=media_type, snap=clips_dict)
     X_list, y_list = build_xy_from_labelset(det_ctx, labelset)
@@ -256,16 +258,15 @@ def labelset_train_and_score(
     if len(X_list) < 6:
         threshold = 0.5
     else:
-        cal_rng = np.random.RandomState(42)
-        threshold = calculate_cross_calibration_threshold(
+        threshold = cross_calibration_threshold_cached(
             X_list,
             y_list,
             input_dim,
             inclusion_value,
-            rng=cal_rng,
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
+            det_ctx=det_ctx,
         )
 
     model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)

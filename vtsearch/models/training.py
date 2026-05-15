@@ -84,6 +84,86 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
         return float(np.median(scores))
 
 
+def _calibration_cache_key(
+    X_list: list,
+    y_list: list[float],
+    inclusion_value: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+    hidden_dim: int,
+) -> tuple:
+    """Build a deterministic cache key for cross-calibration inputs.
+
+    ``calculate_cross_calibration_threshold`` is a deterministic function of
+    these inputs (the RNG is seeded with 42 at every call site that uses the
+    cache), so two calls with matching keys must produce the same threshold.
+    The key encodes the raw training vectors (not just the label IDs) so that
+    a labelset re-resolved to different embeddings — e.g. after the embedder
+    changes — invalidates the cache automatically.
+    """
+    X_bytes = np.stack(X_list).astype(np.float32, copy=False).tobytes()
+    y_bytes = np.asarray(y_list, dtype=np.float32).tobytes()
+    return (
+        X_bytes,
+        y_bytes,
+        int(inclusion_value),
+        int(calibrate_count),
+        float(calibration_fraction),
+        int(hidden_dim),
+    )
+
+
+def cross_calibration_threshold_cached(
+    X_list: list,
+    y_list: list[float],
+    input_dim: int,
+    inclusion_value: int,
+    *,
+    calibrate_count: int,
+    calibration_fraction: float,
+    hidden_dim: int,
+    det_ctx: Any = None,
+) -> float:
+    """Memoized wrapper around :func:`calculate_cross_calibration_threshold`.
+
+    When *det_ctx* is provided, stores the last computed threshold on
+    ``det_ctx.calibration_cache`` and reuses it on the next call when every
+    input matches.  This is the common case during interactive sorting: the
+    user toggles ``inclusion`` or loads a new media item, the labels stay
+    the same, and recomputing two ~200-epoch fold fits would produce the
+    same number we computed last time.
+
+    A real label change produces a different cache key and falls through
+    to a fresh calibration — no explicit invalidation needed.
+    """
+    if det_ctx is not None:
+        key = _calibration_cache_key(
+            X_list, y_list, inclusion_value, calibrate_count, calibration_fraction, hidden_dim,
+        )
+        cached = getattr(det_ctx, "calibration_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+    else:
+        key = None
+
+    rng = np.random.RandomState(42)
+    threshold = calculate_cross_calibration_threshold(
+        X_list,
+        y_list,
+        input_dim,
+        inclusion_value,
+        rng=rng,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        hidden_dim=hidden_dim,
+    )
+
+    if det_ctx is not None and key is not None:
+        det_ctx.calibration_cache = (key, threshold)
+
+    return threshold
+
+
 def _auto_hidden_dim(n_train: int) -> int:
     """Choose hidden-layer width based on training-set size.
 
@@ -508,6 +588,7 @@ def train_and_score(
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
+    det_ctx: Any = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train a small MLP on voted media embeddings and score every media.
 
@@ -591,16 +672,15 @@ def train_and_score(
     if len(X_list) < 6:
         threshold = 0.5
     else:
-        cal_rng = np.random.RandomState(42)
-        threshold = calculate_cross_calibration_threshold(
+        threshold = cross_calibration_threshold_cached(
             X_list,
             y_list,
             input_dim,
             inclusion_value,
-            rng=cal_rng,
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
+            det_ctx=det_ctx,
         )
 
     # Train final model on all data.  Training is image-level in v1 — the
