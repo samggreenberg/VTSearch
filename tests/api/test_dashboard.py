@@ -679,7 +679,7 @@ class TestFindButtonValidation:
         ds_id = resp.get_json()["datasets"][0]["id"]
         resp = client.post("/api/find", json={"dataset_ids": [ds_id], "detector_ids": []})
         assert resp.status_code == 400
-        assert "No detectors selected" in resp.get_json()["error"]
+        assert "No detectors selected" in resp.get_json()["message"]
 
     def test_find_rejects_empty_dataset_ids(self, client):
         """POST /api/find with no datasets returns 400."""
@@ -688,7 +688,7 @@ class TestFindButtonValidation:
         m_id = resp.get_json()["detectors"][0]["id"]
         resp = client.post("/api/find", json={"dataset_ids": [], "detector_ids": [m_id]})
         assert resp.status_code == 400
-        assert "No datasets selected" in resp.get_json()["error"]
+        assert "No datasets selected" in resp.get_json()["message"]
 
     def test_frontend_uses_resolved_model_count(self, client):
         """The Angular bundle should use resolvedSelectedModels for Find validation."""

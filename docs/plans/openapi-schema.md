@@ -281,10 +281,36 @@ request/response gates getting in the way during their migration.
       doesn't fit a static marshmallow schema (see *Open questions /
       Plugin field endpoints* above). Registry tests in
       ``tests/api/test_error_recovery.py`` updated to match.
-- [ ] `detectors/labels.py`, `detectors/scoring.py`, `detectors/find.py`
-      — remaining detector sub-blueprints. ``labels.py``'s vote / preview
-      / thumbnail routes serve binary bodies and will need
-      ``alt_response``-only declarations.
+- [x] `detectors/scoring.py` migrated to flask-smorest (find-label /
+      auto-detect). Schema-level validation failures (missing required
+      ``detector_id``) surface as 422 with the standard ``errors``
+      envelope; handler-level rejects (no medias loaded, detector not
+      found, untrainable detector) keep their HTTP codes (400 / 404)
+      with the standard ``message`` envelope. The find-label diagnostic
+      response (detailed resolution stats + ``warning`` text) is passed
+      as extra ``abort()`` kwargs so it flows through alongside
+      ``message``. Find-label tests in ``tests/detectors/test_find_label.py``
+      updated to match.
+- [x] `detectors/find.py` migrated to flask-smorest (find /
+      find/check-labels). The ``dataset_ids`` / ``detector_ids`` arrays
+      stay un-validated at the schema layer so the handler can reject
+      empty lists with 400 while resetting ``find_progress`` to idle on
+      the way out (a schema-level 422 would bypass the handler and leave
+      the tracker stale). Find tests in ``tests/api/test_dashboard.py``
+      updated to read the ``message`` field instead of ``error``.
+- [x] `detectors/labels.py` migrated to flask-smorest. JSON-shaped
+      routes (save labels / labels-detail / vote) use the standard
+      ``arguments`` + ``response`` decorators; schema-level validation
+      failures (invalid ``vote`` value) surface as 422. The two binary
+      GET routes — ``preview`` and ``thumbnail`` — declare their
+      non-default JSON error responses via ``alt_response`` but do not
+      model the success body in the spec (binary stream or text-content
+      JSON depending on media type). The plugin-field
+      ``import-labels/<importer_name>`` route stays on the legacy plain-
+      Flask path (same reason as
+      ``detectors/registry/from-labelset/<imp>``). Labelset-element
+      tests in ``tests/detectors/test_labelset_elements_api.py``
+      updated to match.
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
 - [ ] Remaining blueprints (see Order above)
