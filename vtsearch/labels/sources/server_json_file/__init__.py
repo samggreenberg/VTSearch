@@ -57,6 +57,27 @@ class ServerFileLabelsetSource(LabelsetSource):
             raise ValueError("JSON must contain a top-level 'labels' list.")
         return [entry for entry in labels if isinstance(entry, dict)]
 
+    def load_full(self, field_values: dict[str, Any]) -> LabelSet:
+        """Read labels *and* any ``detector_meta`` block into a :class:`LabelSet`."""
+        from vtsearch.datasets.labelset import LabelSet as _LabelSet
+
+        path = Path(_resolve_filepath(field_values))
+        if not path.exists():
+            return _LabelSet()
+        if not path.is_file():
+            raise ValueError(f"Not a file: {path}")
+
+        raw = path.read_bytes()
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except Exception as exc:
+            raise ValueError(f"Invalid JSON: {exc}") from exc
+        if not isinstance(data, dict):
+            raise ValueError("JSON must contain an object at the top level.")
+        if not isinstance(data.get("labels"), list):
+            raise ValueError("JSON must contain a top-level 'labels' list.")
+        return _LabelSet.from_dict(data)
+
     def save(self, labelset: LabelSet, field_values: dict[str, Any]) -> None:
         """Write labels to a JSON file on the server."""
         filepath = Path(_resolve_filepath(field_values))

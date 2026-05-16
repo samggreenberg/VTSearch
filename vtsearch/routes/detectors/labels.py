@@ -115,6 +115,7 @@ def save_detector_labels(name: str):
         abort(404, message=f"Detector '{name}' not found")
 
     from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.detectors.input_spec import extract_input_spec_from_medias
     from vtsearch.state import (
         bad_votes,
         good_votes,
@@ -122,14 +123,26 @@ def save_detector_labels(name: str):
         vote_region_boxes,
     )
 
+    medias_snap = snapshot_medias()
     labelset = LabelSet.from_clips_and_votes(
-        snapshot_medias(),
+        medias_snap,
         good_votes,
         bad_votes,
         expand_dupes=False,
         vote_region_boxes=dict(vote_region_boxes),
     )
     data["labelset"] = labelset.to_dict()
+
+    # Capture the active dataset's clipper into the detector's input_spec
+    # so downstream consumers (CLI autodetect, labelset-source sync) can
+    # tell what input format this detector was trained on.  ``None`` means
+    # "no clipper / default clipper"; we drop any previously-stored
+    # input_spec in that case so the field stays in sync with reality.
+    captured_spec = extract_input_spec_from_medias(medias_snap)
+    if captured_spec is not None:
+        data["input_spec"] = captured_spec
+    elif "input_spec" in data:
+        data.pop("input_spec", None)
     _write_detector(path, data)
 
     # Also update the detector registry entry if one exists

@@ -124,7 +124,11 @@ def _load_and_train_detectors(
     labelset's origins are resolved via their importer's ``resolve_file()``,
     the files are embedded with the dataset's embedder, and an MLP is trained
     from the resulting vectors.  Detectors whose ``media_type`` doesn't match
-    the dataset are skipped with a warning.
+    the dataset are skipped with a warning.  Detectors that declare an
+    ``input_spec`` (a clipper the detector was trained on) are also skipped
+    when the loaded dataset wasn't clipped to match — the resulting
+    embeddings would be from a different granularity and the scores would
+    be meaningless.
 
     Returns a ``{name: {"mlp": nn.Sequential, "threshold": float}}`` map.
     Raises :class:`ValueError` if a detector cannot be trained — for example
@@ -132,9 +136,15 @@ def _load_and_train_detectors(
     environment.
     """
     from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.detectors.input_spec import (
+        clipper_matches,
+        extract_input_spec_from_medias,
+    )
     from vtsearch.detectors.store import _detector_path, _read_detector
     from vtsearch.detectors.labelset_training import train_from_labelset
     from vtsearch.state.core import DetectorContext
+
+    dataset_spec = extract_input_spec_from_medias(snap)
 
     out: dict[str, dict[str, Any]] = {}
     for det_name in detector_names:
@@ -153,6 +163,24 @@ def _load_and_train_detectors(
                 detector=det_name,
                 detector_media_type=det_media_type,
                 dataset_media_type=media_type,
+            )
+            continue
+
+        det_input_spec = det.get("input_spec") if isinstance(det.get("input_spec"), dict) else None
+        if det_input_spec and not clipper_matches(det_input_spec, dataset_spec):
+            det_clipper = det_input_spec.get("clipper") or ""
+            dataset_clipper = (dataset_spec or {}).get("clipper") or "(none)"
+            cli_progress.emit(
+                "detector_skipped",
+                text=(
+                    f"Skipping detector '{det_name}': input_spec.clipper "
+                    f"{det_clipper!r} doesn't match dataset clipper "
+                    f"{dataset_clipper!r}. Re-load the dataset with the "
+                    f"matching clipper to use this detector."
+                ),
+                detector=det_name,
+                detector_input_spec=det_input_spec,
+                dataset_input_spec=dataset_spec or {},
             )
             continue
 
