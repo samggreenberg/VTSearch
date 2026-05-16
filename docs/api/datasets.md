@@ -19,7 +19,6 @@ GET /api/media-types
       "type_id": "audio",
       "name": "Audio",
       "icon": "🔊",
-      "tab_title": "Sounds",
       "folder_import_name": "audio",
       "loops": true,
       "file_extensions": ["*.wav", "*.mp3"]

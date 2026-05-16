@@ -200,7 +200,6 @@ changes to `vtsearch/media/__init__.py` are needed.
 | Property             | Returns     | Default            | Purpose                                   |
 |----------------------|-------------|--------------------|-------------------------------------------|
 | `folder_import_name` | `str`       | `type_id`          | Alias for folder imports (matches `type_id`) |
-| `tab_title`          | `str`       | `name + "s"`       | Plural name for UI tabs                    |
 | `dir_key`            | `str`       | `type_id + "_dir"` | Key in pickle files for external dir       |
 | `legacy_bytes_keys`  | `list[str]` | `[]`               | Legacy keys for inline bytes in old pickles |
 | `pickle_extra_fields`| `list[str]` | `[]`               | Extra fields to preserve in pickle round-trips (e.g. `["width", "height"]`) |

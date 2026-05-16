@@ -725,7 +725,7 @@ export class NewDetectorModalComponent implements OnInit {
 
   getDemoTabLabel(typeId: string): string {
     const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
-    if (mt) return (mt.tab_title || mt.name).trim();
+    if (mt) return mt.name.trim();
     return typeId;
   }
 
@@ -918,7 +918,7 @@ export class NewDetectorModalComponent implements OnInit {
   getMediaTypeLabel(typeId: string): string {
     const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
     if (mt) {
-      return (mt.tab_title || mt.name).trim();
+      return mt.name.trim();
     }
     return typeId;
   }

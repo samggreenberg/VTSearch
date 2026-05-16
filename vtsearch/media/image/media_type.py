@@ -60,10 +60,6 @@ class ImageMediaType(MediaType):
         return "image"
 
     @property
-    def tab_title(self) -> str:
-        return "Images"
-
-    @property
     def dir_key(self) -> str:
         return "image_dir"
 

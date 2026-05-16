@@ -230,8 +230,10 @@ Train / Find buttons disable for non-obvious reasons (media-type mismatch, nothi
 
 ## 6. Inconsistencies across the app
 
-### 6.1 `media_type` naming ★★ XS
+### 6.1 `media_type` naming ★★ XS ✅
 Plural in dropdown labels ("images") vs singular in API/IDs ("image"). Pick one (singular) and use it everywhere visible.
+
+**Shipped:** Removed the `tab_title` plural-form override from `MediaType` (base + all five subclasses) and from `/api/media-types`. The Angular frontend now uses `name` (singular) everywhere — dropdowns, tabs, demo tabs, and detector picker all read "Audio", "Image", "Text", "Video", "Document". Removed the `tab_title?` field from `MediaTypeInfo` in `frontend/src/app/models/api.models.ts`.
 
 ### 6.2 "Detector" vs "Model" vs "Classifier" ★★ XS
 Code uses `detector`. Dashboard table is labeled "Detectors". Some UI elements (sort modes, the Models dashboard column) call them "models". User Guide uses both interchangeably. Pick one (suggest **detector** to keep alignment with the codebase) and lint the frontend strings.
