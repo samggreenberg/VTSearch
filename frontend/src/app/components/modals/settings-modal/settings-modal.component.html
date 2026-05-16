@@ -210,6 +210,7 @@
     @if (version) {
       <span class="settings-version" title="App version (UTC timestamp of the last dev to main merge). Include this when reporting issues.">v {{ version }}</span>
     }
+    <span class="settings-saved" [class.settings-saved--visible]="savedVisible" role="status" aria-live="polite" title="Settings auto-save as you change them">&#10003; saved</span>
     <button class="btn btn--secondary" (click)="resetDefaults()" title="Reset all settings to their factory defaults">Default</button>
     <button class="btn btn--secondary" (click)="openImporter()" title="Import settings from a file">Import</button>
     <button class="btn btn--secondary" (click)="openExporter()" title="Export settings to a file">Export</button>

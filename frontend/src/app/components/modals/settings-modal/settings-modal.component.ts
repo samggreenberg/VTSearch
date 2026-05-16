@@ -34,6 +34,8 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   showImporterModal = false;
   showExporterModal = false;
   version = '';
+  savedVisible = false;
+  private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   private destroy$ = new Subject<void>();
 
@@ -45,6 +47,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnDestroy(): void {
+    if (this.savedTimer !== null) clearTimeout(this.savedTimer);
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -183,10 +186,23 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       .update(this.settings)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
+        next: () => {
+          this.error = '';
+          this.flashSaved();
+        },
         error: () => {
           this.error = 'Failed to save settings';
         },
       });
+  }
+
+  private flashSaved(): void {
+    if (this.savedTimer !== null) clearTimeout(this.savedTimer);
+    this.savedVisible = true;
+    this.savedTimer = setTimeout(() => {
+      this.savedVisible = false;
+      this.savedTimer = null;
+    }, 1800);
   }
 
   close(): void {
