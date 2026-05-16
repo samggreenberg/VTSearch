@@ -340,7 +340,9 @@ if __name__ == "__main__":
         dest="list_plugins",
         help=(
             "List every auto-discovered plugin (importers, exporters, embedders, "
-            "converters, clippers, …) and exit. Useful for shell completion."
+            "converters, clippers, …) and exit. Useful for shell completion. "
+            "Per-family shortcuts are also available — see --list-importers, "
+            "--list-exporters, etc."
         ),
     )
     parser.add_argument(
@@ -354,6 +356,13 @@ if __name__ == "__main__":
             "completion-friendly output."
         ),
     )
+
+    # Per-family shortcuts: ``--list-importers`` ≡ ``--list-plugins
+    # --plugin-family importers``, and so on for every family in
+    # vtsearch.plugins.inventory.FAMILIES.
+    from vtsearch.plugins.inventory import register_family_shortcuts
+
+    register_family_shortcuts(parser)
     parser.add_argument(
         "--format",
         type=str,
