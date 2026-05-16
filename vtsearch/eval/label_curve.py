@@ -546,7 +546,7 @@ def run_label_curve_eval(
                         row["category"] = cat
                         rows.append(row)
 
-    return pd.DataFrame(rows, columns=list(_ROW_COLUMNS))
+    return pd.DataFrame(rows, columns=pd.Index(list(_ROW_COLUMNS)))
 
 
 def summarise(df: pd.DataFrame, *, include_diagnostics: bool = False) -> pd.DataFrame:

@@ -306,7 +306,10 @@ def run_voting_iterations_eval(
                 )
                 all_rows.extend(rows)
 
-    return pd.DataFrame(all_rows, columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"])
+    return pd.DataFrame(
+        all_rows,
+        columns=pd.Index(["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"]),
+    )
 
 
 def run_voting_iterations_eval_from_pickles(
