@@ -1,27 +1,5 @@
 {
-  "include": [
-    "vtsearch/auth",
-    "vtsearch/cli.py",
-    "vtsearch/concurrency",
-    "vtsearch/config.py",
-    "vtsearch/converters",
-    "vtsearch/datasets",
-    "vtsearch/detectors",
-    "vtsearch/embedding",
-    "vtsearch/eval",
-    "vtsearch/exporters",
-    "vtsearch/labels",
-    "vtsearch/media",
-    "vtsearch/plugins",
-    "vtsearch/routes",
-    "vtsearch/security",
-    "vtsearch/settings.py",
-    "vtsearch/settings_io",
-    "vtsearch/state",
-    "vtsearch/sync",
-    "vtsearch/training",
-    "vtsearch/utils"
-  ],
+  "include": ["vtsearch"],
   "exclude": [
     "**/__pycache__",
     "**/node_modules",
