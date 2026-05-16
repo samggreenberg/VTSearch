@@ -663,6 +663,17 @@ def _run_origin_load_in_background(
     if not loading_tasks.has_active_tasks():
         dataset_progress.reset_cancel()
 
+    # Remember the user's embedder pick per media type so the next dataset
+    # importer modal can pre-select it even when no loaded dataset is
+    # around to supply the same hint via ``guessedMediaEmbedder``.
+    if media_type and embedder:
+        from vtsearch.settings import set_last_embedder_for_media_type  # noqa: PLC0415
+
+        try:
+            set_last_embedder_for_media_type(media_type, embedder)
+        except Exception:
+            pass
+
     import time as _time
 
     task_id = f"_loading_{uuid4().hex[:8]}"

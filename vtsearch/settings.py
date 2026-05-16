@@ -102,6 +102,9 @@ if TYPE_CHECKING:
     def set_panel_pct_left(value: dict[str, int] | int | float) -> None: ...
     def set_panel_pct_right(value: dict[str, int] | int | float) -> None: ...
 
+    def get_last_embedder_per_media_type() -> dict[str, str]: ...
+    def set_last_embedder_per_media_type(value: dict[str, str]) -> None: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -695,6 +698,30 @@ get_panel_pct_left, get_panel_pct_right, set_panel_pct_left, set_panel_pct_right
     _PANEL_PX_DEFAULTS,
     value_type="int",
 )
+
+
+def get_last_embedder_for_media_type(media_type: str) -> str:
+    """Return the user's last picked embedder for *media_type*, or ``""``."""
+    if not media_type:
+        return ""
+    raw = get_last_embedder_per_media_type()
+    if isinstance(raw, dict):
+        value = raw.get(media_type, "")
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def set_last_embedder_for_media_type(media_type: str, embedder: str) -> None:
+    """Record *embedder* as the user's last pick for *media_type*."""
+    if not media_type or not embedder:
+        return
+    current = get_last_embedder_per_media_type()
+    updated = dict(current) if isinstance(current, dict) else {}
+    if updated.get(media_type) == embedder:
+        return
+    updated[media_type] = embedder
+    set_last_embedder_per_media_type(updated)
 
 
 def get_autorun_detectors() -> list[str]:

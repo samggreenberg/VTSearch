@@ -591,3 +591,33 @@ class TestSettingsModule:
         # Should fall back to defaults
         assert settings_mod.get_volume() == 1.0
         assert settings_mod.get_autorun_detectors() == []
+
+    def test_last_embedder_per_media_type_default(self):
+        assert settings_mod.get_last_embedder_per_media_type() == {}
+        assert settings_mod.get_last_embedder_for_media_type("image") == ""
+
+    def test_set_last_embedder_for_media_type(self, isolated_settings):
+        settings_mod.set_last_embedder_for_media_type("image", "siglip")
+        assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"
+        assert settings_mod.get_last_embedder_per_media_type() == {"image": "siglip"}
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["last_embedder_per_media_type"] == {"image": "siglip"}
+
+    def test_last_embedder_per_media_type_independent_keys(self, isolated_settings):
+        settings_mod.set_last_embedder_for_media_type("image", "siglip")
+        settings_mod.set_last_embedder_for_media_type("audio", "clap")
+        assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"
+        assert settings_mod.get_last_embedder_for_media_type("audio") == "clap"
+
+    def test_last_embedder_for_media_type_ignores_empty_args(self, isolated_settings):
+        settings_mod.set_last_embedder_for_media_type("image", "siglip")
+        # Empty media_type or embedder is a no-op.
+        settings_mod.set_last_embedder_for_media_type("", "anything")
+        settings_mod.set_last_embedder_for_media_type("image", "")
+        assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"
+
+    def test_last_embedder_per_media_type_persists_across_reset(self, isolated_settings):
+        settings_mod.set_last_embedder_for_media_type("image", "siglip")
+        settings_mod.reset()
+        assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"

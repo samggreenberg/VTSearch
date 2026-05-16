@@ -126,3 +126,9 @@ class UserSettings(BaseModel):
     focus_mode_right: dict[str, FocusMode] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
+
+    # Per-media-type memory of the last embedder the user picked, used by the
+    # dataset importer modal to pre-select a sensible default when no loaded
+    # dataset is around to supply the same hint via ``guessedMediaEmbedder``.
+    # Keys are canonical media-type ids (e.g. ``"image"``, ``"audio"``).
+    last_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)

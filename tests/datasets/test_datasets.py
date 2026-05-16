@@ -1158,6 +1158,50 @@ class TestLoadProgressRaceCondition:
         assert progress["error"] is None, "Starting a new load must clear the stale error from a previous load"
         assert progress["status"] == "loading"
 
+    def test_origin_load_records_last_embedder_per_media_type(self, isolated_settings):
+        """Starting a load with a known media_type + embedder should persist
+        the pick into the per-user ``last_embedder_per_media_type`` map.
+        """
+        from unittest.mock import patch
+
+        from vtsearch import settings as settings_mod
+        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+
+        assert settings_mod.get_last_embedder_for_media_type("image") == ""
+
+        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
+            _run_origin_load_in_background(
+                lambda: None,
+                {"importer": "test", "params": {}},
+                embedder="siglip",
+                media_type="image",
+            )
+
+        assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"
+
+    def test_origin_load_skips_save_without_media_type_or_embedder(self, isolated_settings):
+        """No media_type or no embedder means nothing to remember."""
+        from unittest.mock import patch
+
+        from vtsearch import settings as settings_mod
+        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+
+        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
+            _run_origin_load_in_background(
+                lambda: None,
+                {"importer": "test", "params": {}},
+                embedder="",
+                media_type="image",
+            )
+            _run_origin_load_in_background(
+                lambda: None,
+                {"importer": "test", "params": {}},
+                embedder="siglip",
+                media_type="",
+            )
+
+        assert settings_mod.get_last_embedder_per_media_type() == {}
+
     def test_load_embedder_sets_initial_progress(self):
         """_load_embedder_for_clips must set progress before loading starts.
 

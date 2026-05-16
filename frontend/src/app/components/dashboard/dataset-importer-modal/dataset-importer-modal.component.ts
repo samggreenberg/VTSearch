@@ -6,6 +6,7 @@ import { FileBrowserComponent } from '../../file-browser/file-browser.component'
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { SettingsStateService } from '../../../services/settings-state.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
@@ -154,7 +155,10 @@ export class DatasetImporterModalComponent implements OnInit {
   clipperChooserContext: 'form' | 'demo' | 'sf' | 'lf' = 'form';
   clipperChooserClippers: ClipperInfo[] = [];
 
-  constructor(private datasetsApi: DatasetsApiService) {}
+  constructor(
+    private datasetsApi: DatasetsApiService,
+    private settingsState: SettingsStateService,
+  ) {}
 
   ngOnInit(): void {
     this.datasetsApi.getAllImporters().subscribe({
@@ -173,6 +177,35 @@ export class DatasetImporterModalComponent implements OnInit {
         this.mediaTypes = res.media_types || [];
       },
     });
+    // Settings carry the per-media-type "last embedder" memory used to
+    // pre-select an embedder when no loaded dataset can supply
+    // ``guessedMediaEmbedder``.
+    this.settingsState.load();
+  }
+
+  /** Pick the initial embedder for a picker view.  Priority:
+   *  1. ``guessedMediaEmbedder`` (computed from currently loaded datasets)
+   *  2. the user's last pick for this media type (per-user setting)
+   *  3. first option, or empty when the list is empty.
+   *
+   *  ``mediaTypeFolderOrTypeId`` accepts either form — the importer form
+   *  values use the folder name (e.g. ``"images"``) while the settings
+   *  map is keyed by canonical type_id (e.g. ``"image"``).  We resolve to
+   *  type_id before looking up the saved setting. */
+  private pickInitialEmbedder(embedders: EmbedderInfo[], mediaTypeFolderOrTypeId: string): string {
+    if (embedders.length === 0) return '';
+    const guessedMatch = this.guessedMediaEmbedder
+      ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
+      : null;
+    if (guessedMatch) return guessedMatch.name;
+    const typeId = this.toTypeId(mediaTypeFolderOrTypeId) || mediaTypeFolderOrTypeId;
+    const savedMap = this.settingsState.settings?.last_embedder_per_media_type || {};
+    const saved = savedMap[typeId];
+    if (saved) {
+      const savedMatch = embedders.find((e) => e.name === saved);
+      if (savedMatch) return savedMatch.name;
+    }
+    return embedders[0].name;
   }
 
   /** Front-of-list order for the picker within each tab.  Importers not
@@ -451,11 +484,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.availableEmbedders = embedders;
-        // Prefer guessed embedder when it's available for this media type
-        const guessedMatch = this.guessedMediaEmbedder
-          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
-          : null;
-        this.selectedEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
+        this.selectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
       },
     });
   }
@@ -519,11 +548,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.demoEmbedders = embedders;
-        // Prefer guessed embedder when it's available for this media type
-        const guessedMatch = this.guessedMediaEmbedder
-          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
-          : null;
-        this.selectedDemoEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
+        this.selectedDemoEmbedder = this.pickInitialEmbedder(embedders, mediaType);
         this.demoEmbedder = this.selectedDemoEmbedder;
         this.updateDemoStatuses();
         // The initial demo fetch had no embedder/clipper context, so re-fetch
@@ -830,10 +855,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.lfEmbedders = embedders;
-        const guessedMatch = this.guessedMediaEmbedder
-          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
-          : null;
-        this.lfSelectedEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
+        this.lfSelectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
       },
     });
   }
@@ -1258,11 +1280,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.sfEmbedders = embedders;
-        // Prefer guessed embedder when it's available for this media type
-        const guessedMatch = this.guessedMediaEmbedder
-          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
-          : null;
-        this.sfSelectedEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
+        this.sfSelectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
       },
     });
   }
