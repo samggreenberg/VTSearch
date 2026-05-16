@@ -11,6 +11,7 @@ The active provider is set once at startup via :func:`set_login_provider`.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -152,6 +153,151 @@ class TrivialLoginProvider(LoginProvider):
 
     def login_required(self) -> bool:
         return True
+
+    def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:
+        return base_data_dir / username
+
+
+# ---------------------------------------------------------------------------
+# ApiKeyLoginProvider — bearer-token, for headless integrations
+# ---------------------------------------------------------------------------
+
+
+# Usernames are used as data-directory names (data/<user>/...) so they must
+# not contain path separators or traversal segments.
+_VALID_USERNAME = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+class ApiKeyLoginProvider(LoginProvider):
+    """Bearer-token authentication for headless API clients.
+
+    Reads ``Authorization: Bearer <key>`` from the request, hashes the
+    presented key with SHA-256, and looks the hash up in a JSON file
+    (default ``data/api_keys.json``) of the form::
+
+        {"<sha256_hex_of_key>": "alice", "<sha256_hex_of_key>": "ci-bot"}
+
+    The file is reloaded automatically when its mtime changes, so keys
+    can be rotated without restarting the server.
+
+    Generate a key and its hash with::
+
+        python -c "import secrets, hashlib; \\
+            k = secrets.token_urlsafe(32); \\
+            print('key:', k); \\
+            print('hash:', hashlib.sha256(k.encode()).hexdigest())"
+
+    Requests without a valid bearer token resolve to the username
+    ``"anonymous"`` and ``is_authenticated`` returns ``False``.  This
+    provider does not show a login UI (``login_required`` is ``False``)
+    — it is meant for headless callers that send the header directly.
+    """
+
+    name = "api_key"
+
+    def __init__(self, keys_file: Path | None = None) -> None:
+        if keys_file is None:
+            from vtsearch.config import DATA_DIR
+
+            keys_file = DATA_DIR / "api_keys.json"
+        self._keys_file: Path = Path(keys_file)
+        self._keys: dict[str, str] = {}
+        self._mtime: float | None = None
+        self._lock = threading.Lock()
+        self._load_keys_if_changed()
+        if not self._keys:
+            logger.warning(
+                "ApiKeyLoginProvider: no keys loaded from %s — every request will be anonymous. "
+                "Add entries with the snippet in the class docstring.",
+                self._keys_file,
+            )
+
+    def _load_keys_if_changed(self) -> None:
+        try:
+            mtime = self._keys_file.stat().st_mtime
+        except FileNotFoundError:
+            with self._lock:
+                if self._mtime is not None or self._keys:
+                    self._keys = {}
+                    self._mtime = None
+            return
+        except OSError:
+            logger.exception("ApiKeyLoginProvider: failed to stat %s", self._keys_file)
+            return
+        if mtime == self._mtime:
+            return
+        try:
+            import json
+
+            with open(self._keys_file) as f:
+                data = json.load(f)
+        except Exception:
+            logger.exception(
+                "ApiKeyLoginProvider: failed to load %s — keeping previously loaded keys",
+                self._keys_file,
+            )
+            return
+        if not isinstance(data, dict):
+            logger.error(
+                "ApiKeyLoginProvider: %s must contain a JSON object, got %s",
+                self._keys_file,
+                type(data).__name__,
+            )
+            return
+        new_keys: dict[str, str] = {}
+        for key_hash, username in data.items():
+            if not isinstance(key_hash, str) or not isinstance(username, str):
+                logger.error(
+                    "ApiKeyLoginProvider: skipping non-string entry in %s: %r -> %r",
+                    self._keys_file,
+                    key_hash,
+                    username,
+                )
+                continue
+            if not _VALID_USERNAME.match(username):
+                logger.error(
+                    "ApiKeyLoginProvider: skipping key for invalid username %r in %s (must match [A-Za-z0-9._-]+)",
+                    username,
+                    self._keys_file,
+                )
+                continue
+            new_keys[key_hash] = username
+        with self._lock:
+            self._keys = new_keys
+            self._mtime = mtime
+        logger.info(
+            "ApiKeyLoginProvider: loaded %d key(s) from %s",
+            len(new_keys),
+            self._keys_file,
+        )
+
+    def _lookup_user(self, request: Any) -> str | None:
+        if request is None:
+            return None
+        try:
+            header = request.headers.get("Authorization", "") or ""
+        except Exception:
+            return None
+        if not header.startswith("Bearer "):
+            return None
+        token = header[len("Bearer ") :].strip()
+        if not token:
+            return None
+        import hashlib
+
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        self._load_keys_if_changed()
+        with self._lock:
+            return self._keys.get(token_hash)
+
+    def get_user(self, request: Any) -> str:
+        return self._lookup_user(request) or "anonymous"
+
+    def is_authenticated(self, request: Any) -> bool:
+        return self._lookup_user(request) is not None
+
+    def login_required(self) -> bool:
+        return False
 
     def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:
         return base_data_dir / username

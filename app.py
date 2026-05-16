@@ -390,9 +390,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--login",
         type=str,
-        choices=["trivial"],
+        choices=["trivial", "api_key"],
         default=None,
-        help="Login provider: 'trivial' shows a username prompt (no password, cookie-based)",
+        help=(
+            "Login provider: 'trivial' shows a username prompt (no password, cookie-based); "
+            "'api_key' authenticates via Authorization: Bearer <key> against data/api_keys.json"
+        ),
     )
     parser.add_argument(
         "--autodetect",
@@ -633,11 +636,22 @@ if __name__ == "__main__":
 
     elif args.local or not args.autodetect:
         # Activate the chosen login provider before starting the server.
-        if getattr(args, "login", None) == "trivial":
+        login_choice = getattr(args, "login", None)
+        if login_choice == "trivial":
             from vtsearch.auth import TrivialLoginProvider, set_login_provider
 
             set_login_provider(TrivialLoginProvider())
             print("\U0001f511 Trivial login enabled \u2014 users will be prompted for a username", flush=True)
+        elif login_choice == "api_key":
+            from vtsearch.auth import ApiKeyLoginProvider, set_login_provider
+            from vtsearch.config import DATA_DIR
+
+            provider = ApiKeyLoginProvider()
+            set_login_provider(provider)
+            print(
+                f"\U0001f511 API-key login enabled \u2014 reading keys from {DATA_DIR / 'api_keys.json'}",
+                flush=True,
+            )
 
         initialize_server(mode_label="LOCAL" if args.local else "PRODUCTION")
         print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
