@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import { formatProgressFraction } from '../../../utils/format-progress';
+import { formatTimestamp } from '../../../utils/format-date';
 
 @Component({
   selector: 'vt-dataset-card',
@@ -136,9 +137,7 @@ export class DatasetCardComponent implements OnChanges {
   }
 
   formatDate(timestamp: number | null): string {
-    if (!timestamp) return '-';
-    const d = new Date(timestamp * 1000);
-    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return formatTimestamp(timestamp);
   }
 
   capitalizeType(type: string | undefined): string {
