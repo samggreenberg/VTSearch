@@ -685,8 +685,8 @@ Already designed in `docs/design/cli-detector-converter.md`; ship it.
 ### 17.4 Watch mode ★ S
 `--watch /path/to/inbox` re-runs autodetect whenever new files appear.
 
-### 17.5 Dry-run mode ★ XS
-`--dry-run` prints what would be embedded/scored/exported without doing it.
+### 17.5 Dry-run mode ★ XS ✅ shipped
+`--dry-run` prints what would be embedded/scored/exported without doing it. Validates importer/exporter names, settings file, dataset pickle existence, and required CLI field values, but loads no media and trains no models. See [CLI.md § Dry-run mode](../CLI.md#dry-run-mode).
 
 ### 17.6 Progress JSON output ★ S
 `--progress-format json` for scripted callers / CI integration.

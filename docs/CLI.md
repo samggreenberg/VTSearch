@@ -74,6 +74,49 @@ Predicted Good (5 items):
 
 Items with origin information include the origin display string before the filename.
 
+### Dry-run mode
+
+Add `--dry-run` to any `--autodetect` invocation to print the plan
+without loading media, training detectors, scoring, or exporting:
+
+```bash
+python app.py --autodetect --dataset data.pkl --settings settings.json --dry-run
+python app.py --autodetect --importer server_folder --path /data/sounds \
+    --media-type audio --settings settings.json --exporter server_json_file \
+    --filepath out.json --dry-run
+```
+
+The output names the source (pickle file or importer + params), the
+settings file, every detector listed under `autorun_detectors` (with its
+media type and label count), and the exporter + its field values:
+
+```
+DRY RUN — no media will be loaded, embedded, scored, or exported.
+
+Source:
+  Importer: server_folder
+  Params:
+    path: /data/sounds
+    media_type: audio
+  Chunk size: whole dataset
+
+Settings: settings.json
+Autorun detectors (2):
+  - Dog Barks  [media_type=audio, labels=12, file=data/detectors/Dog Barks.json]
+  - Cat Meows  [media_type=audio, labels=8, file=data/detectors/Cat Meows.json]
+
+Exporter: server_json_file
+  filepath: out.json
+```
+
+`--dry-run` validates importer and exporter names, checks that the
+dataset pickle (if given) exists, verifies required CLI fields are
+populated, and reports any detector JSON files that are missing — so
+typos in a cron-style invocation fail immediately instead of after a
+multi-minute embedding pass. `--import-labels-into ... --label-importer-file ...`
+is announced as part of the plan but skipped (no detector JSON is
+modified).
+
 ## Web server modes
 
 **Development (Flask dev server)** — bind to `0.0.0.0:5000`:
