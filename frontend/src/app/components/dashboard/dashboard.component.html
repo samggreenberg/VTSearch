@@ -21,7 +21,13 @@
     </div>
 
     @if (datasets.length === 0 && orphanLoadingTasks.length === 0 && !loading) {
-      <p class="empty-state">No datasets yet. Click + to add one.</p>
+      <div class="welcome-banner">
+        <p class="welcome-banner-text">{{ welcomeBannerMessage }}</p>
+        <button class="btn btn--primary btn--sm welcome-banner-cta"
+          (click)="openImporterModalOnTab(welcomeBannerCtaTab)"
+          [disabled]="isLoading"
+          title="Open the dataset importer">{{ welcomeBannerCtaLabel }}</button>
+      </div>
     } @else {
       <div class="dashboard-grid">
         <table class="dash-table" [class.table-fixed]="datasetCols.tableFixed">
@@ -312,6 +318,7 @@
   <vt-dataset-importer-modal
     [guessedMediaType]="guessedMediaType"
     [guessedMediaEmbedder]="guessedMediaEmbedder"
+    [initialTab]="importerInitialTab"
     (closed)="closeImporterModal()"
     (importStarted)="onImportComplete()"
     (demoSelected)="onDemoSelected($event)"
