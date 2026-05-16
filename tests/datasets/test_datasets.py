@@ -150,6 +150,113 @@ class TestDatasetEndpoints:
             # Clean up
             dest.unlink(missing_ok=True)
 
+    def test_detect_media_type_finds_dominant(self, client, tmp_path, monkeypatch):
+        """GET /api/dataset/detect-media-type returns the dominant media type."""
+        # Use a dedicated subdirectory because the autouse ``isolated_settings``
+        # fixture also writes into ``tmp_path``.
+        root = tmp_path / "media"
+        root.mkdir()
+        # Three .wav files (audio) + one .jpg (image) → dominant=audio.
+        (root / "a.wav").write_bytes(b"RIFF")
+        (root / "b.wav").write_bytes(b"RIFF")
+        (root / "c.wav").write_bytes(b"RIFF")
+        (root / "d.jpg").write_bytes(b"\xff\xd8\xff")
+
+        monkeypatch.setattr(
+            "vtsearch.routes.datasets.ui._resolve_browse_root",
+            lambda source: root if source == "folder" else None,
+        )
+        resp = client.get("/api/dataset/detect-media-type?source=folder&path=")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["sample_size"] == 4
+        assert data["dominant"] == "audio"
+        assert data["counts_by_type"].get("audio") == 3
+        assert data["counts_by_type"].get("image") == 1
+
+    def test_detect_media_type_recursive(self, client, tmp_path, monkeypatch):
+        """The endpoint respects the ``recursive`` query parameter."""
+        root = tmp_path / "media"
+        root.mkdir()
+        (root / "top.jpg").write_bytes(b"\xff\xd8\xff")
+        sub = root / "nested"
+        sub.mkdir()
+        (sub / "deep.wav").write_bytes(b"RIFF")
+
+        monkeypatch.setattr(
+            "vtsearch.routes.datasets.ui._resolve_browse_root",
+            lambda source: root if source == "folder" else None,
+        )
+
+        # Recursive (default): sees both files.
+        resp = client.get("/api/dataset/detect-media-type?source=folder&path=")
+        data = resp.get_json()
+        assert data["sample_size"] == 2
+
+        # Non-recursive: only the top-level .jpg is visible.
+        resp = client.get("/api/dataset/detect-media-type?source=folder&path=&recursive=false")
+        data = resp.get_json()
+        assert data["sample_size"] == 1
+        assert data["dominant"] == "image"
+
+    def test_detect_media_type_unknown_extensions(self, client, tmp_path, monkeypatch):
+        """Unrecognised extensions roll up under ``"unknown"`` and don't dominate."""
+        root = tmp_path / "media"
+        root.mkdir()
+        (root / "a.xyz").write_bytes(b"")
+        (root / "b.qqq").write_bytes(b"")
+
+        monkeypatch.setattr(
+            "vtsearch.routes.datasets.ui._resolve_browse_root",
+            lambda source: root if source == "folder" else None,
+        )
+        resp = client.get("/api/dataset/detect-media-type?source=folder&path=")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["dominant"] is None
+        assert data["counts_by_type"].get("unknown") == 2
+
+    def test_detect_media_type_bad_source(self, client):
+        """GET /api/dataset/detect-media-type returns 404 for an unknown source."""
+        resp = client.get("/api/dataset/detect-media-type?source=demo:nonexistent_xyz&path=")
+        assert resp.status_code == 404
+
+    def test_detect_media_type_directory_cap(self, tmp_path):
+        """The helper stops walking after ``max_dirs`` directories, even when
+        the sample is far from full.  This guards against pathological
+        folder shapes that would otherwise blow up the wall-clock budget."""
+        from vtsearch.datasets.media_type_detection import detect_media_types_in_folder
+
+        root = tmp_path / "media"
+        root.mkdir()
+        # 50 empty sub-directories.  Walking all of them is fine in a
+        # unit test, but the function should still report ``truncated``
+        # when the cap is set low enough to bite.
+        for i in range(50):
+            (root / f"empty_{i:02d}").mkdir()
+        data = detect_media_types_in_folder(root, recursive=True, max_dirs=5)
+        assert data["sample_size"] == 0
+        assert data["dominant"] is None
+        assert data["truncated"] is True
+
+    def test_detect_media_type_does_not_follow_symlinks(self, tmp_path):
+        """The recursive walk does not follow symlinked directories: the
+        sample stays inside *folder* even when a symlink points elsewhere."""
+        from vtsearch.datasets.media_type_detection import detect_media_types_in_folder
+
+        root = tmp_path / "root"
+        root.mkdir()
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "lots_of_audio.wav").write_bytes(b"RIFF")
+        try:
+            (root / "link").symlink_to(elsewhere)
+        except OSError:
+            pytest.skip("symlinks not supported on this platform")
+        data = detect_media_types_in_folder(root, recursive=True)
+        assert data["sample_size"] == 0
+        assert data["dominant"] is None
+
     def test_select_browsed_file_traversal_blocked(self, client, tmp_path):
         """POST /api/browse-media-files/select rejects traversal paths."""
         from unittest.mock import patch

@@ -311,6 +311,20 @@ export interface MediaTypeInfo {
   icon?: string;
   tab_title?: string;
   folder_import_name?: string;
+  /** Glob patterns for files this media type claims, e.g. ``["*.jpg", "*.png"]``. */
+  file_extensions?: string[];
+}
+
+export interface MediaTypeDetectionResponse {
+  sample_size: number;
+  counts_by_type: Record<string, number>;
+  extensions: Record<string, number>;
+  dominant: string | null;
+  /** ``true`` when the backend stopped walking before reaching the file
+   *  cap because the directory-count cap or wall-clock budget fired.  The
+   *  rest of the response is still meaningful — it's just a less complete
+   *  sample than usual. */
+  truncated?: boolean;
 }
 
 export interface MediaTypesResponse {
