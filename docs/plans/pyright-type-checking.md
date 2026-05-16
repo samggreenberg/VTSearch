@@ -550,6 +550,29 @@ recurring in tests/:
     inside the inner method body. Two viable fixes; this stage used an
     inner ``assert fetch_one is not None`` at the top of the method
     body — explicit and runtime-correct.
+16. **pandas `_typing.py` differs between Python 3.10 and 3.11
+    (CI-only).** The same pandas wheel ships different ``_typing.py``
+    files based on the host Python version. In 3.10 the file is
+    pre-PEP-613 (``Axes = ListLike`` with no ``TypeAlias``
+    annotation), and pyright can't see ``Axes`` as an alias for
+    ``ListLike = Union[AnyArrayLike, SequenceNotStr, range]``. The
+    DataFrame constructor's ``columns: Axes | None`` then rejects
+    ``list[str]`` because pyright treats ``Axes`` as an opaque
+    structural type and ``list.index(value: str)`` doesn't satisfy
+    ``SequenceNotStr.index(value: Any)`` under contravariance. In 3.11
+    the same file uses ``Axes: TypeAlias = ListLike`` and pyright
+    resolves the alias correctly, so the error vanishes locally. CI
+    pins ``python-version: "3.10"`` so the 3.10 stubs are what counts.
+    Fix: per-line ``# pyright: ignore[reportArgumentType]`` on each
+    ``pd.DataFrame(..., columns=[...])`` call site, with a one-line
+    comment naming the stub-version mismatch. Two sites in
+    ``tests/detectors/test_eval_visualize.py``. **Lesson:** when
+    ``pythonVersion`` in ``pyrightconfig.json`` (3.10) doesn't match
+    the local development Python (3.11), run pyright in a 3.10 venv
+    before pushing — package-shipped stubs can change shape with the
+    Python version. ``python3.10 -m venv /tmp/py310 && source
+    /tmp/py310/bin/activate && bash scripts/install-cpu.sh && pyright``
+    is a faithful reproduction of the CI gated job.
 
 ### Stage 6 fixes (shipped)
 
