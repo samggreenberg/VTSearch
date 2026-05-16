@@ -27,7 +27,18 @@ package. Rolled out in stages so each PR stays reviewable.
   `schemas/` package — 17 files, 0 new errors) and deletes the advisory
   job from `.github/workflows/pyright.yml`. Gated scope now equals the
   whole `vtsearch/` package (245 files, 0 errors).
-- **Stage 7 (`tests/`):** 📋 optional, deferred.
+- **Stage 7:** ✅ shipped. Adds `tests/` to the gated scope. Baseline
+  was 699 errors across 11 test groups; two surgical pattern fixes
+  (`app.py` `TYPE_CHECKING` block for conftest-injected attributes and
+  explicit `downloader.{core,audio,…}` submodule re-exports) knocked
+  out ~582 of those, and the remaining 117 were resolved per-file with
+  Optional narrowing asserts, HF/cv2/numpy stub-gap ignore comments,
+  and `cast(Any, …)` for test-time ABC attribute writes. Two minor
+  production-code annotation widenings: `resolve_display_name` now
+  accepts `None` (body already handled it), and
+  `stream_progress_events` returns `Generator[str, None, None]` so
+  callers can `.close()` it. Pyright gated scope = `["vtsearch",
+  "tests"]`, 0 errors, 0 warnings.
 
 ## Goal
 
@@ -142,7 +153,7 @@ Each stage is a separate PR. The "errors to fix" column counts real
 | 4 | `routes/`, `converters/` | 40 | ✅ shipped |
 | 5 | `media/` (heaviest — turned out to be the HF-stub gap pattern, not stubs) | 97 | ✅ shipped |
 | 6 | Whole `vtsearch/` (incl. `achievements.py`, `logging_config.py`, `openapi.py`, `schemas/`) — advisory job removed | 0 | ✅ shipped |
-| 7 *(optional)* | `tests/` | TBD | 📋 |
+| 7 | `tests/` | 699 (582 from two patterns + 117 long-tail) | ✅ shipped |
 
 **Stage 0 + Stage 1 landed together in PR #1349.** Subsequent stages are
 separate PRs; each one bumps `include` in `pyrightconfig.json` and fixes
@@ -427,6 +438,119 @@ load + forward calls). All 97 errors collapsed onto these patterns:
     Worth a `grep` of `include` against the on-disk layout when bumping
     the gated scope.
 
+### Stage 7 fixes (shipped)
+
+Two bulk patterns cleared most of the 699 baseline errors before any
+per-file work:
+
+1. **`conftest.py` injects attributes onto `app_module` dynamically.**
+   Pyright can't see runtime assignments like
+   ``app_module.medias = medias``, so 471 errors collapsed onto
+   accesses of `app.medias`, `app.good_votes`, `app.bad_votes`,
+   `app.NUM_MEDIAS`, `app.generate_wav`, `app.train_and_score`,
+   `app.SAMPLE_RATE`, and `app.init_medias`. Fix: a ``TYPE_CHECKING``
+   block at the top of ``app.py`` declares each attribute's type with
+   a comment pointing at ``tests/conftest.py``. Same shape as Stage 2
+   fix #1 for the dynamically generated accessors in
+   ``vtsearch/settings.py``.
+2. **`vtsearch.datasets.downloader.X` submodules not visible as
+   package attributes.** Tests mocked `downloader.core.DATA_DIR`,
+   `downloader.text.<helper>`, etc.; at runtime Python exposes
+   submodules once they're imported elsewhere, but pyright doesn't
+   trust that. Fix: ``vtsearch/datasets/downloader/__init__.py``
+   explicitly does ``from vtsearch.datasets.downloader import audio,
+   core, documents, images, text, video`` (and adds them to
+   ``__all__``).
+
+The remaining 117 errors broke down by pattern. None of these are new
+— they're variations of the patterns documented in Stages 2–5,
+recurring in tests/:
+
+3. **Optional return narrowing.** Standard ``assert x is not None``
+   before subscript / attribute access. Affected helpers:
+   ``get_detector(...)``, ``_read_detector(...)``, ``get_converter(...)``,
+   ``get_settings_source_config()``, ``_SOURCE_DIRS`` (lazy dict),
+   ``DiversityTree.next_sample()`` (returns ``int | None``),
+   ``DetectorContext.calibration_cache``, ``get_thread_dataset_context()``
+   / ``get_thread_detector_context()``, and
+   ``generate_waveform_thumbnail()`` (returns ``bytes | None``).
+4. **`MediaResponse.data` is `bytes | dict`.** Tests that do
+   ``resp.data["content"]`` need ``isinstance(resp.data, dict)`` so the
+   subscript type-checks. Same shape narrowing the union from the
+   "Stage 4 fix #1 tuple-unpack" pattern, just on a single value.
+5. **HF processor `__call__` stub gap.** ``ClapProcessor`` (and other
+   HF processor classes) don't list the runtime kwargs ``sampling_rate=``,
+   ``return_tensors=``, ``padding=``, ``max_length=``, ``truncation=`` in
+   their stubs. Fix: ``cast(Any, processor)`` so the call sites type-check.
+   Identical to Stage 5 fix #1; recurs here because the GPU tests
+   construct processors inline rather than going through a
+   ``MediaEmbedder`` (which already has the ``Any`` annotation pattern).
+6. **Abstract-class instantiation tests.** Tests that verify
+   ``ABC()`` raises ``TypeError`` legitimately need to construct the
+   abstract class. ``# pyright: ignore[reportAbstractUsage]`` on the
+   single line — covered ``Processor``, ``Detector``, ``Localizer``,
+   ``MediaConverter``, ``MediaClipper``, ``Extractor``.
+7. **Test-time attribute writes on a MediaType ABC.**
+   ``mt._model = stub_model`` / ``mt._processor = stub`` only works at
+   runtime because the subclass loads them via ``load_models()`` after
+   instantiation — none of the MediaType subclasses declare
+   ``_model`` / ``_processor`` in ``__init__`` so the attributes
+   aren't visible to pyright on a ``MediaType``-typed local. Fix:
+   ``cast(Any, MediaTypeSubclass())`` at the construction site, with a
+   one-line comment. Same pattern in
+   ``tests/downloads/_helpers.py``, ``tests/downloads/test_ucsf_documents_download.py``,
+   ``tests/gpu/test_gpu.py``.
+8. **Monkey-patching method attributes.** Tests that do
+   ``emb._patch_forward_pil_batch = fake_fn`` or
+   ``tm.set_module_tensor_to_device = fake_fn`` need per-line
+   ``# pyright: ignore[reportAttributeAccessIssue]`` — same shape as
+   Stage 5 fix #5 (`set_module_tensor_to_device` HF stub gap), now
+   appearing in tests/ as well.
+9. **`numpy.savez(**dict_of_arrays)` stub bug.** When you splat a
+   dict-of-ndarrays into ``savez``, pyright binds the first kwarg to
+   ``allow_pickle: bool`` (the first named-kw in the stub) and errors.
+   The runtime accepts arbitrary key/array kwargs. Fix:
+   ``# pyright: ignore[reportArgumentType]`` on the call line.
+10. **`importlib.util` submodule access.** ``import importlib`` does
+    NOT pull in ``importlib.util`` for pyright. Fix: add an explicit
+    ``import importlib.util`` alongside it. After that,
+    ``spec = spec_from_file_location(...)`` still returns ``ModuleSpec
+    | None`` — narrow with ``assert spec is not None and spec.loader
+    is not None`` before ``spec.loader.exec_module(mod)``.
+11. **`cv2.VideoWriter_fourcc` opencv-stubs gap.** Same shape as the
+    HF/PaddleOCR stub gaps: the runtime builtin exists but isn't in
+    the type stub. ``# pyright: ignore[reportAttributeAccessIssue]``.
+12. **`@property` overridden by literal class attribute.** A test stub
+    embedder did ``class _Stub(MediaEmbedder): name = "fake";
+    media_type_id = "test"`` which works at runtime (the class attr
+    shadows the inherited property) but pyright treats it as assigning
+    ``Literal["fake"]`` to a ``property`` slot. ``# pyright:
+    ignore[reportAssignmentType]`` is the right fix — converting both
+    to ``@property def name(self): return "fake"`` would clutter the
+    stub without buying anything.
+13. **Iterator vs Generator return type.**
+    ``stream_progress_events`` was annotated ``Iterator[str]`` but the
+    SSE test calls ``gen.close()``, which only exists on
+    ``Generator``. Production fix: change the return annotation to
+    ``Generator[str, None, None]``. That widens the contract (callers
+    can still iterate) and matches the actual returned generator
+    function.
+14. **Test-helper `Optional[dict]` parameter.**
+    ``resolve_display_name(field_values: dict[str, Any])`` couldn't be
+    called as ``resolve_display_name(None)`` even though the body
+    handled it. Production fix: widen the parameter to
+    ``dict[str, Any] | None`` on both ``DatasetImporter`` and the
+    ``PluginBase`` it inherits from. (Override contravariance allows
+    the override to widen, but widening both sites keeps the call
+    chain consistent and matches the runtime semantics.)
+15. **Class-body conditional method capture.** Test fixtures built a
+    one-shot importer with
+    ``if fetch_one is not None: def fetch_record(...): return
+    fetch_one(...)``. Pyright didn't narrow ``fetch_one`` to non-None
+    inside the inner method body. Two viable fixes; this stage used an
+    inner ``assert fetch_one is not None`` at the top of the method
+    body — explicit and runtime-correct.
+
 ### Stage 6 fixes (shipped)
 
 Zero. The advisory job had reported 0 errors since the end of Stage 5,
@@ -462,8 +586,9 @@ producing a single new error. Stage 6 is therefore config-only:
 
 ```json
 {
-  "include": ["vtsearch"],
-  "exclude": ["**/__pycache__", "**/node_modules", "tests", "frontend", "scripts", "data"],
+  "include": ["vtsearch", "tests"],
+  "exclude": ["**/__pycache__", "**/node_modules", "frontend", "scripts", "data"],
+  "extraPaths": ["tests"],
   "pythonVersion": "3.10",
   "typeCheckingMode": "basic",
   "useLibraryCodeForTypes": true,
@@ -476,7 +601,10 @@ producing a single new error. Stage 6 is therefore config-only:
   package code when stubs are missing — important for `torch`,
   `transformers`, `laion_clap`.
 - `reportMissingTypeStubs` is silenced; we don't ship stubs.
-- `tests/` is excluded for now (Stage 7).
+- `extraPaths: ["tests"]` lets the test files import each other via
+  the unprefixed names defined in ``pyproject.toml``'s
+  ``pythonpath = ["tests"]`` (e.g. ``from helpers import ...``,
+  ``from tests.fixtures.medias import ...``).
 
 ## CI shape
 
@@ -495,7 +623,7 @@ caught up to the full package.
 
 - Strict mode.
 - Annotating every public function.
-- Type-checking `tests/`, `frontend/`, or `scripts/`.
+- Type-checking `frontend/` or `scripts/`.
 - Wiring pyright into `./run-tests.sh` (CI-only — keeps the local
   test loop fast since pyright on a fresh repo takes ~30 s).
 
