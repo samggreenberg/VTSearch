@@ -34,6 +34,7 @@ warnings.filterwarnings("ignore", message=".*HF_TOKEN.*")
 print(f"⏳ Initializing VTSearch... (PID {os.getpid()})", flush=True)
 
 from flask import Flask, g
+from werkzeug.exceptions import MethodNotAllowed, NotFound
 
 # Import refactored modules
 from vtsearch.auth import get_login_provider  # noqa: E402
@@ -235,6 +236,68 @@ def _echo_request_id(response):
     if rid:
         response.headers["X-Request-Id"] = rid
     return response
+
+
+# ---------------------------------------------------------------------------
+# Global JSON error handlers
+# ---------------------------------------------------------------------------
+
+
+@app.errorhandler(NotFound)
+def _handle_404(exc):
+    """JSON 404 for unknown ``/api/`` paths.
+
+    Werkzeug's default 404 renders as HTML — awful for an SPA. The
+    frontend ``ErrorService`` needs JSON to show a useful banner with the
+    request_id. Non-API paths fall through to the SPA's catch-all route
+    (which serves index.html for client-side routing).
+
+    Scoped to ``NotFound`` specifically so flask-smorest's own
+    ``HTTPException`` handler (which renders ``{message, errors}`` for
+    marshmallow validation failures and custom ``abort()`` calls) keeps
+    handling 400/422/etc. — Flask resolves the most specific exception
+    class first.
+    """
+    from flask import request as _req
+    from vtsearch.routes._shared import error_response
+
+    if not _req.path.startswith("/api/"):
+        return exc
+    return error_response(exc.name, 404)
+
+
+@app.errorhandler(MethodNotAllowed)
+def _handle_405(exc):
+    """JSON 405 for wrong-method requests on ``/api/`` paths. See _handle_404."""
+    from flask import request as _req
+    from vtsearch.routes._shared import error_response
+
+    if not _req.path.startswith("/api/"):
+        return exc
+    return error_response(exc.name, 405)
+
+
+@app.errorhandler(Exception)
+def _handle_uncaught_exception(exc):
+    """Return a standardized JSON 500 for any uncaught exception on /api/.
+
+    Without this, an unhandled exception in a route renders Flask's HTML
+    debug page (in dev) or a plain 500 (in prod) — neither carries the
+    request_id the user needs to file a bug. ``HTTPException`` is
+    excluded so flask-smorest's own handler (and the 404/405 handlers
+    above) keep their semantics.
+    """
+    from werkzeug.exceptions import HTTPException as _HTTPException
+
+    if isinstance(exc, _HTTPException):
+        return exc
+    from flask import request as _req
+    from vtsearch.routes._shared import error_response, format_exception_detail
+
+    logging.getLogger(__name__).exception("Unhandled exception on %s %s", _req.method, _req.path)
+    if not _req.path.startswith("/api/"):
+        raise exc
+    return error_response("Internal server error", 500, detail=format_exception_detail(exc))
 
 
 # ---------------------------------------------------------------------------

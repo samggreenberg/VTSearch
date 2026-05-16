@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 
 if TYPE_CHECKING:
     from vtsearch.plugins import PluginBase
@@ -13,6 +13,28 @@ if TYPE_CHECKING:
 import vtsearch.security.path_validation as _paths
 
 logger = logging.getLogger(__name__)
+
+
+def error_response(error: str, status: int, detail: Any | None = None, **extra: Any):
+    """Build a standardized JSON error response.
+
+    Shape::
+
+        {"error": "<short message>", "detail": <optional>, "request_id": "<id>", ...extra}
+
+    ``request_id`` is pulled from ``flask.g`` when available, so clients can
+    quote it in bug reports and operators can correlate it with structured
+    logs. Additional keyword args become top-level fields (e.g.
+    ``missing_fields=[...]``).
+    """
+    body: dict[str, Any] = {"error": error}
+    if detail is not None:
+        body["detail"] = detail
+    rid = getattr(g, "request_id", None)
+    if rid:
+        body["request_id"] = rid
+    body.update(extra)
+    return jsonify(body), status
 
 
 def get_json_safe() -> dict:
@@ -43,9 +65,10 @@ def get_plugin_or_404(get_fn, list_fn, name: str, type_label: str):
     if plugin is not None:
         return plugin, None
     known = [p.name for p in list_fn()]
-    return None, (
-        jsonify({"error": f"Unknown {type_label} '{name}'. Available: {known}"}),
+    return None, error_response(
+        f"Unknown {type_label} '{name}'. Available: {known}",
         404,
+        available=known,
     )
 
 
@@ -66,9 +89,9 @@ def get_json_or_400():
     try:
         data = request.get_json(force=True)
     except Exception:
-        return jsonify({"error": "Invalid request body"}), 400
+        return error_response("Invalid request body", 400)
     if data is None or not isinstance(data, dict):
-        return jsonify({"error": "Invalid request body"}), 400
+        return error_response("Invalid request body", 400)
     return data
 
 
@@ -114,9 +137,10 @@ def validate_required_fields(plugin: PluginBase, field_values: dict) -> tuple | 
         if f.required and f.field_type != "file" and not str(field_values.get(f.key, "")).strip()
     ]
     if missing:
-        return (
-            jsonify({"error": f"Missing required field(s): {missing}", "missing_fields": missing}),
+        return error_response(
+            f"Missing required field(s): {missing}",
             400,
+            missing_fields=missing,
         )
     return None
 
@@ -131,7 +155,7 @@ def validate_filepath_field(field_values: dict) -> tuple | None:
         try:
             _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
         except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+            return error_response(str(exc), 400)
     return None
 
 
@@ -144,11 +168,11 @@ def run_plugin_or_error(plugin: PluginBase, method: str, *args):
     try:
         result = getattr(plugin, method)(*args)
     except ValueError as exc:
-        return None, (jsonify({"error": str(exc)}), 400)
+        return None, error_response(str(exc), 400)
     except Exception as exc:
         logger.exception("%s.%s() failed: %s", type(plugin).__name__, method, exc)
         verb = method.replace("_", " ").capitalize()
-        return None, (jsonify({"error": f"{verb} failed: {exc}"}), 500)
+        return None, error_response(f"{verb} failed: {exc}", 500, detail=format_exception_detail(exc))
     return result, None
 
 

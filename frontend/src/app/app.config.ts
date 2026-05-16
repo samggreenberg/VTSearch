@@ -5,11 +5,18 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { routes } from './app.routes';
 import { activeContextInterceptor } from './interceptors/active-context.interceptor';
 import { achievementsRefreshInterceptor } from './interceptors/achievements-refresh.interceptor';
+import { errorInterceptor } from './interceptors/error.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
-    provideHttpClient(withInterceptors([activeContextInterceptor, achievementsRefreshInterceptor])),
+    provideHttpClient(
+      withInterceptors([
+        activeContextInterceptor,
+        achievementsRefreshInterceptor,
+        errorInterceptor,
+      ]),
+    ),
   ],
 };
