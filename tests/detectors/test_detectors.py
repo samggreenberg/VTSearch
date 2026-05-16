@@ -35,36 +35,44 @@ class TestCreateDetector:
         assert data["num_labels"] == 0
 
     def test_create_missing_name(self, client):
+        # ``name`` is required by the schema → 422 with the standard
+        # flask-smorest envelope (``errors`` per-field).
         res = client.post(
             "/api/detectors",
             json={"text_query": "sounds"},
         )
-        assert res.status_code == 400
-        assert "name" in res.get_json()["error"]
+        assert res.status_code == 422
+        assert "name" in res.get_json()["errors"]["json"]
 
     def test_create_missing_text_query(self, client):
+        # ``name`` + ``media_type`` pass the schema; the
+        # "at-least-one-example" check runs in the handler → 400 with
+        # the standard error envelope (``message``).
         res = client.post(
             "/api/detectors",
             json={"name": "Test", "media_type": "audio"},
         )
         assert res.status_code == 400
-        assert "text_query" in res.get_json()["error"]
+        assert "text_query" in res.get_json()["message"]
 
     def test_create_missing_media_type(self, client):
+        # ``media_type`` is required by the schema → 422.
         res = client.post(
             "/api/detectors",
             json={"name": "Test", "text_query": "sounds"},
         )
-        assert res.status_code == 400
-        assert "media_type" in res.get_json()["error"]
+        assert res.status_code == 422
+        assert "media_type" in res.get_json()["errors"]["json"]
 
     def test_create_rejects_any_media_type(self, client):
+        # ``media_type="any"`` passes schema length check; rejection
+        # happens in the handler → 400 with ``message``.
         res = client.post(
             "/api/detectors",
             json={"name": "Test", "media_type": "any", "text_query": "sounds"},
         )
         assert res.status_code == 400
-        assert "media_type" in res.get_json()["error"]
+        assert "media_type" in res.get_json()["message"]
 
     def test_create_duplicate(self, client):
         client.post(
@@ -186,11 +194,12 @@ class TestRenameDetector:
             "/api/detectors",
             json={"name": "Test", "media_type": "audio", "text_query": "test"},
         )
+        # ``new_name`` is required by the schema → 422.
         res = client.put(
             "/api/detectors/Test/rename",
             json={},
         )
-        assert res.status_code == 400
+        assert res.status_code == 422
 
     def test_rename_updates_model_registry(self, client):
         """Renaming a detector should update registry references."""
