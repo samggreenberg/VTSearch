@@ -304,6 +304,63 @@ class TestSaveLabels:
         res = client.post("/api/detectors/nonexistent/labels")
         assert res.status_code == 404
 
+    def test_save_labels_captures_active_clipper_into_input_spec(self, client):
+        """When the active dataset has a clipper, save_detector_labels stamps it onto input_spec."""
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No medias loaded for this test")
+
+        first_id = next(iter(medias))
+        original = medias[first_id].get("origin")
+        try:
+            medias[first_id]["origin"] = {
+                "importer": "test",
+                "params": {
+                    "clipper": "sound_tiling",
+                    "clipper_duration": "2.0",
+                },
+            }
+
+            client.post(
+                "/api/detectors",
+                json={"name": "ClipperCapture", "media_type": "audio", "text_query": "test"},
+            )
+            res = client.post("/api/detectors/ClipperCapture/labels")
+            assert res.status_code == 200
+
+            model_data = client.get("/api/detectors/ClipperCapture").get_json()
+            assert model_data["input_spec"] == {
+                "clipper": "sound_tiling",
+                "clipper_params": {"duration": "2.0"},
+            }
+        finally:
+            medias[first_id]["origin"] = original
+
+    def test_save_labels_drops_input_spec_when_dataset_has_no_clipper(self, client):
+        """Re-saving labels against an unclipped dataset clears any stale input_spec."""
+        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
+
+        client.post(
+            "/api/detectors",
+            json={"name": "DropSpec", "media_type": "audio", "text_query": "test"},
+        )
+
+        # Seed an old input_spec directly on disk (as if a previous save
+        # had captured one from a clipped dataset).
+        det_path = _detector_path("DropSpec")
+        data = _read_detector(det_path) or {}
+        data["input_spec"] = {"clipper": "sound_tiling"}
+        _write_detector(det_path, data)
+
+        # Re-save from a clean dataset — fixture medias have no clipper.
+        res = client.post("/api/detectors/DropSpec/labels")
+        assert res.status_code == 200
+
+        updated = _read_detector(det_path)
+        assert updated is not None
+        assert "input_spec" not in updated
+
     def test_save_labels_does_not_expand_dupes(self, client):
         """Saving labels for a dupe-set representative should NOT expand members.
 

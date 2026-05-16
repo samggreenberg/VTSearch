@@ -704,6 +704,225 @@ class TestLabelsetSync:
             set_thread_detector_context(None)
             unregister_detector_context("test_import")
 
+    def test_sync_to_source_emits_detector_meta(self, tmp_path):
+        """sync_to_labelset_source writes the detector's input_spec / threshold."""
+        from vtsearch.detectors.store import _detector_path, _write_detector
+        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtsearch.state.core import (
+            DetectorContext,
+            register_detector_context,
+            set_thread_detector_context,
+            unregister_detector_context,
+        )
+        from vtsearch.state.core import medias, good_votes
+
+        det_name = "meta_export"
+        det_path = _detector_path(det_name)
+        _write_detector(
+            det_path,
+            {
+                "name": det_name,
+                "media_type": "audio",
+                "labelset": {"labels": []},
+                "input_spec": {
+                    "clipper": "sound_tiling",
+                    "clipper_params": {"duration": "2.0"},
+                },
+            },
+        )
+
+        ctx = DetectorContext(det_name, name=det_name, media_type="audio")
+        # Stand in for a trained MLP so the threshold flows through.
+        ctx.model = object()
+        ctx.threshold = 0.31
+        ctx.labelset_source = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(tmp_path / "labels.json")},
+        }
+        register_detector_context(ctx)
+        set_thread_detector_context(ctx)
+
+        saved_medias = dict(medias)
+        mid = max(medias.keys(), default=0) + 20000
+        try:
+            medias[mid] = {"id": mid, "md5": "fake_md5", "type": "audio"}
+            good_votes[mid] = None
+            sync_to_labelset_source()
+
+            data = json.loads((tmp_path / "labels.json").read_text())
+            meta = data.get("detector_meta")
+            assert meta is not None
+            assert meta["media_type"] == "audio"
+            assert meta["input_spec"] == {
+                "clipper": "sound_tiling",
+                "clipper_params": {"duration": "2.0"},
+            }
+            assert meta["threshold"] == pytest.approx(0.31)
+        finally:
+            good_votes.pop(mid, None)
+            medias.pop(mid, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context(det_name)
+            if det_path.exists():
+                det_path.unlink()
+
+    def test_sync_to_source_skips_threshold_without_model(self, tmp_path):
+        """A detector that hasn't been trained yet has no live threshold to emit."""
+        from vtsearch.detectors.store import _detector_path, _write_detector
+        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtsearch.state.core import (
+            DetectorContext,
+            register_detector_context,
+            set_thread_detector_context,
+            unregister_detector_context,
+        )
+        from vtsearch.state.core import medias, good_votes
+
+        det_name = "meta_no_model"
+        det_path = _detector_path(det_name)
+        _write_detector(
+            det_path,
+            {"name": det_name, "media_type": "audio", "labelset": {"labels": []}},
+        )
+
+        ctx = DetectorContext(det_name, name=det_name, media_type="audio")
+        ctx.model = None
+        ctx.threshold = 0.99  # noise — should NOT be emitted without a model
+        ctx.labelset_source = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(tmp_path / "labels.json")},
+        }
+        register_detector_context(ctx)
+        set_thread_detector_context(ctx)
+
+        saved_medias = dict(medias)
+        mid = max(medias.keys(), default=0) + 20100
+        try:
+            medias[mid] = {"id": mid, "md5": "fake_md5_2", "type": "audio"}
+            good_votes[mid] = None
+            sync_to_labelset_source()
+
+            data = json.loads((tmp_path / "labels.json").read_text())
+            meta = data.get("detector_meta")
+            assert meta is not None
+            assert "threshold" not in meta
+            assert meta["media_type"] == "audio"
+        finally:
+            good_votes.pop(mid, None)
+            medias.pop(mid, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context(det_name)
+            if det_path.exists():
+                det_path.unlink()
+
+    def test_sync_from_source_writes_input_spec_to_detector(self, tmp_path):
+        """An inbound detector_meta updates the receiving detector JSON's input_spec."""
+        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
+        from vtsearch.labels.sync import sync_from_labelset_source
+        from vtsearch.state.core import (
+            DetectorContext,
+            register_detector_context,
+            set_thread_detector_context,
+            unregister_detector_context,
+        )
+
+        det_name = "meta_import"
+        det_path = _detector_path(det_name)
+        _write_detector(
+            det_path,
+            {"name": det_name, "media_type": "audio", "labelset": {"labels": []}},
+        )
+
+        filepath = tmp_path / "labels.json"
+        filepath.write_text(
+            json.dumps(
+                {
+                    "labels": [],
+                    "detector_meta": {
+                        "media_type": "audio",
+                        "input_spec": {
+                            "clipper": "sound_tiling",
+                            "clipper_params": {"duration": "2.0"},
+                        },
+                        # Threshold is informational; receiver retrains and
+                        # must NOT persist it.
+                        "threshold": 0.5,
+                    },
+                }
+            )
+        )
+
+        ctx = DetectorContext(det_name, name=det_name, media_type="audio")
+        ctx.labelset_source = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(filepath)},
+        }
+        register_detector_context(ctx)
+        set_thread_detector_context(ctx)
+
+        try:
+            sync_from_labelset_source()
+            updated = _read_detector(det_path)
+            assert updated is not None
+            assert updated["input_spec"] == {
+                "clipper": "sound_tiling",
+                "clipper_params": {"duration": "2.0"},
+            }
+            assert "threshold" not in updated
+        finally:
+            set_thread_detector_context(None)
+            unregister_detector_context(det_name)
+            if det_path.exists():
+                det_path.unlink()
+
+    def test_sync_from_source_without_detector_meta_leaves_detector_alone(self, tmp_path):
+        """Legacy labelsets (no detector_meta) don't mutate the receiving detector."""
+        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
+        from vtsearch.labels.sync import sync_from_labelset_source
+        from vtsearch.state.core import (
+            DetectorContext,
+            register_detector_context,
+            set_thread_detector_context,
+            unregister_detector_context,
+        )
+
+        det_name = "meta_legacy"
+        det_path = _detector_path(det_name)
+        _write_detector(
+            det_path,
+            {
+                "name": det_name,
+                "media_type": "audio",
+                "labelset": {"labels": []},
+                "input_spec": {"clipper": "sound_tiling"},
+            },
+        )
+
+        filepath = tmp_path / "labels.json"
+        filepath.write_text(json.dumps({"labels": []}))
+
+        ctx = DetectorContext(det_name, name=det_name, media_type="audio")
+        ctx.labelset_source = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(filepath)},
+        }
+        register_detector_context(ctx)
+        set_thread_detector_context(ctx)
+
+        try:
+            sync_from_labelset_source()
+            updated = _read_detector(det_path)
+            assert updated is not None
+            # Receiver's existing input_spec is preserved.
+            assert updated["input_spec"] == {"clipper": "sound_tiling"}
+        finally:
+            set_thread_detector_context(None)
+            unregister_detector_context(det_name)
+            if det_path.exists():
+                det_path.unlink()
+
 
 # ---------------------------------------------------------------------------
 # API routes: settings sources

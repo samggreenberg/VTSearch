@@ -337,11 +337,11 @@ class TestLabelSet:
     def test_detector_meta_dropped_on_merge(self):
         """Merged labelsets get a fresh identity — meta from sources doesn't leak."""
         a = LabelSet(
-            [LabeledElement(md5="x", label="good", origin={"importer": "t", "params": {}})],
+            [LabeledElement(md5="x", label="good", origin={"importer": "t", "params": {"i": "1"}}, origin_name="x")],
             detector_meta={"media_type": "audio"},
         )
         b = LabelSet(
-            [LabeledElement(md5="y", label="bad", origin={"importer": "t", "params": {}})],
+            [LabeledElement(md5="y", label="bad", origin={"importer": "t", "params": {"i": "2"}}, origin_name="y")],
             detector_meta={"media_type": "video"},
         )
         merged = a.merge(b)
