@@ -31,18 +31,38 @@ class TestErrorEnvelope:
         body = json.loads(resp.data)
         assert body["request_id"] == "test-rid-12345"
 
-    def test_missing_fields_surfaces_extra_field(self, client):
-        # Trigger validate_required_fields() via a plugin route — the
-        # easiest is /api/labels/import with no label_importer name.
-        resp = client.post(
-            "/api/datasets/registry",
-            json={"media_type": "audio"},  # missing required 'name'
-        )
-        # Plain Flask route: returns 400 with our envelope.
-        assert resp.status_code == 400
-        body = json.loads(resp.data)
-        assert "error" in body
-        assert "request_id" in body
+    def test_error_response_helper_includes_extra_fields(self):
+        # Exercise the helper directly so plugin discovery and route
+        # wiring don't muddy the contract.
+        from app import app as flask_app
+        from vtsearch.routes._shared import error_response
+
+        with flask_app.test_request_context("/api/anything"):
+            from flask import g
+
+            g.request_id = "abc123"
+            resp, status = error_response(
+                "Missing required field(s): ['name']",
+                400,
+                missing_fields=["name"],
+            )
+            assert status == 400
+            body = resp.get_json()
+            assert body["error"] == "Missing required field(s): ['name']"
+            assert body["missing_fields"] == ["name"]
+            assert body["request_id"] == "abc123"
+
+    def test_error_response_omits_request_id_outside_request(self):
+        # Background-thread error paths have no g.request_id — the helper
+        # should still produce a valid JSON envelope.
+        from app import app as flask_app
+        from vtsearch.routes._shared import error_response
+
+        with flask_app.app_context():
+            resp, status = error_response("Something broke", 500)
+            assert status == 500
+            body = resp.get_json()
+            assert body == {"error": "Something broke"}
 
     def test_unknown_api_path_returns_json_404(self, client):
         resp = client.get("/api/this-route-does-not-exist")
@@ -63,9 +83,7 @@ class TestErrorEnvelope:
             # If a non-API 404 happens to be JSON for some unrelated
             # reason, it should not have come from our envelope (which
             # always sets request_id).
-            assert "request_id" not in body or resp.headers.get("Content-Type", "").startswith(
-                "application/json"
-            )
+            assert "request_id" not in body or resp.headers.get("Content-Type", "").startswith("application/json")
 
 
 class TestUncaughtExceptionHandler:
