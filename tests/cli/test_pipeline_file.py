@@ -200,6 +200,40 @@ class TestLoadPipelineFile:
         with pytest.raises(ValueError, match="import_labels.file"):
             load_pipeline_file(p)
 
+    def test_unknown_importer_field_key_raises(self, tmp_path):
+        """A typo in importer.fields surfaces at load time, like argparse
+        rejects unknown CLI flags."""
+        from vtsearch.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "importer": {
+                        "name": "server_folder",
+                        "fields": {"path": "/x", "media_type": "audio", "paht_typo": "/x"},
+                    }
+                }
+            )
+        )
+        with pytest.raises(ValueError, match="paht_typo"):
+            load_pipeline_file(p)
+
+    def test_unknown_exporter_field_key_raises(self, tmp_path):
+        from vtsearch.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "dataset": "foo.pkl",
+                    "exporter": {"name": "server_json_file", "fields": {"bogus": "x"}},
+                }
+            )
+        )
+        with pytest.raises(ValueError, match="bogus"):
+            load_pipeline_file(p)
+
     def test_minimal_valid_config_round_trips(self, tmp_path):
         from vtsearch.cli_pipeline import load_pipeline_file
 

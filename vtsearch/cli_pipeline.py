@@ -68,6 +68,7 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:
     if importer is not None:
         importer_name, importer_fields = _parse_plugin_section(importer, "importer")
         _validate_importer_name(importer_name)
+        _validate_field_keys(importer_name, importer_fields, "importer", _list_importer_field_keys)
 
     settings = raw.get("settings")
     if settings is not None and not isinstance(settings, str):
@@ -96,6 +97,7 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:
     if exporter is not None:
         exporter_name, exporter_fields = _parse_plugin_section(exporter, "exporter")
         _validate_exporter_name(exporter_name)
+        _validate_field_keys(exporter_name, exporter_fields, "exporter", _list_exporter_field_keys)
 
     return {
         "dataset": dataset,
@@ -170,6 +172,38 @@ def _validate_exporter_name(name: str) -> None:
     if get_exporter(name) is None:
         available = ", ".join(exp.name for exp in list_exporters())
         raise ValueError(f"Unknown exporter: {name!r}. Available: {available}.")
+
+
+def _list_importer_field_keys(name: str) -> set[str]:
+    from vtsearch.datasets.importers import get_importer  # noqa: PLC0415
+
+    plugin = get_importer(name)
+    return {f.key for f in (plugin.fields if plugin else [])}
+
+
+def _list_exporter_field_keys(name: str) -> set[str]:
+    from vtsearch.exporters import get_exporter  # noqa: PLC0415
+
+    plugin = get_exporter(name)
+    return {f.key for f in (plugin.fields if plugin else [])}
+
+
+def _validate_field_keys(
+    plugin_name: str,
+    fields: dict[str, Any],
+    section: str,
+    keys_for: Any,
+) -> None:
+    """Reject fields that the named plugin doesn't declare — matches argparse,
+    which rejects unknown flags."""
+    allowed = keys_for(plugin_name)
+    unknown = set(fields.keys()) - allowed
+    if unknown:
+        allowed_str = ", ".join(sorted(allowed)) or "(no fields)"
+        raise ValueError(
+            f"'{section}.fields' has unknown key(s) for {plugin_name!r}: "
+            f"{', '.join(sorted(unknown))}. Allowed: {allowed_str}."
+        )
 
 
 def run_pipeline_file(path: str | Path) -> None:
