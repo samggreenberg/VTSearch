@@ -13,7 +13,12 @@ class TestErrorEnvelope:
     """4xx responses from inline error returns include ``request_id``."""
 
     def test_invalid_json_body_carries_request_id(self, client):
-        resp = client.post("/api/sort", content_type="application/json")
+        # ``/api/embed`` is still on the legacy ``get_json_or_400``
+        # helper (the dual-mode multipart-or-JSON dispatcher doesn't fit
+        # a single marshmallow schema). An empty JSON body trips its
+        # "Invalid request body" path, exercising the legacy envelope
+        # that this test is here to pin.
+        resp = client.post("/api/embed", content_type="application/json")
         assert resp.status_code == 400
         body = json.loads(resp.data)
         assert body["error"] == "Invalid request body"
@@ -22,8 +27,10 @@ class TestErrorEnvelope:
         assert resp.headers.get("X-Request-Id") == body["request_id"]
 
     def test_inbound_request_id_round_trips_into_body(self, client):
+        # Same endpoint as above — see comment there for why ``/api/embed``
+        # rather than a migrated route.
         resp = client.post(
-            "/api/sort",
+            "/api/embed",
             content_type="application/json",
             headers={"X-Request-Id": "test-rid-12345"},
         )

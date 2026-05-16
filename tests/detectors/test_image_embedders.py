@@ -573,8 +573,11 @@ class TestSortRouteRejectsTextWhenUnsupported:
             resp = client.post("/api/sort", json={"text": "a cat"})
             assert resp.status_code == 400
             body = resp.get_json()
+            # Migrated to flask-smorest: the ``supports_text`` flag is
+            # passed as an extra ``abort()`` kwarg so it flows through
+            # alongside ``message`` in the standard error envelope.
             assert body.get("supports_text") is False
-            assert "dinov3_single" in body["error"]
+            assert "dinov3_single" in body["message"]
         finally:
             medias.clear()
             medias.update(saved)

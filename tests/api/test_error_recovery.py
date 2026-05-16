@@ -51,13 +51,16 @@ class TestInvalidRequestBodies:
         assert resp.status_code == 422
 
     def test_inclusion_with_empty_json(self, client):
+        # Marshmallow-validated route: missing required ``inclusion`` →
+        # 422 with the standard ``errors`` envelope.
         resp = client.post("/api/inclusion", json={})
-        # Missing 'inclusion' field → should be 400
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_safe_thresholds_with_empty_json(self, client):
+        # Marshmallow-validated route: missing required ``safe_thresholds`` →
+        # 422 with the standard ``errors`` envelope.
         resp = client.post("/api/safe-thresholds", json={})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_labels_import_with_null_body(self, client):
         resp = client.post(
@@ -191,13 +194,17 @@ class TestTypeMismatches:
     """Routes should reject wrong-typed values."""
 
     def test_inclusion_string_value(self, client):
+        # Marshmallow ``fields.Integer(strict=True)`` rejects non-int
+        # values (including strings) as 422.
         resp = client.post("/api/inclusion", json={"inclusion": "five"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_inclusion_boolean_value(self, client):
+        # Marshmallow ``fields.Integer(strict=True)`` rejects booleans
+        # too — even though ``bool`` is a subclass of ``int`` in Python,
+        # strict mode treats the two as different JSON types.
         resp = client.post("/api/inclusion", json={"inclusion": True})
-        # Booleans are explicitly rejected even though bool is a subclass of int.
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_safe_thresholds_string_value(self, client):
         resp = client.post("/api/safe-thresholds", json={"safe_thresholds": "yes"})

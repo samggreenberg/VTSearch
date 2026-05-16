@@ -44,9 +44,13 @@ class TestSortClips:
         resp = client.post("/api/sort", json={"text": ""})
         assert resp.status_code == 400
 
-    def test_missing_text_returns_400(self, client):
+    def test_missing_text_returns_422(self, client):
+        # Schema-level validation: the marshmallow ``SortRequestSchema``
+        # rejects requests without a ``text`` key as 422 with the
+        # standard ``errors`` envelope.
         resp = client.post("/api/sort", json={"other": "field"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        assert "text" in resp.get_json()["errors"]["json"]
 
     def test_whitespace_only_returns_400(self, client):
         resp = client.post("/api/sort", json={"text": "   "})
@@ -659,9 +663,14 @@ class TestLearnedSortAsync:
         assert resp.status_code == 404
         assert resp.get_json()["status"] == "missing"
 
-    def test_polling_without_job_id_returns_400(self, client):
+    def test_polling_without_job_id_returns_422(self, client):
+        # Schema-level validation: the marshmallow
+        # ``LearnedSortResultQuerySchema`` rejects requests without a
+        # ``job_id`` query parameter as 422 with the standard ``errors``
+        # envelope.
         resp = client.get("/api/learned-sort/result")
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        assert "job_id" in resp.get_json()["errors"]["query"]
 
 
 class TestEvalTrainAndScoreAsync:
@@ -785,9 +794,13 @@ class TestTextsortSuggestions:
         resp = client.post("/api/textsort-suggestions", json={"text": ""})
         assert resp.status_code == 400
 
-    def test_missing_text_returns_400(self, client):
+    def test_missing_text_returns_422(self, client):
+        # Schema-level validation: the marshmallow
+        # ``TextsortSuggestionRequestSchema`` rejects requests without a
+        # ``text`` key as 422 with the standard ``errors`` envelope.
         resp = client.post("/api/textsort-suggestions", json={"other": "x"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        assert "text" in resp.get_json()["errors"]["json"]
 
     def test_whitespace_only_returns_400(self, client):
         resp = client.post("/api/textsort-suggestions", json={"text": "   "})

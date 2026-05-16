@@ -42,9 +42,13 @@ class TestInclusionEndpoints:
         assert data["inclusion"] == 3  # Converted to int
 
     def test_set_inclusion_invalid_type(self, client):
+        # Marshmallow-validated route: non-numeric values surface as 422
+        # with the standard ``errors`` envelope.
         resp = client.post("/api/inclusion", json={"inclusion": "not a number"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_set_inclusion_missing_field(self, client):
+        # Marshmallow-validated route: missing required ``inclusion`` →
+        # 422 with the standard ``errors`` envelope.
         resp = client.post("/api/inclusion", json={"wrong": 5})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
