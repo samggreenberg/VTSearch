@@ -119,6 +119,31 @@ api = Api(app)
 
 
 # ---------------------------------------------------------------------------
+# Test-time attributes
+# ---------------------------------------------------------------------------
+# ``tests/conftest.py`` attaches a handful of helpers and proxies to this
+# module so tests can use ``import app as app_module; app_module.medias`` etc.
+# Declaring them here in a ``TYPE_CHECKING`` block lets pyright resolve the
+# attribute accesses without changing runtime behaviour — the values are still
+# only set by conftest and are absent in production. Same pattern as
+# ``vtsearch/settings.py``'s dynamically generated accessors.
+from typing import TYPE_CHECKING  # noqa: E402
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    NUM_MEDIAS: int
+    SAMPLE_RATE: int
+    generate_wav: Callable[..., bytes]
+    train_and_score: Callable[..., Any]
+    medias: dict[int, dict[str, Any]]
+    good_votes: dict[int, None]
+    bad_votes: dict[int, None]
+    init_medias: Callable[[], None]
+
+
+# ---------------------------------------------------------------------------
 # Per-request user context
 # ---------------------------------------------------------------------------
 

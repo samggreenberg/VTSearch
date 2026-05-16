@@ -16,6 +16,20 @@ All public symbols are re-exported here for backward compatibility so that
 ``from vtsearch.datasets.downloader import download_esc50`` continues to work.
 """
 
+# Re-export each submodule as an attribute of the package so that
+# ``from vtsearch.datasets import downloader; downloader.core.X`` is visible
+# to static type-checkers. (At runtime Python adds these automatically once
+# the ``from ... import`` statements below execute, but pyright doesn't trust
+# that.)
+from vtsearch.datasets.downloader import (
+    audio,
+    core,
+    documents,
+    images,
+    text,
+    video,
+)
+
 # Core utilities & constants
 from vtsearch.datasets.downloader.core import (
     AG_NEWS_DOWNLOAD_SIZE_MB,
@@ -127,6 +141,13 @@ from vtsearch.datasets.downloader.text import (
 from vtsearch.datasets.downloader.documents import download_ucsf_documents
 
 __all__ = [
+    # Submodules
+    "audio",
+    "core",
+    "documents",
+    "images",
+    "text",
+    "video",
     # Core (private helpers re-exported for tests)
     "_default_progress",
     "_download_and_extract",
