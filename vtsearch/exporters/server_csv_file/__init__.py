@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from vtsearch.exporters._template import resolve_export_filepath
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
 
@@ -70,10 +71,11 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
             description=(
                 "Absolute or relative path on the server where the CSV "
                 "results file will be written.  Parent directories are "
-                "created automatically."
+                "created automatically.  Supports {YYYYMMDD-HHMMSS}, "
+                "{detector_name} and {username} templates."
             ),
-            placeholder="data/autodetect_results.csv",
-            default="data/autodetect_results.csv",
+            placeholder="data/autodetect_results_{YYYYMMDD-HHMMSS}.csv",
+            default="data/autodetect_results_{YYYYMMDD-HHMMSS}.csv",
         ),
     ]
 
@@ -86,7 +88,7 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
         if not filepath_str:
             raise ValueError("A file path is required.")
 
-        filepath = Path(filepath_str)
+        filepath = Path(resolve_export_filepath(filepath_str))
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
         # Labels format (from the export modal UI)

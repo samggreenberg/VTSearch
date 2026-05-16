@@ -105,7 +105,9 @@ class TestCsvExporterCLI:
         exp.add_cli_arguments(parser)
 
         args = parser.parse_args([])
-        assert args.filepath == "data/autodetect_results.csv"
+        # Default includes a timestamp template so consecutive runs do not
+        # silently overwrite one another.
+        assert args.filepath == "data/autodetect_results_{YYYYMMDD-HHMMSS}.csv"
 
     def test_validate_passes(self):
         from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
@@ -802,3 +804,122 @@ class TestWebhookExporterIntegration:
     def test_unknown_exporter_still_raises(self):
         with pytest.raises(ValueError, match="Unknown exporter"):
             _run_exporter("nonexistent_exporter", {}, {})
+
+
+# ---------------------------------------------------------------------------
+# Filepath template expansion (shared by CSV + JSON exporters)
+# ---------------------------------------------------------------------------
+
+
+class TestFilepathTemplateExpansion:
+    """Default filepaths embed a timestamp; templates expand at export time."""
+
+    def test_csv_default_contains_timestamp_template(self):
+        from vtsearch.exporters import get_exporter
+
+        exp = get_exporter("server_csv_file")
+        fp = next(f for f in exp.fields if f.key == "filepath")
+        assert fp.default == "data/autodetect_results_{YYYYMMDD-HHMMSS}.csv"
+        assert fp.placeholder == "data/autodetect_results_{YYYYMMDD-HHMMSS}.csv"
+
+    def test_json_default_contains_timestamp_template(self):
+        from vtsearch.exporters import get_exporter
+
+        exp = get_exporter("server_json_file")
+        fp = next(f for f in exp.fields if f.key == "filepath")
+        assert fp.default == "data/autodetect_results_{YYYYMMDD-HHMMSS}.json"
+        assert fp.placeholder == "data/autodetect_results_{YYYYMMDD-HHMMSS}.json"
+
+    def test_consecutive_csv_exports_do_not_overwrite(self, tmp_path):
+        """Two exports a second apart should land in distinct files."""
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        results = _make_sample_results()
+        template = str(tmp_path / "out_{YYYYMMDD-HHMMSS}.csv")
+
+        with mock.patch("vtsearch.exporters._template.datetime") as mock_dt:
+            from datetime import datetime as real_dt
+            from datetime import timezone
+
+            mock_dt.now.return_value = real_dt(2026, 5, 16, 14, 30, 22, tzinfo=timezone.utc)
+            r1 = exp.export(results, {"filepath": template})
+            mock_dt.now.return_value = real_dt(2026, 5, 16, 14, 30, 23, tzinfo=timezone.utc)
+            r2 = exp.export(results, {"filepath": template})
+
+        # Both files exist with distinct, timestamp-stamped names.
+        assert r1["filepath"] != r2["filepath"]
+        assert (tmp_path / "out_20260516-143022.csv").exists()
+        assert (tmp_path / "out_20260516-143023.csv").exists()
+        assert "{YYYYMMDD-HHMMSS}" not in r1["filepath"]
+
+    def test_json_template_expands_timestamp(self, tmp_path):
+        from datetime import datetime as real_dt
+        from datetime import timezone
+
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+
+        exp = ServerJsonLabelsetExporter()
+        template = str(tmp_path / "j_{YYYYMMDD-HHMMSS}.json")
+
+        with mock.patch("vtsearch.exporters._template.datetime") as mock_dt:
+            mock_dt.now.return_value = real_dt(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+            result = exp.export(_make_sample_results(), {"filepath": template})
+
+        expected = tmp_path / "j_20260102-030405.json"
+        assert expected.exists()
+        assert result["filepath"] == str(expected.resolve())
+
+    def test_username_template_expands(self, tmp_path):
+        """The {username} template substitutes get_current_user(), sanitised."""
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+
+        exp = ServerJsonLabelsetExporter()
+        template = str(tmp_path / "{username}.json")
+
+        with mock.patch("vtsearch.auth.get_current_user", return_value="alice"):
+            exp.export(_make_sample_results(), {"filepath": template})
+
+        assert (tmp_path / "alice.json").exists()
+
+    def test_username_template_sanitises_path_separators(self, tmp_path):
+        """A malicious username with ``/`` cannot escape the parent directory."""
+        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+
+        exp = ServerJsonLabelsetExporter()
+        template = str(tmp_path / "{username}.json")
+
+        with mock.patch("vtsearch.auth.get_current_user", return_value="../evil"):
+            exp.export(_make_sample_results(), {"filepath": template})
+
+        # ``/`` and ``..`` are replaced with ``_``, so the result stays inside tmp_path.
+        assert (tmp_path / ".._evil.json").exists()
+
+    def test_detector_name_template_expands(self, tmp_path):
+        """The {detector_name} template pulls from the active detector context."""
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtsearch.state.core import DetectorContext, set_thread_detector_context
+
+        exp = ServerCsvLabelsetExporter()
+        template = str(tmp_path / "{detector_name}.csv")
+
+        ctx = DetectorContext("det-id-1", name="dog_bark")
+        set_thread_detector_context(ctx)
+        try:
+            exp.export(_make_sample_results(), {"filepath": template})
+        finally:
+            set_thread_detector_context(None)
+
+        assert (tmp_path / "dog_bark.csv").exists()
+
+    def test_detector_name_template_with_no_active_context_uses_placeholder(self, tmp_path):
+        """An empty detector context (fallback) sanitises to ``_``."""
+        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+
+        exp = ServerCsvLabelsetExporter()
+        template = str(tmp_path / "{detector_name}.csv")
+
+        exp.export(_make_sample_results(), {"filepath": template})
+
+        # sanitize_template_value("") -> "_"
+        assert (tmp_path / "_.csv").exists()
