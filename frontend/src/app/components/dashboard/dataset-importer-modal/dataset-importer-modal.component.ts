@@ -32,6 +32,9 @@ export class DatasetImporterModalComponent implements OnInit {
   selectedFile: File | null = null;
   submitting = false;
   error = '';
+  /** Whether the user has manually edited the generic-form dataset_name
+   *  input (so we stop auto-deriving it from path/url/file fields). */
+  private formDatasetNameDirty = false;
 
   // Clipper state
   availableClippers: ClipperInfo[] = [];
@@ -307,6 +310,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.dynamicFieldOptions = {};
     this.dynamicFieldLoading = {};
     this.dynamicFieldError = {};
+    this.formDatasetNameDirty = false;
 
     // Pre-populate defaults
     if (importer.fields) {
@@ -356,7 +360,8 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Called whenever a form field value changes.  Refreshes options for
    *  every dynamic-options field whose ``depends_on`` includes *changedKey*.
    *  Also clears the dependent field's current value so the user can't
-   *  submit a now-stale selection. */
+   *  submit a now-stale selection.  Also re-derives a default
+   *  ``dataset_name`` from the change unless the user has typed one. */
   onFormFieldChanged(changedKey: string): void {
     const importer = this.selectedImporter;
     if (!importer?.fields) return;
@@ -366,6 +371,67 @@ export class DatasetImporterModalComponent implements OnInit {
       this.formValues[field.key] = '';
       this.refreshDynamicFieldOptions(field);
     }
+    if (changedKey !== 'dataset_name') {
+      this.maybeApplyDerivedDatasetName();
+    }
+  }
+
+  /** Called when the user types into the generic-form ``Dataset Name``
+   *  input.  Marks the field as dirty so subsequent path/url/file changes
+   *  do not overwrite the user's value. */
+  formOnDatasetNameInput(value: string): void {
+    this.formValues['dataset_name'] = value;
+    this.formDatasetNameDirty = true;
+  }
+
+  /** Called when the user picks a server path via ``vt-file-browser``.
+   *  Updates the form value and re-derives the dataset name when the
+   *  user hasn't typed one yet. */
+  formOnServerPathSelected(key: string, path: string): void {
+    this.formValues[key] = path;
+    this.onFormFieldChanged(key);
+  }
+
+  /** Re-derive a default dataset name from the current form values when
+   *  the user hasn't manually edited the dataset_name input.  Inspects
+   *  the importer's fields and uses the first source-style field with a
+   *  value (url, server_path, file, or a field keyed ``path``). */
+  private maybeApplyDerivedDatasetName(): void {
+    if (this.formDatasetNameDirty) return;
+    const derived = this.formDerivedDatasetName();
+    if (derived) {
+      this.formValues['dataset_name'] = derived;
+    }
+  }
+
+  /** Compute a derived dataset name from the current form values. */
+  private formDerivedDatasetName(): string {
+    const fields = this.selectedImporter?.fields || [];
+    for (const f of fields) {
+      if (f.key === 'dataset_name') continue;
+      const raw = this.formValues[f.key];
+      if (typeof raw !== 'string' || !raw) continue;
+      if (f.field_type === 'url') {
+        const cleaned = raw.split('?')[0].replace(/\/+$/, '');
+        const tail = cleaned.split('/').pop() || '';
+        if (!tail) continue;
+        const stripped = tail.replace(
+          /\.(?:tar\.gz|tar\.bz2|tar\.xz|tar|zip|rar)$/i, '',
+        );
+        return stripped || tail;
+      }
+      if (f.field_type === 'server_path' || f.field_type === 'file') {
+        const basename = raw.split(/[\\/]/).pop() || '';
+        if (!basename) continue;
+        const dot = basename.lastIndexOf('.');
+        return dot > 0 ? basename.slice(0, dot) : basename;
+      }
+      if (f.key === 'path') {
+        const parts = raw.split(/[\\/]/).filter(Boolean);
+        if (parts.length > 0) return parts[parts.length - 1];
+      }
+    }
+    return '';
   }
 
   /** Fetch the option list for a dynamic-options field from the backend. */
@@ -1420,6 +1486,7 @@ export class DatasetImporterModalComponent implements OnInit {
     if (input.files && input.files.length > 0) {
       this.selectedFile = input.files[0];
       this.formValues[fieldName] = input.files[0].name;
+      this.maybeApplyDerivedDatasetName();
     }
   }
 
