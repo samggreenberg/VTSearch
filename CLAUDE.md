@@ -75,7 +75,7 @@ This applies to:
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
 
-## Nested-modal back buttons
+## Nested-modal back buttons (Back vs Cancel)
 
 Any modal that switches between an outer view and an inner view (importer picker → importer form, exporter picker → exporter form, new-detector → media picker, etc.) **must** render a left-aligned back chevron at the top of the inner view so the user can return to the outer view without dismissing the modal. The standard markup is:
 
@@ -83,7 +83,14 @@ Any modal that switches between an outer view and an inner view (importer picker
 <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to ...">&larr; Back</button>
 ```
 
-The `.back-btn` rule in `frontend/src/scss/_components.scss` provides the shared styling (`align-self: flex-start`, smaller font, tighter padding). Do not introduce a new variant class, a chevron icon component, or a right-aligned placement — keep the `&larr; Back` text label and the existing class combination. If the nested view is conceptually a separate dialog (e.g. the `vt-clipper-chooser` modal opened from the dataset importer), a Cancel button in the footer satisfies the back affordance; the rule applies to inner *views inside the same modal*, not to genuinely separate dialogs.
+The `.back-btn` rule in `frontend/src/scss/_components.scss` provides the shared styling (`align-self: flex-start`, smaller font, tighter padding). Do not introduce a new variant class, a chevron icon component, or a right-aligned placement — keep the `&larr; Back` text label and the existing class combination.
+
+**Back vs Cancel — these are not interchangeable.** Pick the word that matches the actual semantic:
+
+- **`&larr; Back`** (top-left of the inner view, via `.back-btn`) means *navigate to the previous view*. It returns the user to where they came from — the outer view of the same modal, or the parent modal that opened this one — without committing the current step. Use it for any retreat action, including in child modals like `vt-clipper-chooser` that are opened from a parent modal: from the user's POV they are "going back" to the parent, so the affordance reads as Back even though the implementation dismisses a separate dialog.
+- **`Cancel`** (in the footer alongside the primary action) means *abandon the entire dialog*. Use it only at the leaves of a flow, where the alternative to the primary action is to throw the whole thing away — typically the outermost view of a top-level modal (the importer/exporter picker, the new-detector main form, etc.).
+
+A flow can legitimately carry both: a nested view shows `← Back` at the top to step back one view, while the outer view's footer shows `Cancel` to dismiss the whole modal. What it should *not* do is use the word "Cancel" for an action that is really navigation back to a parent view.
 
 ## Commands
 - **Run tests (CPU, fast)**: `./run-tests.sh` (also runs `ruff check`, `ruff format --check`, and the frontend TypeScript build)
