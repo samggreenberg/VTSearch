@@ -1,5 +1,25 @@
 """Dataset load endpoints: demo, file, folder, browser-folder upload, source
-reload, plus export and clear."""
+reload, plus export and clear.
+
+Migrated to ``flask_smorest`` so these routes appear in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+
+Routes with a single marshmallow-able body (``load-demo``, ``load-folder``,
+``load-source``, ``clear``) use the standard ``@arguments`` + ``@response``
+decorators. Schema-level validation failures (missing required ``path`` /
+``name`` / ``source``) surface as 422 with the standard ``errors``
+envelope; handler-level rejects (unknown demo, invalid path, importer
+not available) keep their HTTP codes (400 / 500) with the standard
+``message`` envelope (except 404s, which the app-level ``NotFound``
+handler intercepts — see plan doc).
+
+Routes whose request body is multipart (``import-local-folder``,
+``load-file``) or whose success body is a binary stream (``export``)
+omit ``@arguments`` and declare error responses via ``alt_response`` —
+same pattern as ``add-to-pile`` / ``server-media-files/upload`` /
+``server-media-files/<f>/thumbnail`` in ``media/list.py`` and
+``media/server.py``.
+"""
 
 import io
 import json
@@ -8,7 +28,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import request, send_file
+from flask_smorest import Blueprint, abort
 
 import vtsearch.security.path_validation as _paths
 from vtsearch.config import DATA_DIR
@@ -19,16 +40,37 @@ from vtsearch.datasets.load_pipeline import (
     clear_dataset,
 )
 from vtsearch.datasets.registry import remove_loaded_id as _reg_remove_loaded
-from vtsearch.routes._shared import format_exception_detail, get_json_or_400, get_json_safe
+from vtsearch.routes._shared import format_exception_detail
 from vtsearch.routes.datasets._helpers import _safe_relative_upload_path
+from vtsearch.schemas.datasets import (
+    DatasetClearResponseSchema,
+    DatasetLoadDemoRequestSchema,
+    DatasetLoadFolderRequestSchema,
+    DatasetLoadSourceRequestSchema,
+    DatasetLoadStartedResponseSchema,
+)
 from vtsearch.state import snapshot_medias, unregister_context
 
-datasets_load_bp = Blueprint("datasets_load", __name__)
+datasets_load_bp = Blueprint(
+    "datasets_load",
+    __name__,
+    description="Load datasets from demos, files, folders, origins; export and clear.",
+)
 
 LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
 
 
 @datasets_load_bp.route("/api/dataset/import-local-folder", methods=["POST"])
+@datasets_load_bp.response(200, DatasetLoadStartedResponseSchema)
+@datasets_load_bp.alt_response(
+    400,
+    description=(
+        "Multipart body is missing the ``files`` field, has no valid files, is "
+        "missing ``media_type``, or carries malformed ``clipper_params`` / "
+        "``vectors_file``."
+    ),
+)
+@datasets_load_bp.alt_response(500, description="The server_folder importer is unavailable.")
 def import_local_folder():
     """Import a folder uploaded from the user's *browser* machine.
 
@@ -49,15 +91,15 @@ def import_local_folder():
     """
     files = request.files.getlist("files")
     if not files:
-        return jsonify({"error": "No files uploaded"}), 400
+        abort(400, message="No files uploaded")
 
     importer = get_importer("server_folder")
     if importer is None:
-        return jsonify({"error": "server_folder importer not available"}), 500
+        abort(500, message="server_folder importer not available")
 
     media_type = (request.form.get("media_type") or "").strip()
     if not media_type:
-        return jsonify({"error": "Missing required field: 'media_type'"}), 400
+        abort(400, message="Missing required field: 'media_type'")
 
     embedder = (request.form.get("embedder") or "").strip()
     clipper = (request.form.get("clipper") or "").strip()
@@ -74,7 +116,7 @@ def import_local_folder():
             if not isinstance(clipper_params, dict):
                 raise ValueError("clipper_params must be a JSON object")
         except (ValueError, TypeError) as exc:
-            return jsonify({"error": f"Invalid clipper_params: {exc}"}), 400
+            abort(400, message=f"Invalid clipper_params: {exc}")
 
     LOCAL_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     upload_dir = Path(tempfile.mkdtemp(prefix="local_folder_", dir=LOCAL_UPLOADS_DIR))
@@ -95,7 +137,7 @@ def import_local_folder():
 
     if saved == 0:
         shutil.rmtree(upload_dir, ignore_errors=True)
-        return jsonify({"error": "No valid files in upload"}), 400
+        abort(400, message="No valid files in upload")
 
     # Optional .npz of pre-computed embedding vectors.  Saved into the
     # upload directory and parsed before kicking off the importer; the
@@ -113,7 +155,7 @@ def import_local_folder():
             content_vectors = dict(read_npz_filenames_and_vectors(npz_path))
         except Exception as exc:
             shutil.rmtree(upload_dir, ignore_errors=True)
-            return jsonify({"error": f"Invalid vectors_file: {exc}"}), 400
+            abort(400, message=f"Invalid vectors_file: {exc}")
         finally:
             # The npz is no longer needed once it's parsed; remove it so
             # the importer doesn't see it as a media file.
@@ -186,11 +228,15 @@ def import_local_folder():
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
     )
-    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
+    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
 @datasets_load_bp.route("/api/dataset/load-demo", methods=["POST"])
-def load_demo_dataset_route():
+@datasets_load_bp.arguments(DatasetLoadDemoRequestSchema)
+@datasets_load_bp.response(200, DatasetLoadStartedResponseSchema)
+@datasets_load_bp.alt_response(400, description="Unknown demo dataset name.")
+@datasets_load_bp.alt_response(500, description="The demo importer is unavailable.")
+def load_demo_dataset_route(body: dict):
     """Load a demo dataset in a background thread.
 
     When a ``converter`` is specified, the demo data is loaded using its
@@ -198,22 +244,18 @@ def load_demo_dataset_route():
     The resulting dataset has the *target* type, not the demo's original
     type.
     """
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    dataset_name = data.get("name")
-    embedder_name = data.get("embedder", "")
-    clipper_name = data.get("clipper", "")
-    converter_name = data.get("converter", "")
-    user_dataset_name = str(data.get("dataset_name") or "").strip()
+    dataset_name = body.get("name")
+    embedder_name = body.get("embedder", "")
+    clipper_name = body.get("clipper", "")
+    converter_name = body.get("converter", "")
+    user_dataset_name = (body.get("dataset_name") or "").strip()
 
     if not dataset_name or dataset_name not in DEMO_DATASETS:
-        return jsonify({"error": "Invalid dataset name"}), 400
+        abort(400, message="Invalid dataset name")
 
     importer = get_importer("demo")
     if importer is None:
-        return jsonify({"error": "demo importer not available"}), 500
+        abort(500, message="demo importer not available")
 
     demo_info = DEMO_DATASETS[dataset_name]
     field_values: dict = {"name": dataset_name}
@@ -240,18 +282,20 @@ def load_demo_dataset_route():
         field_values["embedder"] = embedder_name
 
     task_id = _run_importer_in_background(importer, field_values)
-    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
+    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
 @datasets_load_bp.route("/api/dataset/load-file", methods=["POST"])
+@datasets_load_bp.response(200, DatasetLoadStartedResponseSchema)
+@datasets_load_bp.alt_response(400, description="Multipart body is missing a file or no file is selected.")
 def load_dataset_file():
     """Load a dataset from an uploaded pickle file."""
     if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+        abort(400, message="No file provided")
 
     file = request.files["file"]
     if not file.filename:
-        return jsonify({"error": "No file selected"}), 400
+        abort(400, message="No file selected")
 
     importer = get_importer("pickle")
     # Read file contents before passing to background thread, since the
@@ -259,44 +303,42 @@ def load_dataset_file():
     file_bytes = io.BytesIO(file.read())
     file_bytes.name = file.filename
     task_id = _run_importer_in_background(importer, {"file": file_bytes})
-    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
+    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
 @datasets_load_bp.route("/api/dataset/load-folder", methods=["POST"])
-def load_dataset_folder():
+@datasets_load_bp.arguments(DatasetLoadFolderRequestSchema)
+@datasets_load_bp.response(200, DatasetLoadStartedResponseSchema)
+@datasets_load_bp.alt_response(400, description="Invalid or missing folder path.")
+def load_dataset_folder(body: dict):
     """Generate dataset from a folder of media files."""
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    folder_path = data.get("path")
-    media_type = data.get("media_type", "audio")  # Default to audio
+    folder_path = body.get("path")
+    media_type = body.get("media_type", "audio")
 
     if not folder_path:
-        return jsonify({"error": "No folder path provided"}), 400
+        abort(400, message="No folder path provided")
 
     try:
         _paths.validate_server_filepath(str(folder_path), base_dir=_paths.get_file_access_base_dir())
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        abort(400, message=str(exc))
 
     folder = Path(folder_path)
     if not folder.exists() or not folder.is_dir():
-        return jsonify({"error": "Invalid folder path"}), 400
+        abort(400, message="Invalid folder path")
 
     importer = get_importer("server_folder")
     task_id = _run_importer_in_background(importer, {"path": str(folder), "media_type": media_type})
-    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
+    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
 @datasets_load_bp.route("/api/dataset/load-source", methods=["POST"])
-def load_dataset_from_source():
+@datasets_load_bp.arguments(DatasetLoadSourceRequestSchema)
+@datasets_load_bp.response(200, DatasetLoadStartedResponseSchema)
+@datasets_load_bp.alt_response(400, description="Unknown importer, unreloadable origin, or invalid path inside origin.")
+def load_dataset_from_source(body: dict):
     """Reload a dataset from a stored source origin dict."""
-    data = get_json_safe()
-    source = data.get("source")
-    if not isinstance(source, dict):
-        return jsonify({"error": "source must be an origin dict"}), 400
-    return _load_from_origin(source)
+    return _load_from_origin(body["source"])
 
 
 def _load_from_origin(source: dict):
@@ -316,20 +358,20 @@ def _load_from_origin(source: dict):
             member_origin = members[0].get("origin")
             if isinstance(member_origin, dict):
                 return _load_from_origin(member_origin)
-        return jsonify({"error": "Cannot reload from dupe_set origin"}), 400
+        abort(400, message="Cannot reload from dupe_set origin")
 
     # --- real importers: generic dispatch ---
 
     importer = get_importer(importer_name)
     if importer is None:
-        return jsonify({"error": f"Unknown importer: {importer_name}"}), 400
+        abort(400, message=f"Unknown importer: {importer_name}")
 
     if not importer.can_reload_from_origin(source):
-        return jsonify({"error": f"Cannot reload from {importer_name} origin (source not available)"}), 400
+        abort(400, message=f"Cannot reload from {importer_name} origin (source not available)")
 
     field_values = importer.reload_from_origin(source)
     if field_values is None:
-        return jsonify({"error": f"Cannot reload from {importer_name} origin"}), 400
+        abort(400, message=f"Cannot reload from {importer_name} origin")
 
     # Validate any server file paths in the field values
     _base = _paths.get_file_access_base_dir()
@@ -338,18 +380,25 @@ def _load_from_origin(source: dict):
             try:
                 _paths.validate_server_filepath(val, base_dir=_base)
             except ValueError as exc:
-                return jsonify({"error": str(exc)}), 400
+                abort(400, message=str(exc))
 
     task_id = _run_importer_in_background(importer, field_values)
-    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
+    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
 @datasets_load_bp.route("/api/dataset/export")
+@datasets_load_bp.alt_response(400, description="No dataset is currently loaded.")
+@datasets_load_bp.alt_response(500, description="Dataset export failed unexpectedly.")
 def export_dataset():
-    """Export the current dataset to a pickle file."""
+    """Export the current dataset to a pickle file.
+
+    Success returns a binary ``application/octet-stream`` download; that
+    body is left undescribed in the spec (mirroring the audio / video /
+    image streaming routes in ``media/list.py``).
+    """
     snap = snapshot_medias()
     if not snap:
-        return jsonify({"error": "No dataset loaded"}), 400
+        abort(400, message="No dataset loaded")
 
     try:
         dataset_bytes = export_dataset_to_file(snap)
@@ -363,10 +412,11 @@ def export_dataset():
         import logging
 
         logging.getLogger(__name__).exception("Dataset export failed")
-        return jsonify({"error": f"Dataset export failed: {format_exception_detail(exc)}"}), 500
+        abort(500, message=f"Dataset export failed: {format_exception_detail(exc)}")
 
 
 @datasets_load_bp.route("/api/dataset/clear", methods=["POST"])
+@datasets_load_bp.response(200, DatasetClearResponseSchema)
 def clear_dataset_route():
     """Clear the request-scoped dataset from memory.
 
@@ -382,4 +432,4 @@ def clear_dataset_route():
         _reg_remove_loaded(ds_id)
     else:
         clear_dataset()
-    return jsonify({"ok": True})
+    return {"ok": True}

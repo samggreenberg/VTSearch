@@ -1114,4 +1114,5 @@ class TestImportLocalFolderRouteForwardsSourceSpecs:
             # ``_load`` not ``_run_importer_in_background``, so just
             # verify the route accepts the field and doesn't 400 on it.
             if resp.status_code == 400:
-                assert "source_specs" not in (resp.get_json() or {}).get("error", "")
+                # flask-smorest error envelope: ``message`` (not ``error``).
+                assert "source_specs" not in (resp.get_json() or {}).get("message", "")

@@ -225,7 +225,9 @@ class TestMultiUserFileRestriction:
                 json={"path": "/etc", "media_type": "audio"},
             )
             assert resp.status_code == 400
-            assert "must be within" in resp.get_json()["error"]
+            # New error envelope (flask-smorest): human-readable text lives
+            # under ``message`` (the legacy ``error`` key is gone).
+            assert "must be within" in resp.get_json()["message"]
         finally:
             from vtsearch.auth import set_login_provider
 
@@ -299,8 +301,10 @@ class TestMultiUserFileRestriction:
                 json={"path": str(cwd / "some_folder"), "media_type": "audio"},
             )
             # Should not get a "must be within" error — may get "Invalid folder path"
-            # since the folder doesn't exist, but not a path-validation error
+            # since the folder doesn't exist, but not a path-validation error.
+            # ``load-folder`` is on flask-smorest, so the human-readable text
+            # lives under ``message``.
             if resp.status_code == 400:
-                assert "must be within" not in resp.get_json().get("error", "")
+                assert "must be within" not in resp.get_json().get("message", "")
         finally:
             set_login_provider(original)

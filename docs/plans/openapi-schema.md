@@ -220,25 +220,57 @@ endpoints are useful: integrators who only need the route inventory
 can read `/openapi.json` without flask-smorest's typed
 request/response gates getting in the way during their migration.
 
-## Open questions
+## Resolved questions
 
 - **Plugin field endpoints** (`/api/exporters/<name>`,
-  `/api/importers/<name>/run`, etc.) have request shapes that depend on
-  the plugin's declared `fields`. Static schemas don't fit. Options:
-  (a) leave these routes on the legacy pattern, (b) emit a generic
-  `additionalProperties: true` schema and validate inside the handler,
-  or (c) generate per-plugin schemas at startup from each plugin's
-  `fields` declaration. Decision deferred until the plugin-CRUD routes
-  are reached in the migration order.
-- **Pagination.** flask-smorest has a built-in pagination helper. Some
-  list endpoints (`/api/medias`) could adopt it for consistency, but
-  it'd change the response shape (envelope with `data`/`meta`).
-  Decision deferred — keep current shapes for now.
-- **Spec snapshot.** Should `frontend/src/app/generated/api-client/`
-  and/or a copy of `openapi.json` be checked in? Pros: deterministic
-  builds, easy diff review, no need to run Flask in frontend CI. Cons:
-  noisy diffs on every API change. Tentatively: yes, check both in;
-  the diff *is* the API change review.
+  `/api/importers/<name>/run`, `/api/label-importers/import/<name>`,
+  `/api/dataset/stage-import/<name>`, `/api/dataset/import/<name>`,
+  `/api/detectors/registry/from-labelset/<name>`, etc.) — request
+  shapes depend on each plugin's declared `fields`. **Decision:
+  option (c) — generate a per-plugin marshmallow schema at startup
+  from each plugin's `fields` declaration**, and pass it to
+  `@blp.arguments(...)` per call site. The `FieldType` literal is
+  `{file, folder, url, text, password, email, select, server_path,
+  checkbox}`, which maps mechanically to marshmallow:
+  - `text` / `url` / `email` / `password` / `server_path` / `folder` →
+    `fields.String` (with `validate.Length(min=1)` when `required`).
+  - `select` with static `options` → `fields.String` +
+    `validate.OneOf(options)`. `dynamic_options=True` falls back to
+    `fields.String` (frontend re-fetches via the existing
+    `<name>/options` route).
+  - `checkbox` → `fields.Boolean`.
+  - `file` → not representable in JSON schema; routes that take a
+    `file` field stay on multipart with `@arguments` omitted, declare
+    error responses via `alt_response`, and declare the success body
+    via `response` — same pattern as `add-to-pile` and
+    `server-media-files/upload`. The handler still uses
+    `extract_plugin_fields` / `validate_required_fields` internally
+    for these.
+
+  Schemas are built once at startup (after plugin discovery) and
+  cached on the plugin instance; the route helper looks up
+  `plugin._arg_schema` and `plugin._response_schema` (when defined).
+  Spec consumers see real per-field types instead of
+  `additionalProperties: true`, which is the whole point of this
+  plan. (a) leaves the largest chunk of the API permanently
+  un-typed; (b) gets the route into the spec but loses per-field
+  typing.
+
+- **Pagination.** flask-smorest has a built-in helper, but no current
+  list endpoint actually needs it: `/api/medias/ids` is already the
+  lightweight half of an ids+batch split (the metadata comes back
+  from `POST /api/medias/batch` for the visible IDs), and nothing
+  else returns lists big enough to matter. **Decision: closed — keep
+  current shapes. Revisit only if a future endpoint actually needs
+  paging.**
+
+- **Spec snapshot.** **Decision: yes, check both
+  `frontend/src/app/generated/api-client/` and the generated
+  `openapi.json` into git.** Pros: deterministic builds, no need to
+  spin up Flask in frontend CI, no install hop for a new dev. The
+  "noisy diffs" downside is the feature here, not a bug — the diff
+  *is* the API-change review, and the `regenerate-and-diff` CI job
+  enforces it.
 
 ## Status
 
@@ -373,18 +405,38 @@ request/response gates getting in the way during their migration.
       passed to ``abort()``. Tests in ``tests/api/test_dashboard.py``
       and ``tests/datasets/test_datasets.py`` updated to match
       (``message`` for 400, ``error`` for 404). The heavier dataset
-      modules (``load.py``, ``staging.py``, ``registry.py``) stay on
-      plain Flask blueprints for now — they involve multipart uploads,
-      binary streaming, dataset-loading orchestration, and plugin-field
-      shapes that need either ``alt_response``-only treatment (binary)
-      or the *Open questions / Plugin field endpoints* decision
-      (importer staging / import).
+      modules (``staging.py``, ``registry.py``) stay on plain Flask
+      blueprints for now — they involve plugin-field shapes that need
+      the *Resolved questions / Plugin field endpoints* decision in
+      hand (importer staging / import).
+- [x] `datasets/load.py` migrated to flask-smorest (import-local-folder,
+      load-demo, load-file, load-folder, load-source, export, clear).
+      JSON-shaped routes (load-demo, load-folder, load-source, clear)
+      use the standard ``arguments`` + ``response`` decorators;
+      schema-level validation failures (missing required ``name`` /
+      ``path`` / ``source``) surface as 422 with the standard
+      ``errors`` envelope. Multipart routes (import-local-folder,
+      load-file) and the binary-stream route (export) omit
+      ``arguments`` and declare error responses via ``alt_response``,
+      mirroring ``add-to-pile`` and ``server-media-files/upload``.
+      Handler-level rejects (unknown demo, invalid path, importer
+      unavailable, no dataset loaded, no files uploaded, bad
+      clipper_params / vectors_file) keep their HTTP codes (400 / 500)
+      with the standard ``message`` envelope. Tests in
+      ``tests/api/test_path_validation.py``,
+      ``tests/io/test_local_folder_upload.py``,
+      ``tests/io/test_npz_dataset_import.py``,
+      ``tests/converters/test_document_and_converters.py``, and
+      ``tests/converters/test_converter_selection.py`` updated to
+      read ``message`` instead of ``error``.
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
-- [ ] Remaining dataset blueprints: ``datasets/load.py``,
-      ``datasets/staging.py``, ``datasets/registry.py`` (multipart
-      upload + plugin-field shapes — needs the *Open questions / Plugin
-      field endpoints* decision before staging/load can fully migrate).
+- [ ] Remaining dataset blueprints: ``datasets/staging.py`` and
+      ``datasets/registry.py`` — both involve plugin-field shapes
+      (``stage-import/<name>``, ``import/<name>``,
+      ``registry/<id>/load`` field overrides) for which we now have
+      the *Resolved questions / Plugin field endpoints* decision in
+      hand, so they're unblocked.
 - [ ] Remaining blueprints (see Order above)
 - [ ] Delete the pre-existing permissive `/openapi.json` +
       `--openapi-schema` once flask-smorest covers every blueprint

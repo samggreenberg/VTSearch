@@ -70,7 +70,8 @@ class TestImportLocalFolderEndpoint:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "No files uploaded" in resp.get_json()["error"]
+        # flask-smorest error envelope: ``message`` (not ``error``).
+        assert "No files uploaded" in resp.get_json()["message"]
 
     def test_missing_media_type_returns_400(self, client):
         resp = client.post(
@@ -79,7 +80,7 @@ class TestImportLocalFolderEndpoint:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "media_type" in resp.get_json()["error"]
+        assert "media_type" in resp.get_json()["message"]
 
     def test_invalid_clipper_params_returns_400(self, client):
         resp = client.post(
@@ -92,7 +93,7 @@ class TestImportLocalFolderEndpoint:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "clipper_params" in resp.get_json()["error"]
+        assert "clipper_params" in resp.get_json()["message"]
 
     def test_uploads_files_to_tempdir_and_starts_load(self, client, tmp_path, monkeypatch):
         # Redirect the upload temp root into the test's tmp_path so we can

@@ -265,6 +265,67 @@ class DashboardDiskUsageResponseSchema(Schema):
     path = fields.String(required=True)
 
 
+# ---------------------------------------------------------------------------
+# /api/dataset/load-* and /api/dataset/clear (vtsearch/routes/datasets/load.py)
+# ---------------------------------------------------------------------------
+
+
+class DatasetLoadDemoRequestSchema(Schema):
+    """Body for ``POST /api/dataset/load-demo``.
+
+    ``name`` must be a key of ``DEMO_DATASETS``; the handler returns 400
+    if it isn't (the set isn't known at schema-build time).
+    """
+
+    name = fields.String(required=True, validate=validate.Length(min=1))
+    embedder = fields.String(load_default="")
+    clipper = fields.String(load_default="")
+    converter = fields.String(load_default="")
+    dataset_name = fields.String(load_default="")
+
+
+class DatasetLoadFolderRequestSchema(Schema):
+    """Body for ``POST /api/dataset/load-folder``."""
+
+    path = fields.String(required=True, validate=validate.Length(min=1))
+    media_type = fields.String(load_default="audio")
+
+
+class DatasetLoadSourceRequestSchema(Schema):
+    """Body for ``POST /api/dataset/load-source``.
+
+    ``source`` is a raw origin dict (``{"importer": ..., "params": {...}}``)
+    whose inner shape varies per importer and is validated by the
+    handler (via ``can_reload_from_origin`` / ``reload_from_origin``).
+    """
+
+    source = fields.Dict(
+        required=True,
+        metadata={"description": "Origin dict as stored on medias."},
+    )
+
+
+class DatasetLoadStartedResponseSchema(Schema):
+    """Response for ``POST /api/dataset/load-demo`` / ``load-file`` /
+    ``load-folder`` / ``load-source`` / ``import-local-folder`` and for
+    ``POST /api/dataset/combine`` in ``staging.py``.
+
+    ``task_id`` is the background-task tracker id (string) used by the
+    SSE progress stream; it may be empty when the load completes
+    synchronously (rare).
+    """
+
+    ok = fields.Boolean(required=True)
+    message = fields.String(required=True)
+    task_id = fields.String(required=True)
+
+
+class DatasetClearResponseSchema(Schema):
+    """Response for ``POST /api/dataset/clear``."""
+
+    ok = fields.Boolean(required=True)
+
+
 __all__ = [
     "BrowseMediaFilesQuerySchema",
     "BrowseMediaFilesResponseSchema",
@@ -280,7 +341,12 @@ __all__ = [
     "DashboardDatasetRenameResponseSchema",
     "DashboardDiskUsageResponseSchema",
     "DatasetAllImportersListResponseSchema",
+    "DatasetClearResponseSchema",
     "DatasetImportersListResponseSchema",
+    "DatasetLoadDemoRequestSchema",
+    "DatasetLoadFolderRequestSchema",
+    "DatasetLoadSourceRequestSchema",
+    "DatasetLoadStartedResponseSchema",
     "DatasetStatusResponseSchema",
     "DemoCategoriesResponseSchema",
     "DemoDatasetListQuerySchema",
