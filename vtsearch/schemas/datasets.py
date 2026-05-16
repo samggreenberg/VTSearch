@@ -17,7 +17,18 @@ caught at the *plugin* layer, not the route.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, ValidationError, fields, validate
+
+
+def _list_of_strings(value):
+    """Validator: value must be a ``list`` whose every entry is a ``str``.
+
+    Used by the readers ACL endpoint so that numeric or other non-string
+    items are rejected at the schema layer (422) rather than silently
+    coerced to strings by ``fields.String``'s deserializer.
+    """
+    if not isinstance(value, list) or not all(isinstance(r, str) for r in value):
+        raise ValidationError("Must be a list of strings.")
 
 
 # ---------------------------------------------------------------------------
@@ -361,12 +372,185 @@ class DatasetClearResponseSchema(Schema):
     ok = fields.Boolean(required=True)
 
 
+# ---------------------------------------------------------------------------
+# Staging routes (vtsearch/routes/datasets/staging.py)
+# ---------------------------------------------------------------------------
+
+
+class _AvailableDatasetFileSchema(Schema):
+    """One ``.pkl`` file listed by ``GET /api/dataset/available-files``."""
+
+    name = fields.String(required=True)
+    path = fields.String(required=True)
+    size_mb = fields.Float(required=True)
+
+
+class DatasetAvailableFilesResponseSchema(Schema):
+    """Response for ``GET /api/dataset/available-files``."""
+
+    files = fields.List(fields.Nested(_AvailableDatasetFileSchema), required=True)
+
+
+class DatasetCombineRequestSchema(Schema):
+    """Body for ``POST /api/dataset/combine``."""
+
+    datasets = fields.List(
+        fields.String(),
+        required=True,
+        validate=validate.Length(min=2),
+        metadata={"description": "At least two server-side pickle file paths to merge."},
+    )
+    name = fields.String(load_default="")
+
+
+class DatasetStageFileResponseSchema(Schema):
+    """Response for ``POST /api/dataset/stage-file`` (multipart upload).
+
+    ``count`` and ``media_type`` are derived from a cheap pickle peek and
+    fall back to ``0`` / ``"unknown"`` when the file can't be inspected.
+    """
+
+    path = fields.String(required=True)
+    name = fields.String(required=True)
+    count = fields.Integer(required=True)
+    media_type = fields.String(required=True)
+
+
+class DatasetStagingStartedResponseSchema(Schema):
+    """Response for ``POST /api/dataset/stage-demo/<name>`` and the
+    plugin-field staging routes that haven't migrated yet."""
+
+    ok = fields.Boolean(required=True)
+    message = fields.String(required=True)
+
+
+class DatasetStageDemoRequestSchema(Schema):
+    """Body for ``POST /api/dataset/stage-demo/<name>``.
+
+    ``name`` is supplied via the URL path; the optional ``converter`` /
+    ``dataset_name`` override the demo's defaults.
+    """
+
+    converter = fields.String(load_default="")
+    dataset_name = fields.String(load_default="")
+
+
+class ClearStagingResponseSchema(Schema):
+    """Response for ``DELETE /api/dataset/staging``."""
+
+    ok = fields.Boolean(required=True)
+
+
+class ImporterFieldOptionsRequestSchema(Schema):
+    """Body for ``POST /api/dataset/import/<importer_name>/options``."""
+
+    field_key = fields.String(required=True, validate=validate.Length(min=1))
+    values = fields.Dict(load_default=dict)
+
+
+class ImporterFieldOptionsResponseSchema(Schema):
+    """Response for ``POST /api/dataset/import/<importer_name>/options``."""
+
+    options = fields.List(fields.String(), required=True)
+
+
+# ---------------------------------------------------------------------------
+# Registry routes (vtsearch/routes/datasets/registry.py)
+# ---------------------------------------------------------------------------
+
+
+class DatasetsRegistryListResponseSchema(Schema):
+    """Response for ``GET /api/datasets/registry``.
+
+    Each entry's inner shape is the registry record (plus a derived
+    ``loaded`` flag and resolved ``clipper`` display name). Declared as
+    ``fields.Dict`` to avoid duplicating the registry record schema —
+    drift between schema and registry would be caught at the registry
+    layer, not the route.
+    """
+
+    datasets = fields.List(fields.Dict(), required=True)
+
+
+class DatasetRegistryLoadResponseSchema(Schema):
+    """Response for ``POST /api/datasets/registry/<id>/load``.
+
+    Successful kickoff returns ``task_id``; the "already loaded" path
+    returns the same envelope with an empty ``task_id``.
+    """
+
+    ok = fields.Boolean(required=True)
+    message = fields.String(required=True)
+    task_id = fields.String(load_default="")
+
+
+class DatasetRegistryOkResponseSchema(Schema):
+    """Bare ``{"ok": true}`` response (unload, delete)."""
+
+    ok = fields.Boolean(required=True)
+
+
+class DatasetRegistryRenameRequestSchema(Schema):
+    """Body for ``PUT /api/datasets/registry/<id>/rename``."""
+
+    name = fields.String(required=True, validate=validate.Length(min=1))
+
+
+class DatasetRegistryRenameResponseSchema(Schema):
+    """Response for ``PUT /api/datasets/registry/<id>/rename``."""
+
+    ok = fields.Boolean(required=True)
+    name = fields.String(required=True)
+
+
+class DatasetRegistryReadersRequestSchema(Schema):
+    """Body for ``PUT /api/datasets/registry/<id>/readers``.
+
+    Declared as ``fields.Raw`` with a custom validator (rather than
+    ``fields.List(fields.String())``) so that numeric or other
+    non-string items are rejected as 422 instead of being silently
+    coerced to strings by ``fields.String``'s deserializer.
+    """
+
+    readers = fields.Raw(
+        required=True,
+        validate=_list_of_strings,
+        metadata={
+            "description": 'List of usernames; ``["*"]`` makes the dataset public.',
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    )
+
+
+class DatasetRegistryReadersResponseSchema(Schema):
+    """Response for ``PUT /api/datasets/registry/<id>/readers``."""
+
+    ok = fields.Boolean(required=True)
+    readers = fields.List(fields.String(), required=True)
+
+
+class DatasetRegistryStatsResponseSchema(Schema):
+    """Response for ``GET /api/datasets/registry/<id>/stats``."""
+
+    num_items = fields.Integer(required=True)
+    num_dupes = fields.Integer(required=True)
+    file_type_counts = fields.Dict(keys=fields.String(), values=fields.Integer(), required=True)
+    ingest_started_at = fields.Raw(allow_none=True)
+    ingest_finished_at = fields.Raw(allow_none=True)
+    origin = fields.String(required=True)
+    source = fields.Dict(required=True)
+    clipper = fields.String(required=True)
+    embedder = fields.String(required=True)
+
+
 __all__ = [
     "BrowseMediaFilesQuerySchema",
     "BrowseMediaFilesResponseSchema",
     "BrowseMediaFilesSelectRequestSchema",
     "BrowseMediaFilesSelectResponseSchema",
     "CancelDatasetLoadResponseSchema",
+    "ClearStagingResponseSchema",
     "ClippersListQuerySchema",
     "ClippersListResponseSchema",
     "ConvertersListQuerySchema",
@@ -376,17 +560,32 @@ __all__ = [
     "DashboardDatasetRenameResponseSchema",
     "DashboardDiskUsageResponseSchema",
     "DatasetAllImportersListResponseSchema",
+    "DatasetAvailableFilesResponseSchema",
     "DatasetClearResponseSchema",
+    "DatasetCombineRequestSchema",
     "DatasetImportersListResponseSchema",
     "DatasetLoadDemoRequestSchema",
     "DatasetLoadFolderRequestSchema",
     "DatasetLoadSourceRequestSchema",
     "DatasetLoadStartedResponseSchema",
+    "DatasetRegistryLoadResponseSchema",
+    "DatasetRegistryReadersRequestSchema",
+    "DatasetRegistryReadersResponseSchema",
+    "DatasetRegistryRenameRequestSchema",
+    "DatasetRegistryRenameResponseSchema",
+    "DatasetRegistryStatsResponseSchema",
+    "DatasetStageDemoRequestSchema",
+    "DatasetStageFileResponseSchema",
+    "DatasetStagingStartedResponseSchema",
     "DatasetStatusResponseSchema",
+    "DatasetsRegistryListResponseSchema",
     "DemoCategoriesResponseSchema",
     "DemoDatasetListQuerySchema",
     "DemoDatasetListResponseSchema",
     "EmbeddersListQuerySchema",
     "EmbeddersListResponseSchema",
+    "DatasetRegistryOkResponseSchema",
+    "ImporterFieldOptionsRequestSchema",
+    "ImporterFieldOptionsResponseSchema",
     "MediaTypesListResponseSchema",
 ]

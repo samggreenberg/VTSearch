@@ -435,11 +435,12 @@ class TestAvailableFilesEndpoint:
 
 class TestCombineEndpoint:
     def test_rejects_fewer_than_two(self, client):
+        # Schema-level validation (datasets Length >= 2) → 422.
         resp = client.post(
             "/api/dataset/combine",
             json={"datasets": ["/one.pkl"]},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_rejects_missing_file(self, client, tmp_path):
         resp = client.post(

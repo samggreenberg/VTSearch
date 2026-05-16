@@ -487,13 +487,14 @@ class TestGetExportersEndpoint:
 
 
 class TestExportEndpoint:
-    def test_missing_exporter_name_returns_400(self, client):
+    def test_missing_exporter_name_returns_422(self, client):
+        # Schema-level validation (required ``exporter_name``) → 422.
         res = client.post(
             "/api/exporters/export",
             json={"results": SAMPLE_RESULTS},
         )
-        assert res.status_code == 400
-        assert "exporter_name" in res.get_json()["error"]
+        assert res.status_code == 422
+        assert "exporter_name" in str(res.get_json()["errors"])
 
     def test_unknown_exporter_returns_404(self, client):
         res = client.post(
@@ -501,7 +502,10 @@ class TestExportEndpoint:
             json={"exporter_name": "unicorn", "results": SAMPLE_RESULTS},
         )
         assert res.status_code == 404
-        assert "unicorn" in res.get_json()["error"]
+        # The app-level ``NotFound`` errorhandler reformats 404s to
+        # ``{"error": "Not Found", ...}`` regardless of the
+        # ``message=`` passed to ``abort()``.
+        assert "error" in res.get_json()
 
     def test_gui_exporter_returns_success(self, client):
         res = client.post(
@@ -559,8 +563,9 @@ class TestExportEndpoint:
         )
         assert res.status_code == 400
         data = res.get_json()
-        assert "missing_fields" in data
-        assert "filepath" in data["missing_fields"]
+        # flask-smorest's ``abort()`` strips extra kwargs; the missing
+        # field names are interpolated into ``message`` instead.
+        assert "filepath" in data["message"]
 
     def test_email_exporter_sends_via_mx(self, client):
         mock_server = MagicMock()
@@ -612,8 +617,9 @@ class TestExportEndpoint:
             data="not json",
             content_type="text/plain",
         )
-        # exporter_name will be empty → 400
-        assert res.status_code == 400
+        # flask-smorest's schema-level rejection of unparseable / empty
+        # bodies surfaces as 422 (``exporter_name`` required).
+        assert res.status_code == 422
 
     def test_path_traversal_absolute_rejected(self, client):
         """Absolute paths outside the allowed directory must be rejected."""
@@ -626,7 +632,8 @@ class TestExportEndpoint:
             },
         )
         assert res.status_code == 400
-        assert "outside" in res.get_json()["error"].lower() or "must be within" in res.get_json()["error"].lower()
+        msg = res.get_json()["message"].lower()
+        assert "outside" in msg or "must be within" in msg
 
     def test_path_traversal_relative_rejected(self, client):
         """Relative paths that escape the base directory must be rejected."""
@@ -658,7 +665,7 @@ class TestExportEndpoint:
                     },
                 )
                 assert res.status_code == 500
-                assert "No space left on device" in res.get_json()["error"]
+                assert "No space left on device" in res.get_json()["message"]
 
         # The traceback should be logged server-side
         assert any("No space left on device" in r.message for r in caplog.records)
@@ -682,7 +689,7 @@ class TestExportEndpoint:
                     },
                 )
                 assert res.status_code == 500
-                assert "Permission denied" in res.get_json()["error"]
+                assert "Permission denied" in res.get_json()["message"]
 
         assert any("Permission denied" in r.message for r in caplog.records)
         assert any(r.exc_info for r in caplog.records if "Permission denied" in r.message)

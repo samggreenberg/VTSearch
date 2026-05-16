@@ -1,5 +1,17 @@
 """Blueprint for dataset-registry routes (the on-disk dataset catalog).
 
+Migrated to ``flask_smorest`` so these routes appear in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+
+Schema-level validation failures (missing required ``name`` on rename,
+missing or wrong-typed ``readers`` on the readers endpoint) surface as
+422 with the standard ``errors`` envelope; handler-level rejects (not
+loaded, not the creator) keep their HTTP codes (400 / 403 / 404 / 500)
+with the standard ``message`` envelope. 404s are intercepted by the
+app-level ``NotFound`` errorhandler in ``app.py`` and keep the legacy
+``{"error": "Not Found", "request_id": ...}`` shape regardless of the
+``message=`` kwarg passed to ``abort()``.
+
 Endpoints
 ---------
 GET    /api/datasets/registry                       List datasets visible to the user.
@@ -17,7 +29,7 @@ import gc
 import threading
 from pathlib import Path
 
-from flask import Blueprint, jsonify
+from flask_smorest import Blueprint, abort
 
 from vtsearch.datasets.load_pipeline import (
     _load_embedder_with_progress as _load_embedder_for_clips_with_progress,
@@ -37,7 +49,16 @@ from vtsearch.datasets.registry import (
     unregister_dataset as _reg_unregister,
     update_dataset as _reg_update,
 )
-from vtsearch.routes._shared import get_json_safe
+from vtsearch.schemas.datasets import (
+    DatasetRegistryLoadResponseSchema,
+    DatasetRegistryReadersRequestSchema,
+    DatasetRegistryReadersResponseSchema,
+    DatasetRegistryRenameRequestSchema,
+    DatasetRegistryRenameResponseSchema,
+    DatasetRegistryStatsResponseSchema,
+    DatasetsRegistryListResponseSchema,
+    DatasetRegistryOkResponseSchema,
+)
 from vtsearch.state import (
     DatasetContext,
     collapse_duplicates,
@@ -47,10 +68,15 @@ from vtsearch.state import (
 from vtsearch.concurrency.progress import CancelledError
 from vtsearch.concurrency.progress import loading_tasks as _loading_tasks
 
-datasets_registry_bp = Blueprint("datasets_registry", __name__)
+datasets_registry_bp = Blueprint(
+    "datasets_registry",
+    __name__,
+    description="CRUD over the registered (on-disk) dataset catalog.",
+)
 
 
 @datasets_registry_bp.route("/api/datasets/registry")
+@datasets_registry_bp.response(200, DatasetsRegistryListResponseSchema)
 def list_registered_datasets():
     """Return registered datasets visible to the current user.
 
@@ -79,10 +105,13 @@ def list_registered_datasets():
                     entry["clipper"] = get_clipper(raw_clipper).display_name
                 except KeyError:
                     pass  # keep raw name if clipper not found
-    return jsonify({"datasets": entries})
+    return {"datasets": entries}
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/load", methods=["POST"])
+@datasets_registry_bp.response(200, DatasetRegistryLoadResponseSchema)
+@datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found, or saved pkl file is missing.")
 def load_registered_dataset(dataset_id: str):
     """Load a registered dataset from its saved pkl file.
 
@@ -95,18 +124,18 @@ def load_registered_dataset(dataset_id: str):
 
     entry = _reg_get(dataset_id)
     if entry is None:
-        return jsonify({"error": "Dataset not found in registry"}), 404
+        abort(404, message="Dataset not found in registry")
 
     if not _reg_can_access(dataset_id, get_current_user()):
-        return jsonify({"error": "Access denied"}), 403
+        abort(403, message="Access denied")
 
     # If already loaded in memory, nothing to do.
     if _reg_is_loaded(dataset_id):
-        return jsonify({"ok": True, "message": "Dataset already loaded"})
+        return {"ok": True, "message": "Dataset already loaded", "task_id": ""}
 
     pkl_path = entry.get("pkl_path", "")
     if not pkl_path or not Path(pkl_path).is_file():
-        return jsonify({"error": f"Saved dataset file not found: {pkl_path}"}), 404
+        abort(404, message=f"Saved dataset file not found: {pkl_path}")
 
     _LOAD_STEPS = 3  # read pickle + process items, build diversity index, warm up embedder
 
@@ -223,10 +252,13 @@ def load_registered_dataset(dataset_id: str):
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
-    return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
+    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/unload", methods=["POST"])
+@datasets_registry_bp.response(200, DatasetRegistryOkResponseSchema)
+@datasets_registry_bp.alt_response(400, description="Dataset is not currently loaded.")
+@datasets_registry_bp.alt_response(403, description="Only the dataset creator can unload it.")
 def unload_registered_dataset(dataset_id: str):
     """Unload a specific dataset from memory.
 
@@ -236,21 +268,24 @@ def unload_registered_dataset(dataset_id: str):
     from vtsearch.auth import get_current_user
 
     if not _reg_is_owner(dataset_id, get_current_user()):
-        return jsonify({"error": "Only the dataset creator can unload it"}), 403
+        abort(403, message="Only the dataset creator can unload it")
     if not _reg_is_loaded(dataset_id):
-        return jsonify({"error": "This dataset is not currently loaded"}), 400
+        abort(400, message="This dataset is not currently loaded")
     unregister_context(dataset_id)
     _reg_remove_loaded(dataset_id)
-    return jsonify({"ok": True})
+    return {"ok": True}
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>", methods=["DELETE"])
+@datasets_registry_bp.response(200, DatasetRegistryOkResponseSchema)
+@datasets_registry_bp.alt_response(403, description="Only the dataset creator can delete it.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
 def delete_registered_dataset(dataset_id: str):
     """Remove a dataset from the registry and delete its pkl file."""
     from vtsearch.auth import get_current_user
 
     if not _reg_is_owner(dataset_id, get_current_user()):
-        return jsonify({"error": "Only the dataset creator can delete it"}), 403
+        abort(403, message="Only the dataset creator can delete it")
 
     # If loaded in memory, unload its context.
     if _reg_is_loaded(dataset_id):
@@ -258,25 +293,28 @@ def delete_registered_dataset(dataset_id: str):
         _reg_remove_loaded(dataset_id)
     ok = _reg_unregister(dataset_id)
     if not ok:
-        return jsonify({"error": "Dataset not found"}), 404
-    return jsonify({"ok": True})
+        abort(404, message="Dataset not found")
+    return {"ok": True}
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/rename", methods=["PUT"])
-def rename_registered_dataset(dataset_id: str):
+@datasets_registry_bp.arguments(DatasetRegistryRenameRequestSchema)
+@datasets_registry_bp.response(200, DatasetRegistryRenameResponseSchema)
+@datasets_registry_bp.alt_response(403, description="Only the dataset creator can rename it.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
+def rename_registered_dataset(body: dict, dataset_id: str):
     """Rename a registered dataset."""
     from vtsearch.auth import get_current_user
 
     if not _reg_is_owner(dataset_id, get_current_user()):
-        return jsonify({"error": "Only the dataset creator can rename it"}), 403
+        abort(403, message="Only the dataset creator can rename it")
 
-    data = get_json_safe()
-    new_name = data.get("name", "").strip()
+    new_name = body["name"].strip()
     if not new_name:
-        return jsonify({"error": "name is required"}), 400
+        abort(400, message="name is required")
     ok = _reg_rename(dataset_id, new_name)
     if not ok:
-        return jsonify({"error": "Dataset not found"}), 404
+        abort(404, message="Dataset not found")
     # Also update display name if this dataset is loaded
     if _reg_is_loaded(dataset_id):
         from vtsearch.state import get_context
@@ -284,11 +322,15 @@ def rename_registered_dataset(dataset_id: str):
         ctx = get_context(dataset_id)
         if ctx is not None:
             ctx.dataset_display_name = new_name
-    return jsonify({"ok": True, "name": new_name})
+    return {"ok": True, "name": new_name}
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/readers", methods=["PUT"])
-def update_dataset_readers(dataset_id: str):
+@datasets_registry_bp.arguments(DatasetRegistryReadersRequestSchema)
+@datasets_registry_bp.response(200, DatasetRegistryReadersResponseSchema)
+@datasets_registry_bp.alt_response(403, description="Only the dataset creator can update readers.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
+def update_dataset_readers(body: dict, dataset_id: str):
     """Update the readers list for a dataset.  Only the creator may call this.
 
     Body: ``{"readers": ["alice", "bob"]}``
@@ -296,26 +338,24 @@ def update_dataset_readers(dataset_id: str):
     """
     from vtsearch.auth import get_current_user
 
-    data = get_json_safe()
-    readers = data.get("readers")
-    if not isinstance(readers, list) or not all(isinstance(r, str) for r in readers):
-        return jsonify({"error": "readers must be a list of strings"}), 400
-
+    readers = body["readers"]
     ok, err = _reg_set_readers(dataset_id, readers, get_current_user())
     if not ok:
         status = 403 if "creator" in err else 404
-        return jsonify({"error": err}), status
-    return jsonify({"ok": True, "readers": readers})
+        abort(status, message=err)
+    return {"ok": True, "readers": readers}
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/stats")
+@datasets_registry_bp.response(200, DatasetRegistryStatsResponseSchema)
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
 def get_dataset_stats(dataset_id: str):
     """Return ingest statistics for a registered dataset."""
     from vtsearch.media import get_clipper
 
     entry = _reg_get(dataset_id)
     if entry is None:
-        return jsonify({"error": "Dataset not found"}), 404
+        abort(404, message="Dataset not found")
 
     raw_clipper = entry.get("clipper", "") or ""
     if not raw_clipper or raw_clipper.endswith("_default"):
@@ -326,16 +366,14 @@ def get_dataset_stats(dataset_id: str):
         except KeyError:
             clipper_display = raw_clipper
 
-    return jsonify(
-        {
-            "num_items": entry.get("num_items", 0),
-            "num_dupes": entry.get("num_dupes", 0),
-            "file_type_counts": entry.get("file_type_counts", {}),
-            "ingest_started_at": entry.get("ingest_started_at"),
-            "ingest_finished_at": entry.get("ingest_finished_at"),
-            "origin": entry.get("origin", ""),
-            "source": entry.get("source") or {},
-            "clipper": clipper_display,
-            "embedder": entry.get("embedder", ""),
-        }
-    )
+    return {
+        "num_items": entry.get("num_items", 0),
+        "num_dupes": entry.get("num_dupes", 0),
+        "file_type_counts": entry.get("file_type_counts", {}),
+        "ingest_started_at": entry.get("ingest_started_at"),
+        "ingest_finished_at": entry.get("ingest_finished_at"),
+        "origin": entry.get("origin", ""),
+        "source": entry.get("source") or {},
+        "clipper": clipper_display,
+        "embedder": entry.get("embedder", ""),
+    }

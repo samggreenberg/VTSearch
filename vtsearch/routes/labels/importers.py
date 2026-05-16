@@ -1,47 +1,45 @@
 """Flask routes for the Label Importer API.
 
+Migrated to ``flask_smorest`` so these routes appear in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+
 Endpoints
 ---------
 GET  /api/label-importers
-    List all registered label importers with their metadata and field definitions.
+    List all registered label importers with their metadata and field
+    definitions.
 
 POST /api/label-importers/import/<importer_name>
-    Run the named label importer.  Accepts ``multipart/form-data`` (when the
-    importer has a ``"file"`` field) or JSON (for text-only importers).
-
-    Returns::
-
-        {
-          "applied": <int>,
-          "skipped": <int>,
-          "missing_count": <int>,
-          "missing": [<entry>, ...],
-          "message": "<str>"
-        }
-
-    When ``missing_count`` is non-zero the response contains the label entries
-    that could not be matched to any media in the current dataset (neither by
-    ``origin`` + ``origin_name`` nor by ``md5``).  The frontend can prompt the
-    user and then call ``POST /api/label-importers/ingest-missing`` to pull
-    those medias from their origins.
+    Run the named label importer. Accepts ``multipart/form-data`` (when
+    the importer has a ``"file"`` field) or JSON (for text-only
+    importers). The request body is a plugin-field shape and doesn't fit
+    a static marshmallow schema — this route stays on the legacy
+    plain-Flask path (no ``@arguments`` / ``@response`` decorators) and
+    is omitted from the OpenAPI spec. See *Resolved questions / Plugin
+    field endpoints* in ``docs/plans/openapi-schema.md``.
 
 POST /api/label-importers/ingest-missing
-    Accept a list of missing label entries, re-ingest them from their origins,
-    and apply the labels.
+    Accept a list of missing label entries, re-ingest them from their
+    origins, and apply the labels. JSON-only — fully spec'd.
 """
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+from flask import jsonify
+from flask_smorest import Blueprint
 
 from vtsearch.labels.importers import get_label_importer, list_label_importers
 from vtsearch.routes._shared import (
     extract_plugin_fields,
-    get_json_safe,
     get_plugin_or_404,
     run_plugin_or_error,
     validate_filepath_field,
     validate_required_fields,
+)
+from vtsearch.schemas.labels import (
+    IngestMissingRequestSchema,
+    IngestMissingResponseSchema,
+    LabelImporterEntrySchema,
 )
 from vtsearch.state import (
     apply_label,
@@ -52,7 +50,11 @@ from vtsearch.state import (
     snapshot_medias,
 )
 
-label_importers_bp = Blueprint("label_importers", __name__)
+label_importers_bp = Blueprint(
+    "label_importers",
+    __name__,
+    description="List and run label importers; resolve missing-media entries.",
+)
 
 
 def _apply_labels(
@@ -91,13 +93,20 @@ def _apply_labels(
 
 
 @label_importers_bp.route("/api/label-importers", methods=["GET"])
+@label_importers_bp.response(200, LabelImporterEntrySchema(many=True))
 def get_label_importers():
     """Return a list of all registered label importers."""
-    return jsonify([imp.to_dict() for imp in list_label_importers()])
+    return [imp.to_dict() for imp in list_label_importers()]
 
 
 # ---------------------------------------------------------------------------
 # POST /api/label-importers/import/<importer_name>
+#
+# Plugin-field route — stays on the legacy ``request.get_json`` / multipart
+# path. The request body is the importer's declared ``fields`` (file
+# uploads, free-form params) and doesn't fit a static marshmallow schema.
+# See ``docs/plans/openapi-schema.md`` (Resolved questions / Plugin field
+# endpoints). Not described in the OpenAPI spec.
 # ---------------------------------------------------------------------------
 
 
@@ -105,15 +114,7 @@ def get_label_importers():
 def run_label_import(importer_name: str):
     """Run the named label importer and apply the resulting labels.
 
-    Accepts ``multipart/form-data`` when the importer has a ``"file"`` field,
-    or ``application/json`` for text-only importers.  In both cases the route
-    builds a ``field_values`` dict and passes it to
-    :meth:`~vtsearch.labels.importers.base.LabelImporter.run`.
-
-    Returns JSON with ``applied``, ``skipped``, ``missing_count``,
-    ``missing``, and ``message`` keys.  When ``missing_count > 0`` the
-    client should prompt the user and optionally call
-    ``POST /api/label-importers/ingest-missing`` with the ``missing`` list.
+    Plugin-dependent body shape: not described in the OpenAPI spec.
     """
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
@@ -209,26 +210,11 @@ def run_label_import(importer_name: str):
 
 
 @label_importers_bp.route("/api/label-importers/ingest-missing", methods=["POST"])
-def ingest_missing():
-    """Re-ingest missing medias from their origins, then apply their labels.
-
-    Expects a JSON body::
-
-        {"entries": [<label-entry>, ...]}
-
-    Groups the entries by origin, runs each origin's dataset importer to
-    recover the full media data (media bytes + embedding), appends the
-    matched medias to the live dataset, and applies the labels.
-
-    Returns::
-
-        {"ingested": <int>, "applied": <int>, "message": "<str>"}
-    """
-    body = get_json_safe()
-    entries = body.get("entries", [])
-
-    if not isinstance(entries, list) or not entries:
-        return jsonify({"error": "Request must contain a non-empty 'entries' list."}), 400
+@label_importers_bp.arguments(IngestMissingRequestSchema)
+@label_importers_bp.response(200, IngestMissingResponseSchema)
+def ingest_missing(body: dict):
+    """Re-ingest missing medias from their origins, then apply their labels."""
+    entries = body["entries"]
 
     from vtsearch.datasets.ingest import ingest_missing_medias
 
@@ -249,10 +235,8 @@ def ingest_missing():
 
         sync_to_labelset_source()
 
-    return jsonify(
-        {
-            "ingested": ingested,
-            "applied": applied,
-            "message": f"Ingested {ingested} media(s), applied {applied} label(s).",
-        }
-    )
+    return {
+        "ingested": ingested,
+        "applied": applied,
+        "message": f"Ingested {ingested} media(s), applied {applied} label(s).",
+    }
