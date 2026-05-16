@@ -94,15 +94,15 @@ export class CombineDetectorsModalComponent implements OnInit {
         if (status === 422) {
           this.error =
             serverMsg ||
-            'Every label was a conflict — no model was created. Try fewer or more aligned sources.';
+            'Every label was a conflict — no detector was created. Try fewer or more aligned sources.';
         } else if (status === 409) {
-          this.error = serverMsg || `A model named "${trimmed}" already exists.`;
+          this.error = serverMsg || `A detector named "${trimmed}" already exists.`;
         } else if (status === 404) {
-          this.error = serverMsg || 'A source model was not found.';
+          this.error = serverMsg || 'A source detector was not found.';
         } else if (status === 400) {
           this.error = serverMsg || 'Invalid combine request.';
         } else {
-          this.error = serverMsg || 'Failed to combine models.';
+          this.error = serverMsg || 'Failed to combine detectors.';
         }
       },
     });

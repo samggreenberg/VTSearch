@@ -481,7 +481,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!modelId) return;
     this.sortState.setSortMode('load');
     this.sortState.setSortBusy(true);
-    this.sortState.setSortStatus('Scoring with model…');
+    this.sortState.setSortStatus('Scoring with detector…');
     this.sortState.setSortProgress(0, 0);
 
     this.startScoringProgressPoll();
@@ -507,7 +507,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       error: () => {
         this.stopScoringProgressPoll();
         this.sortState.setSortBusy(false);
-        this.sortState.setSortStatus('Model sort failed');
+        this.sortState.setSortStatus('Detector sort failed');
         this.sortState.setSortProgress(0, 0);
       },
     });

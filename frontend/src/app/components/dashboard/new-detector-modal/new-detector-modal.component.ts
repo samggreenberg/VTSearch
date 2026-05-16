@@ -232,7 +232,7 @@ export class NewDetectorModalComponent implements OnInit {
 
   get modalTitle(): string {
     if (this.view === 'media-picker') return 'Select Media Example';
-    return 'New Model';
+    return 'New Detector';
   }
 
   get hasExample(): boolean {

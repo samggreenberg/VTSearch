@@ -603,8 +603,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     try {
       ok = await this.dialog.confirm(
         targets.length === 1
-          ? `Delete model ${names}?`
-          : `Delete ${targets.length} models: ${names}?`,
+          ? `Delete detector ${names}?`
+          : `Delete ${targets.length} detectors: ${names}?`,
       );
     } finally {
       this.deletingSelectedDetectorsConfirm = false;
@@ -638,14 +638,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get combineSelectedDetectorsHint(): string {
     if (this.selectedDetectorIds.size < 2) {
-      return 'Select two or more trainable models to combine';
+      return 'Select two or more trainable detectors to combine';
     }
     const targets = this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
     const types = new Set(targets.map((m) => m.media_type));
     if (types.size !== 1) {
-      return 'All selected models must be of the same media type';
+      return 'All selected detectors must be of the same media type';
     }
-    return 'Combine selected models into a new one';
+    return 'Combine selected detectors into a new one';
   }
 
   get combineSelectedDetectorSources(): DetectorRegistryEntry[] {
@@ -742,7 +742,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
     this.deletingDetectorId = model.id;
-    const ok = await this.dialog.confirm(`Delete model "${model.name}"?`);
+    const ok = await this.dialog.confirm(`Delete detector "${model.name}"?`);
     this.deletingDetectorId = '';
     if (!ok) return;
     this.detectorsApi.deleteFromRegistry(model.id).subscribe({
@@ -1191,12 +1191,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get findHint(): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
-    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and a model';
+    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and a detector';
     if (nDatasets === 0) return 'Select a dataset';
-    if (nModels === 0) return 'Select a model';
+    if (nModels === 0) return 'Select a detector';
     if (!this.findMediaTypesMatch()) return 'Media type mismatch';
-    if (this.hasUntrainedModel()) return 'Selected model has no training labels';
-    return 'Score selected datasets with selected models';
+    if (this.hasUntrainedModel()) return 'Selected detector has no training labels';
+    return 'Score selected datasets with selected detectors';
   }
 
   get labelHint(): string {
@@ -1204,14 +1204,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const nModels = this.resolvedSelectedModels.length;
     if (nDatasets === 0) return 'Select a dataset';
     if (nDatasets > 1) return 'Select exactly 1 dataset';
-    if (nModels === 0) return 'Create a new model and start training';
-    if (nModels > 1) return 'Select exactly 1 model';
+    if (nModels === 0) return 'Create a new detector and start training';
+    if (nModels > 1) return 'Select exactly 1 detector';
     const model = this.resolvedSelectedModels[0];
     const dataset = this.resolvedSelectedDatasets[0];
     if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';
     }
-    return 'Open Train Mode with the selected dataset and model';
+    return 'Open Train Mode with the selected dataset and detector';
   }
 
   private storeSelectedModelTextQuery(): void {
