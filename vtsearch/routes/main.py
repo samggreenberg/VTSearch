@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Response, current_app, jsonify, send_from_directory
+from flask import Response, current_app, send_from_directory
 from flask_smorest import Blueprint
 
 from vtsearch import __version__
@@ -31,22 +31,6 @@ main_bp = Blueprint(
 def version() -> dict:
     """Return the app version (UTC timestamp of the last dev->main merge)."""
     return {"version": __version__}
-
-
-@main_bp.route("/openapi.json")
-def openapi_json() -> Response:
-    """Return the auto-generated OpenAPI 3.0 spec for this Flask app.
-
-    Served by the pre-existing permissive walker in
-    :mod:`vtsearch.openapi`; the richer flask-smorest spec lives at
-    ``/api/openapi.json``. Both coexist until the migration in
-    ``docs/plans/openapi-schema.md`` completes — at which point this
-    route is deleted along with the walker.
-    """
-    from vtsearch.openapi import generate_openapi_spec
-
-    spec = generate_openapi_spec(current_app, version=__version__)
-    return jsonify(spec)
 
 
 def _static_dir() -> Path:

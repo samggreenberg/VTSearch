@@ -197,28 +197,19 @@ When the migration completes, these files should not exist:
 
 The previous OpenAPI work (feature-brainstorm §12.9, shipped in commit
 `44e9657`) added a separate, lighter-weight implementation:
-`vtsearch.openapi.generate_openapi_spec` walks `app.url_map` and emits
-a permissive spec (every route/method/path-param/docstring, but
-`{type: object}` for every body and response). It's served at
+`vtsearch.openapi.generate_openapi_spec` walked `app.url_map` and
+emitted a permissive spec (every route/method/path-param/docstring, but
+`{type: object}` for every body and response). It was served at
 `/openapi.json` and dumpable via `python app.py --openapi-schema`.
 
-This plan's flask-smorest implementation serves a richer spec at
-`/api/openapi.json` (plus Swagger UI at `/api/docs`) with real
-request/response schemas. The two coexist today — same routes, two
-specs. Once enough blueprints have migrated that the flask-smorest
-spec covers the surface the permissive one does, **delete**:
-
-- `vtsearch/openapi/` — the url-map walker.
-- The `/openapi.json` Flask route registration in `app.py`.
-- The `--openapi-schema` CLI flag in `app.py`'s argparse setup.
-- The `--openapi-schema` references in `docs/CLI.md` and
-  `docs/API.md § Machine-readable schema`.
-
-The point of consolidation is "enough blueprints" — concretely, every
-blueprint listed in the migration order below. Until then, both
-endpoints are useful: integrators who only need the route inventory
-can read `/openapi.json` without flask-smorest's typed
-request/response gates getting in the way during their migration.
+That permissive spec has been **deleted** now that flask-smorest covers
+every blueprint and serves a richer spec at `/api/openapi.json` (plus
+Swagger UI at `/api/docs`) with real request/response schemas. The
+removals — `vtsearch/openapi.py`, the `/openapi.json` route on
+`main_bp`, the `--openapi-schema` CLI flag, the
+`tests/api/test_openapi_schema.py` tests, and the docs references in
+`docs/CLI.md` / `docs/API.md` — all landed together in the same PR that
+checks off this follow-up.
 
 ## Resolved questions
 
@@ -564,14 +555,15 @@ request/response gates getting in the way during their migration.
       the ``errors`` envelope.
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
-- [ ] Delete the pre-existing permissive `/openapi.json` +
-      `--openapi-schema` now that flask-smorest covers every blueprint
-      (see "Relationship to the pre-existing permissive spec" above).
-      The url-map walker in ``vtsearch/openapi.py`` and the ``/openapi.json``
-      route on ``main_bp`` are still in place — flagged as deprecated in
-      their docstrings but kept until a follow-up PR removes them
-      together with the ``--openapi-schema`` CLI flag and the docs
-      references in ``docs/CLI.md`` / ``docs/API.md``.
+- [x] Pre-existing permissive `/openapi.json` + `--openapi-schema`
+      deleted. Removed ``vtsearch/openapi.py`` (the url-map walker),
+      the ``/openapi.json`` route on ``main_bp``, the
+      ``--openapi-schema`` CLI flag in ``app.py``, and
+      ``tests/api/test_openapi_schema.py``. The ``--format`` flag's
+      help text no longer mentions ``--openapi-schema``. Docs updated:
+      ``docs/API.md § Machine-readable schema`` and ``docs/CLI.md``
+      both point at ``GET /api/openapi.json`` (and Swagger UI at
+      ``/api/docs``) as the single source.
 
 ## Open follow-ups
 

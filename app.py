@@ -465,17 +465,10 @@ if __name__ == "__main__":
         choices=["plain", "json", "names"],
         dest="output_format",
         help=(
-            "Output format for --list-plugins / --openapi-schema. 'plain' is "
-            "human-readable, 'json' is machine-readable, 'names' emits bare "
-            "plugin names one per line (shell-completion friendly). "
-            "--openapi-schema only honours 'json' (default for that flag)."
+            "Output format for --list-plugins. 'plain' is human-readable, "
+            "'json' is machine-readable, 'names' emits bare plugin names "
+            "one per line (shell-completion friendly)."
         ),
-    )
-    parser.add_argument(
-        "--openapi-schema",
-        action="store_true",
-        dest="openapi_schema",
-        help="Print the auto-generated OpenAPI 3.0 spec for the HTTP API and exit.",
     )
     parser.add_argument(
         "--pipeline",
@@ -586,16 +579,6 @@ if __name__ == "__main__":
             sys.stdout.write(format_names(inventory, family=args.plugin_family))
         else:
             sys.stdout.write(format_plain(inventory))
-        sys.exit(0)
-
-    if args.openapi_schema:
-        import json as _json
-
-        from vtsearch.openapi import generate_openapi_spec
-
-        spec = generate_openapi_spec(app)
-        sys.stdout.write(_json.dumps(spec, indent=2))
-        sys.stdout.write("\n")
         sys.exit(0)
 
     # ---- Pipeline file ---------------------------------------------------
