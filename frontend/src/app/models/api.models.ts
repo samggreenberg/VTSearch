@@ -311,6 +311,15 @@ export interface MediaTypeInfo {
   icon?: string;
   tab_title?: string;
   folder_import_name?: string;
+  /** Glob patterns for files this media type claims, e.g. ``["*.jpg", "*.png"]``. */
+  file_extensions?: string[];
+}
+
+export interface MediaTypeDetectionResponse {
+  sample_size: number;
+  counts_by_type: Record<string, number>;
+  extensions: Record<string, number>;
+  dominant: string | null;
 }
 
 export interface MediaTypesResponse {

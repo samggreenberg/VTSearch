@@ -8,6 +8,7 @@ import {
   ImportersResponse,
   DemoListResponse,
   MediaTypesResponse,
+  MediaTypeDetectionResponse,
   DatasetRegistryResponse,
   ClipperInfo,
   ClippersResponse,
@@ -76,6 +77,22 @@ export class DatasetsApiService {
 
   getMediaTypes(): Observable<MediaTypesResponse> {
     return this.http.get<MediaTypesResponse>('/api/media-types');
+  }
+
+  detectMediaType(
+    source: string,
+    path: string,
+    recursive: boolean,
+    limit = 50,
+  ): Observable<MediaTypeDetectionResponse> {
+    return this.http.get<MediaTypeDetectionResponse>('/api/dataset/detect-media-type', {
+      params: {
+        source,
+        path,
+        recursive: recursive ? 'true' : 'false',
+        limit: String(limit),
+      },
+    });
   }
 
   getClippers(mediaType?: string): Observable<ClipperInfo[]> {

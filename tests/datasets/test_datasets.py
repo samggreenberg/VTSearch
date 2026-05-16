@@ -150,6 +150,69 @@ class TestDatasetEndpoints:
             # Clean up
             dest.unlink(missing_ok=True)
 
+    def test_detect_media_type_finds_dominant(self, client, tmp_path, monkeypatch):
+        """GET /api/dataset/detect-media-type returns the dominant media type."""
+        # Three .wav files (audio) + one .jpg (image) → dominant=audio.
+        (tmp_path / "a.wav").write_bytes(b"RIFF")
+        (tmp_path / "b.wav").write_bytes(b"RIFF")
+        (tmp_path / "c.wav").write_bytes(b"RIFF")
+        (tmp_path / "d.jpg").write_bytes(b"\xff\xd8\xff")
+
+        monkeypatch.setattr(
+            "vtsearch.routes.datasets.ui._resolve_browse_root",
+            lambda source: tmp_path if source == "folder" else None,
+        )
+        resp = client.get("/api/dataset/detect-media-type?source=folder&path=")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["sample_size"] == 4
+        assert data["dominant"] == "audio"
+        assert data["counts_by_type"].get("audio") == 3
+        assert data["counts_by_type"].get("image") == 1
+
+    def test_detect_media_type_recursive(self, client, tmp_path, monkeypatch):
+        """The endpoint respects the ``recursive`` query parameter."""
+        (tmp_path / "top.jpg").write_bytes(b"\xff\xd8\xff")
+        sub = tmp_path / "nested"
+        sub.mkdir()
+        (sub / "deep.wav").write_bytes(b"RIFF")
+
+        monkeypatch.setattr(
+            "vtsearch.routes.datasets.ui._resolve_browse_root",
+            lambda source: tmp_path if source == "folder" else None,
+        )
+
+        # Recursive (default): sees both files.
+        resp = client.get("/api/dataset/detect-media-type?source=folder&path=")
+        data = resp.get_json()
+        assert data["sample_size"] == 2
+
+        # Non-recursive: only the top-level .jpg is visible.
+        resp = client.get("/api/dataset/detect-media-type?source=folder&path=&recursive=false")
+        data = resp.get_json()
+        assert data["sample_size"] == 1
+        assert data["dominant"] == "image"
+
+    def test_detect_media_type_unknown_extensions(self, client, tmp_path, monkeypatch):
+        """Unrecognised extensions roll up under ``"unknown"`` and don't dominate."""
+        (tmp_path / "a.xyz").write_bytes(b"")
+        (tmp_path / "b.qqq").write_bytes(b"")
+
+        monkeypatch.setattr(
+            "vtsearch.routes.datasets.ui._resolve_browse_root",
+            lambda source: tmp_path if source == "folder" else None,
+        )
+        resp = client.get("/api/dataset/detect-media-type?source=folder&path=")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["dominant"] is None
+        assert data["counts_by_type"].get("unknown") == 2
+
+    def test_detect_media_type_bad_source(self, client):
+        """GET /api/dataset/detect-media-type returns 404 for an unknown source."""
+        resp = client.get("/api/dataset/detect-media-type?source=demo:nonexistent_xyz&path=")
+        assert resp.status_code == 404
+
     def test_select_browsed_file_traversal_blocked(self, client, tmp_path):
         """POST /api/browse-media-files/select rejects traversal paths."""
         from unittest.mock import patch

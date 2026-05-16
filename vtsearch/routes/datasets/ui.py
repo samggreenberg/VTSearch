@@ -287,6 +287,53 @@ def browse_media_files():
     return jsonify({"directories": directories, "files": files, "root_path": str(root)})
 
 
+@datasets_ui_bp.route("/api/dataset/detect-media-type")
+def detect_media_type():
+    """Sample a folder and report which media type dominates by extension.
+
+    Powers the auto-detect hint in the import modal: rather than making
+    the user pick ``media_type`` blindly, the modal calls this after the
+    user selects a folder and pre-fills the dropdown with whichever type
+    has the most matching files in the first ``limit`` files of the tree.
+
+    Query parameters:
+
+    * ``source`` — one of ``demo:<name>`` or ``folder`` (matches
+      ``/api/browse-media-files``).
+    * ``path`` — relative sub-path within the root (default ``""``).
+    * ``recursive`` — ``"true"``/``"false"`` (default ``"true"``).
+    * ``limit`` — max files to examine (default ``50``, capped at ``500``).
+
+    Returns the dict produced by
+    :func:`vtsearch.datasets.media_type_detection.detect_media_types_in_folder`.
+    """
+    from vtsearch.datasets.media_type_detection import detect_media_types_in_folder
+
+    source = request.args.get("source", "folder").strip() or "folder"
+    subpath = request.args.get("path", "").strip()
+    recursive = request.args.get("recursive", "true").strip().lower() != "false"
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except ValueError:
+        limit = 50
+    limit = max(1, min(limit, 500))
+
+    root = _resolve_browse_root(source)
+    if root is None:
+        return jsonify({"error": "Source not found or not available on disk"}), 404
+
+    target = (root / subpath).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+
+    if not target.is_dir():
+        return jsonify({"error": "Directory not found"}), 404
+
+    return jsonify(detect_media_types_in_folder(target, recursive=recursive, limit=limit))
+
+
 @datasets_ui_bp.route("/api/browse-media-files/select", methods=["POST"])
 def select_browsed_file():
     """Copy a file from a browse source into ``data/example_media/``.
