@@ -127,7 +127,12 @@ class UserSettings(BaseModel):
 
     volume: Annotated[float, _clamp(0.0, 1.0)] = 1.0
     inclusion: Annotated[int, _clamp(-10, 10)] = 0
-    theme: Theme = "dark"
+    # ``None`` means the theme has not been set yet for this user. The
+    # frontend detects ``prefers-color-scheme`` on first load and writes
+    # back a concrete value, so this default is only observed once per
+    # user. The legacy fallback for environments without ``matchMedia``
+    # (and for places like the "Reset to defaults" button) is "dark".
+    theme: Theme | None = None
     enrich_descriptions: bool = False
     safe_thresholds: bool = False
     calibrate_count: Annotated[int, _clamp(1, 100)] = DEFAULT_CALIBRATE_COUNT

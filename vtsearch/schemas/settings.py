@@ -42,7 +42,9 @@ class AppSettingsSchema(Schema):
     # Per-user, scalar
     volume = fields.Float()
     inclusion = fields.Integer()
-    theme = fields.String(validate=validate.OneOf(VALID_THEMES))
+    # ``null`` = "no theme persisted yet"; the frontend treats null as
+    # "detect prefers-color-scheme and write back".
+    theme = fields.String(validate=validate.OneOf(VALID_THEMES), allow_none=True)
     enrich_descriptions = fields.Boolean()
     safe_thresholds = fields.Boolean()
     calibrate_count = fields.Integer()
@@ -92,7 +94,9 @@ class SettingsUpdateSchema(Schema):
 
     volume = fields.Float()
     inclusion = fields.Integer()
-    theme = fields.String(validate=validate.OneOf(VALID_THEMES))
+    # ``null`` is accepted so "Reset to defaults" can clear the theme and
+    # let the next page load re-detect ``prefers-color-scheme``.
+    theme = fields.String(validate=validate.OneOf(VALID_THEMES), allow_none=True)
     enrich_descriptions = fields.Boolean()
     safe_thresholds = fields.Boolean()
     calibrate_count = fields.Integer()

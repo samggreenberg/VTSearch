@@ -353,7 +353,7 @@ export interface AutoDetectResponse {
 export interface AppSettings {
   volume: number;
   inclusion?: number;
-  theme?: string;
+  theme?: string | null;
   enrich_descriptions?: boolean;
   safe_thresholds?: boolean;
   calibrate_count?: number;
