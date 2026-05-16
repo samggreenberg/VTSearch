@@ -270,11 +270,21 @@ request/response gates getting in the way during their migration.
       empty merge) keep their HTTP codes (400 / 409 / 422) but now
       carry the standard ``message`` envelope instead of legacy
       ``{"error": str}``. Detector tests updated to match.
-- [ ] `detectors/registry.py`, `detectors/labels.py`,
-      `detectors/scoring.py`, `detectors/find.py` — remaining detector
-      sub-blueprints. ``registry.py`` is the next chunk;
-      ``labels.py``'s vote / preview / thumbnail routes serve binary
-      bodies and will need ``alt_response``-only declarations.
+- [x] `detectors/registry.py` migrated to flask-smorest (list / register
+      / load / unload / delete / rename / autorun / cancel). Schema-level
+      validation failures (missing required fields, length checks)
+      surface as 422 with the standard ``errors`` envelope; handler-level
+      rejects (``media_type='any'``, whitespace-only name, not loaded)
+      keep their HTTP codes (400 / 404 / 409 / 500) with the standard
+      ``message`` envelope. The ``POST /api/detectors/registry/from-labelset/<importer>``
+      route stays on plain Flask — its body is a plugin-field shape that
+      doesn't fit a static marshmallow schema (see *Open questions /
+      Plugin field endpoints* above). Registry tests in
+      ``tests/api/test_error_recovery.py`` updated to match.
+- [ ] `detectors/labels.py`, `detectors/scoring.py`, `detectors/find.py`
+      — remaining detector sub-blueprints. ``labels.py``'s vote / preview
+      / thumbnail routes serve binary bodies and will need
+      ``alt_response``-only declarations.
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
 - [ ] Remaining blueprints (see Order above)

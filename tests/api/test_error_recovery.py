@@ -97,7 +97,8 @@ class TestInvalidRequestBodies:
             data="null",
             content_type="application/json",
         )
-        assert resp.status_code == 400
+        # flask-smorest schema rejects ``null`` body → 422 envelope.
+        assert resp.status_code == 422
 
 
 class TestMissingRequiredFields:
@@ -116,16 +117,18 @@ class TestMissingRequiredFields:
             "/api/detectors/registry",
             json={"media_type": "audio"},
         )
-        assert resp.status_code == 400
-        assert "name" in resp.get_json()["error"]
+        # Required-field validation runs in the registry-create schema → 422.
+        assert resp.status_code == 422
+        assert "name" in resp.get_json()["errors"]["json"]
 
     def test_register_model_missing_media_type(self, client):
         resp = client.post(
             "/api/detectors/registry",
             json={"name": "test"},
         )
-        assert resp.status_code == 400
-        assert "media_type" in resp.get_json()["error"]
+        # Required-field validation runs in the registry-create schema → 422.
+        assert resp.status_code == 422
+        assert "media_type" in resp.get_json()["errors"]["json"]
 
     def test_register_model_rename_missing_new_name(self, client):
         resp = client.post(
@@ -134,7 +137,8 @@ class TestMissingRequiredFields:
         )
         detector_id = resp.get_json()["detector"]["id"]
         resp = client.put(f"/api/detectors/registry/{detector_id}/rename", json={})
-        assert resp.status_code == 400
+        # Required-field validation runs in the rename schema → 422.
+        assert resp.status_code == 422
 
     def test_autorun_flag_missing_value(self, client):
         resp = client.post(
@@ -143,7 +147,8 @@ class TestMissingRequiredFields:
         )
         detector_id = resp.get_json()["detector"]["id"]
         resp = client.put(f"/api/detectors/registry/{detector_id}/autorun", json={})
-        assert resp.status_code == 400
+        # Required-field validation runs in the autorun schema → 422.
+        assert resp.status_code == 422
 
     def test_fill_from_sort_missing_threshold(self, client):
         resp = client.post(
@@ -507,13 +512,16 @@ class TestModelRegistryEdgeCases:
             "/api/detectors/registry",
             json={"name": "", "media_type": "audio"},
         )
-        assert resp.status_code == 400
+        # ``validate.Length(min=1)`` in the schema → 422.
+        assert resp.status_code == 422
 
     def test_create_model_with_whitespace_name(self, client):
         resp = client.post(
             "/api/detectors/registry",
             json={"name": "   ", "media_type": "audio"},
         )
+        # The schema length check passes (3 chars); the handler strips
+        # and aborts with 400 + ``message``.
         assert resp.status_code == 400
 
     def test_double_delete_model(self, client):
