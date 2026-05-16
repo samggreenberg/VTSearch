@@ -289,8 +289,10 @@ VTSearch has a few interactions that are clever but un-Google-able — replace w
 ### 7.1 Stripe histogram in left panel ★★ M
 The mini-histogram below the media list lets users click to jump to a score range. Most users never figure this out. Either remove or replace with a standard horizontal slider that filters the list. (Slider supports drag-to-zoom-window, is keyboard-friendly, and is familiar from price filters.)
 
-### 7.2 Side-toggle bulk-select on dashboard ★ S
+### 7.2 Side-toggle bulk-select on dashboard ★ S — SHIPPED
 The triangle-shaped mixed-state checkbox on the side of the dashboard tables is unusual. Move to a standard left-column checkbox per row with a top-of-column master checkbox (Gmail / Linear / GitHub pattern).
+
+**What shipped:** Per-row checkboxes moved to a new pinned leftmost `select-col` in both the Datasets and Detectors tables; the tri-state master checkbox now lives in that column's header. The right-side sidebar retains the Combine and Delete bulk-action buttons (no longer paired with a checkbox). Files: `frontend/src/app/components/dashboard/{dashboard,dataset-card/dataset-card,detector-card/detector-card}.component.{html,scss}`, plus `dashboard.component.ts` (removed unused `spinDataset/DetectorSelectToggle` animation state).
 
 ### 7.3 Hover-to-reveal delete confirmation ★★ XS
 Hover-only confirmation for destructive actions is unfamiliar and fragile. Replace with a standard modal confirm (matches §6.5).
