@@ -30,10 +30,13 @@ class Video2ImageMediaConverter(MediaConverter):
         PluginField(
             key="n_clips",
             label="Frames per video",
-            field_type="text",
+            field_type="number",
             description="Number of evenly-spaced frames to extract from each video.",
             default="10",
             required=False,
+            integer=True,
+            min_value=1,
+            step=1,
         ),
     ]
 

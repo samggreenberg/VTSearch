@@ -240,6 +240,18 @@
                 (ngModelChange)="formOnDatasetNameInput($event)"
                 [placeholder]="field.description || field.label || field.key"
               />
+            } @else if (field.field_type === 'number') {
+              <input
+                [id]="'field-' + field.key"
+                type="number"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [attr.min]="field.min_value ?? null"
+                [attr.max]="field.max_value ?? null"
+                [attr.step]="field.step ?? (field.integer ? 1 : null)"
+                [placeholder]="field.description || field.label || field.key"
+                (change)="onFormFieldChanged(field.key)"
+              />
             } @else {
               <input
                 [id]="'field-' + field.key"
@@ -278,12 +290,37 @@
                   @for (f of converter.fields || []; track f.key) {
                     <label class="sf-spec-param">
                       {{ f.label || f.key }}:
-                      <input
-                        type="text"
-                        class="form-input sf-spec-param-input"
-                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                        (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
-                      />
+                      @if (f.field_type === 'select') {
+                        <select
+                          class="form-select sf-spec-param-input"
+                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
+                          [title]="f.description || ''"
+                        >
+                          @for (opt of f.options || []; track opt) {
+                            <option [value]="opt">{{ opt }}</option>
+                          }
+                        </select>
+                      } @else if (f.field_type === 'number') {
+                        <input
+                          type="number"
+                          class="form-input sf-spec-param-input"
+                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                          [attr.min]="f.min_value ?? null"
+                          [attr.max]="f.max_value ?? null"
+                          [attr.step]="f.step ?? (f.integer ? 1 : null)"
+                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
+                          [title]="f.description || ''"
+                        />
+                      } @else {
+                        <input
+                          type="text"
+                          class="form-input sf-spec-param-input"
+                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
+                          [title]="f.description || ''"
+                        />
+                      }
                     </label>
                   }
                 }
@@ -412,12 +449,37 @@
                 @for (f of converter.fields || []; track f.key) {
                   <label class="sf-spec-param">
                     {{ f.label || f.key }}:
-                    <input
-                      type="text"
-                      class="form-input sf-spec-param-input"
-                      [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                      (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
-                    />
+                    @if (f.field_type === 'select') {
+                      <select
+                        class="form-select sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
+                        [title]="f.description || ''"
+                      >
+                        @for (opt of f.options || []; track opt) {
+                          <option [value]="opt">{{ opt }}</option>
+                        }
+                      </select>
+                    } @else if (f.field_type === 'number') {
+                      <input
+                        type="number"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        [attr.min]="f.min_value ?? null"
+                        [attr.max]="f.max_value ?? null"
+                        [attr.step]="f.step ?? (f.integer ? 1 : null)"
+                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
+                        [title]="f.description || ''"
+                      />
+                    } @else {
+                      <input
+                        type="text"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
+                        [title]="f.description || ''"
+                      />
+                    }
                   </label>
                 }
               }
@@ -615,12 +677,37 @@
                 @for (f of converter.fields || []; track f.key) {
                   <label class="sf-spec-param">
                     {{ f.label || f.key }}:
-                    <input
-                      type="text"
-                      class="form-input sf-spec-param-input"
-                      [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                      (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
-                    />
+                    @if (f.field_type === 'select') {
+                      <select
+                        class="form-select sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
+                        [title]="f.description || ''"
+                      >
+                        @for (opt of f.options || []; track opt) {
+                          <option [value]="opt">{{ opt }}</option>
+                        }
+                      </select>
+                    } @else if (f.field_type === 'number') {
+                      <input
+                        type="number"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        [attr.min]="f.min_value ?? null"
+                        [attr.max]="f.max_value ?? null"
+                        [attr.step]="f.step ?? (f.integer ? 1 : null)"
+                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
+                        [title]="f.description || ''"
+                      />
+                    } @else {
+                      <input
+                        type="text"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
+                        [title]="f.description || ''"
+                      />
+                    }
                   </label>
                 }
               }

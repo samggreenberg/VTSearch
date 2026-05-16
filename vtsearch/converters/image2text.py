@@ -34,18 +34,38 @@ class Image2TextMediaConverter(MediaConverter):
         PluginField(
             key="language",
             label="OCR language",
-            field_type="text",
-            description="PaddleOCR language code (en, ch, fr, de, japan, korean, ...).",
+            field_type="select",
+            description=(
+                "PaddleOCR language code.  The dropdown lists common choices; any "
+                "PaddleOCR-supported code is accepted when passed via CLI or JSON."
+            ),
+            options=[
+                "en",
+                "ch",
+                "fr",
+                "de",
+                "japan",
+                "korean",
+                "it",
+                "es",
+                "pt",
+                "ru",
+                "ar",
+                "hi",
+            ],
             default="en",
             required=False,
         ),
         PluginField(
             key="threshold",
             label="Confidence threshold",
-            field_type="text",
+            field_type="number",
             description="Drop detected regions whose confidence is below this (0–1).",
             default="0.5",
             required=False,
+            min_value=0,
+            max_value=1,
+            step=0.05,
         ),
     ]
 

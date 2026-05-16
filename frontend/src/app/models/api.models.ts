@@ -270,6 +270,15 @@ export interface ImporterField {
   dynamic_options?: boolean;
   /** Field keys whose values this field's options depend on. */
   depends_on?: string[];
+  /** ``"number"`` fields only: bind ``<input type="number">`` with
+   *  integer-only step. */
+  integer?: boolean;
+  /** ``"number"`` fields only: inclusive minimum (HTML5 ``min``). */
+  min_value?: number | null;
+  /** ``"number"`` fields only: inclusive maximum (HTML5 ``max``). */
+  max_value?: number | null;
+  /** ``"number"`` fields only: step granularity (HTML5 ``step``). */
+  step?: number | null;
 }
 
 export interface ImporterPickerTab {

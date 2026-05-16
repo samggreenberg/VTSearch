@@ -65,6 +65,16 @@
               <option [value]="opt">{{ opt }}</option>
             }
           </select>
+        } @else if (field.field_type === 'number') {
+          <input
+            type="number"
+            class="form-input"
+            [(ngModel)]="exportFieldValues[field.key]"
+            [attr.min]="field.min_value ?? null"
+            [attr.max]="field.max_value ?? null"
+            [attr.step]="field.step ?? (field.integer ? 1 : null)"
+            [placeholder]="field.placeholder || field.description || ''"
+          />
         } @else {
           <input [type]="field.field_type === 'password' ? 'password' : field.field_type === 'email' ? 'email' : 'text'" class="form-input" [(ngModel)]="exportFieldValues[field.key]" [placeholder]="field.placeholder || field.description || ''" />
         }

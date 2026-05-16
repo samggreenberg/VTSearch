@@ -205,6 +205,17 @@
                       <option [value]="opt">{{ opt }}</option>
                     }
                   </select>
+                } @else if (field.field_type === 'number') {
+                  <input
+                    [id]="'field-' + field.key"
+                    type="number"
+                    class="form-input"
+                    [(ngModel)]="formValues[field.key]"
+                    [attr.min]="field.min_value ?? null"
+                    [attr.max]="field.max_value ?? null"
+                    [attr.step]="field.step ?? (field.integer ? 1 : null)"
+                    [placeholder]="field.placeholder || field.description || field.label || field.key"
+                  />
                 } @else {
                   <input
                     [id]="'field-' + field.key"

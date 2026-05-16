@@ -41,7 +41,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Generic, Literal, TypeVar
 
-FieldType = Literal["file", "folder", "url", "text", "password", "email", "select", "server_path", "checkbox"]
+FieldType = Literal[
+    "file",
+    "folder",
+    "url",
+    "text",
+    "password",
+    "email",
+    "select",
+    "server_path",
+    "checkbox",
+    "number",
+]
 
 __all__ = [
     "FieldType",
@@ -77,6 +88,13 @@ class PluginField:
     - ``"checkbox"`` – Boolean tick-box.  ``default`` should be ``"true"`` or
       ``"false"``; values arrive at :meth:`run` as plain strings (or already
       coerced bools) and should be parsed via ``str(value).lower() == "true"``.
+    - ``"number"``   – Numeric input.  Set :attr:`integer` to ``True`` for
+      whole-number inputs (the CLI binds ``type=int``); leave it ``False``
+      for floats (``type=float``).  Optional :attr:`min_value`,
+      :attr:`max_value`, and :attr:`step` are passed through to the HTML5
+      ``<input type="number">`` widget.  Values still arrive at :meth:`run`
+      as strings under ``multipart/form-data``, so plugins should defensively
+      coerce with ``int(...)`` / ``float(...)``.
 
     Dynamic option fields
     ---------------------
@@ -110,6 +128,20 @@ class PluginField:
     #: listed field changes, the frontend re-fetches options for this field.
     #: Only meaningful when :attr:`dynamic_options` is ``True``.
     depends_on: list[str] = field(default_factory=list)
+    #: For ``"number"`` fields: whether to bind ``type=int`` in argparse and
+    #: render the HTML5 number input with integer-only step.  Floats use
+    #: ``type=float`` and accept arbitrary precision.
+    integer: bool = False
+    #: For ``"number"`` fields: optional inclusive minimum, passed through
+    #: to the HTML5 ``min`` attribute.  Backend enforcement is the plugin's
+    #: responsibility.
+    min_value: float | None = None
+    #: For ``"number"`` fields: optional inclusive maximum, passed through
+    #: to the HTML5 ``max`` attribute.
+    max_value: float | None = None
+    #: For ``"number"`` fields: optional step granularity for the HTML5
+    #: ``step`` attribute (e.g. ``0.05``).  Independent of :attr:`integer`.
+    step: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -124,6 +156,10 @@ class PluginField:
             "placeholder": self.placeholder,
             "dynamic_options": self.dynamic_options,
             "depends_on": list(self.depends_on),
+            "integer": self.integer,
+            "min_value": self.min_value,
+            "max_value": self.max_value,
+            "step": self.step,
         }
 
 
@@ -187,6 +223,15 @@ class PluginBase:
                 # ``--<key>`` / ``--no-<key>`` boolean flag.
                 kwargs["action"] = argparse.BooleanOptionalAction
                 kwargs["default"] = str(f.default).lower() == "true"
+                parser.add_argument(arg_name, **kwargs)
+                continue
+            if f.field_type == "number":
+                kwargs["type"] = int if f.integer else float
+                if f.default not in (None, ""):
+                    try:
+                        kwargs["default"] = int(f.default) if f.integer else float(f.default)
+                    except (TypeError, ValueError):
+                        pass
                 parser.add_argument(arg_name, **kwargs)
                 continue
             if f.default:

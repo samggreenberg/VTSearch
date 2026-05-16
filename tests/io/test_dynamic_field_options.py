@@ -99,6 +99,106 @@ class TestPluginFieldDynamicAttrs:
         assert b.depends_on == []
 
 
+class TestNumberFieldType:
+    """The ``"number"`` field_type carries integer / min / max / step hints."""
+
+    def test_number_defaults(self):
+        f = PluginField(key="n", label="N", field_type="number")
+        assert f.integer is False
+        assert f.min_value is None
+        assert f.max_value is None
+        assert f.step is None
+
+    def test_number_to_dict_round_trip(self):
+        f = PluginField(
+            key="n_mels",
+            label="Mel bands",
+            field_type="number",
+            integer=True,
+            min_value=8,
+            max_value=512,
+            step=1,
+        )
+        d = f.to_dict()
+        assert d["field_type"] == "number"
+        assert d["integer"] is True
+        assert d["min_value"] == 8
+        assert d["max_value"] == 512
+        assert d["step"] == 1
+
+    def test_cli_binds_int_type_for_integer_number(self):
+        import argparse
+
+        from vtsearch.plugins import PluginBase
+
+        class P(PluginBase):
+            name = "p"
+            display_name = "P"
+            description = "P"
+            fields = [
+                PluginField(
+                    key="n_mels",
+                    label="Mel bands",
+                    field_type="number",
+                    integer=True,
+                    default="128",
+                ),
+            ]
+
+        parser = argparse.ArgumentParser()
+        P().add_cli_arguments(parser)
+        ns = parser.parse_args(["--n-mels", "64"])
+        assert ns.n_mels == 64
+        assert isinstance(ns.n_mels, int)
+        # default is honoured and pre-coerced to int
+        ns2 = parser.parse_args([])
+        assert ns2.n_mels == 128
+        assert isinstance(ns2.n_mels, int)
+
+    def test_cli_binds_float_type_for_non_integer_number(self):
+        import argparse
+
+        from vtsearch.plugins import PluginBase
+
+        class P(PluginBase):
+            name = "p"
+            display_name = "P"
+            description = "P"
+            fields = [
+                PluginField(
+                    key="threshold",
+                    label="Threshold",
+                    field_type="number",
+                    default="0.5",
+                ),
+            ]
+
+        parser = argparse.ArgumentParser()
+        P().add_cli_arguments(parser)
+        ns = parser.parse_args(["--threshold", "0.75"])
+        assert ns.threshold == 0.75
+        assert isinstance(ns.threshold, float)
+        ns2 = parser.parse_args([])
+        assert ns2.threshold == 0.5
+
+    def test_cli_rejects_non_numeric_value(self):
+        import argparse
+
+        from vtsearch.plugins import PluginBase
+
+        class P(PluginBase):
+            name = "p"
+            display_name = "P"
+            description = "P"
+            fields = [PluginField(key="n", label="N", field_type="number", integer=True, default="1")]
+
+        parser = argparse.ArgumentParser()
+        P().add_cli_arguments(parser)
+        # argparse aborts via SystemExit when the type conversion fails
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--n", "abc"])
+
+
 # ---------------------------------------------------------------------------
 # DatasetImporter.get_field_options default behaviour
 # ---------------------------------------------------------------------------

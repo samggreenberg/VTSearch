@@ -223,6 +223,19 @@
                         <option [value]="opt">{{ opt }}</option>
                       }
                     </select>
+                  } @else if (field.field_type === 'number') {
+                    <input
+                      [id]="'nmm-' + field.key"
+                      type="number"
+                      class="form-input"
+                      [(ngModel)]="labelImporterValues[field.key]"
+                      [name]="'nmm-' + field.key"
+                      [attr.min]="field.min_value ?? null"
+                      [attr.max]="field.max_value ?? null"
+                      [attr.step]="field.step ?? (field.integer ? 1 : null)"
+                      [placeholder]="field.placeholder || field.description || field.label || field.key"
+                      [title]="field.description || field.label || field.key"
+                    />
                   } @else {
                     <input
                       [id]="'nmm-' + field.key"
