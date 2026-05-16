@@ -11,6 +11,7 @@ to work unchanged.
 """
 
 import gc
+import os
 import sys
 from typing import Any, cast
 
@@ -28,6 +29,48 @@ def get_torch_device():
     import torch  # noqa: PLC0415
 
     return torch.device(resolve_device())
+
+
+def _detect_cuda_devices() -> int:
+    """Return the count of visible CUDA GPUs, or 0 if none / torch missing.
+
+    Imports torch lazily so callers (e.g. settings default factories) can
+    run before torch is loaded. All exceptions degrade to ``0`` — a missing
+    or broken CUDA stack must not block startup.
+    """
+    try:
+        import torch  # noqa: PLC0415
+
+        if torch.cuda.is_available():
+            return int(torch.cuda.device_count())
+    except Exception:
+        pass
+    return 0
+
+
+def default_concurrent_downloads() -> int:
+    """Default for ``max_concurrent_dataset_downloads`` derived from hardware.
+
+    The download phase is bandwidth- and disk-bound. Allowing a handful of
+    parallel downloads usually saturates a home connection without thrashing
+    the disk; capped at 4 to keep memory and FD pressure reasonable on small
+    boxes.
+    """
+    return max(1, min(4, os.cpu_count() or 1))
+
+
+def default_concurrent_embeddings() -> int:
+    """Default for ``max_concurrent_dataset_embeddings`` derived from hardware.
+
+    The embed phase is CPU/GPU- and RAM-bound. On CPU-only boxes one worker
+    keeps the box hot without thrashing; with GPUs we allow one task per
+    visible CUDA device (capped at 2) so two datasets can embed in parallel
+    on a multi-GPU rig without overcommitting a single device's VRAM.
+    """
+    gpus = _detect_cuda_devices()
+    if gpus <= 0:
+        return 1
+    return max(1, min(2, gpus))
 
 
 def initialize_models() -> None:

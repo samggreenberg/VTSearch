@@ -358,7 +358,10 @@ Notable fields:
   phase; the embed gate covers CPU/GPU-bound embedding plus post-load
   clipping, dedup, and diversity-tree construction. Changes take
   effect on queued and future loads (running tasks are never
-  preempted). Defaults are `1/1` (serialised).
+  preempted). Defaults derive from hardware on first read (and are
+  **not** persisted to disk): downloads = `min(4, cpu_count)`,
+  embeddings = `1` on CPU-only hosts else `min(2, gpu_count)`. An
+  explicit value in `settings.json` always wins.
 - `settings_source` (not shown above; excluded from defaults) — opt-in
   bidirectional sync. Set to a plugin name + field values to auto-export
   every settings change and auto-import at startup. See `settings_io/sources/`.

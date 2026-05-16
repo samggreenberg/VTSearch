@@ -74,7 +74,9 @@ class ConcurrencyGate:
 # one dataset download while another is still embedding, instead of forcing
 # strict end-to-end serialisation.  Limits are user-configurable via the
 # ``max_concurrent_dataset_downloads`` and ``max_concurrent_dataset_embeddings``
-# settings (defaults: 1 each, matching the previous behaviour).
+# settings; defaults derive from the host's CPU/GPU counts (see
+# :func:`vtsearch.embedding.loader.default_concurrent_downloads` and
+# :func:`vtsearch.embedding.loader.default_concurrent_embeddings`).
 _download_gate = ConcurrencyGate(get_max_concurrent_dataset_downloads)
 _embed_gate = ConcurrencyGate(get_max_concurrent_dataset_embeddings)
 
