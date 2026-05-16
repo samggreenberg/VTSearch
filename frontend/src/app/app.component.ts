@@ -3,6 +3,7 @@ import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
+import { ErrorBannerComponent } from './components/error-banner/error-banner.component';
 import { AchievementUnlockHostComponent } from './components/achievement-unlock-host/achievement-unlock-host.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
 import { KeyboardHelpModalComponent } from './components/modals/keyboard-help-modal/keyboard-help-modal.component';
@@ -16,7 +17,7 @@ import { AchievementsService } from './services/achievements.service';
 import { ThemeService } from './services/theme.service';
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterOutlet, DialogHostComponent, AchievementUnlockHostComponent, SettingsModalComponent, KeyboardHelpModalComponent, LoginComponent],
+  imports: [CommonModule, RouterOutlet, DialogHostComponent, ErrorBannerComponent, AchievementUnlockHostComponent, SettingsModalComponent, KeyboardHelpModalComponent, LoginComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })

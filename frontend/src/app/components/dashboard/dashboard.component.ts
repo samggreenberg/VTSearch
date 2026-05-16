@@ -605,7 +605,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.datasetState.refresh();
         },
         error: () => {
-          this.dialog.alert(`Failed to delete model "${model.name}".`, 'error');
+          // Global error interceptor surfaces the failure in the banner.
         },
       });
     }
@@ -738,7 +738,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.datasetState.refresh();
       },
       error: () => {
-        this.dialog.alert('Failed to delete model. Please try again.', 'error');
+        // Global error interceptor surfaces the failure in the banner.
       },
     });
   }
@@ -1401,11 +1401,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
         this.findResultsOpen = true;
       },
-      error: (err) => {
+      error: () => {
         this.stopFindProgressPolling();
         this.datasetState.setLoading(false);
         this.progressIndeterminate = false;
-        this.dialog.alert(err.error?.error || 'Find failed.', 'error');
+        // Global error interceptor surfaces the failure in the banner.
       },
     });
   }

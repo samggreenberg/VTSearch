@@ -34,6 +34,7 @@ warnings.filterwarnings("ignore", message=".*HF_TOKEN.*")
 print(f"⏳ Initializing VTSearch... (PID {os.getpid()})", flush=True)
 
 from flask import Flask, g
+from werkzeug.exceptions import HTTPException
 
 # Import refactored modules
 from vtsearch.auth import get_login_provider  # noqa: E402
@@ -235,6 +236,50 @@ def _echo_request_id(response):
     if rid:
         response.headers["X-Request-Id"] = rid
     return response
+
+
+# ---------------------------------------------------------------------------
+# Global JSON error handlers
+# ---------------------------------------------------------------------------
+
+
+@app.errorhandler(HTTPException)
+def _handle_http_exception(exc):
+    """Return a standardized JSON shape for any uncaught HTTPException.
+
+    Werkzeug's default ``abort(404)`` etc. render as HTML — that's awful
+    for an SPA. Convert them to our ``{error, detail, request_id}`` shape
+    so the frontend ``ErrorService`` can show a useful banner. Routes that
+    already build a JSON response keep doing so; this only fires for
+    abort()/404-on-unknown-path-style errors.
+    """
+    from flask import request as _req
+    from vtsearch.routes._shared import error_response
+
+    if not _req.path.startswith("/api/"):
+        return exc
+    detail = exc.description if exc.description and exc.description != exc.name else None
+    return error_response(exc.name, exc.code or 500, detail=detail)
+
+
+@app.errorhandler(Exception)
+def _handle_uncaught_exception(exc):
+    """Return a standardized JSON 500 for any uncaught exception on /api/.
+
+    Without this, an unhandled exception in a route renders Flask's HTML
+    debug page (in dev) or a plain 500 (in prod) — neither carries the
+    request_id the user needs to file a bug. Letting HTTPException slip
+    through to its own handler keeps abort() semantics intact.
+    """
+    if isinstance(exc, HTTPException):
+        return exc
+    from flask import request as _req
+    from vtsearch.routes._shared import error_response, format_exception_detail
+
+    logging.getLogger(__name__).exception("Unhandled exception on %s %s", _req.method, _req.path)
+    if not _req.path.startswith("/api/"):
+        raise exc
+    return error_response("Internal server error", 500, detail=format_exception_detail(exc))
 
 
 # ---------------------------------------------------------------------------
