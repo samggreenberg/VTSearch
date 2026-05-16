@@ -17,6 +17,11 @@ class TestDashboardDatasetInfo:
             resp = client.get("/api/dashboard/dataset-info")
             assert resp.status_code == 404
             data = resp.get_json()
+            # 404s are intercepted by the app-level ``NotFound``
+            # errorhandler in ``app.py`` (which always wins for 404
+            # because it matches a more specific exception subclass than
+            # flask-smorest's ``HTTPException`` handler), so the
+            # response carries ``error`` not ``message``.
             assert "error" in data
         finally:
             medias.update(saved)

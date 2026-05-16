@@ -1,17 +1,37 @@
-"""Dashboard, demo dataset listing, and other UI helper routes."""
+"""Dashboard, demo dataset listing, and other UI helper routes.
+
+Migrated to ``flask_smorest`` so these routes appear in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``. Schema-level
+validation surfaces as 422; handler-level rejects (unknown demo, missing
+source on disk, path-traversal) use ``abort()`` with the standard
+``message`` envelope.
+"""
 
 from __future__ import annotations
 
 import shutil
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask_smorest import Blueprint, abort
 
 from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
 from vtsearch.datasets import DEMO_DATASETS
 from vtsearch.datasets.loader import read_pkl_clipper, read_pkl_embedder
 from vtsearch.datasets.load_pipeline import _origin_to_str
-from vtsearch.routes._shared import format_mtime, get_json_or_400
+from vtsearch.routes._shared import format_mtime
+from vtsearch.schemas.datasets import (
+    BrowseMediaFilesQuerySchema,
+    BrowseMediaFilesResponseSchema,
+    BrowseMediaFilesSelectRequestSchema,
+    BrowseMediaFilesSelectResponseSchema,
+    DashboardDatasetInfoResponseSchema,
+    DashboardDatasetRenameRequestSchema,
+    DashboardDatasetRenameResponseSchema,
+    DashboardDiskUsageResponseSchema,
+    DemoCategoriesResponseSchema,
+    DemoDatasetListQuerySchema,
+    DemoDatasetListResponseSchema,
+)
 from vtsearch.state import (
     get_dataset_display_name,
     get_dupe_count,
@@ -19,7 +39,11 @@ from vtsearch.state import (
     snapshot_medias,
 )
 
-datasets_ui_bp = Blueprint("datasets_ui", __name__)
+datasets_ui_bp = Blueprint(
+    "datasets_ui",
+    __name__,
+    description="Dashboard, demo dataset listing, browse-media-files picker, and disk usage.",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +57,9 @@ def _folder_has_content(folder) -> bool:
 
 
 @datasets_ui_bp.route("/api/dataset/demo-list")
-def demo_dataset_list():
+@datasets_ui_bp.arguments(DemoDatasetListQuerySchema, location="query")
+@datasets_ui_bp.response(200, DemoDatasetListResponseSchema)
+def demo_dataset_list(query: dict):
     """List available demo datasets.
 
     Each dataset has a ``status`` field with one of three values:
@@ -49,8 +75,8 @@ def demo_dataset_list():
     # Optional embedder/clipper filters: when the caller specifies an embedder
     # or clipper, a cached pkl is only considered "ready" if it was produced by
     # those same values.
-    requested_embedder = request.args.get("embedder", "").strip()
-    requested_clipper = request.args.get("clipper", "").strip()
+    requested_embedder = query.get("embedder", "").strip()
+    requested_clipper = query.get("clipper", "").strip()
 
     demos = []
     for name, dataset_info in DEMO_DATASETS.items():
@@ -156,10 +182,12 @@ def demo_dataset_list():
                 "pkl_clipper": pkl_clipper or "",
             }
         )
-    return jsonify({"datasets": demos})
+    return {"datasets": demos}
 
 
 @datasets_ui_bp.route("/api/dataset/demo-categories/<name>")
+@datasets_ui_bp.response(200, DemoCategoriesResponseSchema)
+@datasets_ui_bp.alt_response(404, description="No demo dataset with that name is registered.")
 def demo_dataset_categories(name: str):
     """List the categories within a specific demo dataset.
 
@@ -167,10 +195,10 @@ def demo_dataset_categories(name: str):
     """
     dataset_info = DEMO_DATASETS.get(name)
     if dataset_info is None:
-        return jsonify({"error": f"Unknown demo dataset: {name}"}), 404
+        abort(404, message=f"Unknown demo dataset: {name}")
 
     categories = dataset_info.get("categories", [])
-    return jsonify({"categories": categories})
+    return {"categories": categories}
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +257,11 @@ def _resolve_browse_root(source: str) -> Path | None:
 
 
 @datasets_ui_bp.route("/api/browse-media-files")
-def browse_media_files():
+@datasets_ui_bp.arguments(BrowseMediaFilesQuerySchema, location="query")
+@datasets_ui_bp.response(200, BrowseMediaFilesResponseSchema)
+@datasets_ui_bp.alt_response(400, description="Path escapes the source root, or other invalid path.")
+@datasets_ui_bp.alt_response(404, description="Source / directory not found on disk.")
+def browse_media_files(query: dict):
     """List files and subdirectories within an allowed root.
 
     Query parameters:
@@ -247,22 +279,22 @@ def browse_media_files():
             ]
         }
     """
-    source = request.args.get("source", "").strip()
-    subpath = request.args.get("path", "").strip()
+    source = query.get("source", "").strip()
+    subpath = query.get("path", "").strip()
 
     root = _resolve_browse_root(source)
     if root is None:
-        return jsonify({"error": "Source not found or not available on disk"}), 404
+        abort(404, message="Source not found or not available on disk")
 
     # Resolve the target directory, preventing traversal.
     target = (root / subpath).resolve()
     try:
         target.relative_to(root)
     except ValueError:
-        return jsonify({"error": "Invalid path"}), 400
+        abort(400, message="Invalid path")
 
     if not target.is_dir():
-        return jsonify({"error": "Directory not found"}), 404
+        abort(404, message="Directory not found")
 
     known_exts = _media_extensions()
     directories: list[dict] = []
@@ -284,7 +316,7 @@ def browse_media_files():
                 }
             )
 
-    return jsonify({"directories": directories, "files": files, "root_path": str(root)})
+    return {"directories": directories, "files": files, "root_path": str(root)}
 
 
 @datasets_ui_bp.route("/api/dataset/detect-media-type")
@@ -335,7 +367,11 @@ def detect_media_type():
 
 
 @datasets_ui_bp.route("/api/browse-media-files/select", methods=["POST"])
-def select_browsed_file():
+@datasets_ui_bp.arguments(BrowseMediaFilesSelectRequestSchema)
+@datasets_ui_bp.response(201, BrowseMediaFilesSelectResponseSchema)
+@datasets_ui_bp.alt_response(400, description="Path escapes the source root.")
+@datasets_ui_bp.alt_response(404, description="Source or file not found on disk.")
+def select_browsed_file(body: dict):
     """Copy a file from a browse source into ``data/example_media/``.
 
     Expects JSON::
@@ -351,29 +387,22 @@ def select_browsed_file():
 
     from vtsearch.config import DATA_DIR
 
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    source = (data.get("source") or "").strip()
-    file_path = (data.get("path") or "").strip()
-
-    if not source or not file_path:
-        return jsonify({"error": "source and path are required"}), 400
+    source = body["source"].strip()
+    file_path = body["path"].strip()
 
     root = _resolve_browse_root(source)
     if root is None:
-        return jsonify({"error": "Source not found"}), 404
+        abort(404, message="Source not found")
 
     # Resolve and validate the file path within the root.
     abs_path = (root / file_path).resolve()
     try:
         abs_path.relative_to(root)
     except ValueError:
-        return jsonify({"error": "Invalid path"}), 400
+        abort(400, message="Invalid path")
 
     if not abs_path.is_file():
-        return jsonify({"error": "File not found"}), 404
+        abort(404, message="File not found")
 
     # Copy to data/example_media/ with a unique prefix to avoid collisions.
     dest_dir = DATA_DIR / "example_media"
@@ -382,7 +411,7 @@ def select_browsed_file():
     dest = dest_dir / safe_name
     shutil.copy2(abs_path, dest)
 
-    return jsonify({"filename": safe_name, "original_name": abs_path.name}), 201
+    return {"filename": safe_name, "original_name": abs_path.name}
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +420,8 @@ def select_browsed_file():
 
 
 @datasets_ui_bp.route("/api/dashboard/dataset-info")
+@datasets_ui_bp.response(200, DashboardDatasetInfoResponseSchema)
+@datasets_ui_bp.alt_response(404, description="No dataset is currently loaded.")
 def dashboard_dataset_info():
     """Return metadata about the currently loaded dataset for the dashboard.
 
@@ -399,7 +430,7 @@ def dashboard_dataset_info():
     """
     snap = snapshot_medias()
     if not snap:
-        return jsonify({"error": "No dataset loaded"}), 404
+        abort(404, message="No dataset loaded")
 
     first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
@@ -430,43 +461,38 @@ def dashboard_dataset_info():
             source = o
             break
 
-    return jsonify(
-        {
-            "name": name,
-            "num_medias": num_medias,
-            "num_dupes": get_dupe_count(),
-            "media_type": media_type,
-            "origin": origin or "unknown",
-            "source": source,
-        }
-    )
+    return {
+        "name": name,
+        "num_medias": num_medias,
+        "num_dupes": get_dupe_count(),
+        "media_type": media_type,
+        "origin": origin or "unknown",
+        "source": source,
+    }
 
 
 @datasets_ui_bp.route("/api/dashboard/dataset-rename", methods=["PUT"])
-def dashboard_dataset_rename():
+@datasets_ui_bp.arguments(DashboardDatasetRenameRequestSchema)
+@datasets_ui_bp.response(200, DashboardDatasetRenameResponseSchema)
+def dashboard_dataset_rename(body: dict):
     """Set a custom display name for the currently loaded dataset."""
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    new_name = data.get("name", "").strip()
+    new_name = body["name"].strip()
     if not new_name:
-        return jsonify({"error": "name is required"}), 400
+        abort(400, message="name is required")
 
     set_dataset_display_name(new_name)
-    return jsonify({"success": True, "name": new_name})
+    return {"success": True, "name": new_name}
 
 
 @datasets_ui_bp.route("/api/dashboard/disk-usage")
+@datasets_ui_bp.response(200, DashboardDiskUsageResponseSchema)
 def dashboard_disk_usage():
     """Return free / used / total bytes for the partition holding ``DATA_DIR``."""
     probe = DATA_DIR if DATA_DIR.exists() else DATA_DIR.parent
     usage = shutil.disk_usage(str(probe))
-    return jsonify(
-        {
-            "total": usage.total,
-            "used": usage.used,
-            "free": usage.free,
-            "path": str(probe),
-        }
-    )
+    return {
+        "total": usage.total,
+        "used": usage.used,
+        "free": usage.free,
+        "path": str(probe),
+    }

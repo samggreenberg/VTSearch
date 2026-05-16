@@ -24,7 +24,10 @@ class TestDatasetEndpoints:
         resp = client.get("/api/dataset/status")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "num_medias" in data or "error" in data
+        # /api/dataset/status always returns 200 with the loaded-dataset
+        # summary; legacy "or error" branch is gone after the
+        # openapi-schema migration of vtsearch/routes/datasets/status.py.
+        assert "num_medias" in data
 
     def test_get_dataset_demo_list(self, client):
         resp = client.get("/api/dataset/demo-list")
@@ -55,6 +58,10 @@ class TestDatasetEndpoints:
         resp = client.get("/api/dataset/demo-categories/nonexistent_dataset_xyz")
         assert resp.status_code == 404
         data = resp.get_json()
+        # 404s are intercepted by the app-level ``NotFound`` errorhandler
+        # in ``app.py`` (it matches a more specific exception subclass
+        # than flask-smorest's ``HTTPException`` handler), so the
+        # response carries ``error`` not ``message``.
         assert "error" in data
 
     def test_browse_media_files_unknown_source(self, client):
@@ -62,6 +69,7 @@ class TestDatasetEndpoints:
         resp = client.get("/api/browse-media-files?source=demo:nonexistent_xyz&path=")
         assert resp.status_code == 404
         data = resp.get_json()
+        # 404 → app-level NotFound handler wins; see above.
         assert "error" in data
 
     def test_browse_media_files_path_traversal_blocked(self, client):
@@ -78,7 +86,9 @@ class TestDatasetEndpoints:
         resp = client.get(f"/api/browse-media-files?source=demo:{name}&path=../../etc")
         assert resp.status_code == 400
         data = resp.get_json()
-        assert "error" in data
+        # 400s use flask-smorest's standard ``message`` envelope after
+        # the openapi-schema migration.
+        assert "message" in data
 
     def test_browse_media_files_demo_source(self, client, tmp_path):
         """GET /api/browse-media-files lists files and directories for a demo source."""
