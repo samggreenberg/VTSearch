@@ -22,6 +22,10 @@ export class DatasetImporterModalComponent implements OnInit {
   @Input() guessedMediaType = '';
   /** Embedder name guessed from existing datasets/in-progress loads (e.g. "siglip"). */
   @Input() guessedMediaEmbedder = '';
+  /** Picker tab id to pre-select when the modal opens (e.g. "server" from
+   *  the dashboard's first-run welcome banner CTA).  Empty leaves the
+   *  picker in the default "no tab selected" state. */
+  @Input() initialTab = '';
 
   @Output() closed = new EventEmitter<void>();
   @Output() importStarted = new EventEmitter<void>();
@@ -168,6 +172,9 @@ export class DatasetImporterModalComponent implements OnInit {
       next: (res) => {
         this.importers = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
         this.declaredTabs = res.tabs || [];
+        if (this.initialTab && this.visibleImporterTabs.some((t) => t.id === this.initialTab)) {
+          this.selectImporterTab(this.initialTab);
+        }
       },
     });
     this.datasetsApi.getEmbedders().subscribe({

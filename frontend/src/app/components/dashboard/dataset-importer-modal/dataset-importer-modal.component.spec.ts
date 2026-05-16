@@ -201,6 +201,18 @@ describe('DatasetImporterModalComponent', () => {
     expect(el.querySelectorAll('.importer-subtab').length).toBe(0);
   });
 
+  it('should pre-select the initialTab once importers and tabs arrive', () => {
+    component.initialTab = 'server';
+    flushImporters();
+    expect(component.activeImporterTab).toBe('server');
+  });
+
+  it('should ignore an initialTab id that no declared/used tab matches', () => {
+    component.initialTab = 'no-such-tab';
+    flushImporters();
+    expect(component.activeImporterTab).toBe('');
+  });
+
   it('should always render the Services tab even when no importers populate it', () => {
     flushImporters();
     fixture.detectChanges();

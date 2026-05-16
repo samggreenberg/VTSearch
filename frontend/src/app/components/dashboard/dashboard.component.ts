@@ -14,7 +14,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
 import { AchievementsService } from '../../services/achievements.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, DetectorRegistryEntry } from '../../models/api.models';
+import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, DetectorRegistryEntry, ImporterInfo } from '../../models/api.models';
 import { formatProgressFraction } from '../../utils/format-progress';
 import { ColMeta, ManagedColumns } from '../../utils/managed-columns';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
@@ -76,6 +76,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   importerModalOpen = false;
   importerClosing = false;
+  /** Picker tab id the importer modal should pre-select when it next
+   *  opens — set by the welcome-banner CTA so a fresh user lands in
+   *  the right place. Empty for the normal "+" button flow. */
+  importerInitialTab = '';
+  /** Visible importers (i.e. ``hidden_from_picker !== true``), fetched
+   *  once on init so the welcome banner can detect Services-tab
+   *  importers without waiting for the modal to open. */
+  visibleImporters: ImporterInfo[] = [];
   combineModalOpen = false;
   /** Datasets passed into the Combine modal when it opens. */
   combineModalDatasets: DatasetRegistryEntry[] = [];
@@ -249,6 +257,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.refresh();
     this.resumeActivePolling();
     this.startDiskUsagePolling();
+    this.datasetsApi.getAllImporters().subscribe({
+      next: (res) => {
+        this.visibleImporters = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
+      },
+    });
   }
 
   private startDiskUsagePolling(): void {
@@ -832,6 +845,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   openImporterModal(): void {
+    this.importerInitialTab = '';
+    this.importerClosing = false;
+    this.importerModalOpen = true;
+  }
+
+  /** Welcome-banner CTA: open the importer modal with one of the picker
+   *  tabs pre-selected so a fresh user lands on the relevant choices. */
+  openImporterModalOnTab(tabId: string): void {
+    this.importerInitialTab = tabId;
     this.importerClosing = false;
     this.importerModalOpen = true;
   }
@@ -839,10 +861,49 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeImporterModal(): void {
     this.importerModalOpen = false;
     this.importerClosing = true;
+    this.importerInitialTab = '';
   }
 
   onImporterAnimationEnd(): void {
     this.importerClosing = false;
+  }
+
+  // --- First-run welcome banner ---
+
+  /** Visible importers in the Services tab, in registry order. */
+  get servicesImporters(): ImporterInfo[] {
+    return this.visibleImporters.filter((imp) => (imp.category || '') === 'services');
+  }
+
+  /** Pretty name for a Services importer (display_name falls back to name). */
+  private importerLabel(imp: ImporterInfo): string {
+    return imp.display_name || imp.name;
+  }
+
+  /** Body text for the welcome banner. Three branches:
+   *   - no Services importers → push Server Folder
+   *   - exactly one Services importer → name it
+   *   - multiple Services importers → generic Services prompt */
+  get welcomeBannerMessage(): string {
+    const services = this.servicesImporters;
+    if (services.length === 1) {
+      const label = this.importerLabel(services[0]);
+      return `Welcome — load a dataset to get started. You have ${label} registered in the Services tab, which is probably what you want.`;
+    }
+    if (services.length > 1) {
+      return 'Welcome — load a dataset to get started. You have importers registered in the Services tab, which is probably where to start.';
+    }
+    return 'Welcome — load a dataset to get started. Server Folder is the most common starting point: point it at a folder of files already on this machine.';
+  }
+
+  /** CTA label paired with the welcome-banner message. */
+  get welcomeBannerCtaLabel(): string {
+    return this.servicesImporters.length > 0 ? 'Open Services' : 'Open Server';
+  }
+
+  /** Picker tab the welcome-banner CTA pre-selects in the importer modal. */
+  get welcomeBannerCtaTab(): string {
+    return this.servicesImporters.length > 0 ? 'services' : 'server';
   }
 
   onImportComplete(): void {
