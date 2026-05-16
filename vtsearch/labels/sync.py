@@ -51,7 +51,16 @@ def sync_to_labelset_source() -> None:
     field_values = cfg.get("field_values", {})
 
     from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.detectors.input_spec import build_detector_meta
+    from vtsearch.detectors.store import _detector_path, _read_detector
     from vtsearch.state.core import good_votes, bad_votes, medias, vote_region_boxes
+
+    # Read the detector JSON so the exported labelset can carry its
+    # input_spec / media_type alongside the in-memory threshold.  Anything
+    # missing is simply omitted from detector_meta.
+    detector_data = _read_detector(_detector_path(ctx.name)) or {}
+    threshold = ctx.threshold if ctx.model is not None else None
+    detector_meta = build_detector_meta(detector_data, threshold=threshold)
 
     # Serialize against any in-progress sync_from on another thread.
     # Re-check the flag inside the lock so we never push partial state
@@ -65,6 +74,7 @@ def sync_to_labelset_source() -> None:
                 dict(good_votes),
                 dict(bad_votes),
                 vote_region_boxes=dict(vote_region_boxes),
+                detector_meta=detector_meta or None,
             )
             source.save(labelset, field_values)
         except Exception as exc:
@@ -106,13 +116,31 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
 
     field_values = cfg.get("field_values", {})
     try:
-        labels = source.load(field_values)
+        labelset = source.load_full(field_values)
     except Exception as exc:
         logger.exception("Failed to load from labelset source: %s", exc)
         return None
 
-    if not labels:
+    if not labelset.elements and not labelset.detector_meta:
         return None
+
+    # If the source carried a detector_meta block, fold its input_spec
+    # (and media_type, when the receiver is missing one) into the
+    # receiving detector's on-disk JSON.  threshold is intentionally
+    # *not* persisted — the receiver will retrain its MLP from the
+    # imported labels and recompute its own threshold.
+    if labelset.detector_meta:
+        from vtsearch.detectors.input_spec import apply_detector_meta
+        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
+
+        det_path = _detector_path(ctx.name)
+        det_data = _read_detector(det_path)
+        if det_data is not None and apply_detector_meta(det_data, labelset.detector_meta):
+            _write_detector(det_path, det_data)
+
+    labels = [el.to_dict() for el in labelset.elements]
+    if not labels:
+        return labels
 
     # Hold _sync_lock for the entire apply pass so that any concurrent
     # sync_to_labelset_source() on another thread blocks (or skips, on

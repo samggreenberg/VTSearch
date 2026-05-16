@@ -112,10 +112,24 @@ class LabelSet:
 
     Parameters:
         elements: Initial list of :class:`LabeledElement` instances.
+        detector_meta: Optional detector-level metadata block.  When
+            present, lets a labelset round-trip a detector's
+            ``media_type``, ``input_spec`` (clipper + params), and current
+            ``threshold`` so an external consumer can reproduce the
+            detector's expected input format and decision boundary without
+            reading the detector JSON directly.  Strictly informational —
+            ``None`` (the default) means the labelset carries only labels,
+            preserving the legacy format.
     """
 
-    def __init__(self, elements: list[LabeledElement] | None = None) -> None:
+    def __init__(
+        self,
+        elements: list[LabeledElement] | None = None,
+        *,
+        detector_meta: dict[str, Any] | None = None,
+    ) -> None:
         self.elements: list[LabeledElement] = list(elements) if elements else []
+        self.detector_meta: dict[str, Any] | None = dict(detector_meta) if detector_meta else None
 
     def __len__(self) -> int:
         return len(self.elements)
@@ -136,6 +150,7 @@ class LabelSet:
         *,
         expand_dupes: bool = True,
         vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
+        detector_meta: dict[str, Any] | None = None,
     ) -> LabelSet:
         """Build a ``LabelSet`` from the current media and vote state.
 
@@ -154,6 +169,11 @@ class LabelSet:
                 box is attached to the corresponding good vote's
                 :class:`LabeledElement`.  Ignored for bad votes (no-votes
                 are always image-level — see the patch-embedder v2 design).
+            detector_meta: Optional detector-level metadata block to attach
+                to the labelset (e.g. ``{"media_type": ..., "input_spec":
+                ..., "threshold": ...}``).  Lets the labelset carry the
+                originating detector's expected input format and decision
+                boundary so an external consumer can reproduce them.
 
         Returns:
             A new ``LabelSet`` containing one :class:`LabeledElement` per
@@ -176,7 +196,7 @@ class LabelSet:
             media = medias.get(cid)
             if media:
                 elements.extend(_clip_to_elements(media, "bad", expand_dupes=expand_dupes))
-        return cls(elements)
+        return cls(elements, detector_meta=detector_meta)
 
     @classmethod
     def from_results(
@@ -230,26 +250,34 @@ class LabelSet:
         """Serialise to a plain dict.
 
         Returns:
-            ``{"labels": [<element dict>, ...]}``.  The format is a
-            superset of the legacy label-export format (which only had
-            ``md5`` and ``label`` keys), so existing consumers remain
-            compatible.
+            ``{"labels": [<element dict>, ...]}`` plus an optional
+            top-level ``"detector_meta"`` block when one was attached.
+            The format is a superset of the legacy label-export format
+            (which only had ``md5`` and ``label`` keys), so existing
+            consumers remain compatible — they ignore ``detector_meta``.
         """
-        return {"labels": [e.to_dict() for e in self.elements]}
+        out: dict[str, Any] = {"labels": [e.to_dict() for e in self.elements]}
+        if self.detector_meta is not None:
+            out["detector_meta"] = dict(self.detector_meta)
+        return out
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> LabelSet:
         """Reconstruct a ``LabelSet`` from a dict produced by :meth:`to_dict`.
 
         Also accepts the legacy label format (entries with only ``md5`` and
-        ``label`` keys) for backward compatibility.
+        ``label`` keys) for backward compatibility.  When a top-level
+        ``"detector_meta"`` block is present, it is attached to the
+        reconstructed :class:`LabelSet`.
         """
         elements: list[LabeledElement] = []
         for entry in d.get("labels", []):
             if not isinstance(entry, dict):
                 continue
             elements.append(LabeledElement.from_dict(entry))
-        return cls(elements)
+        dm = d.get("detector_meta")
+        detector_meta = dm if isinstance(dm, dict) else None
+        return cls(elements, detector_meta=detector_meta)
 
     # ------------------------------------------------------------------
     # Merging
@@ -325,6 +353,10 @@ class LabelSet:
                         region_box=el.region_box,
                     )
                 )
+        # Merged labelsets represent a new combined detector; do not
+        # carry the originating detector's ``detector_meta`` (input_spec,
+        # threshold) into the merged result — those describe a single
+        # detector's training context.
         return LabelSet(merged)
 
 

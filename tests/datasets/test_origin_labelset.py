@@ -302,6 +302,52 @@ class TestLabelSet:
         assert ls.elements[0].origin is not None
         assert ls.elements[0].origin["importer"] == "server_folder"
 
+    def test_detector_meta_default_is_none(self):
+        """Legacy callers that don't pass detector_meta still get None."""
+        ls = LabelSet([LabeledElement(md5="a", label="good")])
+        assert ls.detector_meta is None
+        # And serialisation stays legacy-shaped (no detector_meta key).
+        assert "detector_meta" not in ls.to_dict()
+
+    def test_detector_meta_roundtrip(self):
+        """detector_meta survives a to_dict / from_dict cycle."""
+        meta = {
+            "media_type": "audio",
+            "input_spec": {
+                "clipper": "sound_tiling",
+                "clipper_params": {"duration": "2.0"},
+            },
+            "threshold": 0.42,
+        }
+        ls = LabelSet(
+            [LabeledElement(md5="a", label="good")],
+            detector_meta=meta,
+        )
+        d = ls.to_dict()
+        assert d["detector_meta"] == meta
+        ls2 = LabelSet.from_dict(d)
+        assert ls2.detector_meta == meta
+
+    def test_detector_meta_from_clips_and_votes(self):
+        medias = {1: {"md5": "h1", "filename": "a.wav", "category": "x"}}
+        meta = {"media_type": "audio", "threshold": 0.3}
+        ls = LabelSet.from_clips_and_votes(medias, {1: None}, {}, detector_meta=meta)
+        assert ls.detector_meta == meta
+
+    def test_detector_meta_dropped_on_merge(self):
+        """Merged labelsets get a fresh identity — meta from sources doesn't leak."""
+        a = LabelSet(
+            [LabeledElement(md5="x", label="good", origin={"importer": "t", "params": {}})],
+            detector_meta={"media_type": "audio"},
+        )
+        b = LabelSet(
+            [LabeledElement(md5="y", label="bad", origin={"importer": "t", "params": {}})],
+            detector_meta={"media_type": "video"},
+        )
+        merged = a.merge(b)
+        assert merged.detector_meta is None
+        assert len(merged) == 2
+
 
 # ---------------------------------------------------------------------------
 # DatasetImporter.build_origin()
