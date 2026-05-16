@@ -185,10 +185,16 @@ class _PluginEntrySchema(Schema):
     icon = fields.String(required=True)
     ui_mode = fields.String(required=True)
     hidden_from_picker = fields.Boolean(required=True)
-    # ``fields`` is declared last because assigning to a name shadowing
-    # the imported ``fields`` module would break subsequent
-    # ``fields.<Type>`` references within this class body.
-    fields = fields.List(fields.Dict(), required=True)
+    # Renamed to avoid shadowing :attr:`marshmallow.Schema.fields` (a
+    # ``dict[str, Field]`` registry on the base class). ``data_key`` /
+    # ``attribute`` keep the wire name as ``"fields"`` on both load and
+    # dump.
+    plugin_fields = fields.List(
+        fields.Dict(),
+        required=True,
+        data_key="fields",
+        attribute="fields",
+    )
 
 
 class ExporterEntrySchema(_PluginEntrySchema):
