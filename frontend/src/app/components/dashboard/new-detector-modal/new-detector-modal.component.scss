@@ -254,8 +254,43 @@
   padding: 16px 0;
 }
 
+// Media-type field row: dropdown + optional unlock button.
+.media-type-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+
+  .custom-select { flex: 1; min-width: 0; }
+}
+
+.lock-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 6px);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+    background: var(--bg-hover);
+  }
+}
+
 // Custom select dropdown (supports icons inside options)
 .custom-select { position: relative; }
+
+.custom-select-trigger.is-locked {
+  cursor: not-allowed;
+  opacity: 0.6;
+  background: var(--bg-disabled, var(--bg-subtle));
+  color: var(--text-muted);
+}
 
 .custom-select-trigger {
   display: flex;
