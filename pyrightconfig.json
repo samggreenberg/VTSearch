@@ -7,7 +7,11 @@
     "vtsearch/exporters",
     "vtsearch/labels",
     "vtsearch/plugins",
+    "vtsearch/security",
+    "vtsearch/settings.py",
+    "vtsearch/settings_factory.py",
     "vtsearch/settings_io",
+    "vtsearch/state",
     "vtsearch/sync",
     "vtsearch/utils"
   ],

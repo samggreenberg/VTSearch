@@ -142,11 +142,12 @@ class DiversityTree:
             km = KMeans(
                 n_clusters=actual_k,
                 random_state=42 + init_i,
-                n_init=1,
+                n_init=1,  # pyright: ignore[reportArgumentType]
             )
             candidate_labels = km.fit_predict(vecs)
-            if km.inertia_ < best_inertia:
-                best_inertia = km.inertia_
+            inertia = km.inertia_
+            if inertia is not None and inertia < best_inertia:
+                best_inertia = inertia
                 best_labels = candidate_labels
 
             # Report progress after each init, weighted by vector count

@@ -84,7 +84,7 @@ def resolve_media_ids(
     origin_name = entry.get("origin_name", "")
 
     has_origin_key = origin is not None and bool(origin_name)
-    if has_origin_key:
+    if origin is not None and origin_name:
         key = _origin_key(origin, origin_name)
         for cid in origin_lookup.get(key, []):
             matched[cid] = None

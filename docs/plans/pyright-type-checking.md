@@ -10,9 +10,10 @@ package. Rolled out in stages so each PR stays reviewable.
   `plugins/`, `settings_io/`, `sync/`, `utils/`. The advisory job runs over
   the full `vtsearch/` package on every PR and prints the residual error
   count to the GitHub step summary.
-- **Stage 2:** ⏳ next — `settings.py`, `settings_factory.py`, `state/`,
-  `security/`.
-- **Stages 3–6:** 📋 not started.
+- **Stage 2:** ✅ shipped. Adds `settings.py`, `settings_factory.py`,
+  `state/`, `security/` to the gated scope (31 real errors fixed).
+- **Stage 3:** ⏳ next — `datasets/`, `detectors/`, `eval/`, `models/`.
+- **Stages 4–6:** 📋 not started.
 - **Stage 7 (`tests/`):** 📋 optional, deferred.
 
 ## Goal
@@ -64,6 +65,25 @@ shell. CI installs them via `requirements/base.txt`, so import errors
 will resolve there. **Local dev needs `bash scripts/install-cpu.sh`
 for clean reports.**
 
+### Post-Stage-2 advisory count
+
+After Stage 2 shipped, `pyright vtsearch/` with deps installed reports
+**174 errors** across the remaining out-of-gate scopes:
+
+| Dir | Errors |
+|---|---:|
+| `media/` | 96 |
+| `routes/` | 37 |
+| `datasets/` | 19 |
+| `detectors/` | 12 |
+| `converters/` | 3 |
+| `embedding/` | 3 |
+| `eval/` | 2 |
+| `training/` | 2 |
+
+(`models/` no longer exists — its contents were redistributed into
+`detectors/`, `training/`, and `embedding/` during a separate reorg.)
+
 ## Stages
 
 Each stage is a separate PR. The "errors to fix" column counts real
@@ -73,11 +93,11 @@ Each stage is a separate PR. The "errors to fix" column counts real
 |---|---|---:|---|
 | 0 | (no scope; config + advisory CI only) | 0 | ✅ shipped (PR #1349) |
 | 1 | `utils/`, `auth/`, `plugins/`, `sync/`, `concurrency/`, `exporters/`, `labels/`, `settings_io/`, `cli.py`, `config.py` | 4 | ✅ shipped (PR #1349) |
-| **2** | `settings.py`, `settings_factory.py`, `state/`, `security/` | ~27 | ⏳ next |
-| 3 | `datasets/`, `detectors/`, `eval/`, `models/` | ~30 | 📋 |
-| 4 | `routes/`, `converters/` | ~58 | 📋 |
-| 5 | `media/` (heaviest — may need `.pyi` stubs or per-file `# pyright: ignore`) | ~68 | 📋 |
-| 6 | Whole `vtsearch/` — advisory job removed | 0 | 📋 |
+| 2 | `settings.py`, `settings_factory.py`, `state/`, `security/` | 31 | ✅ shipped |
+| **3** | `datasets/`, `detectors/`, `eval/`, `embedding/`, `training/` | ~38 | ⏳ next |
+| 4 | `routes/`, `converters/` | ~40 | 📋 |
+| 5 | `media/` (heaviest — may need `.pyi` stubs or per-file `# pyright: ignore`) | ~96 | 📋 |
+| 6 | Whole `vtsearch/` (incl. `achievements.py`, `logging_config.py`, `openapi.py`, `schemas/`) — advisory job removed | 0 | 📋 |
 | 7 *(optional)* | `tests/` | TBD | 📋 |
 
 **Stage 0 + Stage 1 landed together in PR #1349.** Subsequent stages are
@@ -108,6 +128,40 @@ stages:
    `str | None`.** Same shape as #3 — narrow the optional via an early
    return at the call site (e27bd8e). Worth checking other `entry_points`
    callers as later stages widen scope.
+
+### Stage 2 fixes (shipped)
+
+Patterns that recurred enough to document:
+
+1. **Dynamically generated module accessors.** `vtsearch/settings.py`
+   creates `get_<key>` / `set_<key>` at import time via
+   `globals()[f"get_{key}"] = ...`. Pyright can't see those, so
+   `settings.get_inclusion()` from `state/__init__.py` errored with
+   *"is not a known attribute of module"*. Fix: declare each accessor's
+   signature in an `if TYPE_CHECKING:` block at the top of the module.
+   That documents the public API for free and stays correct as long as
+   the spec table and the block stay in sync.
+2. **Private CPython implementation details (`pickle._Unpickler`).**
+   `_PeekUnpickler` extends the private pure-Python unpickler and pokes
+   at its internals (`read`, `append`, `stack`, `pop_mark`, `dispatch`).
+   None of those are in typeshed. Fix: declare the touched attributes
+   inside an `if TYPE_CHECKING:` class block, and explicitly type
+   `dispatch: dict[int, Any]` so the Self-typed dispatch methods stop
+   failing the contravariance check against `Callable[[Unpickler], None]`.
+3. **`socket.getaddrinfo` sockaddr field is `str | int` at index 0.**
+   IPv4/IPv6 union means typeshed widens `sockaddr[0]` to `str | int`,
+   even though it's always `str` at runtime. Wrap with `str(...)` at
+   the call site rather than asserting.
+4. **Multi-step nullability narrowing doesn't survive intermediate
+   booleans.** `has_origin_key = origin is not None and bool(...)` then
+   `if has_origin_key:` does *not* narrow `origin` to `dict`. Inline
+   the condition (`if origin is not None and origin_name:`) so the
+   narrow applies to the type-checker on the actual access.
+5. **`sklearn.cluster.KMeans` has mistyped kwargs in stubs.** `n_init=1`
+   is valid at runtime; the stub claims it must be `str`. Use
+   `# pyright: ignore[reportArgumentType]` rather than `int -> str`
+   gymnastics. `KMeans.inertia_` is typed `Optional[float]`; assign to
+   a local and narrow before comparing.
 
 ### Operational notes from Stage 1
 
