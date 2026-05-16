@@ -152,15 +152,19 @@ class TestDatasetEndpoints:
 
     def test_detect_media_type_finds_dominant(self, client, tmp_path, monkeypatch):
         """GET /api/dataset/detect-media-type returns the dominant media type."""
+        # Use a dedicated subdirectory because the autouse ``isolated_settings``
+        # fixture also writes into ``tmp_path``.
+        root = tmp_path / "media"
+        root.mkdir()
         # Three .wav files (audio) + one .jpg (image) → dominant=audio.
-        (tmp_path / "a.wav").write_bytes(b"RIFF")
-        (tmp_path / "b.wav").write_bytes(b"RIFF")
-        (tmp_path / "c.wav").write_bytes(b"RIFF")
-        (tmp_path / "d.jpg").write_bytes(b"\xff\xd8\xff")
+        (root / "a.wav").write_bytes(b"RIFF")
+        (root / "b.wav").write_bytes(b"RIFF")
+        (root / "c.wav").write_bytes(b"RIFF")
+        (root / "d.jpg").write_bytes(b"\xff\xd8\xff")
 
         monkeypatch.setattr(
             "vtsearch.routes.datasets.ui._resolve_browse_root",
-            lambda source: tmp_path if source == "folder" else None,
+            lambda source: root if source == "folder" else None,
         )
         resp = client.get("/api/dataset/detect-media-type?source=folder&path=")
         assert resp.status_code == 200
@@ -172,14 +176,16 @@ class TestDatasetEndpoints:
 
     def test_detect_media_type_recursive(self, client, tmp_path, monkeypatch):
         """The endpoint respects the ``recursive`` query parameter."""
-        (tmp_path / "top.jpg").write_bytes(b"\xff\xd8\xff")
-        sub = tmp_path / "nested"
+        root = tmp_path / "media"
+        root.mkdir()
+        (root / "top.jpg").write_bytes(b"\xff\xd8\xff")
+        sub = root / "nested"
         sub.mkdir()
         (sub / "deep.wav").write_bytes(b"RIFF")
 
         monkeypatch.setattr(
             "vtsearch.routes.datasets.ui._resolve_browse_root",
-            lambda source: tmp_path if source == "folder" else None,
+            lambda source: root if source == "folder" else None,
         )
 
         # Recursive (default): sees both files.
@@ -195,12 +201,14 @@ class TestDatasetEndpoints:
 
     def test_detect_media_type_unknown_extensions(self, client, tmp_path, monkeypatch):
         """Unrecognised extensions roll up under ``"unknown"`` and don't dominate."""
-        (tmp_path / "a.xyz").write_bytes(b"")
-        (tmp_path / "b.qqq").write_bytes(b"")
+        root = tmp_path / "media"
+        root.mkdir()
+        (root / "a.xyz").write_bytes(b"")
+        (root / "b.qqq").write_bytes(b"")
 
         monkeypatch.setattr(
             "vtsearch.routes.datasets.ui._resolve_browse_root",
-            lambda source: tmp_path if source == "folder" else None,
+            lambda source: root if source == "folder" else None,
         )
         resp = client.get("/api/dataset/detect-media-type?source=folder&path=")
         assert resp.status_code == 200
