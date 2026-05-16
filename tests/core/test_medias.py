@@ -548,7 +548,10 @@ class TestAddToPile:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "No file" in resp.get_json()["error"]
+        # Multipart body parsed by the handler (not a marshmallow schema),
+        # so the failure surfaces as 400 with the standard
+        # flask-smorest ``message`` envelope.
+        assert "No file" in resp.get_json()["message"]
 
     def test_missing_label(self, client):
         wav_bytes = app_module.generate_wav(999, 0.1)
@@ -558,7 +561,7 @@ class TestAddToPile:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "label" in resp.get_json()["error"]
+        assert "label" in resp.get_json()["message"]
 
     def test_invalid_label(self, client):
         wav_bytes = app_module.generate_wav(999, 0.1)
@@ -568,7 +571,7 @@ class TestAddToPile:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "label" in resp.get_json()["error"]
+        assert "label" in resp.get_json()["message"]
 
     def test_empty_file(self, client):
         resp = client.post(
@@ -577,7 +580,7 @@ class TestAddToPile:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "Empty" in resp.get_json()["error"]
+        assert "Empty" in resp.get_json()["message"]
 
     def test_no_dataset_loaded(self, client):
         """When no dataset is loaded, adding new media fails gracefully."""
@@ -591,6 +594,6 @@ class TestAddToPile:
                 content_type="multipart/form-data",
             )
             assert resp.status_code == 400
-            assert "No dataset" in resp.get_json()["error"]
+            assert "No dataset" in resp.get_json()["message"]
         finally:
             app_module.medias.update(saved)

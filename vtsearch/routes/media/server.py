@@ -1,15 +1,38 @@
-"""Blueprint for server media file management and example-sort routes."""
+"""Blueprint for server media file management and example-sort routes.
+
+Migrated to ``flask_smorest`` so the JSON-shaped routes appear in the
+``/api/openapi.json`` spec. See ``docs/plans/openapi-schema.md``.
+
+The thumbnail GET route serves binary bytes (or an error JSON) and only
+declares its ``alt_response`` error codes; the success body is not
+described. The upload POST route is multipart — its body is left
+undescribed (no ``arguments`` decorator) but the success body is
+declared via ``response``.
+"""
 
 import io
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import request, send_file
+from flask_smorest import Blueprint, abort
+from werkzeug.exceptions import HTTPException
 
 from vtsearch.config import DATA_DIR
-from vtsearch.routes._shared import format_exception_detail, get_json_or_400
+from vtsearch.routes._shared import format_exception_detail
+from vtsearch.schemas.media import (
+    ExampleSortOriginRequestSchema,
+    ExampleSortResponseSchema,
+    ExampleSortServerRequestSchema,
+    ServerMediaListResponseSchema,
+    ServerMediaUploadResponseSchema,
+)
 from vtsearch.state import snapshot_medias
 
-media_server_bp = Blueprint("media_server", __name__)
+media_server_bp = Blueprint(
+    "media_server",
+    __name__,
+    description="Server-side example media files and example-sort routes.",
+)
 
 
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
@@ -54,6 +77,14 @@ def _get_server_media_dir() -> Path:
 
 
 @media_server_bp.route("/api/server-media-files/upload", methods=["POST"])
+@media_server_bp.response(201, ServerMediaUploadResponseSchema)
+@media_server_bp.alt_response(
+    400,
+    description=(
+        "Missing or malformed multipart body (no file / no filename / "
+        "invalid crop_params for the given media type)."
+    ),
+)
 def upload_server_media_file():
     """Upload a media file to data/example_media/ and return its filename.
 
@@ -70,11 +101,11 @@ def upload_server_media_file():
     import uuid
 
     if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+        abort(400, message="No file provided")
 
     file = request.files["file"]
     if not file.filename:
-        return jsonify({"error": "No file selected"}), 400
+        abort(400, message="No file selected")
 
     suffix = Path(file.filename).suffix or ".bin"
     safe_name = f"{uuid.uuid4().hex}{suffix}"
@@ -98,12 +129,15 @@ def upload_server_media_file():
                 dest.write_bytes(cropped)
             except (ValueError, FileNotFoundError):
                 dest.unlink(missing_ok=True)
-                return jsonify({"error": "Invalid crop_params for this media type"}), 400
+                abort(400, message="Invalid crop_params for this media type")
 
-    return jsonify({"filename": safe_name, "original_name": file.filename}), 201
+    return {"filename": safe_name, "original_name": file.filename}
 
 
 @media_server_bp.route("/api/server-media-files/<path:filename>/thumbnail", methods=["GET"])
+@media_server_bp.alt_response(400, description="Filename escapes the example_media directory.")
+@media_server_bp.alt_response(404, description="File not found, or media type has no thumbnail.")
+@media_server_bp.alt_response(500, description="Thumbnail could not be generated.")
 def server_media_file_thumbnail(filename: str):
     """Return a small image preview of an example media file.
 
@@ -117,10 +151,10 @@ def server_media_file_thumbnail(filename: str):
     try:
         file_path.resolve().relative_to(media_dir.resolve())
     except ValueError:
-        return jsonify({"error": "Invalid filename"}), 400
+        abort(400, message="Invalid filename")
 
     if not file_path.is_file():
-        return jsonify({"error": f"File not found: {filename}"}), 404
+        abort(404, message=f"File not found: {filename}")
 
     suffix = file_path.suffix.lower()
     media_type = _media_type_from_ext(suffix)
@@ -138,7 +172,7 @@ def server_media_file_thumbnail(filename: str):
 
         thumb = generate_waveform_thumbnail_from_file(file_path)
         if thumb is None:
-            return jsonify({"error": "Could not generate audio thumbnail"}), 500
+            abort(500, message="Could not generate audio thumbnail")
         return send_file(
             io.BytesIO(thumb),
             mimetype="image/png",
@@ -150,22 +184,23 @@ def server_media_file_thumbnail(filename: str):
 
         thumb = generate_video_thumbnail_from_file(file_path)
         if thumb is None:
-            return jsonify({"error": "Could not generate video thumbnail"}), 500
+            abort(500, message="Could not generate video thumbnail")
         return send_file(
             io.BytesIO(thumb),
             mimetype="image/png",
             download_name=f"{file_path.stem}_frame.png",
         )
 
-    return jsonify({"error": f"No thumbnail available for {suffix}"}), 404
+    abort(404, message=f"No thumbnail available for {suffix}")
 
 
 @media_server_bp.route("/api/server-media-files", methods=["GET"])
+@media_server_bp.response(200, ServerMediaListResponseSchema)
 def list_server_media_files():
     """List media files saved on the server in the user's example_media/ dir."""
     media_dir = _get_server_media_dir()
     if not media_dir.is_dir():
-        return jsonify({"files": []})
+        return {"files": []}
 
     files = []
     for p in sorted(media_dir.iterdir()):
@@ -177,11 +212,16 @@ def list_server_media_files():
                     "size_bytes": p.stat().st_size,
                 }
             )
-    return jsonify({"files": files})
+    return {"files": files}
 
 
 @media_server_bp.route("/api/example-sort-server", methods=["POST"])
-def example_sort_server():
+@media_server_bp.arguments(ExampleSortServerRequestSchema)
+@media_server_bp.response(200, ExampleSortResponseSchema)
+@media_server_bp.alt_response(400, description="Filename escapes the example_media directory.")
+@media_server_bp.alt_response(404, description="File not found.")
+@media_server_bp.alt_response(500, description="Example sort failed.")
+def example_sort_server(body: dict):
     """Sort medias by similarity to a server-side media file.
 
     Optional ``crop_params`` body field carries a JSON-compatible dict with
@@ -189,13 +229,9 @@ def example_sort_server():
     image: ``{"box": [...]}``).  When set, the file is cropped server-side
     before embedding.
     """
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    filename = data.get("filename", "").strip()
+    filename = body["filename"].strip()
     if not filename:
-        return jsonify({"error": "filename is required"}), 400
+        abort(400, message="filename is required")
 
     media_dir = _get_server_media_dir()
     file_path = media_dir / filename
@@ -204,12 +240,12 @@ def example_sort_server():
     try:
         file_path.resolve().relative_to(media_dir.resolve())
     except ValueError:
-        return jsonify({"error": "Invalid filename"}), 400
+        abort(400, message="Invalid filename")
 
     if not file_path.is_file():
-        return jsonify({"error": f"File not found: {filename}"}), 404
+        abort(404, message=f"File not found: {filename}")
 
-    crop_params = data.get("crop_params") if isinstance(data.get("crop_params"), dict) else None
+    crop_params = body.get("crop_params") if isinstance(body.get("crop_params"), dict) else None
 
     try:
         from vtsearch.routes.sorting import _apply_crop_or_keep, _example_sort_from_path
@@ -230,16 +266,26 @@ def example_sort_server():
                 tmp.unlink(missing_ok=True)
         else:
             results, thresh = _example_sort_from_path(file_path)
-        return jsonify({"results": results, "threshold": thresh})
+        return {"results": results, "threshold": thresh}
+    except HTTPException:
+        raise
     except Exception as exc:
         import logging
 
         logging.getLogger(__name__).exception("example-sort-server failed")
-        return jsonify({"error": f"Example sort failed: {format_exception_detail(exc)}"}), 500
+        abort(500, message=f"Example sort failed: {format_exception_detail(exc)}")
 
 
 @media_server_bp.route("/api/example-sort-origin", methods=["POST"])
-def example_sort_origin():
+@media_server_bp.arguments(ExampleSortOriginRequestSchema)
+@media_server_bp.response(200, ExampleSortResponseSchema)
+@media_server_bp.alt_response(
+    400,
+    description="No media source for the given origin, or no medias loaded.",
+)
+@media_server_bp.alt_response(404, description="File not found at the given key.")
+@media_server_bp.alt_response(500, description="Example sort failed.")
+def example_sort_origin(body: dict):
     """Sort medias by similarity to a media file resolved from an origin.
 
     Accepts a JSON body with ``origin`` (an origin dict as stored on medias)
@@ -254,33 +300,26 @@ def example_sort_origin():
             "key": "subdir/audio123.wav"
         }
     """
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    origin = data.get("origin")
-    if not isinstance(origin, dict):
-        return jsonify({"error": "origin dict is required"}), 400
-
-    key = data.get("key", "").strip()
+    origin = body["origin"]
+    key = body["key"].strip()
     if not key:
-        return jsonify({"error": "key is required"}), 400
+        abort(400, message="key is required")
 
     if not snapshot_medias():
-        return jsonify({"error": "No medias loaded"}), 400
+        abort(400, message="No medias loaded")
 
     from vtsearch.datasets.sources import get_source_for_origin
 
     source = get_source_for_origin(origin)
     if source is None:
-        return jsonify({"error": f"No media source available for origin type: {origin.get('importer', '')}"}), 400
+        abort(400, message=f"No media source available for origin type: {origin.get('importer', '')}")
 
-    crop_params = data.get("crop_params") if isinstance(data.get("crop_params"), dict) else None
+    crop_params = body.get("crop_params") if isinstance(body.get("crop_params"), dict) else None
 
     try:
         file_path = source.fetch_item(key)
         if file_path is None:
-            return jsonify({"error": f"File not found: {key}"}), 404
+            abort(404, message=f"File not found: {key}")
 
         from vtsearch.routes.sorting import _apply_crop_or_keep, _example_sort_from_path
 
@@ -299,11 +338,13 @@ def example_sort_origin():
                 tmp.unlink(missing_ok=True)
         else:
             results, thresh = _example_sort_from_path(file_path)
-        return jsonify({"results": results, "threshold": thresh})
+        return {"results": results, "threshold": thresh}
+    except HTTPException:
+        raise
     except Exception as exc:
         import logging
 
         logging.getLogger(__name__).exception("example-sort-origin failed")
-        return jsonify({"error": f"Example sort failed: {format_exception_detail(exc)}"}), 500
+        abort(500, message=f"Example sort failed: {format_exception_detail(exc)}")
     finally:
         source.cleanup()

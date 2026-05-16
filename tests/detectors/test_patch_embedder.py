@@ -1041,14 +1041,20 @@ class TestVoteEndpointRegionBox:
         assert 1 not in vote_region_boxes
 
     def test_malformed_region_box_rejected(self, client):
+        # The marshmallow schema only declares ``region_box`` as a List of
+        # Floats — the length check (==4) is done by ``_parse_region_box``
+        # in the handler, so a 3-element list passes the schema and is
+        # rejected by the handler with a 400 + standard ``message`` envelope.
         resp = client.post(
             "/api/medias/1/vote",
             json={"vote": "good", "region_box": [0.1, 0.2, 0.7]},
         )
         assert resp.status_code == 400
-        assert "region_box" in resp.get_json()["error"]
+        assert "region_box" in resp.get_json()["message"]
 
     def test_out_of_range_region_box_rejected(self, client):
+        # Range check ([0, 1]) is done by ``_parse_region_box`` in the
+        # handler → 400 + standard ``message`` envelope.
         resp = client.post(
             "/api/medias/1/vote",
             json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 1.5]},
@@ -1056,11 +1062,13 @@ class TestVoteEndpointRegionBox:
         assert resp.status_code == 400
 
     def test_non_numeric_region_box_rejected(self, client):
+        # ``["a", "b", "c", "d"]`` fails the marshmallow Float coercion →
+        # schema-level 422 with the per-field ``errors`` envelope.
         resp = client.post(
             "/api/medias/1/vote",
             json={"vote": "good", "region_box": ["a", "b", "c", "d"]},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_toggle_good_off_clears_region_box(self, client):
         """Voting good twice toggles off the vote; the region_box must go

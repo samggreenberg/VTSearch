@@ -1,4 +1,16 @@
-"""Blueprint for media-related routes."""
+"""Blueprint for media-related routes.
+
+Migrated to ``flask_smorest`` so the JSON-shaped routes appear in the
+``/api/openapi.json`` spec. See ``docs/plans/openapi-schema.md``.
+
+The binary-streaming routes (``audio``, ``video``, ``image``, ``media``)
+declare only their JSON error responses via ``alt_response``; the
+success body is a streamed file whose mimetype is chosen at runtime, so
+the spec leaves it undescribed (mirroring ``detectors/labels.py``'s
+preview / thumbnail routes). The multipart ``add-to-pile`` route
+describes its success body via ``response`` but omits ``arguments``
+because the request shape isn't a single marshmallow schema.
+"""
 
 from __future__ import annotations
 
@@ -9,11 +21,20 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, jsonify, make_response, request, send_file
+from flask import Response, jsonify, make_response, request, send_file
+from flask_smorest import Blueprint, abort
 
-from vtsearch.media.base import MediaResponse
-from vtsearch.routes._shared import get_json_or_400
 from vtsearch.media.audio.ffmpeg import get_ffmpeg_exe
+from vtsearch.media.base import MediaResponse
+from vtsearch.schemas.media import (
+    MediaAddToPileResponseSchema,
+    MediaBatchRequestSchema,
+    MediaBatchResponseSchema,
+    MediaIdsListResponseSchema,
+    MediaParagraphResponseSchema,
+    MediaVoteRequestSchema,
+    MediaVoteResponseSchema,
+)
 from vtsearch.state import (
     _state_lock,
     apply_label,
@@ -25,7 +46,11 @@ from vtsearch.state import (
     toggle_vote,
 )
 
-medias_bp = Blueprint("medias", __name__)
+medias_bp = Blueprint(
+    "medias",
+    __name__,
+    description="List, fetch, stream, and vote on individual media items.",
+)
 
 # Extensions the browser's <video> element can play natively.
 _BROWSER_VIDEO_EXTS = {".mp4", ".m4v", ".webm", ".ogg", ".ogv"}
@@ -225,7 +250,8 @@ def _flask_response(mr: MediaResponse) -> Response:
 
 
 @medias_bp.route("/api/medias/ids")
-def list_media_ids() -> Response:
+@medias_bp.response(200, MediaIdsListResponseSchema(many=True))
+def list_media_ids():
     """Return a lightweight listing of all loaded medias.
 
     Each item contains only the fields the frontend needs to build virtual
@@ -247,11 +273,13 @@ def list_media_ids() -> Response:
         if embedder:
             item["embedder"] = embedder
         result.append(item)
-    return jsonify(result)
+    return result
 
 
 @medias_bp.route("/api/medias/batch", methods=["POST"])
-def batch_medias() -> tuple[Response, int] | Response:
+@medias_bp.arguments(MediaBatchRequestSchema)
+@medias_bp.response(200, MediaBatchResponseSchema(many=True))
+def batch_medias(body: dict):
     """Return full metadata for a specific set of media IDs.
 
     Callers request only the IDs they need (e.g. the ones currently visible
@@ -259,30 +287,16 @@ def batch_medias() -> tuple[Response, int] | Response:
     :func:`list_media_ids` (``GET /api/medias/ids``) to discover which
     media IDs exist in the loaded dataset.
 
-    Request body (JSON):
-        ``{"ids": [1, 2, 3, ...]}`` — list of integer media IDs.
-
-    Returns:
-        A JSON array of media metadata dicts containing ``id``, ``type``,
-        ``filename``, ``md5``, ``custom_metadata``, and optional
-        ``origin_name`` / ``description`` / ``embedder`` / ``clip_*`` keys.
-        Unknown IDs are silently omitted.
+    Returns a JSON array of media metadata dicts; unknown IDs are silently
+    omitted.
     """
     from vtsearch.media import get as get_media_type  # noqa: PLC0415
 
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    ids = data.get("ids")
-    if not isinstance(ids, list):
-        return jsonify({"error": "ids must be a list"}), 400
+    ids = body["ids"]
 
     snap = snapshot_medias()
     result: list[dict[str, Any]] = []
     for cid in ids:
-        if not isinstance(cid, int):
-            continue
         c = snap.get(cid)
         if c is None:
             continue
@@ -312,26 +326,23 @@ def batch_medias() -> tuple[Response, int] | Response:
             if clip_key in c:
                 media_data[clip_key] = c[clip_key]
         result.append(media_data)
-    return jsonify(result)
+    return result
 
 
 @medias_bp.route("/api/medias/<int:media_id>/audio")
-def media_audio(media_id: int) -> tuple[Response, int] | Response:
+@medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
+def media_audio(media_id: int):
     """Stream the WAV audio bytes for a single media item.
 
-    Args:
-        media_id: Integer media ID from the URL path.
-
-    Returns:
-        A ``audio/wav`` file response on success (HTTP 200), or a JSON error
-        response with HTTP 404 if the media does not exist.
+    Returns an ``audio/wav`` file response on success (HTTP 200), or a 404
+    JSON envelope if the media does not exist or its bytes are unavailable.
     """
     c = get_media(media_id)
     if not c:
-        return jsonify({"error": "not found"}), 404
+        abort(404, message="not found")
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
-        return jsonify({"error": "media not available"}), 404
+        abort(404, message="media not available")
     return send_file(
         io.BytesIO(media_bytes),
         mimetype="audio/wav",
@@ -340,25 +351,20 @@ def media_audio(media_id: int) -> tuple[Response, int] | Response:
 
 
 @medias_bp.route("/api/medias/<int:media_id>/video")
-def media_video(media_id: int) -> tuple[Response, int] | Response:
+@medias_bp.alt_response(400, description="Media is not a video.")
+@medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
+@medias_bp.alt_response(415, description="Source format requires ffmpeg/opencv which are unavailable.")
+def media_video(media_id: int):
     """Stream the video bytes for a single video media item.
 
-    Determines the MIME type from the media's filename extension, defaulting to
-    ``video/mp4`` for unrecognised extensions.
-
-    Args:
-        media_id: Integer media ID from the URL path.
-
-    Returns:
-        A video file response with the appropriate MIME type on success
-        (HTTP 200), a JSON 404 error if the media does not exist, or a JSON 400
-        error if the media exists but is not of type ``"video"``.
+    Determines the MIME type from the media's filename extension, defaulting
+    to ``video/mp4`` for unrecognised extensions.
     """
     c = get_media(media_id)
     if not c:
-        return jsonify({"error": "not found"}), 404
+        abort(404, message="not found")
     if c.get("type") != "video":
-        return jsonify({"error": "not a video"}), 400
+        abort(400, message="not a video")
 
     filename = c.get("filename", "")
     ext = Path(filename).suffix.lower() if filename else ".mp4"
@@ -372,20 +378,21 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
 
         media_bytes = _resolve_bytes(c)
         if media_bytes is None:
-            return jsonify({"error": "media not available"}), 404
+            abort(404, message="media not available")
 
         transcoded = _transcode_to_mp4(media_bytes, filename)
         if transcoded is not None:
             c["_transcoded_mp4"] = transcoded
             return _send_video_bytes(transcoded, "video/mp4", f"media_{media_id}.mp4")
         # ffmpeg and OpenCV both unavailable — cannot transcode
-        return jsonify(
-            {"error": f"Cannot play {ext} videos: install ffmpeg or opencv-python-headless to enable transcoding"}
-        ), 415
+        abort(
+            415,
+            message=f"Cannot play {ext} videos: install ffmpeg or opencv-python-headless to enable transcoding",
+        )
 
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
-        return jsonify({"error": "media not available"}), 404
+        abort(404, message="media not available")
 
     if ext == ".webm":
         mimetype = "video/webm"
@@ -398,23 +405,19 @@ def media_video(media_id: int) -> tuple[Response, int] | Response:
 
 
 @medias_bp.route("/api/medias/<int:media_id>/image")
-def media_image(media_id: int) -> tuple[Response, int] | Response:
+@medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
+@medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
+def media_image(media_id: int):
     """Stream the image bytes for a single image media item.
 
-    Determines the MIME type from the media's filename extension, defaulting to
-    ``image/jpeg`` for unrecognised extensions.
-
-    Args:
-        media_id: Integer media ID from the URL path.
-
-    Returns:
-        An image file response with the appropriate MIME type on success
-        (HTTP 200), a JSON 404 error if the media does not exist, or a JSON 400
-        error if the media exists but is not of type ``"image"``.
+    Determines the MIME type from the media's filename extension, defaulting
+    to ``image/jpeg`` for unrecognised extensions. For non-image media types
+    that declare an ``image_response`` hook (audio waveforms, video frames),
+    the route delegates to that hook.
     """
     c = get_media(media_id)
     if not c:
-        return jsonify({"error": "not found"}), 404
+        abort(404, message="not found")
 
     media_type = c.get("type")
 
@@ -434,11 +437,11 @@ def media_image(media_id: int) -> tuple[Response, int] | Response:
                     mimetype=resp.mimetype,
                     download_name=resp.download_name,
                 )
-        return jsonify({"error": "no image available"}), 400
+        abort(400, message="no image available")
 
     media_bytes = _resolve_bytes(c)
     if media_bytes is None:
-        return jsonify({"error": "media not available"}), 404
+        abort(404, message="media not available")
 
     # Determine mimetype based on filename extension
     filename = c.get("filename", "")
@@ -462,115 +465,89 @@ def media_image(media_id: int) -> tuple[Response, int] | Response:
 
 @medias_bp.route("/api/medias/<int:media_id>/paragraph")
 @medias_bp.route("/api/medias/<int:media_id>/text")
-def media_paragraph(media_id: int) -> tuple[Response, int] | Response:
-    """Return the text content and statistics for a single text media item.
-
-    Args:
-        media_id: Integer media ID from the URL path.
-
-    Returns:
-        A JSON object with keys ``"content"`` (str), ``"word_count"`` (int),
-        and ``"character_count"`` (int) on success (HTTP 200), a JSON 404
-        error if the media does not exist, or a JSON 400 error if the media
-        exists but is not of type ``"text"``.
-    """
+@medias_bp.response(200, MediaParagraphResponseSchema)
+@medias_bp.alt_response(400, description="Media is not a text item.")
+@medias_bp.alt_response(404, description="Media not found, or media content unavailable.")
+def media_paragraph(media_id: int):
+    """Return the text content and statistics for a single text media item."""
     c = get_media(media_id)
     if not c:
-        return jsonify({"error": "not found"}), 404
+        abort(404, message="not found")
     if c.get("type") not in ("text", "paragraph"):
-        return jsonify({"error": "not a text media"}), 400
+        abort(400, message="not a text media")
 
     content = _resolve_string(c)
     if content is None:
-        return jsonify({"error": "media not available"}), 404
+        abort(404, message="media not available")
 
-    return jsonify(
-        {
-            "content": content,
-            "word_count": c.get("word_count", 0) or len(content.split()),
-            "character_count": c.get("character_count", 0) or len(content),
-        }
-    )
+    return {
+        "content": content,
+        "word_count": c.get("word_count", 0) or len(content.split()),
+        "character_count": c.get("character_count", 0) or len(content),
+    }
 
 
 @medias_bp.route("/api/medias/<int:media_id>/media")
-def media_generic(media_id: int) -> tuple[Response, int] | Response:
+@medias_bp.alt_response(400, description="Media has an unsupported media type.")
+@medias_bp.alt_response(404, description="Media not found.")
+def media_generic(media_id: int):
     """Serve the media content for any type via a single generic endpoint.
 
-    Determines the media type from the media item's ``"type"`` field and delegates
-    to the registered :class:`~vtsearch.media.base.MediaType`'s
-    :meth:`~vtsearch.media.base.MediaType.media_response` method.  This
-    endpoint works for all current and future media types without modification.
-
-    Args:
-        media_id: Integer media ID from the URL path.
-
-    Returns:
-        The media content with the appropriate MIME type on success (HTTP 200),
-        or a JSON error response for HTTP 404 (media not found) or HTTP 400
-        (unrecognised media type).
+    Determines the media type from the media item's ``"type"`` field and
+    delegates to the registered :class:`~vtsearch.media.base.MediaType`'s
+    :meth:`~vtsearch.media.base.MediaType.media_response` method. This
+    endpoint works for all current and future media types without
+    modification. Response body is either binary (image/audio/video bytes
+    with the appropriate mimetype) or JSON (text content); the spec leaves
+    the success body undescribed.
     """
     c = get_media(media_id)
     if not c:
-        return jsonify({"error": "not found"}), 404
+        abort(404, message="not found")
 
     from vtsearch.media import get as media_get
 
     try:
         mt = media_get(c.get("type", ""))
     except KeyError:
-        return jsonify({"error": f"unsupported media type: {c.get('type')}"}), 400
+        abort(400, message=f"unsupported media type: {c.get('type')}")
 
     return _flask_response(mt.media_response(c))
 
 
 @medias_bp.route("/api/medias/<int:media_id>/vote", methods=["POST"])
-def vote_media(media_id: int) -> tuple[Response, int] | Response:
+@medias_bp.arguments(MediaVoteRequestSchema)
+@medias_bp.response(200, MediaVoteResponseSchema)
+@medias_bp.alt_response(400, description="region_box is malformed, or a bad-vote carries a region_box.")
+@medias_bp.alt_response(404, description="Media not found.")
+def vote_media(body: dict, media_id: int):
     """Record or toggle a good/bad vote for a single media item.
 
     Voting behaviour (toggle semantics):
 
-    - If ``vote == "good"`` and the media is already in ``good_votes``, the vote
-      is *removed* (toggled off).
+    - If ``vote == "good"`` and the media is already in ``good_votes``, the
+      vote is *removed* (toggled off).
     - If ``vote == "good"`` and the media is not yet in ``good_votes``, it is
       added to ``good_votes`` (removed from ``bad_votes`` if present) and the
       event is appended to ``label_history``.
     - The same toggle logic applies symmetrically for ``vote == "bad"``.
 
-    Args:
-        media_id: Integer media ID from the URL path.
-
-    Request body (JSON):
-        ``{"vote": "good"}`` or ``{"vote": "bad"}``.  Yes-votes may
-        additionally carry ``"region_box": [x0, y0, x1, y1]`` (normalised
-        image coords in ``[0, 1]``) to designate the good region.
-        No-votes that include ``region_box`` are rejected — by design
-        no-votes are image-level always (patch-embedder v2).
-
-    Returns:
-        ``{"ok": True}`` (HTTP 200) on success, or a JSON error response for:
-
-        - HTTP 404 – media not found.
-        - HTTP 400 – request body is missing, malformed, or ``vote`` is not
-          ``"good"`` or ``"bad"``.
+    Yes-votes may carry ``"region_box": [x0, y0, x1, y1]`` (normalised image
+    coords in ``[0, 1]``) to designate the good region. No-votes that
+    include ``region_box`` are rejected — by design no-votes are
+    image-level always (patch-embedder v2).
     """
     if get_media(media_id) is None:
-        return jsonify({"error": "not found"}), 404
+        abort(404, message="not found")
 
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    vote = data.get("vote")
-    if vote not in ("good", "bad"):
-        return jsonify({"error": "vote must be 'good' or 'bad'"}), 400
+    vote = body["vote"]
 
     try:
-        region_box = _parse_region_box(data.get("region_box"))
+        region_box = _parse_region_box(body.get("region_box"))
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        abort(400, message=str(exc))
     if vote == "bad" and region_box is not None:
-        return jsonify({"error": "no-votes cannot carry a region_box"}), 400
+        abort(400, message="no-votes cannot carry a region_box")
 
     toggle_vote(media_id, vote, region_box=region_box)
 
@@ -582,39 +559,46 @@ def vote_media(media_id: int) -> tuple[Response, int] | Response:
 
     sync_to_labelset_source()
 
-    return jsonify({"ok": True})
+    return {"ok": True}
 
 
 @medias_bp.route("/api/medias/add-to-pile", methods=["POST"])
-def add_media_to_pile() -> tuple[Response, int] | Response:
+@medias_bp.response(200, MediaAddToPileResponseSchema)
+@medias_bp.alt_response(
+    201,
+    schema=MediaAddToPileResponseSchema,
+    description="A new media was embedded and inserted before being voted.",
+)
+@medias_bp.alt_response(
+    400,
+    description=(
+        "Missing or malformed multipart body (no file / empty file / "
+        "invalid label), no dataset loaded, or no embedder available."
+    ),
+)
+def add_media_to_pile():
     """Upload a media file and add it directly to the Good or Bad pile.
 
     If a media with the same MD5 already exists in the dataset, the existing
-    media is voted accordingly.  Otherwise the file is embedded using the
-    dataset's embedder, inserted as a new media item, and then voted.
-
-    Request (``multipart/form-data``):
-        - ``file``: The media file to upload.
-        - ``label``: ``"good"`` or ``"bad"``.
-
-    Returns:
-        ``{"ok": true, "media_id": <int>, "is_new": <bool>}`` on success
-        (HTTP 200/201), or a JSON error response.
+    media is voted accordingly. Otherwise the file is embedded using the
+    dataset's embedder, inserted as a new media item, and then voted. The
+    request body is multipart/form-data with ``file`` (the upload) and
+    ``label`` (``"good"`` or ``"bad"``).
     """
     if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+        abort(400, message="No file provided")
 
     file = request.files["file"]
     if not file.filename:
-        return jsonify({"error": "No file selected"}), 400
+        abort(400, message="No file selected")
 
     label = request.form.get("label", "")
     if label not in ("good", "bad"):
-        return jsonify({"error": "label must be 'good' or 'bad'"}), 400
+        abort(400, message="label must be 'good' or 'bad'")
 
     file_bytes = file.read()
     if not file_bytes:
-        return jsonify({"error": "Empty file"}), 400
+        abort(400, message="Empty file")
 
     file_md5 = hashlib.md5(file_bytes).hexdigest()
 
@@ -627,11 +611,11 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
         # MD5 match — vote the existing media(s).
         for cid in existing_cids:
             apply_label(cid, label)
-        return jsonify({"ok": True, "media_id": existing_cids[0], "is_new": False})
+        return {"ok": True, "media_id": existing_cids[0], "is_new": False}
 
     # No match — embed and insert as new media.
     if not snap:
-        return jsonify({"error": "No dataset loaded. Load a dataset first."}), 400
+        abort(400, message="No dataset loaded. Load a dataset first.")
 
     first_media = next(iter(snap.values()))
     dataset_media_type = first_media.get("type", "audio")
@@ -649,7 +633,7 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
         avail = embedders_for_type(dataset_media_type)
         embedder = avail[0] if avail else None
     if embedder is None:
-        return jsonify({"error": "No embedder available for the current dataset type."}), 400
+        abort(400, message="No embedder available for the current dataset type.")
 
     # Write to a temporary file for embedding
     import tempfile
@@ -668,7 +652,7 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
         tmp_path.unlink(missing_ok=True)
 
     if embedding is None:
-        return jsonify({"error": "Failed to embed the uploaded file."}), 400
+        abort(400, message="Failed to embed the uploaded file.")
 
     # Generate thumbnail for non-image media
     thumb = None
@@ -706,4 +690,4 @@ def add_media_to_pile() -> tuple[Response, int] | Response:
 
     apply_label(new_id, label)
 
-    return jsonify({"ok": True, "media_id": new_id, "is_new": True}), 201
+    return {"ok": True, "media_id": new_id, "is_new": True}, 201
