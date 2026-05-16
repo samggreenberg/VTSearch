@@ -189,6 +189,7 @@ def train_and_score(
     """
     import torch  # noqa: PLC0415
 
+    from vtsearch.metrics import time_training
     from vtsearch.training.mlp import _auto_hidden_dim, train_model
     from vtsearch.training.thresholds import (
         calculate_safe_threshold,
@@ -251,7 +252,8 @@ def train_and_score(
     # which equals the patch-region full-image vector for patch datasets),
     # mirroring the v1 vote rule of "vote on whole images".  Region-level
     # training examples are a phase-2 concern.
-    model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
+    with time_training("in_memory"):
+        model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
 
     # Score every media — region-aware max-pool over regions when the
     # dataset is patch-region-aware, plain single-vector scoring when not.
@@ -386,6 +388,7 @@ def train_detector_from_origins(
     import torch  # noqa: PLC0415
 
     from vtsearch.detectors.resolver import embed_file, resolve_file_context
+    from vtsearch.metrics import time_training
     from vtsearch.training.mlp import train_model
     from vtsearch.training.thresholds import calculate_cross_calibration_threshold
 
@@ -440,7 +443,8 @@ def train_detector_from_origins(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
         )
-    model = train_model(X, y, input_dim, inclusion)
+    with time_training("from_origins"):
+        model = train_model(X, y, input_dim, inclusion)
 
     state_dict = model.state_dict()
     weights = {k: v.cpu().tolist() for k, v in state_dict.items()}

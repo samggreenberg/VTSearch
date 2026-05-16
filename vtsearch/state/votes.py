@@ -198,11 +198,17 @@ def toggle_vote(
                     invalidate_progress_cache_from(media_id)
                 added = True
 
+    from vtsearch.metrics import record_vote_event
+
+    det_ctx = get_active_detector_context()
     if added:
         from vtsearch.achievements import record_vote
 
-        det_ctx = get_active_detector_context()
         record_vote(det_ctx.detector_id, media_type=det_ctx.media_type)
+        record_vote_event(vote, media_type=det_ctx.media_type)
+    else:
+        # Toggle-off path: the user undid an existing vote.
+        record_vote_event("unlabel", media_type=det_ctx.media_type)
 
 
 def apply_label(
@@ -250,6 +256,10 @@ def apply_label(
                 add_label_to_history(media_id, "bad")
         if not silent:
             diversity_tree_label(media_id)
+    if not silent:
+        from vtsearch.metrics import record_vote_event
+
+        record_vote_event(label, media_type=get_active_detector_context().media_type)
 
 
 def apply_label_with_click_time(media_id: int, label: str) -> None:
@@ -275,6 +285,9 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
             add_label_to_history(media_id, "bad")
         assign_click_time(media_id)
         diversity_tree_label(media_id)
+    from vtsearch.metrics import record_vote_event
+
+    record_vote_event(label, media_type=get_active_detector_context().media_type)
 
 
 def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all: bool = False) -> None:
@@ -322,3 +335,8 @@ def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all
             vote_click_times[media_id] = new_val
             if tree is not None and media_id in tree.vector_to_leaf:
                 tree.label(media_id)
+    from vtsearch.metrics import record_vote_event
+
+    mt = get_active_detector_context().media_type
+    for _media_id, label in labels:
+        record_vote_event(label, media_type=mt)

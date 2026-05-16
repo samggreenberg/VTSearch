@@ -23,6 +23,7 @@ from vtsearch.routes.file_browser import file_browser_bp
 from vtsearch.routes.labels import exporters_bp, label_importers_bp, labels_bp
 from vtsearch.routes.main import main_bp
 from vtsearch.routes.media import embed_bp, media_server_bp, medias_bp
+from vtsearch.routes.metrics import metrics_bp
 from vtsearch.routes.processors import processors_bp
 from vtsearch.routes.settings import settings_bp, settings_io_bp, sync_sources_bp
 from vtsearch.routes.sorting import sorting_bp
@@ -51,6 +52,7 @@ __all__ = [
     "main_bp",
     "media_server_bp",
     "medias_bp",
+    "metrics_bp",
     "processors_bp",
     "settings_bp",
     "settings_io_bp",

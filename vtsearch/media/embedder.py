@@ -553,7 +553,9 @@ class MediaEmbedder(ABC):
 
         Returns ``None`` if the media cannot be embedded.
         """
-        with self._embed_lock:
+        from vtsearch.metrics import time_embedding
+
+        with self._embed_lock, time_embedding(self.name, self.media_type_id):
             return self._embed_media_impl(media)
 
     @abstractmethod

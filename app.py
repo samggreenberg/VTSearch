@@ -53,6 +53,7 @@ from vtsearch.routes import (  # noqa: E402
     labels_bp,
     media_server_bp,
     medias_bp,
+    metrics_bp,
     datasets_listings_bp,
     datasets_load_bp,
     datasets_registry_bp,
@@ -277,6 +278,7 @@ app.register_blueprint(detector_scoring_bp)
 app.register_blueprint(detector_find_bp)
 app.register_blueprint(embed_bp)
 app.register_blueprint(events_bp)
+app.register_blueprint(metrics_bp)
 
 
 # ---------------------------------------------------------------------------
