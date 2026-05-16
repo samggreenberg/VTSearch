@@ -84,6 +84,24 @@ def _upper(v: Any) -> Any:
     return v.upper() if isinstance(v, str) else v
 
 
+def _default_concurrent_downloads() -> int:
+    """Lazily resolve the hardware-derived default for parallel downloads.
+
+    Imported lazily to avoid pulling :mod:`vtsearch.embedding.loader` (and
+    transitively torch) at settings-model import time.
+    """
+    from vtsearch.embedding.loader import default_concurrent_downloads
+
+    return default_concurrent_downloads()
+
+
+def _default_concurrent_embeddings() -> int:
+    """Lazily resolve the hardware-derived default for parallel embeddings."""
+    from vtsearch.embedding.loader import default_concurrent_embeddings
+
+    return default_concurrent_embeddings()
+
+
 class ServerSettings(BaseModel):
     """Server-tier (shared) settings persisted in ``data/settings.json``."""
 
@@ -91,8 +109,14 @@ class ServerSettings(BaseModel):
 
     saved_datasets_dir: str = Field(default_factory=lambda: str(DATA_DIR / "saved_datasets"))
     detectors_dir: str = Field(default_factory=lambda: str(DATA_DIR / "detectors"))
-    max_concurrent_dataset_downloads: Annotated[int, _clamp(1, 16)] = 1
-    max_concurrent_dataset_embeddings: Annotated[int, _clamp(1, 16)] = 1
+    # Defaults derive from cores/GPUs at first read (not persisted to disk);
+    # a manual override in ``data/settings.json`` always wins.
+    max_concurrent_dataset_downloads: Annotated[int, _clamp(1, 16)] = Field(
+        default_factory=_default_concurrent_downloads
+    )
+    max_concurrent_dataset_embeddings: Annotated[int, _clamp(1, 16)] = Field(
+        default_factory=_default_concurrent_embeddings
+    )
     autorun_detectors: list[str] = Field(default_factory=list)
 
 
