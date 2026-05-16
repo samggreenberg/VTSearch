@@ -703,7 +703,7 @@ Dropped: not worth building. External schedulers (cron, systemd timers, file-wat
 ### 18.1 `/healthz` and `/readyz` ★★ S
 Distinguish "process is up" from "models are loaded and DB is reachable".
 
-### 18.2 Backup CLI ★★ S
+### 18.2 Backup CLI ★★ S — NOT NECESSARY
 `python app.py --backup data-snapshot.tar.gz` and `--restore`. Includes datasets-pkl, settings, detectors.
 
 ### 18.3 Audit log ★ M
