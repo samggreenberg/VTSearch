@@ -707,7 +707,7 @@ class TestEvalTrainAndScoreAsync:
 
     def test_invalid_metric_rejected(self, client):
         resp = client.post("/api/eval/train-and-score", json={"metric": "bogus", "wait": True})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 class TestExampleSort:

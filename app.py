@@ -313,8 +313,8 @@ def _handle_uncaught_exception(exc):
 # attach to Flask normally and are simply absent from the spec.
 api.register_blueprint(achievements_bp)
 api.register_blueprint(auth_bp)
-app.register_blueprint(eval_bp)
-app.register_blueprint(file_browser_bp)
+api.register_blueprint(eval_bp)
+api.register_blueprint(file_browser_bp)
 api.register_blueprint(health_bp)
 api.register_blueprint(labels_bp)
 api.register_blueprint(media_server_bp)

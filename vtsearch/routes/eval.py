@@ -1,14 +1,30 @@
-"""Blueprint for evaluation and labeling progress routes."""
+"""Blueprint for evaluation and labeling progress routes.
 
-from flask import Blueprint, jsonify, request
+Migrated to ``flask_smorest`` so the routes are described in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``. Schema-level
+failures (missing ``metric`` / ``job_id``, invalid metric value) surface
+as 422 with the standard ``errors`` envelope; handler-level rejects
+(no votes / no label history, missing job) keep their HTTP codes
+(400 / 404 / 500) with the standard ``message`` envelope.
+"""
 
-from vtsearch.routes._shared import get_json_or_400
+from flask_smorest import Blueprint, abort
+
 from vtsearch.detectors.labeling_progress import (
     analyze_labeling_progress,
     calculate_diversity_level_over_time,
     calculate_error_cost_over_time,
     calculate_prediction_stability_over_time,
     compute_labeling_status,
+)
+from vtsearch.schemas.eval import (
+    EvalTrainAndScoreRequestSchema,
+    EvalTrainAndScoreResponseSchema,
+    EvalTrainAndScoreResultQuerySchema,
+    IndicatorScoreHistoryQuerySchema,
+    IndicatorScoreHistoryResponseSchema,
+    LabelingProgressResponseSchema,
+    LabelingStatusResponseSchema,
 )
 from vtsearch.state import (
     bad_votes,
@@ -23,29 +39,37 @@ from vtsearch.concurrency.progress import (
     update_eval_progress,
 )
 
-eval_bp = Blueprint("eval", __name__)
+eval_bp = Blueprint(
+    "eval",
+    __name__,
+    description="Labeling-progress analysis and learned-sort eval indicators.",
+)
 
 
 @eval_bp.route("/api/labeling-progress", methods=["POST"])
+@eval_bp.response(200, LabelingProgressResponseSchema)
+@eval_bp.alt_response(400, description="No good/bad votes, or no label history.")
+@eval_bp.alt_response(500, description="Labeling-progress computation failed.")
 def labeling_progress():
     """Analyze labeling progress and calculate stopping condition metrics."""
     if not good_votes or not bad_votes:
-        return jsonify({"error": "need at least one good and one bad vote"}), 400
+        abort(400, message="need at least one good and one bad vote")
 
     if not label_history:
-        return jsonify({"error": "no label history available"}), 400
+        abort(400, message="no label history available")
 
     try:
-        analysis = analyze_labeling_progress(snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion())
-        return jsonify(analysis)
+        return analyze_labeling_progress(snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion())
     except Exception:
         import logging
 
         logging.getLogger(__name__).exception("labeling-progress failed")
-        return jsonify({"error": "Labeling progress computation failed"}), 500
+        abort(500, message="Labeling progress computation failed")
 
 
 @eval_bp.route("/api/labeling-status", methods=["GET"])
+@eval_bp.response(200, LabelingStatusResponseSchema)
+@eval_bp.alt_response(500, description="Labeling-status computation failed.")
 def labeling_status_indicator():
     """Return per-metric red/yellow/green labeling statuses.
 
@@ -55,29 +79,27 @@ def labeling_status_indicator():
     try:
         tree = get_diversity_tree()
         span = tree.span_info() if tree is not None else None
-        status = compute_labeling_status(
+        return compute_labeling_status(
             snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion(), span_info=span
         )
-        return jsonify(status)
     except Exception:
         import logging
 
         logging.getLogger(__name__).exception("labeling-status failed")
-        return jsonify({"error": "Labeling status computation failed"}), 500
+        abort(500, message="Labeling status computation failed")
 
 
 @eval_bp.route("/api/indicator-score-history", methods=["GET"])
-def indicator_score_history():
+@eval_bp.arguments(IndicatorScoreHistoryQuerySchema, location="query")
+@eval_bp.response(200, IndicatorScoreHistoryResponseSchema)
+@eval_bp.alt_response(500, description="Score-history computation failed.")
+def indicator_score_history(query: dict):
     """Return cached indicator score history for a given metric.
 
-    Query parameter ``metric`` must be one of ``smart``, ``stable``, or
-    ``diverse``.  Returns the cached per-step data without retraining
-    models — only data already computed by the labeling-status polling
-    is returned.
+    Reads only the per-step cache populated by the labeling-status
+    polling — no models are retrained.
     """
-    metric = request.args.get("metric", "").strip()
-    if metric not in ("smart", "stable", "diverse"):
-        return jsonify({"error": "metric must be one of: smart, stable, diverse"}), 400
+    metric = query["metric"]
 
     clips = snapshot_medias()
     inclusion = get_inclusion()
@@ -85,18 +107,16 @@ def indicator_score_history():
     try:
         if metric == "smart":
             data = calculate_error_cost_over_time(clips, label_history, good_votes, bad_votes, inclusion)
-            return jsonify({"metric": "smart", "history": data})
         elif metric == "stable":
             data = calculate_prediction_stability_over_time(clips, label_history, inclusion)
-            return jsonify({"metric": "stable", "history": data})
         else:
             data = calculate_diversity_level_over_time(clips, label_history, inclusion)
-            return jsonify({"metric": "diverse", "history": data})
+        return {"metric": metric, "history": data}
     except Exception:
         import logging
 
         logging.getLogger(__name__).exception("indicator-score-history failed")
-        return jsonify({"error": "Score history computation failed"}), 500
+        abort(500, message="Score history computation failed")
 
 
 _METRIC_KEY = {"smart": "error_cost", "stable": "stability", "diverse": "diversity"}
@@ -116,7 +136,10 @@ def _eval_done_payload(job) -> dict:
 
 
 @eval_bp.route("/api/eval/train-and-score", methods=["POST"])
-def eval_train_and_score():
+@eval_bp.arguments(EvalTrainAndScoreRequestSchema)
+@eval_bp.response(200, EvalTrainAndScoreResponseSchema)
+@eval_bp.alt_response(500, description="Evaluation computation failed (only when ``wait=true``).")
+def eval_train_and_score(body: dict):
     """Start (or short-circuit) an eval train-and-score computation.
 
     The work walks the full ``label_history`` retraining a small MLP at
@@ -139,15 +162,8 @@ def eval_train_and_score():
         set_thread_detector_context,
     )
 
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    metric = data.get("metric", "").strip()
-    if metric not in ("smart", "stable", "diverse"):
-        return jsonify({"error": "metric must be one of: smart, stable, diverse"}), 400
-
-    wait = bool(data.get("wait"))
+    metric = body["metric"]
+    wait = body["wait"]
 
     clips = snapshot_medias()
     inclusion = get_inclusion()
@@ -171,7 +187,7 @@ def eval_train_and_score():
 
     cached = eval_jobs.cached_for(signature)
     if cached is not None:
-        return jsonify(_eval_done_payload(cached))
+        return _eval_done_payload(cached)
 
     n_total = max(len(history) - 1, 0)
     update_eval_progress("running", f"Computing {metric}...", 0, n_total)
@@ -200,44 +216,38 @@ def eval_train_and_score():
     if wait:
         job.done_event.wait(timeout=300)
         if job.status == "error":
-            return jsonify({"error": job.error or "Evaluation computation failed"}), 500
+            abort(500, message=job.error or "Evaluation computation failed")
         if job.status == "done":
-            return jsonify(_eval_done_payload(job))
+            return _eval_done_payload(job)
 
-    return jsonify({"job_id": job.job_id, "status": "running", "current": 0, "total": n_total})
+    return {"job_id": job.job_id, "status": "running", "current": 0, "total": n_total}
 
 
 @eval_bp.route("/api/eval/train-and-score/result", methods=["GET"])
-def eval_train_and_score_result():
+@eval_bp.arguments(EvalTrainAndScoreResultQuerySchema, location="query")
+@eval_bp.response(200, EvalTrainAndScoreResponseSchema)
+@eval_bp.alt_response(404, description="Job not found.")
+@eval_bp.alt_response(500, description="Background evaluation job failed.")
+def eval_train_and_score_result(query: dict):
     """Poll a background eval train-and-score job."""
     from vtsearch.concurrency.async_jobs import eval_jobs
 
-    job_id = request.args.get("job_id", "").strip()
-    if not job_id:
-        return jsonify({"error": "job_id is required"}), 400
+    job_id = query["job_id"]
 
     job = eval_jobs.get(job_id)
     if job is None:
-        return jsonify({"status": "missing", "error": "Job not found"}), 404
+        abort(404, message="Job not found", job_id=job_id, status="missing")
 
     if job.status in ("running", "pending"):
         prog = get_eval_progress()
-        return jsonify(
-            {
-                "job_id": job.job_id,
-                "status": "running",
-                "current": prog.get("current", 0),
-                "total": prog.get("total", 0),
-            }
-        )
+        return {
+            "job_id": job.job_id,
+            "status": "running",
+            "current": prog.get("current", 0),
+            "total": prog.get("total", 0),
+        }
     if job.status == "error":
-        return jsonify(
-            {
-                "job_id": job.job_id,
-                "status": "error",
-                "error": job.error or "Evaluation computation failed",
-            }
-        ), 500
+        abort(500, message=job.error or "Evaluation computation failed", job_id=job.job_id)
     if job.status == "cancelled":
-        return jsonify({"job_id": job.job_id, "status": "cancelled"})
-    return jsonify(_eval_done_payload(job))
+        return {"job_id": job.job_id, "status": "cancelled"}
+    return _eval_done_payload(job)
