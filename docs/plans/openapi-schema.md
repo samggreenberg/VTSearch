@@ -262,6 +262,19 @@ request/response gates getting in the way during their migration.
       routes, blocked on the *Open questions* decision below ("Plugin
       field endpoints"). Tracked here so we don't re-spend the
       research cost when we pick the labels migration back up.
+- [x] `detectors/crud.py` migrated to flask-smorest (list / create /
+      get / delete / rename / set-examples / combine). Schema-level
+      validation failures (missing required fields, length / OneOf
+      checks) surface as 422 with the standard ``errors`` envelope;
+      handler-level rejects (``media_type='any'``, name collisions,
+      empty merge) keep their HTTP codes (400 / 409 / 422) but now
+      carry the standard ``message`` envelope instead of legacy
+      ``{"error": str}``. Detector tests updated to match.
+- [ ] `detectors/registry.py`, `detectors/labels.py`,
+      `detectors/scoring.py`, `detectors/find.py` — remaining detector
+      sub-blueprints. ``registry.py`` is the next chunk;
+      ``labels.py``'s vote / preview / thumbnail routes serve binary
+      bodies and will need ``alt_response``-only declarations.
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
 - [ ] Remaining blueprints (see Order above)

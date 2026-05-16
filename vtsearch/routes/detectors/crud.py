@@ -26,6 +26,9 @@ PUT  /api/detectors/<name>/examples
 
 POST /api/detectors/combine
     Combine the labelsets of two or more detectors into a new detector.
+
+Migrated to ``flask_smorest`` so the routes are described in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ from __future__ import annotations
 import logging
 import time
 
-from flask import Blueprint, jsonify, request
+from flask_smorest import Blueprint, abort
 
 from vtsearch.detectors.store import (
     _detector_path,
@@ -41,10 +44,27 @@ from vtsearch.detectors.store import (
     _write_detector,
     get_detectors_dir,
 )
+from vtsearch.schemas.detectors import (
+    DetectorCombineRequestSchema,
+    DetectorCombineResponseSchema,
+    DetectorCreateRequestSchema,
+    DetectorCreateResponseSchema,
+    DetectorDeleteResponseSchema,
+    DetectorDetailSchema,
+    DetectorExamplesRequestSchema,
+    DetectorExamplesResponseSchema,
+    DetectorRenameRequestSchema,
+    DetectorRenameResponseSchema,
+    DetectorsListResponseSchema,
+)
 
 logger = logging.getLogger(__name__)
 
-detectors_crud_bp = Blueprint("detectors_crud", __name__)
+detectors_crud_bp = Blueprint(
+    "detectors_crud",
+    __name__,
+    description="Create, list, rename, delete, and combine detectors.",
+)
 
 
 def _list_all() -> list[dict]:
@@ -80,9 +100,10 @@ def _list_all() -> list[dict]:
 
 
 @detectors_crud_bp.route("/api/detectors", methods=["GET"])
+@detectors_crud_bp.response(200, DetectorsListResponseSchema)
 def list_detectors():
     """Return all detectors (summary only, no full labelset)."""
-    return jsonify({"detectors": _list_all()})
+    return {"detectors": _list_all()}
 
 
 # ---------------------------------------------------------------------------
@@ -91,30 +112,32 @@ def list_detectors():
 
 
 @detectors_crud_bp.route("/api/detectors", methods=["POST"])
-def create_detector():
+@detectors_crud_bp.arguments(DetectorCreateRequestSchema)
+@detectors_crud_bp.response(201, DetectorCreateResponseSchema)
+@detectors_crud_bp.alt_response(400, description="Missing example/query, or media_type is 'any'.")
+@detectors_crud_bp.alt_response(409, description="A detector with this name already exists.")
+def create_detector(body: dict):
     """Create a new detector.
 
-    Expects JSON::
-
-        {"name": "Dog Barks", "text_query": "dog barking sounds"}
+    Requires ``name`` and ``media_type``; at least one of ``text_query``,
+    ``media_example``, or ``examples`` must be provided.
     """
-    data = request.get_json(force=True, silent=True) or {}
-    name = data.get("name", "").strip()
-    text_query = data.get("text_query", "").strip()
-    media_example = data.get("media_example", "").strip()
-    media_type = data.get("media_type", "").strip()
-    examples = data.get("examples")
+    name = body["name"].strip()
+    media_type = body["media_type"].strip()
+    text_query = body["text_query"].strip()
+    media_example = body["media_example"].strip()
+    examples = body.get("examples")
 
     if not name:
-        return jsonify({"error": "name is required"}), 400
+        abort(400, message="name is required")
     if not text_query and not media_example and not examples:
-        return jsonify({"error": "text_query, media_example, or examples is required"}), 400
+        abort(400, message="text_query, media_example, or examples is required")
     if not media_type or media_type == "any":
-        return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
+        abort(400, message="media_type is required (must be a specific type, not 'any')")
 
     path = _detector_path(name)
     if path.exists():
-        return jsonify({"error": f"A detector named '{name}' already exists"}), 409
+        abort(409, message=f"A detector named '{name}' already exists")
 
     # Build examples list; if text_query/media_example provided without
     # explicit examples, create a single example from it for backward compat.
@@ -134,17 +157,15 @@ def create_detector():
     }
     _write_detector(path, detector_data)
 
-    return jsonify(
-        {
-            "success": True,
-            "name": name,
-            "text_query": text_query,
-            "media_example": media_example,
-            "media_type": media_type,
-            "examples": examples or [],
-            "num_labels": 0,
-        }
-    ), 201
+    return {
+        "success": True,
+        "name": name,
+        "text_query": text_query,
+        "media_example": media_example,
+        "media_type": media_type,
+        "examples": examples or [],
+        "num_labels": 0,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -153,13 +174,15 @@ def create_detector():
 
 
 @detectors_crud_bp.route("/api/detectors/<name>", methods=["GET"])
+@detectors_crud_bp.response(200, DetectorDetailSchema)
+@detectors_crud_bp.alt_response(404, description="Detector not found.")
 def get_detector(name: str):
     """Retrieve a single detector with its full labelset."""
     path = _detector_path(name)
     data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
-    return jsonify(data)
+        abort(404, message=f"Detector '{name}' not found")
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -168,13 +191,15 @@ def get_detector(name: str):
 
 
 @detectors_crud_bp.route("/api/detectors/<name>", methods=["DELETE"])
+@detectors_crud_bp.response(200, DetectorDeleteResponseSchema)
+@detectors_crud_bp.alt_response(404, description="Detector not found.")
 def delete_detector(name: str):
     """Delete a detector."""
     path = _detector_path(name)
     if not path.exists():
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        abort(404, message=f"Detector '{name}' not found")
     path.unlink()
-    return jsonify({"success": True, "name": name})
+    return {"success": True, "name": name}
 
 
 # ---------------------------------------------------------------------------
@@ -183,26 +208,24 @@ def delete_detector(name: str):
 
 
 @detectors_crud_bp.route("/api/detectors/<name>/rename", methods=["PUT"])
-def rename_detector(name: str):
-    """Rename a detector.
-
-    Expects JSON::
-
-        {"new_name": "Cat Meows"}
-    """
+@detectors_crud_bp.arguments(DetectorRenameRequestSchema)
+@detectors_crud_bp.response(200, DetectorRenameResponseSchema)
+@detectors_crud_bp.alt_response(404, description="Detector not found.")
+@detectors_crud_bp.alt_response(409, description="A detector with the new name already exists.")
+def rename_detector(body: dict, name: str):
+    """Rename a detector."""
     old_path = _detector_path(name)
     data = _read_detector(old_path)
     if data is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        abort(404, message=f"Detector '{name}' not found")
 
-    body = request.get_json(force=True, silent=True) or {}
-    new_name = body.get("new_name", "").strip()
+    new_name = body["new_name"].strip()
     if not new_name:
-        return jsonify({"error": "new_name is required"}), 400
+        abort(400, message="new_name is required")
 
     new_path = _detector_path(new_name)
     if new_path.exists() and new_path != old_path:
-        return jsonify({"error": f"A detector named '{new_name}' already exists"}), 409
+        abort(409, message=f"A detector named '{new_name}' already exists")
 
     data["name"] = new_name
     _write_detector(new_path, data)
@@ -227,7 +250,7 @@ def rename_detector(name: str):
     except Exception:
         logger.exception("Failed to rename autorun entry for %s", name)
 
-    return jsonify({"success": True, "old_name": name, "new_name": new_name})
+    return {"success": True, "old_name": name, "new_name": new_name}
 
 
 # ---------------------------------------------------------------------------
@@ -236,22 +259,17 @@ def rename_detector(name: str):
 
 
 @detectors_crud_bp.route("/api/detectors/<name>/examples", methods=["PUT"])
-def set_detector_examples(name: str):
-    """Set/replace the examples for a detector.
-
-    Expects JSON::
-
-        {"examples": [{"type": "text", "value": "dog barking"}]}
-    """
+@detectors_crud_bp.arguments(DetectorExamplesRequestSchema)
+@detectors_crud_bp.response(200, DetectorExamplesResponseSchema)
+@detectors_crud_bp.alt_response(404, description="Detector not found.")
+def set_detector_examples(body: dict, name: str):
+    """Set/replace the examples for a detector."""
     path = _detector_path(name)
     data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        abort(404, message=f"Detector '{name}' not found")
 
-    body = request.get_json(force=True, silent=True) or {}
-    examples = body.get("examples")
-    if examples is None:
-        return jsonify({"error": "examples is required"}), 400
+    examples = body["examples"]
 
     data["examples"] = examples
     # Update text_query from first text example for backward compat
@@ -260,7 +278,7 @@ def set_detector_examples(name: str):
         data["text_query"] = text_examples[0]["value"]
     _write_detector(path, data)
 
-    return jsonify({"success": True, "name": name, "examples": examples})
+    return {"success": True, "name": name, "examples": examples}
 
 
 # ---------------------------------------------------------------------------
@@ -269,47 +287,38 @@ def set_detector_examples(name: str):
 
 
 @detectors_crud_bp.route("/api/detectors/combine", methods=["POST"])
-def combine_detectors():
+@detectors_crud_bp.arguments(DetectorCombineRequestSchema)
+@detectors_crud_bp.response(201, DetectorCombineResponseSchema)
+@detectors_crud_bp.alt_response(400, description="Validation error (unsupported policy, mixed media types, etc.).")
+@detectors_crud_bp.alt_response(404, description="A source detector was not found.")
+@detectors_crud_bp.alt_response(409, description="A detector with the new name already exists.")
+@detectors_crud_bp.alt_response(422, description="Combined labelset is empty after applying the conflict policy.")
+def combine_detectors(body: dict):
     """Combine the labelsets of two or more detectors into a new detector.
-
-    Expects JSON::
-
-        {
-            "names": ["Dog Barks", "More Dog Barks"],
-            "new_name": "All Dog Barks",
-            "conflict_policy": "drop"        # optional; default "drop"
-        }
 
     All source detectors must share the same ``media_type``.  The new
     detector's labelset is the merge of all source labelsets, keyed by
-    ``Origin`` (importer + params + origin_name) and falling back to ``md5``
-    for legacy entries.  Per ``conflict_policy="drop"`` (the only supported
-    policy today), any element key that appears with disagreeing labels
-    across the sources is removed entirely.
+    ``Origin`` (importer + params + origin_name) and falling back to
+    ``md5`` for legacy entries.  Per ``conflict_policy="drop"`` (the only
+    supported policy today), any element key that appears with disagreeing
+    labels across the sources is removed entirely.
 
-    The combined detector is *purely a labelset entry* — no labelset-source
-    is inherited from the sources, and the threshold/MLP are computed later
-    when the detector is activated against a dataset.
-
-    Returns ``201`` with a summary on success, or ``4xx`` on validation
-    errors (missing names, unknown source, media-type mismatch, name
-    collision, empty merged result).
+    The combined detector is *purely a labelset entry* — no
+    labelset-source is inherited from the sources, and the threshold/MLP
+    are computed later when the detector is activated against a dataset.
     """
-    body = request.get_json(force=True, silent=True) or {}
-    names = body.get("names") or []
-    new_name = (body.get("new_name") or "").strip()
-    conflict_policy = (body.get("conflict_policy") or "drop").strip()
+    names = body["names"]
+    new_name = body["new_name"].strip()
+    conflict_policy = body["conflict_policy"].strip()
 
-    if not isinstance(names, list) or len(names) < 2:
-        return jsonify({"error": "names must be a list of at least 2 detector names"}), 400
     if not new_name:
-        return jsonify({"error": "new_name is required"}), 400
+        abort(400, message="new_name is required")
     if conflict_policy != "drop":
-        return jsonify({"error": f"Unsupported conflict_policy: {conflict_policy!r}"}), 400
+        abort(400, message=f"Unsupported conflict_policy: {conflict_policy!r}")
 
     new_path = _detector_path(new_name)
     if new_path.exists():
-        return jsonify({"error": f"A detector named '{new_name}' already exists"}), 409
+        abort(409, message=f"A detector named '{new_name}' already exists")
 
     from vtsearch.datasets.labelset import LabelSet
 
@@ -318,29 +327,26 @@ def combine_detectors():
         src_path = _detector_path(src_name)
         src_data = _read_detector(src_path)
         if src_data is None:
-            return jsonify({"error": f"Detector '{src_name}' not found"}), 404
+            abort(404, message=f"Detector '{src_name}' not found")
         sources.append(src_data)
 
     media_types = {s.get("media_type", "") for s in sources}
     if len(media_types) > 1:
-        return jsonify(
-            {"error": f"All source detectors must share the same media_type; got {sorted(media_types)}"}
-        ), 400
+        abort(400, message=f"All source detectors must share the same media_type; got {sorted(media_types)}")
     media_type = next(iter(media_types))
     if not media_type or media_type == "any":
-        return jsonify({"error": "Source detectors must have a specific media_type (not empty or 'any')"}), 400
+        abort(400, message="Source detectors must have a specific media_type (not empty or 'any')")
 
     labelsets = [LabelSet.from_dict(s.get("labelset") or {}) for s in sources]
     merged = labelsets[0].merge(*labelsets[1:], conflict_policy=conflict_policy)
 
     if len(merged) == 0:
-        return jsonify(
-            {
-                "error": (
-                    f"Combined labelset is empty after applying conflict policy {conflict_policy!r}; nothing to save."
-                )
-            }
-        ), 422
+        abort(
+            422,
+            message=(
+                f"Combined labelset is empty after applying conflict policy {conflict_policy!r}; nothing to save."
+            ),
+        )
 
     # Dedupe examples across sources by (type, value)
     merged_examples: list[dict] = []
@@ -376,14 +382,12 @@ def combine_detectors():
     }
     _write_detector(new_path, new_data)
 
-    return jsonify(
-        {
-            "success": True,
-            "name": new_name,
-            "media_type": media_type,
-            "num_labels": len(merged),
-            "combined_from": list(names),
-            "source_label_counts": [len(ls) for ls in labelsets],
-            "examples": merged_examples,
-        }
-    ), 201
+    return {
+        "success": True,
+        "name": new_name,
+        "media_type": media_type,
+        "num_labels": len(merged),
+        "combined_from": list(names),
+        "source_label_counts": [len(ls) for ls in labelsets],
+        "examples": merged_examples,
+    }
