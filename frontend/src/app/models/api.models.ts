@@ -376,6 +376,7 @@ export interface AppSettings {
   autopilot_hard_reds?: number;
   autopilot_resort_interval?: number;
   autopilot_goal_diversity?: number;
+  last_embedder_per_media_type?: Record<string, string>;
   [key: string]: unknown;
 }
 
