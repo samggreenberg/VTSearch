@@ -682,8 +682,10 @@ Already designed in `docs/design/cli-detector-converter.md`; ship it.
 ### 17.3 Pipeline file ★ M
 `python app.py --pipeline pipeline.yaml` runs an importer → clipper → embedder → detector → exporter sequence declared in YAML. Replaces N CLI flags with one config file. Repeatable for cron.
 
-### 17.4 Watch mode ★ S
-`--watch /path/to/inbox` re-runs autodetect whenever new files appear.
+### ~~17.4 Watch mode ★ S~~ — unnecessary
+~~`--watch /path/to/inbox` re-runs autodetect whenever new files appear.~~
+
+Dropped: not worth building. External schedulers (cron, systemd timers, file-watcher daemons like `inotifywait` / `entr`) can re-invoke `--autodetect` on new files without bloating the CLI surface or adding a long-running-process code path to maintain.
 
 ### 17.5 Dry-run mode ★ XS
 `--dry-run` prints what would be embedded/scored/exported without doing it.
