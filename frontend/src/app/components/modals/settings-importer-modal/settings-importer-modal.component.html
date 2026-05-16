@@ -64,10 +64,21 @@
                   <option [value]="opt">{{ opt }}</option>
                 }
               </select>
+            } @else if (field.field_type === 'number') {
+              <input
+                [id]="'sif-' + field.key"
+                type="number"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+                [attr.min]="field.min || null"
+                [attr.max]="field.max || null"
+                [attr.step]="field.step || null"
+              />
             } @else {
               <input
                 [id]="'sif-' + field.key"
-                type="text"
+                [type]="field.field_type === 'password' ? 'password' : field.field_type === 'email' ? 'email' : field.field_type === 'url' ? 'url' : 'text'"
                 class="form-input"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"

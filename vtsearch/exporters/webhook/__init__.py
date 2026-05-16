@@ -29,7 +29,7 @@ class WebhookLabelsetExporter(LabelsetExporter):
         ExporterField(
             key="url",
             label="Webhook URL",
-            field_type="text",
+            field_type="url",
             description="The URL to POST the results JSON to.",
             placeholder="https://example.com/webhook",
         ),

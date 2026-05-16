@@ -27,7 +27,7 @@ Example – a minimal SFTP importer skeleton::
         fields = [
             ImporterField("host",       "Hostname",    "text"),
             ImporterField("user",       "Username",    "text"),
-            ImporterField("password",   "Password",    "text"),
+            ImporterField("password",   "Password",    "password"),
             ImporterField("path",       "Remote Path", "text"),
             ImporterField(
                 "media_type", "Media Type", "select",

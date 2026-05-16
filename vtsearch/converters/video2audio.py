@@ -37,10 +37,12 @@ class Video2AudioMediaConverter(MediaConverter):
         PluginField(
             key="ffmpeg_timeout",
             label="ffmpeg timeout (seconds)",
-            field_type="text",
+            field_type="number",
             description="Maximum seconds to wait for ffmpeg to extract the audio track.",
             default="600",
             required=False,
+            min="1",
+            step="1",
         ),
     ]
 

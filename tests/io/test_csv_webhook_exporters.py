@@ -600,6 +600,13 @@ class TestWebhookExporterMetadata:
         keys = [f.key for f in exp.fields]
         assert "url" in keys
 
+    def test_webhook_url_field_is_url_type(self):
+        from vtsearch.exporters import get_exporter
+
+        exp = get_exporter("webhook")
+        url_field = next(f for f in exp.fields if f.key == "url")
+        assert url_field.field_type == "url"
+
     def test_webhook_exporter_has_auth_header_field(self):
         from vtsearch.exporters import get_exporter
 
