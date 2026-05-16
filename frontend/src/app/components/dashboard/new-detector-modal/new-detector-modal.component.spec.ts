@@ -22,8 +22,8 @@ describe('NewDetectorModalComponent', () => {
     // Flush the media types request from ngOnInit
     httpMock.expectOne('/api/media-types').flush({
       media_types: [
-        { type_id: 'audio', name: 'Audio', icon: 'audio', tab_title: 'Sounds' },
-        { type_id: 'image', name: 'Image', icon: 'image', tab_title: 'Images' },
+        { type_id: 'audio', name: 'Audio', icon: 'audio' },
+        { type_id: 'image', name: 'Image', icon: 'image' },
       ],
     });
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
@@ -173,8 +173,8 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
 
     httpMock.expectOne('/api/media-types').flush({
       media_types: [
-        { type_id: 'audio', name: 'Audio', icon: 'audio', tab_title: 'Sounds' },
-        { type_id: 'image', name: 'Image', icon: 'image', tab_title: 'Images' },
+        { type_id: 'audio', name: 'Audio', icon: 'audio' },
+        { type_id: 'image', name: 'Image', icon: 'image' },
       ],
     });
     // No /api/datasets/registry call when defaultMediaType is provided.

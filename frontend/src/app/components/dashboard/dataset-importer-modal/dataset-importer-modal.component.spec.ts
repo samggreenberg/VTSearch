@@ -35,7 +35,7 @@ describe('DatasetImporterModalComponent', () => {
       picker_view: 'server_folder',
       category: 'server',
       fields: [
-        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'images'] },
+        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'image'] },
         { key: 'path', field_type: 'text', label: 'Folder Path', required: true },
       ],
     },
@@ -47,7 +47,7 @@ describe('DatasetImporterModalComponent', () => {
       picker_view: 'form',
       category: 'server',
       fields: [
-        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'images'] },
+        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'image'] },
         { key: 'paths_file', field_type: 'server_path', label: 'Paths File', required: true },
       ],
     },
@@ -74,7 +74,7 @@ describe('DatasetImporterModalComponent', () => {
       description: 'A test importer that renders the generic form',
       picker_view: 'form',
       fields: [
-        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'images'] },
+        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'image'] },
         { key: 'path', field_type: 'text', label: 'Path', required: true },
       ],
     },
@@ -122,8 +122,8 @@ describe('DatasetImporterModalComponent', () => {
   ];
 
   const mockMediaTypes = [
-    { type_id: 'audio', name: 'Audio', icon: 'audio', tab_title: 'Audio' },
-    { type_id: 'image', name: 'Images', icon: 'image', tab_title: 'Images' },
+    { type_id: 'audio', name: 'Audio', icon: 'audio' },
+    { type_id: 'image', name: 'Image', icon: 'image' },
   ];
 
   beforeEach(async () => {

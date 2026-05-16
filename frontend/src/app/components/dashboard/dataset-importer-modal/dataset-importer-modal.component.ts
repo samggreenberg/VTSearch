@@ -762,7 +762,7 @@ export class DatasetImporterModalComponent implements OnInit {
   getMediaTypeOptionLabel(opt: string): string {
     const mt = this.mediaTypes.find((m) => m.folder_import_name === opt);
     if (mt) {
-      return (mt.tab_title || mt.name).trim();
+      return mt.name.trim();
     }
     return opt;
   }
@@ -770,7 +770,7 @@ export class DatasetImporterModalComponent implements OnInit {
   getTabLabel(mediaType: string): string {
     const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
     if (mt) {
-      return (mt.tab_title || mt.name).trim();
+      return mt.name.trim();
     }
     return mediaType;
   }
@@ -783,7 +783,7 @@ export class DatasetImporterModalComponent implements OnInit {
   getTabText(mediaType: string): string {
     const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
     if (mt) {
-      return mt.tab_title || mt.name;
+      return mt.name;
     }
     return mediaType;
   }

@@ -55,10 +55,6 @@ class TextMediaType(MediaType):
         return "text"
 
     @property
-    def tab_title(self) -> str:
-        return "Texts"
-
-    @property
     def dir_key(self) -> str:
         return "text_dir"
 

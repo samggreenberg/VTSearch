@@ -309,7 +309,6 @@ export interface MediaTypeInfo {
   type_id: string;
   name: string;
   icon?: string;
-  tab_title?: string;
   folder_import_name?: string;
   /** Glob patterns for files this media type claims, e.g. ``["*.jpg", "*.png"]``. */
   file_extensions?: string[];

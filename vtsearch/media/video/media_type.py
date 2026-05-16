@@ -235,10 +235,6 @@ class VideoMediaType(MediaType):
         return "video"
 
     @property
-    def tab_title(self) -> str:
-        return "Videos"
-
-    @property
     def dir_key(self) -> str:
         return "video_dir"
 

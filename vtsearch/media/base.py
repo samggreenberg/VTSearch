@@ -233,15 +233,6 @@ class MediaType(ABC):
         return self.type_id
 
     @property
-    def tab_title(self) -> str:
-        """Plural display name used for UI tabs (e.g. ``"Videos"``, ``"Sounds"``).
-
-        Defaults to :attr:`name` + ``"s"``.  Override for irregular plurals
-        or custom labels.
-        """
-        return self.name + "s"
-
-    @property
     def dir_key(self) -> str:
         """Key used in pickle files to store the external media directory path.
 
@@ -481,7 +472,6 @@ class MediaType(ABC):
             "type_id": self.type_id,
             "name": self.name,
             "icon": self.icon,
-            "tab_title": self.tab_title,
             "folder_import_name": self.folder_import_name,
             "loops": self.loops,
             "file_extensions": self.file_extensions,
