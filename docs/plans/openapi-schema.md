@@ -311,6 +311,22 @@ request/response gates getting in the way during their migration.
       ``detectors/registry/from-labelset/<imp>``). Labelset-element
       tests in ``tests/detectors/test_labelset_elements_api.py``
       updated to match.
+- [x] `processors/crud.py` and `processors/scoring.py` migrated to
+      flask-smorest (autorun-extractor / autorun-localizer CRUD,
+      pregen-processor list/add, single-shot extract/localize, and
+      auto-extract/auto-localize). Schema-level validation failures
+      (missing required ``name`` / ``media_type`` / ``extractor_type`` /
+      ``localizer_type`` / ``config``) surface as 422 with the standard
+      ``errors`` envelope; handler-level rejects (no medias loaded,
+      media-type mismatch, unbuildable config, rename collisions, no
+      autorun processors for active media type) keep their HTTP codes
+      (400 / 404) with the standard ``message`` envelope. The shared
+      sub-package ``processors_bp`` aggregator is gone — both
+      blueprints are now registered directly with the flask-smorest
+      ``Api`` in ``app.py`` (mirroring the ``detectors/`` layout).
+      Extractor tests in ``tests/detectors/test_extractors.py`` and the
+      cross-cutting checks in ``tests/integration/test_multi_media_coverage.py``
+      updated to match.
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
 - [ ] Remaining blueprints (see Order above)

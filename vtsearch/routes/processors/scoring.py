@@ -156,7 +156,9 @@ def run_extract(body: dict):
 
 @processors_scoring_bp.route("/api/auto-extract", methods=["POST"])
 @processors_scoring_bp.response(200, AutoExtractResponseSchema)
-@processors_scoring_bp.alt_response(400, description="No medias loaded, or no autorun extractors for active media type.")
+@processors_scoring_bp.alt_response(
+    400, description="No medias loaded, or no autorun extractors for active media type."
+)
 def auto_extract():
     """Run all autorun extractors for the current media type and return extraction results."""
     snap = snapshot_medias()
@@ -223,7 +225,9 @@ def run_localize(body: dict):
 
 @processors_scoring_bp.route("/api/auto-localize", methods=["POST"])
 @processors_scoring_bp.response(200, AutoLocalizeResponseSchema)
-@processors_scoring_bp.alt_response(400, description="No medias loaded, or no autorun localizers for active media type.")
+@processors_scoring_bp.alt_response(
+    400, description="No medias loaded, or no autorun localizers for active media type."
+)
 def auto_localize():
     """Run all autorun localizers for the current media type."""
     snap = snapshot_medias()
