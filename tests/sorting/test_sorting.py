@@ -44,9 +44,13 @@ class TestSortClips:
         resp = client.post("/api/sort", json={"text": ""})
         assert resp.status_code == 400
 
-    def test_missing_text_returns_400(self, client):
+    def test_missing_text_returns_422(self, client):
+        # Schema-level validation: the marshmallow ``SortRequestSchema``
+        # rejects requests without a ``text`` key as 422 with the
+        # standard ``errors`` envelope.
         resp = client.post("/api/sort", json={"other": "field"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        assert "text" in resp.get_json()["errors"]["json"]
 
     def test_whitespace_only_returns_400(self, client):
         resp = client.post("/api/sort", json={"text": "   "})
@@ -655,13 +659,22 @@ class TestLearnedSortAsync:
         learned_sort_jobs.reset_for_tests()
 
     def test_polling_unknown_job_returns_404(self, client):
+        # 404s are intercepted by the app-level ``NotFound`` errorhandler
+        # in ``app.py``, which renders the legacy
+        # ``{"error": "Not Found", "request_id": ...}`` envelope.
+        # Frontends rely on the HTTP status code for the missing-job
+        # branch rather than a body field.
         resp = client.get("/api/learned-sort/result?job_id=does-not-exist")
         assert resp.status_code == 404
-        assert resp.get_json()["status"] == "missing"
 
-    def test_polling_without_job_id_returns_400(self, client):
+    def test_polling_without_job_id_returns_422(self, client):
+        # Schema-level validation: the marshmallow
+        # ``LearnedSortResultQuerySchema`` rejects requests without a
+        # ``job_id`` query parameter as 422 with the standard ``errors``
+        # envelope.
         resp = client.get("/api/learned-sort/result")
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        assert "job_id" in resp.get_json()["errors"]["query"]
 
 
 class TestEvalTrainAndScoreAsync:
@@ -707,7 +720,7 @@ class TestEvalTrainAndScoreAsync:
 
     def test_invalid_metric_rejected(self, client):
         resp = client.post("/api/eval/train-and-score", json={"metric": "bogus", "wait": True})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 class TestExampleSort:
@@ -785,9 +798,13 @@ class TestTextsortSuggestions:
         resp = client.post("/api/textsort-suggestions", json={"text": ""})
         assert resp.status_code == 400
 
-    def test_missing_text_returns_400(self, client):
+    def test_missing_text_returns_422(self, client):
+        # Schema-level validation: the marshmallow
+        # ``TextsortSuggestionRequestSchema`` rejects requests without a
+        # ``text`` key as 422 with the standard ``errors`` envelope.
         resp = client.post("/api/textsort-suggestions", json={"other": "x"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        assert "text" in resp.get_json()["errors"]["json"]
 
     def test_whitespace_only_returns_400(self, client):
         resp = client.post("/api/textsort-suggestions", json={"text": "   "})

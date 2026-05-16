@@ -248,7 +248,7 @@ class TestLabelImporterRegistry:
     def test_each_importer_fields_are_valid(self):
         from vtsearch.labels.importers import list_label_importers
 
-        valid_types = ("file", "text", "password", "select", "server_path")
+        valid_types = ("file", "text", "password", "number", "select", "server_path", "url", "email")
         for imp in list_label_importers():
             for f in imp.fields:
                 assert f.key, f"{imp.name} has a field without a key"

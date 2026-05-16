@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
@@ -22,7 +22,6 @@ from vtsearch.media.image._image_bulk import bulk_embed_image_files
 
 if TYPE_CHECKING:
     from PIL import Image
-    from transformers import CLIPModel, CLIPProcessor
 
 
 class ImageClipEmbedder(MediaEmbedder):
@@ -34,12 +33,18 @@ class ImageClipEmbedder(MediaEmbedder):
 
     def __init__(self) -> None:
         super().__init__()
-        self._model: Optional[CLIPModel] = None
-        self._processor: Optional[CLIPProcessor] = None
+        # Typed ``Any``: transformers stubs miss several ``CLIPProcessor.__call__``
+        # kwargs we pass at runtime; runtime ``None`` checks guard the calls.
+        self._model: Any = None
+        self._processor: Any = None
 
     @property
     def name(self) -> str:
         return "clip"
+
+    @property
+    def display_name(self) -> str:
+        return "CLIP (general images)"
 
     @property
     def media_type_id(self) -> str:

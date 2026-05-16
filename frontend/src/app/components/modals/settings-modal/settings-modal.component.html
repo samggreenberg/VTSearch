@@ -14,14 +14,6 @@
         </button>
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'autoload'"
-          (click)="activeSettingsTab = 'autoload'"
-          title="Choose which embedding models to load automatically when a dataset is opened">
-          <vt-icon type="cloud-upload" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'autoload'"></vt-icon>
-          Autoload
-        </button>
-        <button
-          class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'autopilot'"
           (click)="activeSettingsTab = 'autopilot'"
           title="Configure the guided autopilot labeling workflow">
@@ -53,6 +45,7 @@
           <div class="form-group">
             <label class="form-label" title="Color theme for the application interface">Theme</label>
             <select class="form-select" [ngModel]="settings.theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme" aria-label="Theme">
+              <option value="system">System</option>
               <option value="dark">Dark</option>
               <option value="light">Light</option>
               <option value="highviz">High Visibility</option>
@@ -161,7 +154,7 @@
             <input type="checkbox" [ngModel]="settings.enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
             Enrich descriptions
           </label>
-          <label class="checkbox-row" title="Blend the learned threshold toward 0.5 to reduce aggressive inclusion/exclusion. Useful when the model has few training examples.">
+          <label class="checkbox-row" title="Blend the learned threshold toward 0.5 to reduce aggressive inclusion/exclusion. Useful when the detector has few training examples.">
             <input type="checkbox" [ngModel]="settings.safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
             Safe thresholds
           </label>
@@ -201,28 +194,6 @@
 
         }
 
-        <!-- Autoload -->
-        @if (activeSettingsTab === 'autoload') {
-          <h3>Autoload Embedders</h3>
-          @if (embedders.length > 0) {
-            <div class="embedder-grid">
-              <div class="embedder-grid-header">
-                <span title="Name of the embedding model (e.g. CLIP, CLAP, E5)">Embedder</span>
-                <span title="Which media type this embedder processes (audio, image, text, video, document)">Media Type</span>
-              </div>
-              @for (embedder of embedders; track embedder.name) {
-                <label class="embedder-row">
-                  <input type="checkbox" [checked]="isEmbedderAutoloaded(embedder)" (change)="toggleEmbedder(embedder)" />
-                  <span class="embedder-name">{{ embedder.name }}</span>
-                  <span class="embedder-media-type"><vt-icon [icon]="getMediaTypeIcon(embedder.media_type_id)" class="embedder-media-type-icon"></vt-icon>{{ embedder.media_type_id }}</span>
-                </label>
-              }
-            </div>
-          } @else {
-            <p class="empty-state">No embedders available.</p>
-          }
-        }
-
         <!-- Achievements -->
         @if (activeSettingsTab === 'achievements') {
           <vt-achievements-tab />
@@ -239,6 +210,7 @@
     @if (version) {
       <span class="settings-version" title="App version (UTC timestamp of the last dev to main merge). Include this when reporting issues.">v {{ version }}</span>
     }
+    <span class="settings-saved" [class.settings-saved--visible]="savedVisible" role="status" aria-live="polite" title="Settings auto-save as you change them">&#10003; saved</span>
     <button class="btn btn--secondary" (click)="resetDefaults()" title="Reset all settings to their factory defaults">Default</button>
     <button class="btn btn--secondary" (click)="openImporter()" title="Import settings from a file">Import</button>
     <button class="btn btn--secondary" (click)="openExporter()" title="Export settings to a file">Export</button>

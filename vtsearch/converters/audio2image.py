@@ -31,8 +31,11 @@ class Audio2ImageMediaConverter(MediaConverter):
         bounded.  ``0`` or empty means "render the whole file".  Defaults
         to ``30``.
     ``colormap``
-        Any matplotlib colormap name (e.g. ``"magma"``, ``"viridis"``,
-        ``"inferno"``, ``"gray"``).  Defaults to ``"magma"``.
+        Matplotlib colormap chosen from a curated drop-down (``"magma"``,
+        ``"viridis"``, ``"inferno"``, ``"plasma"``, ``"cividis"``,
+        ``"turbo"``, ``"jet"``, ``"hot"``, ``"cool"``, ``"coolwarm"``,
+        ``"gray"``, ``"bone"``, ``"copper"``, ``"twilight"``).  Defaults
+        to ``"magma"``.
     """
 
     display_name = "Audio → Image (spectrogram)"
@@ -50,24 +53,45 @@ class Audio2ImageMediaConverter(MediaConverter):
         PluginField(
             key="n_mels",
             label="Mel bands",
-            field_type="text",
+            field_type="number",
             description="Number of mel bands (mel only).",
             default="128",
             required=False,
+            min="8",
+            max="512",
+            step="1",
         ),
         PluginField(
             key="time_window_s",
             label="Window (seconds)",
-            field_type="text",
+            field_type="number",
             description="Render at most this many seconds from the start. 0 = whole file.",
             default="30",
             required=False,
+            min="0",
+            step="0.5",
         ),
         PluginField(
             key="colormap",
             label="Colormap",
-            field_type="text",
-            description="Matplotlib colormap (e.g. magma, viridis, inferno, gray).",
+            field_type="select",
+            description="Matplotlib colormap.",
+            options=[
+                "magma",
+                "viridis",
+                "inferno",
+                "plasma",
+                "cividis",
+                "turbo",
+                "jet",
+                "hot",
+                "cool",
+                "coolwarm",
+                "gray",
+                "bone",
+                "copper",
+                "twilight",
+            ],
             default="magma",
             required=False,
         ),

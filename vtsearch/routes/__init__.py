@@ -13,15 +13,18 @@ from vtsearch.routes.datasets import (
 from vtsearch.routes.detectors import (
     detector_find_bp,
     detector_scoring_bp,
-    detectors_bp,
+    detectors_crud_bp,
+    detectors_labels_bp,
     detectors_registry_bp,
 )
 from vtsearch.routes.eval import eval_bp
+from vtsearch.routes.events import events_bp
 from vtsearch.routes.file_browser import file_browser_bp
+from vtsearch.routes.health import health_bp
 from vtsearch.routes.labels import exporters_bp, label_importers_bp, labels_bp
 from vtsearch.routes.main import main_bp
 from vtsearch.routes.media import embed_bp, media_server_bp, medias_bp
-from vtsearch.routes.processors import processors_bp
+from vtsearch.routes.processors import processors_crud_bp, processors_scoring_bp
 from vtsearch.routes.settings import settings_bp, settings_io_bp, sync_sources_bp
 from vtsearch.routes.sorting import sorting_bp
 
@@ -36,18 +39,22 @@ __all__ = [
     "datasets_ui_bp",
     "detector_find_bp",
     "detector_scoring_bp",
-    "detectors_bp",
+    "detectors_crud_bp",
+    "detectors_labels_bp",
     "detectors_registry_bp",
     "embed_bp",
     "eval_bp",
+    "events_bp",
     "exporters_bp",
     "file_browser_bp",
+    "health_bp",
     "label_importers_bp",
     "labels_bp",
     "main_bp",
     "media_server_bp",
     "medias_bp",
-    "processors_bp",
+    "processors_crud_bp",
+    "processors_scoring_bp",
     "settings_bp",
     "settings_io_bp",
     "sorting_bp",

@@ -37,6 +37,10 @@ class ImageEupePatchEmbedder(_EupeBase):
         return "eupe_patch"
 
     @property
+    def display_name(self) -> str:
+        return "EUPE patch (region-aware images)"
+
+    @property
     def supports_patch_regions(self) -> bool:
         return True
 

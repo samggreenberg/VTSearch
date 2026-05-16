@@ -270,6 +270,12 @@ export interface ImporterField {
   dynamic_options?: boolean;
   /** Field keys whose values this field's options depend on. */
   depends_on?: string[];
+  /** For ``number`` fields: minimum allowed value (empty = no min). */
+  min?: string;
+  /** For ``number`` fields: maximum allowed value (empty = no max). */
+  max?: string;
+  /** For ``number`` fields: step increment (empty / ``"any"`` = unconstrained). */
+  step?: string;
 }
 
 export interface ImporterPickerTab {
@@ -309,8 +315,21 @@ export interface MediaTypeInfo {
   type_id: string;
   name: string;
   icon?: string;
-  tab_title?: string;
   folder_import_name?: string;
+  /** Glob patterns for files this media type claims, e.g. ``["*.jpg", "*.png"]``. */
+  file_extensions?: string[];
+}
+
+export interface MediaTypeDetectionResponse {
+  sample_size: number;
+  counts_by_type: Record<string, number>;
+  extensions: Record<string, number>;
+  dominant: string | null;
+  /** ``true`` when the backend stopped walking before reaching the file
+   *  cap because the directory-count cap or wall-clock budget fired.  The
+   *  rest of the response is still meaningful — it's just a less complete
+   *  sample than usual. */
+  truncated?: boolean;
 }
 
 export interface MediaTypesResponse {
@@ -369,8 +388,6 @@ export interface AppSettings {
   focus_mode_right?: Record<string, 'click' | 'hover'>;
   panel_pct_left?: Record<string, number>;
   panel_pct_right?: Record<string, number>;
-  autoload_media_types?: string[];
-  autoload_media_embedders?: string[];
   autorun_detectors?: string[];
   autopilot_enabled?: boolean;
   hide_autopilot?: boolean;
@@ -378,6 +395,7 @@ export interface AppSettings {
   autopilot_hard_reds?: number;
   autopilot_resort_interval?: number;
   autopilot_goal_diversity?: number;
+  last_embedder_per_media_type?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -616,7 +634,20 @@ export interface AutoDetectResultsData {
 
 export interface EmbedderInfo {
   name: string;
+  /**
+   * Human-readable label shown in pickers, e.g. ``"SigLIP (general images)"``.
+   * Falls back to ``name`` for legacy embedders that don't supply a friendlier
+   * label; the raw ``name`` is also rendered as a secondary line so power
+   * users can still see the registry key.
+   */
+  display_name?: string;
   media_type_id: string;
+  /**
+   * Whether this embedder is the recommended default for its media type
+   * (exactly one per media type). The dropdown surfaces this entry under a
+   * "Recommended" optgroup and tucks the rest under "Advanced".
+   */
+  is_default?: boolean;
   /**
    * Whether this embedder can embed text queries into the same vector space as
    * its media. ``false`` for vision-only encoders (DINOv3, Perception Encoder)

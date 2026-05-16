@@ -1,25 +1,48 @@
-"""Blueprint for main application routes."""
+"""Blueprint for main application routes.
+
+``/api/version`` is the only JSON API exposed here and is described via
+``flask_smorest`` decorators so it appears in ``/api/openapi.json``.
+The other routes serve static files / the Angular SPA shell and stay
+plain Flask routes (no schema, no spec presence) — they share the same
+``flask_smorest.Blueprint`` object since that class is a regular Flask
+``Blueprint`` subclass and only decorated routes contribute to the
+spec.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, Response, current_app, jsonify, send_from_directory
+from flask import Response, current_app, jsonify, send_from_directory
+from flask_smorest import Blueprint
 
 from vtsearch import __version__
+from vtsearch.schemas.main import VersionSchema
 
-main_bp = Blueprint("main", __name__)
+main_bp = Blueprint(
+    "main",
+    __name__,
+    description="App version and SPA / static-file serving.",
+)
 
 
 @main_bp.route("/api/version")
-def version() -> Response:
+@main_bp.response(200, VersionSchema)
+def version() -> dict:
     """Return the app version (UTC timestamp of the last dev->main merge)."""
-    return jsonify({"version": __version__})
+    return {"version": __version__}
 
 
 @main_bp.route("/openapi.json")
 def openapi_json() -> Response:
-    """Return the auto-generated OpenAPI 3.0 spec for this Flask app."""
+    """Return the auto-generated OpenAPI 3.0 spec for this Flask app.
+
+    Served by the pre-existing permissive walker in
+    :mod:`vtsearch.openapi`; the richer flask-smorest spec lives at
+    ``/api/openapi.json``. Both coexist until the migration in
+    ``docs/plans/openapi-schema.md`` completes — at which point this
+    route is deleted along with the walker.
+    """
     from vtsearch.openapi import generate_openapi_spec
 
     spec = generate_openapi_spec(current_app, version=__version__)

@@ -190,6 +190,11 @@ class MediaType(ABC):
     See the module docstring above for the four-step process.
     """
 
+    # Progress callback wired in by ``vtsearch.media.set_progress_callback``.
+    # Demo loaders / model loaders call it; defaults to a no-op so direct
+    # instantiation (tests, scripts) doesn't crash before the registry is set up.
+    _on_progress: ProgressCallback = _noop_progress
+
     # ------------------------------------------------------------------
     # Identity
     # ------------------------------------------------------------------
@@ -226,15 +231,6 @@ class MediaType(ABC):
         ``"videos"``) are accepted via the alias map in ``vtsearch.media``.
         """
         return self.type_id
-
-    @property
-    def tab_title(self) -> str:
-        """Plural display name used for UI tabs (e.g. ``"Videos"``, ``"Sounds"``).
-
-        Defaults to :attr:`name` + ``"s"``.  Override for irregular plurals
-        or custom labels.
-        """
-        return self.name + "s"
 
     @property
     def dir_key(self) -> str:
@@ -476,7 +472,6 @@ class MediaType(ABC):
             "type_id": self.type_id,
             "name": self.name,
             "icon": self.icon,
-            "tab_title": self.tab_title,
             "folder_import_name": self.folder_import_name,
             "loops": self.loops,
             "file_extensions": self.file_extensions,

@@ -21,8 +21,9 @@ class Image2TextMediaConverter(MediaConverter):
     User-configurable parameters
     ----------------------------
     ``language``
-        PaddleOCR language code (e.g. ``"en"``, ``"ch"``, ``"fr"``,
-        ``"de"``, ``"japan"``, ``"korean"``).  Defaults to ``"en"``.
+        PaddleOCR language code chosen from a curated drop-down (English,
+        Chinese, French, German, Japanese, Korean, Russian, Arabic, …).
+        Defaults to ``"en"``.
     ``threshold``
         Minimum per-region confidence in ``[0, 1]``.  Lower-confidence
         regions are dropped.  Defaults to ``"0.5"``.
@@ -34,18 +35,40 @@ class Image2TextMediaConverter(MediaConverter):
         PluginField(
             key="language",
             label="OCR language",
-            field_type="text",
-            description="PaddleOCR language code (en, ch, fr, de, japan, korean, ...).",
+            field_type="select",
+            description="PaddleOCR language code.",
+            options=[
+                "en",
+                "ch",
+                "chinese_cht",
+                "fr",
+                "german",
+                "japan",
+                "korean",
+                "ru",
+                "arabic",
+                "cyrillic",
+                "devanagari",
+                "latin",
+                "es",
+                "pt",
+                "it",
+                "ta",
+                "te",
+            ],
             default="en",
             required=False,
         ),
         PluginField(
             key="threshold",
             label="Confidence threshold",
-            field_type="text",
+            field_type="number",
             description="Drop detected regions whose confidence is below this (0–1).",
             default="0.5",
             required=False,
+            min="0",
+            max="1",
+            step="0.05",
         ),
     ]
 
@@ -85,7 +108,7 @@ class Image2TextMediaConverter(MediaConverter):
             return []
 
         try:
-            from paddleocr import PaddleOCR  # noqa: PLC0415
+            from paddleocr import PaddleOCR  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
         except ImportError:
             print("Image2TextMediaConverter requires PaddleOCR: pip install paddleocr paddlepaddle")
             return []

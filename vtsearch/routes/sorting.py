@@ -1,17 +1,31 @@
-"""Blueprint for sorting and voting routes."""
+"""Blueprint for sorting and voting routes.
+
+Migrated to ``flask_smorest`` so the routes are described in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+
+Schema-level validation failures (missing required ``text`` / ``job_id`` /
+``examples`` / ``inclusion`` / ``safe_thresholds``; type-mismatched
+``inclusion`` / ``safe_thresholds`` values) surface as 422 with the
+standard ``errors`` envelope. Handler-level rejects (empty / whitespace
+``text``, no votes, no medias, bad files in the multipart routes, etc.)
+keep their HTTP codes (400 / 404 / 500) with the standard ``message``
+envelope. The two multipart routes (``/api/example-sort``,
+``/api/label-file-sort``) omit ``arguments`` and declare their error
+responses via ``alt_response`` — same pattern as ``add-to-pile`` and
+``server-media-files/upload``.
+"""
 
 import json
 import logging
 import threading
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import request
+from flask_smorest import Blueprint, abort
 
 from vtsearch.routes._shared import (
     format_exception_detail,
     get_embedder_for_medias,
-    get_json_or_400,
-    get_json_safe,
 )
 
 from vtsearch.config import DATA_DIR
@@ -19,6 +33,25 @@ import vtsearch.security.path_validation as _paths
 from vtsearch.detectors.labeling_progress import inject_live_model
 from vtsearch.detectors.training import train_and_score
 from vtsearch.embedding import embed_text_query
+from vtsearch.schemas.sorting import (
+    DiversityTreeNextResponseSchema,
+    InclusionRequestSchema,
+    InclusionResponseSchema,
+    LabelFileSortResponseSchema,
+    LearnedSortRequestSchema,
+    LearnedSortResponseSchema,
+    LearnedSortResultQuerySchema,
+    OkResponseSchema,
+    SafeThresholdsRequestSchema,
+    SafeThresholdsResponseSchema,
+    SeedFromExamplesRequestSchema,
+    SeedFromExamplesResponseSchema,
+    SortRequestSchema,
+    SortResponseSchema,
+    TextsortSuggestionRequestSchema,
+    TextsortSuggestionsResponseSchema,
+    VotesResponseSchema,
+)
 from vtsearch.training.thresholds import calculate_gmm_threshold
 from vtsearch.state import (
     add_textsort_suggestion,
@@ -39,18 +72,13 @@ from vtsearch.state import (
     update_learned_scores,
     vote_region_boxes,
 )
-from vtsearch.concurrency.progress import (
-    get_sort_progress,
-    update_sort_progress,
+from vtsearch.concurrency.progress import update_sort_progress
+
+sorting_bp = Blueprint(
+    "sorting",
+    __name__,
+    description="Text / example / learned sort, votes, inclusion, safe-thresholds, diversity tree.",
 )
-
-sorting_bp = Blueprint("sorting", __name__)
-
-
-@sorting_bp.route("/api/sort/progress")
-def sort_progress():
-    """Return the current progress of a text sort operation."""
-    return jsonify(get_sort_progress())
 
 
 def _cosine_sort(query_vec):
@@ -110,22 +138,21 @@ def _load_embedder_with_progress(media_type, total_steps):
 
 
 @sorting_bp.route("/api/sort", methods=["POST"])
-def sort_clips():
+@sorting_bp.arguments(SortRequestSchema)
+@sorting_bp.response(200, SortResponseSchema)
+@sorting_bp.alt_response(400, description="Empty/whitespace text, no medias, or embedder doesn't support text.")
+@sorting_bp.alt_response(500, description="Text sort failed (embedder error or unexpected exception).")
+def sort_clips(body: dict):
     """Return medias sorted by cosine similarity to a text query."""
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        update_sort_progress("idle")
-        return data
-
-    text = data.get("text", "").strip()
+    text = body.get("text", "").strip()
     if not text:
         update_sort_progress("idle")
-        return jsonify({"error": "text is required"}), 400
+        abort(400, message="text is required")
 
     snap = snapshot_medias()
     if not snap:
         update_sort_progress("idle")
-        return jsonify({"error": "No medias loaded"}), 400
+        abort(400, message="No medias loaded")
 
     first = next(iter(snap.values()))
     media_type = first.get("type", "audio")
@@ -146,17 +173,19 @@ def sort_clips():
             _active_emb = None
         if _active_emb is not None and not _active_emb.supports_text:
             update_sort_progress("idle")
-            return (
-                jsonify(
-                    {
-                        "error": (
-                            f"Embedder '{_active_emb.name}' does not support text queries. "
-                            "Use learned sort or load a saved sort instead."
-                        ),
-                        "supports_text": False,
-                    }
-                ),
+            # flask-smorest's error handler only flows ``message`` and
+            # ``errors`` from ``abort()`` kwargs into the response body,
+            # so the original ``supports_text=False`` flag would be
+            # silently dropped. The frontend already reads the same flag
+            # from each embedder's ``EmbedderInfo`` (see
+            # ``left-panel.component.ts: updateTextSortAvailable``), so
+            # we don't need to ship it on the error response too.
+            abort(
                 400,
+                message=(
+                    f"Embedder '{_active_emb.name}' does not support text queries. "
+                    "Use learned sort or load a saved sort instead."
+                ),
             )
 
     try:
@@ -169,16 +198,23 @@ def sort_clips():
         text_vec = embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder_name)
         if text_vec is None:
             update_sort_progress("idle")
-            return jsonify({"error": f"Could not embed text for media type {media_type}"}), 500
+            abort(500, message=f"Could not embed text for media type {media_type}")
 
         update_sort_progress("sorting", "Computing similarities…", 2, total_steps)
         results, threshold = _cosine_sort(text_vec)
         update_sort_progress("idle")
-        return jsonify({"results": results, "threshold": threshold})
+        return {"results": results, "threshold": threshold}
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+
+        if isinstance(exc, HTTPException):
+            # ``abort()`` above raises HTTPException; let flask-smorest's
+            # handler render its envelope unchanged instead of wrapping it
+            # in a 500.
+            raise
         logging.getLogger(__name__).exception("text sort failed")
         update_sort_progress("idle")
-        return jsonify({"error": f"Text sort failed: {format_exception_detail(exc)}"}), 500
+        abort(500, message=f"Text sort failed: {format_exception_detail(exc)}")
 
 
 def _learned_sort_done_payload(job) -> dict:
@@ -193,7 +229,11 @@ def _learned_sort_done_payload(job) -> dict:
 
 
 @sorting_bp.route("/api/learned-sort", methods=["POST"])
-def learned_sort():
+@sorting_bp.arguments(LearnedSortRequestSchema)
+@sorting_bp.response(200, LearnedSortResponseSchema)
+@sorting_bp.alt_response(400, description="No good/bad votes available for training.")
+@sorting_bp.alt_response(500, description="Background learned-sort job failed (only when ``wait=true``).")
+def learned_sort(body: dict):
     """Kick off (or short-circuit) a learned-sort training job.
 
     Training is GIL-bound and ran inline used to stall every other request
@@ -222,8 +262,7 @@ def learned_sort():
         set_thread_detector_context,
     )
 
-    body = request.get_json(silent=True) or {}
-    wait = bool(body.get("wait"))
+    wait = body["wait"]
 
     snap = snapshot_medias()
 
@@ -251,10 +290,10 @@ def learned_sort():
         good_count = sum(1 for el in labelset.elements if el.label == "good")
         bad_count = sum(1 for el in labelset.elements if el.label == "bad")
         if good_count == 0 or bad_count == 0:
-            return jsonify({"error": "need at least one good and one bad vote"}), 400
+            abort(400, message="need at least one good and one bad vote")
     else:
         if not good_votes or not bad_votes:
-            return jsonify({"error": "need at least one good and one bad vote"}), 400
+            abort(400, message="need at least one good and one bad vote")
 
     inclusion_value = get_inclusion()
     safe_thresholds_value = get_safe_thresholds()
@@ -285,7 +324,7 @@ def learned_sort():
 
     cached = learned_sort_jobs.cached_for(signature)
     if cached is not None:
-        return jsonify(_learned_sort_done_payload(cached))
+        return _learned_sort_done_payload(cached)
 
     def _run(job):
         # Background thread needs the same dataset/detector context as the
@@ -396,11 +435,11 @@ def learned_sort():
     if wait:
         job.done_event.wait(timeout=120)
         if job.status == "error":
-            return jsonify({"error": job.error or "learned-sort failed"}), 500
+            abort(500, message=job.error or "learned-sort failed")
         if job.status == "done":
-            return jsonify(_learned_sort_done_payload(job))
+            return _learned_sort_done_payload(job)
 
-    return jsonify({"job_id": job.job_id, "status": "running", "current": 0, "total": 1})
+    return {"job_id": job.job_id, "status": "running", "current": 0, "total": 1}
 
 
 def _stable_element_id_for_sig(el) -> str:
@@ -411,7 +450,11 @@ def _stable_element_id_for_sig(el) -> str:
 
 
 @sorting_bp.route("/api/learned-sort/result", methods=["GET"])
-def learned_sort_result():
+@sorting_bp.arguments(LearnedSortResultQuerySchema, location="query")
+@sorting_bp.response(200, LearnedSortResponseSchema)
+@sorting_bp.alt_response(404, description="Job not found.")
+@sorting_bp.alt_response(500, description="Background learned-sort job failed.")
+def learned_sort_result(query: dict):
     """Poll a learned-sort background job.
 
     Returns the same shape as the POST endpoint's ``done`` response when the
@@ -419,38 +462,36 @@ def learned_sort_result():
     """
     from vtsearch.concurrency.async_jobs import learned_sort_jobs
 
-    job_id = request.args.get("job_id", "").strip()
-    if not job_id:
-        return jsonify({"error": "job_id is required"}), 400
+    job_id = query["job_id"]
 
     job = learned_sort_jobs.get(job_id)
     if job is None:
-        return jsonify({"status": "missing", "error": "Job not found"}), 404
+        # 404s are intercepted by the app-level ``NotFound`` errorhandler
+        # in ``app.py`` and rendered with the legacy
+        # ``{"error": "Not Found", "request_id": "..."}`` envelope — the
+        # ``message`` kwarg and any extras (e.g. ``status="missing"``)
+        # are dropped. Frontends rely on the HTTP status code for the
+        # missing-job branch rather than a body field.
+        abort(404, message="Job not found")
 
     if job.status in ("running", "pending"):
-        return jsonify(
-            {
-                "job_id": job.job_id,
-                "status": "running",
-                "current": job.current,
-                "total": job.total,
-            }
-        )
+        return {
+            "job_id": job.job_id,
+            "status": "running",
+            "current": job.current,
+            "total": job.total,
+        }
     if job.status == "error":
-        return jsonify(
-            {
-                "job_id": job.job_id,
-                "status": "error",
-                "error": job.error or "learned-sort failed",
-            }
-        ), 500
+        abort(500, message=job.error or "learned-sort failed", job_id=job.job_id)
     if job.status == "cancelled":
-        return jsonify({"job_id": job.job_id, "status": "cancelled"})
-    return jsonify(_learned_sort_done_payload(job))
+        return {"job_id": job.job_id, "status": "cancelled"}
+    return _learned_sort_done_payload(job)
 
 
-@sorting_bp.route("/api/votes")
+@sorting_bp.route("/api/votes", methods=["GET"])
+@sorting_bp.response(200, VotesResponseSchema)
 def get_votes():
+    """Return current good/bad votes, click times, and learned scores."""
     from vtsearch.state.core import _empty_detector_context, get_active_detector_context
 
     click_times = get_vote_click_times()
@@ -462,19 +503,18 @@ def get_votes():
     else:
         labelset_good_count = len(good_votes)
         labelset_bad_count = len(bad_votes)
-    return jsonify(
-        {
-            "good": sorted(good_votes),
-            "bad": sorted(bad_votes),
-            "click_times": {str(k): v for k, v in click_times.items()},
-            "learned_scores": {str(k): round(v, 4) for k, v in learned_scores.items()},
-            "labelset_good_count": labelset_good_count,
-            "labelset_bad_count": labelset_bad_count,
-        }
-    )
+    return {
+        "good": sorted(good_votes),
+        "bad": sorted(bad_votes),
+        "click_times": {str(k): v for k, v in click_times.items()},
+        "learned_scores": {str(k): round(v, 4) for k, v in learned_scores.items()},
+        "labelset_good_count": labelset_good_count,
+        "labelset_bad_count": labelset_bad_count,
+    }
 
 
 @sorting_bp.route("/api/votes/clear", methods=["POST"])
+@sorting_bp.response(200, OkResponseSchema)
 def clear_votes_route():
     """Clear all votes without clearing medias.
 
@@ -484,11 +524,13 @@ def clear_votes_route():
     from vtsearch.state import clear_votes
 
     clear_votes()
-    return jsonify({"ok": True})
+    return {"ok": True}
 
 
 @sorting_bp.route("/api/votes/seed-from-examples", methods=["POST"])
-def seed_votes_from_examples():
+@sorting_bp.arguments(SeedFromExamplesRequestSchema)
+@sorting_bp.response(200, SeedFromExamplesResponseSchema)
+def seed_votes_from_examples(body: dict):
     """Seed good votes from a model's media examples.
 
     For each ``type: "media"`` example, reads the file from
@@ -496,23 +538,13 @@ def seed_votes_from_examples():
     matching loaded media as Good, or — if the example is new —
     embeds it, inserts it into the ``medias`` dict, and votes it Good.
 
-    Expects JSON::
-
-        {"examples": [{"type": "media", "value": "abc123.wav"}, ...]}
-
     Returns::
 
         {"seeded": 2, "skipped": 1}
     """
     from vtsearch.detectors.media_seeding import seed_good_votes_from_examples
 
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    examples = data.get("examples")
-    if not isinstance(examples, list):
-        return jsonify({"error": "examples must be a list"}), 400
+    examples = body["examples"]
 
     seeded = seed_good_votes_from_examples(examples)
     skipped = len(examples) - seeded
@@ -526,72 +558,60 @@ def seed_votes_from_examples():
 
         sync_to_labelset_source()
 
-    return jsonify({"seeded": seeded, "skipped": skipped})
+    return {"seeded": seeded, "skipped": skipped}
 
 
-@sorting_bp.route("/api/textsort-suggestions")
+@sorting_bp.route("/api/textsort-suggestions", methods=["GET"])
+@sorting_bp.response(200, TextsortSuggestionsResponseSchema)
 def get_textsort_suggestions_route():
     """Return stored text-sort suggestions (most recent last)."""
-    return jsonify({"suggestions": get_textsort_suggestions()})
+    return {"suggestions": get_textsort_suggestions()}
 
 
 @sorting_bp.route("/api/textsort-suggestions", methods=["POST"])
-def add_textsort_suggestion_route():
+@sorting_bp.arguments(TextsortSuggestionRequestSchema)
+@sorting_bp.response(200, OkResponseSchema)
+@sorting_bp.alt_response(400, description="Empty or whitespace-only ``text``.")
+def add_textsort_suggestion_route(body: dict):
     """Store a text-sort query as a suggested name for detectors/labelsets."""
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-    text = data.get("text", "").strip()
+    text = body.get("text", "").strip()
     if not text:
-        return jsonify({"error": "text is required"}), 400
+        abort(400, message="text is required")
     add_textsort_suggestion(text)
-    return jsonify({"ok": True})
+    return {"ok": True}
 
 
-@sorting_bp.route("/api/inclusion")
+@sorting_bp.route("/api/inclusion", methods=["GET"])
+@sorting_bp.response(200, InclusionResponseSchema)
 def get_inclusion_route():
     """Get the current Inclusion setting."""
-    return jsonify({"inclusion": get_inclusion()})
+    return {"inclusion": get_inclusion()}
 
 
 @sorting_bp.route("/api/inclusion", methods=["POST"])
-def set_inclusion_route():
-    """Set the Inclusion setting."""
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    new_inclusion = data.get("inclusion")
-
-    if isinstance(new_inclusion, bool) or not isinstance(new_inclusion, (int, float)):
-        return jsonify({"error": "inclusion must be a number"}), 400
-
-    # Clamp to -10 to +10 range
-    new_inclusion = int(max(-10, min(10, new_inclusion)))
+@sorting_bp.arguments(InclusionRequestSchema)
+@sorting_bp.response(200, InclusionResponseSchema)
+def set_inclusion_route(body: dict):
+    """Set the Inclusion setting (clamped to ``[-10, 10]``)."""
+    new_inclusion = int(max(-10, min(10, body["inclusion"])))
     set_inclusion(new_inclusion)
+    return {"inclusion": get_inclusion()}
 
-    return jsonify({"inclusion": get_inclusion()})
 
-
-@sorting_bp.route("/api/safe-thresholds")
+@sorting_bp.route("/api/safe-thresholds", methods=["GET"])
+@sorting_bp.response(200, SafeThresholdsResponseSchema)
 def get_safe_thresholds_route():
     """Get the current Safe Thresholds setting."""
-    return jsonify({"safe_thresholds": get_safe_thresholds()})
+    return {"safe_thresholds": get_safe_thresholds()}
 
 
 @sorting_bp.route("/api/safe-thresholds", methods=["POST"])
-def set_safe_thresholds_route():
+@sorting_bp.arguments(SafeThresholdsRequestSchema)
+@sorting_bp.response(200, SafeThresholdsResponseSchema)
+def set_safe_thresholds_route(body: dict):
     """Set the Safe Thresholds setting."""
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    value = data.get("safe_thresholds")
-    if not isinstance(value, bool):
-        return jsonify({"error": "safe_thresholds must be a boolean"}), 400
-
-    set_safe_thresholds(value)
-    return jsonify({"safe_thresholds": get_safe_thresholds()})
+    set_safe_thresholds(body["safe_thresholds"])
+    return {"safe_thresholds": get_safe_thresholds()}
 
 
 def _example_sort_from_path(file_path: Path) -> tuple:
@@ -659,6 +679,12 @@ def _apply_crop_or_keep(temp_path: Path, crop_params: dict | None) -> Path:
 
 
 @sorting_bp.route("/api/example-sort", methods=["POST"])
+@sorting_bp.response(200, SortResponseSchema)
+@sorting_bp.alt_response(
+    400,
+    description="No file provided, no filename, or no medias loaded.",
+)
+@sorting_bp.alt_response(500, description="Example sort failed (embedder error or unexpected exception).")
 def example_sort():
     """Sort medias by similarity to an uploaded example media file.
 
@@ -668,14 +694,14 @@ def example_sort():
     the file is cropped server-side before embedding.
     """
     if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+        abort(400, message="No file provided")
 
     file = request.files["file"]
     if not file.filename:
-        return jsonify({"error": "No file selected"}), 400
+        abort(400, message="No file selected")
 
     if not snapshot_medias():
-        return jsonify({"error": "No medias loaded"}), 400
+        abort(400, message="No medias loaded")
 
     try:
         # Save uploaded file to a unique temp location to avoid race conditions
@@ -694,32 +720,43 @@ def example_sort():
             # Clean up temp file even if sorting raises
             temp_path.unlink(missing_ok=True)
 
-        return jsonify({"results": results, "threshold": thresh})
+        return {"results": results, "threshold": thresh}
 
     except Exception as exc:
-        import logging
+        from werkzeug.exceptions import HTTPException
 
+        if isinstance(exc, HTTPException):
+            raise
         logging.getLogger(__name__).exception("example-sort failed")
-        return jsonify({"error": f"Example sort failed: {format_exception_detail(exc)}"}), 500
+        abort(500, message=f"Example sort failed: {format_exception_detail(exc)}")
 
 
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])
+@sorting_bp.response(200, LabelFileSortResponseSchema)
+@sorting_bp.alt_response(
+    400,
+    description=(
+        "No file / no filename, no medias loaded, no embedder, invalid label file, "
+        "no labels in file, too few valid labeled files, or missing good/bad split."
+    ),
+)
+@sorting_bp.alt_response(500, description="Label file sort failed (unexpected exception).")
 def label_file_sort():
     """Train MLP on external media files from a label file, then sort all medias."""
     if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+        abort(400, message="No file provided")
 
     file = request.files["file"]
     if not file.filename:
-        return jsonify({"error": "No file selected"}), 400
+        abort(400, message="No file selected")
 
     if not snapshot_medias():
-        return jsonify({"error": "No medias loaded"}), 400
+        abort(400, message="No medias loaded")
 
     # Determine embedder from loaded dataset
     emb = _get_embedder_for_loaded_data()
     if emb is None:
-        return jsonify({"error": "No embedder available for loaded dataset"}), 400
+        abort(400, message="No embedder available for loaded dataset")
 
     try:
         # Parse the label file
@@ -727,12 +764,12 @@ def label_file_sort():
         try:
             label_data = json.loads(text)
         except Exception:
-            return jsonify({"error": "Invalid label file format"}), 400
+            abort(400, message="Invalid label file format")
 
         # Extract labels list
         labels = label_data.get("labels", [])
         if not labels:
-            return jsonify({"error": "No labels found in file"}), 400
+            abort(400, message="No labels found in file")
 
         # Load and embed each labeled media file
         X_list = []
@@ -777,11 +814,9 @@ def label_file_sort():
             loaded_count += 1
 
         if loaded_count < 2:
-            return (
-                jsonify(
-                    {"error": f"Need at least 2 valid labeled files (loaded {loaded_count}, skipped {skipped_count})"}
-                ),
+            abort(
                 400,
+                message=f"Need at least 2 valid labeled files (loaded {loaded_count}, skipped {skipped_count})",
             )
 
         # Check if we have both good and bad examples
@@ -790,10 +825,7 @@ def label_file_sort():
         try:
             validate_good_bad_split(y_list)
         except ValueError:
-            return (
-                jsonify({"error": "Need at least one good and one bad labeled example"}),
-                400,
-            )
+            abort(400, message="Need at least one good and one bad labeled example")
 
         # Train MLP and compute threshold using the shared pipeline
         import torch  # noqa: PLC0415
@@ -816,23 +848,25 @@ def label_file_sort():
         paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
         results = [{"id": cid, "score": round(s, 4)} for cid, s in paired]
 
-        return jsonify(
-            {
-                "results": results,
-                "threshold": round(threshold, 4),
-                "loaded": loaded_count,
-                "skipped": skipped_count,
-            }
-        )
+        return {
+            "results": results,
+            "threshold": round(threshold, 4),
+            "loaded": loaded_count,
+            "skipped": skipped_count,
+        }
 
-    except Exception:
-        import logging
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
 
+        if isinstance(exc, HTTPException):
+            raise
         logging.getLogger(__name__).exception("label-file-sort failed")
-        return jsonify({"error": "Label file sort failed"}), 500
+        abort(500, message="Label file sort failed")
 
 
 @sorting_bp.route("/api/diversity-tree/next", methods=["GET", "POST"])
+@sorting_bp.response(200, DiversityTreeNextResponseSchema)
+@sorting_bp.alt_response(400, description="Invalid score keys/values or threshold value (POST only).")
 def diversity_tree_next():
     """Return the next diverse sample from the Diversity Tree.
 
@@ -850,25 +884,31 @@ def diversity_tree_next():
     progress, and ``exhausted`` (bool) which is true when the tree exists
     but every node has already been seen.
     """
-    scores = None
-    threshold = None
+    scores: dict[int, float] | None = None
+    threshold: float | None = None
     if request.method == "POST":
-        data = get_json_safe()
+        # ``request.get_json(silent=True)`` keeps the legacy lenient body
+        # handling — flask-smorest's ``arguments`` would 422 on a missing
+        # body, but we want GET / POST to behave identically when nothing
+        # is sent. The shape-level validation lives in the schema; per-
+        # value int-coercion stays in the handler so we can return a 400
+        # with a custom message.
+        data = request.get_json(silent=True) or {}
         raw_scores = data.get("scores")
         if isinstance(raw_scores, dict):
             try:
                 scores = {int(k): float(v) for k, v in raw_scores.items()}
             except (ValueError, TypeError):
-                return jsonify({"error": "Invalid score keys or values"}), 400
+                abort(400, message="Invalid score keys or values")
         raw_threshold = data.get("threshold")
         if raw_threshold is not None:
             try:
                 threshold = float(raw_threshold)
             except (ValueError, TypeError):
-                return jsonify({"error": "Invalid threshold value"}), 400
+                abort(400, message="Invalid threshold value")
 
     tree = get_diversity_tree()
     next_id = diversity_tree_next_sample(scores=scores, threshold=threshold)
     level = tree.diversity_level() if tree is not None else 0
     exhausted = tree is not None and next_id is None
-    return jsonify({"id": next_id, "diversity_level": level, "exhausted": exhausted})
+    return {"id": next_id, "diversity_level": level, "exhausted": exhausted}

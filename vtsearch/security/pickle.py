@@ -9,7 +9,7 @@ from __future__ import annotations
 import io
 import pickle
 import struct
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 
 # Allowlist of (module, name) pairs that may be instantiated during unpickling.
@@ -76,7 +76,20 @@ class _PeekUnpickler(pickle._Unpickler):
     :class:`RestrictedUnpickler`, so an RCE payload is still rejected.
     """
 
-    dispatch = pickle._Unpickler.dispatch.copy()
+    if TYPE_CHECKING:
+        # pickle._Unpickler is the private pure-Python implementation; its
+        # internal attributes are not exposed in typeshed. Declare the ones
+        # this subclass touches so type-checkers can resolve them.
+        stack: list[Any]
+
+        def read(self, n: int) -> bytes: ...
+        def append(self, value: Any) -> None: ...
+        def pop_mark(self) -> list[Any]: ...
+
+    # Typed as dict[int, Any] (not the typeshed-inferred Callable[[Unpickler], None])
+    # because the dispatched methods take Self, which is contravariantly
+    # incompatible with the public Unpickler signature.
+    dispatch: dict[int, Any] = pickle._Unpickler.dispatch.copy()
 
     def find_class(self, module: str, name: str) -> Any:
         if (module, name) in _PICKLE_SAFE_CLASSES:

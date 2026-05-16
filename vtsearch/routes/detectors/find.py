@@ -4,6 +4,9 @@ Run selected detectors against selected datasets and return merged hit/miss
 results.  Each detector's MLP is sourced from its in-memory
 :class:`~vtsearch.state.DetectorContext` (when loaded) or trained on demand
 from its on-disk labelset.
+
+Migrated to ``flask_smorest`` so the routes are described in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
 """
 
 from __future__ import annotations
@@ -11,13 +14,23 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from flask import Blueprint, jsonify
+from flask_smorest import Blueprint, abort
 
+from vtsearch.concurrency.progress import update_find_progress
 from vtsearch.detectors.training import train_and_threshold
-from vtsearch.routes._shared import get_json_safe
-from vtsearch.concurrency.progress import get_find_progress, update_find_progress
+from vtsearch.schemas.detectors import (
+    FindCheckLabelsRequestSchema,
+    FindCheckLabelsResponseSchema,
+    FindRequestSchema,
+    FindResponseSchema,
+)
 
-detector_find_bp = Blueprint("detector_find", __name__)
+detector_find_bp = Blueprint(
+    "detector_find",
+    __name__,
+    description="Run detectors against datasets and return merged hits / "
+    "negative hits, plus a pre-flight label-resolution check.",
+)
 
 
 # Number of high-level Find steps: prepare detectors, load data, score.
@@ -25,7 +38,9 @@ _FIND_STEPS = 3
 
 
 @detector_find_bp.route("/api/find/check-labels", methods=["POST"])
-def find_check_labels():
+@detector_find_bp.arguments(FindCheckLabelsRequestSchema)
+@detector_find_bp.response(200, FindCheckLabelsResponseSchema)
+def find_check_labels(body: dict):
     """Pre-flight check: report how many detector labels can be resolved.
 
     Takes the same ``detector_ids`` / ``dataset_ids`` payload as ``/api/find``
@@ -37,12 +52,11 @@ def find_check_labels():
     from vtsearch.detectors.registry import get_detector as reg_get_detector
     from vtsearch.detectors.store import _detector_path, _read_detector
 
-    body = get_json_safe()
-    dataset_ids = body.get("dataset_ids", [])
-    detector_ids = body.get("detector_ids", [])
+    dataset_ids = body["dataset_ids"]
+    detector_ids = body["detector_ids"]
 
     if not dataset_ids or not detector_ids:
-        return jsonify({"warnings": []})
+        return {"warnings": []}
 
     warnings: list[dict] = []
     for d_id in detector_ids:
@@ -113,25 +127,20 @@ def find_check_labels():
                 }
             )
 
-    return jsonify({"warnings": warnings})
-
-
-@detector_find_bp.route("/api/find/progress")
-def find_progress_endpoint():
-    """Return the current progress of the Find operation."""
-    return jsonify(get_find_progress())
+    return {"warnings": warnings}
 
 
 @detector_find_bp.route("/api/find", methods=["POST"])
-def multi_find():
+@detector_find_bp.arguments(FindRequestSchema)
+@detector_find_bp.response(200, FindResponseSchema)
+@detector_find_bp.alt_response(
+    400,
+    description="Empty datasets/detectors list, or a selected detector has no labels.",
+)
+@detector_find_bp.alt_response(404, description="A selected dataset or detector ID is unknown / missing.")
+@detector_find_bp.alt_response(500, description="A dataset pkl file could not be loaded.")
+def multi_find(body: dict):
     """Run selected detectors on selected datasets and return merged results.
-
-    Expects JSON::
-
-        {
-            "dataset_ids": ["abc123", "def456"],
-            "detector_ids": ["ghi789", "jkl012"]
-        }
 
     For each dataset: loads it from its saved pkl, then for each detector runs
     detection.  Returns a merged results table.
@@ -145,16 +154,15 @@ def multi_find():
     from vtsearch.detectors.registry import get_detector as reg_get_detector
     from vtsearch.detectors.store import _detector_path, _read_detector
 
-    body = get_json_safe()
-    dataset_ids = body.get("dataset_ids", [])
-    detector_ids = body.get("detector_ids", [])
+    dataset_ids = body["dataset_ids"]
+    detector_ids = body["detector_ids"]
 
     if not dataset_ids:
         update_find_progress("idle", "", step=None, total_steps=None)
-        return jsonify({"error": "No datasets selected"}), 400
+        abort(400, message="No datasets selected")
     if not detector_ids:
         update_find_progress("idle", "", step=None, total_steps=None)
-        return jsonify({"error": "No detectors selected"}), 400
+        abort(400, message="No detectors selected")
 
     update_find_progress(
         "running",
@@ -170,11 +178,11 @@ def multi_find():
         ds = reg_get_ds(ds_id)
         if ds is None:
             update_find_progress("idle", "", step=None, total_steps=None)
-            return jsonify({"error": f"Dataset '{ds_id}' not found"}), 404
+            abort(404, message=f"Dataset '{ds_id}' not found")
         pkl_path = ds.get("pkl_path", "")
         if not pkl_path or not Path(pkl_path).is_file():
             update_find_progress("idle", "", step=None, total_steps=None)
-            return jsonify({"error": f"Dataset file missing for '{ds.get('name', ds_id)}'"}), 404
+            abort(404, message=f"Dataset file missing for '{ds.get('name', ds_id)}'")
         datasets.append(ds)
 
     detectors = []
@@ -182,7 +190,7 @@ def multi_find():
         d = reg_get_detector(d_id)
         if d is None:
             update_find_progress("idle", "", step=None, total_steps=None)
-            return jsonify({"error": f"Detector '{d_id}' not found"}), 404
+            abort(404, message=f"Detector '{d_id}' not found")
         detectors.append(d)
 
     detector_configs = []
@@ -223,7 +231,7 @@ def multi_find():
             continue
 
         update_find_progress("idle", "", step=None, total_steps=None)
-        return jsonify({"error": f"Detector '{d['name']}' has no labels for detection"}), 400
+        abort(400, message=f"Detector '{d['name']}' has no labels for detection")
 
     all_results = []
     all_negative_results = []
@@ -267,7 +275,7 @@ def multi_find():
                 temp_medias[mid] = {**mdata, "id": mid, "embedding": emb}
         except Exception as e:
             update_find_progress("idle", "", step=None, total_steps=None)
-            return jsonify({"error": f"Failed to load dataset '{ds['name']}': {e}"}), 500
+            abort(500, message=f"Failed to load dataset '{ds['name']}': {e}")
 
         if not temp_medias:
             continue
@@ -417,15 +425,13 @@ def multi_find():
 
     update_find_progress("idle", "", step=None, total_steps=None)
 
-    return jsonify(
-        {
-            "results": all_results,
-            "negative_results": all_negative_results,
-            "datasets": [ds["name"] for ds in datasets],
-            "detectors": detector_names,
-            "media_type": detected_media_type,
-            "multiple_datasets": multiple_datasets,
-            "multiple_detectors": multiple_detectors,
-            "total_hits": len(all_results),
-        }
-    )
+    return {
+        "results": all_results,
+        "negative_results": all_negative_results,
+        "datasets": [ds["name"] for ds in datasets],
+        "detectors": detector_names,
+        "media_type": detected_media_type,
+        "multiple_datasets": multiple_datasets,
+        "multiple_detectors": multiple_detectors,
+        "total_hits": len(all_results),
+    }

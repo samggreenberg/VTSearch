@@ -25,7 +25,7 @@ class ServerFileSettingsSource(SettingsSource):
     fields = [
         SettingsSourceField(
             key="filepath",
-            label="Server File Path",
+            label="Save to (server path)",
             field_type="server_path",
             description=(
                 "Absolute or relative path to a settings JSON file on the server.  Supports {username} template."

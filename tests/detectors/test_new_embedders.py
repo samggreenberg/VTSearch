@@ -54,7 +54,9 @@ class TestImageSiglipEmbedderProperties:
         d = emb.to_dict()
         assert d == {
             "name": "siglip",
+            "display_name": "SigLIP (general images)",
             "media_type_id": "image",
+            "is_default": True,
             "supports_text": True,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -148,7 +150,9 @@ class TestAudioClapMusicEmbedderProperties:
         d = emb.to_dict()
         assert d == {
             "name": "clap_music",
+            "display_name": "CLAP (music)",
             "media_type_id": "audio",
+            "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -229,7 +233,9 @@ class TestTextBGEEmbedderProperties:
         d = emb.to_dict()
         assert d == {
             "name": "bge",
+            "display_name": "BGE (text)",
             "media_type_id": "text",
+            "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -357,7 +363,9 @@ class TestVideoLanguageBindEmbedderProperties:
         d = emb.to_dict()
         assert d == {
             "name": "languagebind",
+            "display_name": "LanguageBind (video)",
             "media_type_id": "video",
+            "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -541,6 +549,7 @@ class TestAllEmbeddersRegistration:
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
+            assert "is_default" in d
             assert "supports_text" in d
             assert "supports_patch_regions" in d
             assert "license_notice" in d

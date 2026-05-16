@@ -429,17 +429,63 @@ Draw a sketch, use it as image-sort query. CLIP+sketch models exist.
 ### 12.1 Streaming embeddings (lazy) ★★ L
 Today everything is in RAM. Memory-mapped or DB-backed embedding store (DuckDB / LanceDB / Qdrant) so we can hold 1M items. Important for the HF / S3 importers (§7) to be useful.
 
-### 12.2 GPU batched embedding ★★ M
-Currently many embedders embed one-at-a-time. Batch within a converter run + within a clipper run; expect 5-10× speedup on GPU.
+### 12.2 GPU batched embedding ★★ M — **mostly DONE**
+Phase A (image + text bulk overrides), Phase B (bulk `patch_forward`),
+and Phase C (clip re-embed via `embed_media_bulk` with no tempfile)
+all landed. Deferred follow-ups:
+
+- **Audio CLAP + CLAP-Music bulk override.** Decode is the bottleneck
+  and adds I/O complexity; smaller GPU win than image but still
+  meaningful for big audio imports. `librosa` is happy to decode a
+  list serially while the model batches.
+- **Video X-CLIP / LanguageBind bulk override.** Tricky because
+  X-CLIP at batch 32 with 8 frames each is ~640 MB of activations
+  and can OOM on 8 GB cards. Likely wants a smaller default
+  `embed_batch_size` (e.g. 8) on the video embedders.
+- **Fuse single-vector + patch forward on DINOv2/DINOv3/EUPE.** Today
+  the backbone runs twice per image (once for `embed_media_bulk`,
+  once for `patch_forward_bulk`). Fusing requires changing the loader
+  to call a single combined hook and split the outputs — worth it if
+  profiling shows the backbone forward is the dominant cost.
 
 ### 12.3 Mixed-precision training ★ XS
 `torch.cuda.amp` for the MLP; trivial change.
 
-### 12.4 Model preload manager ★★ S
-Setting exists; could be smarter — predict which embedder is needed next from active dataset metadata.
+### 12.4 Model preload manager ★★ S — **DONE**
+Replaced the static `autoload_media_embedders` setting with
+`preload_predicted_embedders()` in `vtsearch/embedding/loader.py`. Startup
+walks the dataset and detector registries and warms each unique embedder
+referenced (`entry["embedder"]`, falling back to the default embedder
+for `entry["media_type"]`). `register_dataset()` also fires
+`smart_preload_in_background()` so a newly-implied embedder is warmed
+mid-session. Empty registry preloads nothing.
 
-### 12.5 WebSocket for live progress ★★ M
-Today progress is polled via REST. WebSocket = lower latency, less server load, smoother UI.
+### 12.5 ~~WebSocket~~ SSE for live progress ★★ M — **DONE**
+Was: progress polled via REST (`/api/dataset/progress`, `/api/sort/progress`,
+`/api/find/progress`, `/api/dataset/loading-tasks`,
+`/api/detectors/loading-tasks`, `/api/eval/voting-iterations`).
+
+Replaced by a single Server-Sent Events stream at **`GET /api/events`**
+(see [`docs/api/events.md`](../api/events.md)). Channels: `dataset`,
+`sort`, `find`, `eval`, `loading-tasks`, `detector-loading-tasks`. The
+first frame on every channel is the current snapshot, so clients don't
+need a bootstrap REST call.
+
+**Why SSE over WebSocket:**
+- Progress is one-way (server → client), text-only — exactly SSE's
+  sweet spot, where WebSocket's bidirectionality is wasted.
+- Flask is sync/WSGI — SSE works as a plain streaming response, no
+  `flask-sock` / ASGI / Upgrade-handshake surface area.
+- Auth, per-request context, and proxy compatibility come for free
+  because it's still an HTTP GET.
+- `EventSource` reconnects automatically; we don't have to build
+  heartbeat / resume / backoff.
+
+WebSocket can be revisited later if a genuinely bidirectional feature
+(live multi-user voting, presence) lands.
+
+The old §18.9 ("SSE event stream") is subsumed by this item — they
+referred to the same idea.
 
 ### 12.6 Background prefetch of next likely media ★ S
 For speed-labelling, preload the next 3 items' previews.
@@ -450,8 +496,8 @@ Checkpoint MLP state every N epochs.
 ### 12.8 Centralised plugin registry CLI ★ S — **shipped**
 `python app.py --list-plugins` shows every importer/exporter/embedder/converter/clipper across all auto-discovered plugin families. Supports `--format plain|json|names` and `--plugin-family <name>` for shell-completion scripts. Backed by `vtsearch.plugins.inventory.gather_plugins()`. See [CLI.md § Inspecting plugins and the API schema](../CLI.md#inspecting-plugins-and-the-api-schema).
 
-### 12.9 OpenAPI schema ★★ M — **shipped (minimal)**
-`GET /openapi.json` and `python app.py --openapi-schema` return an OpenAPI 3.0 doc generated from Flask's `url_map` — every route, method, path parameter, and view docstring. Request/response schemas are intentionally left permissive (`{type: object}`); the route inventory alone is enough to power Swagger UI and a generated TS client and to gate API surface changes in CI. See [API.md § Machine-readable schema](../API.md#machine-readable-schema). Open question: do we want to add per-route Pydantic / `apispec` decorators later to fill in body schemas? Deferred until a real consumer needs them.
+### 12.9 OpenAPI schema ★★ M — **shipped (minimal); deeper migration in progress**
+`GET /openapi.json` and `python app.py --openapi-schema` return an OpenAPI 3.0 doc generated from Flask's `url_map` — every route, method, path parameter, and view docstring. Request/response schemas are intentionally left permissive (`{type: object}`); the route inventory alone is enough to power Swagger UI and a generated TS client and to gate API surface changes in CI. See [API.md § Machine-readable schema](../API.md#machine-readable-schema). The open question — "do we want to add per-route schemas later?" — is now being answered: a deeper migration to flask-smorest + marshmallow with real request/response schemas is in progress at [openapi-schema.md](openapi-schema.md), serving its richer spec at `/api/openapi.json` and a Swagger UI at `/api/docs`. Both implementations coexist today; consolidate on flask-smorest once enough blueprints are migrated and delete the `vtsearch.openapi` walker + the `/openapi.json` route + the `--openapi-schema` CLI flag.
 
 ### 12.10 Python client library ★★ M
 `pip install vtsearch-client` so notebooks can drive the same endpoints headlessly.
@@ -462,17 +508,28 @@ Every `PluginRegistry` now also scans an `importlib.metadata` entry-point group 
 ### 12.12 Ruff → Ruff format CI gate ★ XS
 We have ruff; add a CI step that fails on unformatted code.
 
-### 12.13 Type-checking with mypy/pyright ★ M
-Pyright in basic mode would catch a lot.
+### 12.13 Type-checking with mypy/pyright ★ M — **Stage 1 shipped; in progress**
+Pyright in basic mode is now a hard CI gate. Rolled out package-by-package per [pyright-type-checking.md](pyright-type-checking.md). Stage 1 (foundation: `auth`, `cli`, `concurrency`, `config`, `exporters`, `labels`, `plugins`, `settings_io`, `sync`, `utils`) shipped in PR #1349 along with an advisory job that reports residual error counts over the full `vtsearch/` package.
 
-### 12.14 Async-friendly Flask routes ★ M
-Migrate hot paths (sorting, scoring) to Quart or FastAPI for true async. Long-running training already uses background threads so impact is bounded — but the polling endpoints would benefit.
+### 12.14 Async-friendly Flask routes ★ M (not recommended)
+Original idea: migrate hot paths (sorting, scoring) to Quart or FastAPI for true async; long-running training already uses background threads so impact is bounded — but the polling endpoints would benefit.
+
+**Assessment: not worth doing as currently scoped.** The benefit is thin and the migration cost is real:
+
+- Sort/score are CPU-bound (embedding dot products, MLP inference, ranking). Async only helps a handler yield during I/O waits — there is no I/O to wait on here, so true async produces no speedup on the named hot paths.
+- Training and dataset loading are already off the request thread (`JobManager`, background threads in `vtsearch/concurrency/`). Async wouldn't change that either.
+- The "polling endpoints would benefit" argument only matters under many concurrent clients starving Flask's thread pool. VTSearch is a single-user / small-team tool; threaded Flask (or a modest gunicorn worker count) handles `/api/progress/*` polling without issue.
+- Migration cost is non-trivial: per-request context (`g.dataset_context`, `g.detector_context`) set in `before_request`, the `_ProxyDict`/`_ProxyList` proxies in `vtsearch/state/core.py` with their `g`-first / thread-local-fallback logic, `_state_lock` (a sync `RLock`), every blueprint, every `request.json` call — all built around sync Flask semantics. Quart is the cheaper port but still requires auditing every handler and lock; FastAPI is closer to a rewrite.
+
+**Revisit if:** VTSearch grows into a multi-tenant hosted service with hundreds of concurrent pollers, or genuinely I/O-bound routes appear (streaming LLM calls, fan-out to remote vector DBs). Until then, leave as-is.
 
 ### 12.15 Structured logging + request IDs ★★ S
 Today logs are print-style. JSON logs with `dataset_id`/`detector_id`/`request_id` make production debugging tractable.
 
-### 12.16 Prometheus metrics ★★ S
+### 12.16 Prometheus metrics ★★ S — considered, declined for now
 `/metrics` endpoint with vote count, embedding latency, training time, RAM usage by dataset.
+
+Prototyped (PR #1366, closed unmerged) and declined. The pros — real percentiles via histograms, standard tooling, complements §12.15's structured logs — only pay off when a scraper is actually consuming the endpoint, which the current single-user / local-Flask deployment doesn't have. What pushed against shipping: a new runtime dependency (`prometheus-client`), per-worker counter state under gunicorn (correct cluster totals would require `prometheus_client.multiprocess` mode and extra setup), latent label-cardinality footguns if anyone later labels by `user_id` / `dataset_id` on counters, and a small but non-zero perf cost on every vote / embed / train hot path. Worth revisiting when VTSearch grows a multi-tenant or k8s deployment story — at that point the scraper exists and the implementation effort stays small (≈300 LoC plus tests).
 
 ### 12.17 Pydantic models for settings ★ S
 The `_SETTING_SPECS` table is clever but custom; Pydantic v2 would generalise it and produce JSON schemas for free.
@@ -524,7 +581,7 @@ Per-detector dashboard: precision/recall/F1 from a held-out vote split, calibrat
 Add synthetic label noise, measure detector quality degradation. Inform UI for "warn user when their vote disagrees with a confident model prediction" feature.
 
 ### 13.12 Cross-embedder ensembling ★★ M
-Train one MLP per embedder, average. Often beats best single embedder. Pairs with `autoload_media_embedders`.
+Train one MLP per embedder, average. Often beats best single embedder. Pairs with the smart-preload manager (§12.4) so every used embedder is already warm.
 
 ---
 
@@ -624,17 +681,19 @@ Discoverability without grepping source.
 ### 17.2 Detector input-spec auto-detect ★★ M
 Already designed in `docs/design/cli-detector-converter.md`; ship it.
 
-### 17.3 Pipeline file ★ M
-`python app.py --pipeline pipeline.yaml` runs an importer → clipper → embedder → detector → exporter sequence declared in YAML. Replaces N CLI flags with one config file. Repeatable for cron.
+### 17.3 Pipeline file ★ M ✅ shipped
+`python app.py --pipeline pipeline.yaml` runs an importer → detector → exporter sequence declared in YAML. Replaces the N `--autodetect` flags with one config file. Repeatable for cron. See `docs/CLI.md § Pipeline file` for the schema. (Clipper/embedder are derived from the dataset/detector media type — not user-selectable knobs today — so the YAML mirrors the actually-exposed flag set.)
 
-### 17.4 Watch mode ★ S
-`--watch /path/to/inbox` re-runs autodetect whenever new files appear.
+### ~~17.4 Watch mode ★ S~~ — unnecessary
+~~`--watch /path/to/inbox` re-runs autodetect whenever new files appear.~~
 
-### 17.5 Dry-run mode ★ XS
-`--dry-run` prints what would be embedded/scored/exported without doing it.
+Dropped: not worth building. External schedulers (cron, systemd timers, file-watcher daemons like `inotifywait` / `entr`) can re-invoke `--autodetect` on new files without bloating the CLI surface or adding a long-running-process code path to maintain.
 
-### 17.6 Progress JSON output ★ S
-`--progress-format json` for scripted callers / CI integration.
+### 17.5 Dry-run mode ★ XS ✅ shipped
+`--dry-run` prints what would be embedded/scored/exported without doing it. Validates importer/exporter names, settings file, dataset pickle existence, and required CLI field values, but loads no media and trains no models. See [CLI.md § Dry-run mode](../CLI.md#dry-run-mode).
+
+### 17.6 ~~Progress JSON output~~ — **DONE**
+`python app.py --autodetect --progress-format json` emits NDJSON on stdout — one event per line, shapes documented in `vtsearch/cli_progress.py`. Errors are routed to the same stream so a single pipe captures the full run; tqdm bars remain on stderr (discard with `2>/dev/null`).
 
 ### 17.7 Embedded interactive REPL ★ exploratory
 `python app.py --repl` drops into IPython with `medias`/`good_votes`/`detector` already imported. Power-user analysis.
@@ -646,7 +705,7 @@ Already designed in `docs/design/cli-detector-converter.md`; ship it.
 ### 18.1 `/healthz` and `/readyz` ★★ S
 Distinguish "process is up" from "models are loaded and DB is reachable".
 
-### 18.2 Backup CLI ★★ S
+### 18.2 Backup CLI ★★ S — NOT NECESSARY
 `python app.py --backup data-snapshot.tar.gz` and `--restore`. Includes datasets-pkl, settings, detectors.
 
 ### 18.3 Audit log ★ M
@@ -667,8 +726,11 @@ Apple Silicon + Graviton tier deployments.
 ### 18.8 Model-cache warmer init container ★ S
 Compose pattern that pulls model weights once, sidecar reuses.
 
-### 18.9 SSE event stream ★ M
-`/api/events?since=...` for the progress + activity feed (§16.5) without WebSocket.
+### 18.9 ~~SSE event stream~~ — **subsumed by §12.5 (DONE)**
+The progress feed shipped as `GET /api/events` — see §12.5 and
+[`docs/api/events.md`](../api/events.md). An "activity feed" channel
+(votes, label changes, etc.) for §16.5 can be added as another event
+name on the same endpoint when needed.
 
 ---
 

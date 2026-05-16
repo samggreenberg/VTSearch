@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -19,9 +19,6 @@ from vtsearch.media.embedder import (
     timed_progress,
 )
 
-if TYPE_CHECKING:
-    from transformers import XCLIPModel, XCLIPProcessor
-
 
 class VideoXClipEmbedder(MediaEmbedder):
     """Embeds videos using the X-CLIP model (microsoft/xclip-base-patch32).
@@ -32,8 +29,10 @@ class VideoXClipEmbedder(MediaEmbedder):
 
     def __init__(self) -> None:
         super().__init__()
-        self._model: Optional[XCLIPModel] = None
-        self._processor: Optional[XCLIPProcessor] = None
+        # Typed ``Any``: transformers stubs miss several ``XCLIPProcessor.__call__``
+        # kwargs we pass at runtime; runtime ``None`` checks guard the calls.
+        self._model: Any = None
+        self._processor: Any = None
 
     # ------------------------------------------------------------------
     # Identity
@@ -42,6 +41,10 @@ class VideoXClipEmbedder(MediaEmbedder):
     @property
     def name(self) -> str:
         return "xclip"
+
+    @property
+    def display_name(self) -> str:
+        return "X-CLIP (video)"
 
     @property
     def media_type_id(self) -> str:

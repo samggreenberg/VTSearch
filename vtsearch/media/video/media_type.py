@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from vtsearch.media.base import (
     DemoDataset,
@@ -14,6 +15,9 @@ from vtsearch.media.base import (
     _noop_progress,
     demo_slice,
 )
+
+if TYPE_CHECKING:
+    import numpy as np
 
 _THUMB_SIZE = 128
 
@@ -98,8 +102,8 @@ def generate_video_thumbnail_from_file(file_path: Path, *, size: int = _THUMB_SI
     return buf.getvalue()
 
 
-def _frame_at_time(cap, time_seconds: float) -> "tuple | None":
-    """Seek *cap* to *time_seconds* and read one frame.  Returns ``(ok, frame)`` or ``None``."""
+def _frame_at_time(cap, time_seconds: float) -> "np.ndarray | None":
+    """Seek *cap* to *time_seconds* and read one frame.  Returns the frame array or ``None``."""
     import cv2  # noqa: PLC0415
 
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -229,10 +233,6 @@ class VideoMediaType(MediaType):
     @property
     def folder_import_name(self) -> str:
         return "video"
-
-    @property
-    def tab_title(self) -> str:
-        return "Videos"
 
     @property
     def dir_key(self) -> str:

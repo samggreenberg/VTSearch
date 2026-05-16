@@ -49,9 +49,10 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
         if file_path is None:
             return None
 
-        params = (elem.origin or {}).get("params", {}) if elem.origin else {}
+        origin = elem.origin or {}
+        params = origin.get("params", {})
         if isinstance(params, dict) and params.get("clipper"):
-            return _apply_clip_and_embed(file_path, media_type, elem.origin, embedder_name)
+            return _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
         return embed_file(file_path, media_type, embedder_name)
 
 

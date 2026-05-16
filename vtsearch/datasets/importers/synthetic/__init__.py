@@ -53,10 +53,12 @@ class SyntheticDatasetImporter(DatasetImporter):
         ImporterField(
             key="size",
             label="Size",
-            field_type="text",
+            field_type="number",
             description="How many medias to generate (e.g. 100, 1000, 10000).",
             default="100",
             placeholder="100",
+            min="1",
+            step="1",
         ),
     ]
 

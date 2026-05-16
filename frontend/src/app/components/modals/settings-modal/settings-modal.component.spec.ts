@@ -21,8 +21,6 @@ describe('SettingsModalComponent', () => {
     autopilot_top_greens: 3,
     autopilot_hard_reds: 3,
     autopilot_goal_diversity: 40,
-    autoload_media_types: ['audio'],
-    autoload_media_embedders: ['audio'],
   };
 
   const mockMediaTypes = {
@@ -51,11 +49,9 @@ describe('SettingsModalComponent', () => {
     fixture.detectChanges();
     // forkJoin makes all requests in parallel
     const settingsReq = httpMock.expectOne('/api/settings');
-    const embeddersReq = httpMock.expectOne('/api/embedders');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
     const versionReq = httpMock.expectOne('/api/version');
     settingsReq.flush(mockSettings);
-    embeddersReq.flush({ embedders: [{ name: 'audio', media_type_id: 'audio' }, { name: 'images', media_type_id: 'image' }, { name: 'text', media_type_id: 'text' }] });
     mediaTypesReq.flush(mockMediaTypes);
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
   }
@@ -65,10 +61,9 @@ describe('SettingsModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should load settings and embedders on init', () => {
+  it('should load settings on init', () => {
     flushInit();
     expect(component.settings.theme).toBe('dark');
-    expect(component.embedders.length).toBe(3);
     expect(component.loading).toBeFalse();
   });
 
@@ -113,56 +108,12 @@ describe('SettingsModalComponent', () => {
     expect(component.getViewMode('view_mode_right', 'audio')).toBe('grid');
   });
 
-  it('should check if embedder is autoloaded', () => {
-    flushInit();
-    expect(component.isEmbedderAutoloaded({ name: 'audio', media_type_id: 'audio' })).toBeTrue();
-    expect(component.isEmbedderAutoloaded({ name: 'clip', media_type_id: 'image' })).toBeFalse();
-  });
-
-  it('should toggle embedder in autoload list', () => {
-    flushInit();
-    component.toggleEmbedder({ name: 'clip', media_type_id: 'image' });
-    expect(component.settings.autoload_media_embedders).toContain('clip');
-    httpMock.expectOne('/api/settings').flush(mockSettings);
-
-    component.toggleEmbedder({ name: 'audio', media_type_id: 'audio' });
-    expect(component.settings.autoload_media_embedders).not.toContain('audio');
-    httpMock.expectOne('/api/settings').flush(mockSettings);
-  });
-
   it('should reset to defaults', () => {
     flushInit();
     component.resetDefaults();
     httpMock.expectOne('/api/settings/defaults').flush({ ...mockSettings, theme: 'light' });
     httpMock.expectOne('/api/settings').flush(mockSettings);
     expect(component.settings.theme).toBe('light');
-  });
-
-  it('should sort embedders by media_type_id then name', () => {
-    fixture.detectChanges();
-    const settingsReq = httpMock.expectOne('/api/settings');
-    const embeddersReq = httpMock.expectOne('/api/embedders');
-    const mediaTypesReq = httpMock.expectOne('/api/media-types');
-    const versionReq = httpMock.expectOne('/api/version');
-    settingsReq.flush(mockSettings);
-    embeddersReq.flush({
-      embedders: [
-        { name: 'zebra', media_type_id: 'image' },
-        { name: 'alpha', media_type_id: 'text' },
-        { name: 'beta', media_type_id: 'audio' },
-        { name: 'alpha', media_type_id: 'audio' },
-        { name: 'clip', media_type_id: 'image' },
-      ],
-    });
-    mediaTypesReq.flush(mockMediaTypes);
-    versionReq.flush({ version: '2026-05-07T00:00:00Z' });
-    expect(component.embedders.map((e) => `${e.media_type_id}:${e.name}`)).toEqual([
-      'audio:alpha',
-      'audio:beta',
-      'image:clip',
-      'image:zebra',
-      'text:alpha',
-    ]);
   });
 
   it('should use preselectedViewTab when valid', () => {
@@ -184,13 +135,6 @@ describe('SettingsModalComponent', () => {
     expect(component.activeViewTab).toBe('audio');
   });
 
-  it('should return media type icon for embedder', () => {
-    flushInit();
-    expect(component.getMediaTypeIcon('audio')).toBe('audio');
-    expect(component.getMediaTypeIcon('image')).toBe('image');
-    expect(component.getMediaTypeIcon('unknown')).toBe('');
-  });
-
   it('should emit closed on close', () => {
     flushInit();
     spyOn(component.closed, 'emit');
@@ -201,11 +145,9 @@ describe('SettingsModalComponent', () => {
   it('should handle init error gracefully', () => {
     fixture.detectChanges();
     const settingsReq = httpMock.expectOne('/api/settings');
-    const embeddersReq = httpMock.expectOne('/api/embedders');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
     const versionReq = httpMock.expectOne('/api/version');
     settingsReq.flush({}, { status: 500, statusText: 'Error' });
-    embeddersReq.flush({ embedders: [] });
     mediaTypesReq.flush({ media_types: [] });
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
     expect(component.loading).toBeFalse();

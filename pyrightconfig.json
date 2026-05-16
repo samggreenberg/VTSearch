@@ -1,0 +1,16 @@
+{
+  "include": ["vtsearch"],
+  "exclude": [
+    "**/__pycache__",
+    "**/node_modules",
+    "tests",
+    "frontend",
+    "scripts",
+    "data"
+  ],
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+  "reportMissingImports": "error",
+  "reportMissingTypeStubs": "none"
+}

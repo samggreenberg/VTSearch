@@ -9,7 +9,7 @@ import time
 import uuid
 import zipfile
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, cast
 from urllib.parse import urlencode
 
 import requests
@@ -89,13 +89,20 @@ def download_20newsgroups(
     # Get the actual newsgroup categories to download
     newsgroup_categories = [category_mapping.get(cat, cat) for cat in categories]
 
-    # Download the dataset (sklearn handles caching automatically)
-    newsgroups = fetch_20newsgroups(
-        subset="train",
-        categories=newsgroup_categories,
-        remove=("headers", "footers", "quotes"),
-        shuffle=True,
-        random_state=42,
+    # Download the dataset (sklearn handles caching automatically).
+    # cast(Any) because the stubs widen the return type to a
+    # `Bunch | tuple` union driven by the `return_X_y` overload; with the
+    # default `return_X_y=False` we always get a Bunch with `.data`,
+    # `.target`, `.target_names`.
+    newsgroups = cast(
+        Any,
+        fetch_20newsgroups(
+            subset="train",
+            categories=newsgroup_categories,
+            remove=("headers", "footers", "quotes"),
+            shuffle=True,
+            random_state=42,
+        ),
     )
 
     # Map back to our category names

@@ -3,23 +3,37 @@
 Implements the active-dataset scoring endpoints — find-label and auto-detect —
 on top of the detector concept.  Detectors are loaded into ``DetectorContext``
 instances on demand; weights live exclusively in RAM.
+
+Migrated to ``flask_smorest`` so the routes are described in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
 """
 
 from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
-from flask import Blueprint, jsonify, request
+from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._shared import get_json_safe
-from vtsearch.state import snapshot_medias
 from vtsearch.concurrency.memory_budget import cap_workers_by_memory
 from vtsearch.concurrency.progress import update_find_progress
+from vtsearch.schemas.detectors import (
+    AutoDetectRequestSchema,
+    AutoDetectResponseSchema,
+    FindLabelRequestSchema,
+    FindLabelResponseSchema,
+)
+from vtsearch.state import snapshot_medias
 
 logger = logging.getLogger(__name__)
 
-detector_scoring_bp = Blueprint("detector_scoring", __name__)
+detector_scoring_bp = Blueprint(
+    "detector_scoring",
+    __name__,
+    description="Run a detector against the active dataset (find-label) "
+    "or run every autorun detector at once (auto-detect).",
+)
 
 # Keys excluded from API responses (large binary/vector data).
 _HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string", "thumbnail_bytes")
@@ -38,7 +52,7 @@ def _resolve_or_train_detector(
     *,
     progress_step: int = 2,
     progress_total_steps: int = 4,
-) -> tuple[object | None, float, dict | None]:
+) -> tuple[Any | None, float, dict | None]:
     """Return (mlp, threshold, diagnostic) for *detector_id*.
 
     Tries the loaded :class:`DetectorContext` first.  Falls back to training
@@ -163,12 +177,12 @@ def _resolve_or_train_detector(
 
 
 @detector_scoring_bp.route("/api/find-label", methods=["POST"])
-def find_label():
+@detector_scoring_bp.arguments(FindLabelRequestSchema)
+@detector_scoring_bp.response(200, FindLabelResponseSchema)
+@detector_scoring_bp.alt_response(400, description="No medias loaded, or the detector has no labels for scoring.")
+@detector_scoring_bp.alt_response(404, description="Detector not found.")
+def find_label(body: dict):
     """Score all loaded medias with a detector and apply labels based on threshold.
-
-    Expects JSON::
-
-        {"detector_id": "abc123"}
 
     Resolves the detector from the registry, scores every loaded media, and
     applies Good/Bad labels for ALL elements based on the threshold.  Returns
@@ -186,15 +200,11 @@ def find_label():
     # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
     _FIND_LABEL_STEPS = 4
 
-    body = get_json_safe()
-    detector_id = body.get("detector_id")
-    if not detector_id:
-        update_find_progress("idle", "")
-        return jsonify({"error": "detector_id is required"}), 400
+    detector_id = body["detector_id"]
 
     # If the request body specifies a dataset_id, override the request-scoped
     # context so scoring runs against the correct dataset.
-    dataset_id = body.get("dataset_id")
+    dataset_id = body.get("dataset_id") or ""
     if dataset_id:
         from flask import g
         from vtsearch.state import get_context
@@ -215,12 +225,12 @@ def find_label():
     d = reg_get_detector(detector_id)
     if d is None:
         update_find_progress("idle", "")
-        return jsonify({"error": f"Detector '{detector_id}' not found"}), 404
+        abort(404, message=f"Detector '{detector_id}' not found")
 
     snap = snapshot_medias()
     if not snap:
         update_find_progress("idle", "")
-        return jsonify({"error": "No medias loaded"}), 400
+        abort(400, message="No medias loaded")
 
     media_type = d.get("media_type", "") or next(iter(snap.values())).get("type", "image")
     det_path = _detector_path(d["name"])
@@ -259,16 +269,13 @@ def find_label():
             total = diagnostic["total_labels"]
             mt = diagnostic.get("media_type", "items")
             mt_plural = mt + "s" if mt and not mt.endswith("s") else mt
-            return jsonify(
-                {
-                    "error": error_msg,
-                    "resolution_diagnostic": diagnostic,
-                    "warning": (
-                        f"{failed} of your {total} {mt_plural} could not be resolved from their original files."
-                    ),
-                }
-            ), 400
-        return jsonify({"error": f"Detector '{d['name']}' has no labels for scoring"}), 400
+            abort(
+                400,
+                message=error_msg,
+                resolution_diagnostic=diagnostic,
+                warning=(f"{failed} of your {total} {mt_plural} could not be resolved from their original files."),
+            )
+        abort(400, message=f"Detector '{d['name']}' has no labels for scoring")
 
     n_total = len(snap)
     update_find_progress(
@@ -347,28 +354,30 @@ def find_label():
 
     record_find(n_total)
 
-    return jsonify(
-        {
-            "ok": True,
-            "results": results,
-            "threshold": round(threshold, 4),
-            "good_count": good_count,
-            "bad_count": bad_count,
-            "detector_name": d.get("name", ""),
-        }
-    )
+    return {
+        "ok": True,
+        "results": results,
+        "threshold": round(threshold, 4),
+        "good_count": good_count,
+        "bad_count": bad_count,
+        "detector_name": d.get("name", ""),
+    }
 
 
 @detector_scoring_bp.route("/api/auto-detect", methods=["POST"])
-def auto_detect():
+@detector_scoring_bp.arguments(AutoDetectRequestSchema)
+@detector_scoring_bp.response(200, AutoDetectResponseSchema)
+@detector_scoring_bp.alt_response(
+    400,
+    description="No medias loaded, or no autorun detectors match the active media type.",
+)
+@detector_scoring_bp.alt_response(404, description="Named detector is not flagged for autorun.")
+def auto_detect(body: dict):
     """Score the active dataset with every detector flagged for autorun.
 
     Iterates :func:`~vtsearch.settings.get_autorun_detectors` and trains each
     one's MLP on demand from its on-disk labelset.  Returns one result column
-    per detector.
-
-    Accepts an optional JSON body with ``detector_name`` to run a single
-    autorun detector by name.
+    per detector. Pass ``detector_name`` to run a single autorun detector.
     """
     import torch  # noqa: PLC0415
 
@@ -381,20 +390,19 @@ def auto_detect():
 
     snap = snapshot_medias()
     if not snap:
-        return jsonify({"error": "No medias loaded"}), 400
+        abort(400, message="No medias loaded")
 
     media_type = next(iter(snap.values())).get("type", "audio")
 
     autorun_names = get_autorun_detectors()
-    body = request.get_json(silent=True) or {}
-    single_name = body.get("detector_name")
+    single_name = body.get("detector_name") or ""
     if single_name:
         if single_name not in autorun_names:
-            return jsonify({"error": f"Detector '{single_name}' not flagged for autorun"}), 404
+            abort(404, message=f"Detector '{single_name}' not flagged for autorun")
         autorun_names = [single_name]
 
     if not autorun_names:
-        return jsonify({"error": f"No autorun detectors found for media type: {media_type}"}), 400
+        abort(400, message=f"No autorun detectors found for media type: {media_type}")
 
     # Build per-name (det_data, registry entry) pairs, filtered by media type.
     detectors_to_run: list[tuple[str, dict, dict | None]] = []
@@ -414,7 +422,7 @@ def auto_detect():
         detectors_to_run.append((name, det_data, reg_entry))
 
     if not detectors_to_run:
-        return jsonify({"error": f"No autorun detectors found for media type: {media_type}"}), 400
+        abort(400, message=f"No autorun detectors found for media type: {media_type}")
 
     from vtsearch.embedding.matrix import get_embedding_matrix_for_snap
 
@@ -483,10 +491,8 @@ def auto_detect():
 
         record_find(len(all_ids) * len(results))
 
-    return jsonify(
-        {
-            "media_type": media_type,
-            "detectors_run": len(results),
-            "results": results,
-        }
-    )
+    return {
+        "media_type": media_type,
+        "detectors_run": len(results),
+        "results": results,
+    }

@@ -496,7 +496,8 @@ errors directly to the user.
    daemon thread.
 3. `POST /api/dataset/import/<name>/options` invokes `get_field_options()`
    to populate dynamic-options dropdowns (see above).
-4. `GET /api/dataset/progress` provides progress bar data.
+4. The `dataset` channel on `GET /api/events` (SSE) streams progress
+   bar data.
 
 ### Progress reporting
 

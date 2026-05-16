@@ -175,9 +175,17 @@ class TestExporterRegistry:
             for f in exp.fields:
                 assert f.key, f"{exp.name} has a field without a key"
                 assert f.label, f"{exp.name} field '{f.key}' has no label"
-                assert f.field_type in ("text", "password", "email", "file", "folder", "select", "server_path"), (
-                    f"{exp.name} field '{f.key}' has unknown type '{f.field_type}'"
-                )
+                assert f.field_type in (
+                    "text",
+                    "password",
+                    "email",
+                    "file",
+                    "folder",
+                    "select",
+                    "server_path",
+                    "url",
+                    "number",
+                ), f"{exp.name} field '{f.key}' has unknown type '{f.field_type}'"
 
 
 # ---------------------------------------------------------------------------

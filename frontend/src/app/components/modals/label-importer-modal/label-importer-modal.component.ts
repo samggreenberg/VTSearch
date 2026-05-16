@@ -62,7 +62,7 @@ export class LabelImporterModalComponent implements OnInit {
     if (this.view === 'form' && this.selectedImporter) {
       return this.selectedImporter.display_name || this.selectedImporter.name;
     }
-    return this.targetModelName ? 'Add Labels to Model' : 'Import Labels';
+    return this.targetModelName ? 'Add Labels to Detector' : 'Import Labels';
   }
 
   ngOnInit(): void {

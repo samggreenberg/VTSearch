@@ -42,8 +42,12 @@ class SyncSource(PluginBase, Generic[LoadT, SaveT]):
         """
         raise NotImplementedError(f"{type(self).__name__}.load() is not implemented")
 
-    def save(self, data: SaveT, field_values: dict[str, Any]) -> None:
+    def save(self, data: SaveT, /, field_values: dict[str, Any]) -> None:
         """Export *data* to the source.
+
+        The first parameter is positional-only so subclasses can name it
+        according to what they save (``labelset``, ``settings``, ...) without
+        breaking the override contract.
 
         Raises:
             NotImplementedError: If the subclass has not implemented this.

@@ -30,5 +30,9 @@ class ImageEupeSingleEmbedder(_EupeBase):
     def name(self) -> str:
         return "eupe_single"
 
+    @property
+    def display_name(self) -> str:
+        return "EUPE single (image vector)"
+
 
 EMBEDDER = ImageEupeSingleEmbedder()

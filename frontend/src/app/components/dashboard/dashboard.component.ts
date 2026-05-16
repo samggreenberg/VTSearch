@@ -2,9 +2,10 @@ import { Component, HostListener, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
-import { catchError, filter, take, takeUntil, switchMap } from 'rxjs/operators';
+import { catchError, filter, switchMap, take, takeUntil } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
+import { ProgressEventsService } from '../../services/progress-events.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { FindSessionService } from '../../services/find-session.service';
@@ -13,7 +14,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
 import { AchievementsService } from '../../services/achievements.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, LoadingTasksResponse, DetectorRegistryEntry } from '../../models/api.models';
+import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, DetectorRegistryEntry, ImporterInfo } from '../../models/api.models';
 import { formatProgressFraction } from '../../utils/format-progress';
 import { ColMeta, ManagedColumns } from '../../utils/managed-columns';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
@@ -75,6 +76,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   importerModalOpen = false;
   importerClosing = false;
+  /** Picker tab id the importer modal should pre-select when it next
+   *  opens — set by the welcome-banner CTA so a fresh user lands in
+   *  the right place. Empty for the normal "+" button flow. */
+  importerInitialTab = '';
+  /** Visible importers (i.e. ``hidden_from_picker !== true``), fetched
+   *  once on init so the welcome banner can detect Services-tab
+   *  importers without waiting for the modal to open. */
+  visibleImporters: ImporterInfo[] = [];
   combineModalOpen = false;
   /** Datasets passed into the Combine modal when it opens. */
   combineModalDatasets: DatasetRegistryEntry[] = [];
@@ -190,6 +199,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     private topBarState: TopBarStateService,
     private achievements: AchievementsService,
+    private progressEvents: ProgressEventsService,
   ) {}
 
   ngOnInit(): void {
@@ -247,6 +257,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.refresh();
     this.resumeActivePolling();
     this.startDiskUsagePolling();
+    this.datasetsApi.getAllImporters().subscribe({
+      next: (res) => {
+        this.visibleImporters = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
+      },
+    });
   }
 
   private startDiskUsagePolling(): void {
@@ -282,24 +297,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
   }
 
-  /** Check for in-progress loading tasks (e.g. after a page reload) and resume polling. */
+  /** Check for in-progress loading tasks (e.g. after a page reload) and start watching. */
   private resumeActivePolling(): void {
-    this.datasetsApi
-      .getLoadingTasks()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((tasks) => {
-        if (tasks.some((t) => t.status !== 'idle')) {
-          this.startProgressPolling();
-        }
-      });
-    this.detectorsApi
-      .getDetectorLoadingTasks()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((resp) => {
-        if ((resp.tasks ?? []).some((t: LoadingTask) => t.status !== 'idle')) {
-          this.startDetectorProgressPolling();
-        }
-      });
+    // SSE pushes the initial snapshot the moment we connect, so the first
+    // event on each channel tells us whether there's anything in flight.
+    this.progressEvents.loadingTasks$
+      .pipe(filter((tasks) => tasks.some((t) => t.status !== 'idle')), take(1), takeUntil(this.destroy$))
+      .subscribe(() => this.startProgressPolling());
+    this.progressEvents.detectorLoadingTasks$
+      .pipe(filter((tasks) => tasks.some((t) => t.status !== 'idle')), take(1), takeUntil(this.destroy$))
+      .subscribe(() => this.startDetectorProgressPolling());
   }
 
   // --- Column resize / drag-reorder ---
@@ -596,8 +603,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     try {
       ok = await this.dialog.confirm(
         targets.length === 1
-          ? `Delete model ${names}?`
-          : `Delete ${targets.length} models: ${names}?`,
+          ? `Delete detector ${names}?`
+          : `Delete ${targets.length} detectors: ${names}?`,
       );
     } finally {
       this.deletingSelectedDetectorsConfirm = false;
@@ -611,7 +618,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.datasetState.refresh();
         },
         error: () => {
-          this.dialog.alert(`Failed to delete model "${model.name}".`, 'error');
+          // Global error interceptor surfaces the failure in the banner.
         },
       });
     }
@@ -631,14 +638,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get combineSelectedDetectorsHint(): string {
     if (this.selectedDetectorIds.size < 2) {
-      return 'Select two or more trainable models to combine';
+      return 'Select two or more trainable detectors to combine';
     }
     const targets = this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
     const types = new Set(targets.map((m) => m.media_type));
     if (types.size !== 1) {
-      return 'All selected models must be of the same media type';
+      return 'All selected detectors must be of the same media type';
     }
-    return 'Combine selected models into a new one';
+    return 'Combine selected detectors into a new one';
   }
 
   get combineSelectedDetectorSources(): DetectorRegistryEntry[] {
@@ -735,7 +742,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
     this.deletingDetectorId = model.id;
-    const ok = await this.dialog.confirm(`Delete model "${model.name}"?`);
+    const ok = await this.dialog.confirm(`Delete detector "${model.name}"?`);
     this.deletingDetectorId = '';
     if (!ok) return;
     this.detectorsApi.deleteFromRegistry(model.id).subscribe({
@@ -744,7 +751,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.datasetState.refresh();
       },
       error: () => {
-        this.dialog.alert('Failed to delete model. Please try again.', 'error');
+        // Global error interceptor surfaces the failure in the banner.
       },
     });
   }
@@ -838,6 +845,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   openImporterModal(): void {
+    this.importerInitialTab = '';
+    this.importerClosing = false;
+    this.importerModalOpen = true;
+  }
+
+  /** Welcome-banner CTA: open the importer modal with one of the picker
+   *  tabs pre-selected so a fresh user lands on the relevant choices. */
+  openImporterModalOnTab(tabId: string): void {
+    this.importerInitialTab = tabId;
     this.importerClosing = false;
     this.importerModalOpen = true;
   }
@@ -845,10 +861,49 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeImporterModal(): void {
     this.importerModalOpen = false;
     this.importerClosing = true;
+    this.importerInitialTab = '';
   }
 
   onImporterAnimationEnd(): void {
     this.importerClosing = false;
+  }
+
+  // --- First-run welcome banner ---
+
+  /** Visible importers in the Services tab, in registry order. */
+  get servicesImporters(): ImporterInfo[] {
+    return this.visibleImporters.filter((imp) => (imp.category || '') === 'services');
+  }
+
+  /** Pretty name for a Services importer (display_name falls back to name). */
+  private importerLabel(imp: ImporterInfo): string {
+    return imp.display_name || imp.name;
+  }
+
+  /** Body text for the welcome banner. Three branches:
+   *   - no Services importers → push Server Folder
+   *   - exactly one Services importer → name it
+   *   - multiple Services importers → generic Services prompt */
+  get welcomeBannerMessage(): string {
+    const services = this.servicesImporters;
+    if (services.length === 1) {
+      const label = this.importerLabel(services[0]);
+      return `Welcome — load a dataset to get started. You have ${label} registered in the Services tab, which is probably what you want.`;
+    }
+    if (services.length > 1) {
+      return 'Welcome — load a dataset to get started. You have importers registered in the Services tab, which is probably where to start.';
+    }
+    return 'Welcome — load a dataset to get started. Server Folder is the most common starting point: point it at a folder of files already on this machine.';
+  }
+
+  /** CTA label paired with the welcome-banner message. */
+  get welcomeBannerCtaLabel(): string {
+    return this.servicesImporters.length > 0 ? 'Open Services' : 'Open Server';
+  }
+
+  /** Picker tab the welcome-banner CTA pre-selects in the importer modal. */
+  get welcomeBannerCtaTab(): string {
+    return this.servicesImporters.length > 0 ? 'services' : 'server';
   }
 
   onImportComplete(): void {
@@ -968,14 +1023,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetPollingActive = true;
     this.completedTaskIds.clear();
 
-    timer(0, 1000)
-      .pipe(
-        takeUntil(this.polling$),
-        takeUntil(this.destroy$),
-        switchMap(() => this.datasetsApi.getLoadingTasks().pipe(
-          catchError(() => EMPTY),
-        )),
-      )
+    this.progressEvents.loadingTasks$
+      .pipe(takeUntil(this.polling$), takeUntil(this.destroy$))
       .subscribe({
         next: (tasks: LoadingTask[]) => {
           // Separate active from finished
@@ -1031,17 +1080,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.detectorPollingActive = true;
     this.completedModelTaskIds.clear();
 
-    timer(0, 1000)
-      .pipe(
-        takeUntil(this.detectorPolling$),
-        takeUntil(this.destroy$),
-        switchMap(() => this.detectorsApi.getDetectorLoadingTasks().pipe(
-          catchError(() => EMPTY),
-        )),
-      )
+    this.progressEvents.detectorLoadingTasks$
+      .pipe(takeUntil(this.detectorPolling$), takeUntil(this.destroy$))
       .subscribe({
-        next: (resp: LoadingTasksResponse) => {
-          const tasks = resp.tasks ?? [];
+        next: (tasks: LoadingTask[]) => {
           const active = tasks.filter((t) => t.status !== 'idle');
           const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
           const failed = errored.filter((t) => t.error !== 'Cancelled');
@@ -1149,12 +1191,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get findHint(): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
-    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and a model';
+    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and a detector';
     if (nDatasets === 0) return 'Select a dataset';
-    if (nModels === 0) return 'Select a model';
+    if (nModels === 0) return 'Select a detector';
     if (!this.findMediaTypesMatch()) return 'Media type mismatch';
-    if (this.hasUntrainedModel()) return 'Selected model has no training labels';
-    return 'Score selected datasets with selected models';
+    if (this.hasUntrainedModel()) return 'Selected detector has no training labels';
+    return 'Score selected datasets with selected detectors';
   }
 
   get labelHint(): string {
@@ -1162,14 +1204,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const nModels = this.resolvedSelectedModels.length;
     if (nDatasets === 0) return 'Select a dataset';
     if (nDatasets > 1) return 'Select exactly 1 dataset';
-    if (nModels === 0) return 'Create a new model and start training';
-    if (nModels > 1) return 'Select exactly 1 model';
+    if (nModels === 0) return 'Create a new detector and start training';
+    if (nModels > 1) return 'Select exactly 1 detector';
     const model = this.resolvedSelectedModels[0];
     const dataset = this.resolvedSelectedDatasets[0];
     if (model && dataset && model.media_type !== dataset.media_type) {
       return 'Media type mismatch';
     }
-    return 'Open Train Mode with the selected dataset and model';
+    return 'Open Train Mode with the selected dataset and detector';
   }
 
   private storeSelectedModelTextQuery(): void {
@@ -1319,14 +1361,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private startFindProgressPolling(): void {
     this.findPolling$.next(); // cancel previous
-    timer(0, 500)
-      .pipe(
-        takeUntil(this.findPolling$),
-        takeUntil(this.destroy$),
-        switchMap(() => this.detectorsApi.getFindProgress().pipe(
-          catchError(() => EMPTY),
-        )),
-      )
+    this.progressEvents.find$
+      .pipe(takeUntil(this.findPolling$), takeUntil(this.destroy$))
       .subscribe({
         next: (progress: any) => {
           if (!progress || progress.status === 'idle') return;
@@ -1426,11 +1462,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
         this.findResultsOpen = true;
       },
-      error: (err) => {
+      error: () => {
         this.stopFindProgressPolling();
         this.datasetState.setLoading(false);
         this.progressIndeterminate = false;
-        this.dialog.alert(err.error?.error || 'Find failed.', 'error');
+        // Global error interceptor surfaces the failure in the banner.
       },
     });
   }

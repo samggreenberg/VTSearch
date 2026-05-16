@@ -423,16 +423,6 @@ class TestTextsortSuggestionsContract:
         assert "my suggestion" in data["suggestions"]
 
 
-class TestSortProgressContract:
-    """GET /api/sort/progress response shape."""
-
-    def test_returns_json(self, client):
-        resp = client.get("/api/sort/progress")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert isinstance(data, dict)
-
-
 class TestDiversityTreeContract:
     """GET/POST /api/diversity-tree/next response shape."""
 
@@ -549,46 +539,77 @@ class TestErrorResponseFormat:
         assert "error" in data
 
     def test_400_sort_error_is_json(self, client):
+        # The sort blueprint now returns flask-smorest's standard error
+        # envelope: empty / whitespace ``text`` is a handler-level reject
+        # that surfaces as 400 with ``message`` (not the legacy
+        # ``{"error": str}`` shape). Keeping the test name for grep
+        # continuity.
         resp = client.post("/api/sort", json={"text": ""})
         assert resp.status_code == 400
         data = resp.get_json()
-        assert "error" in data
+        assert "message" in data
 
     def test_400_vote_error_is_json(self, client):
+        # The media-vote blueprint now uses flask-smorest's standard
+        # error envelope: a ``vote`` value that fails the OneOf check
+        # surfaces as 422 with a per-field ``errors`` dict, not the
+        # legacy ``{"error": str}`` shape. Keeping the test name for
+        # grep continuity.
         resp = client.post("/api/medias/1/vote", json={"vote": "invalid"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
         data = resp.get_json()
-        assert "error" in data
+        assert "errors" in data
 
     def test_400_inclusion_error_is_json(self, client):
+        # The sorting blueprint now returns flask-smorest's standard
+        # error envelope: type mismatches surface as 422 with a per-field
+        # ``errors`` dict, not the legacy ``{"error": str}`` shape.
+        # Keeping the test name for grep continuity.
         resp = client.post("/api/inclusion", json={"inclusion": "not_a_number"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
         data = resp.get_json()
-        assert "error" in data
+        assert "errors" in data
 
     def test_400_safe_thresholds_error_is_json(self, client):
+        # The sorting blueprint now returns flask-smorest's standard
+        # error envelope: type mismatches surface as 422 with a per-field
+        # ``errors`` dict, not the legacy ``{"error": str}`` shape.
+        # Keeping the test name for grep continuity.
         resp = client.post("/api/safe-thresholds", json={"safe_thresholds": "not_a_bool"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
         data = resp.get_json()
-        assert "error" in data
+        assert "errors" in data
 
     def test_400_labels_import_error_is_json(self, client):
+        # The labels blueprint now returns flask-smorest's standard
+        # error envelope: type mismatches surface as 422 with a
+        # per-field ``errors`` dict, not the legacy ``{"error": str}``
+        # shape. Keeping the test name for grep continuity.
         resp = client.post("/api/labels/import", json={"labels": "not_a_list"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
         data = resp.get_json()
-        assert "error" in data
+        assert "errors" in data
 
     def test_400_settings_error_is_json(self, client):
+        # The settings blueprint now returns flask-smorest's standard
+        # error envelope: type mismatches surface as 422 with a
+        # per-field ``errors`` dict, not the legacy ``{"error": str}``
+        # shape. Keeping the test name for grep continuity.
         resp = client.put("/api/settings", json={"volume": "not_a_number"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
         data = resp.get_json()
-        assert "error" in data
+        assert "errors" in data
 
     def test_400_learned_sort_no_votes_is_json(self, client):
+        # The sorting blueprint now returns flask-smorest's standard
+        # error envelope: handler-level rejects (no good/bad votes)
+        # surface as 400 with ``message``, not the legacy
+        # ``{"error": str}`` shape. Keeping the test name for grep
+        # continuity.
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
         data = resp.get_json()
-        assert "error" in data
+        assert "message" in data
 
     def test_404_unknown_exporter_is_json(self, client):
         resp = client.post(
@@ -613,10 +634,6 @@ class TestApiCacheControl:
 
     def test_datasets_registry_no_store(self, client):
         resp = client.get("/api/datasets/registry")
-        assert resp.headers.get("Cache-Control") == "no-store"
-
-    def test_loading_tasks_no_store(self, client):
-        resp = client.get("/api/dataset/loading-tasks")
         assert resp.headers.get("Cache-Control") == "no-store"
 
     def test_dataset_status_no_store(self, client):

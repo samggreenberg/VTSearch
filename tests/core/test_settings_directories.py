@@ -81,4 +81,6 @@ class TestDirectorySettingsAPI:
 
     def test_update_dir_non_string_rejected(self, client):
         res = client.put("/api/settings", json={"detectors_dir": 123})
-        assert res.status_code == 400
+        # ``detectors_dir`` is declared as a string in the SettingsUpdate
+        # schema → type validation in marshmallow → 422.
+        assert res.status_code == 422

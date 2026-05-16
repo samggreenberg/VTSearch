@@ -177,6 +177,114 @@ class SoundTilingClipper(MediaClipper):
         return d
 
 
+class SoundAutoClipper(MediaClipper):
+    """Pass-through for short audio, tile longer audio.
+
+    Designed as the recommended default in the importer picker. The
+    decision is made once per dataset: if the median media duration
+    exceeds *threshold*, the clipper resolves to a
+    :class:`SoundTilingClipper` with the configured *tile_duration*;
+    otherwise it resolves to :class:`SoundDefaultClipper`.
+
+    The chosen concrete clipper is what gets recorded in each clip's
+    origin, so cross-dataset replay is deterministic.
+    """
+
+    def __init__(self, threshold: float = 30.0, tile_duration: float = 10.0) -> None:
+        if threshold <= 0:
+            raise ValueError("threshold must be positive")
+        if tile_duration <= 0:
+            raise ValueError("tile_duration must be positive")
+        self._threshold = threshold
+        self._tile_duration = tile_duration
+
+    @property
+    def name(self) -> str:
+        return "sound_auto"
+
+    @property
+    def media_type(self) -> str:
+        return "audio"
+
+    @property
+    def display_name(self) -> str:
+        return "Auto (recommended)"
+
+    @property
+    def description(self) -> str:
+        return (
+            f"Pass short audio through unchanged; tile audio longer than "
+            f"{self._threshold:g}s into {self._tile_duration:g}s segments."
+        )
+
+    @property
+    def threshold(self) -> float:
+        return self._threshold
+
+    @property
+    def tile_duration(self) -> float:
+        return self._tile_duration
+
+    def resolve_for_durations(self, durations: list[float]) -> "MediaClipper":
+        if not durations:
+            return SoundDefaultClipper()
+        median = sorted(durations)[len(durations) // 2]
+        if median > self._threshold:
+            return SoundTilingClipper(self._tile_duration)
+        return SoundDefaultClipper()
+
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        # Fallback path for direct use (outside the load pipeline).
+        # The load pipeline resolves auto → concrete before calling clip(),
+        # so this code only runs if someone uses SoundAutoClipper directly.
+        wav_bytes = media.get("media_bytes")
+        if wav_bytes is None:
+            return [media]
+        try:
+            duration = _wav_duration(wav_bytes)
+        except Exception:
+            return [media]
+        if duration > self._threshold:
+            return SoundTilingClipper(self._tile_duration).clip(media)
+        return SoundDefaultClipper().clip(media)
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": "threshold",
+                "label": "Auto-tile threshold (seconds)",
+                "description": "Audio longer than this is automatically tiled into segments.",
+                "type": "number",
+                "default": self._threshold,
+                "min": 1,
+                "max": 600,
+                "step": 1,
+            },
+            {
+                "key": "tile_duration",
+                "label": "Tile length when tiling (seconds)",
+                "description": "Segment length used when auto-tiling is triggered.",
+                "type": "number",
+                "default": self._tile_duration,
+                "min": 0.5,
+                "max": 300,
+                "step": 0.5,
+            },
+        ]
+
+    def with_params(self, params: dict[str, Any]) -> "SoundAutoClipper":
+        threshold = float(params.get("threshold", self._threshold))
+        tile_duration = float(params.get("tile_duration", self._tile_duration))
+        return SoundAutoClipper(threshold=threshold, tile_duration=tile_duration)
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["threshold"] = self._threshold
+        d["tile_duration"] = self._tile_duration
+        return d
+
+
 class SoundClipClipper(MediaClipper):
     """Extract a single user-specified ``[start, end)`` slice from an audio media.
 

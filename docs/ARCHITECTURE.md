@@ -565,7 +565,7 @@ auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
 `inclusion`, `enrich_descriptions`, `safe_thresholds`, `calibrate_count`,
 `calibration_fraction`, `audio_playing`, `swipe_animation`,
 `show_metadata`, `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`,
-`panel_pct_*` (per-media-type layout), `autoload_media_embedders`,
+`panel_pct_*` (per-media-type layout),
 `autopilot_enabled`, `hide_autopilot`, `autopilot_top_greens`,
 `autopilot_hard_reds`, `autopilot_goal_diversity`,
 `autorun_detectors`, and infrastructure directories
@@ -574,8 +574,8 @@ See `_DEFAULTS` in `settings.py` for the full list.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
 
 Trainable models are persisted as JSON files in `data/detectors/`
-via the `detectors_bp` route blueprint.  Each stores a name,
-text query, media type, examples list, and labelset.
+via the `detectors_crud_bp` / `detectors_labels_bp` route blueprints.
+Each stores a name, text query, media type, examples list, and labelset.
 
 **Primarily Flask routes mutate this state.**  Most ML and dataset
 functions accept state as parameters — so you can use the ML code in a

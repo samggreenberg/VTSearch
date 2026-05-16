@@ -291,7 +291,6 @@ class TestModelLoadEndpoints:
             json={
                 "name": name,
                 "media_type": "audio",
-                "trainable": True,
                 "text_query": "test",
             },
         )
@@ -374,9 +373,9 @@ class TestModelLoadingTasks:
     """Test the model loading tasks progress API."""
 
     def test_loading_tasks_empty(self, client):
-        res = client.get("/api/detectors/loading-tasks")
-        assert res.status_code == 200
-        assert res.get_json()["tasks"] == []
+        from vtsearch.concurrency.progress import detector_loading_tasks
+
+        assert detector_loading_tasks.list_tasks() == []
 
     def test_cancel_nonexistent_task(self, client):
         res = client.post("/api/detectors/cancel/nonexistent")

@@ -28,10 +28,12 @@ describe('DashboardComponent', () => {
   function flushInitialRequests(
     datasets: any[] = [],
     detectors: any[] = [],
+    importers: any[] = [],
   ): void {
     fixture.detectChanges();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors });
+    httpMock.expectOne('/api/dataset/all-importers').flush({ importers, tabs: [] });
   }
 
   it('should create', () => {
@@ -270,7 +272,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       component.selectedDatasetIds.add('d1');
       component.selectedDetectorIds.clear();
-      expect(component.labelHint).toBe('Select a model');
+      expect(component.labelHint).toBe('Select a detector');
     });
 
     it('should hint about multiple datasets', () => {
@@ -285,7 +287,7 @@ describe('DashboardComponent', () => {
       component.selectedDatasetIds.add('d1');
       component.selectedDetectorIds.add('m1');
       component.selectedDetectorIds.add('m2');
-      expect(component.labelHint).toBe('Select exactly 1 model');
+      expect(component.labelHint).toBe('Select exactly 1 detector');
     });
 
     it('should hint about media type mismatch', () => {
@@ -299,7 +301,7 @@ describe('DashboardComponent', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
-      expect(component.labelHint).toBe('Open Train Mode with the selected dataset and model');
+      expect(component.labelHint).toBe('Open Train Mode with the selected dataset and detector');
     });
   });
 
@@ -308,7 +310,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
       component.selectedDetectorIds.clear();
-      expect(component.findHint).toBe('Select a dataset and a model');
+      expect(component.findHint).toBe('Select a dataset and a detector');
     });
 
     it('should hint about missing dataset', () => {
@@ -322,7 +324,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       component.selectedDatasetIds.add('d1');
       component.selectedDetectorIds.clear();
-      expect(component.findHint).toBe('Select a model');
+      expect(component.findHint).toBe('Select a detector');
     });
 
     it('should hint about media type mismatch', () => {
@@ -336,14 +338,14 @@ describe('DashboardComponent', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
-      expect(component.findHint).toBe('Score selected datasets with selected models');
+      expect(component.findHint).toBe('Score selected datasets with selected detectors');
     });
 
     it('should hint about untrained model', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0 }];
       flushInitialRequests(datasets, models);
-      expect(component.findHint).toBe('Selected model has no training labels');
+      expect(component.findHint).toBe('Selected detector has no training labels');
     });
   });
 
@@ -392,11 +394,71 @@ describe('DashboardComponent', () => {
     expect(component.importerModalOpen).toBeFalse();
   });
 
-  it('should render empty state when no datasets', () => {
+  it('should render welcome banner when no datasets', () => {
     flushInitialRequests();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.empty-state')?.textContent).toContain('No datasets yet');
+    const banner = el.querySelector('.welcome-banner');
+    expect(banner).toBeTruthy();
+    expect(banner?.textContent || '').toContain('Welcome');
+  });
+
+  describe('welcome banner', () => {
+    it('should default to pushing Server Folder when no Services importers are registered', () => {
+      flushInitialRequests([], [], [
+        { name: 'server_folder', category: 'server' },
+        { name: 'demo', category: 'demo' },
+      ]);
+      expect(component.welcomeBannerMessage).toContain('Server Folder');
+      expect(component.welcomeBannerCtaLabel).toBe('Open Server');
+      expect(component.welcomeBannerCtaTab).toBe('server');
+    });
+
+    it('should name a single Services importer when exactly one is registered', () => {
+      flushInitialRequests([], [], [
+        { name: 'recaller', display_name: 'ReCaller', category: 'services' },
+        { name: 'server_folder', category: 'server' },
+      ]);
+      expect(component.welcomeBannerMessage).toContain('ReCaller');
+      expect(component.welcomeBannerMessage).toContain('Services');
+      expect(component.welcomeBannerCtaLabel).toBe('Open Services');
+      expect(component.welcomeBannerCtaTab).toBe('services');
+    });
+
+    it('should use generic wording when multiple Services importers are registered', () => {
+      flushInitialRequests([], [], [
+        { name: 'recaller', display_name: 'ReCaller', category: 'services' },
+        { name: 'other_service', display_name: 'Other', category: 'services' },
+      ]);
+      expect(component.welcomeBannerMessage).not.toContain('ReCaller');
+      expect(component.welcomeBannerMessage).toContain('Services');
+      expect(component.welcomeBannerCtaLabel).toBe('Open Services');
+      expect(component.welcomeBannerCtaTab).toBe('services');
+    });
+
+    it('should ignore hidden_from_picker importers when picking the welcome branch', () => {
+      flushInitialRequests([], [], [
+        { name: 'recaller', display_name: 'ReCaller', category: 'services', hidden_from_picker: true },
+        { name: 'server_folder', category: 'server' },
+      ]);
+      expect(component.servicesImporters.length).toBe(0);
+      expect(component.welcomeBannerMessage).toContain('Server Folder');
+    });
+
+    it('should open the importer modal pre-pinned to the chosen tab', () => {
+      flushInitialRequests();
+      component.openImporterModalOnTab('services');
+      expect(component.importerModalOpen).toBeTrue();
+      expect(component.importerInitialTab).toBe('services');
+    });
+
+    it('should reset the initial tab when the modal closes', () => {
+      flushInitialRequests();
+      component.openImporterModalOnTab('server');
+      expect(component.importerInitialTab).toBe('server');
+      component.closeImporterModal();
+      expect(component.importerInitialTab).toBe('');
+    });
   });
 
   it('should render dataset table when datasets exist', () => {

@@ -47,7 +47,7 @@ def validate_url(url: str) -> str:
         raise ValueError(f"Could not resolve hostname: {hostname}")
 
     for family, _, _, _, sockaddr in infos:
-        ip_str = sockaddr[0]
+        ip_str = str(sockaddr[0])
         if _is_private_ip(ip_str):
             raise ValueError(
                 f"URL points to a private/internal network address ({ip_str}). Only publicly routable URLs are allowed."

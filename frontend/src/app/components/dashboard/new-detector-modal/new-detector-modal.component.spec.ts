@@ -22,8 +22,8 @@ describe('NewDetectorModalComponent', () => {
     // Flush the media types request from ngOnInit
     httpMock.expectOne('/api/media-types').flush({
       media_types: [
-        { type_id: 'audio', name: 'Audio', icon: 'audio', tab_title: 'Sounds' },
-        { type_id: 'image', name: 'Image', icon: 'image', tab_title: 'Images' },
+        { type_id: 'audio', name: 'Audio', icon: 'audio' },
+        { type_id: 'image', name: 'Image', icon: 'image' },
       ],
     });
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
@@ -127,5 +127,65 @@ describe('NewDetectorModalComponent', () => {
     spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
+  });
+
+  it('should not lock media type when no default is provided', () => {
+    expect(component.mediaTypeLocked).toBeFalse();
+  });
+
+  it('should ignore toggleMediaTypeDropdown when locked', () => {
+    component.mediaTypeLocked = true;
+    component.mediaTypeDropdownOpen = false;
+    component.toggleMediaTypeDropdown();
+    expect(component.mediaTypeDropdownOpen).toBeFalse();
+  });
+
+  it('should open dropdown via toggle when unlocked', () => {
+    component.mediaTypeLocked = false;
+    component.mediaTypeDropdownOpen = false;
+    component.toggleMediaTypeDropdown();
+    expect(component.mediaTypeDropdownOpen).toBeTrue();
+  });
+
+  it('should unlock media type on explicit unlock', () => {
+    component.mediaTypeLocked = true;
+    component.unlockMediaType();
+    expect(component.mediaTypeLocked).toBeFalse();
+  });
+});
+
+describe('NewDetectorModalComponent with defaultMediaType', () => {
+  let component: NewDetectorModalComponent;
+  let fixture: ComponentFixture<NewDetectorModalComponent>;
+  let httpMock: HttpTestingController;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [NewDetectorModalComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(NewDetectorModalComponent);
+    component = fixture.componentInstance;
+    component.defaultMediaType = 'image';
+    httpMock = TestBed.inject(HttpTestingController);
+    fixture.detectChanges();
+
+    httpMock.expectOne('/api/media-types').flush({
+      media_types: [
+        { type_id: 'audio', name: 'Audio', icon: 'audio' },
+        { type_id: 'image', name: 'Image', icon: 'image' },
+      ],
+    });
+    // No /api/datasets/registry call when defaultMediaType is provided.
+  });
+
+  afterEach(() => {
+    httpMock.verify();
+  });
+
+  it('should lock media type to the active dataset type', () => {
+    expect(component.mediaType).toBe('image');
+    expect(component.mediaTypeLocked).toBeTrue();
   });
 });

@@ -177,13 +177,20 @@ class TestSafeThresholdsAPI:
         resp = client.get("/api/safe-thresholds")
         assert resp.get_json()["safe_thresholds"] is True
 
-    def test_post_non_boolean_returns_400(self, client):
+    def test_post_non_boolean_returns_422(self, client):
+        # Schema-level validation: the marshmallow
+        # ``SafeThresholdsRequestSchema`` rejects non-boolean values as
+        # 422 with the standard ``errors`` envelope.
         resp = client.post("/api/safe-thresholds", json={"safe_thresholds": "yes"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        assert "safe_thresholds" in resp.get_json()["errors"]["json"]
 
-    def test_post_missing_field_returns_400(self, client):
+    def test_post_missing_field_returns_422(self, client):
+        # Schema-level validation: missing required ``safe_thresholds`` →
+        # 422 with the standard ``errors`` envelope.
         resp = client.post("/api/safe-thresholds", json={})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        assert "safe_thresholds" in resp.get_json()["errors"]["json"]
 
 
 class TestSafeThresholdsEval:
@@ -393,9 +400,10 @@ class TestCalibrationFractionAPI:
         data = resp.get_json()
         assert data["calibration_fraction"] == pytest.approx(0.3)
 
-    def test_put_invalid_type_returns_400(self, client):
+    def test_put_invalid_type_returns_422(self, client):
         resp = client.put("/api/settings", json={"calibration_fraction": "bad"})
-        assert resp.status_code == 400
+        # Type validation runs in the SettingsUpdate schema → 422.
+        assert resp.status_code == 422
 
     def test_put_persists(self, client):
         client.put("/api/settings", json={"calibration_fraction": 0.15})

@@ -62,7 +62,7 @@ class SpeechExtractor(Extractor):
     def load_model(self) -> None:
         if self._model is not None:
             return
-        import whisper  # noqa: PLC0415
+        import whisper  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
         self._model = whisper.load_model(self._model_size)
 

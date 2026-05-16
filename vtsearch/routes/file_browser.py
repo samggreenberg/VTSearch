@@ -4,6 +4,15 @@ Provides a generic file-browser API so the frontend can let users navigate
 the server filesystem and pick files — instead of having to type paths
 by hand.
 
+Migrated to ``flask_smorest`` so the route is described in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``. Schema-level
+failures (e.g. unparseable query params) surface as 422 with the
+standard ``errors`` envelope; handler-level rejects (path traversal,
+permission denied) keep their HTTP codes (400 / 403) with the standard
+``message`` envelope. 404s are intercepted by the app-level
+``NotFound`` errorhandler in ``app.py`` and keep the legacy
+``{"error": "Not Found", "request_id": ...}`` shape.
+
 Endpoints
 ---------
 GET  /api/browse
@@ -14,13 +23,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask_smorest import Blueprint, abort
 
 from vtsearch.routes._shared import format_mtime
+from vtsearch.schemas.file_browser import BrowseQuerySchema, BrowseResponseSchema
 
 import vtsearch.security.path_validation as _paths
 
-file_browser_bp = Blueprint("file_browser", __name__)
+file_browser_bp = Blueprint(
+    "file_browser",
+    __name__,
+    description="Server-side file browser for picking files from the user's allowed root.",
+)
 
 
 def _get_browse_root() -> Path:
@@ -40,33 +54,23 @@ def _get_browse_root() -> Path:
 
 
 @file_browser_bp.route("/api/browse")
-def browse():
+@file_browser_bp.arguments(BrowseQuerySchema, location="query")
+@file_browser_bp.response(200, BrowseResponseSchema)
+@file_browser_bp.alt_response(400, description="Invalid path (traversal blocked).")
+@file_browser_bp.alt_response(403, description="Permission denied reading the requested directory.")
+@file_browser_bp.alt_response(404, description="Directory not found within the allowed root.")
+def browse(query: dict):
     """List directories and files at a relative path.
 
-    Query parameters:
-
-    * ``path`` — relative path within the allowed root (default ``""``).
-    * ``extensions`` — comma-separated list of file extensions to show,
-      e.g. ``".csv,.json"``.  When omitted all files are listed.
-
-    Returns::
-
-        {
-            "directories": [{"name": "subdir", "path": "subdir"}, ...],
-            "files": [
-                {"name": "my_labels.csv", "path": "my_labels.csv", "size_bytes": 1234},
-                ...
-            ],
-            "current_path": "data/labels",
-            "root": "/home/user/project"
-        }
+    Returns a directories+files listing with names, relative paths,
+    modification times, and (for files) sizes in bytes. The server's
+    absolute root is intentionally omitted from the response.
     """
-    subpath = request.args.get("path", "").strip()
-    extensions_param = request.args.get("extensions", "").strip()
+    subpath = query["path"].strip()
+    extensions_param = query["extensions"].strip()
 
     root = _get_browse_root().resolve()
 
-    # Parse optional extension filter
     allowed_exts: set[str] | None = None
     if extensions_param:
         allowed_exts = set()
@@ -77,7 +81,6 @@ def browse():
             if ext:
                 allowed_exts.add(ext)
 
-    # Resolve target, preventing traversal
     if subpath:
         target = (root / subpath).resolve()
     else:
@@ -86,10 +89,10 @@ def browse():
     try:
         target.relative_to(root)
     except ValueError:
-        return jsonify({"error": "Invalid path"}), 400
+        abort(400, message="Invalid path")
 
     if not target.is_dir():
-        return jsonify({"error": "Directory not found"}), 404
+        abort(404, message="Directory not found")
 
     directories: list[dict] = []
     files: list[dict] = []
@@ -97,7 +100,7 @@ def browse():
     try:
         entries = sorted(target.iterdir())
     except PermissionError:
-        return jsonify({"error": "Permission denied"}), 403
+        abort(403, message="Permission denied")
 
     for entry in entries:
         if entry.name.startswith("."):
@@ -116,10 +119,8 @@ def browse():
 
     current_path = str(target.relative_to(root)) if target != root else ""
 
-    return jsonify(
-        {
-            "directories": directories,
-            "files": files,
-            "current_path": current_path,
-        }
-    )
+    return {
+        "directories": directories,
+        "files": files,
+        "current_path": current_path,
+    }

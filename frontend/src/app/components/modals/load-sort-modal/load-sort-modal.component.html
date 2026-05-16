@@ -91,13 +91,13 @@
     </div>
   } @else {
     <div class="load-sort-sections">
-      <!-- Sort by Trained Model -->
+      <!-- Sort by Trained Detector -->
       <div class="sort-section">
-        <h3 title="Load a trained model and use it to find matching items in the active dataset">Sort by Model</h3>
+        <h3 title="Load a trained detector and use it to find matching items in the active dataset">Sort by Detector</h3>
         @if (registryModels.length > 0) {
           <div class="file-list">
             @for (model of registryModels; track model.id) {
-              <button class="file-item" (click)="loadRegistryModel(model)" [title]="'Load model: ' + model.name">
+              <button class="file-item" (click)="loadRegistryModel(model)" [title]="'Load detector: ' + model.name">
                 {{ model.name }}
                 @if (model.num_training) {
                   <span class="item-meta">{{ model.num_training | number }} labels</span>
@@ -106,7 +106,7 @@
             }
           </div>
         } @else {
-          <p class="empty-state">No trained models found. Add some labels in the Dashboard first.</p>
+          <p class="empty-state">No trained detectors found. Add some labels in the Dashboard first.</p>
         }
       </div>
 

@@ -182,63 +182,6 @@
 }
 
 
-.embedder-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.embedder-grid-header {
-  display: grid;
-  grid-template-columns: 1fr 10rem;
-  gap: var(--space-md);
-  padding: 0 0 0.4rem calc(1.25rem + 0.5rem);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: var(--space-xs);
-}
-
-.embedder-row {
-  display: grid;
-  grid-template-columns: auto 1fr 10rem;
-  gap: var(--space-md);
-  align-items: center;
-  padding: 0.35rem 0;
-  font-size: var(--font-md);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: background 0.1s;
-
-  &:hover {
-    background: var(--bg-secondary);
-  }
-
-  input[type='checkbox'] {
-    margin: 0;
-  }
-}
-
-.embedder-name {
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.embedder-media-type {
-  color: var(--text-secondary);
-  font-size: var(--font-sm);
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.embedder-media-type-icon {
-  font-size: var(--font-xl);
-}
-
 .settings-tab-icon {
   transition: transform 0.4s ease;
   transform: rotate(0deg);
@@ -261,4 +204,16 @@
   font-family: var(--font-mono, monospace);
   color: var(--text-secondary);
   user-select: text;
+}
+
+.settings-saved {
+  display: inline-flex;
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  user-select: none;
+
+  &--visible { opacity: 1; }
 }

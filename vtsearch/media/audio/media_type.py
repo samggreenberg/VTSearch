@@ -128,10 +128,6 @@ class AudioMediaType(MediaType):
         return "audio"
 
     @property
-    def tab_title(self) -> str:
-        return "Sounds"
-
-    @property
     def dir_key(self) -> str:
         return "audio_dir"
 

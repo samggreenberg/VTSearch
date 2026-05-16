@@ -74,7 +74,9 @@ class ConcurrencyGate:
 # one dataset download while another is still embedding, instead of forcing
 # strict end-to-end serialisation.  Limits are user-configurable via the
 # ``max_concurrent_dataset_downloads`` and ``max_concurrent_dataset_embeddings``
-# settings (defaults: 1 each, matching the previous behaviour).
+# settings; defaults derive from the host's CPU/GPU counts (see
+# :func:`vtsearch.embedding.loader.default_concurrent_downloads` and
+# :func:`vtsearch.embedding.loader.default_concurrent_embeddings`).
 _download_gate = ConcurrencyGate(get_max_concurrent_dataset_downloads)
 _embed_gate = ConcurrencyGate(get_max_concurrent_dataset_embeddings)
 
@@ -144,7 +146,7 @@ def _get_embedder_for_clips():
 
 
 def _load_embedder_with_progress(
-    media_dict: dict,
+    media_dict: dict | None,
     progress_fn,
     step: int | None = None,
     total_steps: int | None = None,
@@ -262,6 +264,13 @@ def _apply_clipper(
 
     if clipper_params:
         clipper = clipper.with_params(clipper_params)
+
+    # Resolve auto-selecting clippers to a concrete clipper for the
+    # whole dataset based on its typical media duration.  Non-auto
+    # clippers return self, so this is a no-op for them.
+    durations = [float(m.get("duration", 0) or 0) for m in clips_dict.values()]
+    clipper = clipper.resolve_for_durations(durations)
+    clipper_name = clipper.name
 
     # Extract the effective clipper parameter values so they can be
     # stored in each clip's origin.  This uses to_dict() which concrete
@@ -398,14 +407,17 @@ def _fixup_clip_md5_and_embeddings(
 
     Without the MD5 fix, all clips from the same parent would share the
     parent's MD5 (causing ``collapse_duplicates`` to merge them).
+
+    Embeddings are batched through ``embed_media_bulk`` in a single call
+    per invocation so GPU-backed embedders can fuse the forward pass.
+    Failures fall back to keeping the clip's existing embedding.
     """
     import hashlib
 
     total_clips = len(clips)
+    embed_indices: list[int] = []
+    embed_inputs: list[dict] = []
     for clip_idx, (clip, recompute) in enumerate(zip(clips, needs_recompute)):
-        if on_progress:
-            on_progress(clip_idx, total_clips, "embedding")
-
         # Also embed clips that have no embedding (e.g. when the import
         # phase skipped embedding because a clipper was specified).
         needs_embed = recompute or clip.get("embedding") is None
@@ -413,19 +425,61 @@ def _fixup_clip_md5_and_embeddings(
             continue
 
         content_bytes = _clip_content_bytes(clip, media_type)
-        if content_bytes is not None:
+        if content_bytes is None:
             if recompute:
-                clip["md5"] = hashlib.md5(content_bytes).hexdigest()
-            _reembed_clip(clip, content_bytes, media_type)
-        elif recompute:
-            # Metadata-only clips (e.g. video): bytes unchanged but
-            # boundaries differ — create a unique MD5 by hashing the
-            # parent bytes + clip boundaries so dedup doesn't collapse
-            # distinct clips.
-            parent_bytes = clip.get("media_bytes", b"")
-            boundary_tag = f"|clip_start={clip.get('clip_start')}|clip_end={clip.get('clip_end')}"
-            combined = hashlib.md5(parent_bytes).hexdigest() + boundary_tag
-            clip["md5"] = hashlib.md5(combined.encode()).hexdigest()
+                # Metadata-only clips (e.g. video): bytes unchanged but
+                # boundaries differ — create a unique MD5 by hashing the
+                # parent bytes + clip boundaries so dedup doesn't collapse
+                # distinct clips.
+                parent_bytes = clip.get("media_bytes", b"")
+                boundary_tag = f"|clip_start={clip.get('clip_start')}|clip_end={clip.get('clip_end')}"
+                combined = hashlib.md5(parent_bytes).hexdigest() + boundary_tag
+                clip["md5"] = hashlib.md5(combined.encode()).hexdigest()
+            continue
+
+        if recompute:
+            clip["md5"] = hashlib.md5(content_bytes).hexdigest()
+        embed_indices.append(clip_idx)
+        embed_inputs.append(_build_clip_embed_input(clip, media_type))
+
+    if not embed_indices:
+        return
+
+    if on_progress:
+        on_progress(0, total_clips, "embedding")
+
+    embedder = _resolve_clip_embedder(media_type)
+    if embedder is None:
+        return
+
+    def _clip_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+        if on_progress:
+            # Map the embedder's batch-level progress back to clip-list
+            # coordinates so the existing on_progress(current, total, phase)
+            # contract keeps reporting against total_clips.
+            scaled = min(total_clips, int(current * len(embed_indices) / max(1, total)))
+            on_progress(scaled, total_clips, "embedding")
+
+    original_cb = embedder._on_progress
+    embedder._on_progress = _clip_progress
+    try:
+        vectors = embedder.embed_media_bulk(embed_inputs)
+    except Exception:
+        import logging as _logging
+
+        _logging.getLogger(__name__).exception(
+            "Bulk clip re-embed failed for media_type=%s (%d clips)", media_type, len(embed_indices)
+        )
+        return
+    finally:
+        embedder._on_progress = original_cb
+
+    for slot, vec in zip(embed_indices, vectors):
+        if vec is not None:
+            clips[slot]["embedding"] = vec
+
+    if on_progress:
+        on_progress(total_clips, total_clips, "embedding")
 
 
 def _clip_content_bytes(clip: dict, media_type: str) -> bytes | None:
@@ -447,37 +501,46 @@ def _clip_content_bytes(clip: dict, media_type: str) -> bytes | None:
     return None
 
 
-def _reembed_clip(clip: dict, content_bytes: bytes, media_type: str) -> None:
-    """Re-embed a clip from its actual content bytes."""
-    import os
-    import tempfile
-    from pathlib import Path
+def _build_clip_embed_input(clip: dict, media_type: str) -> dict:
+    """Build the minimal media dict a bulk embedder needs for a clip.
 
+    Hands the embedder the in-memory ``media_bytes`` (audio/image) or
+    ``media_string`` (text) so the bulk surface never has to round-trip
+    the content through a tempfile.  Preserves ``origin_name`` and
+    ``filename`` so embedders that surface diagnostic paths still log
+    something useful.
+    """
+    base: dict = {
+        "origin_name": clip.get("origin_name", ""),
+        "filename": clip.get("filename", ""),
+    }
+    if media_type == "text":
+        base["media_string"] = clip.get("media_string", "")
+    else:
+        base["media_bytes"] = clip.get("media_bytes")
+    return base
+
+
+def _resolve_clip_embedder(media_type: str):
+    """Pick the default embedder for *media_type* used by clip re-embed.
+
+    Mirrors the legacy ``embed_file`` fallback chain: first registered
+    embedder for the media type, or ``None`` if none are registered.
+    """
     try:
-        from vtsearch.detectors.resolver import embed_file
+        from vtsearch.media import embedders_for_type  # noqa: PLC0415
     except ImportError:
-        return
+        return None
+    avail = embedders_for_type(media_type)
+    if not avail:
+        import logging as _logging
 
-    # Determine file extension from media type.
-    ext_map = {"audio": ".wav", "image": ".png", "text": ".txt"}
-    ext = ext_map.get(media_type, ".bin")
-
-    fd, tmp_path = tempfile.mkstemp(suffix=ext)
-    try:
-        try:
-            os.write(fd, content_bytes)
-        finally:
-            os.close(fd)
-        embedding = embed_file(Path(tmp_path), media_type)
-        if embedding is not None:
-            clip["embedding"] = embedding
-    except Exception:
-        pass  # Keep parent embedding if re-embedding fails.
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+        _logging.getLogger(__name__).warning(
+            "clip re-embed: no embedders registered for media_type=%r — skipping bulk call",
+            media_type,
+        )
+        return None
+    return avail[0]
 
 
 def _auto_register_dataset(
@@ -608,6 +671,17 @@ def _run_origin_load_in_background(
     # that might still be intended for those in-flight tasks).
     if not loading_tasks.has_active_tasks():
         dataset_progress.reset_cancel()
+
+    # Remember the user's embedder pick per media type so the next dataset
+    # importer modal can pre-select it even when no loaded dataset is
+    # around to supply the same hint via ``guessedMediaEmbedder``.
+    if media_type and embedder:
+        from vtsearch.settings import set_last_embedder_for_media_type  # noqa: PLC0415
+
+        try:
+            set_last_embedder_for_media_type(media_type, embedder)
+        except Exception:
+            pass
 
     import time as _time
 

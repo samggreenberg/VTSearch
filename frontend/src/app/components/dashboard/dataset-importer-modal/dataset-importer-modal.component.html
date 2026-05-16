@@ -80,10 +80,24 @@
                 [ngModel]="selectedDemoEmbedder"
                 (ngModelChange)="onDemoEmbedderChange($event)"
               >
-                @for (embedder of demoEmbedders; track embedder.name) {
-                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                @if (recommendedEmbedders(demoEmbedders).length > 0) {
+                  <optgroup label="Recommended">
+                    @for (embedder of recommendedEmbedders(demoEmbedders); track embedder.name) {
+                      <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                    }
+                  </optgroup>
+                }
+                @if (advancedEmbedders(demoEmbedders).length > 0) {
+                  <optgroup label="Advanced ▾">
+                    @for (embedder of advancedEmbedders(demoEmbedders); track embedder.name) {
+                      <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                    }
+                  </optgroup>
                 }
               </select>
+              @if (selectedEmbedderRawId(selectedDemoEmbedder, demoEmbedders); as rawId) {
+                <small class="embedder-raw-id">{{ rawId }}</small>
+              }
             }
             @if (licenseNoticeFor(selectedDemoEmbedder, demoEmbedders); as notice) {
               <div class="license-warning" role="note">⚠ {{ notice }}</div>
@@ -179,7 +193,7 @@
                 [value]="formValues[field.key] || ''"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
                 [extensions]="field.accept || ''"
-                (pathSelected)="formValues[field.key] = $event"
+                (pathSelected)="formOnServerPathSelected(field.key, $event)"
               />
             } @else if (field.field_type === 'file') {
               <input
@@ -220,6 +234,54 @@
               @if (field.dynamic_options && dynamicFieldError[field.key]) {
                 <p class="error-text">{{ dynamicFieldError[field.key] }}</p>
               }
+            } @else if (field.key === 'dataset_name') {
+              <input
+                [id]="'field-' + field.key"
+                type="text"
+                class="form-input"
+                [ngModel]="formValues['dataset_name'] || ''"
+                (ngModelChange)="formOnDatasetNameInput($event)"
+                [placeholder]="field.description || field.label || field.key"
+              />
+            } @else if (field.field_type === 'number') {
+              <input
+                [id]="'field-' + field.key"
+                type="number"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+                [attr.min]="field.min || null"
+                [attr.max]="field.max || null"
+                [attr.step]="field.step || null"
+                (change)="onFormFieldChanged(field.key)"
+              />
+            } @else if (field.field_type === 'password') {
+              <input
+                [id]="'field-' + field.key"
+                type="password"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+                (change)="onFormFieldChanged(field.key)"
+              />
+            } @else if (field.field_type === 'email') {
+              <input
+                [id]="'field-' + field.key"
+                type="email"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+                (change)="onFormFieldChanged(field.key)"
+              />
+            } @else if (field.field_type === 'url') {
+              <input
+                [id]="'field-' + field.key"
+                type="url"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+                (change)="onFormFieldChanged(field.key)"
+              />
             } @else {
               <input
                 [id]="'field-' + field.key"
@@ -258,12 +320,34 @@
                   @for (f of converter.fields || []; track f.key) {
                     <label class="sf-spec-param">
                       {{ f.label || f.key }}:
-                      <input
-                        type="text"
-                        class="form-input sf-spec-param-input"
-                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                        (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
-                      />
+                      @if (f.field_type === 'select') {
+                        <select
+                          class="form-select sf-spec-param-input"
+                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
+                        >
+                          @for (opt of f.options || []; track opt) {
+                            <option [value]="opt">{{ opt }}</option>
+                          }
+                        </select>
+                      } @else if (f.field_type === 'number') {
+                        <input
+                          type="number"
+                          class="form-input sf-spec-param-input"
+                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                          [attr.min]="f.min || null"
+                          [attr.max]="f.max || null"
+                          [attr.step]="f.step || null"
+                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
+                        />
+                      } @else {
+                        <input
+                          [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"
+                          class="form-input sf-spec-param-input"
+                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
+                        />
+                      }
                     </label>
                   }
                 }
@@ -285,10 +369,24 @@
             class="form-select"
             [(ngModel)]="selectedEmbedder"
           >
-            @for (embedder of availableEmbedders; track embedder.name) {
-              <option [value]="embedder.name">{{ embedder.name }}</option>
+            @if (recommendedEmbedders(availableEmbedders).length > 0) {
+              <optgroup label="Recommended">
+                @for (embedder of recommendedEmbedders(availableEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                }
+              </optgroup>
+            }
+            @if (advancedEmbedders(availableEmbedders).length > 0) {
+              <optgroup label="Advanced ▾">
+                @for (embedder of advancedEmbedders(availableEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                }
+              </optgroup>
             }
           </select>
+          @if (selectedEmbedderRawId(selectedEmbedder, availableEmbedders); as rawId) {
+            <small class="embedder-raw-id">{{ rawId }}</small>
+          }
           @if (licenseNoticeFor(selectedEmbedder, availableEmbedders); as notice) {
             <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }
@@ -355,6 +453,9 @@
             <option [value]="opt">{{ getMediaTypeOptionLabel(opt) }}</option>
           }
         </select>
+        @if (detectionHint(lfDetection); as hint) {
+          <p class="detection-hint">{{ hint }}</p>
+        }
       </div>
 
       <div class="form-group sf-source-specs">
@@ -378,12 +479,34 @@
                 @for (f of converter.fields || []; track f.key) {
                   <label class="sf-spec-param">
                     {{ f.label || f.key }}:
-                    <input
-                      type="text"
-                      class="form-input sf-spec-param-input"
-                      [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                      (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
-                    />
+                    @if (f.field_type === 'select') {
+                      <select
+                        class="form-select sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
+                      >
+                        @for (opt of f.options || []; track opt) {
+                          <option [value]="opt">{{ opt }}</option>
+                        }
+                      </select>
+                    } @else if (f.field_type === 'number') {
+                      <input
+                        type="number"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        [attr.min]="f.min || null"
+                        [attr.max]="f.max || null"
+                        [attr.step]="f.step || null"
+                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
+                      />
+                    } @else {
+                      <input
+                        [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
+                      />
+                    }
                   </label>
                 }
               }
@@ -464,7 +587,8 @@
             <input
               id="lf-recursive"
               type="checkbox"
-              [(ngModel)]="lfRecursive"
+              [ngModel]="lfRecursive"
+              (ngModelChange)="lfOnRecursiveChange($event)"
             />
             Include subfolders
           </label>
@@ -479,10 +603,24 @@
             class="form-select"
             [(ngModel)]="lfSelectedEmbedder"
           >
-            @for (embedder of lfEmbedders; track embedder.name) {
-              <option [value]="embedder.name">{{ embedder.name }}</option>
+            @if (recommendedEmbedders(lfEmbedders).length > 0) {
+              <optgroup label="Recommended">
+                @for (embedder of recommendedEmbedders(lfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                }
+              </optgroup>
+            }
+            @if (advancedEmbedders(lfEmbedders).length > 0) {
+              <optgroup label="Advanced ▾">
+                @for (embedder of advancedEmbedders(lfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                }
+              </optgroup>
             }
           </select>
+          @if (selectedEmbedderRawId(lfSelectedEmbedder, lfEmbedders); as rawId) {
+            <small class="embedder-raw-id">{{ rawId }}</small>
+          }
           @if (licenseNoticeFor(lfSelectedEmbedder, lfEmbedders); as notice) {
             <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }
@@ -543,6 +681,9 @@
             <option [value]="opt">{{ getMediaTypeOptionLabel(opt) }}</option>
           }
         </select>
+        @if (detectionHint(sfDetection); as hint) {
+          <p class="detection-hint">{{ hint }}</p>
+        }
       </div>
 
       <div class="form-group sf-source-specs">
@@ -566,12 +707,34 @@
                 @for (f of converter.fields || []; track f.key) {
                   <label class="sf-spec-param">
                     {{ f.label || f.key }}:
-                    <input
-                      type="text"
-                      class="form-input sf-spec-param-input"
-                      [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                      (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
-                    />
+                    @if (f.field_type === 'select') {
+                      <select
+                        class="form-select sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
+                      >
+                        @for (opt of f.options || []; track opt) {
+                          <option [value]="opt">{{ opt }}</option>
+                        }
+                      </select>
+                    } @else if (f.field_type === 'number') {
+                      <input
+                        type="number"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        [attr.min]="f.min || null"
+                        [attr.max]="f.max || null"
+                        [attr.step]="f.step || null"
+                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
+                      />
+                    } @else {
+                      <input
+                        [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
+                      />
+                    }
                   </label>
                 }
               }
@@ -630,7 +793,8 @@
           <input
             id="sf-recursive"
             type="checkbox"
-            [(ngModel)]="sfRecursive"
+            [ngModel]="sfRecursive"
+            (ngModelChange)="sfOnRecursiveChange($event)"
           />
           Include subfolders
         </label>
@@ -644,10 +808,24 @@
             class="form-select"
             [(ngModel)]="sfSelectedEmbedder"
           >
-            @for (embedder of sfEmbedders; track embedder.name) {
-              <option [value]="embedder.name">{{ embedder.name }}</option>
+            @if (recommendedEmbedders(sfEmbedders).length > 0) {
+              <optgroup label="Recommended">
+                @for (embedder of recommendedEmbedders(sfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                }
+              </optgroup>
+            }
+            @if (advancedEmbedders(sfEmbedders).length > 0) {
+              <optgroup label="Advanced ▾">
+                @for (embedder of advancedEmbedders(sfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                }
+              </optgroup>
             }
           </select>
+          @if (selectedEmbedderRawId(sfSelectedEmbedder, sfEmbedders); as rawId) {
+            <small class="embedder-raw-id">{{ rawId }}</small>
+          }
           @if (licenseNoticeFor(sfSelectedEmbedder, sfEmbedders); as notice) {
             <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }

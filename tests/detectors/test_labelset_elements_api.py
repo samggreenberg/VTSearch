@@ -192,7 +192,7 @@ class TestLabelElementVote:
         )
         assert res.status_code == 404
 
-    def test_invalid_vote_value_400(self, client):
+    def test_invalid_vote_value_422(self, client):
         _seed_cross_dataset_model()
         detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         target = detail["good"][0]
@@ -200,7 +200,9 @@ class TestLabelElementVote:
             f"/api/detectors/cross-ds-model/labels/{target['id']}/vote",
             json={"vote": "maybe"},
         )
-        assert res.status_code == 400
+        # Schema-level OneOf validation → 422 with the standard errors envelope.
+        assert res.status_code == 422
+        assert "vote" in res.get_json()["errors"]["json"]
 
 
 # ---------------------------------------------------------------------------
@@ -368,14 +370,15 @@ def _load_detector_and_wait_local(client, detector_id, timeout=5.0):
     """
     import time
 
+    from vtsearch.concurrency.progress import detector_loading_tasks
     from vtsearch.state.core import get_detector_context, set_thread_detector_context
 
     res = client.post("/api/detectors/registry/load", json={"detector_id": detector_id})
     assert res.status_code in (200, 202), res.get_data(as_text=True)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        tasks = client.get("/api/detectors/loading-tasks").get_json().get("tasks", [])
-        if not [t for t in tasks if t.get("status") != "idle"]:
+        active = [t for t in detector_loading_tasks.list_tasks() if t.get("status") != "idle"]
+        if not active:
             break
         time.sleep(0.05)
 

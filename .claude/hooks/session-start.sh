@@ -17,6 +17,9 @@ elif [ "$current_branch" = "dev" ] || [ "$current_branch" = "main" ]; then
   echo "ℹ session-start: on $current_branch; skipping dev rebase." >&2
 elif ! git diff-index --quiet HEAD -- 2>/dev/null; then
   echo "‼ session-start: working tree dirty; skipping dev rebase to avoid clobbering changes." >&2
+elif git rev-parse --verify --quiet "refs/remotes/origin/$current_branch" >/dev/null \
+    && [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$current_branch")" ]; then
+  echo "‼ session-start: local $current_branch differs from origin/$current_branch (pushed work would be orphaned); skipping dev rebase." >&2
 else
   echo "ℹ session-start: fetching and rebasing $current_branch onto origin/dev..." >&2
   if git fetch origin --prune 2>&1 | sed 's/^/  /' >&2 \

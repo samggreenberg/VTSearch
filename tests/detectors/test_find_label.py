@@ -32,7 +32,10 @@ class TestFindLabel:
 
     def test_find_label_missing_model_id(self, client):
         resp = client.post("/api/find-label", json={})
-        assert resp.status_code == 400
+        # Schema validation: missing required `detector_id` → 422 with the
+        # standard flask-smorest errors envelope.
+        assert resp.status_code == 422
+        assert "detector_id" in resp.get_json()["errors"]["json"]
 
     def test_find_label_unknown_model_id(self, client):
         resp = client.post("/api/find-label", json={"detector_id": "does-not-exist"})

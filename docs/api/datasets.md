@@ -19,7 +19,6 @@ GET /api/media-types
       "type_id": "audio",
       "name": "Audio",
       "icon": "🔊",
-      "tab_title": "Sounds",
       "folder_import_name": "audio",
       "loops": true,
       "file_extensions": ["*.wav", "*.mp3"]
@@ -126,29 +125,28 @@ GET /api/dataset/status
 
 → `{"loaded": true, "num_medias": 500, "has_votes": true, "media_type": "audio", "display_name": "ESC-50", "num_dupes": 3}`
 
-### Dataset progress
+### Dataset progress (SSE)
 
-```
-GET /api/dataset/progress
-```
+Progress for dataset operations is streamed through the unified
+[`/api/events`](events.md) Server-Sent Events endpoint. Two channels
+carry dataset state:
 
-→ Progress object for long-running operations (loading, embedding, etc.):
+- `dataset` — the singleton dataset progress tracker (used by staging,
+  embedding, and other one-at-a-time operations):
 
-```json
-{"status": "loading", "message": "Embedding medias…", "cur": 50, "total": 500}
-```
+  ```json
+  {"status": "loading", "message": "Embedding medias…", "current": 50, "total": 500}
+  ```
 
-### Loading tasks
+- `loading-tasks` — array of all active dataset loading tasks:
 
-```
-GET /api/dataset/loading-tasks
-```
+  ```json
+  [{"task_id": "task_abc", "name": "ESC-50", "status": "loading", "message": "...", "current": 50, "total": 500}]
+  ```
 
-→ All active dataset loading tasks with their progress:
-
-```json
-{"tasks": [{"id": "task_abc", "name": "ESC-50", "status": "loading", "message": "...", "cur": 50, "total": 500}]}
-```
+Connect with `new EventSource('/api/events')` and listen for the
+`dataset` and `loading-tasks` events. The first frame on each channel
+is the current snapshot — no separate bootstrap call is needed.
 
 ### Cancel loading
 
@@ -254,7 +252,8 @@ POST /api/dataset/load-source
 
 → `{"ok": true, "message": "Loading started"}`
 
-All load endpoints are async — poll `GET /api/dataset/progress`.
+All load endpoints are async — subscribe to the `dataset` and
+`loading-tasks` channels on [`/api/events`](events.md) (SSE) for progress.
 
 ### Demo datasets
 

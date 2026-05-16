@@ -287,10 +287,13 @@ class TestExampleSortUpload:
 class TestExampleSortServer:
     """POST /api/example-sort-server — sort by a server-side file."""
 
-    def test_missing_filename_returns_400(self, client):
+    def test_missing_filename_returns_422(self, client):
+        # The example-sort-server schema declares ``filename`` as required,
+        # so an empty body fails schema-level validation with the standard
+        # flask-smorest 422 envelope.
         resp = client.post("/api/example-sort-server", json={})
-        assert resp.status_code == 400
-        assert "filename" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "filename" in resp.get_json()["errors"]["json"]
 
     def test_nonexistent_file_returns_404(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
@@ -324,20 +327,24 @@ class TestExampleSortServer:
 class TestExampleSortOrigin:
     """POST /api/example-sort-origin — sort by media resolved from an origin."""
 
-    def test_missing_origin_returns_400(self, client):
+    def test_missing_origin_returns_422(self, client):
+        # The example-sort-origin schema declares ``origin`` as required.
         resp = client.post("/api/example-sort-origin", json={"key": "foo.wav"})
-        assert resp.status_code == 400
-        assert "origin" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "origin" in resp.get_json()["errors"]["json"]
 
-    def test_missing_key_returns_400(self, client):
+    def test_missing_key_returns_422(self, client):
+        # The example-sort-origin schema declares ``key`` as required.
         resp = client.post(
             "/api/example-sort-origin",
             json={"origin": {"importer": "server_folder", "params": {"path": "/tmp"}}},
         )
-        assert resp.status_code == 400
-        assert "key" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "key" in resp.get_json()["errors"]["json"]
 
     def test_unknown_origin_type_returns_400(self, client):
+        # Origin shape itself is permissive; the handler rejects unknown
+        # importer types with a 400 + standard ``message`` envelope.
         resp = client.post(
             "/api/example-sort-origin",
             json={
@@ -370,15 +377,15 @@ class TestExampleSortOrigin:
 class TestExtractEndpoint:
     """POST /api/extract — run a single extractor."""
 
-    def test_missing_extractor_type_returns_400(self, client):
+    def test_missing_extractor_type_returns_422(self, client):
         resp = client.post("/api/extract", json={"name": "test", "config": {"foo": 1}})
-        assert resp.status_code == 400
-        assert "extractor_type" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "extractor_type" in str(resp.get_json()).lower()
 
-    def test_missing_config_returns_400(self, client):
+    def test_missing_config_returns_422(self, client):
         resp = client.post("/api/extract", json={"name": "test", "extractor_type": "image_class"})
-        assert resp.status_code == 400
-        assert "config" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "config" in str(resp.get_json()).lower()
 
     def test_unknown_type_returns_400(self, client):
         resp = client.post(
@@ -398,7 +405,7 @@ class TestExtractEndpoint:
         )
         # Default medias are audio; image_class extractor expects image
         assert resp.status_code == 400
-        assert "media type" in resp.get_json()["error"].lower()
+        assert "media type" in resp.get_json()["message"].lower()
 
     def test_no_medias_returns_400(self, client):
         saved = dict(medias)
@@ -413,7 +420,7 @@ class TestExtractEndpoint:
                 },
             )
             assert resp.status_code == 400
-            assert "No medias" in resp.get_json()["error"]
+            assert "No medias" in resp.get_json()["message"]
         finally:
             medias.clear()
             medias.update(saved)
@@ -428,7 +435,7 @@ class TestAutoExtractEndpoint:
         try:
             resp = client.post("/api/auto-extract")
             assert resp.status_code == 400
-            assert "No medias" in resp.get_json()["error"]
+            assert "No medias" in resp.get_json()["message"]
         finally:
             medias.clear()
             medias.update(saved)
@@ -436,7 +443,7 @@ class TestAutoExtractEndpoint:
     def test_no_autorun_extractors_returns_400(self, client):
         resp = client.post("/api/auto-extract")
         assert resp.status_code == 400
-        assert "No autorun extractors" in resp.get_json()["error"]
+        assert "No autorun extractors" in resp.get_json()["message"]
 
 
 class TestAutoLocalizeEndpoint:
@@ -448,7 +455,7 @@ class TestAutoLocalizeEndpoint:
         try:
             resp = client.post("/api/auto-localize")
             assert resp.status_code == 400
-            assert "No medias" in resp.get_json()["error"]
+            assert "No medias" in resp.get_json()["message"]
         finally:
             medias.clear()
             medias.update(saved)
@@ -456,7 +463,7 @@ class TestAutoLocalizeEndpoint:
     def test_no_autorun_localizers_returns_400(self, client):
         resp = client.post("/api/auto-localize")
         assert resp.status_code == 400
-        assert "No autorun localizers" in resp.get_json()["error"]
+        assert "No autorun localizers" in resp.get_json()["message"]
 
 
 # ===================================================================

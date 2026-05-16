@@ -9,11 +9,14 @@ import os
 import threading
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import numpy as np
 
 from vtsearch.media.base import ProgressCallback, _noop_progress
+
+if TYPE_CHECKING:
+    from vtsearch.media.patch_embed import PatchEmbedOutput
 
 __all__ = [
     "DEFAULT_EMBED_BATCH_SIZE",
@@ -339,7 +342,10 @@ def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "
     try:
         import transformers.modeling_utils as _tm  # noqa: PLC0415
 
-        _orig_smttd = _tm.set_module_tensor_to_device
+        # pyright: ignore[reportAttributeAccessIssue] — set_module_tensor_to_device
+        # is re-exported from accelerate at runtime but isn't in the transformers
+        # stubs. The AttributeError catch below handles missing-attribute drift.
+        _orig_smttd = _tm.set_module_tensor_to_device  # pyright: ignore[reportAttributeAccessIssue]
 
         def _tracked_smttd(*a: Any, **kw: Any) -> Any:
             r = _orig_smttd(*a, **kw)
@@ -347,7 +353,7 @@ def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "
             _report()
             return r
 
-        _tm.set_module_tensor_to_device = _tracked_smttd
+        _tm.set_module_tensor_to_device = _tracked_smttd  # pyright: ignore[reportAttributeAccessIssue]
         _patches.append((_tm, "set_module_tensor_to_device", _orig_smttd))
     except (ImportError, AttributeError):
         pass
@@ -431,6 +437,17 @@ class MediaEmbedder(ABC):
     @abstractmethod
     def name(self) -> str:
         """Unique identifier for this embedder, e.g. ``"clap"``, ``"siglip"``."""
+
+    @property
+    def display_name(self) -> str:
+        """Human-readable label for this embedder, shown in pickers.
+
+        Defaults to :attr:`name` so legacy embedders keep working unchanged.
+        Subclasses should override to surface a friendlier label (e.g.
+        ``"SigLIP (general images)"``) while the raw :attr:`name` stays
+        available as a secondary line for power users.
+        """
+        return self.name
 
     @property
     @abstractmethod
@@ -725,7 +742,9 @@ class MediaEmbedder(ABC):
         """Return a JSON-serialisable summary of this embedder."""
         return {
             "name": self.name,
+            "display_name": self.display_name,
             "media_type_id": self.media_type_id,
+            "is_default": self.is_default,
             "supports_text": self.supports_text,
             "supports_patch_regions": self.supports_patch_regions,
             "license_notice": self.license_notice,

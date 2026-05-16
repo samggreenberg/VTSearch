@@ -254,24 +254,19 @@ class TestGetProgressWithLoadingTasks:
 # ---------------------------------------------------------------------------
 
 
-class TestLoadingTasksEndpoint:
-    """Test the /api/dataset/loading-tasks endpoint."""
+class TestLoadingTasksTrackerEndpoint:
+    """Test the loading_tasks tracker (streamed via the SSE `loading-tasks` channel)."""
 
     def test_returns_empty_when_no_tasks(self, client):
-        resp = client.get("/api/dataset/loading-tasks")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["tasks"] == []
+        assert loading_tasks.list_tasks() == []
 
     def test_returns_active_tasks(self, client):
         pt = loading_tasks.create_task("api_test", "API Test DS")
         pt.update("loading", "Processing", 25, 50)
         try:
-            resp = client.get("/api/dataset/loading-tasks")
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert len(data["tasks"]) == 1
-            task = data["tasks"][0]
+            tasks = loading_tasks.list_tasks()
+            assert len(tasks) == 1
+            task = tasks[0]
             assert task["task_id"] == "api_test"
             assert task["name"] == "API Test DS"
             assert task["status"] == "loading"
@@ -281,26 +276,23 @@ class TestLoadingTasksEndpoint:
 
 
 class TestLoadingTasksMediaType:
-    """Test that /api/dataset/loading-tasks exposes media_type."""
+    """Test that the loading_tasks tracker exposes media_type."""
 
-    def test_api_returns_media_type(self, client):
+    def test_tasks_include_media_type(self, client):
         pt = loading_tasks.create_task("mt_test", "Image DS", media_type="image")
         pt.update("loading", "Working", 10, 100)
         try:
-            resp = client.get("/api/dataset/loading-tasks")
-            assert resp.status_code == 200
-            tasks = resp.get_json()["tasks"]
+            tasks = loading_tasks.list_tasks()
             assert len(tasks) == 1
             assert tasks[0]["media_type"] == "image"
         finally:
             loading_tasks.remove_task("mt_test")
 
-    def test_api_omits_empty_media_type(self, client):
+    def test_tasks_omit_empty_media_type(self, client):
         pt = loading_tasks.create_task("mt_test2", "Unknown DS")
         pt.update("loading", "Working", 10, 100)
         try:
-            resp = client.get("/api/dataset/loading-tasks")
-            tasks = resp.get_json()["tasks"]
+            tasks = loading_tasks.list_tasks()
             assert len(tasks) == 1
             assert "media_type" not in tasks[0]
         finally:
@@ -442,15 +434,14 @@ class TestErrorVisibility:
         tasks = loading_tasks.list_tasks()
         assert len(tasks) == 0
 
-    def test_errored_task_in_api_response(self, client):
-        """GET /api/dataset/loading-tasks returns errored tasks."""
+    def test_errored_task_listed_after_finish(self, client):
+        """list_tasks() returns errored tasks until the stale window elapses."""
         pt = loading_tasks.create_task("api_err", "API Err DS")
         pt.update("idle", "", 0, 0, error="Load failed")
         loading_tasks.mark_finished("api_err")
         try:
-            resp = client.get("/api/dataset/loading-tasks")
-            data = resp.get_json()
-            errored = [t for t in data["tasks"] if t.get("error")]
+            tasks = loading_tasks.list_tasks()
+            errored = [t for t in tasks if t.get("error")]
             assert len(errored) == 1
             assert errored[0]["error"] == "Load failed"
         finally:
@@ -597,117 +588,129 @@ class TestLoadingGates:
     """Verify the download/embed gates serialise (or pipeline) concurrent loads."""
 
     def test_second_load_waits_for_first(self):
-        """With the default limit of 1, a second load should show 'Waiting…'
+        """With the download limit at 1, a second load should show 'Waiting…'
         for the download gate and only proceed after the first releases it."""
+        from vtsearch import settings as settings_mod
         from vtsearch.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
 
-        first_started = threading.Event()
-        first_proceed = threading.Event()
-        second_started = threading.Event()
-        load_order = []
+        original = settings_mod.get_max_concurrent_dataset_downloads()
+        settings_mod.set_max_concurrent_dataset_downloads(1)
+        try:
+            first_started = threading.Event()
+            first_proceed = threading.Event()
+            second_started = threading.Event()
+            load_order = []
 
-        def first_load(medias):
-            load_order.append("first_start")
-            first_started.set()
-            first_proceed.wait(timeout=10)
-            load_order.append("first_end")
+            def first_load(medias):
+                load_order.append("first_start")
+                first_started.set()
+                first_proceed.wait(timeout=10)
+                load_order.append("first_end")
 
-        def second_load(medias):
-            load_order.append("second_start")
-            second_started.set()
+            def second_load(medias):
+                load_order.append("second_start")
+                second_started.set()
 
-        task1 = _run_origin_load_in_background(
-            first_load,
-            {"importer": "test1", "params": {}},
-            name="First",
-        )
+            task1 = _run_origin_load_in_background(
+                first_load,
+                {"importer": "test1", "params": {}},
+                name="First",
+            )
 
-        # Wait for first load to actually start running.
-        assert first_started.wait(timeout=10)
+            # Wait for first load to actually start running.
+            assert first_started.wait(timeout=10)
 
-        task2 = _run_origin_load_in_background(
-            second_load,
-            {"importer": "test2", "params": {}},
-            name="Second",
-        )
+            task2 = _run_origin_load_in_background(
+                second_load,
+                {"importer": "test2", "params": {}},
+                name="Second",
+            )
 
-        # Second load should be waiting — give it a moment to start its
-        # thread and hit the gate wait.
-        time.sleep(0.3)
-        assert not second_started.is_set(), "Second load should be queued, not running"
+            # Second load should be waiting — give it a moment to start its
+            # thread and hit the gate wait.
+            time.sleep(0.3)
+            assert not second_started.is_set(), "Second load should be queued, not running"
 
-        # Check that the second task shows a "Waiting" message.
-        task2_info = loading_tasks.get_tracker(task2)
-        assert task2_info is not None
-        status = task2_info.get()
-        assert "Waiting" in status.get("message", "")
+            # Check that the second task shows a "Waiting" message.
+            task2_info = loading_tasks.get_tracker(task2)
+            assert task2_info is not None
+            status = task2_info.get()
+            assert "Waiting" in status.get("message", "")
 
-        # Let the first load finish.
-        first_proceed.set()
+            # Let the first load finish.
+            first_proceed.set()
 
-        # Now the second should proceed.
-        assert second_started.wait(timeout=10), "Second load never started after first finished"
-        assert load_order[:2] == ["first_start", "first_end"]
-        assert "second_start" in load_order
+            # Now the second should proceed.
+            assert second_started.wait(timeout=10), "Second load never started after first finished"
+            assert load_order[:2] == ["first_start", "first_end"]
+            assert "second_start" in load_order
 
-        # Clean up — wait for tasks to finish.
-        deadline = time.time() + 10
-        while loading_tasks.has_active_tasks() and time.time() < deadline:
-            time.sleep(0.1)
-        loading_tasks.remove_task(task1)
-        loading_tasks.remove_task(task2)
-        # Sanity: gates fully released after both tasks finish.
-        assert _download_gate.active == 0
+            # Clean up — wait for tasks to finish.
+            deadline = time.time() + 10
+            while loading_tasks.has_active_tasks() and time.time() < deadline:
+                time.sleep(0.1)
+            loading_tasks.remove_task(task1)
+            loading_tasks.remove_task(task2)
+            # Sanity: gates fully released after both tasks finish.
+            assert _download_gate.active == 0
+        finally:
+            settings_mod.set_max_concurrent_dataset_downloads(original)
 
     def test_cancel_while_waiting_does_not_corrupt_gate(self):
         """Cancelling a queued task must not release the gate it never
         acquired, which would let extra loads through."""
+        from vtsearch import settings as settings_mod
         from vtsearch.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
 
-        first_started = threading.Event()
-        first_proceed = threading.Event()
+        original = settings_mod.get_max_concurrent_dataset_downloads()
+        settings_mod.set_max_concurrent_dataset_downloads(1)
+        try:
+            first_started = threading.Event()
+            first_proceed = threading.Event()
 
-        def first_load(medias):
-            first_started.set()
-            first_proceed.wait(timeout=10)
+            def first_load(medias):
+                first_started.set()
+                first_proceed.wait(timeout=10)
 
-        task1 = _run_origin_load_in_background(
-            first_load,
-            {"importer": "test1", "params": {}},
-            name="First",
-        )
-        assert first_started.wait(timeout=10)
+            task1 = _run_origin_load_in_background(
+                first_load,
+                {"importer": "test1", "params": {}},
+                name="First",
+            )
+            assert first_started.wait(timeout=10)
 
-        # Start a second load — it will be queued on the download gate.
-        task2 = _run_origin_load_in_background(
-            lambda medias: None,
-            {"importer": "test2", "params": {}},
-            name="Second",
-        )
-        time.sleep(0.3)
+            # Start a second load — it will be queued on the download gate.
+            task2 = _run_origin_load_in_background(
+                lambda medias: None,
+                {"importer": "test2", "params": {}},
+                name="Second",
+            )
+            time.sleep(0.3)
 
-        # Cancel the queued task before it acquires the gate.
-        loading_tasks.cancel_task(task2)
-        time.sleep(0.5)
+            # Cancel the queued task before it acquires the gate.
+            loading_tasks.cancel_task(task2)
+            time.sleep(0.5)
 
-        # The gate should still show exactly one holder (the first load).
-        # If the cancel wrongly released, active would drop to 0.
-        assert _download_gate.active == 1, "Cancelled task that never held the gate must not release it"
+            # The gate should still show exactly one holder (the first load).
+            # If the cancel wrongly released, active would drop to 0.
+            assert _download_gate.active == 1, "Cancelled task that never held the gate must not release it"
 
-        # Clean up.
-        first_proceed.set()
-        deadline = time.time() + 10
-        while loading_tasks.has_active_tasks() and time.time() < deadline:
-            time.sleep(0.1)
-        loading_tasks.remove_task(task1)
-        loading_tasks.remove_task(task2)
-        assert _download_gate.active == 0
+            # Clean up.
+            first_proceed.set()
+            deadline = time.time() + 10
+            while loading_tasks.has_active_tasks() and time.time() < deadline:
+                time.sleep(0.1)
+            loading_tasks.remove_task(task1)
+            loading_tasks.remove_task(task2)
+            assert _download_gate.active == 0
+        finally:
+            settings_mod.set_max_concurrent_dataset_downloads(original)
 
     def test_download_and_embed_can_overlap(self):
         """When the importer signals the embedding phase, the download gate

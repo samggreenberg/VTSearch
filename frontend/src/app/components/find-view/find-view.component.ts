@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject, Subscription, timer } from 'rxjs';
-import { finalize, switchMap, takeUntil } from 'rxjs/operators';
+import { Subject, Subscription } from 'rxjs';
+import { finalize, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -13,6 +13,7 @@ import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { ProgressEventsService } from '../../services/progress-events.service';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 
 @Component({
@@ -63,6 +64,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     public voteState: VoteStateService,
     public sortState: SortStateService,
     private settingsState: SettingsStateService,
+    private progressEvents: ProgressEventsService,
   ) {}
 
   ngOnInit(): void {
@@ -117,11 +119,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private startProgressPolling(): void {
     this.stopProgressPolling();
-    this.progressPollSub = timer(200, 500)
-      .pipe(
-        switchMap(() => this.detectorsApi.getFindProgress()),
-        takeUntil(this.destroy$),
-      )
+    this.progressPollSub = this.progressEvents.find$
+      .pipe(takeUntil(this.destroy$))
       .subscribe((prog: any) => {
         if (prog.status === 'running') {
           const msg = prog.message || 'Scoring with detector…';

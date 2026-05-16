@@ -6,7 +6,8 @@ import { FileBrowserComponent } from '../../file-browser/file-browser.component'
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
+import { SettingsStateService } from '../../../services/settings-state.service';
+import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 @Component({
@@ -21,6 +22,10 @@ export class DatasetImporterModalComponent implements OnInit {
   @Input() guessedMediaType = '';
   /** Embedder name guessed from existing datasets/in-progress loads (e.g. "siglip"). */
   @Input() guessedMediaEmbedder = '';
+  /** Picker tab id to pre-select when the modal opens (e.g. "server" from
+   *  the dashboard's first-run welcome banner CTA).  Empty leaves the
+   *  picker in the default "no tab selected" state. */
+  @Input() initialTab = '';
 
   @Output() closed = new EventEmitter<void>();
   @Output() importStarted = new EventEmitter<void>();
@@ -32,6 +37,9 @@ export class DatasetImporterModalComponent implements OnInit {
   selectedFile: File | null = null;
   submitting = false;
   error = '';
+  /** Whether the user has manually edited the generic-form dataset_name
+   *  input (so we stop auto-deriving it from path/url/file fields). */
+  private formDatasetNameDirty = false;
 
   // Clipper state
   availableClippers: ClipperInfo[] = [];
@@ -140,6 +148,14 @@ export class DatasetImporterModalComponent implements OnInit {
    *  ``docs/plans/multi-media-import.md``. */
   sfSourceSpecs: SourceSpec[] = [];
 
+  /** Auto-detect result for the local-folder / local-files picker.  Set
+   *  after the user picks files; ``null`` when no detection has been run
+   *  for the current selection. */
+  lfDetection: MediaTypeDetectionResponse | null = null;
+  /** Same as :prop:`lfDetection` but for the server-folder picker.  Filled
+   *  in by an API call after each successful directory load. */
+  sfDetection: MediaTypeDetectionResponse | null = null;
+
   // Dynamic-options cache for the generic form view.  Keyed by ImporterField.key.
   /** Options last fetched from the backend for dynamic-options fields. */
   dynamicFieldOptions: Record<string, string[]> = {};
@@ -154,13 +170,19 @@ export class DatasetImporterModalComponent implements OnInit {
   clipperChooserContext: 'form' | 'demo' | 'sf' | 'lf' = 'form';
   clipperChooserClippers: ClipperInfo[] = [];
 
-  constructor(private datasetsApi: DatasetsApiService) {}
+  constructor(
+    private datasetsApi: DatasetsApiService,
+    private settingsState: SettingsStateService,
+  ) {}
 
   ngOnInit(): void {
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
         this.importers = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
         this.declaredTabs = res.tabs || [];
+        if (this.initialTab && this.visibleImporterTabs.some((t) => t.id === this.initialTab)) {
+          this.selectImporterTab(this.initialTab);
+        }
       },
     });
     this.datasetsApi.getEmbedders().subscribe({
@@ -173,6 +195,35 @@ export class DatasetImporterModalComponent implements OnInit {
         this.mediaTypes = res.media_types || [];
       },
     });
+    // Settings carry the per-media-type "last embedder" memory used to
+    // pre-select an embedder when no loaded dataset can supply
+    // ``guessedMediaEmbedder``.
+    this.settingsState.load();
+  }
+
+  /** Pick the initial embedder for a picker view.  Priority:
+   *  1. ``guessedMediaEmbedder`` (computed from currently loaded datasets)
+   *  2. the user's last pick for this media type (per-user setting)
+   *  3. first option, or empty when the list is empty.
+   *
+   *  ``mediaTypeFolderOrTypeId`` accepts either form — the importer form
+   *  values use the folder name (e.g. ``"images"``) while the settings
+   *  map is keyed by canonical type_id (e.g. ``"image"``).  We resolve to
+   *  type_id before looking up the saved setting. */
+  private pickInitialEmbedder(embedders: EmbedderInfo[], mediaTypeFolderOrTypeId: string): string {
+    if (embedders.length === 0) return '';
+    const guessedMatch = this.guessedMediaEmbedder
+      ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
+      : null;
+    if (guessedMatch) return guessedMatch.name;
+    const typeId = this.toTypeId(mediaTypeFolderOrTypeId) || mediaTypeFolderOrTypeId;
+    const savedMap = this.settingsState.settings?.last_embedder_per_media_type || {};
+    const saved = savedMap[typeId];
+    if (saved) {
+      const savedMatch = embedders.find((e) => e.name === saved);
+      if (savedMatch) return savedMatch.name;
+    }
+    return embedders[0].name;
   }
 
   /** Front-of-list order for the picker within each tab.  Importers not
@@ -307,6 +358,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.dynamicFieldOptions = {};
     this.dynamicFieldLoading = {};
     this.dynamicFieldError = {};
+    this.formDatasetNameDirty = false;
 
     // Pre-populate defaults
     if (importer.fields) {
@@ -356,7 +408,8 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Called whenever a form field value changes.  Refreshes options for
    *  every dynamic-options field whose ``depends_on`` includes *changedKey*.
    *  Also clears the dependent field's current value so the user can't
-   *  submit a now-stale selection. */
+   *  submit a now-stale selection.  Also re-derives a default
+   *  ``dataset_name`` from the change unless the user has typed one. */
   onFormFieldChanged(changedKey: string): void {
     const importer = this.selectedImporter;
     if (!importer?.fields) return;
@@ -366,6 +419,67 @@ export class DatasetImporterModalComponent implements OnInit {
       this.formValues[field.key] = '';
       this.refreshDynamicFieldOptions(field);
     }
+    if (changedKey !== 'dataset_name') {
+      this.maybeApplyDerivedDatasetName();
+    }
+  }
+
+  /** Called when the user types into the generic-form ``Dataset Name``
+   *  input.  Marks the field as dirty so subsequent path/url/file changes
+   *  do not overwrite the user's value. */
+  formOnDatasetNameInput(value: string): void {
+    this.formValues['dataset_name'] = value;
+    this.formDatasetNameDirty = true;
+  }
+
+  /** Called when the user picks a server path via ``vt-file-browser``.
+   *  Updates the form value and re-derives the dataset name when the
+   *  user hasn't typed one yet. */
+  formOnServerPathSelected(key: string, path: string): void {
+    this.formValues[key] = path;
+    this.onFormFieldChanged(key);
+  }
+
+  /** Re-derive a default dataset name from the current form values when
+   *  the user hasn't manually edited the dataset_name input.  Inspects
+   *  the importer's fields and uses the first source-style field with a
+   *  value (url, server_path, file, or a field keyed ``path``). */
+  private maybeApplyDerivedDatasetName(): void {
+    if (this.formDatasetNameDirty) return;
+    const derived = this.formDerivedDatasetName();
+    if (derived) {
+      this.formValues['dataset_name'] = derived;
+    }
+  }
+
+  /** Compute a derived dataset name from the current form values. */
+  private formDerivedDatasetName(): string {
+    const fields = this.selectedImporter?.fields || [];
+    for (const f of fields) {
+      if (f.key === 'dataset_name') continue;
+      const raw = this.formValues[f.key];
+      if (typeof raw !== 'string' || !raw) continue;
+      if (f.field_type === 'url') {
+        const cleaned = raw.split('?')[0].replace(/\/+$/, '');
+        const tail = cleaned.split('/').pop() || '';
+        if (!tail) continue;
+        const stripped = tail.replace(
+          /\.(?:tar\.gz|tar\.bz2|tar\.xz|tar|zip|rar)$/i, '',
+        );
+        return stripped || tail;
+      }
+      if (f.field_type === 'server_path' || f.field_type === 'file') {
+        const basename = raw.split(/[\\/]/).pop() || '';
+        if (!basename) continue;
+        const dot = basename.lastIndexOf('.');
+        return dot > 0 ? basename.slice(0, dot) : basename;
+      }
+      if (f.key === 'path') {
+        const parts = raw.split(/[\\/]/).filter(Boolean);
+        if (parts.length > 0) return parts[parts.length - 1];
+      }
+    }
+    return '';
   }
 
   /** Fetch the option list for a dynamic-options field from the backend. */
@@ -451,11 +565,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.availableEmbedders = embedders;
-        // Prefer guessed embedder when it's available for this media type
-        const guessedMatch = this.guessedMediaEmbedder
-          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
-          : null;
-        this.selectedEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
+        this.selectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
       },
     });
   }
@@ -519,11 +629,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.demoEmbedders = embedders;
-        // Prefer guessed embedder when it's available for this media type
-        const guessedMatch = this.guessedMediaEmbedder
-          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
-          : null;
-        this.selectedDemoEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
+        this.selectedDemoEmbedder = this.pickInitialEmbedder(embedders, mediaType);
         this.demoEmbedder = this.selectedDemoEmbedder;
         this.updateDemoStatuses();
         // The initial demo fetch had no embedder/clipper context, so re-fetch
@@ -656,7 +762,7 @@ export class DatasetImporterModalComponent implements OnInit {
   getMediaTypeOptionLabel(opt: string): string {
     const mt = this.mediaTypes.find((m) => m.folder_import_name === opt);
     if (mt) {
-      return (mt.tab_title || mt.name).trim();
+      return mt.name.trim();
     }
     return opt;
   }
@@ -664,7 +770,7 @@ export class DatasetImporterModalComponent implements OnInit {
   getTabLabel(mediaType: string): string {
     const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
     if (mt) {
-      return (mt.tab_title || mt.name).trim();
+      return mt.name.trim();
     }
     return mediaType;
   }
@@ -677,7 +783,7 @@ export class DatasetImporterModalComponent implements OnInit {
   getTabText(mediaType: string): string {
     const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
     if (mt) {
-      return mt.tab_title || mt.name;
+      return mt.name;
     }
     return mediaType;
   }
@@ -710,6 +816,38 @@ export class DatasetImporterModalComponent implements OnInit {
     if (!name) return null;
     const found = list.find((e) => e.name === name);
     return found?.license_notice ?? null;
+  }
+
+  /** Embedders flagged ``is_default`` for the active media type. */
+  recommendedEmbedders(list: EmbedderInfo[]): EmbedderInfo[] {
+    return list.filter((e) => e.is_default);
+  }
+
+  /** Non-default embedders, shown under the "Advanced" optgroup. */
+  advancedEmbedders(list: EmbedderInfo[]): EmbedderInfo[] {
+    return list.filter((e) => !e.is_default);
+  }
+
+  /**
+   * Human-readable label for the option element. Falls back to the raw name
+   * for embedders that don't yet supply a friendlier label.
+   */
+  embedderLabel(embedder: EmbedderInfo): string {
+    return embedder.display_name || embedder.name;
+  }
+
+  /**
+   * Raw registry ID for the currently-selected embedder, used as a secondary
+   * ``<small>`` line under the picker so power users can still see it. Returns
+   * an empty string when the display name equals the raw name (no need to
+   * repeat it) or when no embedder is selected.
+   */
+  selectedEmbedderRawId(name: string, list: EmbedderInfo[]): string {
+    if (!name) return '';
+    const found = list.find((e) => e.name === name);
+    if (!found) return '';
+    const label = found.display_name || found.name;
+    return label === found.name ? '' : found.name;
   }
 
   selectDemo(demo: DemoDataset): void {
@@ -748,6 +886,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.selectedImporter = resolved;
     this.lfPickerKind = resolved?.name === 'local_files' ? 'files' : 'folder';
     this.lfFiles = [];
+    this.lfDetection = null;
     this.lfVectorsFile = null;
     this.lfError = '';
     this.lfSubmitting = false;
@@ -776,12 +915,51 @@ export class DatasetImporterModalComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     if (!input.files) {
       this.lfFiles = [];
+      this.lfDetection = null;
       return;
     }
     this.lfFiles = Array.from(input.files);
     this.lfError = '';
     if (!this.lfDatasetNameDirty) {
       this.lfDatasetName = this.lfDerivedDatasetName();
+    }
+    this.lfDetection = this.detectFromFiles(this.lfFiles, this.lfRecursive);
+    this.lfApplyDetection();
+  }
+
+  lfOnRecursiveChange(recursive: boolean): void {
+    this.lfRecursive = recursive;
+    if (this.lfFiles.length > 0) {
+      this.lfDetection = this.detectFromFiles(this.lfFiles, this.lfRecursive);
+      this.lfApplyDetection();
+    }
+  }
+
+  sfOnRecursiveChange(recursive: boolean): void {
+    this.sfRecursive = recursive;
+    if (this.sfBrowseRootPath) {
+      this.sfRunDetection();
+    }
+  }
+
+  /** Apply :prop:`lfDetection` to the lf-* view: set the output media-type
+   *  dropdown and rebuild the source-spec rows.  Re-fetches embedders and
+   *  clippers via :prop:`lfOnMediaTypeChange` when the chosen type changed
+   *  so the rest of the form stays consistent. */
+  private lfApplyDetection(): void {
+    if (!this.lfDetection) return;
+    const { mediaType, sourceSpecs } = this.autofillFromDetection(
+      this.lfDetection,
+      this.lfMediaTypeOptions,
+      (typeId) => this.availableConvertersFor('server_folder', typeId),
+    );
+    if (mediaType && mediaType !== this.lfMediaType) {
+      this.lfMediaType = mediaType;
+      this.lfLoadEmbedders(this.lfMediaType);
+      this.lfLoadClippers(this.lfMediaType);
+    }
+    if (sourceSpecs) {
+      this.lfSourceSpecs = sourceSpecs;
     }
   }
 
@@ -830,10 +1008,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.lfEmbedders = embedders;
-        const guessedMatch = this.guessedMediaEmbedder
-          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
-          : null;
-        this.lfSelectedEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
+        this.lfSelectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
       },
     });
   }
@@ -951,6 +1126,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfBrowseRootPath = '';
     this.sfBrowseDirs = [];
     this.sfBrowseError = '';
+    this.sfDetection = null;
     this.sfSubmitting = false;
     this.sfRecursive = this.readRecursiveDefault(this.selectedImporter);
     this.sfDatasetName = '';
@@ -987,12 +1163,55 @@ export class DatasetImporterModalComponent implements OnInit {
         if (!this.sfDatasetNameDirty) {
           this.sfDatasetName = this.sfDerivedDatasetName();
         }
+        this.sfRunDetection();
       },
       error: (err) => {
         this.sfBrowseError = err.error?.error || 'Could not browse server folders. Is saved_datasets_dir configured?';
         this.sfBrowseLoading = false;
       },
     });
+  }
+
+  /** Token guarding overlapping detection responses for the sf-* picker.
+   *  Each :meth:`sfRunDetection` invocation bumps this and stamps it onto
+   *  its closure; the response handler bails when the token has moved on,
+   *  so rapidly clicking through directories never lets an older request
+   *  overwrite a newer one. */
+  private sfDetectionToken = 0;
+
+  /** Detect the dominant media type for the currently picked server folder
+   *  and apply it to the sf-* form (output media-type + source specs). */
+  private sfRunDetection(): void {
+    const token = ++this.sfDetectionToken;
+    this.datasetsApi.detectMediaType('folder', this.sfBrowsePath, this.sfRecursive).subscribe({
+      next: (res) => {
+        if (token !== this.sfDetectionToken) return;
+        this.sfDetection = res;
+        this.sfApplyDetection();
+      },
+      error: () => {
+        if (token !== this.sfDetectionToken) return;
+        this.sfDetection = null;
+      },
+    });
+  }
+
+  /** Apply :prop:`sfDetection` to the sf-* view. */
+  private sfApplyDetection(): void {
+    if (!this.sfDetection) return;
+    const { mediaType, sourceSpecs } = this.autofillFromDetection(
+      this.sfDetection,
+      this.sfMediaTypeOptions,
+      (typeId) => this.availableConvertersFor('server_folder', typeId),
+    );
+    if (mediaType && mediaType !== this.sfMediaType) {
+      this.sfMediaType = mediaType;
+      this.sfLoadEmbedders(this.sfMediaType);
+      this.sfLoadClippers(this.sfMediaType);
+    }
+    if (sourceSpecs) {
+      this.sfSourceSpecs = sourceSpecs;
+    }
   }
 
   /** Derive a default dataset name from the currently selected server folder.
@@ -1055,6 +1274,140 @@ export class DatasetImporterModalComponent implements OnInit {
     if (!folderName) return '';
     const mt = this.mediaTypes.find((m) => m.folder_import_name === folderName);
     return mt?.type_id || folderName;
+  }
+
+  // -------------------------------------------------------------------
+  // Media-type auto-detection
+  //
+  // Two flavours: the server-folder picker hits an API endpoint that
+  // walks the chosen path on the server filesystem; the local-folder /
+  // local-files picker counts extensions on the in-browser File[] (no
+  // HTTP round-trip needed because the files haven't been uploaded yet).
+  //
+  // Once a detection result is available we (a) pre-fill the output
+  // media-type dropdown with the dominant type and (b) auto-populate
+  // multi-media SourceSpec rows for every non-dominant type present in
+  // the sample that has a converter to the dominant type — so a folder
+  // of "47 images + 3 videos" opens with "include images directly" plus
+  // a "video → image" converter row pre-added.
+  // -------------------------------------------------------------------
+
+  /** Lowercase ``ext → type_id`` map derived from registered media types.
+   *  ``.jpg → "image"``.  Rebuilt on each call (cheap; one Map per type). */
+  private extensionToTypeId(): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const mt of this.mediaTypes) {
+      for (const pattern of mt.file_extensions || []) {
+        const dot = pattern.lastIndexOf('.');
+        if (dot < 0) continue;
+        map.set(pattern.slice(dot).toLowerCase(), mt.type_id);
+      }
+    }
+    return map;
+  }
+
+  /** Count media types in a browser-side ``File[]`` and shape the result
+   *  like :type:`MediaTypeDetectionResponse` so the rest of the modal
+   *  can treat local- and server-side detections identically.
+   *
+   *  When ``recursive`` is ``false`` files whose ``webkitRelativePath``
+   *  lies in a sub-directory of the picked folder are skipped, matching
+   *  the importer's "Include subfolders" toggle. */
+  private detectFromFiles(files: File[], recursive: boolean, limit = 50): MediaTypeDetectionResponse {
+    const extMap = this.extensionToTypeId();
+    const countsByType: Record<string, number> = {};
+    const extensions: Record<string, number> = {};
+    let examined = 0;
+    for (const file of files) {
+      if (examined >= limit) break;
+      const rel = ((file as any).webkitRelativePath as string | undefined) || '';
+      if (!recursive && rel && rel.split('/').length > 2) continue;
+      const name = rel || file.name || '';
+      const slash = name.lastIndexOf('/');
+      const base = slash >= 0 ? name.slice(slash + 1) : name;
+      if (base.startsWith('.')) continue;
+      const dot = base.lastIndexOf('.');
+      const ext = dot > 0 ? base.slice(dot).toLowerCase() : '';
+      extensions[ext] = (extensions[ext] || 0) + 1;
+      const typeId = (ext && extMap.get(ext)) || 'unknown';
+      countsByType[typeId] = (countsByType[typeId] || 0) + 1;
+      examined += 1;
+    }
+    let dominant: string | null = null;
+    let bestCount = 0;
+    for (const [typeId, count] of Object.entries(countsByType)) {
+      if (typeId === 'unknown') continue;
+      if (count > bestCount) {
+        bestCount = count;
+        dominant = typeId;
+      }
+    }
+    return { sample_size: examined, counts_by_type: countsByType, extensions, dominant };
+  }
+
+  /** Human-readable description of a detection result, suitable for a
+   *  hint chip next to the dropdown. */
+  detectionHint(detection: MediaTypeDetectionResponse | null): string {
+    if (!detection || detection.sample_size === 0) return '';
+    const entries = Object.entries(detection.counts_by_type)
+      .filter(([typeId]) => typeId !== 'unknown')
+      .sort((a, b) => b[1] - a[1]);
+    if (entries.length === 0) {
+      return `No recognised media files in ${detection.sample_size} sampled.`;
+    }
+    const total = detection.sample_size;
+    const fileWord = total === 1 ? 'file' : 'files';
+    if (entries.length === 1) {
+      const [typeId, count] = entries[0];
+      return `Detected: ${this.getTabLabel(typeId)} (${count} of ${total} ${fileWord})`;
+    }
+    const head = entries
+      .map(([typeId, count]) => `${this.getTabLabel(typeId)} (${count})`)
+      .join(' + ');
+    return `Detected: ${head} of ${total} ${fileWord}`;
+  }
+
+  /** Apply a detection result to a (mediaType, sourceSpecs) pair.
+   *
+   *  Sets ``mediaType`` to the dominant type's ``folder_import_name`` when
+   *  it's a valid option, then rebuilds the source-spec list: one direct
+   *  row for the dominant type plus one converter row per non-dominant
+   *  recognised type that has at least one matching converter to the
+   *  dominant type.  Returns the new ``(mediaType, sourceSpecs)`` pair —
+   *  the caller decides which view's state to update.
+   */
+  private autofillFromDetection(
+    detection: MediaTypeDetectionResponse,
+    availableOptions: string[],
+    convertersForType: (outputTypeId: string) => ConverterInfo[],
+  ): { mediaType: string | null; sourceSpecs: SourceSpec[] | null } {
+    const dominant = detection.dominant;
+    if (!dominant) return { mediaType: null, sourceSpecs: null };
+    const folderName = this.mediaTypes.find((m) => m.type_id === dominant)?.folder_import_name || dominant;
+    if (!availableOptions.includes(folderName)) {
+      return { mediaType: null, sourceSpecs: null };
+    }
+    const converters = convertersForType(dominant);
+    const sourceSpecs: SourceSpec[] = [
+      { source_type: dominant, converter: null, params: {} },
+    ];
+    const seenSourceTypes = new Set<string>([dominant]);
+    const orderedNonDominant = Object.entries(detection.counts_by_type)
+      .filter(([typeId, count]) => typeId !== 'unknown' && typeId !== dominant && count > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([typeId]) => typeId);
+    for (const sourceType of orderedNonDominant) {
+      if (seenSourceTypes.has(sourceType)) continue;
+      const converter = converters.find((c) => c.source_type === sourceType);
+      if (!converter) continue;
+      const params: Record<string, string> = {};
+      for (const f of converter.fields || []) {
+        params[f.key] = String(f.default ?? '');
+      }
+      sourceSpecs.push({ source_type: sourceType, converter: converter.name, params });
+      seenSourceTypes.add(sourceType);
+    }
+    return { mediaType: folderName, sourceSpecs };
   }
 
   /** Converters whose ``target_type`` matches *outputTypeId*.  The map
@@ -1258,11 +1611,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.sfEmbedders = embedders;
-        // Prefer guessed embedder when it's available for this media type
-        const guessedMatch = this.guessedMediaEmbedder
-          ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
-          : null;
-        this.sfSelectedEmbedder = guessedMatch ? guessedMatch.name : (embedders.length > 0 ? embedders[0].name : '');
+        this.sfSelectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
       },
     });
   }
@@ -1420,6 +1769,7 @@ export class DatasetImporterModalComponent implements OnInit {
     if (input.files && input.files.length > 0) {
       this.selectedFile = input.files[0];
       this.formValues[fieldName] = input.files[0].name;
+      this.maybeApplyDerivedDatasetName();
     }
   }
 

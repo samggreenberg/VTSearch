@@ -12,6 +12,7 @@ the embedder / clipper / media-type registries that live directly on
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -206,6 +207,58 @@ def format_json(inventory: dict[str, list[PluginEntry]]) -> str:
 
 FAMILIES: tuple[str, ...] = tuple(_FAMILY_LABELS.keys())
 
+
+# ---------------------------------------------------------------------------
+# CLI integration
+# ---------------------------------------------------------------------------
+
+
+class _ListFamilyAction(argparse.Action):
+    """Argparse action backing the ``--list-<family>`` shortcuts.
+
+    Sets ``list_plugins=True`` and ``plugin_family=<family>`` on the
+    namespace so the existing ``--list-plugins`` early-exit branch picks
+    them up unchanged.
+    """
+
+    def __init__(self, option_strings, dest, const=None, default=None, required=False, help=None):
+        super().__init__(
+            option_strings=option_strings,
+            dest=dest,
+            nargs=0,
+            const=const,
+            default=default,
+            required=required,
+            help=help,
+        )
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        namespace.list_plugins = True
+        namespace.plugin_family = self.const
+
+
+def family_flag(family: str) -> str:
+    """Return the CLI flag name for *family* (e.g. ``label_importers`` → ``--list-label-importers``)."""
+    return f"--list-{family.replace('_', '-')}"
+
+
+def register_family_shortcuts(parser: argparse.ArgumentParser) -> None:
+    """Add ``--list-<family>`` shortcut flags to *parser* for every known family.
+
+    Each shortcut is equivalent to ``--list-plugins --plugin-family
+    <family>`` and obeys the same ``--format`` setting.  Generated from
+    :data:`FAMILIES` so a new plugin family automatically gets a shortcut.
+    """
+    for family in FAMILIES:
+        parser.add_argument(
+            family_flag(family),
+            action=_ListFamilyAction,
+            const=family,
+            dest="list_plugins",
+            help=f"Shortcut for --list-plugins --plugin-family {family}.",
+        )
+
+
 __all__ = [
     "FAMILIES",
     "PluginEntry",
@@ -213,4 +266,6 @@ __all__ = [
     "format_plain",
     "format_names",
     "format_json",
+    "family_flag",
+    "register_family_shortcuts",
 ]

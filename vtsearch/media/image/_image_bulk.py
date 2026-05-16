@@ -23,16 +23,40 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 
-def _load_pil(path: Path) -> Optional["Image.Image"]:
-    """Open *path* and return an RGB PIL Image, or ``None`` on failure."""
+def _load_pil(source: Path | bytes) -> Optional["Image.Image"]:
+    """Open *source* and return an RGB PIL Image, or ``None`` on failure.
+
+    *source* may be a filesystem path or an in-memory ``bytes`` blob (used
+    by the clip re-embed path so it can hand the bulk surface the
+    clipped image bytes directly without a tempfile detour).
+    """
     try:
         from PIL import Image  # noqa: PLC0415
+        import io  # noqa: PLC0415
 
-        with Image.open(path) as img:
+        if isinstance(source, (bytes, bytearray)):
+            with Image.open(io.BytesIO(bytes(source))) as img:
+                return img.convert("RGB")
+        with Image.open(source) as img:
             return img.convert("RGB")
     except Exception:
-        _log.exception("Error decoding image %s", path)
+        _log.exception("Error decoding image %r", source if isinstance(source, Path) else "<bytes>")
         return None
+
+
+def _pil_source_for(media: dict) -> Path | bytes | None:
+    """Pick the in-memory or on-disk source to decode for *media*.
+
+    Prefers ``media_bytes`` (set by clip re-embed) over ``media_path`` so
+    the bulk path never has to round-trip through a tempfile.
+    """
+    blob = media.get("media_bytes")
+    if isinstance(blob, (bytes, bytearray)) and blob:
+        return bytes(blob)
+    path_str = media.get("media_path")
+    if path_str:
+        return Path(path_str)
+    return None
 
 
 def bulk_embed_image_files(
@@ -66,10 +90,10 @@ def bulk_embed_image_files(
         chunk_images: list[Image.Image] = []
         for idx in range(start, end):
             media = medias[idx]
-            path_str = media.get("media_path")
-            if not path_str:
+            source = _pil_source_for(media)
+            if source is None:
                 continue
-            img = _load_pil(Path(path_str))
+            img = _load_pil(source)
             if img is None:
                 continue
             chunk_indices.append(idx)
@@ -133,10 +157,10 @@ def bulk_patch_forward_image_files(
         chunk_images: list[Image.Image] = []
         for idx in range(start, end):
             media = medias[idx]
-            path_str = media.get("media_path")
-            if not path_str:
+            source = _pil_source_for(media)
+            if source is None:
                 continue
-            img = _load_pil(Path(path_str))
+            img = _load_pil(source)
             if img is None:
                 continue
             chunk_indices.append(idx)

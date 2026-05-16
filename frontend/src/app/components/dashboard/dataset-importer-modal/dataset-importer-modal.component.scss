@@ -72,6 +72,26 @@
 // embedder reports a license_notice (today: real-EUPE under FAIR
 // Noncommercial). Subtle yellow chip, no acceptance click — users
 // who object pick a different embedder.
+// Detection hint shown below the output-media-type dropdown after the
+// modal samples the picked folder / files.  Subtle chip so it informs
+// without distracting from the form.
+.detection-hint {
+  margin: 6px 0 0;
+  font-size: .82rem;
+  line-height: 1.35;
+  color: var(--text-muted, #666);
+  font-style: italic;
+}
+
+.embedder-raw-id {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: .75rem;
+  color: var(--text-muted, #888);
+  line-height: 1.2;
+}
+
 .license-warning {
   margin-top: 6px;
   padding: 6px 10px;

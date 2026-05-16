@@ -19,7 +19,9 @@ from vtsearch.embedding.loader import (
     get_torch_device,
     get_xclip_model,
     initialize_models,
-    preload_autoload_media_types,
+    predict_embedders_to_preload,
+    preload_predicted_embedders,
+    smart_preload_in_background,
 )
 from vtsearch.embedding.matrix import (
     get_embedding_matrix,
@@ -34,7 +36,9 @@ __all__ = [
     "embed_paragraph_file",
     "embed_text_query",
     "initialize_models",
-    "preload_autoload_media_types",
+    "predict_embedders_to_preload",
+    "preload_predicted_embedders",
+    "smart_preload_in_background",
     "get_clap_model",
     "get_xclip_model",
     "get_e5_model",

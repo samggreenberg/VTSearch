@@ -14,7 +14,7 @@ CLI workflows (no browser) see [CLI.md](CLI.md).
 5. [Autopilot — the guided workflow](#autopilot--the-guided-workflow) *(start here)*
 6. [Manual mode — for power users](#manual-mode--for-power-users)
 7. [View options](#view-options)
-8. [Dashboard — managing datasets and models](#dashboard--managing-datasets-and-models)
+8. [Dashboard — managing datasets and detectors](#dashboard--managing-datasets-and-detectors)
 9. [Exporting your work](#exporting-your-work)
 10. [Importing pre-trained detectors](#importing-pre-trained-detectors)
 11. [Where to go next](#where-to-go-next)
@@ -33,7 +33,7 @@ snow"), and the app uses a pretrained embedding model to rank items
 by semantic similarity to your query.
 
 In practice, you usually combine the two: search for a rough starting
-point, vote a handful of items, and let the learned model refine the
+point, vote a handful of items, and let the learned detector refine the
 ranking. VTSearch's **Autopilot** drives that loop for you — so most
 users never need to think about sort modes or selection strategies
 directly.
@@ -154,27 +154,27 @@ just picks *which* items to show you and *when* each phase ends.
 ### The four phases
 
 1. **Good examples** — Vote some **good** items (default: 3). The
-   model needs positive examples before it can learn anything.
+   detector needs positive examples before it can learn anything.
    Autopilot offers strong candidates first via the same semantic
    ranking the Text sort uses. If you don't see anything good, type
    a text query into the sort bar to jump-start the ranking.
 2. **Bad examples** — Vote some **bad** items (default: 4). Now
-   the model has both sides of the boundary. Autopilot flips to
+   the detector has both sides of the boundary. Autopilot flips to
    items ranked low, so finding clear bad examples is usually quick.
 3. **Boundary refinement (hard)** — Autopilot serves items the
-   model is **uncertain about** — the hardest cases near the
-   decision boundary. Voting these teaches the model fastest.
-   This phase continues until the model's confidence stabilises
+   detector is **uncertain about** — the hardest cases near the
+   decision boundary. Voting these teaches the detector fastest.
+   This phase continues until the detector's confidence stabilises
    (the "smart" and "stable" indicators in the status bar both
    turn green).
 4. **Diversity exploration (new)** — Autopilot serves items from
-   parts of the dataset the model hasn't seen yet, using the
+   parts of the dataset the detector hasn't seen yet, using the
    diversity tree. This catches edge cases the boundary phase
    missed. Phase ends when the diversity coverage hits your goal
    (default: 40%).
 
 When all four phases are done, Autopilot says **done**. You can
-keep labeling if you want — the model continues to improve — or
+keep labeling if you want — the detector continues to improve — or
 move on to exporting results.
 
 ### The collapsed bar
@@ -193,12 +193,12 @@ exposes:
 
 - **Top greens** — how many good votes phase 1 requires (default 3).
 - **Hard reds** — how many bad votes phase 2 requires (default 4).
-- **Resort interval** — how often the learned model is retrained
+- **Resort interval** — how often the learned detector is retrained
   during phases 3 and 4 (default every 10 votes).
 - **Goal diversity** — the fraction of the dataset's diversity
   tree that phase 4 must cover before finishing (default 40%).
 
-Raising these numbers trains a more thorough model at the cost of
+Raising these numbers trains a more thorough detector at the cost of
 more labelling effort.
 
 ---
@@ -228,7 +228,7 @@ Picks how the left-panel list is ordered.
   from another VTSearch instance). Opens a modal to pick a
   detector file or an example media item to sort by.
 
-You can freely switch modes — votes and the model persist across
+You can freely switch modes — votes and the detector persist across
 switches.
 
 ### 2. Selection strategy
@@ -238,7 +238,7 @@ Picks *which unlabeled item* the app highlights next.
 - **Top** — Pick the highest-ranked unlabeled item. Best for
   quickly finding strong matches.
 - **Hard** — Pick the item closest to the decision boundary.
-  These uncertain cases improve model accuracy fastest.
+  These uncertain cases improve detector accuracy fastest.
 - **New** — Pick an item from an underexplored region of the
   dataset using diversity sampling. Ensures broad coverage.
 
@@ -249,7 +249,7 @@ but in Manual mode you choose directly.
 
 A slider from **-10** (strict) to **+10** (lenient), default 0.
 
-Nudges the classification threshold after the learned model runs.
+Nudges the classification threshold after the learned detector runs.
 Negative values mean "only call it good if you're very sure" —
 fewer positives, higher precision. Positive values mean "include
 borderline items" — more positives, higher recall. The slider
@@ -284,7 +284,7 @@ with the same controls.
 When the dataset's embedder is patch-region-aware (DINOv2, DINOv3,
 or EUPE with a `_patch` slug — set when the dataset was created),
 you can vote **good** on a *region* of the image instead of the
-whole image.  This tells the model "this specific part is what I
+whole image.  This tells the detector "this specific part is what I
 like", and the learned sort uses that hint to find similar regions
 elsewhere in the dataset.
 
@@ -327,9 +327,9 @@ rectangle away — and drawing a rectangle is real work, so VTSearch
 There is **no timer** — the confirmation state waits as long as you
 need.
 
-### What region voting does to the model
+### What region voting does to the detector
 
-Region-voted good examples train the model on the *region* (pooled
+Region-voted good examples train the detector on the *region* (pooled
 from the patch grid) instead of the full image.  Bad votes are
 unaffected — VTSearch already treats every bad vote as "no region
 in this image is good" regardless of whether you drew a rectangle.
@@ -340,7 +340,7 @@ media types have no region affordance.
 
 ---
 
-## Dashboard — managing datasets and models
+## Dashboard — managing datasets and detectors
 
 The Dashboard is your inventory view. Two tables stacked vertically
 and a pair of action buttons underneath.
@@ -357,16 +357,16 @@ and a pair of action buttons underneath.
   state. Per-row icon buttons: **Rename**, **Add Labels** (import
   labels into this detector), **Export**, and **Delete**.
 
-**Starting a labeling session:** click a dataset row and a model
+**Starting a labeling session:** click a dataset row and a detector
 row to select them, then click the **Train** button in the action
 bar below the two tables. That opens the three-panel labeling view
 against your selection.
 
-**Scoring a dataset:** select a dataset and a model, then click
+**Scoring a dataset:** select a dataset and a detector, then click
 **Find** in the action bar. VTSearch scores every item in the
-dataset with the model and opens a ranked results modal.
+dataset with the detector and opens a ranked results modal.
 
-You can keep multiple datasets and multiple models loaded at once.
+You can keep multiple datasets and multiple detectors loaded at once.
 Loading just pulls them into memory; the Train / Find buttons work
 on whichever rows you currently have selected.
 
@@ -385,8 +385,8 @@ your current labels. Formats:
 - **Webhook** — POSTs the result to a URL you configure.
 - **Email (SMTP)** — emails the result if SMTP is configured.
 
-You can also export **detector weights** from the Models dashboard —
-useful for sharing a trained classifier with another VTSearch
+You can also export **detector weights** from the Detectors dashboard —
+useful for sharing a trained detector with another VTSearch
 instance, or for running it from the CLI. See [CLI.md](CLI.md) for
 command-line autodetect.
 
@@ -400,9 +400,9 @@ Two ways to bring in existing work:
   a JSON or CSV of `{md5, label}` pairs and populates your vote
   piles from it. Useful for continuing labelling across sessions
   or merging work from multiple labellers.
-- **Detectors (models)** — the **Load** sort mode and the Models
+- **Detectors** — the **Load** sort mode and the Detectors
   dashboard both have "import detector" options. A detector file
-  contains the trained model weights plus the threshold and
+  contains the trained detector weights plus the threshold and
   metadata needed to score a new dataset. Once imported, you can
   use it for Load-sort or for autorun scoring.
 

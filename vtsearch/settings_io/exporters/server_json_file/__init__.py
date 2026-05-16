@@ -24,7 +24,7 @@ class ServerFileSettingsExporter(SettingsExporter):
     fields = [
         SettingsExporterField(
             key="filepath",
-            label="Server File Path",
+            label="Save to (server path)",
             field_type="server_path",
             description=(
                 "Absolute or relative path on the server where the settings "

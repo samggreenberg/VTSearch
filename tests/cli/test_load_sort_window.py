@@ -39,7 +39,9 @@ class TestExampleSort:
     def test_no_file_returns_400(self, client):
         resp = client.post("/api/example-sort")
         assert resp.status_code == 400
-        assert "file" in resp.get_json()["error"].lower()
+        # Migrated to flask-smorest: handler-level rejects surface under
+        # ``message``, not the legacy ``error`` key.
+        assert "file" in resp.get_json()["message"].lower()
 
     def test_example_sort_returns_results_and_threshold(self, client):
         wav_buf = self._make_wav_bytes()
@@ -237,10 +239,12 @@ class TestExampleSortServer:
             wf.writeframes(struct.pack(f"<{num_samples}h", *samples))
         return path
 
-    def test_missing_filename_returns_400(self, client):
+    def test_missing_filename_returns_422(self, client):
+        # ``filename`` is required by the marshmallow schema → schema-level
+        # 422 with the per-field ``errors`` envelope.
         resp = client.post("/api/example-sort-server", json={})
-        assert resp.status_code == 400
-        assert "filename" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "filename" in resp.get_json()["errors"]["json"]
 
     def test_nonexistent_file_returns_404(self, client):
         resp = client.post("/api/example-sort-server", json={"filename": "nope.wav"})
@@ -340,30 +344,37 @@ class TestRegistryDetectorsForLoadSort:
 class TestExampleSortOrigin:
     """Tests for /api/example-sort-origin (sort by origin-resolved media file)."""
 
-    def test_missing_origin_returns_400(self, client):
+    def test_missing_origin_returns_422(self, client):
+        # ``origin`` is required by the marshmallow schema → 422.
         resp = client.post("/api/example-sort-origin", json={"key": "test.wav"})
-        assert resp.status_code == 400
-        assert "origin" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "origin" in resp.get_json()["errors"]["json"]
 
-    def test_missing_key_returns_400(self, client):
+    def test_missing_key_returns_422(self, client):
+        # ``key`` is required by the marshmallow schema → 422.
         resp = client.post(
             "/api/example-sort-origin",
             json={"origin": {"importer": "server_folder", "params": {"path": "/tmp"}}},
         )
-        assert resp.status_code == 400
-        assert "key" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "key" in resp.get_json()["errors"]["json"]
 
-    def test_invalid_origin_type_returns_400(self, client):
+    def test_invalid_origin_type_returns_422(self, client):
+        # ``origin`` is declared as ``fields.Dict`` — a non-dict value
+        # fails type coercion at the schema layer → 422.
         resp = client.post("/api/example-sort-origin", json={"origin": "not_a_dict", "key": "test.wav"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_unknown_origin_importer_returns_400(self, client):
+        # Handler-level reject: the origin shape passes the schema but
+        # ``get_source_for_origin`` returns None → 400 + standard
+        # ``message`` envelope.
         resp = client.post(
             "/api/example-sort-origin",
             json={"origin": {"importer": "nonexistent_source"}, "key": "test.wav"},
         )
         assert resp.status_code == 400
-        assert "source" in resp.get_json()["error"].lower()
+        assert "source" in resp.get_json()["message"].lower()
 
     def test_sort_with_folder_origin(self, client, tmp_path):
         """Sort by a media file resolved from a folder origin."""

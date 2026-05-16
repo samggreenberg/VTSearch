@@ -36,7 +36,9 @@ class TestImageClipEmbedder:
 
         assert ImageClipEmbedder().to_dict() == {
             "name": "clip",
+            "display_name": "CLIP (general images)",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -106,7 +108,9 @@ class TestImageSiglip2Embedder:
 
         assert ImageSiglip2Embedder().to_dict() == {
             "name": "siglip2",
+            "display_name": "SigLIP 2 (general images)",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -172,7 +176,9 @@ class TestImageDinov2SingleEmbedder:
 
         assert ImageDinov2SingleEmbedder().to_dict() == {
             "name": "dinov2_single",
+            "display_name": "DINOv2 single (image vector)",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": False,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -235,7 +241,9 @@ class TestImageDinov2PatchEmbedder:
 
         assert ImageDinov2PatchEmbedder().to_dict() == {
             "name": "dinov2_patch",
+            "display_name": "DINOv2 patch (region-aware images)",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": False,
             "supports_patch_regions": True,
             "license_notice": None,
@@ -280,7 +288,9 @@ class TestImageDinov3SingleEmbedder:
 
         assert ImageDinov3SingleEmbedder().to_dict() == {
             "name": "dinov3_single",
+            "display_name": "DINOv3 single (image vector)",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": False,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -341,7 +351,9 @@ class TestImageDinov3PatchEmbedder:
 
         assert ImageDinov3PatchEmbedder().to_dict() == {
             "name": "dinov3_patch",
+            "display_name": "DINOv3 patch (region-aware images)",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": False,
             "supports_patch_regions": True,
             "license_notice": None,
@@ -567,8 +579,12 @@ class TestSortRouteRejectsTextWhenUnsupported:
             resp = client.post("/api/sort", json={"text": "a cat"})
             assert resp.status_code == 400
             body = resp.get_json()
-            assert body.get("supports_text") is False
-            assert "dinov3_single" in body["error"]
+            # Migrated to flask-smorest: handler-level rejects surface
+            # under ``message``. The frontend already reads the
+            # ``supports_text`` flag from each embedder's
+            # ``EmbedderInfo`` directly, so the legacy body field that
+            # used to ride along on this error has been dropped.
+            assert "dinov3_single" in body["message"]
         finally:
             medias.clear()
             medias.update(saved)

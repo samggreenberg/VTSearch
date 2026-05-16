@@ -11,7 +11,7 @@ from __future__ import annotations
 import gc
 import hashlib
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, cast
 
 import numpy as np
 from PIL import Image
@@ -396,7 +396,9 @@ def embed_image_file_from_pil(image: Image.Image, embedder_name: str = "") -> Op
         if not avail:
             return None
         emb = avail[0]
-    return emb.embed_pil_image(image)
+    # Image-type embedders all implement embed_pil_image, but the method
+    # is not on the MediaEmbedder ABC (only image subclasses define it).
+    return cast(Any, emb).embed_pil_image(image)
 
 
 def _write_embedder_sidecar(pkl_path: Path, embedder_name: str) -> None:

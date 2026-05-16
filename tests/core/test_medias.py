@@ -376,12 +376,15 @@ class TestBatchMedias:
         assert resp.get_json() == []
 
     def test_missing_ids_field(self, client):
+        # Marshmallow-validated route: missing required ``ids`` field
+        # surfaces as 422 with the flask-smorest error envelope.
         resp = client.post("/api/medias/batch", json={"foo": "bar"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_non_list_ids(self, client):
+        # Type-coercion failure on ``ids`` → 422 with the ``errors`` envelope.
         resp = client.post("/api/medias/batch", json={"ids": "not a list"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 class TestMediaThumbnailBytes:
@@ -457,10 +460,15 @@ class TestMediaAudio:
             assert wf.getsampwidth() == 2
 
     def test_returns_404_for_invalid_id(self, client):
+        # The global 404 handler in ``app.py`` normalises NotFound
+        # exceptions on ``/api/`` paths to ``error_response(exc.name, 404)``
+        # — that's the JSON-for-SPA hook that overrides werkzeug's HTML
+        # 404. The flask-smorest message passed to ``abort()`` is dropped
+        # in favour of the canonical reason phrase.
         resp = client.get("/api/medias/9999/audio")
         assert resp.status_code == 404
         data = resp.get_json()
-        assert data["error"] == "not found"
+        assert data["error"] == "Not Found"
 
     def test_returns_404_for_zero_id(self, client):
         resp = client.get("/api/medias/0/audio")
@@ -548,7 +556,10 @@ class TestAddToPile:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "No file" in resp.get_json()["error"]
+        # Multipart body parsed by the handler (not a marshmallow schema),
+        # so the failure surfaces as 400 with the standard
+        # flask-smorest ``message`` envelope.
+        assert "No file" in resp.get_json()["message"]
 
     def test_missing_label(self, client):
         wav_bytes = app_module.generate_wav(999, 0.1)
@@ -558,7 +569,7 @@ class TestAddToPile:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "label" in resp.get_json()["error"]
+        assert "label" in resp.get_json()["message"]
 
     def test_invalid_label(self, client):
         wav_bytes = app_module.generate_wav(999, 0.1)
@@ -568,7 +579,7 @@ class TestAddToPile:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "label" in resp.get_json()["error"]
+        assert "label" in resp.get_json()["message"]
 
     def test_empty_file(self, client):
         resp = client.post(
@@ -577,7 +588,7 @@ class TestAddToPile:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "Empty" in resp.get_json()["error"]
+        assert "Empty" in resp.get_json()["message"]
 
     def test_no_dataset_loaded(self, client):
         """When no dataset is loaded, adding new media fails gracefully."""
@@ -591,6 +602,6 @@ class TestAddToPile:
                 content_type="multipart/form-data",
             )
             assert resp.status_code == 400
-            assert "No dataset" in resp.get_json()["error"]
+            assert "No dataset" in resp.get_json()["message"]
         finally:
             app_module.medias.update(saved)

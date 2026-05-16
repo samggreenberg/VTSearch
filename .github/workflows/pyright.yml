@@ -1,0 +1,55 @@
+name: Pyright
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  # Hard gate: must pass for the PR to merge.
+  # Covers the whole vtsearch/ package (pyrightconfig.json `include`).
+  gated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install vtsearch + deps (CPU)
+        run: |
+          set +e
+          bash scripts/install-cpu.sh 2>&1 | tee /tmp/install.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "## Install step (exit=$status)"
+            echo ""
+            echo '```'
+            tail -c 60000 /tmp/install.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      - name: Install pyright
+        run: npm install -g pyright@1.1.408
+
+      - name: Pyright (gated scope)
+        run: |
+          set +e
+          pyright 2>&1 | tee /tmp/pyright-gated.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "## Pyright gated scope"
+            echo ""
+            echo "Exit status: \`$status\`"
+            echo ""
+            echo '```'
+            tail -c 60000 /tmp/pyright-gated.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status

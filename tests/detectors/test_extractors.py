@@ -219,7 +219,7 @@ class TestAutorunExtractors:
         assert resp.status_code == 200
         assert resp.get_json()["success"] is True
 
-    def test_add_missing_name_returns_400(self, client):
+    def test_add_missing_name_returns_422(self, client):
         resp = client.post(
             "/api/autorun-extractors",
             json={
@@ -228,9 +228,9 @@ class TestAutorunExtractors:
                 "config": {"target_class": "person"},
             },
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
-    def test_add_missing_extractor_type_returns_400(self, client):
+    def test_add_missing_extractor_type_returns_422(self, client):
         resp = client.post(
             "/api/autorun-extractors",
             json={
@@ -239,9 +239,9 @@ class TestAutorunExtractors:
                 "config": {"target_class": "person"},
             },
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
-    def test_add_missing_media_type_returns_400(self, client):
+    def test_add_missing_media_type_returns_422(self, client):
         resp = client.post(
             "/api/autorun-extractors",
             json={
@@ -250,9 +250,9 @@ class TestAutorunExtractors:
                 "config": {"target_class": "person"},
             },
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
-    def test_add_missing_config_returns_400(self, client):
+    def test_add_missing_config_returns_422(self, client):
         resp = client.post(
             "/api/autorun-extractors",
             json={
@@ -261,7 +261,7 @@ class TestAutorunExtractors:
                 "media_type": "image",
             },
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_add_multiple(self, client):
         self._post_extractor(client, "ext-a")
@@ -320,13 +320,13 @@ class TestAutorunExtractors:
         )
         assert resp.status_code == 400
 
-    def test_rename_missing_new_name_returns_400(self, client):
+    def test_rename_missing_new_name_returns_422(self, client):
         self._post_extractor(client, "some-ext")
         resp = client.put(
             "/api/autorun-extractors/some-ext/rename",
             json={},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     # -- stored data --
 
@@ -360,7 +360,7 @@ class TestExtractEndpoint:
                 json={"extractor_type": "image_class", "config": {"target_class": "person"}},
             )
             assert resp.status_code == 400
-            assert "No medias loaded" in resp.get_json()["error"]
+            assert "No medias loaded" in resp.get_json()["message"]
         finally:
             medias.update(saved)
 
@@ -371,15 +371,15 @@ class TestExtractEndpoint:
             json={"extractor_type": "image_class", "config": {"target_class": "person"}},
         )
         assert resp.status_code == 400
-        assert "does not match" in resp.get_json()["error"]
+        assert "does not match" in resp.get_json()["message"]
 
     def test_extract_missing_extractor_type(self, client):
         resp = client.post("/api/extract", json={"config": {"target_class": "person"}})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_extract_missing_config(self, client):
         resp = client.post("/api/extract", json={"extractor_type": "image_class"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +402,7 @@ class TestAutoExtract:
     def test_no_extractors_returns_400(self, client):
         resp = client.post("/api/auto-extract")
         assert resp.status_code == 400
-        assert "No autorun extractors" in resp.get_json()["error"]
+        assert "No autorun extractors" in resp.get_json()["message"]
 
     def test_no_matching_media_type_returns_400(self, client):
         # Clips are audio; add an image extractor

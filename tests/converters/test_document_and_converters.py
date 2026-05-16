@@ -682,9 +682,10 @@ class TestLoadDemoWithConverter:
             "/api/dataset/load-demo",
             json={"name": "nonexistent_demo", "converter": "video2image"},
         )
-        # Should fail with "Invalid dataset name", not with a parameter error
+        # Should fail with "Invalid dataset name", not with a parameter error.
+        # flask-smorest error envelope: ``message`` (not ``error``).
         assert resp.status_code == 400
-        assert "Invalid dataset" in resp.get_json()["error"]
+        assert "Invalid dataset" in resp.get_json()["message"]
 
     def test_apply_converter_to_demo_unknown_converter(self):
         """_apply_converter_to_demo should raise for unknown converters."""

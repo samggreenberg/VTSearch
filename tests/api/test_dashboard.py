@@ -17,6 +17,11 @@ class TestDashboardDatasetInfo:
             resp = client.get("/api/dashboard/dataset-info")
             assert resp.status_code == 404
             data = resp.get_json()
+            # 404s are intercepted by the app-level ``NotFound``
+            # errorhandler in ``app.py`` (which always wins for 404
+            # because it matches a more specific exception subclass than
+            # flask-smorest's ``HTTPException`` handler), so the
+            # response carries ``error`` not ``message``.
             assert "error" in data
         finally:
             medias.update(saved)
@@ -227,8 +232,8 @@ class TestGuessMediaType:
     """Frontend auto-populates the media-type dropdown when creating a new model.
 
     The guessing logic lives in the Angular frontend (dashboard component):
-    1. If all datasets in the registry share a single media_type, use that.
-    2. Otherwise, if settings.autoload_media_embedders has exactly one entry, use it.
+    if all datasets in the registry share a single media_type, use that;
+    otherwise leave the dropdown blank.
 
     These tests verify the underlying data contracts that the frontend logic relies on.
     """
@@ -270,30 +275,11 @@ class TestGuessMediaType:
         types = {d["media_type"] for d in data["datasets"]}
         assert len(types) > 1
 
-    def test_autoload_single_embedder_from_settings(self, client):
-        """When autoload_media_embedders has exactly one entry, settings returns it."""
-        client.put("/api/settings", json={"autoload_media_embedders": ["siglip"]})
-        resp = client.get("/api/settings")
-        data = resp.get_json()
-        assert data["autoload_media_embedders"] == ["siglip"]
-
-    def test_autoload_multiple_embedders_no_single_guess(self, client):
-        """When autoload_media_embedders has multiple entries, no single guess."""
-        client.put("/api/settings", json={"autoload_media_embedders": ["clap", "siglip"]})
-        resp = client.get("/api/settings")
-        data = resp.get_json()
-        assert len(data["autoload_media_embedders"]) > 1
-
-    def test_empty_registry_falls_back_to_settings(self, client):
-        """With no datasets, the frontend should fall back to autoload settings."""
+    def test_empty_registry_no_guess(self, client):
+        """With no datasets, the registry returns an empty list and the frontend leaves the field blank."""
         resp = client.get("/api/datasets/registry")
         data = resp.get_json()
-        assert len(data["datasets"]) == 0
-        # Set a single autoload embedder
-        client.put("/api/settings", json={"autoload_media_embedders": ["e5"]})
-        resp = client.get("/api/settings")
-        data = resp.get_json()
-        assert data["autoload_media_embedders"] == ["e5"]
+        assert data["datasets"] == []
 
 
 class TestDashboardDatasetRegistryColumns:
@@ -698,7 +684,7 @@ class TestFindButtonValidation:
         ds_id = resp.get_json()["datasets"][0]["id"]
         resp = client.post("/api/find", json={"dataset_ids": [ds_id], "detector_ids": []})
         assert resp.status_code == 400
-        assert "No detectors selected" in resp.get_json()["error"]
+        assert "No detectors selected" in resp.get_json()["message"]
 
     def test_find_rejects_empty_dataset_ids(self, client):
         """POST /api/find with no datasets returns 400."""
@@ -707,7 +693,7 @@ class TestFindButtonValidation:
         m_id = resp.get_json()["detectors"][0]["id"]
         resp = client.post("/api/find", json={"dataset_ids": [], "detector_ids": [m_id]})
         assert resp.status_code == 400
-        assert "No datasets selected" in resp.get_json()["error"]
+        assert "No datasets selected" in resp.get_json()["message"]
 
     def test_frontend_uses_resolved_model_count(self, client):
         """The Angular bundle should use resolvedSelectedModels for Find validation."""
@@ -722,13 +708,13 @@ class TestFindButtonValidation:
 
 
 class TestFindProgress:
-    """Tests for the /api/find/progress endpoint and progress reporting."""
+    """Tests for the find_progress tracker (streamed via the SSE `find` channel)."""
 
     def test_find_progress_returns_idle_by_default(self, client):
-        """GET /api/find/progress returns idle state when no Find is running."""
-        resp = client.get("/api/find/progress")
-        assert resp.status_code == 200
-        data = resp.get_json()
+        """The find_progress tracker is idle when no Find is running."""
+        from vtsearch.concurrency.progress import find_progress
+
+        data = find_progress.get()
         assert data["status"] == "idle"
         assert data["message"] == ""
         assert data["step"] is None

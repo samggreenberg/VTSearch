@@ -11,8 +11,9 @@ import { AchievementsTabComponent } from '../../achievements-tab/achievements-ta
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { AppSettings, EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
+import { AppSettings, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
+import { formatVersion } from '../../../utils/format-date';
 
 @Component({
   selector: 'vt-settings-modal',
@@ -26,7 +27,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   @Output() closed = new EventEmitter<void>();
 
   settings: AppSettings = { volume: 50 };
-  embedders: EmbedderInfo[] = [];
   mediaTypes: MediaTypeInfo[] = [];
   activeSettingsTab = 'appearance';
   activeViewTab = '';
@@ -35,6 +35,8 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   showImporterModal = false;
   showExporterModal = false;
   version = '';
+  savedVisible = false;
+  private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   private destroy$ = new Subject<void>();
 
@@ -46,6 +48,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnDestroy(): void {
+    if (this.savedTimer !== null) clearTimeout(this.savedTimer);
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -53,7 +56,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     forkJoin({
       settings: this.settingsApi.getSettings(),
-      embedders: this.settingsApi.getEmbedders(),
       mediaTypes: this.datasetsApi.getMediaTypes(),
       version: this.settingsApi.getVersion(),
     })
@@ -61,10 +63,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       .subscribe({
       next: (res) => {
         this.settings = res.settings;
-        this.version = res.version.version;
-        this.embedders = (res.embedders.embedders || []).sort(
-          (a, b) => a.media_type_id.localeCompare(b.media_type_id) || a.name.localeCompare(b.name),
-        );
+        this.version = formatVersion(res.version.version);
         this.mediaTypes = res.mediaTypes.media_types || [];
         if (this.mediaTypes.length > 0) {
           const preselected = this.preselectedViewTab;
@@ -144,25 +143,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  getMediaTypeIcon(typeId: string): string {
-    const mt = this.mediaTypes.find((m) => m.type_id === typeId);
-    return mt?.icon || '';
-  }
-
-  isEmbedderAutoloaded(embedder: EmbedderInfo): boolean {
-    return (this.settings.autoload_media_embedders || []).includes(embedder.name);
-  }
-
-  toggleEmbedder(embedder: EmbedderInfo): void {
-    const current = this.settings.autoload_media_embedders || [];
-    if (current.includes(embedder.name)) {
-      this.settings.autoload_media_embedders = current.filter((e) => e !== embedder.name);
-    } else {
-      this.settings.autoload_media_embedders = [...current, embedder.name];
-    }
-    this.save();
-  }
-
   resetDefaults(): void {
     this.settingsApi
       .getDefaults()
@@ -207,10 +187,23 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       .update(this.settings)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
+        next: () => {
+          this.error = '';
+          this.flashSaved();
+        },
         error: () => {
           this.error = 'Failed to save settings';
         },
       });
+  }
+
+  private flashSaved(): void {
+    if (this.savedTimer !== null) clearTimeout(this.savedTimer);
+    this.savedVisible = true;
+    this.savedTimer = setTimeout(() => {
+      this.savedVisible = false;
+      this.savedTimer = null;
+    }, 1800);
   }
 
   close(): void {

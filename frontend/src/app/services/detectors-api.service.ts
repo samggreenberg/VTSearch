@@ -7,7 +7,6 @@ import {
   DetectorsRegistryResponse,
   DetectorsResponse,
   LabelsDetailResponse,
-  LoadingTasksResponse,
 } from '../models/api.models';
 import { ActiveContextService } from './active-context.service';
 
@@ -141,10 +140,6 @@ export class DetectorsApiService {
     return this.http.post(`/api/detectors/registry/${encodeURIComponent(detectorId)}/unload`, {});
   }
 
-  getDetectorLoadingTasks(): Observable<LoadingTasksResponse> {
-    return this.http.get<LoadingTasksResponse>('/api/detectors/loading-tasks');
-  }
-
   cancelDetectorLoadingTask(taskId: string): Observable<unknown> {
     return this.http.post(`/api/detectors/cancel/${encodeURIComponent(taskId)}`, {});
   }
@@ -219,10 +214,6 @@ export class DetectorsApiService {
 
   find(params: Record<string, unknown>): Observable<unknown> {
     return this.http.post('/api/find', params);
-  }
-
-  getFindProgress(): Observable<unknown> {
-    return this.http.get('/api/find/progress');
   }
 
   findLabel(params: Record<string, unknown>): Observable<unknown> {

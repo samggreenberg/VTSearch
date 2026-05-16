@@ -1,21 +1,36 @@
-"""Extractor and localizer execution routes."""
+"""Extractor and localizer execution routes.
+
+Migrated to ``flask_smorest`` so the routes are described in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+"""
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
-from flask import Blueprint, jsonify
+from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._shared import get_json_or_400
+from vtsearch.concurrency.memory_budget import cap_workers_by_memory
 from vtsearch.routes.processors.crud import _build_extractor, _build_localizer
+from vtsearch.schemas.processors import (
+    AutoExtractResponseSchema,
+    AutoLocalizeResponseSchema,
+    ExtractRequestSchema,
+    ExtractResponseSchema,
+    LocalizeRequestSchema,
+    LocalizeResponseSchema,
+)
 from vtsearch.state import (
     get_autorun_extractors_by_media,
     get_autorun_localizers_by_media,
     snapshot_medias,
 )
-from vtsearch.concurrency.memory_budget import cap_workers_by_memory
 
-processors_scoring_bp = Blueprint("processors_scoring", __name__)
+processors_scoring_bp = Blueprint(
+    "processors_scoring",
+    __name__,
+    description="Run extractors / localizers against the active dataset, either one-off or via autorun.",
+)
 
 # Keys excluded from API responses (large binary/vector data).
 _HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string", "thumbnail_bytes")
@@ -104,73 +119,67 @@ def _auto_run_processors(
 
 
 @processors_scoring_bp.route("/api/extract", methods=["POST"])
-def run_extract():
+@processors_scoring_bp.arguments(ExtractRequestSchema)
+@processors_scoring_bp.response(200, ExtractResponseSchema)
+@processors_scoring_bp.alt_response(400, description="No medias loaded, bad config, or media-type mismatch.")
+def run_extract(body: dict):
     """Run a single extractor on all medias and return per-media extraction results."""
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    extractor_name = data.get("name", "").strip()
-    extractor_type = data.get("extractor_type", "").strip()
-    config = data.get("config")
-
-    if not extractor_type:
-        return jsonify({"error": "extractor_type is required"}), 400
-    if not config or not isinstance(config, dict):
-        return jsonify({"error": "config is required"}), 400
+    extractor_name = body["name"].strip()
+    extractor_type = body["extractor_type"].strip()
+    config = body["config"]
 
     snap = snapshot_medias()
     if not snap:
-        return jsonify({"error": "No medias loaded"}), 400
+        abort(400, message="No medias loaded")
 
     try:
         extractor = _build_extractor(extractor_name or "adhoc", extractor_type, config)
     except Exception as e:
-        return jsonify({"error": f"Invalid extractor config: {e}"}), 400
+        abort(400, message=f"Invalid extractor config: {e}")
 
     media_type = next(iter(snap.values())).get("type", "")
     if extractor.media_type != media_type:
-        return (
-            jsonify({"error": f"Extractor media type '{extractor.media_type}' does not match medias '{media_type}'"}),
+        abort(
             400,
+            message=f"Extractor media type '{extractor.media_type}' does not match medias '{media_type}'",
         )
 
     results = _apply_processor_to_medias(extractor, snap, "extract", "extractions")
 
-    return jsonify(
-        {
-            "extractor_name": extractor.name,
-            "media_type": media_type,
-            "total_medias_with_hits": len(results),
-            "results": results,
-        }
-    )
+    return {
+        "extractor_name": extractor.name,
+        "media_type": media_type,
+        "total_medias_with_hits": len(results),
+        "results": results,
+    }
 
 
 @processors_scoring_bp.route("/api/auto-extract", methods=["POST"])
+@processors_scoring_bp.response(200, AutoExtractResponseSchema)
+@processors_scoring_bp.alt_response(
+    400, description="No medias loaded, or no autorun extractors for active media type."
+)
 def auto_extract():
     """Run all autorun extractors for the current media type and return extraction results."""
     snap = snapshot_medias()
     if not snap:
-        return jsonify({"error": "No medias loaded"}), 400
+        abort(400, message="No medias loaded")
 
     media_type = next(iter(snap.values())).get("type", "")
     extractors = get_autorun_extractors_by_media(media_type)
 
     if not extractors:
-        return jsonify({"error": f"No autorun extractors found for media type: {media_type}"}), 400
+        abort(400, message=f"No autorun extractors found for media type: {media_type}")
 
     results = _auto_run_processors(
         snap, extractors, _build_extractor, "extractor_type", "extract", "extractions", "extractor_name"
     )
 
-    return jsonify(
-        {
-            "media_type": media_type,
-            "extractors_run": len(results),
-            "results": results,
-        }
-    )
+    return {
+        "media_type": media_type,
+        "extractors_run": len(results),
+        "results": results,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -179,70 +188,64 @@ def auto_extract():
 
 
 @processors_scoring_bp.route("/api/localize", methods=["POST"])
-def run_localize():
+@processors_scoring_bp.arguments(LocalizeRequestSchema)
+@processors_scoring_bp.response(200, LocalizeResponseSchema)
+@processors_scoring_bp.alt_response(400, description="No medias loaded, bad config, or media-type mismatch.")
+def run_localize(body: dict):
     """Run a single localizer on all clips and return per-clip localization results."""
-    data = get_json_or_400()
-    if not isinstance(data, dict):
-        return data
-
-    localizer_name = data.get("name", "").strip()
-    localizer_type = data.get("localizer_type", "").strip()
-    config = data.get("config")
-
-    if not localizer_type:
-        return jsonify({"error": "localizer_type is required"}), 400
-    if not config or not isinstance(config, dict):
-        return jsonify({"error": "config is required"}), 400
+    localizer_name = body["name"].strip()
+    localizer_type = body["localizer_type"].strip()
+    config = body["config"]
 
     snap = snapshot_medias()
     if not snap:
-        return jsonify({"error": "No medias loaded"}), 400
+        abort(400, message="No medias loaded")
 
     try:
         localizer = _build_localizer(localizer_name or "adhoc", localizer_type, config)
     except Exception as e:
-        return jsonify({"error": f"Invalid localizer config: {e}"}), 400
+        abort(400, message=f"Invalid localizer config: {e}")
 
     media_type = next(iter(snap.values())).get("type", "")
     if localizer.media_type != media_type:
-        return (
-            jsonify({"error": f"Localizer media type '{localizer.media_type}' does not match medias '{media_type}'"}),
+        abort(
             400,
+            message=f"Localizer media type '{localizer.media_type}' does not match medias '{media_type}'",
         )
 
     results = _apply_processor_to_medias(localizer, snap, "localize", "localizations")
 
-    return jsonify(
-        {
-            "localizer_name": localizer.name,
-            "media_type": media_type,
-            "total_medias_with_hits": len(results),
-            "results": results,
-        }
-    )
+    return {
+        "localizer_name": localizer.name,
+        "media_type": media_type,
+        "total_medias_with_hits": len(results),
+        "results": results,
+    }
 
 
 @processors_scoring_bp.route("/api/auto-localize", methods=["POST"])
+@processors_scoring_bp.response(200, AutoLocalizeResponseSchema)
+@processors_scoring_bp.alt_response(
+    400, description="No medias loaded, or no autorun localizers for active media type."
+)
 def auto_localize():
     """Run all autorun localizers for the current media type."""
     snap = snapshot_medias()
     if not snap:
-        return jsonify({"error": "No medias loaded"}), 400
+        abort(400, message="No medias loaded")
 
     media_type = next(iter(snap.values())).get("type", "")
     localizers = get_autorun_localizers_by_media(media_type)
 
     if not localizers:
-        return jsonify({"error": f"No autorun localizers found for media type: {media_type}"}), 400
+        abort(400, message=f"No autorun localizers found for media type: {media_type}")
 
     results = _auto_run_processors(
         snap, localizers, _build_localizer, "localizer_type", "localize", "localizations", "localizer_name"
     )
 
-    return jsonify(
-        {
-            "media_type": media_type,
-            "localizers_run": len(results),
-            "results": results,
-        }
-    )
+    return {
+        "media_type": media_type,
+        "localizers_run": len(results),
+        "results": results,
+    }

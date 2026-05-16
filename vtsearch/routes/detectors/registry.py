@@ -8,13 +8,18 @@ Endpoints
 ---------
 GET    /api/detectors/registry                        List registered detectors.
 POST   /api/detectors/registry                        Register a new detector.
+POST   /api/detectors/registry/from-labelset/<imp>    Seed a new detector from a label importer.
 POST   /api/detectors/registry/load                   Load a detector into memory.
 POST   /api/detectors/registry/<id>/unload            Unload a detector from memory.
 DELETE /api/detectors/registry/<id>                   Remove a detector from the registry.
 PUT    /api/detectors/registry/<id>/rename            Rename a registered detector.
 PUT    /api/detectors/registry/<id>/autorun           Toggle the detector's autorun flag.
-GET    /api/detectors/loading-tasks                   Active detector-load progress.
 POST   /api/detectors/cancel/<task_id>                Cancel a load task.
+
+Migrated to ``flask_smorest`` so the routes are described in
+``/api/openapi.json`` — except for ``POST /from-labelset/<importer>``, which
+takes plugin-dependent fields and stays on plain Flask (see
+``docs/plans/openapi-schema.md`` *Open questions / Plugin field endpoints*).
 """
 
 from __future__ import annotations
@@ -23,7 +28,8 @@ import logging
 import threading
 import time
 
-from flask import Blueprint, jsonify, request
+from flask import jsonify
+from flask_smorest import Blueprint, abort
 
 from vtsearch.auth import get_current_user
 from vtsearch.detectors.store import (
@@ -36,13 +42,37 @@ from vtsearch.detectors.label_restoration import (
 )
 from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
 from vtsearch.detectors.media_seeding import seed_good_votes_from_examples as _seed_good_votes_from_examples
+from vtsearch.schemas.detectors import (
+    DetectorCancelResponseSchema,
+    DetectorRegistryAutorunRequestSchema,
+    DetectorRegistryAutorunResponseSchema,
+    DetectorRegistryCreateRequestSchema,
+    DetectorRegistryCreateResponseSchema,
+    DetectorRegistryDeleteResponseSchema,
+    DetectorRegistryListResponseSchema,
+    DetectorRegistryLoadRequestSchema,
+    DetectorRegistryLoadResponseSchema,
+    DetectorRegistryRenameRequestSchema,
+    DetectorRegistryRenameResponseSchema,
+    DetectorRegistryUnloadResponseSchema,
+)
 
 logger = logging.getLogger(__name__)
 
-detectors_registry_bp = Blueprint("detectors_registry", __name__)
+detectors_registry_bp = Blueprint(
+    "detectors_registry",
+    __name__,
+    description="Register, load, unload, rename, and toggle autorun on detectors.",
+)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/detectors/registry
+# ---------------------------------------------------------------------------
 
 
 @detectors_registry_bp.route("/api/detectors/registry")
+@detectors_registry_bp.response(200, DetectorRegistryListResponseSchema)
 def list_registered_detectors():
     """Return all registered detectors with their loaded state and autorun flag."""
     from vtsearch.detectors.registry import get_loaded_detector_ids, list_detectors
@@ -57,37 +87,35 @@ def list_registered_detectors():
         entry["autorun"] = entry.get("name", "") in autorun_names
         entry.setdefault("last_trained_at", None)
         entry["detector_loaded"] = did in loaded_ids
-    return jsonify({"detectors": entries})
+    return {"detectors": entries}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/detectors/registry
+# ---------------------------------------------------------------------------
 
 
 @detectors_registry_bp.route("/api/detectors/registry", methods=["POST"])
-def register_detector_route():
-    """Register a new detector in the detector registry.
-
-    Expects JSON::
-
-        {
-            "name": "Dog Barks",
-            "media_type": "audio",
-            "text_query": "dog barking sounds"
-        }
-    """
+@detectors_registry_bp.arguments(DetectorRegistryCreateRequestSchema)
+@detectors_registry_bp.response(201, DetectorRegistryCreateResponseSchema)
+@detectors_registry_bp.alt_response(400, description="Empty name after stripping, or media_type is 'any'.")
+def register_detector_route(body: dict):
+    """Register a new detector in the detector registry."""
     from vtsearch.detectors.registry import register_detector
 
-    data = request.get_json(force=True, silent=True) or {}
-    name = data.get("name", "").strip()
-    media_type = data.get("media_type", "").strip()
-    text_query = data.get("text_query", "")
-    media_example = data.get("media_example", "")
+    name = body["name"].strip()
+    media_type = body["media_type"].strip()
+    text_query = body["text_query"]
+    media_example = body["media_example"]
 
     if not name:
-        return jsonify({"error": "name is required"}), 400
+        abort(400, message="name is required")
     if not media_type or media_type == "any":
-        return jsonify({"error": "media_type is required (must be a specific type, not 'any')"}), 400
+        abort(400, message="media_type is required (must be a specific type, not 'any')")
 
     det_path = _detector_path(name)
     if not det_path.exists():
-        examples = data.get("examples", [])
+        examples = body.get("examples") or []
         if not examples and text_query:
             examples = [{"type": "text", "value": text_query}]
         if not examples and media_example:
@@ -110,7 +138,17 @@ def register_detector_route():
         media_example=media_example,
         created_by=get_current_user(),
     )
-    return jsonify({"ok": True, "detector": entry}), 201
+    return {"ok": True, "detector": entry}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/detectors/registry/from-labelset/<importer_name>
+#
+# Plugin-field route — stays on the legacy ``request.get_json`` path. The
+# request body is the importer's declared ``fields`` (file uploads,
+# free-form params) and doesn't fit a static marshmallow schema. See
+# ``docs/plans/openapi-schema.md`` (Open questions / Plugin field endpoints).
+# ---------------------------------------------------------------------------
 
 
 @detectors_registry_bp.route(
@@ -118,7 +156,10 @@ def register_detector_route():
     methods=["POST"],
 )
 def register_detector_from_labelset(importer_name: str):
-    """Create a detector seeded with labels from a label importer."""
+    """Create a detector seeded with labels from a label importer.
+
+    Plugin-dependent body shape: not described in the OpenAPI spec.
+    """
     from vtsearch.datasets.ingest import _media_type_from_origin
     from vtsearch.datasets.labelset import LabeledElement, LabelSet
     from vtsearch.labels.importers import get_label_importer, list_label_importers
@@ -135,6 +176,7 @@ def register_detector_from_labelset(importer_name: str):
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
         return err
+    assert importer is not None  # narrowed by err check
 
     has_file_fields = any(f.field_type == "file" for f in importer.fields)
     name = get_request_field("name", has_file_fields).strip()
@@ -233,9 +275,21 @@ def register_detector_from_labelset(importer_name: str):
     ), 201
 
 
+# ---------------------------------------------------------------------------
+# POST /api/detectors/registry/load
+# ---------------------------------------------------------------------------
+
+
 @detectors_registry_bp.route("/api/detectors/registry/load", methods=["POST"])
-def load_detector_route():
-    """Load a detector into memory and make it active."""
+@detectors_registry_bp.arguments(DetectorRegistryLoadRequestSchema)
+@detectors_registry_bp.response(200, DetectorRegistryLoadResponseSchema)
+@detectors_registry_bp.alt_response(404, description="Detector not found.")
+def load_detector_route(body: dict):
+    """Load a detector into memory and make it active.
+
+    Pass ``detector_id=null`` (or omit the field) to unload the active
+    detector without loading another one.
+    """
     from vtsearch.detectors.registry import (
         get_detector,
         is_detector_loaded,
@@ -248,13 +302,12 @@ def load_detector_route():
         register_detector_context,
     )
 
-    data = request.get_json(force=True, silent=True) or {}
-    detector_id = data.get("detector_id")
+    detector_id = body.get("detector_id")
 
     if detector_id is not None:
         entry = get_detector(detector_id)
         if entry is None:
-            return jsonify({"error": "Detector not found"}), 404
+            abort(404, message="Detector not found")
 
     if good_votes or bad_votes:
         sync_labels_to_loaded_detector()
@@ -270,10 +323,10 @@ def load_detector_route():
             unregister_detector_context(prev_id)
             remove_loaded_detector_id(prev_id)
         set_find_mode(False)
-        return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
+        return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
     if is_detector_loaded(detector_id):
-        return jsonify({"ok": True, "labels_restored": 0, "examples_seeded": 0})
+        return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
     from vtsearch.concurrency.progress import CancelledError, detector_loading_tasks
 
@@ -409,16 +462,22 @@ def load_detector_route():
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()
-    return jsonify(
-        {
-            "ok": True,
-            "message": "Loading started",
-            "task_id": str(task_id),
-        }
-    )
+    return {
+        "ok": True,
+        "message": "Loading started",
+        "task_id": str(task_id),
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/detectors/registry/<detector_id>/unload
+# ---------------------------------------------------------------------------
 
 
 @detectors_registry_bp.route("/api/detectors/registry/<detector_id>/unload", methods=["POST"])
+@detectors_registry_bp.response(200, DetectorRegistryUnloadResponseSchema)
+@detectors_registry_bp.alt_response(400, description="Detector is not loaded.")
+@detectors_registry_bp.alt_response(404, description="Detector not found.")
 def unload_detector_route(detector_id: str):
     """Unload a detector from memory (frees its DetectorContext)."""
     from vtsearch.detectors.registry import get_detector, is_detector_loaded, remove_loaded_detector_id
@@ -431,9 +490,9 @@ def unload_detector_route(detector_id: str):
 
     entry = get_detector(detector_id)
     if entry is None:
-        return jsonify({"error": "Detector not found"}), 404
+        abort(404, message="Detector not found")
     if not is_detector_loaded(detector_id):
-        return jsonify({"error": "Detector is not loaded"}), 400
+        abort(400, message="Detector is not loaded")
 
     det_ctx = get_active_detector_context()
     if det_ctx.detector_id == detector_id and (good_votes or bad_votes):
@@ -442,17 +501,24 @@ def unload_detector_route(detector_id: str):
     unregister_detector_context(detector_id)
     remove_loaded_detector_id(detector_id)
 
-    return jsonify({"ok": True, "message": "Detector unloaded"})
+    return {"ok": True, "message": "Detector unloaded"}
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/detectors/registry/<detector_id>
+# ---------------------------------------------------------------------------
 
 
 @detectors_registry_bp.route("/api/detectors/registry/<detector_id>", methods=["DELETE"])
+@detectors_registry_bp.response(200, DetectorRegistryDeleteResponseSchema)
+@detectors_registry_bp.alt_response(404, description="Detector not found.")
 def delete_registered_detector(detector_id: str):
     """Remove a detector from the registry, including its labelset file."""
     from vtsearch.detectors.registry import get_detector, unregister_detector
 
     entry = get_detector(detector_id)
     if entry is None:
-        return jsonify({"error": "Detector not found"}), 404
+        abort(404, message="Detector not found")
 
     try:
         det_name = entry.get("name", "")
@@ -482,41 +548,48 @@ def delete_registered_detector(detector_id: str):
         logger.exception("Failed to drop autorun flag for %s", detector_id)
 
     unregister_detector(detector_id)
-    return jsonify({"ok": True})
+    return {"ok": True}
 
 
-@detectors_registry_bp.route("/api/detectors/loading-tasks")
-def detector_loading_tasks_endpoint():
-    """Return all active detector loading tasks with their progress."""
-    from vtsearch.concurrency.progress import detector_loading_tasks
-
-    return jsonify({"tasks": detector_loading_tasks.list_tasks()})
+# ---------------------------------------------------------------------------
+# POST /api/detectors/cancel/<task_id>
+# ---------------------------------------------------------------------------
 
 
 @detectors_registry_bp.route("/api/detectors/cancel/<task_id>", methods=["POST"])
+@detectors_registry_bp.response(200, DetectorCancelResponseSchema)
+@detectors_registry_bp.alt_response(404, description="Task not found.")
 def cancel_detector_loading_task(task_id: str):
     """Cancel a specific detector loading task."""
     from vtsearch.concurrency.progress import detector_loading_tasks
 
     ok = detector_loading_tasks.cancel_task(task_id)
     if not ok:
-        return jsonify({"error": "Task not found"}), 404
-    return jsonify({"ok": True})
+        abort(404, message="Task not found")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/detectors/registry/<detector_id>/rename
+# ---------------------------------------------------------------------------
 
 
 @detectors_registry_bp.route("/api/detectors/registry/<detector_id>/rename", methods=["PUT"])
-def rename_registered_detector(detector_id: str):
+@detectors_registry_bp.arguments(DetectorRegistryRenameRequestSchema)
+@detectors_registry_bp.response(200, DetectorRegistryRenameResponseSchema)
+@detectors_registry_bp.alt_response(400, description="Empty name after stripping.")
+@detectors_registry_bp.alt_response(404, description="Detector not found.")
+def rename_registered_detector(body: dict, detector_id: str):
     """Rename a registered detector and its on-disk labelset file."""
     from vtsearch.detectors.registry import get_detector, rename_detector
 
-    data = request.get_json(force=True, silent=True) or {}
-    new_name = data.get("name", "").strip()
+    new_name = body["name"].strip()
     if not new_name:
-        return jsonify({"error": "name is required"}), 400
+        abort(400, message="name is required")
 
     entry = get_detector(detector_id)
     if entry is None:
-        return jsonify({"error": "Detector not found"}), 404
+        abort(404, message="Detector not found")
 
     old_name = entry.get("name", "")
     if old_name and old_name != new_name:
@@ -541,14 +614,21 @@ def rename_registered_detector(detector_id: str):
             logger.exception("Failed to rename autorun entry for %s", detector_id)
 
     rename_detector(detector_id, new_name)
-    return jsonify({"ok": True, "name": new_name})
+    return {"ok": True, "name": new_name}
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/detectors/registry/<detector_id>/autorun
+# ---------------------------------------------------------------------------
 
 
 @detectors_registry_bp.route("/api/detectors/registry/<detector_id>/autorun", methods=["PUT"])
-def set_detector_autorun(detector_id: str):
+@detectors_registry_bp.arguments(DetectorRegistryAutorunRequestSchema)
+@detectors_registry_bp.response(200, DetectorRegistryAutorunResponseSchema)
+@detectors_registry_bp.alt_response(404, description="Detector not found.")
+@detectors_registry_bp.alt_response(500, description="Detector has no associated name.")
+def set_detector_autorun(body: dict, detector_id: str):
     """Toggle the autorun flag for a registered detector.
-
-    Body: ``{"autorun": true}``.
 
     The flag is stored in ``settings.json`` under ``autorun_detectors`` so the
     CLI's ``--autodetect`` flow and the active-dataset ``/api/auto-detect``
@@ -562,19 +642,16 @@ def set_detector_autorun(detector_id: str):
 
     entry = get_detector(detector_id)
     if entry is None:
-        return jsonify({"error": "Detector not found"}), 404
+        abort(404, message="Detector not found")
 
-    data = request.get_json(force=True, silent=True) or {}
-    if "autorun" not in data:
-        return jsonify({"error": "autorun is required"}), 400
-    flag = bool(data["autorun"])
+    flag = body["autorun"]
 
     name = entry.get("name", "")
     if not name:
-        return jsonify({"error": "Detector has no name"}), 500
+        abort(500, message="Detector has no name")
 
     if flag:
         add_autorun_detector(name)
     else:
         remove_autorun_detector(name)
-    return jsonify({"ok": True, "autorun": flag})
+    return {"ok": True, "autorun": flag}

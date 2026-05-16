@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -17,9 +17,6 @@ from vtsearch.media.embedder import (
     timed_progress,
 )
 
-if TYPE_CHECKING:
-    from transformers import ClapModel, ClapProcessor
-
 
 class AudioClapEmbedder(MediaEmbedder):
     """Embeds audio files using the CLAP model (laion/clap-htsat-unfused).
@@ -30,8 +27,10 @@ class AudioClapEmbedder(MediaEmbedder):
 
     def __init__(self) -> None:
         super().__init__()
-        self._model: Optional[ClapModel] = None
-        self._processor: Optional[ClapProcessor] = None
+        # Typed ``Any``: transformers stubs miss several ``ClapProcessor.__call__``
+        # kwargs we pass at runtime; runtime ``None`` checks guard the calls.
+        self._model: Any = None
+        self._processor: Any = None
 
     # ------------------------------------------------------------------
     # Identity
@@ -40,6 +39,10 @@ class AudioClapEmbedder(MediaEmbedder):
     @property
     def name(self) -> str:
         return "clap"
+
+    @property
+    def display_name(self) -> str:
+        return "CLAP (general audio)"
 
     @property
     def media_type_id(self) -> str:
@@ -137,12 +140,28 @@ class AudioClapEmbedder(MediaEmbedder):
             self.load_models()
         if self._model is None or self._processor is None:
             return None
-        file_path = Path(media["media_path"])
+        # Prefer in-memory bytes (set by clip re-embed) over a disk path so
+        # the caller does not need to round-trip through a tempfile.
+        audio_bytes = media.get("media_bytes")
+        file_path: Optional[Path] = None
+        if not isinstance(audio_bytes, (bytes, bytearray)) or not audio_bytes:
+            audio_bytes = None
+            path_str = media.get("media_path")
+            if not path_str:
+                return None
+            file_path = Path(path_str)
+        source_repr = file_path if file_path is not None else "<bytes>"
         try:
+            import io  # noqa: PLC0415
             import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
-            audio_data, _sr = librosa.load(file_path, sr=CLAP_SAMPLE_RATE, mono=True)
+            if audio_bytes is not None:
+                source: io.BytesIO | Path = io.BytesIO(bytes(audio_bytes))
+            else:
+                assert file_path is not None  # narrowed by the path_str check above
+                source = file_path
+            audio_data, _sr = librosa.load(source, sr=CLAP_SAMPLE_RATE, mono=True)
             inputs = self._processor(
                 audio=audio_data,
                 sampling_rate=CLAP_SAMPLE_RATE,
@@ -158,7 +177,7 @@ class AudioClapEmbedder(MediaEmbedder):
                 embedding = self._model.audio_projection(outputs.pooler_output).detach().cpu().numpy()
             return embedding[0]
         except Exception:
-            logging.getLogger(__name__).exception("Error embedding %s", file_path)
+            logging.getLogger(__name__).exception("Error embedding %s", source_repr)
             return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:

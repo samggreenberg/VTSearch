@@ -53,6 +53,10 @@ class TestSyntheticImporterRegistration:
         media_type_field = imp.fields[0]
         assert media_type_field.field_type == "select"
         assert set(media_type_field.options) == {"image", "audio", "video"}
+        size_field = imp.fields[1]
+        assert size_field.field_type == "number"
+        assert size_field.min == "1"
+        assert size_field.step == "1"
 
 
 class TestSyntheticImporterValidation:

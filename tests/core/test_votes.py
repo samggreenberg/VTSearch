@@ -54,13 +54,16 @@ class TestVoteClip:
         assert 1 in app_module.good_votes
 
     def test_invalid_vote_value(self, client):
+        # Marshmallow OneOf validator on ``vote`` rejects non-{good,bad}
+        # values with the flask-smorest 422 envelope.
         resp = client.post("/api/medias/1/vote", json={"vote": "meh"})
-        assert resp.status_code == 400
-        assert "vote must be" in resp.get_json()["error"]
+        assert resp.status_code == 422
+        assert "vote" in resp.get_json()["errors"]["json"]
 
     def test_missing_vote_field(self, client):
+        # Required-field validation runs in MediaVoteRequestSchema → 422.
         resp = client.post("/api/medias/1/vote", json={"wrong": "field"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_vote_nonexistent_clip(self, client):
         resp = client.post("/api/medias/9999/vote", json={"vote": "good"})

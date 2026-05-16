@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from vtsearch.auth import (
+    ApiKeyLoginProvider,
     DefaultLoginProvider,
     LoginProvider,
     TrivialLoginProvider,
@@ -279,6 +280,232 @@ class TestUserDataDirIsolation:
 
 
 # ---------------------------------------------------------------------------
+# ApiKeyLoginProvider
+# ---------------------------------------------------------------------------
+
+
+def _hash_key(key: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def _write_keys(path: Path, mapping: dict[str, str]) -> None:
+    import json
+
+    path.write_text(json.dumps(mapping))
+
+
+class _FakeRequest:
+    """Minimal stand-in for a Flask request — only ``headers.get`` is used."""
+
+    def __init__(self, headers: dict[str, str] | None = None) -> None:
+        self.headers = headers or {}
+
+
+class TestApiKeyLoginProvider:
+    """Test the bearer-token login provider used by headless integrations."""
+
+    def test_name(self):
+        provider = ApiKeyLoginProvider(keys_file=Path("/nonexistent/api_keys.json"))
+        assert provider.name == "api_key"
+
+    def test_login_required_is_false(self):
+        provider = ApiKeyLoginProvider(keys_file=Path("/nonexistent/api_keys.json"))
+        assert provider.login_required() is False
+
+    def test_no_file_means_anonymous(self):
+        provider = ApiKeyLoginProvider(keys_file=Path("/nonexistent/api_keys.json"))
+        req = _FakeRequest({"Authorization": "Bearer some-key"})
+        assert provider.get_user(req) == "anonymous"
+        assert provider.is_authenticated(req) is False
+
+    def test_valid_key_returns_username(self, tmp_path):
+        key = "super-secret-key"
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key(key): "alice"})
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+
+        req = _FakeRequest({"Authorization": f"Bearer {key}"})
+        assert provider.get_user(req) == "alice"
+        assert provider.is_authenticated(req) is True
+
+    def test_invalid_key_returns_anonymous(self, tmp_path):
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key("real-key"): "alice"})
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+
+        req = _FakeRequest({"Authorization": "Bearer wrong-key"})
+        assert provider.get_user(req) == "anonymous"
+        assert provider.is_authenticated(req) is False
+
+    def test_missing_header_returns_anonymous(self, tmp_path):
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key("k"): "alice"})
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+
+        req = _FakeRequest({})
+        assert provider.get_user(req) == "anonymous"
+        assert provider.is_authenticated(req) is False
+
+    def test_non_bearer_header_returns_anonymous(self, tmp_path):
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key("k"): "alice"})
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+
+        # Basic auth shouldn't be parsed as a bearer token even if the rest matches.
+        req = _FakeRequest({"Authorization": "Basic k"})
+        assert provider.get_user(req) == "anonymous"
+
+    def test_empty_bearer_token_returns_anonymous(self, tmp_path):
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key("k"): "alice"})
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+
+        req = _FakeRequest({"Authorization": "Bearer    "})
+        assert provider.get_user(req) == "anonymous"
+
+    def test_multiple_keys_per_user(self, tmp_path):
+        """Two keys mapping to the same username both authenticate."""
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(
+            keys_file,
+            {
+                _hash_key("key-one"): "alice",
+                _hash_key("key-two"): "alice",
+                _hash_key("key-three"): "bob",
+            },
+        )
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer key-one"})) == "alice"
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer key-two"})) == "alice"
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer key-three"})) == "bob"
+
+    def test_data_dir_is_per_user(self, tmp_path):
+        provider = ApiKeyLoginProvider(keys_file=tmp_path / "api_keys.json")
+        base = Path("/app/data")
+        assert provider.get_user_data_dir("alice", base) == base / "alice"
+
+    def test_invalid_username_skipped(self, tmp_path, caplog):
+        """A username with path-traversal characters is rejected at load time."""
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(
+            keys_file,
+            {
+                _hash_key("good"): "alice",
+                _hash_key("evil"): "../../etc/passwd",
+            },
+        )
+        with caplog.at_level("ERROR"):
+            provider = ApiKeyLoginProvider(keys_file=keys_file)
+
+        # Good key still works
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer good"})) == "alice"
+        # Evil key is dropped, request resolves to anonymous
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer evil"})) == "anonymous"
+        assert any("invalid username" in rec.message for rec in caplog.records)
+
+    def test_malformed_json_keeps_existing_keys(self, tmp_path, caplog):
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key("good"): "alice"})
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer good"})) == "alice"
+
+        # Corrupt the file. Bump mtime so the reload is actually attempted.
+        import os
+        import time
+
+        keys_file.write_text("{not valid json")
+        future = time.time() + 10
+        os.utime(keys_file, (future, future))
+
+        with caplog.at_level("ERROR"):
+            # Request should still authenticate using the previously loaded map.
+            assert provider.get_user(_FakeRequest({"Authorization": "Bearer good"})) == "alice"
+        assert any("failed to load" in rec.message for rec in caplog.records)
+
+    def test_hot_reload_on_mtime_change(self, tmp_path):
+        """Adding a new key to the file is picked up without restarting."""
+        import os
+        import time
+
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key("alice-key"): "alice"})
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer bob-key"})) == "anonymous"
+
+        # Add Bob and bump mtime so the reload triggers.
+        _write_keys(
+            keys_file,
+            {
+                _hash_key("alice-key"): "alice",
+                _hash_key("bob-key"): "bob",
+            },
+        )
+        future = time.time() + 10
+        os.utime(keys_file, (future, future))
+
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer bob-key"})) == "bob"
+        # Original key still works.
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer alice-key"})) == "alice"
+
+    def test_file_deleted_clears_keys(self, tmp_path):
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key("k"): "alice"})
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer k"})) == "alice"
+
+        keys_file.unlink()
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer k"})) == "anonymous"
+
+    def test_status_dict(self, tmp_path):
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key("k"): "alice"})
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+
+        status = provider.status_dict(_FakeRequest({"Authorization": "Bearer k"}))
+        assert status["provider"] == "api_key"
+        assert status["user"] == "alice"
+        assert status["authenticated"] is True
+        assert status["login_required"] is False
+
+        anon_status = provider.status_dict(_FakeRequest({}))
+        assert anon_status["user"] == "anonymous"
+        assert anon_status["authenticated"] is False
+
+    def test_end_to_end_flask_request(self, tmp_path, client):
+        """Plug the provider into the live app and hit /api/auth/status."""
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key("flask-test-key"): "alice"})
+        provider = ApiKeyLoginProvider(keys_file=keys_file)
+        original = get_login_provider()
+        try:
+            set_login_provider(provider)
+
+            # No header -> anonymous, unauthenticated.
+            resp = client.get("/api/auth/status")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["provider"] == "api_key"
+            assert data["user"] == "anonymous"
+            assert data["authenticated"] is False
+
+            # Valid bearer token -> alice, authenticated.
+            resp = client.get(
+                "/api/auth/status",
+                headers={"Authorization": "Bearer flask-test-key"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["user"] == "alice"
+            assert data["authenticated"] is True
+        finally:
+            set_login_provider(original)
+
+
+# ---------------------------------------------------------------------------
 # Provider swap safety
 # ---------------------------------------------------------------------------
 
@@ -375,7 +602,9 @@ class TestTrivialLoginEndpoints:
         """Login endpoint returns 400 when the trivial provider is not active."""
         resp = client.post("/api/auth/login", json={"username": "alice"})
         assert resp.status_code == 400
-        assert "not supported" in resp.get_json()["error"]
+        # flask-smorest emits its standard error envelope with the
+        # message under "message", not "error".
+        assert "not supported" in resp.get_json()["message"]
 
     def test_logout_rejected_with_default_provider(self, client):
         """Logout endpoint returns 400 when the trivial provider is not active."""
@@ -423,7 +652,8 @@ class TestTrivialLoginEndpoints:
         try:
             set_login_provider(TrivialLoginProvider())
             resp = client.post("/api/auth/login", json={"username": ""})
-            assert resp.status_code == 400
+            # Schema-level validation failure → 422 (flask-smorest).
+            assert resp.status_code == 422
         finally:
             set_login_provider(original)
 
@@ -432,7 +662,7 @@ class TestTrivialLoginEndpoints:
         try:
             set_login_provider(TrivialLoginProvider())
             resp = client.post("/api/auth/login", json={"username": "alice bob"})
-            assert resp.status_code == 400
+            assert resp.status_code == 422
         finally:
             set_login_provider(original)
 
@@ -441,7 +671,7 @@ class TestTrivialLoginEndpoints:
         try:
             set_login_provider(TrivialLoginProvider())
             resp = client.post("/api/auth/login", json={"username": "../etc"})
-            assert resp.status_code == 400
+            assert resp.status_code == 422
         finally:
             set_login_provider(original)
 

@@ -41,7 +41,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Generic, Literal, TypeVar
 
-FieldType = Literal["file", "folder", "url", "text", "password", "email", "select", "server_path", "checkbox"]
+FieldType = Literal[
+    "file",
+    "folder",
+    "url",
+    "text",
+    "password",
+    "email",
+    "number",
+    "select",
+    "server_path",
+    "checkbox",
+]
 
 __all__ = [
     "FieldType",
@@ -70,6 +81,13 @@ class PluginField:
     - ``"text"``     – Generic single-line text input.
     - ``"password"`` – Text input whose characters are masked.
     - ``"email"``    – Text input pre-validated as an e-mail address.
+    - ``"number"``   – Numeric input.  Use :attr:`min`, :attr:`max`, and
+      :attr:`step` to constrain the allowed values; an integer ``step``
+      (and integer :attr:`default` / :attr:`min` / :attr:`max`) tells the
+      CLI parser to coerce values with :class:`int`, otherwise
+      :class:`float` is used.  Values still arrive at :meth:`run` as
+      strings from web requests, so plugins should ``int()`` or
+      ``float()`` them as needed.
     - ``"select"``   – Drop-down; ``options`` must be populated (or
       :attr:`dynamic_options` set, in which case options are fetched at
       runtime from the plugin's ``get_field_options`` method).
@@ -110,6 +128,15 @@ class PluginField:
     #: listed field changes, the frontend re-fetches options for this field.
     #: Only meaningful when :attr:`dynamic_options` is ``True``.
     depends_on: list[str] = field(default_factory=list)
+    #: For ``"number"`` fields: minimum allowed value (string form, empty = no min).
+    min: str = ""
+    #: For ``"number"`` fields: maximum allowed value (string form, empty = no max).
+    max: str = ""
+    #: For ``"number"`` fields: step increment (string form).  If empty or
+    #: ``"any"``, falls back to ``"1"`` for integer-looking defaults and
+    #: ``"any"`` for floats.  A non-integer step (e.g. ``"0.05"``) tells the
+    #: CLI parser to use :class:`float`; an integer step uses :class:`int`.
+    step: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -124,7 +151,24 @@ class PluginField:
             "placeholder": self.placeholder,
             "dynamic_options": self.dynamic_options,
             "depends_on": list(self.depends_on),
+            "min": self.min,
+            "max": self.max,
+            "step": self.step,
         }
+
+    def is_integer_number(self) -> bool:
+        """Return True for a ``"number"`` field that represents an integer.
+
+        A number field is treated as an integer when its :attr:`step`,
+        :attr:`default`, :attr:`min`, and :attr:`max` all lack a decimal
+        point.  Otherwise it is treated as a float.
+        """
+        if self.field_type != "number":
+            return False
+        for val in (self.step, self.default, self.min, self.max):
+            if val and "." in str(val):
+                return False
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +237,10 @@ class PluginBase:
                 kwargs["default"] = f.default
             if f.field_type == "select" and f.options:
                 kwargs["choices"] = f.options
+            if f.field_type == "number":
+                kwargs["type"] = int if f.is_integer_number() else float
+                if f.default:
+                    kwargs["default"] = kwargs["type"](f.default)
             parser.add_argument(arg_name, **kwargs)
 
     def validate_cli_field_values(self, field_values: dict[str, Any]) -> None:
@@ -290,6 +338,8 @@ class PluginRegistry(Generic[T]):
         (excluding ``__init__.py`` and ``base.py``) for the sentinel.
         """
         parent = importlib.import_module(self._package)
+        if parent.__file__ is None:
+            raise RuntimeError(f"Cannot discover plugins under namespace package {self._package!r}")
         package_dir = Path(parent.__file__).parent
         for entry in sorted(package_dir.iterdir()):
             if entry.name.startswith((".", "_")):
@@ -330,8 +380,11 @@ class PluginRegistry(Generic[T]):
         skipped.  This prevents an installed third-party package from
         accidentally shadowing a core plugin.
         """
+        group = self._entry_point_group
+        if group is None:
+            return
         try:
-            eps = importlib.metadata.entry_points(group=self._entry_point_group)
+            eps = importlib.metadata.entry_points(group=group)
         except Exception as exc:  # pragma: no cover
             warnings.warn(
                 f"Failed to read entry-point group {self._entry_point_group!r}: {exc}",

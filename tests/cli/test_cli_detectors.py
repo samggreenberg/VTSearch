@@ -140,6 +140,138 @@ class TestAutorunDetectorsCLI:
         assert isinstance(det.get("hits"), list)
         assert det["detector_name"] == "ds-a-detector"
 
+    def test_detector_with_mismatched_input_spec_is_skipped(self, client, tmp_path, monkeypatch):
+        """A detector whose input_spec.clipper doesn't match the dataset is skipped, not run."""
+        files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
+        _stub_resolve(monkeypatch, files)
+
+        labelset = {
+            "labels": [
+                {
+                    "md5": "a" * 32,
+                    "label": "good",
+                    "origin": {"importer": "ds_a", "params": {}},
+                    "origin_name": "alpha.wav",
+                },
+                {
+                    "md5": "c" * 32,
+                    "label": "bad",
+                    "origin": {"importer": "ds_a", "params": {}},
+                    "origin_name": "gamma.wav",
+                },
+            ]
+        }
+
+        # Write the detector by hand so input_spec is present on disk.
+        from vtsearch.detectors.store import _detector_path, _write_detector
+
+        _write_detector(
+            _detector_path("spec-mismatch"),
+            {
+                "name": "spec-mismatch",
+                "media_type": "audio",
+                "labelset": labelset,
+                "input_spec": {
+                    "clipper": "sound_tiling",
+                    "clipper_params": {"duration": "2.0"},
+                },
+            },
+        )
+        # Plus a detector with no input_spec — so the pipeline has
+        # *something* to score and doesn't error out empty-handed.
+        _write_trainable_model("ds-a-detector", labelset)
+
+        # The test fixture's medias have empty origin params (no clipper),
+        # so the mismatched detector should be skipped while the
+        # unconstrained one runs.
+        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        settings_path = _settings_file_with_detectors(tmp_path, ["spec-mismatch", "ds-a-detector"])
+        out_path = tmp_path / "hits.json"
+
+        from vtsearch.cli import autodetect_main
+
+        autodetect_main(
+            str(dataset_path),
+            settings_path=str(settings_path),
+            exporter_name="server_json_file",
+            exporter_field_values={"filepath": str(out_path)},
+        )
+
+        body = json.loads(out_path.read_text())
+        results = body.get("results", {})
+        # Mismatched detector skipped, unconstrained one ran.
+        assert "spec-mismatch" not in results
+        assert "ds-a-detector" in results
+
+    def test_detector_with_matching_input_spec_runs(self, client, tmp_path, monkeypatch):
+        """When the dataset's clipper matches the detector's input_spec, the detector runs."""
+        files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
+        _stub_resolve(monkeypatch, files)
+
+        labelset = {
+            "labels": [
+                {
+                    "md5": "a" * 32,
+                    "label": "good",
+                    "origin": {"importer": "ds_a", "params": {}},
+                    "origin_name": "alpha.wav",
+                },
+                {
+                    "md5": "c" * 32,
+                    "label": "bad",
+                    "origin": {"importer": "ds_a", "params": {}},
+                    "origin_name": "gamma.wav",
+                },
+            ]
+        }
+
+        from vtsearch.detectors.store import _detector_path, _write_detector
+
+        _write_detector(
+            _detector_path("spec-matched"),
+            {
+                "name": "spec-matched",
+                "media_type": "audio",
+                "labelset": labelset,
+                "input_spec": {"clipper": "sound_tiling", "clipper_params": {"duration": "2.0"}},
+            },
+        )
+
+        # Stamp the matching clipper config onto every test media's origin
+        # so the CLI sees a dataset that was loaded with sound_tiling(2.0).
+        # The fixture medias use the default importer with empty params; we
+        # only mutate origin.params here, not the medias themselves.
+        original_origins = {}
+        try:
+            for mid, media in app_module.medias.items():
+                original_origins[mid] = media.get("origin")
+                media["origin"] = {
+                    "importer": "test",
+                    "params": {
+                        "clipper": "sound_tiling",
+                        "clipper_duration": "2.0",
+                    },
+                }
+
+            dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+            settings_path = _settings_file_with_detectors(tmp_path, ["spec-matched"])
+            out_path = tmp_path / "hits.json"
+
+            from vtsearch.cli import autodetect_main
+
+            autodetect_main(
+                str(dataset_path),
+                settings_path=str(settings_path),
+                exporter_name="server_json_file",
+                exporter_field_values={"filepath": str(out_path)},
+            )
+            body = json.loads(out_path.read_text())
+            assert "spec-matched" in body.get("results", {})
+        finally:
+            for mid, origin in original_origins.items():
+                if mid in app_module.medias:
+                    app_module.medias[mid]["origin"] = origin
+
     def test_clear_error_when_origins_unresolvable(self, client, tmp_path, monkeypatch):
         """No origins resolve → ValueError with a CLI-friendly explanation."""
         # Stub yields None for everything (simulates labels from local_folder).

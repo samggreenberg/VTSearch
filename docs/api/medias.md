@@ -174,13 +174,14 @@ the frontend.
 Returns HTTP 400 + `{"supports_text": false, ...}` when the dataset's
 embedder doesn't support text queries.
 
-### Text sort progress
+### Text sort progress (SSE)
 
-```
-GET /api/sort/progress
-```
+Text-sort progress streams on the `sort` channel of
+[`/api/events`](events.md):
 
-→ `{"status": "sorting", "message": "Computing similarities…", "cur": 50, "total": 100}`
+```json
+{"status": "sorting", "message": "Computing similarities…", "current": 50, "total": 100}
+```
 
 Status is `"idle"` or `"sorting"`.
 

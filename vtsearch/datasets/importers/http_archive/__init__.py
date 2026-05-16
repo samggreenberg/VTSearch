@@ -84,7 +84,7 @@ def _extract_archive(
 
     elif name.endswith(".rar"):
         try:
-            import rarfile  # optional dependency
+            import rarfile  # optional dependency  # pyright: ignore[reportMissingImports]
         except ImportError as exc:
             raise RuntimeError(
                 "RAR extraction requires the 'rarfile' package. Install it with: pip install rarfile"
@@ -170,7 +170,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
     fields = [
         ImporterField(
             key="url",
-            label="Archive URL",
+            label="Path or URL",
             field_type="url",
             description="URL to a publicly accessible archive (.zip, .tar.gz, .rar, \u2026) of media files.",
         ),

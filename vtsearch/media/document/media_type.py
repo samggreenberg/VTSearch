@@ -66,10 +66,6 @@ class DocumentMediaType(MediaType):
         return "document"
 
     @property
-    def tab_title(self) -> str:
-        return "Documents"
-
-    @property
     def dir_key(self) -> str:
         return "document_dir"
 

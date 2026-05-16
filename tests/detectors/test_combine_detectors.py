@@ -144,24 +144,28 @@ def _save_labelset(client, name, labelset_dict):
 
 class TestCombineEndpointValidation:
     def test_missing_names(self, client):
+        # ``names`` is required by the combine schema → 422 with the
+        # standard flask-smorest envelope (``errors`` per-field).
         res = client.post("/api/detectors/combine", json={"new_name": "X"})
-        assert res.status_code == 400
-        assert "names" in res.get_json()["error"]
+        assert res.status_code == 422
+        assert "names" in res.get_json()["errors"]["json"]
 
     def test_only_one_name(self, client):
+        # ``names`` requires at least 2 entries (schema length validator) → 422.
         res = client.post(
             "/api/detectors/combine",
             json={"names": ["A"], "new_name": "X"},
         )
-        assert res.status_code == 400
+        assert res.status_code == 422
 
     def test_missing_new_name(self, client):
+        # ``new_name`` is required by the schema → 422.
         res = client.post(
             "/api/detectors/combine",
             json={"names": ["A", "B"]},
         )
-        assert res.status_code == 400
-        assert "new_name" in res.get_json()["error"]
+        assert res.status_code == 422
+        assert "new_name" in res.get_json()["errors"]["json"]
 
     def test_unknown_source_model(self, client):
         _create_model(client, "A")
@@ -178,8 +182,10 @@ class TestCombineEndpointValidation:
             "/api/detectors/combine",
             json={"names": ["A", "B"], "new_name": "X"},
         )
+        # Cross-source media-type check runs in the handler → 400 with
+        # the standard error envelope (``message``).
         assert res.status_code == 400
-        assert "media_type" in res.get_json()["error"]
+        assert "media_type" in res.get_json()["message"]
 
     def test_new_name_collision(self, client):
         _create_model(client, "A")
@@ -213,8 +219,10 @@ class TestCombineEndpointValidation:
             "/api/detectors/combine",
             json={"names": ["A", "B"], "new_name": "X"},
         )
+        # Handler emits 422 via ``abort(422, message=...)`` → standard
+        # error envelope with ``message``.
         assert res.status_code == 422
-        assert "empty" in res.get_json()["error"].lower()
+        assert "empty" in res.get_json()["message"].lower()
 
 
 class TestCombineEndpointSuccess:

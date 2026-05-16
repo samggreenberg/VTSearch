@@ -87,7 +87,6 @@ class TestPerUserIsolation:
         # Server-tier keys are filtered out.
         assert "saved_datasets_dir" not in out
         assert "autorun_detectors" not in out
-        assert "autoload_media_embedders" not in out
 
 
 class TestLegacyMigration:

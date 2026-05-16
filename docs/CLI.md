@@ -74,6 +74,104 @@ Predicted Good (5 items):
 
 Items with origin information include the origin display string before the filename.
 
+### Dry-run mode
+
+Add `--dry-run` to any `--autodetect` invocation to print the plan
+without loading media, training detectors, scoring, or exporting:
+
+```bash
+python app.py --autodetect --dataset data.pkl --settings settings.json --dry-run
+python app.py --autodetect --importer server_folder --path /data/sounds \
+    --media-type audio --settings settings.json --exporter server_json_file \
+    --filepath out.json --dry-run
+```
+
+The output names the source (pickle file or importer + params), the
+settings file, every detector listed under `autorun_detectors` (with its
+media type and label count), and the exporter + its field values:
+
+```
+DRY RUN — no media will be loaded, embedded, scored, or exported.
+
+Source:
+  Importer: server_folder
+  Params:
+    path: /data/sounds
+    media_type: audio
+  Chunk size: whole dataset
+
+Settings: settings.json
+Autorun detectors (2):
+  - Dog Barks  [media_type=audio, labels=12, file=data/detectors/Dog Barks.json]
+  - Cat Meows  [media_type=audio, labels=8, file=data/detectors/Cat Meows.json]
+
+Exporter: server_json_file
+  filepath: out.json
+```
+
+`--dry-run` validates importer and exporter names, checks that the
+dataset pickle (if given) exists, verifies required CLI fields are
+populated, and reports any detector JSON files that are missing — so
+typos in a cron-style invocation fail immediately instead of after a
+multi-minute embedding pass. `--import-labels-into ... --label-importer-file ...`
+is announced as part of the plan but skipped (no detector JSON is
+modified).
+
+## Pipeline file
+
+For repeatable runs (cron, CI), put the whole autodetect invocation in a YAML
+file and pass it via `--pipeline`:
+
+```bash
+python app.py --pipeline pipeline.yaml
+```
+
+The YAML supports every knob the `--autodetect` flag set does. It cannot be
+combined with the other autodetect flags — declare everything inline.
+
+```yaml
+# Pick exactly one source.
+dataset: data/sounds.pkl
+# --- or ---
+importer:
+  name: server_folder              # see `python app.py --list-importers`
+  fields:                          # importer-specific PluginField values
+    path: /data/sounds
+    media_type: audio
+    recursive: true
+
+# Optional. Path to the same settings JSON the --settings flag accepts.
+# Defaults to data/settings.json.
+settings: settings.json
+
+# Optional. When set, overrides settings.json's `autorun_detectors` list
+# for this run only. The file on disk is NOT modified.
+detectors:
+  - Dog Barks
+  - Cat Meows
+
+# Optional. Process medias in batches of N. Same as --chunk-size.
+chunk_size: 1000
+
+# Optional. One-shot merge of an external label file into a detector
+# before scoring (same as --import-labels-into / --label-importer /
+# --label-importer-file).
+import_labels:
+  detector: dog-barks
+  importer: server_json_file       # default: server_json_file
+  file: new_labels.json
+
+# Optional. Where results go. Defaults to the `gui` exporter (console).
+exporter:
+  name: server_json_file
+  fields:
+    filepath: results.json
+```
+
+Plugin names (`importer.name`, `exporter.name`, `import_labels.importer`) are
+validated against the registered plugins at load time, so a typo fails fast
+before any media is loaded.
+
 ## Web server modes
 
 **Development (Flask dev server)** — bind to `0.0.0.0:5000`:
@@ -124,8 +222,22 @@ python app.py --list-plugins --plugin-family importers --format names
                                                       # one bare name per line — completion-friendly
 ```
 
-Use `--format names --plugin-family <family>` from a shell-completion
-script to suggest valid values for `--importer`, `--exporter`, etc.
+Per-family shortcuts are available for every plugin family — they're
+equivalent to `--list-plugins --plugin-family <family>` and accept the
+same `--format` flag:
+
+```bash
+python app.py --list-importers                        # dataset importers
+python app.py --list-exporters --format names         # results exporters, bare names
+python app.py --list-embedders --format json          # embedders as JSON
+# Also: --list-converters, --list-clippers, --list-media-types,
+# --list-media-sources, --list-label-importers, --list-labelset-sources,
+# --list-settings-importers, --list-settings-exporters, --list-settings-sources.
+```
+
+Use `--format names --plugin-family <family>` (or any `--list-<family>
+--format names` shortcut) from a shell-completion script to suggest
+valid values for `--importer`, `--exporter`, etc.
 
 `python app.py --openapi-schema` prints an OpenAPI 3.0 document for the
 HTTP API to stdout and exits — same content as `GET /openapi.json` on

@@ -105,6 +105,37 @@ class TestSettingsModule:
         settings_mod.set_autorun_detectors(["x", "y", "x"])
         assert settings_mod.get_autorun_detectors() == ["x", "y"]
 
+    def test_max_concurrent_downloads_default_from_hardware(self, isolated_settings):
+        """With no override on disk, the default scales with cpu_count (cap 4)."""
+        import os
+
+        expected = max(1, min(4, os.cpu_count() or 1))
+        assert settings_mod.get_max_concurrent_dataset_downloads() == expected
+        # The hardware-derived default must NOT be persisted to disk — only
+        # explicit ``set_*`` calls write keys. (The fixture pre-writes a few
+        # path keys; we just check our key is absent.)
+        raw = isolated_settings.read_text() if isolated_settings.exists() else ""
+        assert "max_concurrent_dataset_downloads" not in raw
+
+    def test_max_concurrent_embeddings_default_from_hardware(self, isolated_settings):
+        """CPU-only boxes default to 1; CUDA boxes default to min(2, gpu_count)."""
+        from vtsearch.embedding.loader import _detect_cuda_devices
+
+        gpus = _detect_cuda_devices()
+        expected = max(1, min(2, gpus)) if gpus > 0 else 1
+        assert settings_mod.get_max_concurrent_dataset_embeddings() == expected
+
+    def test_max_concurrent_explicit_value_wins_over_hardware_default(self, isolated_settings):
+        """An explicit ``set_*`` call overrides the hardware-derived default."""
+        settings_mod.set_max_concurrent_dataset_downloads(7)
+        settings_mod.set_max_concurrent_dataset_embeddings(3)
+        assert settings_mod.get_max_concurrent_dataset_downloads() == 7
+        assert settings_mod.get_max_concurrent_dataset_embeddings() == 3
+        # And it survives a reset (read back from disk).
+        settings_mod.reset()
+        assert settings_mod.get_max_concurrent_dataset_downloads() == 7
+        assert settings_mod.get_max_concurrent_dataset_embeddings() == 3
+
     def test_persistence_survives_reset(self, isolated_settings):
         settings_mod.set_volume(0.7)
         settings_mod.add_autorun_detector("p")
@@ -466,7 +497,9 @@ class TestSettingsModule:
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()
         assert defaults["volume"] == 1.0
-        assert defaults["theme"] == "dark"
+        # Theme defaults to ``"system"`` — the frontend resolves this to
+        # the OS ``prefers-color-scheme`` at render time.
+        assert defaults["theme"] == "system"
         assert defaults["calibrate_count"] == 1
         assert defaults["calibration_fraction"] == 0.5
         assert defaults["safe_thresholds"] is False
@@ -591,3 +624,33 @@ class TestSettingsModule:
         # Should fall back to defaults
         assert settings_mod.get_volume() == 1.0
         assert settings_mod.get_autorun_detectors() == []
+
+    def test_last_embedder_per_media_type_default(self):
+        assert settings_mod.get_last_embedder_per_media_type() == {}
+        assert settings_mod.get_last_embedder_for_media_type("image") == ""
+
+    def test_set_last_embedder_for_media_type(self, isolated_settings):
+        settings_mod.set_last_embedder_for_media_type("image", "siglip")
+        assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"
+        assert settings_mod.get_last_embedder_per_media_type() == {"image": "siglip"}
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["last_embedder_per_media_type"] == {"image": "siglip"}
+
+    def test_last_embedder_per_media_type_independent_keys(self, isolated_settings):
+        settings_mod.set_last_embedder_for_media_type("image", "siglip")
+        settings_mod.set_last_embedder_for_media_type("audio", "clap")
+        assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"
+        assert settings_mod.get_last_embedder_for_media_type("audio") == "clap"
+
+    def test_last_embedder_for_media_type_ignores_empty_args(self, isolated_settings):
+        settings_mod.set_last_embedder_for_media_type("image", "siglip")
+        # Empty media_type or embedder is a no-op.
+        settings_mod.set_last_embedder_for_media_type("", "anything")
+        settings_mod.set_last_embedder_for_media_type("image", "")
+        assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"
+
+    def test_last_embedder_per_media_type_persists_across_reset(self, isolated_settings):
+        settings_mod.set_last_embedder_for_media_type("image", "siglip")
+        settings_mod.reset()
+        assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"

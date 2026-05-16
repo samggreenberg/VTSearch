@@ -11,7 +11,9 @@ to work unchanged.
 """
 
 import gc
+import os
 import sys
+from typing import Any, cast
 
 from vtsearch.config import MODELS_CACHE_DIR, resolve_device
 from vtsearch.media.torch_setup import ensure_torch_configured
@@ -27,6 +29,48 @@ def get_torch_device():
     import torch  # noqa: PLC0415
 
     return torch.device(resolve_device())
+
+
+def _detect_cuda_devices() -> int:
+    """Return the count of visible CUDA GPUs, or 0 if none / torch missing.
+
+    Imports torch lazily so callers (e.g. settings default factories) can
+    run before torch is loaded. All exceptions degrade to ``0`` — a missing
+    or broken CUDA stack must not block startup.
+    """
+    try:
+        import torch  # noqa: PLC0415
+
+        if torch.cuda.is_available():
+            return int(torch.cuda.device_count())
+    except Exception:
+        pass
+    return 0
+
+
+def default_concurrent_downloads() -> int:
+    """Default for ``max_concurrent_dataset_downloads`` derived from hardware.
+
+    The download phase is bandwidth- and disk-bound. Allowing a handful of
+    parallel downloads usually saturates a home connection without thrashing
+    the disk; capped at 4 to keep memory and FD pressure reasonable on small
+    boxes.
+    """
+    return max(1, min(4, os.cpu_count() or 1))
+
+
+def default_concurrent_embeddings() -> int:
+    """Default for ``max_concurrent_dataset_embeddings`` derived from hardware.
+
+    The embed phase is CPU/GPU- and RAM-bound. On CPU-only boxes one worker
+    keeps the box hot without thrashing; with GPUs we allow one task per
+    visible CUDA device (capped at 2) so two datasets can embed in parallel
+    on a multi-GPU rig without overcommitting a single device's VRAM.
+    """
+    gpus = _detect_cuda_devices()
+    if gpus <= 0:
+        return 1
+    return max(1, min(2, gpus))
 
 
 def initialize_models() -> None:
@@ -84,25 +128,69 @@ def _make_console_progress(original_callback):
     return _callback
 
 
-def preload_autoload_media_types() -> list[str]:
-    """Eagerly load embedding models for autoload embedders (and legacy media types).
+def predict_embedders_to_preload() -> list[str]:
+    """Predict which embedders are likely to be needed next, from active metadata.
 
-    Reads ``autoload_media_embedders`` from persisted settings and calls
-    :meth:`~vtsearch.media.base.MediaEmbedder.load_models` on each one so
-    that models are warm before the user opens the GUI.
+    Walks the dataset registry and detector registry and returns the unique
+    list of embedder names the user is likely to need:
 
+    - For each registered dataset: ``entry["embedder"]`` if set, otherwise
+      the default embedder for ``entry["media_type"]``.
+    - For each registered detector: the default embedder for
+      ``entry["media_type"]``.
+
+    Names not matching a registered embedder are filtered out. Order
+    reflects discovery order (datasets first, then detectors), so the
+    output is stable across runs.
+    """
+    from vtsearch.datasets.registry import list_datasets
+    from vtsearch.detectors.registry import list_detectors
+    from vtsearch.media import all_embedders, embedders_for_type
+
+    valid = {e.name for e in all_embedders()}
+    predictions: list[str] = []
+    seen: set[str] = set()
+
+    def _add(name: str) -> None:
+        if name and name in valid and name not in seen:
+            seen.add(name)
+            predictions.append(name)
+
+    def _default_for(media_type: str) -> str:
+        if not media_type:
+            return ""
+        opts = embedders_for_type(media_type)
+        return opts[0].name if opts else ""
+
+    for entry in list_datasets():
+        emb = entry.get("embedder", "") or ""
+        _add(emb if emb else _default_for(entry.get("media_type", "")))
+
+    for entry in list_detectors():
+        _add(_default_for(entry.get("media_type", "")))
+
+    return predictions
+
+
+def preload_predicted_embedders() -> list[str]:
+    """Eagerly load embedding models predicted by :func:`predict_embedders_to_preload`.
+
+    Calls :meth:`~vtsearch.media.base.MediaEmbedder.load_models` on each
+    predicted embedder so it is warm before the user opens the GUI.
     Prints intermediate status messages and download progress bars to
-    the console so that the user can see what is happening during the
-    (potentially long) model loading phase.
+    the console while models load.
 
     Returns the list of embedder names that were preloaded.
     """
     from vtsearch.media import get_embedder
-    from vtsearch.settings import get_autoload_media_embedders
 
+    targets = predict_embedders_to_preload()
+    if not targets:
+        return []
+
+    print(f"  Predicted embedders to preload: {', '.join(targets)}", flush=True)
     preloaded: list[str] = []
-
-    for emb_name in get_autoload_media_embedders():
+    for emb_name in targets:
         try:
             emb = get_embedder(emb_name)
             print(f"  Preloading {emb_name} embedder...", flush=True)
@@ -118,6 +206,30 @@ def preload_autoload_media_types() -> list[str]:
     return preloaded
 
 
+def smart_preload_in_background() -> None:
+    """Kick a daemon thread that warms any predicted embedders not yet loaded.
+
+    Idempotent: embedders whose model is already in memory are skipped.
+    Failures are swallowed because this is a best-effort optimisation —
+    the real load path will retry on first use.
+    """
+    import threading
+
+    def _run() -> None:
+        from vtsearch.media import get_embedder
+
+        for emb_name in predict_embedders_to_preload():
+            try:
+                emb = get_embedder(emb_name)
+                if getattr(emb, "_model", None) is not None:
+                    continue
+                emb.load_models()
+            except Exception:
+                pass
+
+    threading.Thread(target=_run, name="smart-preload", daemon=True).start()
+
+
 # ---------------------------------------------------------------------------
 # Backward-compatible getter functions
 #
@@ -131,7 +243,8 @@ def get_clap_model():
     from vtsearch.media import get_embedder
 
     emb = get_embedder("clap")
-    return emb._get_model_and_processor()
+    # _get_model_and_processor is defined on the CLAP subclass, not the ABC.
+    return cast(Any, emb)._get_model_and_processor()
 
 
 def get_xclip_model():
@@ -139,7 +252,7 @@ def get_xclip_model():
     from vtsearch.media import get_embedder
 
     emb = get_embedder("xclip")
-    return emb._get_model_and_processor()
+    return cast(Any, emb)._get_model_and_processor()
 
 
 def get_e5_model():
@@ -147,4 +260,4 @@ def get_e5_model():
     from vtsearch.media import get_embedder
 
     emb = get_embedder("e5")
-    return emb._get_model()
+    return cast(Any, emb)._get_model()

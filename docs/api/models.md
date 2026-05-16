@@ -168,8 +168,8 @@ POST /api/detectors/registry/load
 
 → `{"ok": true, "message": "Loading started", "task_id": "..."}`
 
-Loading is async — poll `GET /api/detectors/loading-tasks` for progress.
-404 if model not found.
+Loading is async — subscribe to the `detector-loading-tasks` channel
+on [`/api/events`](events.md) (SSE) for progress. 404 if model not found.
 
 ### Unload model
 
@@ -179,13 +179,14 @@ POST /api/detectors/registry/{model_id}/unload
 
 → `{"ok": true}`
 
-### Model loading tasks
+### Model loading tasks (SSE)
 
-```
-GET /api/detectors/loading-tasks
-```
+Active model loading tasks are streamed on the `detector-loading-tasks`
+channel of [`/api/events`](events.md):
 
-→ `{"tasks": [{"id": "...", "name": "...", "status": "loading", "message": "...", "cur": 50, "total": 100}]}`
+```json
+[{"task_id": "...", "name": "...", "status": "loading", "message": "...", "current": 50, "total": 100}]
+```
 
 ### Cancel model loading
 

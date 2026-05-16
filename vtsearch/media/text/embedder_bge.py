@@ -22,6 +22,27 @@ if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
 
 
+def _read_text(media: dict) -> Optional[str]:
+    """Return the embeddable text for *media*, or ``None`` on failure.
+
+    Prefers ``media_string`` (set directly by clip re-embed and by some
+    importers) over ``media_path`` so the bulk surface does not need to
+    round-trip the content through a tempfile.
+    """
+    text = media.get("media_string")
+    if isinstance(text, str):
+        return text.strip()
+    file_path = media.get("media_path")
+    if not file_path:
+        return None
+    try:
+        with open(Path(file_path), "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception:
+        logging.getLogger(__name__).exception("Error reading %s", file_path)
+        return None
+
+
 class TextBGEEmbedder(MediaEmbedder):
     """Embeds text using the BGE-base-en-v1.5 model.
 
@@ -41,6 +62,10 @@ class TextBGEEmbedder(MediaEmbedder):
     @property
     def name(self) -> str:
         return "bge"
+
+    @property
+    def display_name(self) -> str:
+        return "BGE (text)"
 
     @property
     def media_type_id(self) -> str:
@@ -92,16 +117,16 @@ class TextBGEEmbedder(MediaEmbedder):
             self.load_models()
         if self._model is None:
             return None
-        file_path = Path(media["media_path"])
+        text_content = _read_text(media)
+        if text_content is None:
+            return None
+        if not text_content:
+            print("Warning: empty text content")
+            return None
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                text_content = f.read().strip()
-            if not text_content:
-                print(f"Warning: empty text file {file_path}")
-                return None
-            return self._model.encode(text_content, normalize_embeddings=True)
+            return np.asarray(self._model.encode(text_content, normalize_embeddings=True))
         except Exception:
-            logging.getLogger(__name__).exception("Error embedding %s", file_path)
+            logging.getLogger(__name__).exception("Error embedding text content")
             return None
 
     def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
@@ -113,18 +138,11 @@ class TextBGEEmbedder(MediaEmbedder):
 
         passages: list[Optional[str]] = []
         for media in medias:
-            file_path = media.get("media_path")
-            if not file_path:
+            text = _read_text(media)
+            if not text:
                 passages.append(None)
                 continue
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    text = f.read().strip()
-            except Exception:
-                logging.getLogger(__name__).exception("Error reading %s", file_path)
-                passages.append(None)
-                continue
-            passages.append(text if text else None)
+            passages.append(text)
 
         ready_indices = [i for i, p in enumerate(passages) if p is not None]
         if not ready_indices:
@@ -156,7 +174,7 @@ class TextBGEEmbedder(MediaEmbedder):
         if self._model is None:
             return None
         try:
-            return self._model.encode(text, normalize_embeddings=True)
+            return np.asarray(self._model.encode(text, normalize_embeddings=True))
         except Exception:
             logging.getLogger(__name__).exception("Error embedding passage (BGE)")
             return None
@@ -167,7 +185,7 @@ class TextBGEEmbedder(MediaEmbedder):
         if self._model is None:
             return None
         try:
-            return self._model.encode(f"Represent this sentence: {text}", normalize_embeddings=True)
+            return np.asarray(self._model.encode(f"Represent this sentence: {text}", normalize_embeddings=True))
         except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for text (BGE)")
             return None

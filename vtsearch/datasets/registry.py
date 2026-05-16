@@ -156,6 +156,17 @@ def register_dataset(
         entries = _ensure_loaded()
         entries.append(entry)
         _save(entries)
+
+    # New entry expands the predicted-embedder set; warm anything new in the
+    # background so a subsequent load is instant. Idempotent: already-loaded
+    # embedders are skipped inside the worker.
+    try:
+        from vtsearch.embedding.loader import smart_preload_in_background
+
+        smart_preload_in_background()
+    except Exception:
+        pass
+
     return entry
 
 

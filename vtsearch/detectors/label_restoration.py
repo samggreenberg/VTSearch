@@ -24,7 +24,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
 
     Returns the number of labels successfully restored.
     """
-    from vtsearch.datasets.labelset import LabelSet
+    from vtsearch.datasets.labelset import LabeledElement, LabelSet
     from vtsearch.state import (
         apply_label,
         build_media_lookup,
@@ -47,7 +47,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
     origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
 
     restored = 0
-    unresolved: list[tuple] = []  # (elem, label) pairs needing origin resolution
+    unresolved: list[LabeledElement] = []  # elements needing origin resolution
     for elem in labelset.elements:
         if elem.label not in ("good", "bad"):
             continue

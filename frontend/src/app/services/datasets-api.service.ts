@@ -4,13 +4,11 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
   DatasetStatus,
-  DatasetProgress,
   DatasetStatsResponse,
   ImportersResponse,
   DemoListResponse,
-  LoadingTask,
-  LoadingTasksResponse,
   MediaTypesResponse,
+  MediaTypeDetectionResponse,
   DatasetRegistryResponse,
   ClipperInfo,
   ClippersResponse,
@@ -27,10 +25,6 @@ export class DatasetsApiService {
 
   getStatus(): Observable<DatasetStatus> {
     return this.http.get<DatasetStatus>('/api/dataset/status');
-  }
-
-  getProgress(): Observable<DatasetProgress> {
-    return this.http.get<DatasetProgress>('/api/dataset/progress');
   }
 
   getImporters(): Observable<ImportersResponse> {
@@ -83,6 +77,22 @@ export class DatasetsApiService {
 
   getMediaTypes(): Observable<MediaTypesResponse> {
     return this.http.get<MediaTypesResponse>('/api/media-types');
+  }
+
+  detectMediaType(
+    source: string,
+    path: string,
+    recursive: boolean,
+    limit = 50,
+  ): Observable<MediaTypeDetectionResponse> {
+    return this.http.get<MediaTypeDetectionResponse>('/api/dataset/detect-media-type', {
+      params: {
+        source,
+        path,
+        recursive: recursive ? 'true' : 'false',
+        limit: String(limit),
+      },
+    });
   }
 
   getClippers(mediaType?: string): Observable<ClipperInfo[]> {
@@ -185,12 +195,6 @@ export class DatasetsApiService {
 
   combineDatasets(params: Record<string, unknown>): Observable<unknown> {
     return this.http.post('/api/dataset/combine', params);
-  }
-
-  getLoadingTasks(): Observable<LoadingTask[]> {
-    return this.http.get<LoadingTasksResponse>('/api/dataset/loading-tasks').pipe(
-      map((res) => res.tasks),
-    );
   }
 
   cancelIngest(): Observable<OkResponse> {

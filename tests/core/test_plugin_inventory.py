@@ -7,16 +7,19 @@ each one), and the three output formats must round-trip cleanly.
 
 from __future__ import annotations
 
+import argparse
 import json
 
 import pytest
 
 from vtsearch.plugins.inventory import (
     FAMILIES,
+    family_flag,
     format_json,
     format_names,
     format_plain,
     gather_plugins,
+    register_family_shortcuts,
 )
 
 
@@ -90,3 +93,40 @@ class TestFormatters:
 
     def test_format_names_unknown_family_is_empty(self, inventory):
         assert format_names(inventory, family="not_a_family") == ""
+
+
+class TestFamilyShortcutFlags:
+    """``--list-<family>`` shortcuts mirror ``--list-plugins --plugin-family <family>``."""
+
+    @pytest.fixture
+    def parser(self):
+        p = argparse.ArgumentParser()
+        # The shortcuts share the ``list_plugins`` / ``plugin_family``
+        # dests with the long-form flags, so the canonical args must be
+        # registered first or the namespace defaults are missing.
+        p.add_argument("--list-plugins", action="store_true", dest="list_plugins")
+        p.add_argument("--plugin-family", default=None, dest="plugin_family")
+        register_family_shortcuts(p)
+        return p
+
+    def test_flag_name_uses_hyphens(self):
+        assert family_flag("importers") == "--list-importers"
+        assert family_flag("label_importers") == "--list-label-importers"
+        assert family_flag("settings_sources") == "--list-settings-sources"
+
+    @pytest.mark.parametrize("family", FAMILIES)
+    def test_each_family_has_a_shortcut(self, parser, family):
+        args = parser.parse_args([family_flag(family)])
+        assert args.list_plugins is True
+        assert args.plugin_family == family
+
+    def test_shortcut_equivalent_to_long_form(self, parser):
+        short = parser.parse_args(["--list-importers"])
+        long = parser.parse_args(["--list-plugins", "--plugin-family", "importers"])
+        assert (short.list_plugins, short.plugin_family) == (long.list_plugins, long.plugin_family)
+
+    def test_help_lists_shortcut(self, parser):
+        # Discoverability is the whole point — `--help` must mention them.
+        help_text = parser.format_help()
+        assert "--list-importers" in help_text
+        assert "--list-exporters" in help_text

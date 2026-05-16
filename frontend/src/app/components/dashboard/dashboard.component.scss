@@ -412,6 +412,29 @@
   font-style: italic;
 }
 
+.welcome-banner {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+
+  .welcome-banner-text {
+    color: var(--text-primary);
+    margin: 0;
+    max-width: 480px;
+    line-height: 1.45;
+  }
+
+  .welcome-banner-cta {
+    align-self: center;
+  }
+}
+
 .dashboard-actions {
   flex-shrink: 0;
   display: flex;

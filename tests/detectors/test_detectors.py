@@ -35,36 +35,44 @@ class TestCreateDetector:
         assert data["num_labels"] == 0
 
     def test_create_missing_name(self, client):
+        # ``name`` is required by the schema → 422 with the standard
+        # flask-smorest envelope (``errors`` per-field).
         res = client.post(
             "/api/detectors",
             json={"text_query": "sounds"},
         )
-        assert res.status_code == 400
-        assert "name" in res.get_json()["error"]
+        assert res.status_code == 422
+        assert "name" in res.get_json()["errors"]["json"]
 
     def test_create_missing_text_query(self, client):
+        # ``name`` + ``media_type`` pass the schema; the
+        # "at-least-one-example" check runs in the handler → 400 with
+        # the standard error envelope (``message``).
         res = client.post(
             "/api/detectors",
             json={"name": "Test", "media_type": "audio"},
         )
         assert res.status_code == 400
-        assert "text_query" in res.get_json()["error"]
+        assert "text_query" in res.get_json()["message"]
 
     def test_create_missing_media_type(self, client):
+        # ``media_type`` is required by the schema → 422.
         res = client.post(
             "/api/detectors",
             json={"name": "Test", "text_query": "sounds"},
         )
-        assert res.status_code == 400
-        assert "media_type" in res.get_json()["error"]
+        assert res.status_code == 422
+        assert "media_type" in res.get_json()["errors"]["json"]
 
     def test_create_rejects_any_media_type(self, client):
+        # ``media_type="any"`` passes schema length check; rejection
+        # happens in the handler → 400 with ``message``.
         res = client.post(
             "/api/detectors",
             json={"name": "Test", "media_type": "any", "text_query": "sounds"},
         )
         assert res.status_code == 400
-        assert "media_type" in res.get_json()["error"]
+        assert "media_type" in res.get_json()["message"]
 
     def test_create_duplicate(self, client):
         client.post(
@@ -186,11 +194,12 @@ class TestRenameDetector:
             "/api/detectors",
             json={"name": "Test", "media_type": "audio", "text_query": "test"},
         )
+        # ``new_name`` is required by the schema → 422.
         res = client.put(
             "/api/detectors/Test/rename",
             json={},
         )
-        assert res.status_code == 400
+        assert res.status_code == 422
 
     def test_rename_updates_model_registry(self, client):
         """Renaming a detector should update registry references."""
@@ -294,6 +303,74 @@ class TestSaveLabels:
     def test_save_labels_nonexistent_model(self, client):
         res = client.post("/api/detectors/nonexistent/labels")
         assert res.status_code == 404
+
+    def test_save_labels_captures_active_clipper_into_input_spec(self, client):
+        """When the active dataset has a clipper, save_detector_labels stamps it onto input_spec."""
+        from vtsearch.detectors.store import _detector_path, _read_detector
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No medias loaded for this test")
+
+        # Stamp every media's origin with the same clipper config — the
+        # extractor scans the dict order until it finds a clipped media,
+        # so doing it everywhere matches what the loader does in real life
+        # and removes any iteration-order flakiness.
+        originals: dict[int, object] = {}
+        try:
+            for mid, media in medias.items():
+                originals[mid] = media.get("origin")
+                media["origin"] = {
+                    "importer": "test",
+                    "params": {
+                        "clipper": "sound_tiling",
+                        "clipper_duration": "2.0",
+                    },
+                }
+
+            client.post(
+                "/api/detectors",
+                json={"name": "ClipperCapture", "media_type": "audio", "text_query": "test"},
+            )
+            res = client.post("/api/detectors/ClipperCapture/labels")
+            assert res.status_code == 200
+
+            # Read straight off disk so we don't depend on the GET route's
+            # serialisation behaviour for an unknown-include field.
+            disk = _read_detector(_detector_path("ClipperCapture"))
+            assert disk is not None
+            assert disk["input_spec"] == {
+                "clipper": "sound_tiling",
+                "clipper_params": {"duration": "2.0"},
+            }
+        finally:
+            for mid, origin in originals.items():
+                if mid in medias:
+                    medias[mid]["origin"] = origin
+
+    def test_save_labels_drops_input_spec_when_dataset_has_no_clipper(self, client):
+        """Re-saving labels against an unclipped dataset clears any stale input_spec."""
+        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
+
+        client.post(
+            "/api/detectors",
+            json={"name": "DropSpec", "media_type": "audio", "text_query": "test"},
+        )
+
+        # Seed an old input_spec directly on disk (as if a previous save
+        # had captured one from a clipped dataset).
+        det_path = _detector_path("DropSpec")
+        data = _read_detector(det_path) or {}
+        data["input_spec"] = {"clipper": "sound_tiling"}
+        _write_detector(det_path, data)
+
+        # Re-save from a clean dataset — fixture medias have no clipper.
+        res = client.post("/api/detectors/DropSpec/labels")
+        assert res.status_code == 200
+
+        updated = _read_detector(det_path)
+        assert updated is not None
+        assert "input_spec" not in updated
 
     def test_save_labels_does_not_expand_dupes(self, client):
         """Saving labels for a dupe-set representative should NOT expand members.

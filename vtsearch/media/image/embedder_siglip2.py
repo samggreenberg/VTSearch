@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
@@ -39,12 +39,18 @@ class ImageSiglip2Embedder(MediaEmbedder):
 
     def __init__(self) -> None:
         super().__init__()
-        self._model = None
-        self._processor = None
+        # Typed ``Any``: transformers stubs miss several processor kwargs we
+        # pass at runtime; runtime ``None`` checks guard the calls.
+        self._model: Any = None
+        self._processor: Any = None
 
     @property
     def name(self) -> str:
         return "siglip2"
+
+    @property
+    def display_name(self) -> str:
+        return "SigLIP 2 (general images)"
 
     @property
     def media_type_id(self) -> str:

@@ -14,6 +14,12 @@ The user does not pass a ``media_type``: every embedder declares its
 expected modality.  Wrong-modality requests (e.g. an audio file sent to
 an image embedder) are caught by a fast extension pre-check before any
 model weights are loaded.
+
+This blueprint lives on the ``flask_smorest`` ``Api`` for registration
+consistency, but the dual-mode dispatcher does not lend itself to a
+single marshmallow schema, so the route is left undecorated and is
+intentionally absent from ``/api/openapi.json`` (same pattern as the
+SPA-serving and plugin-field routes — see ``docs/plans/openapi-schema.md``).
 """
 
 from __future__ import annotations
@@ -23,14 +29,23 @@ import uuid
 from pathlib import Path
 
 import numpy as np
-from flask import Blueprint, jsonify, request
+from flask import jsonify, request
+from flask_smorest import Blueprint
 
 from vtsearch.config import DATA_DIR
 from vtsearch.media import all_embedders, get_by_extension, get_embedder
 from vtsearch.media.embedder import media_from_path
 from vtsearch.routes._shared import get_json_or_400
 
-embed_bp = Blueprint("embed", __name__)
+embed_bp = Blueprint(
+    "embed",
+    __name__,
+    description=(
+        "On-demand embedding of a media file (multipart) or text snippet "
+        "(JSON). The dispatch route is dual-mode and not described in the "
+        "spec; see the module docstring."
+    ),
+)
 logger = logging.getLogger(__name__)
 
 

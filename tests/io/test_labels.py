@@ -98,7 +98,9 @@ class TestImportLabels:
             "/api/labels/import",
             json={"labels": "not a list"},
         )
-        assert resp.status_code == 400
+        # Marshmallow validates ``labels`` as a list → 422 with the
+        # standard flask-smorest envelope.
+        assert resp.status_code == 422
 
     def test_import_multiple_labels(self, client):
         labels = []
