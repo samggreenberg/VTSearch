@@ -690,8 +690,8 @@ Dropped: not worth building. External schedulers (cron, systemd timers, file-wat
 ### 17.5 Dry-run mode ★ XS ✅ shipped
 `--dry-run` prints what would be embedded/scored/exported without doing it. Validates importer/exporter names, settings file, dataset pickle existence, and required CLI field values, but loads no media and trains no models. See [CLI.md § Dry-run mode](../CLI.md#dry-run-mode).
 
-### 17.6 Progress JSON output ★ S
-`--progress-format json` for scripted callers / CI integration.
+### 17.6 ~~Progress JSON output~~ — **DONE**
+`python app.py --autodetect --progress-format json` emits NDJSON on stdout — one event per line, shapes documented in `vtsearch/cli_progress.py`. Errors are routed to the same stream so a single pipe captures the full run; tqdm bars remain on stderr (discard with `2>/dev/null`).
 
 ### 17.7 Embedded interactive REPL ★ exploratory
 `python app.py --repl` drops into IPython with `medias`/`good_votes`/`detector` already imported. Power-user analysis.

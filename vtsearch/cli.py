@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from typing import Any
 
 
+from vtsearch import cli_progress
 from vtsearch.datasets.loader import apply_custom_metadata_md5, load_dataset_from_pickle
 from vtsearch.utils.hits import build_media_hit
 
@@ -143,9 +144,15 @@ def _load_and_train_detectors(
 
         det_media_type = det.get("media_type", "") or ""
         if media_type and det_media_type and det_media_type != media_type:
-            print(
-                f"Skipping detector '{det_name}': media_type {det_media_type!r} doesn't match dataset {media_type!r}.",
-                flush=True,
+            cli_progress.emit(
+                "detector_skipped",
+                text=(
+                    f"Skipping detector '{det_name}': media_type "
+                    f"{det_media_type!r} doesn't match dataset {media_type!r}."
+                ),
+                detector=det_name,
+                detector_media_type=det_media_type,
+                dataset_media_type=media_type,
             )
             continue
 
@@ -257,7 +264,8 @@ def _run_exporter(
 
     exporter.validate_cli_field_values(field_values)
     result = exporter.export_cli(results, field_values)
-    print(result.get("message", "Export complete."))
+    message = result.get("message", "Export complete.")
+    cli_progress.emit("export_complete", text=message, message=message)
 
 
 def import_labels_into_detector_from_file(
@@ -433,13 +441,24 @@ def _run_pipeline(
                 available = _list_exporter_names()
                 raise ValueError(f"Unknown exporter: {exporter_name}. Available: {', '.join(available)}")
             exporter.validate_cli_field_values(exporter_field_values or {})
-        _print_dry_run_plan(
-            source_description=source_description or {},
-            settings_path=settings_path,
-            autorun_detectors=get_autorun_detectors(),
-            exporter_name=exporter_name,
-            exporter_field_values=exporter_field_values,
-        )
+        autorun_detectors = get_autorun_detectors()
+        if cli_progress.get_format() == "json":
+            cli_progress.emit(
+                "dry_run_plan",
+                source=source_description or {},
+                settings_path=settings_path,
+                autorun_detectors=_summarize_autorun_detectors(autorun_detectors),
+                exporter=exporter_name,
+                exporter_field_values=exporter_field_values or {},
+            )
+        else:
+            _print_dry_run_plan(
+                source_description=source_description or {},
+                settings_path=settings_path,
+                autorun_detectors=autorun_detectors,
+                exporter_name=exporter_name,
+                exporter_field_values=exporter_field_values,
+            )
         return
 
     merged_results: dict[str, dict[str, Any]] = {}
@@ -474,7 +493,12 @@ def _run_pipeline(
                 )
 
         if chunk_num > 1 or total_medias != len(chunk_medias):
-            print(f"Processing chunk {chunk_num} ({len(chunk_medias)} medias)...", flush=True)
+            cli_progress.emit(
+                "chunk_start",
+                text=f"Processing chunk {chunk_num} ({len(chunk_medias)} medias)...",
+                chunk_num=chunk_num,
+                chunk_size=len(chunk_medias),
+            )
 
         if detector_mlps:
             chunk_results = _score_medias_with_detectors(chunk_medias, detector_mlps)
@@ -484,7 +508,12 @@ def _run_pipeline(
         raise ValueError(empty_error)
 
     if chunk_num > 1:
-        print(f"Finished processing {total_medias} medias across {chunk_num} chunk(s).", flush=True)
+        cli_progress.emit(
+            "chunks_done",
+            text=f"Finished processing {total_medias} medias across {chunk_num} chunk(s).",
+            total_medias=total_medias,
+            chunks=chunk_num,
+        )
 
     results = _build_multi_results_dict(merged_results, media_type or "unknown")
     _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
@@ -510,7 +539,7 @@ def autodetect_main(
             source_description={"kind": "pickle", "dataset": dataset_path, "chunk_size": None},
         )
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        cli_progress.emit_error(str(e))
         sys.exit(1)
 
 
@@ -540,7 +569,7 @@ def autodetect_importer_main(
             },
         )
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        cli_progress.emit_error(str(e))
         sys.exit(1)
 
 
@@ -565,7 +594,7 @@ def autodetect_main_chunked(
             source_description={"kind": "pickle", "dataset": dataset_path, "chunk_size": chunk_size},
         )
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        cli_progress.emit_error(str(e))
         sys.exit(1)
 
 
@@ -596,5 +625,5 @@ def autodetect_importer_main_chunked(
             },
         )
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        cli_progress.emit_error(str(e))
         sys.exit(1)
