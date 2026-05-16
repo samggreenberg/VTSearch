@@ -1,9 +1,24 @@
-"""Dataset staging, importer dispatch, and the combine-datasets endpoint."""
+"""Dataset staging, importer dispatch, and the combine-datasets endpoint.
+
+Migrated to ``flask_smorest`` so these routes appear in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+
+JSON-shaped routes (available-files, combine, stage-demo, clear-staging,
+importer-field-options) use the standard ``@arguments`` + ``@response``
+decorators; schema-level validation failures surface as 422.
+Multipart-upload routes (``stage-file``) and plugin-field routes
+(``stage-import/<importer>``, ``import/<importer>``) keep ``@arguments``
+omitted — the latter pair stays on the legacy plain-Flask path because
+the request body is a plugin-field shape that doesn't fit a static
+marshmallow schema (see *Resolved questions / Plugin field endpoints*
+in the plan doc).
+"""
 
 from pathlib import Path
 from uuid import uuid4
 
-from flask import Blueprint, jsonify, request
+from flask import jsonify, request
+from flask_smorest import Blueprint, abort
 
 import vtsearch.security.path_validation as _paths
 from vtsearch.config import EMBEDDINGS_DIR
@@ -18,12 +33,28 @@ from vtsearch.routes.datasets._helpers import (
     _extract_clipper_params,
     _extract_importer_fields,
 )
+from vtsearch.schemas.datasets import (
+    ClearStagingResponseSchema,
+    DatasetAvailableFilesResponseSchema,
+    DatasetCombineRequestSchema,
+    DatasetLoadStartedResponseSchema,
+    DatasetStageDemoRequestSchema,
+    DatasetStageFileResponseSchema,
+    DatasetStagingStartedResponseSchema,
+    ImporterFieldOptionsRequestSchema,
+    ImporterFieldOptionsResponseSchema,
+)
 from vtsearch.security.pickle import peek_pickle_dataset_summary
 
-datasets_staging_bp = Blueprint("datasets_staging", __name__)
+datasets_staging_bp = Blueprint(
+    "datasets_staging",
+    __name__,
+    description="Stage, combine, and import datasets.",
+)
 
 
 @datasets_staging_bp.route("/api/dataset/available-files")
+@datasets_staging_bp.response(200, DatasetAvailableFilesResponseSchema)
 def available_dataset_files():
     """List ``.pkl`` files in the embeddings directory."""
     files = []
@@ -36,45 +67,47 @@ def available_dataset_files():
                     "size_mb": round(pkl.stat().st_size / (1024 * 1024), 1),
                 }
             )
-    return jsonify({"files": files})
+    return {"files": files}
 
 
 @datasets_staging_bp.route("/api/dataset/combine", methods=["POST"])
-def combine_datasets_route():
+@datasets_staging_bp.arguments(DatasetCombineRequestSchema)
+@datasets_staging_bp.response(200, DatasetLoadStartedResponseSchema)
+@datasets_staging_bp.alt_response(400, description="Invalid or missing dataset path.")
+@datasets_staging_bp.alt_response(500, description="The combine_datasets importer is unavailable.")
+def combine_datasets_route(body: dict):
     """Combine multiple pickle datasets in a background thread."""
-    body = request.get_json(force=True) or {}
-    dataset_paths = body.get("datasets", [])
+    dataset_paths = body["datasets"]
     name = str(body.get("name", "") or "").strip()
-
-    if not isinstance(dataset_paths, list) or len(dataset_paths) < 2:
-        return jsonify({"error": "Provide at least two dataset file paths."}), 400
 
     _base = _paths.get_file_access_base_dir()
     for p in dataset_paths:
         try:
             _paths.validate_server_filepath(str(p), base_dir=_base)
         except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+            abort(400, message=str(exc))
         if not Path(p).exists():
-            return jsonify({"error": f"File not found: {p}"}), 400
+            abort(400, message=f"File not found: {p}")
 
     importer = get_importer("combine_datasets")
     if importer is None:
-        return jsonify({"error": "combine_datasets importer not available"}), 500
+        abort(500, message="combine_datasets importer not available")
 
     task_id = _run_importer_in_background(importer, {"datasets": dataset_paths, "name": name})
-    return jsonify({"ok": True, "message": "Combining datasets...", "task_id": str(task_id) if task_id else ""})
+    return {"ok": True, "message": "Combining datasets...", "task_id": str(task_id) if task_id else ""}
 
 
 @datasets_staging_bp.route("/api/dataset/stage-file", methods=["POST"])
+@datasets_staging_bp.response(200, DatasetStageFileResponseSchema)
+@datasets_staging_bp.alt_response(400, description="Multipart body has no file or empty filename.")
 def stage_file():
     """Upload a ``.pkl`` file and save it to the staging directory."""
     if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+        abort(400, message="No file provided")
 
     file = request.files["file"]
     if not file.filename:
-        return jsonify({"error": "No file selected"}), 400
+        abort(400, message="No file selected")
 
     STAGING_DIR.mkdir(parents=True, exist_ok=True)
     staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
@@ -103,12 +136,24 @@ def stage_file():
         media_type = "unknown"
 
     name = file.filename or "Uploaded dataset"
-    return jsonify({"path": str(staging_path), "name": name, "count": count, "media_type": media_type})
+    return {"path": str(staging_path), "name": name, "count": count, "media_type": media_type}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/dataset/stage-import/<importer_name>
+#
+# Plugin-field route — multipart-or-JSON depending on the importer's
+# declared ``fields``. Stays on the legacy plain-Flask path; not in spec.
+# See *Resolved questions / Plugin field endpoints* in the plan doc.
+# ---------------------------------------------------------------------------
 
 
 @datasets_staging_bp.route("/api/dataset/stage-import/<importer_name>", methods=["POST"])
 def stage_import(importer_name: str):
-    """Run a registered importer in staging mode."""
+    """Run a registered importer in staging mode.
+
+    Plugin-dependent body shape: not described in the OpenAPI spec.
+    """
     importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
     if err:
         return err
@@ -131,16 +176,19 @@ def stage_import(importer_name: str):
 
 
 @datasets_staging_bp.route("/api/dataset/stage-demo/<name>", methods=["POST"])
-def stage_demo(name: str):
+@datasets_staging_bp.arguments(DatasetStageDemoRequestSchema)
+@datasets_staging_bp.response(200, DatasetStagingStartedResponseSchema)
+@datasets_staging_bp.alt_response(400, description="Unknown demo dataset name.")
+@datasets_staging_bp.alt_response(500, description="The demo importer is unavailable.")
+def stage_demo(body: dict, name: str):
     """Stage a demo dataset as a temporary ``.pkl`` file."""
     if name not in DEMO_DATASETS:
-        return jsonify({"error": "Invalid dataset name"}), 400
+        abort(400, message="Invalid dataset name")
 
     importer = get_importer("demo")
     if importer is None:
-        return jsonify({"error": "demo importer not available"}), 500
+        abort(500, message="demo importer not available")
 
-    body = request.get_json(force=True, silent=True) or {}
     converter_name = body.get("converter", "")
     dataset_name = str(body.get("dataset_name") or "").strip()
 
@@ -152,67 +200,76 @@ def stage_demo(name: str):
 
     label = dataset_name or DEMO_DATASETS[name].get("label", name)
     _stage_importer_in_background(importer, field_values, label=label)
-    return jsonify({"ok": True, "message": "Staging demo dataset..."})
+    return {"ok": True, "message": "Staging demo dataset..."}
 
 
 @datasets_staging_bp.route("/api/dataset/staging", methods=["DELETE"])
+@datasets_staging_bp.response(200, ClearStagingResponseSchema)
 def clear_staging():
     """Remove all files from the staging directory."""
     if STAGING_DIR.exists():
         for f in STAGING_DIR.iterdir():
             if f.is_file():
                 f.unlink(missing_ok=True)
-    return jsonify({"ok": True})
+    return {"ok": True}
 
 
 @datasets_staging_bp.route("/api/dataset/import/<importer_name>/options", methods=["POST"])
-def importer_field_options(importer_name: str):
+@datasets_staging_bp.arguments(ImporterFieldOptionsRequestSchema)
+@datasets_staging_bp.response(200, ImporterFieldOptionsResponseSchema)
+@datasets_staging_bp.alt_response(400, description="Unknown or non-dynamic field key.")
+@datasets_staging_bp.alt_response(404, description="Unknown importer name.")
+@datasets_staging_bp.alt_response(500, description="get_field_options did not return a list.")
+@datasets_staging_bp.alt_response(501, description="Importer does not implement get_field_options.")
+@datasets_staging_bp.alt_response(502, description="Remote service backing dynamic options raised an error.")
+def importer_field_options(body: dict, importer_name: str):
     """Return dropdown options for a dynamic-options field.
 
-    Body::
-
-        {"field_key": "query_id", "values": {"media_type": "audio", ...}}
-
     The importer's ``get_field_options(field_key, current_values)`` is
-    called with the supplied snapshot of current form values.  Returns
-    ``{"options": [...]}`` on success.  Errors from the plugin (network
-    failure, auth error, etc.) are surfaced as a 502 with the original
-    message so the frontend can display them inline.
+    called with the supplied snapshot of current form values. Errors
+    from the plugin (network failure, auth error, etc.) are surfaced as
+    a 502 with the original message so the frontend can display them
+    inline.
     """
     importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
     if err:
         return err
     assert importer is not None  # narrowed by err check
 
-    body = request.get_json(force=True, silent=True) or {}
-    field_key = str(body.get("field_key") or "").strip()
+    field_key = body["field_key"].strip()
     values = body.get("values") or {}
-    if not field_key:
-        return jsonify({"error": "Missing required field: 'field_key'"}), 400
-    if not isinstance(values, dict):
-        return jsonify({"error": "'values' must be an object"}), 400
 
     field = next((f for f in importer.fields if f.key == field_key), None)
     if field is None:
-        return jsonify({"error": f"Unknown field: {field_key!r}"}), 400
+        abort(400, message=f"Unknown field: {field_key!r}")
     if not getattr(field, "dynamic_options", False):
-        return jsonify({"error": f"Field {field_key!r} is not dynamic"}), 400
+        abort(400, message=f"Field {field_key!r} is not dynamic")
 
     try:
         options = importer.get_field_options(field_key, values)
     except NotImplementedError as exc:
-        return jsonify({"error": str(exc) or "Importer does not implement get_field_options"}), 501
+        abort(501, message=str(exc) or "Importer does not implement get_field_options")
     except Exception as exc:  # noqa: BLE001 — surface remote-service errors verbatim
-        return jsonify({"error": str(exc) or type(exc).__name__}), 502
+        abort(502, message=str(exc) or type(exc).__name__)
 
     if not isinstance(options, list):
-        return jsonify({"error": "get_field_options must return a list"}), 500
-    return jsonify({"options": [str(o) for o in options]})
+        abort(500, message="get_field_options must return a list")
+    return {"options": [str(o) for o in options]}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/dataset/import/<importer_name>
+#
+# Plugin-field route — same legacy treatment as ``stage-import``.
+# ---------------------------------------------------------------------------
 
 
 @datasets_staging_bp.route("/api/dataset/import/<importer_name>", methods=["POST"])
 def import_dataset(importer_name: str):
-    """Run a registered importer by name in a background thread."""
+    """Run a registered importer by name in a background thread.
+
+    Plugin-dependent body shape: not described in the OpenAPI spec.
+    """
     importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
     if err:
         return err

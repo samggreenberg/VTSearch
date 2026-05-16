@@ -168,7 +168,9 @@ class TestMultiUserFileRestriction:
                 },
             )
             assert resp.status_code == 400
-            assert "must be within" in resp.get_json()["error"]
+            # flask-smorest error envelope: handler-level rejects (path
+            # traversal) live under ``message``.
+            assert "must be within" in resp.get_json()["message"]
         finally:
             from vtsearch.auth import set_login_provider
 
@@ -191,7 +193,7 @@ class TestMultiUserFileRestriction:
             )
             # Should not get a path-validation 400 (may get other errors, but not path-related)
             if resp.status_code == 400:
-                assert "must be within" not in resp.get_json().get("error", "")
+                assert "must be within" not in resp.get_json().get("message", "")
         finally:
             from vtsearch.auth import set_login_provider
 
@@ -244,7 +246,8 @@ class TestMultiUserFileRestriction:
                 json={"datasets": ["/etc/a.pkl", "/etc/b.pkl"]},
             )
             assert resp.status_code == 400
-            assert "must be within" in resp.get_json()["error"]
+            # flask-smorest error envelope.
+            assert "must be within" in resp.get_json()["message"]
         finally:
             from vtsearch.auth import set_login_provider
 

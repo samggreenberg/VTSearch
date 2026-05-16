@@ -325,12 +325,12 @@ api.register_blueprint(processors_crud_bp)
 api.register_blueprint(processors_scoring_bp)
 api.register_blueprint(datasets_listings_bp)
 api.register_blueprint(datasets_status_bp)
-app.register_blueprint(datasets_staging_bp)
+api.register_blueprint(datasets_staging_bp)
 api.register_blueprint(datasets_load_bp)
 api.register_blueprint(datasets_ui_bp)
-app.register_blueprint(datasets_registry_bp)
-app.register_blueprint(exporters_bp)
-app.register_blueprint(label_importers_bp)
+api.register_blueprint(datasets_registry_bp)
+api.register_blueprint(exporters_bp)
+api.register_blueprint(label_importers_bp)
 # settings_bp is a flask-smorest Blueprint (OpenAPI pilot); register
 # it via the Api so its routes appear in /api/openapi.json. Other
 # blueprints stay on the plain Flask path until migrated.

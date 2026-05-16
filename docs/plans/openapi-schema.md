@@ -290,10 +290,61 @@ request/response gates getting in the way during their migration.
       standard error envelope (matching the settings migration); the
       tests that previously asserted 400 + `{"error": ...}` for
       schema-level failures were updated to 422 + `errors` to match.
-- [ ] `labels/exporters.py`, `labels/importers.py` — plugin-field
-      routes, blocked on the *Open questions* decision below ("Plugin
-      field endpoints"). Tracked here so we don't re-spend the
-      research cost when we pick the labels migration back up.
+- [x] `labels/exporters.py` migrated to flask-smorest (``GET
+      /api/exporters``, ``POST /api/exporters/export``). Schema-level
+      validation failures (missing required ``exporter_name``) surface
+      as 422 with the standard ``errors`` envelope; handler-level
+      rejects (unknown exporter, missing plugin field, invalid
+      ``filepath``, exporter raised) keep their HTTP codes (404 / 400 /
+      500) with the standard ``message`` envelope. ``field_values`` is
+      declared as ``fields.Dict`` because its inner keys depend on the
+      named exporter; the handler validates it against the selected
+      plugin's :attr:`fields`. Tests in
+      ``tests/api/test_error_recovery.py``,
+      ``tests/api/test_api_contracts.py``, and
+      ``tests/api/test_path_validation.py`` updated to expect 422 for
+      schema rejections and ``message`` instead of ``error`` for
+      handler-level 400s.
+- [x] `labels/importers.py` migrated to flask-smorest (``GET
+      /api/label-importers``, ``POST
+      /api/label-importers/ingest-missing``). Schema-level validation
+      failures (missing required ``entries``, empty list) surface as
+      422. The plugin-field route ``POST
+      /api/label-importers/import/<importer_name>`` stays on the
+      legacy plain-Flask path on the same ``flask_smorest.Blueprint``
+      (same pattern as ``detectors/labels.py``'s
+      ``import-labels/<importer_name>`` and
+      ``detectors/registry/from-labelset/<importer>``) — its body is a
+      plugin-field shape that doesn't fit a static marshmallow schema.
+      See *Resolved questions / Plugin field endpoints*.
+- [x] `datasets/staging.py` migrated to flask-smorest (available-files,
+      combine, stage-file, stage-demo, clear-staging, import field
+      options). Schema-level validation failures (missing required
+      ``datasets`` / ``field_key``; ``datasets`` shorter than 2)
+      surface as 422 with the standard ``errors`` envelope;
+      handler-level rejects (path validation, unknown demo, missing
+      importer) keep their HTTP codes (400 / 500) with the standard
+      ``message`` envelope. Multipart upload (``stage-file``) omits
+      ``arguments`` and declares error responses via ``alt_response``.
+      The two plugin-field routes (``stage-import/<importer>``,
+      ``import/<importer>``) stay on the legacy plain-Flask path. The
+      combine-datasets path-validation test was updated to read
+      ``message`` instead of ``error``.
+- [x] `datasets/registry.py` migrated to flask-smorest (list, load,
+      unload, delete, rename, readers, stats). Schema-level validation
+      failures (missing required ``name`` on rename, missing or
+      wrong-typed ``readers`` on the readers endpoint) surface as 422
+      with the standard ``errors`` envelope; handler-level rejects
+      (not loaded, not the creator) keep their HTTP codes (400 / 403)
+      with the standard ``message`` envelope. 404s are intercepted by
+      the app-level ``NotFound`` errorhandler in ``app.py`` and keep
+      the legacy ``{"error": "Not Found", "request_id": ...}`` shape.
+      The ``readers`` field is declared as ``fields.Raw`` with a
+      custom validator (rather than ``fields.List(fields.String())``)
+      so that numeric items are rejected as 422 instead of silently
+      coerced to strings. Tests in
+      ``tests/api/test_multi_user_dataset_access.py`` updated from 400
+      to 422 for the two invalid-body cases.
 - [x] `detectors/crud.py` migrated to flask-smorest (list / create /
       get / delete / rename / set-examples / combine). Schema-level
       validation failures (missing required fields, length / OneOf
@@ -491,13 +542,28 @@ request/response gates getting in the way during their migration.
       schema).
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
-- [ ] Remaining dataset blueprints: ``datasets/staging.py`` and
-      ``datasets/registry.py`` — both involve plugin-field shapes
-      (``stage-import/<name>``, ``import/<name>``,
-      ``registry/<id>/load`` field overrides) for which we now have
-      the *Resolved questions / Plugin field endpoints* decision in
-      hand, so they're unblocked.
 - [ ] Remaining blueprints (see Order above)
 - [ ] Delete the pre-existing permissive `/openapi.json` +
       `--openapi-schema` once flask-smorest covers every blueprint
       (see "Relationship to the pre-existing permissive spec" above)
+
+## Open follow-ups
+
+- **Per-plugin schemas for plugin-field routes.** The four routes
+  whose request body is a plugin-field shape stay on the legacy
+  plain-Flask path on their (now smorest-typed) blueprints:
+  ``POST /api/label-importers/import/<importer_name>``,
+  ``POST /api/dataset/stage-import/<importer_name>``,
+  ``POST /api/dataset/import/<importer_name>``, and
+  ``POST /api/detectors/<name>/import-labels/<importer_name>``
+  (plus ``POST /api/detectors/registry/from-labelset/<importer_name>``).
+  The *Resolved questions / Plugin field endpoints* section above
+  describes the eventual design — generate a per-plugin marshmallow
+  schema at startup from each plugin's ``fields`` declaration and
+  attach it to the route call site. That requires either registering
+  one Flask URL rule per plugin variant at startup or invoking
+  ``plugin._arg_schema.load(...)`` manually inside the handler.
+  Neither is wired yet; the routes are documented in their module
+  docstrings as "Plugin-dependent body shape: not described in the
+  OpenAPI spec" so spec consumers see them in the URL map but without
+  a request body schema.

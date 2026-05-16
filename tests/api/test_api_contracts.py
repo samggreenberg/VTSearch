@@ -623,10 +623,12 @@ class TestErrorResponseFormat:
         assert "error" in data
 
     def test_400_missing_exporter_name_is_json(self, client):
+        # Migrated to flask-smorest: schema-level validation surfaces
+        # missing required fields as 422 + ``errors`` (not 400 + ``error``).
         resp = client.post("/api/exporters/export", json={})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
         data = resp.get_json()
-        assert "error" in data
+        assert "errors" in data
 
 
 class TestApiCacheControl:

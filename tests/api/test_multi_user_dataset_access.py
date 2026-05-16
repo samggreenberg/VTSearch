@@ -184,20 +184,22 @@ class TestReadersEndpoint:
         assert data["readers"] == ["bob", "carol"]
 
     def test_set_readers_invalid_body(self, client):
+        # Schema-level validation (readers must be a list of strings) → 422.
         entry = _make_dataset("api2", created_by="default")
         resp = client.put(
             f"/api/datasets/registry/{entry['id']}/readers",
             json={"readers": "not_a_list"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_set_readers_non_string_items(self, client):
+        # Schema-level validation rejects non-string items → 422.
         entry = _make_dataset("api3", created_by="default")
         resp = client.put(
             f"/api/datasets/registry/{entry['id']}/readers",
             json={"readers": [123]},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_set_readers_non_creator_forbidden(self, client):
         entry = _make_dataset("api4", created_by="other_user")

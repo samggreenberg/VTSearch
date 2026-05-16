@@ -185,8 +185,9 @@ class TestMissingRequiredFields:
         assert resp.status_code == 422
 
     def test_exporter_missing_name(self, client):
+        # Schema-level validation (required ``exporter_name``) → 422.
         resp = client.post("/api/exporters/export", json={})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_textsort_suggestion_empty_text(self, client):
         resp = client.post("/api/textsort-suggestions", json={"text": ""})
