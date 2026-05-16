@@ -270,6 +270,12 @@ export interface ImporterField {
   dynamic_options?: boolean;
   /** Field keys whose values this field's options depend on. */
   depends_on?: string[];
+  /** For ``number`` fields: minimum allowed value (empty = no min). */
+  min?: string;
+  /** For ``number`` fields: maximum allowed value (empty = no max). */
+  max?: string;
+  /** For ``number`` fields: step increment (empty / ``"any"`` = unconstrained). */
+  step?: string;
 }
 
 export interface ImporterPickerTab {

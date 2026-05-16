@@ -243,6 +243,45 @@
                 (ngModelChange)="formOnDatasetNameInput($event)"
                 [placeholder]="field.description || field.label || field.key"
               />
+            } @else if (field.field_type === 'number') {
+              <input
+                [id]="'field-' + field.key"
+                type="number"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+                [attr.min]="field.min || null"
+                [attr.max]="field.max || null"
+                [attr.step]="field.step || null"
+                (change)="onFormFieldChanged(field.key)"
+              />
+            } @else if (field.field_type === 'password') {
+              <input
+                [id]="'field-' + field.key"
+                type="password"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+                (change)="onFormFieldChanged(field.key)"
+              />
+            } @else if (field.field_type === 'email') {
+              <input
+                [id]="'field-' + field.key"
+                type="email"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+                (change)="onFormFieldChanged(field.key)"
+              />
+            } @else if (field.field_type === 'url') {
+              <input
+                [id]="'field-' + field.key"
+                type="url"
+                class="form-input"
+                [(ngModel)]="formValues[field.key]"
+                [placeholder]="field.placeholder || field.description || field.label || field.key"
+                (change)="onFormFieldChanged(field.key)"
+              />
             } @else {
               <input
                 [id]="'field-' + field.key"
@@ -281,12 +320,34 @@
                   @for (f of converter.fields || []; track f.key) {
                     <label class="sf-spec-param">
                       {{ f.label || f.key }}:
-                      <input
-                        type="text"
-                        class="form-input sf-spec-param-input"
-                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                        (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
-                      />
+                      @if (f.field_type === 'select') {
+                        <select
+                          class="form-select sf-spec-param-input"
+                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
+                        >
+                          @for (opt of f.options || []; track opt) {
+                            <option [value]="opt">{{ opt }}</option>
+                          }
+                        </select>
+                      } @else if (f.field_type === 'number') {
+                        <input
+                          type="number"
+                          class="form-input sf-spec-param-input"
+                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                          [attr.min]="f.min || null"
+                          [attr.max]="f.max || null"
+                          [attr.step]="f.step || null"
+                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
+                        />
+                      } @else {
+                        <input
+                          [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"
+                          class="form-input sf-spec-param-input"
+                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
+                        />
+                      }
                     </label>
                   }
                 }
@@ -418,12 +479,34 @@
                 @for (f of converter.fields || []; track f.key) {
                   <label class="sf-spec-param">
                     {{ f.label || f.key }}:
-                    <input
-                      type="text"
-                      class="form-input sf-spec-param-input"
-                      [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                      (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
-                    />
+                    @if (f.field_type === 'select') {
+                      <select
+                        class="form-select sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
+                      >
+                        @for (opt of f.options || []; track opt) {
+                          <option [value]="opt">{{ opt }}</option>
+                        }
+                      </select>
+                    } @else if (f.field_type === 'number') {
+                      <input
+                        type="number"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        [attr.min]="f.min || null"
+                        [attr.max]="f.max || null"
+                        [attr.step]="f.step || null"
+                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
+                      />
+                    } @else {
+                      <input
+                        [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
+                      />
+                    }
                   </label>
                 }
               }
@@ -624,12 +707,34 @@
                 @for (f of converter.fields || []; track f.key) {
                   <label class="sf-spec-param">
                     {{ f.label || f.key }}:
-                    <input
-                      type="text"
-                      class="form-input sf-spec-param-input"
-                      [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                      (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
-                    />
+                    @if (f.field_type === 'select') {
+                      <select
+                        class="form-select sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
+                      >
+                        @for (opt of f.options || []; track opt) {
+                          <option [value]="opt">{{ opt }}</option>
+                        }
+                      </select>
+                    } @else if (f.field_type === 'number') {
+                      <input
+                        type="number"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        [attr.min]="f.min || null"
+                        [attr.max]="f.max || null"
+                        [attr.step]="f.step || null"
+                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
+                      />
+                    } @else {
+                      <input
+                        [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"
+                        class="form-input sf-spec-param-input"
+                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
+                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
+                      />
+                    }
                   </label>
                 }
               }
