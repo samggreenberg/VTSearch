@@ -452,6 +452,17 @@ if __name__ == "__main__":
         dest="openapi_schema",
         help="Print the auto-generated OpenAPI 3.0 spec for the HTTP API and exit.",
     )
+    parser.add_argument(
+        "--pipeline",
+        type=str,
+        default=None,
+        dest="pipeline",
+        help=(
+            "Run the importer/detector/exporter sequence declared in a YAML "
+            "pipeline file. Replaces the --autodetect flag set with one "
+            "config file. See docs/CLI.md for the schema."
+        ),
+    )
     parser.add_argument("--dataset", type=str, help="Path to a dataset pickle file (used with --autodetect)")
     parser.add_argument(
         "--settings",
@@ -547,6 +558,37 @@ if __name__ == "__main__":
         spec = generate_openapi_spec(app)
         sys.stdout.write(_json.dumps(spec, indent=2))
         sys.stdout.write("\n")
+        sys.exit(0)
+
+    # ---- Pipeline file ---------------------------------------------------
+    # `--pipeline pipeline.yaml` declares an autodetect run in YAML instead
+    # of flags. It is mutually exclusive with the rest of the autodetect
+    # CLI: any extra autodetect flag (importer/dataset/exporter/settings/
+    # chunk-size/import-labels-into) belongs in the YAML, not on the command
+    # line.
+    if args.pipeline:
+        for conflicting in (
+            "autodetect",
+            "dataset",
+            "importer",
+            "exporter",
+            "settings",
+            "chunk_size",
+            "import_labels_into",
+            "label_importer_file",
+            "dry_run",
+        ):
+            if getattr(args, conflicting, None):
+                cli_flag = f"--{conflicting.replace('_', '-')}"
+                parser.error(f"--pipeline cannot be combined with {cli_flag}; declare it in the YAML file instead.")
+        if remaining:
+            parser.error(
+                f"--pipeline does not accept extra flags ({' '.join(remaining)}); "
+                "declare plugin field values in the YAML file instead."
+            )
+        from vtsearch.cli_pipeline import run_pipeline_file
+
+        run_pipeline_file(args.pipeline)
         sys.exit(0)
 
     importer = None

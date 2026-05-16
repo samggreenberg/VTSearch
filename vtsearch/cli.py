@@ -388,6 +388,7 @@ def _run_pipeline(
     settings_path: str | None = None,
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
+    override_detectors: list[str] | None = None,
     empty_error: str = "No medias loaded",
     dry_run: bool = False,
     source_description: dict[str, Any] | None = None,
@@ -401,6 +402,11 @@ def _run_pipeline(
     When *dry_run* is True the function prints the plan derived from
     *source_description* + the settings file and returns without consuming
     the iterator, so no importer runs and no embedding or scoring occurs.
+
+    When *override_detectors* is supplied, that list of detector names is
+    used in place of the settings file's ``autorun_detectors``.  The pipeline
+    YAML loader uses this to declare detectors inline without mutating the
+    settings file on disk.
     """
     if settings_path:
         from vtsearch.settings import set_settings_path
@@ -458,7 +464,7 @@ def _run_pipeline(
         if media_type is None:
             media_type = _detect_media_type(chunk_medias)
 
-            detector_names = get_autorun_detectors()
+            detector_names = list(override_detectors) if override_detectors is not None else get_autorun_detectors()
             if detector_names:
                 # Train each detector exactly once, using the first chunk as
                 # the fast-path snap; subsequent chunks reuse the cached

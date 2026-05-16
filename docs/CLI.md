@@ -117,6 +117,61 @@ multi-minute embedding pass. `--import-labels-into ... --label-importer-file ...
 is announced as part of the plan but skipped (no detector JSON is
 modified).
 
+## Pipeline file
+
+For repeatable runs (cron, CI), put the whole autodetect invocation in a YAML
+file and pass it via `--pipeline`:
+
+```bash
+python app.py --pipeline pipeline.yaml
+```
+
+The YAML supports every knob the `--autodetect` flag set does. It cannot be
+combined with the other autodetect flags — declare everything inline.
+
+```yaml
+# Pick exactly one source.
+dataset: data/sounds.pkl
+# --- or ---
+importer:
+  name: server_folder              # see `python app.py --list-importers`
+  fields:                          # importer-specific PluginField values
+    path: /data/sounds
+    media_type: audio
+    recursive: true
+
+# Optional. Path to the same settings JSON the --settings flag accepts.
+# Defaults to data/settings.json.
+settings: settings.json
+
+# Optional. When set, overrides settings.json's `autorun_detectors` list
+# for this run only. The file on disk is NOT modified.
+detectors:
+  - Dog Barks
+  - Cat Meows
+
+# Optional. Process medias in batches of N. Same as --chunk-size.
+chunk_size: 1000
+
+# Optional. One-shot merge of an external label file into a detector
+# before scoring (same as --import-labels-into / --label-importer /
+# --label-importer-file).
+import_labels:
+  detector: dog-barks
+  importer: server_json_file       # default: server_json_file
+  file: new_labels.json
+
+# Optional. Where results go. Defaults to the `gui` exporter (console).
+exporter:
+  name: server_json_file
+  fields:
+    filepath: results.json
+```
+
+Plugin names (`importer.name`, `exporter.name`, `import_labels.importer`) are
+validated against the registered plugins at load time, so a typo fails fast
+before any media is loaded.
+
 ## Web server modes
 
 **Development (Flask dev server)** — bind to `0.0.0.0:5000`:
