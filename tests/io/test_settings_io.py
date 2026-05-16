@@ -442,13 +442,18 @@ class TestSettingsExportEndpoint:
         )
         assert res.status_code == 404
 
-    def test_missing_exporter_name_400(self, client):
+    def test_missing_exporter_name_422(self, client):
+        # Schema-level validation: marshmallow rejects the missing required
+        # ``exporter_name`` with the standard 422 ``errors`` envelope.
         res = client.post("/api/settings-exporters/export", json={})
-        assert res.status_code == 400
+        assert res.status_code == 422
+        assert "exporter_name" in res.get_json().get("errors", {}).get("json", {})
 
     def test_missing_required_field_400(self, client):
+        # Handler-level validation: plugin field check uses ``message``.
         res = client.post(
             "/api/settings-exporters/export",
             json={"exporter_name": "server_json_file", "field_values": {}},
         )
         assert res.status_code == 400
+        assert "Missing required field" in res.get_json().get("message", "")

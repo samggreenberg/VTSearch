@@ -335,8 +335,8 @@ api.register_blueprint(label_importers_bp)
 # it via the Api so its routes appear in /api/openapi.json. Other
 # blueprints stay on the plain Flask path until migrated.
 api.register_blueprint(settings_bp)
-app.register_blueprint(settings_io_bp)
-app.register_blueprint(sync_sources_bp)
+api.register_blueprint(settings_io_bp)
+api.register_blueprint(sync_sources_bp)
 api.register_blueprint(detectors_crud_bp)
 api.register_blueprint(detectors_labels_bp)
 api.register_blueprint(detectors_registry_bp)
