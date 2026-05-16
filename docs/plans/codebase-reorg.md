@@ -1,7 +1,7 @@
 # Codebase Reorganization Plan
 
-**Status:** In Progress (mid-sized refactors landed; harder reshapes
-evaluated below)
+**Status:** Complete — every actionable item has shipped; the remaining
+items are explicitly **Skip**.
 
 The first round — `tests/fixtures/medias.py` move, test-suite bucketing,
 shared embedder stubs, routes-by-domain, `utils/` split into focused
@@ -230,7 +230,7 @@ that would also benefit from unification.
 
 ---
 
-## 5. Frontend reorganization — **Do (the dashboard split only)**
+## 5. Frontend reorganization — **Skip**
 
 ### Today
 
@@ -239,29 +239,41 @@ that would also benefit from unification.
 - 59 `.spec.ts` files, none of them run (no Karma; CLAUDE.md notes they
   must still typecheck).
 - Outliers by size:
-  - `dashboard.component.ts` — **1,464 LOC**
+  - `dashboard.component.ts` — 1,439 LOC
   - `label-view.component.ts` — 913 LOC
   - `find-view.component.ts` — 385 LOC
 
 ### Verdict per slice
 
-- **`dashboard.component.ts` — split.** 1,464 LOC in a single component
-  is the worst offender in the frontend. The dashboard has natural tab
-  seams (datasets / detectors / processors / settings) that each map to
-  a sub-component. Target: ≤400 LOC for the host component, the rest
-  pushed into `dashboard/tabs/<tab>/`. Highest value of any frontend
-  change.
-- **`label-view.component.ts` — audit, then maybe split.** 913 LOC but
-  it's one coherent screen with tightly coupled keyboard/mouse/vote
-  state. May not split cleanly. Defer until after dashboard.
+- **`dashboard.component.ts` — skip.** The earlier verdict assumed
+  "natural tab seams (datasets / detectors / processors / settings)".
+  That premise is wrong — the dashboard has no tabs, and no settings
+  or processors sections. What it actually has is two sections
+  (Datasets, Detectors) plus a Train/Find action bar, where Train/Find
+  read selection state from BOTH sections and call back into per-
+  section progress polling. The host is wide because it is the
+  orchestrator, not because it's tangled — most methods are <20 LOC
+  with clear single responsibilities, the per-row UI already lives in
+  `dataset-card` / `detector-card`, and ~120 LOC are column metadata
+  + comments. A section split would lift the cross-section selection
+  state straight back into the host (re-creating the coupling) or
+  require an `@Output` for every interaction — meaningful refactor
+  risk for zero behaviour change and marginal LOC win.
+- **`label-view.component.ts` — skip for the same reason.** One
+  coherent screen with tightly coupled keyboard/mouse/vote state; no
+  obvious independent sub-components.
 - **Global "by feature" reorg of `components/` and `services/` —
   skip.** Angular convention is by-type; the codebase is internally
   consistent; the cost (every import path changes) is high; the benefit
-  (faster grep?) is marginal. Don't do this unless the team is
-  expanding and onboarding pain is real.
+  (faster grep?) is marginal.
 - **Dead `.spec.ts` files — leave them.** They typecheck (per
   CLAUDE.md), they document intended behaviour, and deleting them
   forfeits future test-runner coverage at zero current benefit.
+
+If a future change adds genuine new top-level concerns to the dashboard
+(processors tab, settings tab, etc.) or splits the page into actual
+tabs, revisit. As long as the page is "datasets + detectors + Train/
+Find", the current shape is appropriate.
 
 ---
 
@@ -317,7 +329,9 @@ expected to land there following the same pattern used by
    constants live in `_demo_categories.py` and the
    `build_demo_datasets()` + `load_demo_source()` helpers live in
    `_demo_sources.py`.
-7. Split `dashboard.component.ts` (#5).
+7. ~~Split `dashboard.component.ts` (#5).~~ Skipped — the original
+   verdict assumed tab seams that don't exist. See #5 for the full
+   rationale; revisit if the dashboard grows actual tabs.
 
-Each step is its own PR. Don't batch — every move is a large mechanical
-diff that's easier to review in isolation.
+Each step was its own PR. No further work is queued — every remaining
+item in this doc is an explicit **Skip**.
