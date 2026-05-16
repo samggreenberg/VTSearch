@@ -409,6 +409,29 @@ request/response gates getting in the way during their migration.
       blueprints for now — they involve plugin-field shapes that need
       the *Resolved questions / Plugin field endpoints* decision in
       hand (importer staging / import).
+- [x] `eval.py` migrated to flask-smorest (labeling-progress,
+      labeling-status, indicator-score-history, eval/train-and-score +
+      /result). Schema-level validation failures (missing required
+      ``metric`` / ``job_id``; invalid metric value) surface as 422 with
+      the standard ``errors`` envelope; handler-level rejects (no
+      good/bad votes, no label history, job not found, wait-mode error)
+      keep their HTTP codes (400 / 404 / 500) with the standard
+      ``message`` envelope. The train-and-score response schema uses
+      ``unknown = "include"`` so the metric-specific data key
+      (``error_cost`` / ``stability`` / ``diversity``) and the historical
+      cancelled-status response flow through unchanged. The
+      ``test_invalid_metric_rejected`` test was updated from 400 to 422
+      to match.
+- [x] `file_browser.py` migrated to flask-smorest (single ``GET
+      /api/browse`` endpoint). Schema-level validation failures surface
+      as 422 with the standard ``errors`` envelope; handler-level
+      rejects (path traversal, permission denied) keep their HTTP codes
+      (400 / 403) with the standard ``message`` envelope. 404s
+      (directory not found) are intercepted by the app-level
+      ``NotFound`` errorhandler in ``app.py`` and keep the legacy
+      ``{"error": "Not Found", "request_id": ...}`` shape. File-browser
+      tests in ``tests/api/test_file_browser.py`` updated to read
+      ``message`` instead of ``error`` for the 400 cases.
 - [x] `datasets/load.py` migrated to flask-smorest (import-local-folder,
       load-demo, load-file, load-folder, load-source, export, clear).
       JSON-shaped routes (load-demo, load-folder, load-source, clear)

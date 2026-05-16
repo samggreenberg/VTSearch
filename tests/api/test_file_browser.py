@@ -116,7 +116,7 @@ class TestBrowseEndpoint:
             resp = client.get("/api/browse?path=../../etc")
 
         assert resp.status_code == 400
-        assert "Invalid path" in resp.get_json()["error"]
+        assert "Invalid path" in resp.get_json()["message"]
 
     def test_nonexistent_dir(self, client, tmp_path):
         """Browsing a path that doesn't exist returns 404."""
@@ -264,7 +264,7 @@ class TestMultiUserBrowseIsolation:
             set_login_provider(original)
 
         assert resp.status_code == 400
-        assert "Invalid path" in resp.get_json()["error"]
+        assert "Invalid path" in resp.get_json()["message"]
 
     def test_absolute_path_to_other_user_blocked(self, client, tmp_path):
         """A user cannot browse another user's directory via an absolute path."""
@@ -283,7 +283,7 @@ class TestMultiUserBrowseIsolation:
             set_login_provider(original)
 
         assert resp.status_code == 400
-        assert "Invalid path" in resp.get_json()["error"]
+        assert "Invalid path" in resp.get_json()["message"]
 
     def test_two_users_see_different_files(self, client, tmp_path):
         """Two users with separate data dirs see only their own files."""

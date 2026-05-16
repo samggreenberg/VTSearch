@@ -31,6 +31,8 @@ from vtsearch.schemas.datasets import (
     DemoCategoriesResponseSchema,
     DemoDatasetListQuerySchema,
     DemoDatasetListResponseSchema,
+    DetectMediaTypeQuerySchema,
+    DetectMediaTypeResponseSchema,
 )
 from vtsearch.state import (
     get_dataset_display_name,
@@ -320,7 +322,11 @@ def browse_media_files(query: dict):
 
 
 @datasets_ui_bp.route("/api/dataset/detect-media-type")
-def detect_media_type():
+@datasets_ui_bp.arguments(DetectMediaTypeQuerySchema, location="query")
+@datasets_ui_bp.response(200, DetectMediaTypeResponseSchema)
+@datasets_ui_bp.alt_response(400, description="Path escapes the source root.")
+@datasets_ui_bp.alt_response(404, description="Source not available, or directory not found.")
+def detect_media_type(query: dict):
     """Sample a folder and report which media type dominates by extension.
 
     Powers the auto-detect hint in the import modal: rather than making
@@ -328,42 +334,31 @@ def detect_media_type():
     user selects a folder and pre-fills the dropdown with whichever type
     has the most matching files in the first ``limit`` files of the tree.
 
-    Query parameters:
-
-    * ``source`` — one of ``demo:<name>`` or ``folder`` (matches
-      ``/api/browse-media-files``).
-    * ``path`` — relative sub-path within the root (default ``""``).
-    * ``recursive`` — ``"true"``/``"false"`` (default ``"true"``).
-    * ``limit`` — max files to examine (default ``50``, capped at ``500``).
-
-    Returns the dict produced by
-    :func:`vtsearch.datasets.media_type_detection.detect_media_types_in_folder`.
+    The 404 returned when the source is unavailable on disk is
+    intercepted by the app-level ``NotFound`` errorhandler and keeps the
+    legacy ``{"error": "Not Found", "request_id": ...}`` envelope.
     """
     from vtsearch.datasets.media_type_detection import detect_media_types_in_folder
 
-    source = request.args.get("source", "folder").strip() or "folder"
-    subpath = request.args.get("path", "").strip()
-    recursive = request.args.get("recursive", "true").strip().lower() != "false"
-    try:
-        limit = int(request.args.get("limit", "50"))
-    except ValueError:
-        limit = 50
-    limit = max(1, min(limit, 500))
+    source = query["source"].strip() or "folder"
+    subpath = query["path"].strip()
+    recursive = query["recursive"]
+    limit = max(1, min(query["limit"], 500))
 
     root = _resolve_browse_root(source)
     if root is None:
-        return jsonify({"error": "Source not found or not available on disk"}), 404
+        abort(404, message="Source not found or not available on disk")
 
     target = (root / subpath).resolve()
     try:
         target.relative_to(root)
     except ValueError:
-        return jsonify({"error": "Invalid path"}), 400
+        abort(400, message="Invalid path")
 
     if not target.is_dir():
-        return jsonify({"error": "Directory not found"}), 404
+        abort(404, message="Directory not found")
 
-    return jsonify(detect_media_types_in_folder(target, recursive=recursive, limit=limit))
+    return detect_media_types_in_folder(target, recursive=recursive, limit=limit)
 
 
 @datasets_ui_bp.route("/api/browse-media-files/select", methods=["POST"])

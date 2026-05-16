@@ -223,6 +223,41 @@ class BrowseMediaFilesSelectResponseSchema(Schema):
     original_name = fields.String(required=True)
 
 
+class DetectMediaTypeQuerySchema(Schema):
+    """Query for ``GET /api/dataset/detect-media-type``.
+
+    The ``limit`` field is capped to ``[1, 500]`` by the handler; the
+    schema only narrows the type. Invalid integer strings fall back to
+    the default rather than rejecting the request, preserving the
+    pre-migration permissiveness for this hint endpoint.
+    """
+
+    source = fields.String(
+        load_default="folder",
+        metadata={"description": "One of ``demo:<name>`` or ``folder`` (matches ``/api/browse-media-files``)."},
+    )
+    path = fields.String(load_default="")
+    recursive = fields.Boolean(load_default=True)
+    limit = fields.Integer(load_default=50)
+
+    class Meta:
+        unknown = "exclude"
+
+
+class DetectMediaTypeResponseSchema(Schema):
+    """Response for ``GET /api/dataset/detect-media-type``.
+
+    Mirrors :func:`vtsearch.datasets.media_type_detection.detect_media_types_in_folder`'s
+    return value.
+    """
+
+    sample_size = fields.Integer(required=True)
+    counts_by_type = fields.Dict(keys=fields.String(), values=fields.Integer(), required=True)
+    extensions = fields.Dict(keys=fields.String(), values=fields.Integer(), required=True)
+    dominant = fields.String(allow_none=True, required=True)
+    truncated = fields.Boolean(required=True)
+
+
 # ---------------------------------------------------------------------------
 # /api/dashboard/dataset-info, /api/dashboard/dataset-rename, /api/dashboard/disk-usage
 # ---------------------------------------------------------------------------
