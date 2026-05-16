@@ -146,11 +146,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (defaults) => {
           this.settings = defaults;
-          // ``null`` from the backend means "no theme set" — reset
-          // re-detects the OS preference and persists it.
-          const theme =
-            (defaults.theme as Theme | null | undefined) ?? this.themeService.detectOsTheme();
-          this.themeService.setTheme(theme);
+          if (defaults.theme) {
+            this.themeService.setTheme(defaults.theme as Theme);
+          }
           this.save();
         },
       });
