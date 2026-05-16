@@ -540,12 +540,38 @@ request/response gates getting in the way during their migration.
       legacy ``get_json_or_400`` helper because its dual-mode
       multipart-or-JSON dispatcher doesn't fit a single marshmallow
       schema).
+- [x] `settings/io.py` and `settings/sources.py` migrated to flask-smorest
+      (settings-importers / settings-exporters / settings-sources /
+      labelset-sources). The two plugin-field routes
+      (``POST /api/settings-importers/import/<importer_name>``) stay on
+      the legacy plain-Flask path on the same smorest blueprint — same
+      pattern as ``labels/importers.py``. Schema-level validation
+      failures (missing required ``exporter_name`` / ``source_name``)
+      surface as 422 with the standard ``errors`` envelope; handler-
+      level rejects (unknown exporter / source, detector not loaded,
+      missing plugin field, invalid ``filepath``, exporter raised) keep
+      their HTTP codes (404 / 400 / 500) with the standard ``message``
+      envelope. The nullable-GET endpoints
+      (``/api/settings-sources/active`` and
+      ``/api/detectors/<n>/labelset-source``) return ``jsonify(None)``
+      to short-circuit flask-smorest's ``schema.dump`` (which would
+      otherwise turn ``None`` into ``{}``); the sync endpoint always
+      includes a ``keys`` list in its response (even when empty)
+      because marshmallow's ``getattr`` fallback resolves ``keys`` on a
+      dict to the built-in method. The
+      ``test_missing_exporter_name_400`` test in
+      ``tests/io/test_settings_io.py`` was updated to expect 422 with
+      the ``errors`` envelope.
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
-- [ ] Remaining blueprints (see Order above)
 - [ ] Delete the pre-existing permissive `/openapi.json` +
-      `--openapi-schema` once flask-smorest covers every blueprint
-      (see "Relationship to the pre-existing permissive spec" above)
+      `--openapi-schema` now that flask-smorest covers every blueprint
+      (see "Relationship to the pre-existing permissive spec" above).
+      The url-map walker in ``vtsearch/openapi.py`` and the ``/openapi.json``
+      route on ``main_bp`` are still in place — flagged as deprecated in
+      their docstrings but kept until a follow-up PR removes them
+      together with the ``--openapi-schema`` CLI flag and the docs
+      references in ``docs/CLI.md`` / ``docs/API.md``.
 
 ## Open follow-ups
 
