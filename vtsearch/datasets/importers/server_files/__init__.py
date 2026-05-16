@@ -211,7 +211,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
         ),
         ImporterField(
             key="paths_file",
-            label="Paths File",
+            label="Path or URL",
             field_type="server_path",
             description=(
                 "Absolute server path to a file listing the media to import.  Either:\n"

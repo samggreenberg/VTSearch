@@ -23,7 +23,7 @@ class ServerFileSettingsImporter(SettingsImporter):
     fields = [
         SettingsImporterField(
             key="filepath",
-            label="Server File Path",
+            label="Path or URL",
             field_type="server_path",
             description="Absolute or relative path to a VTSearch settings JSON file on the server.",
             placeholder="data/settings.json",

@@ -38,7 +38,7 @@ class PickleDatasetImporter(DatasetImporter):
     fields = [
         ImporterField(
             key="file",
-            label="Dataset File",
+            label="Upload a file",
             field_type="file",
             description="A .pkl file that was exported from VTSearch.",
             accept=".pkl",
