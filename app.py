@@ -514,6 +514,19 @@ if __name__ == "__main__":
             "no models."
         ),
     )
+    parser.add_argument(
+        "--progress-format",
+        type=str,
+        default="text",
+        choices=["text", "json"],
+        dest="progress_format",
+        help=(
+            "Format for CLI status output. 'text' (default) prints "
+            "human-readable prose; 'json' emits NDJSON on stdout, one event "
+            "per line, for scripted callers and CI. See vtsearch.cli_progress "
+            "for the event schema. Applies to --autodetect."
+        ),
+    )
 
     # Two-pass parsing: first pass gets --importer and --exporter names;
     # second pass adds their plugin-specific arguments and re-parses.
@@ -580,6 +593,16 @@ if __name__ == "__main__":
         parser.parse_args()
 
     if args.autodetect:
+        # Wire the CLI progress format (text/json) before any pipeline call
+        # produces output. In JSON mode we also re-route the global media
+        # progress callback from update_progress (which writes to a tracker
+        # nothing reads in CLI mode) to an NDJSON emitter on stdout.
+        from vtsearch import cli_progress
+
+        cli_progress.set_format(args.progress_format)
+        if args.progress_format == "json":
+            set_progress_callback(cli_progress.progress_callback)
+
         # Collect exporter field values if an exporter was specified
         exporter_field_values = None
         if exporter:
@@ -602,13 +625,19 @@ if __name__ == "__main__":
 
                 set_settings_path(settings_path)
             if dry_run:
-                print(
-                    f"DRY RUN — would import labels from {args.label_importer_file!r} "
-                    f"via importer {args.label_importer!r} into detector "
-                    f"{args.import_labels_into!r}.",
-                    flush=True,
+                cli_progress.emit(
+                    "labels_import_dry_run",
+                    text=(
+                        f"DRY RUN — would import labels from {args.label_importer_file!r} "
+                        f"via importer {args.label_importer!r} into detector "
+                        f"{args.import_labels_into!r}."
+                    ),
+                    detector=args.import_labels_into,
+                    importer=args.label_importer,
+                    filepath=args.label_importer_file,
                 )
-                print("", flush=True)
+                if cli_progress.get_format() == "text":
+                    print("", flush=True)
             else:
                 from vtsearch.cli import import_labels_into_detector_from_file
 
@@ -618,13 +647,18 @@ if __name__ == "__main__":
                         args.label_importer,
                         args.label_importer_file,
                     )
-                    print(
-                        f"Imported {applied} label(s) into detector "
-                        f"'{args.import_labels_into}' (skipped {skipped} duplicate/invalid).",
-                        flush=True,
+                    cli_progress.emit(
+                        "labels_imported",
+                        text=(
+                            f"Imported {applied} label(s) into detector "
+                            f"'{args.import_labels_into}' (skipped {skipped} duplicate/invalid)."
+                        ),
+                        detector=args.import_labels_into,
+                        applied=applied,
+                        skipped=skipped,
                     )
                 except (FileNotFoundError, ValueError) as exc:
-                    print(f"Error importing labels: {exc}", file=sys.stderr)
+                    cli_progress.emit_error(f"importing labels: {exc}")
                     sys.exit(1)
 
         if args.importer:

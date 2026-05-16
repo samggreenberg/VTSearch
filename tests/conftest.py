@@ -247,6 +247,12 @@ def reset_state():
 
     reset_all_async_jobs_for_tests()
 
+    # Reset CLI progress format so a test that flips it to "json" can't
+    # leak the choice into the next test.
+    from vtsearch import cli_progress
+
+    cli_progress.set_format("text")
+
     _set_login_provider(_DefaultLoginProvider())
 
     _reset_ds_reg()
