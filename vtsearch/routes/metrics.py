@@ -22,5 +22,10 @@ metrics_bp = Blueprint("metrics", __name__)
 
 @metrics_bp.route("/metrics")
 def prometheus_metrics() -> Response:
-    """Return the Prometheus exposition payload."""
-    return Response(metrics.render(), mimetype=metrics.CONTENT_TYPE_LATEST)
+    """Return the Prometheus exposition payload.
+
+    Uses ``content_type=`` (not ``mimetype=``) so the ``version=0.0.4``
+    and ``charset=utf-8`` parameters land verbatim — passing them via
+    ``mimetype`` would cause Flask to append a second ``charset=utf-8``.
+    """
+    return Response(metrics.render(), content_type=metrics.CONTENT_TYPE_LATEST)

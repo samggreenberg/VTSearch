@@ -18,7 +18,11 @@ def _scrape(client) -> str:
     response = client.get("/metrics")
     assert response.status_code == 200
     assert response.mimetype == "text/plain"
-    assert "version=0.0.4" in response.headers["Content-Type"]
+    ct = response.headers["Content-Type"]
+    assert "version=0.0.4" in ct
+    # Flask must not duplicate the charset parameter — passing the full
+    # Content-Type via ``content_type=`` keeps it verbatim.
+    assert ct.count("charset=utf-8") == 1
     return response.get_data(as_text=True)
 
 
