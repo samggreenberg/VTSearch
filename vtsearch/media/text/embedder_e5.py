@@ -124,7 +124,7 @@ class TextE5Embedder(MediaEmbedder):
             print("Warning: empty text content")
             return None
         try:
-            return self._model.encode(f"passage: {text_content}", normalize_embeddings=True)
+            return np.asarray(self._model.encode(f"passage: {text_content}", normalize_embeddings=True))
         except Exception:
             logging.getLogger(__name__).exception("Error embedding text content")
             return None
@@ -179,7 +179,7 @@ class TextE5Embedder(MediaEmbedder):
         if self._model is None:
             return None
         try:
-            return self._model.encode(f"passage: {text}", normalize_embeddings=True)
+            return np.asarray(self._model.encode(f"passage: {text}", normalize_embeddings=True))
         except Exception:
             logging.getLogger(__name__).exception("Error embedding passage")
             return None
@@ -190,7 +190,7 @@ class TextE5Embedder(MediaEmbedder):
         if self._model is None:
             return None
         try:
-            return self._model.encode(f"query: {text}", normalize_embeddings=True)
+            return np.asarray(self._model.encode(f"query: {text}", normalize_embeddings=True))
         except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for text")
             return None

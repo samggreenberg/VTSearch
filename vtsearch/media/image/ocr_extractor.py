@@ -63,7 +63,7 @@ class OCRExtractor(Extractor):
     def load_model(self) -> None:
         if self._model is not None:
             return
-        from paddleocr import PaddleOCR  # noqa: PLC0415
+        from paddleocr import PaddleOCR  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
         self._model = PaddleOCR(use_angle_cls=True, lang=self._language, show_log=False)
 

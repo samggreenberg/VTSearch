@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 
 from vtsearch.media.base import (
@@ -636,7 +637,7 @@ class TextMediaType(MediaType):
             if not text_content:
                 continue
             try:
-                embedding = embedder.embed_text_passage(text_content)
+                embedding = cast(Any, embedder).embed_text_passage(text_content)
             except Exception:
                 logging.getLogger(__name__).exception("Error embedding paragraph")
                 continue

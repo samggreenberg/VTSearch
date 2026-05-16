@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -16,9 +16,6 @@ from vtsearch.media.embedder import (
     load_pretrained_local_first,
     timed_progress,
 )
-
-if TYPE_CHECKING:
-    from transformers import ClapModel, ClapProcessor
 
 
 class AudioClapMusicEmbedder(MediaEmbedder):
@@ -34,8 +31,10 @@ class AudioClapMusicEmbedder(MediaEmbedder):
 
     def __init__(self) -> None:
         super().__init__()
-        self._model: Optional[ClapModel] = None
-        self._processor: Optional[ClapProcessor] = None
+        # Typed ``Any``: transformers stubs miss several ``ClapProcessor.__call__``
+        # kwargs we pass at runtime; runtime ``None`` checks guard the calls.
+        self._model: Any = None
+        self._processor: Any = None
 
     # ------------------------------------------------------------------
     # Identity

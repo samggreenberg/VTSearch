@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -66,8 +66,12 @@ class _EupeBase(MediaEmbedder):
 
     def __init__(self) -> None:
         super().__init__()
-        self._model = None
-        self._preprocess = None
+        # Typed ``Any``: ``torch.hub.load`` returns ``object``, which breaks
+        # ``.to()``/``.parameters()``/``.forward_features()``; the torchvision
+        # ``Compose`` callable also returns ``Image`` per stubs, breaking
+        # ``.unsqueeze(0)``. Runtime ``None`` checks guard the calls.
+        self._model: Any = None
+        self._preprocess: Any = None
 
     @property
     def media_type_id(self) -> str:
@@ -111,7 +115,7 @@ class _EupeBase(MediaEmbedder):
                 source="github",
                 pretrained=True,
                 weights=EUPE_MODEL_ID,
-                trust_repo=True,
+                trust_repo=True,  # pyright: ignore[reportArgumentType]  # bool is valid at runtime; stubs only list str
             )
         self._model = self._model.to("cpu")
         self._model.eval()

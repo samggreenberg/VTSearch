@@ -190,6 +190,11 @@ class MediaType(ABC):
     See the module docstring above for the four-step process.
     """
 
+    # Progress callback wired in by ``vtsearch.media.set_progress_callback``.
+    # Demo loaders / model loaders call it; defaults to a no-op so direct
+    # instantiation (tests, scripts) doesn't crash before the registry is set up.
+    _on_progress: ProgressCallback = _noop_progress
+
     # ------------------------------------------------------------------
     # Identity
     # ------------------------------------------------------------------

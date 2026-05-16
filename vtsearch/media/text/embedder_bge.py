@@ -120,7 +120,7 @@ class TextBGEEmbedder(MediaEmbedder):
             print("Warning: empty text content")
             return None
         try:
-            return self._model.encode(text_content, normalize_embeddings=True)
+            return np.asarray(self._model.encode(text_content, normalize_embeddings=True))
         except Exception:
             logging.getLogger(__name__).exception("Error embedding text content")
             return None
@@ -170,7 +170,7 @@ class TextBGEEmbedder(MediaEmbedder):
         if self._model is None:
             return None
         try:
-            return self._model.encode(text, normalize_embeddings=True)
+            return np.asarray(self._model.encode(text, normalize_embeddings=True))
         except Exception:
             logging.getLogger(__name__).exception("Error embedding passage (BGE)")
             return None
@@ -181,7 +181,7 @@ class TextBGEEmbedder(MediaEmbedder):
         if self._model is None:
             return None
         try:
-            return self._model.encode(f"Represent this sentence: {text}", normalize_embeddings=True)
+            return np.asarray(self._model.encode(f"Represent this sentence: {text}", normalize_embeddings=True))
         except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for text (BGE)")
             return None
