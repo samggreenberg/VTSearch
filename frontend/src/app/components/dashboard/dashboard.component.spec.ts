@@ -370,7 +370,7 @@ describe('DashboardComponent', () => {
     component.selectedDatasetIds.add('d1');
 
     // Mock dialog confirmation
-    spyOn(component['dialog'], 'confirm').and.returnValue(Promise.resolve(true));
+    spyOn(component['dialog'], 'confirmDestructive').and.returnValue(Promise.resolve(true));
 
     component.deleteDataset(datasets[0]);
     tick();

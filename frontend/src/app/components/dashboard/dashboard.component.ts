@@ -496,11 +496,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.deletingSelectedDatasetsConfirm = true;
     let ok = false;
     try {
-      ok = await this.dialog.confirm(
+      const question =
         targets.length === 1
           ? `Delete dataset ${names}?`
-          : `Delete ${targets.length} datasets: ${names}?`,
-      );
+          : `Delete ${targets.length} datasets: ${names}?`;
+      const detail =
+        targets.length === 1
+          ? 'This removes the dataset from the registry and deletes its cached pickle file. Detectors trained against it are unaffected.'
+          : 'This removes the datasets from the registry and deletes their cached pickle files. Detectors trained against them are unaffected.';
+      ok = await this.dialog.confirmDestructive(question, detail);
     } finally {
       this.deletingSelectedDatasetsConfirm = false;
       this.wasDeletingSelectedDatasetsConfirm = true;
@@ -582,11 +586,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.deletingSelectedDetectorsConfirm = true;
     let ok = false;
     try {
-      ok = await this.dialog.confirm(
+      const question =
         targets.length === 1
           ? `Delete detector ${names}?`
-          : `Delete ${targets.length} detectors: ${names}?`,
-      );
+          : `Delete ${targets.length} detectors: ${names}?`;
+      const detail =
+        targets.length === 1
+          ? 'This removes its labelset and training metadata. The dataset is unaffected.'
+          : 'This removes their labelsets and training metadata. The datasets are unaffected.';
+      ok = await this.dialog.confirmDestructive(question, detail);
     } finally {
       this.deletingSelectedDetectorsConfirm = false;
       this.wasDeletingSelectedDetectorsConfirm = true;
@@ -670,7 +678,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   async deleteDataset(dataset: DatasetRegistryEntry): Promise<void> {
     this.deletingDatasetId = dataset.id;
-    const ok = await this.dialog.confirm(`Delete dataset "${dataset.name}"?`);
+    const ok = await this.dialog.confirmDestructive(
+      `Delete dataset "${dataset.name}"?`,
+      'This removes the dataset from the registry and deletes its cached pickle file. Detectors trained against it are unaffected.',
+    );
     this.deletingDatasetId = '';
     if (!ok) return;
     this.datasetsApi.deleteRegistered(dataset.id).subscribe({
@@ -719,7 +730,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
     this.deletingDetectorId = model.id;
-    const ok = await this.dialog.confirm(`Delete detector "${model.name}"?`);
+    const ok = await this.dialog.confirmDestructive(
+      `Delete detector "${model.name}"?`,
+      'This removes its labelset and training metadata. The dataset is unaffected.',
+    );
     this.deletingDetectorId = '';
     if (!ok) return;
     this.detectorsApi.deleteFromRegistry(model.id).subscribe({
