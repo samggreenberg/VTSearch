@@ -327,6 +327,31 @@ request/response gates getting in the way during their migration.
       Extractor tests in ``tests/detectors/test_extractors.py`` and the
       cross-cutting checks in ``tests/integration/test_multi_media_coverage.py``
       updated to match.
+- [x] `media/list.py` and `media/server.py` migrated to flask-smorest
+      (medias/ids, medias/batch, vote, paragraph/text, add-to-pile,
+      server-media-files CRUD + thumbnail, example-sort-server,
+      example-sort-origin). Schema-level validation failures (missing
+      required ``vote`` / ``filename`` / ``origin`` / ``key`` / ``ids``;
+      invalid ``vote`` value) surface as 422 with the standard
+      ``errors`` envelope; handler-level rejects (region_box length /
+      range, bad-vote with region_box, no medias loaded, unknown origin
+      type, path traversal) keep their HTTP codes (400 / 404 / 500) with
+      the standard ``message`` envelope. The binary-streaming routes
+      (audio / video / image / generic media / thumbnail) and the
+      multipart-upload routes (add-to-pile, server-media-files/upload)
+      declare error responses via ``alt_response`` and omit
+      ``arguments``; the success body for the binary routes is left
+      undescribed (mirroring the detector preview / thumbnail pattern).
+      `media/embed.py` stays undecorated on a ``flask_smorest.Blueprint``
+      because the dual-mode multipart-or-JSON dispatcher doesn't fit a
+      single marshmallow schema (same SPA-pattern as the plugin-field
+      routes). Tests in ``tests/core/test_medias.py``,
+      ``tests/core/test_votes.py``, ``tests/api/test_error_recovery.py``,
+      ``tests/api/test_api_contracts.py``,
+      ``tests/detectors/test_patch_embedder.py``,
+      ``tests/integration/test_multi_media_coverage.py``,
+      ``tests/datasets/test_media_sources.py``, and
+      ``tests/cli/test_load_sort_window.py`` updated to match.
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
 - [ ] Remaining blueprints (see Order above)
