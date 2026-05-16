@@ -291,7 +291,6 @@ class TestModelLoadEndpoints:
             json={
                 "name": name,
                 "media_type": "audio",
-                "trainable": True,
                 "text_query": "test",
             },
         )
