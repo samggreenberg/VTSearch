@@ -545,10 +545,15 @@ class TestErrorResponseFormat:
         assert "error" in data
 
     def test_400_vote_error_is_json(self, client):
+        # The media-vote blueprint now uses flask-smorest's standard
+        # error envelope: a ``vote`` value that fails the OneOf check
+        # surfaces as 422 with a per-field ``errors`` dict, not the
+        # legacy ``{"error": str}`` shape. Keeping the test name for
+        # grep continuity.
         resp = client.post("/api/medias/1/vote", json={"vote": "invalid"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
         data = resp.get_json()
-        assert "error" in data
+        assert "errors" in data
 
     def test_400_inclusion_error_is_json(self, client):
         resp = client.post("/api/inclusion", json={"inclusion": "not_a_number"})

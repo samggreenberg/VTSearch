@@ -406,22 +406,26 @@ class TestIngestViaSource:
 
 class TestExampleSortOriginEndpoint:
     def test_missing_origin(self, client):
+        # ``origin`` is required by the marshmallow schema → schema-level
+        # 422 with the per-field ``errors`` envelope.
         resp = client.post(
             "/api/example-sort-origin",
             json={"key": "clip.wav"},
         )
-        assert resp.status_code == 400
-        assert "origin" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "origin" in resp.get_json()["errors"]["json"]
 
     def test_missing_key(self, client):
+        # ``key`` is required by the marshmallow schema → 422.
         resp = client.post(
             "/api/example-sort-origin",
             json={"origin": {"importer": "server_folder", "params": {"path": "/tmp"}}},
         )
-        assert resp.status_code == 400
-        assert "key" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "key" in resp.get_json()["errors"]["json"]
 
     def test_unknown_source_type(self, client):
+        # Handler-level reject → 400 with the standard ``message`` envelope.
         resp = client.post(
             "/api/example-sort-origin",
             json={
@@ -430,7 +434,7 @@ class TestExampleSortOriginEndpoint:
             },
         )
         assert resp.status_code == 400
-        assert "no media source" in resp.get_json()["error"].lower()
+        assert "no media source" in resp.get_json()["message"].lower()
 
     def test_file_not_found(self, client, tmp_path):
         folder = tmp_path / "empty"

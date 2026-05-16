@@ -36,8 +36,10 @@ class TestInvalidRequestBodies:
         assert resp.status_code == 400
 
     def test_vote_with_empty_json(self, client):
+        # Marshmallow-validated route: missing required ``vote`` surfaces
+        # as 422 with the flask-smorest error envelope.
         resp = client.post("/api/medias/1/vote", json={})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_vote_with_null_body(self, client):
         resp = client.post(
@@ -45,7 +47,8 @@ class TestInvalidRequestBodies:
             data="null",
             content_type="application/json",
         )
-        assert resp.status_code == 400
+        # ``null`` is not a valid object for the MediaVoteRequest schema.
+        assert resp.status_code == 422
 
     def test_inclusion_with_empty_json(self, client):
         resp = client.post("/api/inclusion", json={})
@@ -110,7 +113,8 @@ class TestMissingRequiredFields:
 
     def test_vote_missing_vote_field(self, client):
         resp = client.post("/api/medias/1/vote", json={"label": "good"})
-        assert resp.status_code == 400
+        # Required-field validation runs in the MediaVoteRequest schema → 422.
+        assert resp.status_code == 422
 
     def test_register_model_missing_name(self, client):
         resp = client.post(
@@ -420,10 +424,11 @@ class TestMediaTypeMismatch:
     """Requesting wrong media type for an item should return 400."""
 
     def test_video_endpoint_on_audio_media(self, client):
-        # Default test medias are audio type
+        # Default test medias are audio type. The media blueprint now
+        # uses flask-smorest's standard error envelope (``message`` key).
         resp = client.get("/api/medias/1/video")
         assert resp.status_code == 400
-        assert "not a video" in resp.get_json()["error"]
+        assert "not a video" in resp.get_json()["message"]
 
     def test_image_endpoint_on_audio_media_returns_waveform(self, client):
         # Audio medias now return a waveform thumbnail PNG
@@ -434,7 +439,7 @@ class TestMediaTypeMismatch:
     def test_paragraph_endpoint_on_audio_media(self, client):
         resp = client.get("/api/medias/1/paragraph")
         assert resp.status_code == 400
-        assert "not a text media" in resp.get_json()["error"]
+        assert "not a text media" in resp.get_json()["message"]
 
 
 class TestBoundaryValues:

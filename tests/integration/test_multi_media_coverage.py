@@ -287,10 +287,13 @@ class TestExampleSortUpload:
 class TestExampleSortServer:
     """POST /api/example-sort-server — sort by a server-side file."""
 
-    def test_missing_filename_returns_400(self, client):
+    def test_missing_filename_returns_422(self, client):
+        # The example-sort-server schema declares ``filename`` as required,
+        # so an empty body fails schema-level validation with the standard
+        # flask-smorest 422 envelope.
         resp = client.post("/api/example-sort-server", json={})
-        assert resp.status_code == 400
-        assert "filename" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "filename" in resp.get_json()["errors"]["json"]
 
     def test_nonexistent_file_returns_404(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
@@ -324,20 +327,24 @@ class TestExampleSortServer:
 class TestExampleSortOrigin:
     """POST /api/example-sort-origin — sort by media resolved from an origin."""
 
-    def test_missing_origin_returns_400(self, client):
+    def test_missing_origin_returns_422(self, client):
+        # The example-sort-origin schema declares ``origin`` as required.
         resp = client.post("/api/example-sort-origin", json={"key": "foo.wav"})
-        assert resp.status_code == 400
-        assert "origin" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "origin" in resp.get_json()["errors"]["json"]
 
-    def test_missing_key_returns_400(self, client):
+    def test_missing_key_returns_422(self, client):
+        # The example-sort-origin schema declares ``key`` as required.
         resp = client.post(
             "/api/example-sort-origin",
             json={"origin": {"importer": "server_folder", "params": {"path": "/tmp"}}},
         )
-        assert resp.status_code == 400
-        assert "key" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "key" in resp.get_json()["errors"]["json"]
 
     def test_unknown_origin_type_returns_400(self, client):
+        # Origin shape itself is permissive; the handler rejects unknown
+        # importer types with a 400 + standard ``message`` envelope.
         resp = client.post(
             "/api/example-sort-origin",
             json={
