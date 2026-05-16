@@ -42,6 +42,10 @@ class ImageDinov3PatchEmbedder(_Dinov3Base):
         return "dinov3_patch"
 
     @property
+    def display_name(self) -> str:
+        return "DINOv3 patch (region-aware images)"
+
+    @property
     def supports_patch_regions(self) -> bool:
         return True
 

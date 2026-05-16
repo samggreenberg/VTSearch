@@ -43,6 +43,10 @@ class ImageClipEmbedder(MediaEmbedder):
         return "clip"
 
     @property
+    def display_name(self) -> str:
+        return "CLIP (general images)"
+
+    @property
     def media_type_id(self) -> str:
         return "image"
 

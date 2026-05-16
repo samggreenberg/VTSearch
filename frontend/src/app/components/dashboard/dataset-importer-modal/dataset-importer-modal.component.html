@@ -83,18 +83,21 @@
                 @if (recommendedEmbedders(demoEmbedders).length > 0) {
                   <optgroup label="Recommended">
                     @for (embedder of recommendedEmbedders(demoEmbedders); track embedder.name) {
-                      <option [value]="embedder.name">{{ embedder.name }}</option>
+                      <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
                     }
                   </optgroup>
                 }
                 @if (advancedEmbedders(demoEmbedders).length > 0) {
                   <optgroup label="Advanced ▾">
                     @for (embedder of advancedEmbedders(demoEmbedders); track embedder.name) {
-                      <option [value]="embedder.name">{{ embedder.name }}</option>
+                      <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
                     }
                   </optgroup>
                 }
               </select>
+              @if (selectedEmbedderRawId(selectedDemoEmbedder, demoEmbedders); as rawId) {
+                <small class="embedder-raw-id">{{ rawId }}</small>
+              }
             }
             @if (licenseNoticeFor(selectedDemoEmbedder, demoEmbedders); as notice) {
               <div class="license-warning" role="note">⚠ {{ notice }}</div>
@@ -308,18 +311,21 @@
             @if (recommendedEmbedders(availableEmbedders).length > 0) {
               <optgroup label="Recommended">
                 @for (embedder of recommendedEmbedders(availableEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
                 }
               </optgroup>
             }
             @if (advancedEmbedders(availableEmbedders).length > 0) {
               <optgroup label="Advanced ▾">
                 @for (embedder of advancedEmbedders(availableEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
                 }
               </optgroup>
             }
           </select>
+          @if (selectedEmbedderRawId(selectedEmbedder, availableEmbedders); as rawId) {
+            <small class="embedder-raw-id">{{ rawId }}</small>
+          }
           @if (licenseNoticeFor(selectedEmbedder, availableEmbedders); as notice) {
             <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }
@@ -517,18 +523,21 @@
             @if (recommendedEmbedders(lfEmbedders).length > 0) {
               <optgroup label="Recommended">
                 @for (embedder of recommendedEmbedders(lfEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
                 }
               </optgroup>
             }
             @if (advancedEmbedders(lfEmbedders).length > 0) {
               <optgroup label="Advanced ▾">
                 @for (embedder of advancedEmbedders(lfEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
                 }
               </optgroup>
             }
           </select>
+          @if (selectedEmbedderRawId(lfSelectedEmbedder, lfEmbedders); as rawId) {
+            <small class="embedder-raw-id">{{ rawId }}</small>
+          }
           @if (licenseNoticeFor(lfSelectedEmbedder, lfEmbedders); as notice) {
             <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }
@@ -697,18 +706,21 @@
             @if (recommendedEmbedders(sfEmbedders).length > 0) {
               <optgroup label="Recommended">
                 @for (embedder of recommendedEmbedders(sfEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
                 }
               </optgroup>
             }
             @if (advancedEmbedders(sfEmbedders).length > 0) {
               <optgroup label="Advanced ▾">
                 @for (embedder of advancedEmbedders(sfEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
                 }
               </optgroup>
             }
           </select>
+          @if (selectedEmbedderRawId(sfSelectedEmbedder, sfEmbedders); as rawId) {
+            <small class="embedder-raw-id">{{ rawId }}</small>
+          }
           @if (licenseNoticeFor(sfSelectedEmbedder, sfEmbedders); as notice) {
             <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }

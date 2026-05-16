@@ -629,6 +629,13 @@ export interface AutoDetectResultsData {
 
 export interface EmbedderInfo {
   name: string;
+  /**
+   * Human-readable label shown in pickers, e.g. ``"SigLIP (general images)"``.
+   * Falls back to ``name`` for legacy embedders that don't supply a friendlier
+   * label; the raw ``name`` is also rendered as a secondary line so power
+   * users can still see the registry key.
+   */
+  display_name?: string;
   media_type_id: string;
   /**
    * Whether this embedder is the recommended default for its media type

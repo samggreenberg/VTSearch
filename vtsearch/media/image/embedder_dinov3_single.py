@@ -32,5 +32,9 @@ class ImageDinov3SingleEmbedder(_Dinov3Base):
     def name(self) -> str:
         return "dinov3_single"
 
+    @property
+    def display_name(self) -> str:
+        return "DINOv3 single (image vector)"
+
 
 EMBEDDER = ImageDinov3SingleEmbedder()

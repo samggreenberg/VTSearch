@@ -828,6 +828,28 @@ export class DatasetImporterModalComponent implements OnInit {
     return list.filter((e) => !e.is_default);
   }
 
+  /**
+   * Human-readable label for the option element. Falls back to the raw name
+   * for embedders that don't yet supply a friendlier label.
+   */
+  embedderLabel(embedder: EmbedderInfo): string {
+    return embedder.display_name || embedder.name;
+  }
+
+  /**
+   * Raw registry ID for the currently-selected embedder, used as a secondary
+   * ``<small>`` line under the picker so power users can still see it. Returns
+   * an empty string when the display name equals the raw name (no need to
+   * repeat it) or when no embedder is selected.
+   */
+  selectedEmbedderRawId(name: string, list: EmbedderInfo[]): string {
+    if (!name) return '';
+    const found = list.find((e) => e.name === name);
+    if (!found) return '';
+    const label = found.display_name || found.name;
+    return label === found.name ? '' : found.name;
+  }
+
   selectDemo(demo: DemoDataset): void {
     const userName = (this.demoDatasetName || '').trim();
     this.demoSelected.emit({
