@@ -239,8 +239,8 @@ Code uses `detector`. Dashboard table is labeled "Detectors". Some UI elements (
 ### 6.3 Path-style fields ★★ S
 The "where do I put this file?" concept appears across plugins as `filepath`, `paths_file`, `path`, `url`, `file`. Plus the underlying field types differ (`server_path`, `text`, `file`). Standardize labels: **Save to (server path)**, **Path or URL**, **Upload a file**.
 
-### 6.4 Modal back-button conventions ★★ XS
-Some modals show back buttons (importer → form), some don't (new-detector → media picker). Pick a convention: always render a left-aligned back chevron in any nested-modal flow.
+### 6.4 Modal back-button conventions ★★ XS — SHIPPED
+Convention: every nested-modal flow renders a left-aligned `&larr; Back` button using the shared `btn btn--secondary btn--sm back-btn` class combination (styled by `.back-btn` in `frontend/src/scss/_components.scss`). Documented under "Nested-modal back buttons" in `CLAUDE.md`. All current nested flows (processor / settings / label importer modals, settings exporter, load-sort, resort-prompt, new-detector → media picker, new-detector → trained-importer form) already follow this convention.
 
 ### 6.5 Confirm-on-destructive ★★ S
 Delete dataset, delete detector, delete label entry, clear votes, reset settings — currently a mix of inline-hover-confirm, modal-confirm, and no-confirm. Standardize on a single confirm pattern, with the operation name in the confirmation: *"Delete detector 'cats'? This removes its labelset and training metadata. The dataset is unaffected."*
