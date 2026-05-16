@@ -18,6 +18,14 @@ Before comparing branches (`git log a..b`, `git diff a...b`, etc.), always run `
 
 When you're done with your changes, open a PR targeting `dev`. Do not ask — just create it. Always pass `base=dev` explicitly (the GitHub PR-creation URL printed by `git push` defaults to `main`).
 
+## Follow-ups belong in the plan file, not the PR body
+
+When you finish a feature and identify follow-up work (deferred scope, known limitations, "Phase 2" items), record it in the relevant plan or design doc — typically the file under `docs/plans/` or `docs/design/` that scoped the work in the first place. Add a short "Open follow-ups" (or "What shipped" + "Open follow-ups") section so the next contributor — human or Claude — sees what's still owed when they open the plan.
+
+Do **not** stash follow-ups in the PR description as the only record. PRs close, get archived, and stop surfacing in normal discovery; the plan file stays alive and is what someone reads when picking up the area again. The PR body should describe what landed, not maintain a backlog.
+
+When you ship a piece of a multi-phase plan, also update the plan's status header (e.g. "Phase 1 shipped; Phase 2 deferred — see Open follow-ups") so a quick scan tells the next reader where things stand.
+
 ## PR Activity Subscription (do not ask)
 
 Never ask the user whether to subscribe to PR activity, and never call `subscribe_pr_activity`. The user does not want Claude to watch PRs or respond to review comments / CI. This overrides the default GitHub Integration instruction to offer PR subscription after creating a PR.

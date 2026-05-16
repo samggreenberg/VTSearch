@@ -1,10 +1,6 @@
 # Design: CLI Autodetect with Converters and Clippers
 
-> **Status: Design proposal (not yet implemented).** The converter registry
-> exists in `vtsearch/converters/` and is fully functional for dataset
-> import-time conversion. However, the `input_spec` field on detector JSON
-> and the CLI autodetect pipeline changes described here are **not yet
-> implemented**. This document captures the design for future work.
+> **Status:** Phase 1 shipped (detector `input_spec` + LabelSet `detector_meta` round-trip + CLI skip-on-mismatch). The converter-routing and re-clipping pipeline described below is **not yet implemented** — see *What shipped* and *Open follow-ups* at the bottom.
 
 ## Problem
 
@@ -230,3 +226,22 @@ This is a niche escape hatch, not the primary interface.
 | Should a detector remember its training clipper? | Yes — as `input_spec.clipper`, describing what granularity the detector expects. This *is* the right default for autodetect. |
 | Should we have per-detector settings for converter/clipper? | No — clipper lives in the detector itself (travels with the file). Converter is automatic from the registry. |
 | Per-detector settings for EACH detector‽ | No. Clipper is per-detector via `input_spec`. Converter is per-source-type via registry. No settings explosion. |
+
+## What shipped (Phase 1)
+
+- Detector JSON gained the optional `input_spec` field (`clipper` + `clipper_params`). Detectors without it behave exactly as before.
+- `save_detector_labels` captures the active dataset's clipper into `input_spec` automatically (and clears any stale value when re-saving from an unclipped dataset).
+- `LabelSet` gained an optional top-level `detector_meta` block (`media_type`, `input_spec`, `threshold`) so a round-trip through a `LabelsetSource` doesn't strip the training context. Legacy labelsets without the block still load.
+- `LabelsetSource` gained `load_full()` returning a full `LabelSet`. `server_json_file` overrides it; the default impl wraps the legacy `load()` so other sources keep working.
+- `sync_to_labelset_source` emits `detector_meta` (threshold only when an MLP is loaded). `sync_from_labelset_source` writes `input_spec` (and missing `media_type`) back onto the receiver — threshold is *not* persisted because the receiver retrains.
+- CLI `_load_and_train_detectors` skips detectors whose `input_spec.clipper` doesn't match the loaded dataset's clipper, with a clear progress message pointing the user at how to reload. Detectors without `input_spec` are unaffected.
+
+## Open follow-ups
+
+These were deliberately deferred to keep Phase 1 focused on the round-trip and the validation skip. They're listed here, not in any PR description, so they don't get lost when the PR closes.
+
+- **Converter routing across source types in CLI.** Today the CLI scores only the medias whose `media_type` already matches each detector's. The design above describes auto-routing via `list_converters_for_target(detector.media_type)` per source type (so one image detector handles native images, `video2image`, and `document2image` in the same run). Needs plumbing in `_run_pipeline`: group medias by source type → look up a converter route per detector → embed converted medias → score.
+- **Re-clipping the loaded dataset to match a detector's `input_spec.clipper`.** Today a mismatched detector is skipped with a message telling the user to reload. The more ergonomic flow is "auto-clip + re-embed at scoring time." Cheaper short-circuit: when first media's `origin.params.clipper` already equals the detector's, skip the work. Needs media bytes or a resolvable file path, so thin-loaded medias would have to go through `resolve_file_context` first.
+- **Converter-aware detector matching.** Replace direct `media_type` equality in `get_autodetect_detectors_by_media` with a `get_autodetect_detectors_for_dataset(source_types: set[str])` that accepts any detector reachable via a one-hop converter route. Required before the converter-routing item above is useful.
+- **`--override-clipper` CLI flag.** Power-user escape hatch to score with a different granularity than the detector was trained on. Not the primary interface — only worth shipping after the auto-clip path lands.
+- **Clip-score aggregation toggle.** When a clipper produces N clips per media, the aggregation is currently implicit (max). The design proposes an explicit `input_spec.clip_aggregation` (`"max"` | `"mean"`) field, useful once re-clipping is in place.
