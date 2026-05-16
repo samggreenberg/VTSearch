@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from vtsearch.exporters._template import resolve_export_filepath
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
 
 
@@ -52,10 +53,11 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
             description=(
                 "Absolute or relative path on the server where the JSON "
                 "results file will be written.  Parent directories are "
-                "created automatically."
+                "created automatically.  Supports {YYYYMMDD-HHMMSS}, "
+                "{detector_name} and {username} templates."
             ),
-            placeholder="data/autodetect_results.json",
-            default="data/autodetect_results.json",
+            placeholder="data/autodetect_results_{YYYYMMDD-HHMMSS}.json",
+            default="data/autodetect_results_{YYYYMMDD-HHMMSS}.json",
         ),
     ]
 
@@ -64,7 +66,7 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
         if not filepath_str:
             raise ValueError("A file path is required.")
 
-        filepath = Path(filepath_str)
+        filepath = Path(resolve_export_filepath(filepath_str))
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
         # Labels format (from the export modal UI) — filter to selected columns
