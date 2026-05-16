@@ -253,6 +253,15 @@ request/response gates getting in the way during their migration.
       undecorated on the same `flask_smorest.Blueprint` (regular Flask
       routing, simply absent from the spec since they don't return
       JSON).
+- [x] `labels/vote.py` migrated to flask-smorest (export / import /
+      fill-from-sort). Validation errors now surface as 422 with the
+      standard error envelope (matching the settings migration); the
+      tests that previously asserted 400 + `{"error": ...}` for
+      schema-level failures were updated to 422 + `errors` to match.
+- [ ] `labels/exporters.py`, `labels/importers.py` — plugin-field
+      routes, blocked on the *Open questions* decision below ("Plugin
+      field endpoints"). Tracked here so we don't re-spend the
+      research cost when we pick the labels migration back up.
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
 - [ ] Remaining blueprints (see Order above)

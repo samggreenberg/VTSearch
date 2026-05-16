@@ -123,21 +123,25 @@ class TestFillFromSortDryRun:
             "/api/labels/fill-from-sort",
             json={"threshold": 0.5, "sides": "good"},
         )
-        assert resp.status_code == 400
+        # Required-field validation runs in the FillFromSort schema → 422.
+        # Keeping the test name for grep continuity.
+        assert resp.status_code == 422
 
     def test_missing_threshold_returns_400(self, client):
         resp = client.post(
             "/api/labels/fill-from-sort",
             json={"sort_results": [], "sides": "good"},
         )
-        assert resp.status_code == 400
+        # Required-field validation runs in the FillFromSort schema → 422.
+        assert resp.status_code == 422
 
     def test_invalid_sides_returns_400(self, client):
         resp = client.post(
             "/api/labels/fill-from-sort",
             json={"sort_results": [], "threshold": 0.5, "sides": "invalid"},
         )
-        assert resp.status_code == 400
+        # OneOf validation runs in the schema → 422.
+        assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
