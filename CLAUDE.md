@@ -75,6 +75,16 @@ This applies to:
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
 
+## Nested-modal back buttons
+
+Any modal that switches between an outer view and an inner view (importer picker → importer form, exporter picker → exporter form, new-detector → media picker, etc.) **must** render a left-aligned back chevron at the top of the inner view so the user can return to the outer view without dismissing the modal. The standard markup is:
+
+```html
+<button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to ...">&larr; Back</button>
+```
+
+The `.back-btn` rule in `frontend/src/scss/_components.scss` provides the shared styling (`align-self: flex-start`, smaller font, tighter padding). Do not introduce a new variant class, a chevron icon component, or a right-aligned placement — keep the `&larr; Back` text label and the existing class combination. If the nested view is conceptually a separate dialog (e.g. the `vt-clipper-chooser` modal opened from the dataset importer), a Cancel button in the footer satisfies the back affordance; the rule applies to inner *views inside the same modal*, not to genuinely separate dialogs.
+
 ## Commands
 - **Run tests (CPU, fast)**: `./run-tests.sh` (also runs `ruff check`, `ruff format --check`, and the frontend TypeScript build)
 - **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; every invocation runs ruff first; `core` additionally runs the frontend build check)
