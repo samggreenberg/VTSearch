@@ -17,10 +17,12 @@ class TestDashboardDatasetInfo:
             resp = client.get("/api/dashboard/dataset-info")
             assert resp.status_code == 404
             data = resp.get_json()
-            # flask-smorest standard envelope: handler-level abort() carries
-            # ``message``; legacy ``error`` is gone after the openapi-schema
-            # migration of vtsearch/routes/datasets/ui.py.
-            assert "message" in data
+            # 404s are intercepted by the app-level ``NotFound``
+            # errorhandler in ``app.py`` (which always wins for 404
+            # because it matches a more specific exception subclass than
+            # flask-smorest's ``HTTPException`` handler), so the
+            # response carries ``error`` not ``message``.
+            assert "error" in data
         finally:
             medias.update(saved)
 
