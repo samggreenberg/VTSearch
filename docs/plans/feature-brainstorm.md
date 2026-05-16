@@ -526,8 +526,10 @@ Original idea: migrate hot paths (sorting, scoring) to Quart or FastAPI for true
 ### 12.15 Structured logging + request IDs ★★ S
 Today logs are print-style. JSON logs with `dataset_id`/`detector_id`/`request_id` make production debugging tractable.
 
-### 12.16 Prometheus metrics ★★ S
+### 12.16 Prometheus metrics ★★ S — DONE
 `/metrics` endpoint with vote count, embedding latency, training time, RAM usage by dataset.
+
+Shipped: `vtsearch/metrics.py` owns a private `prometheus_client.CollectorRegistry` exposing `vtsearch_votes_total` (counter, labelled by `vote`/`media_type`), `vtsearch_embedding_seconds` (histogram, labelled by `embedder`/`media_type`), `vtsearch_training_seconds` (histogram, labelled by `kind`), `vtsearch_dataset_memory_bytes` (gauge per loaded dataset, computed at scrape time from the cached embedding matrix), plus `vtsearch_datasets_loaded` / `vtsearch_detectors_loaded` / `vtsearch_process_rss_bytes`. Instrumentation hooks live in `state/votes.py` (toggle/apply/bulk-apply paths), `media/embedder.py::embed_media`, and `detectors/training.py` (both `train_and_score` and `train_detector_from_origins`). The Flask blueprint in `routes/metrics.py` renders the registry at `/metrics` in the Prometheus text-exposition format.
 
 ### 12.17 Pydantic models for settings ★ S
 The `_SETTING_SPECS` table is clever but custom; Pydantic v2 would generalise it and produce JSON schemas for free.
