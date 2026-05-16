@@ -370,15 +370,15 @@ class TestExampleSortOrigin:
 class TestExtractEndpoint:
     """POST /api/extract — run a single extractor."""
 
-    def test_missing_extractor_type_returns_400(self, client):
+    def test_missing_extractor_type_returns_422(self, client):
         resp = client.post("/api/extract", json={"name": "test", "config": {"foo": 1}})
-        assert resp.status_code == 400
-        assert "extractor_type" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "extractor_type" in str(resp.get_json()).lower()
 
-    def test_missing_config_returns_400(self, client):
+    def test_missing_config_returns_422(self, client):
         resp = client.post("/api/extract", json={"name": "test", "extractor_type": "image_class"})
-        assert resp.status_code == 400
-        assert "config" in resp.get_json()["error"].lower()
+        assert resp.status_code == 422
+        assert "config" in str(resp.get_json()).lower()
 
     def test_unknown_type_returns_400(self, client):
         resp = client.post(
@@ -398,7 +398,7 @@ class TestExtractEndpoint:
         )
         # Default medias are audio; image_class extractor expects image
         assert resp.status_code == 400
-        assert "media type" in resp.get_json()["error"].lower()
+        assert "media type" in resp.get_json()["message"].lower()
 
     def test_no_medias_returns_400(self, client):
         saved = dict(medias)
@@ -413,7 +413,7 @@ class TestExtractEndpoint:
                 },
             )
             assert resp.status_code == 400
-            assert "No medias" in resp.get_json()["error"]
+            assert "No medias" in resp.get_json()["message"]
         finally:
             medias.clear()
             medias.update(saved)
@@ -428,7 +428,7 @@ class TestAutoExtractEndpoint:
         try:
             resp = client.post("/api/auto-extract")
             assert resp.status_code == 400
-            assert "No medias" in resp.get_json()["error"]
+            assert "No medias" in resp.get_json()["message"]
         finally:
             medias.clear()
             medias.update(saved)
@@ -436,7 +436,7 @@ class TestAutoExtractEndpoint:
     def test_no_autorun_extractors_returns_400(self, client):
         resp = client.post("/api/auto-extract")
         assert resp.status_code == 400
-        assert "No autorun extractors" in resp.get_json()["error"]
+        assert "No autorun extractors" in resp.get_json()["message"]
 
 
 class TestAutoLocalizeEndpoint:
@@ -448,7 +448,7 @@ class TestAutoLocalizeEndpoint:
         try:
             resp = client.post("/api/auto-localize")
             assert resp.status_code == 400
-            assert "No medias" in resp.get_json()["error"]
+            assert "No medias" in resp.get_json()["message"]
         finally:
             medias.clear()
             medias.update(saved)
@@ -456,7 +456,7 @@ class TestAutoLocalizeEndpoint:
     def test_no_autorun_localizers_returns_400(self, client):
         resp = client.post("/api/auto-localize")
         assert resp.status_code == 400
-        assert "No autorun localizers" in resp.get_json()["error"]
+        assert "No autorun localizers" in resp.get_json()["message"]
 
 
 # ===================================================================
