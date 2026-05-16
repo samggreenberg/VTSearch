@@ -259,8 +259,8 @@ The dropdown shows raw IDs (`siglip`, `dinov3_patch`, `e5`). Map each to a human
 ### 6.9 SSE channel/progress schemas ★ S
 Each long-running operation emits a slightly different progress payload (`step`/`total_steps` for dataset, `current`/`total` for eval, plain status strings for sort). Standardize on a single `ProgressEvent` interface so the frontend can render any of them with the same component.
 
-### 6.10 Date formatting ★ XS
-"last_trained / created" columns format dates differently from the version string in the footer. Use one formatter (relative for < 7d ago, absolute YYYY-MM-DD otherwise) everywhere.
+### 6.10 Date formatting ★ XS — SHIPPED
+"last_trained / created" columns format dates differently from the version string in the footer. ~~Use one formatter (relative for < 7d ago, absolute YYYY-MM-DD otherwise) everywhere.~~ Shipped: a single `frontend/src/app/utils/format-date.ts` is now called from all four sites (detector card, dataset card, dataset stats modal, settings-modal version footer). Always-absolute — no relative branch. Columns render `YYYY-MM-DD HH:MM` (local), version renders `YYYY-MM-DD` (UTC). Relative time was dropped deliberately: it drifts on every reload and the coarse buckets (`2w ago`) throw away precision that matters in a model-management dashboard.
 
 ### 6.11 Active-dataset/detector indicator ★★ S
 Inside Train/Find views there's no clear top-bar indicator of which dataset/detector is active. The frontend already sets `X-Dataset-Id` / `X-Detector-Id` headers — surface those names in a fixed header strip "🗂 Dataset: foo · 🧪 Detector: cats" with a click-to-switch dropdown. Removes the dashboard round-trip from §5 of the workflow trace.

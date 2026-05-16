@@ -13,6 +13,7 @@ import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { AppSettings, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
+import { formatVersion } from '../../../utils/format-date';
 
 @Component({
   selector: 'vt-settings-modal',
@@ -62,7 +63,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       .subscribe({
       next: (res) => {
         this.settings = res.settings;
-        this.version = res.version.version;
+        this.version = formatVersion(res.version.version);
         this.mediaTypes = res.mediaTypes.media_types || [];
         if (this.mediaTypes.length > 0) {
           const preselected = this.preselectedViewTab;

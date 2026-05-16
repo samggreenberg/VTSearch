@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { DatasetStatsResponse } from '../../../models/api.models';
+import { formatTimestamp as formatTs } from '../../../utils/format-date';
 
 @Component({
   selector: 'vt-dataset-stats-modal',
@@ -61,9 +62,7 @@ export class DatasetStatsModalComponent implements OnInit {
   }
 
   formatTimestamp(ts: number | null): string {
-    if (!ts) return '-';
-    const d = new Date(ts * 1000);
-    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return formatTs(ts);
   }
 
   get duration(): string {
