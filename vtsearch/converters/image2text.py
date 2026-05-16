@@ -85,7 +85,7 @@ class Image2TextMediaConverter(MediaConverter):
             return []
 
         try:
-            from paddleocr import PaddleOCR  # noqa: PLC0415
+            from paddleocr import PaddleOCR  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
         except ImportError:
             print("Image2TextMediaConverter requires PaddleOCR: pip install paddleocr paddlepaddle")
             return []

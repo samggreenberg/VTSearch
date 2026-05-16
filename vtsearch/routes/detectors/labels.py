@@ -195,6 +195,7 @@ def import_labels_into_detector(name: str, importer_name: str):
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
         return err
+    assert importer is not None  # narrowed by err check
 
     field_values = extract_plugin_fields(importer)
     err = validate_required_fields(importer, field_values)
@@ -417,9 +418,10 @@ def _in_memory_thumbnail_response(media: dict, media_type: str):
         mt = get_media_type(media_type)
     except KeyError:
         return None
-    if not hasattr(mt, "image_response"):
+    image_response_fn = getattr(mt, "image_response", None)
+    if image_response_fn is None:
         return None
-    resp = mt.image_response(media)
+    resp = image_response_fn(media)
     if resp is None:
         return None
     return send_file(

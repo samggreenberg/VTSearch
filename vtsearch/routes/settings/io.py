@@ -62,6 +62,7 @@ def run_settings_import(importer_name: str):
     )
     if err:
         return err
+    assert importer is not None  # narrowed by err check
 
     field_values = extract_plugin_fields(importer)
 
@@ -122,6 +123,7 @@ def run_settings_export():
     )
     if err:
         return err
+    assert exporter is not None  # narrowed by err check
 
     field_values: dict = data.get("field_values", {}) or {}
 

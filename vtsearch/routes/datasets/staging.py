@@ -112,10 +112,12 @@ def stage_import(importer_name: str):
     importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
     if err:
         return err
+    assert importer is not None  # narrowed by err check
 
     field_values, field_err = _extract_importer_fields(importer)
     if field_err:
         return field_err
+    assert field_values is not None  # narrowed by field_err check
 
     # Pass through optional keys not declared as plugin fields.
     file_keys = {f.key for f in importer.fields if f.field_type == "file"}
@@ -180,6 +182,7 @@ def importer_field_options(importer_name: str):
     importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
     if err:
         return err
+    assert importer is not None  # narrowed by err check
 
     body = request.get_json(force=True, silent=True) or {}
     field_key = str(body.get("field_key") or "").strip()
@@ -213,10 +216,12 @@ def import_dataset(importer_name: str):
     importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
     if err:
         return err
+    assert importer is not None  # narrowed by err check
 
     field_values, field_err = _extract_importer_fields(importer)
     if field_err:
         return field_err
+    assert field_values is not None  # narrowed by field_err check
 
     # Pass through optional keys not declared as plugin fields.
     file_keys = {f.key for f in importer.fields if f.field_type == "file"}

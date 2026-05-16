@@ -14,8 +14,10 @@ package. Rolled out in stages so each PR stays reviewable.
   `state/`, `security/` to the gated scope (31 real errors fixed).
 - **Stage 3:** ✅ shipped. Adds `datasets/`, `detectors/`, `eval/`,
   `embedding/`, `training/` to the gated scope (38 real errors fixed).
-- **Stage 4:** ⏳ next — `routes/`, `converters/`.
-- **Stages 5–6:** 📋 not started.
+- **Stage 4:** ✅ shipped. Adds `routes/`, `converters/` to the gated
+  scope (40 real errors fixed).
+- **Stage 5:** ⏳ next — `media/`.
+- **Stage 6:** 📋 not started.
 - **Stage 7 (`tests/`):** 📋 optional, deferred.
 
 ## Goal
@@ -101,6 +103,16 @@ After Stage 3 shipped, `pyright vtsearch/` with deps installed reports
 unrelated refactor between the two stages — not new regression from
 Stage 3's fixes.)
 
+### Post-Stage-4 advisory count
+
+After Stage 4 shipped, `pyright vtsearch/` with deps installed reports
+**97 errors**, all in `media/`. The advisory job now exactly matches the
+remaining work for Stage 5.
+
+| Dir | Errors |
+|---|---:|
+| `media/` | 97 |
+
 ## Stages
 
 Each stage is a separate PR. The "errors to fix" column counts real
@@ -112,8 +124,8 @@ Each stage is a separate PR. The "errors to fix" column counts real
 | 1 | `utils/`, `auth/`, `plugins/`, `sync/`, `concurrency/`, `exporters/`, `labels/`, `settings_io/`, `cli.py`, `config.py` | 4 | ✅ shipped (PR #1349) |
 | 2 | `settings.py`, `settings_factory.py`, `state/`, `security/` | 31 | ✅ shipped |
 | 3 | `datasets/`, `detectors/`, `eval/`, `embedding/`, `training/` | 38 | ✅ shipped |
-| **4** | `routes/`, `converters/` | ~40 | ⏳ next |
-| 5 | `media/` (heaviest — may need `.pyi` stubs or per-file `# pyright: ignore`) | ~96 | 📋 |
+| 4 | `routes/`, `converters/` | 40 | ✅ shipped |
+| **5** | `media/` (heaviest — may need `.pyi` stubs or per-file `# pyright: ignore`) | ~97 | ⏳ next |
 | 6 | Whole `vtsearch/` (incl. `achievements.py`, `logging_config.py`, `openapi.py`, `schemas/`) — advisory job removed | 0 | 📋 |
 | 7 *(optional)* | `tests/` | TBD | 📋 |
 
@@ -235,6 +247,70 @@ Patterns that recurred enough to document:
     runtime; a localized `# pyright: ignore[reportArgumentType]` is
     the right escape hatch rather than wrapping every cell access in
     `cast`.
+
+### Stage 4 fixes (shipped)
+
+Patterns that recurred enough to document:
+
+1. **Discriminated tuple unions don't narrow after unpacking.** Helpers
+   like `get_plugin_or_404` and `_extract_importer_fields` return
+   `(value, None)` on success and `(None, error)` on failure. Typing the
+   return as `tuple[T, None] | tuple[None, E]` doesn't help: pyright's
+   `is not None` check on the unpacked `err` variable does NOT narrow
+   the sibling `value` variable. Confirmed with a minimal repro.
+   Fix at every call site: add `assert value is not None  # narrowed by
+   err check` right after the early-return. Explicit, pythonic, and
+   safe at runtime (catches helper-contract drift). Stage 4 added ~13
+   such asserts across `routes/datasets`, `routes/detectors`,
+   `routes/labels`, and `routes/settings`.
+2. **`hasattr` does not narrow attribute access for non-Protocol
+   classes.** Two sites used
+   `if hasattr(mt, "image_response"): mt.image_response(...)` to call
+   an optional method on a `MediaType` ABC; pyright still flagged the
+   call as accessing an unknown attribute. Fix: switch to
+   `fn = getattr(mt, "image_response", None); if fn is not None:
+   fn(...)`. The local binding has type `Any`, no narrowing needed, and
+   the runtime check is unchanged.
+3. **`dict[str, callable]` is a typo — use
+   `Callable[..., Any]`.** `callable` is a builtin function (the
+   `isinstance`-style predicate), not a type. Pyright's diagnostic is
+   *"Expected class but received '(obj: object, /) -> TypeIs[(...) ->
+   object]'"* — cryptic until you spot the lowercase `c`. Fix:
+   `from typing import Callable; dict[str, Callable[[Any], Any]]`.
+4. **Trained-model parameter type returned as `object | None` blocks
+   `.parameters()` / call.** `_resolve_or_train_detector(...) ->
+   tuple[object | None, float, dict | None]` made callers fail with
+   *"Cannot access attribute 'parameters' for class 'object'"* and
+   *"Object of type 'object' is not callable"*. The runtime value is a
+   `torch.nn.Module`. Annotate as `Any | None` (matches
+   `DetectorContext.model: Any` in `state/core.py`) — pyright stops
+   complaining and callers can do `next(mlp.parameters())` and `mlp(x)`
+   freely.
+5. **PyMuPDF `Page.get_text(option)` widens to `str | list | dict` in
+   the stub even when the option is the string literal `"text"`** (no
+   overload picks up the literal). The runtime value is always `str`
+   in text mode. Fix: `cast(str, page.get_text("text")).strip()`.
+6. **Soft-dependency imports inside `try/except ImportError` still
+   trip `reportMissingImports`** when the package isn't pinned in
+   `requirements/base.txt`. Stage 4 saw this with `paddleocr`. Fix:
+   `from paddleocr import PaddleOCR  # pyright:
+   ignore[reportMissingImports]` — the runtime check already handles
+   absence, and we don't want to drag the package into CI install just
+   for the type-checker.
+7. **`result.get("metric")` is `Unknown | None`; passing it as a dict
+   key with `dict.get` fails.** Common shape: an untyped JSON
+   container yields `Any | None`, and the next call wants `str`.
+   Coerce at the boundary: `metric = result.get("metric") or ""` (or
+   `str(result.get("metric") or "")` when downstream needs `str`
+   specifically).
+8. **`run_plugin_or_error` returning `(result, None) | (None, err)`
+   leaks `None` into a `**outcome` unpack.** Same shape as #1 but the
+   helper's untyped return makes pyright keep `outcome` as
+   `Any | None` even after `if err: return err`. Two fixes work:
+   `**(outcome or {})` (defensive; also fixes the runtime crash if the
+   plugin actually returned `None`) or the explicit assert. Stage 4
+   used `or {}` for the dict-unpack site since the value is genuinely
+   optional at the plugin contract level.
 
 ### Operational notes from Stage 1
 
