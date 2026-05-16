@@ -21,6 +21,8 @@ automatically by flask-smorest.
 
 from __future__ import annotations
 
+from typing import Any, Callable
+
 from flask_smorest import Blueprint, abort
 
 from vtsearch import settings
@@ -37,7 +39,7 @@ settings_bp = Blueprint(
 # ``vtsearch.settings`` and enforce range clamping / value validation,
 # so this module's only job is to dispatch — marshmallow already
 # validated the *types*.
-_SCALAR_SETTERS: dict[str, callable] = {
+_SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "volume": settings.set_volume,
     "theme": settings.set_theme,
     "enrich_descriptions": settings.set_enrich_descriptions,

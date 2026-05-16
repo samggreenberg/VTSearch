@@ -78,6 +78,7 @@ def run_export():
     exporter, err = get_plugin_or_404(get_exporter, list_exporters, exporter_name, "exporter")
     if err:
         return err
+    assert exporter is not None  # narrowed by err check
 
     field_values: dict = data.get("field_values", {}) or {}
     results: dict = data.get("results", {}) or {}
@@ -94,4 +95,4 @@ def run_export():
     if err:
         return err
 
-    return jsonify({"success": True, **outcome})
+    return jsonify({"success": True, **(outcome or {})})

@@ -176,6 +176,7 @@ def register_detector_from_labelset(importer_name: str):
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
         return err
+    assert importer is not None  # narrowed by err check
 
     has_file_fields = any(f.field_type == "file" for f in importer.fields)
     name = get_request_field("name", has_file_fields).strip()

@@ -118,6 +118,7 @@ def run_label_import(importer_name: str):
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
         return err
+    assert importer is not None  # narrowed by err check
 
     field_values = extract_plugin_fields(importer)
 

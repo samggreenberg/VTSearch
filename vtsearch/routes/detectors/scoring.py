@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 from flask_smorest import Blueprint, abort
 
@@ -51,7 +52,7 @@ def _resolve_or_train_detector(
     *,
     progress_step: int = 2,
     progress_total_steps: int = 4,
-) -> tuple[object | None, float, dict | None]:
+) -> tuple[Any | None, float, dict | None]:
     """Return (mlp, threshold, diagnostic) for *detector_id*.
 
     Tries the loaded :class:`DetectorContext` first.  Falls back to training

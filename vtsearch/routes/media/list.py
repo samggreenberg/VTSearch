@@ -429,8 +429,9 @@ def media_image(media_id: int):
             mt = get_media_type(media_type)
         except KeyError:
             mt = None
-        if mt and hasattr(mt, "image_response"):
-            resp = mt.image_response(c)
+        image_response_fn = getattr(mt, "image_response", None) if mt else None
+        if image_response_fn is not None:
+            resp = image_response_fn(c)
             if resp is not None:
                 return send_file(
                     io.BytesIO(resp.data),

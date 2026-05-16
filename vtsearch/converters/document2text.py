@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from vtsearch.converters.base import MediaConverter
 
@@ -65,7 +65,9 @@ class Document2TextMediaConverter(MediaConverter):
         page_texts: list[str] = []
         try:
             for page in doc:
-                text = page.get_text().strip()
+                # get_text("text") returns str at runtime; the PyMuPDF
+                # stub widens to str|list|dict to cover other modes.
+                text = cast(str, page.get_text("text")).strip()
                 if text:
                     page_texts.append(text)
         finally:

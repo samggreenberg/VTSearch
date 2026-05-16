@@ -105,7 +105,7 @@ _METRIC_KEY = {"smart": "error_cost", "stable": "stability", "diverse": "diversi
 def _eval_done_payload(job) -> dict:
     """Build the JSON body for a finished eval job, including metric data."""
     result = job.result or {}
-    metric = result.get("metric")
+    metric = result.get("metric") or ""
     data_key = _METRIC_KEY.get(metric, "data")
     return {
         "job_id": job.job_id,
