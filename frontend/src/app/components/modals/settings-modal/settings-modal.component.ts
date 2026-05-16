@@ -14,6 +14,7 @@ import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { AppSettings, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 import { formatVersion } from '../../../utils/format-date';
+import { VtDialogService } from '../../../services/dialog.service';
 
 @Component({
   selector: 'vt-settings-modal',
@@ -45,6 +46,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     private settingsState: SettingsStateService,
     private datasetsApi: DatasetsApiService,
     private themeService: ThemeService,
+    private dialog: VtDialogService,
   ) {}
 
   ngOnDestroy(): void {
@@ -143,7 +145,13 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  resetDefaults(): void {
+  async resetDefaults(): Promise<void> {
+    const ok = await this.dialog.confirmDestructive(
+      'Reset all settings to factory defaults?',
+      'Your current preferences (appearance, view modes, autopilot, calibration, and other per-user settings) will be overwritten and cannot be recovered.',
+      'Reset',
+    );
+    if (!ok) return;
     this.settingsApi
       .getDefaults()
       .pipe(takeUntil(this.destroy$))

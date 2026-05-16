@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { SettingsModalComponent } from './settings-modal.component';
@@ -108,13 +108,23 @@ describe('SettingsModalComponent', () => {
     expect(component.getViewMode('view_mode_right', 'audio')).toBe('grid');
   });
 
-  it('should reset to defaults', () => {
+  it('should reset to defaults after confirmation', fakeAsync(() => {
     flushInit();
+    spyOn(component['dialog'], 'confirmDestructive').and.returnValue(Promise.resolve(true));
     component.resetDefaults();
+    tick();
     httpMock.expectOne('/api/settings/defaults').flush({ ...mockSettings, theme: 'light' });
     httpMock.expectOne('/api/settings').flush(mockSettings);
     expect(component.settings.theme).toBe('light');
-  });
+  }));
+
+  it('should not reset when confirmation is declined', fakeAsync(() => {
+    flushInit();
+    spyOn(component['dialog'], 'confirmDestructive').and.returnValue(Promise.resolve(false));
+    component.resetDefaults();
+    tick();
+    httpMock.expectNone('/api/settings/defaults');
+  }));
 
   it('should use preselectedViewTab when valid', () => {
     component.preselectedViewTab = 'image';
