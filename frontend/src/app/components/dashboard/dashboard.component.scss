@@ -41,10 +41,6 @@
   padding: 4px 0;
 }
 
-.side-action-gap {
-  height: 12px;
-}
-
 .side-action-btn {
   background: none;
   border: none;
@@ -73,11 +69,32 @@
   }
 }
 
-// Select-all/none spins once on click (animationend handler clears class so
-// icon snaps back to 0). Delete spins to 90° while confirm dialog is up,
-// then reverses back. Hoisted out of `.side-action-btn` to keep specificity
-// flat and reduce compiled CSS size.
-.side-action-spin,
+// Header master checkbox: matches the per-row .select-checkbox visual in the
+// card components so the column reads as one consistent checkbox stack.
+.select-checkbox {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover:not(:disabled) {
+    background: var(--btn-icon-hover-bg);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}
+
+// Delete spins to 90° while confirm dialog is up, then reverses back.
+// Hoisted out of `.side-action-btn` to keep specificity flat.
 .side-action-delete-active {
   animation: side-action-rotate 0.3s ease-in-out forwards;
 }
@@ -245,10 +262,35 @@
     text-overflow: ellipsis;
   }
 
-  // Pinned columns: Name on the left, Actions on the right.
+  // Pinned columns: Select on the far left, Name next, Actions on the right.
   th.actions-col,
   td.actions-col {
     text-align: right;
+  }
+
+  // Leftmost select column hosts only the bulk-select checkbox; keep it
+  // narrow and centered so it doesn't crowd the Name column.
+  th.select-col,
+  td.select-col {
+    width: 36px;
+    padding-left: 8px;
+    padding-right: 0;
+    text-align: center;
+  }
+
+  // The select header isn't sortable or draggable — neutralise the inherited
+  // grab cursor and dim the master checkbox toward --text-secondary so it
+  // reads as a header-row control rather than a clickable label.
+  th.select-col {
+    cursor: default;
+
+    .header-checkbox {
+      color: var(--text-secondary);
+
+      &:hover:not(:disabled) {
+        color: var(--text-primary);
+      }
+    }
   }
 
   th {

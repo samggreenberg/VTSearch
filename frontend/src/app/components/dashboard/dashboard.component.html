@@ -33,6 +33,29 @@
         <table class="dash-table" [class.table-fixed]="datasetCols.tableFixed">
           <thead>
             <tr>
+              <th class="select-col" data-col="select" [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths['select'] : null">
+                <button class="select-checkbox header-checkbox" (click)="toggleAllDatasets()" [disabled]="isLoading || datasets.length === 0" [title]="datasetSelectionState === 'all' ? 'Deselect all' : 'Select all datasets'" [attr.aria-label]="datasetSelectionState === 'all' ? 'Deselect all' : 'Select all'" [attr.aria-checked]="datasetSelectionState === 'all' ? 'true' : datasetSelectionState === 'some' ? 'mixed' : 'false'" role="checkbox">
+                  @switch (datasetSelectionState) {
+                    @case ('all') {
+                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <polyline points="8 12 11 15 16 9"/>
+                      </svg>
+                    }
+                    @case ('some') {
+                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <line x1="8" y1="12" x2="16" y2="12"/>
+                      </svg>
+                    }
+                    @default {
+                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                      </svg>
+                    }
+                  }
+                </button>
+              </th>
               <th (click)="datasetCols.sortBy('name')" class="sortable name-col" title="Dataset display name (click to sort)" data-col="name" [style.width.%]="datasetCols.tableFixed ? datasetCols.colWidths['name'] : null">Name<span class="sort-indicator" [class.active]="datasetCols.isSortActive('name')">{{ datasetCols.sortIndicator('name') }}</span></th>
               @for (col of visibleDatasetColumns; track col) {
                 <th
@@ -57,6 +80,7 @@
           <tbody>
             @for (task of orphanLoadingTasks; track task.task_id) {
               <tr class="loading-task-row" [class.loading-task-error]="!!task.error">
+                <td class="select-col"></td>
                 <td>
                   <span class="loading-task-name">{{ task.name || 'Loading...' }}</span>
                 </td>
@@ -108,28 +132,6 @@
     }
   </div>
   <div class="dashboard-side-actions">
-    <button class="side-action-btn" (click)="toggleAllDatasets()" [disabled]="isLoading || datasets.length === 0" [title]="datasetSelectionState === 'all' ? 'Deselect all' : 'Select all datasets'" [attr.aria-label]="datasetSelectionState === 'all' ? 'Deselect all' : 'Select all'" [attr.aria-checked]="datasetSelectionState === 'all' ? 'true' : datasetSelectionState === 'some' ? 'mixed' : 'false'" role="checkbox">
-      @switch (datasetSelectionState) {
-        @case ('all') {
-          <svg aria-hidden="true" [class.side-action-spin]="spinDatasetSelectToggle" (animationend)="onSpinDatasetSelectToggleEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <polyline points="7 12 11 16 17 8"/>
-          </svg>
-        }
-        @case ('some') {
-          <svg aria-hidden="true" [class.side-action-spin]="spinDatasetSelectToggle" (animationend)="onSpinDatasetSelectToggleEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <line x1="7" y1="12" x2="17" y2="12"/>
-          </svg>
-        }
-        @default {
-          <svg aria-hidden="true" [class.side-action-spin]="spinDatasetSelectToggle" (animationend)="onSpinDatasetSelectToggleEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-          </svg>
-        }
-      }
-    </button>
-    <div class="side-action-gap"></div>
     <button class="side-action-btn" (click)="combineSelectedDatasets()" [disabled]="isLoading || !combineSelectedDatasetsEnabled" [title]="combineSelectedDatasetsHint" aria-label="Combine selected datasets">
       <!-- Two horizontal arrows on the left, merging smoothly into a single arrow on the right. -->
       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -172,6 +174,29 @@
         <table class="dash-table" [class.table-fixed]="detectorCols.tableFixed">
           <thead>
             <tr>
+              <th class="select-col" data-col="select" [style.width.%]="detectorCols.tableFixed ? detectorCols.colWidths['select'] : null">
+                <button class="select-checkbox header-checkbox" (click)="toggleAllDetectors()" [disabled]="isLoading || detectors.length === 0" [title]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all detectors'" [attr.aria-label]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all'" [attr.aria-checked]="detectorSelectionState === 'all' ? 'true' : detectorSelectionState === 'some' ? 'mixed' : 'false'" role="checkbox">
+                  @switch (detectorSelectionState) {
+                    @case ('all') {
+                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <polyline points="8 12 11 15 16 9"/>
+                      </svg>
+                    }
+                    @case ('some') {
+                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <line x1="8" y1="12" x2="16" y2="12"/>
+                      </svg>
+                    }
+                    @default {
+                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                      </svg>
+                    }
+                  }
+                </button>
+              </th>
               <th (click)="detectorCols.sortBy('name')" class="sortable name-col" title="Detector display name (click to sort)" data-col="name" [style.width.%]="detectorCols.tableFixed ? detectorCols.colWidths['name'] : null">Name<span class="sort-indicator" [class.active]="detectorCols.isSortActive('name')">{{ detectorCols.sortIndicator('name') }}</span></th>
               @for (col of visibleDetectorColumns; track col) {
                 <th
@@ -222,28 +247,6 @@
     }
   </div>
   <div class="dashboard-side-actions">
-    <button class="side-action-btn" (click)="toggleAllDetectors()" [disabled]="isLoading || detectors.length === 0" [title]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all detectors'" [attr.aria-label]="detectorSelectionState === 'all' ? 'Deselect all' : 'Select all'" [attr.aria-checked]="detectorSelectionState === 'all' ? 'true' : detectorSelectionState === 'some' ? 'mixed' : 'false'" role="checkbox">
-      @switch (detectorSelectionState) {
-        @case ('all') {
-          <svg aria-hidden="true" [class.side-action-spin]="spinDetectorSelectToggle" (animationend)="onSpinDetectorSelectToggleEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <polyline points="7 12 11 16 17 8"/>
-          </svg>
-        }
-        @case ('some') {
-          <svg aria-hidden="true" [class.side-action-spin]="spinDetectorSelectToggle" (animationend)="onSpinDetectorSelectToggleEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <line x1="7" y1="12" x2="17" y2="12"/>
-          </svg>
-        }
-        @default {
-          <svg aria-hidden="true" [class.side-action-spin]="spinDetectorSelectToggle" (animationend)="onSpinDetectorSelectToggleEnd()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-          </svg>
-        }
-      }
-    </button>
-    <div class="side-action-gap"></div>
     <button class="side-action-btn" (click)="openCombineDetectorsModal()" [disabled]="isLoading || !combineSelectedDetectorsEnabled" [title]="combineSelectedDetectorsHint" aria-label="Combine selected detectors">
       <!-- Two horizontal arrows on the left, merging smoothly into a single arrow on the right. -->
       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
