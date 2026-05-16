@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtsearch.settings import VALID_FOCUS_MODES, VALID_GRID_ICON_SIZES, VALID_THEMES, VALID_VIEW_MODES
+from vtsearch.settings_models import VALID_FOCUS_MODES, VALID_GRID_ICON_SIZES, VALID_THEMES, VALID_VIEW_MODES
 
 
 class _PerMediaTypeStringDict(fields.Dict):
