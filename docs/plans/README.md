@@ -9,7 +9,6 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 
 | Plan | Status | Summary |
 |------|--------|---------|
-| [codebase-reorg.md](codebase-reorg.md) | **In progress** | Mid-sized refactors landed (route bucketing, `utils/` split, `docker/`/`requirements/` out of root, docs cleanup, `media → models` import flip, `models/` package split). Still open: split `routes/detectors/store.py` (902 LOC), audit `image/media_type.py` (1641 LOC), split `dashboard.component.ts` (1439 LOC). |
 | [multi-media-import.md](multi-media-import.md) | **In progress** | Importers can mix multiple source media types via `effective_source_specs()`. `server_folder`, `server_files`, `local_folder`, `local_files` migrated; `pickle`, `combine_datasets`, `synthetic`, `http_archive`, `recaller`, `demo` remain on the legacy shim. |
 | [delete-detectors.md](delete-detectors.md) | **Mostly shipped** | Steps 1–2 and most of step 3 landed: `vtsearch/models/` is gone, `weights_compat.py` is gone, `/api/autorun-detectors/*` and detector-on-disk routes are gone, `autorun_processors` is gone, the `trainable` flag is gone. Remaining: delete the `detectors_dir` setting (step 3 tail) and the docs pass (step 7). |
 | [patch-embedder.md](patch-embedder.md) | **V1 + V2 shipped; V3 design only** | Six image embedders (DINOv2 / DINOv3 / EUPE × single+patch) are live; region voting via Shift-drag is live. V3 ("one text embedder + one patch embedder per dataset") is designed but not implemented — work plan still a sketch. |
@@ -21,6 +20,20 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 
 ## Recently completed (removed)
 
+- **codebase-reorg.md** — Multi-round refactor: tests bucketed into
+  group folders, shared embedder stubs in conftest, routes split by
+  domain (`datasets/`, `detectors/`, `processors/`, `media/`,
+  `settings/`, `labels/`), `vtsearch/models/` package split into
+  `detectors/` + `training/` + `embedding/` + `state/diversity_tree.py`,
+  `routes/datasets/crud.py` split into `listings.py` / `status.py` /
+  `staging.py` / `load.py`, `routes/detectors/store.py` split into
+  `crud.py` / `labels.py`, `image/media_type.py` split into
+  `_demo_categories.py` + `_demo_sources.py` (1641 → 173 LOC),
+  `docker/` / `requirements/` / `scripts/` moved out of repo root,
+  `utils/` split into focused packages. Remaining items in the plan
+  (`dashboard.component.ts` split, plugin-discovery unification,
+  `cli.py` split, `auth/` collapse) were explicit **Skip** decisions
+  with documented rationale.
 - **gpu-batched-embedding.md** — Phase A (image + text bulk overrides),
   Phase B (bulk `patch_forward`), and Phase C (clip re-embed via
   `embed_media_bulk` with no tempfile) all shipped. Remaining deferred
