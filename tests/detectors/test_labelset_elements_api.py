@@ -259,6 +259,7 @@ class TestCrossDatasetVoteDoesNotWipeLabels:
         sync_labels_to_loaded_detector()
 
         saved = _read_detector(_detector_path("cross-ds-model"))
+        assert saved is not None
         keys = {
             (el.get("origin", {}).get("importer", ""), el.get("origin_name", "")) for el in saved["labelset"]["labels"]
         }
@@ -342,6 +343,7 @@ class TestCrossDatasetMLPTraining:
         from vtsearch.detectors.store import _detector_path, _read_detector
 
         saved = _read_detector(_detector_path("cross-ds-model"))
+        assert saved is not None
         ls = LabelSet.from_dict(saved["labelset"])
         for el in ls.elements:
             assert stable_element_id(el) in det_ctx.label_embeddings

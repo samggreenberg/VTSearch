@@ -387,6 +387,7 @@ class TestNextSample:
         vecs = _make_vectors(100)
         tree = DiversityTree(vecs, k=2, min_node_size=10)
         first = tree.next_sample()
+        assert first is not None
         tree.label(first)
 
         # Next sample should not be the same element anymore
@@ -415,6 +416,7 @@ class TestNextSample:
 
         # First sample is from root
         s1 = tree.next_sample()
+        assert s1 is not None
         assert s1 in tree.nodes["0"]["ids"]
 
         # After labeling, next should be from first unseen child

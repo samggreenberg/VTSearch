@@ -622,11 +622,13 @@ class TestImporterBulkHooks:
             if fetch_one is not None:
 
                 def fetch_record(self, record, field_values, thin=False):
+                    assert fetch_one is not None  # narrowed by enclosing if
                     return fetch_one(record, field_values, thin)
 
             if fetch_bulk is not None:
 
                 def _fetch_records_bulk_impl(self, recs, field_values, thin=False):
+                    assert fetch_bulk is not None
                     return fetch_bulk(recs, field_values, thin)
 
         return _BulkTestImporter()
@@ -688,7 +690,8 @@ class TestImporterBulkHooks:
         out = imp.fetch_records_bulk(["x", "y"], {})
 
         assert seen == ["x", "y"]
-        assert [m["filename"] for m in out] == ["x", "y"]
+        assert all(m is not None for m in out)
+        assert [m["filename"] for m in out if m is not None] == ["x", "y"]
 
     def test_bulk_override_used_when_implemented(self):
         # When a subclass overrides _fetch_records_bulk_impl, fetch_record must
@@ -771,6 +774,7 @@ class TestReCallerBulkOverride:
 
         assert len(per_item) == len(bulk) == 3
         for a, b in zip(per_item, bulk):
+            assert a is not None and b is not None
             assert a["filename"] == b["filename"]
             assert a["origin"] == b["origin"]
             assert a["custom_metadata"] == b["custom_metadata"]

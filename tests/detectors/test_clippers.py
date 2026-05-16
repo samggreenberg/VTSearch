@@ -17,7 +17,7 @@ from vtsearch.media.clipper import MediaClipper
 class TestMediaClipperABC:
     def test_cannot_instantiate(self):
         with pytest.raises(TypeError):
-            MediaClipper()
+            MediaClipper()  # pyright: ignore[reportAbstractUsage]
 
     def test_to_dict_on_concrete(self):
         from vtsearch.media.audio.clipper import SoundDefaultClipper

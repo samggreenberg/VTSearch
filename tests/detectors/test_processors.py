@@ -78,7 +78,7 @@ class StubExtractor(Extractor):
 class TestProcessorABC:
     def test_cannot_instantiate(self):
         with pytest.raises(TypeError):
-            Processor()
+            Processor()  # pyright: ignore[reportAbstractUsage]
 
     def test_detector_is_processor(self):
         det = StubDetector()
@@ -110,7 +110,7 @@ class TestProcessorABC:
 class TestDetectorABC:
     def test_cannot_instantiate(self):
         with pytest.raises(TypeError):
-            Detector()
+            Detector()  # pyright: ignore[reportAbstractUsage]
 
     def test_detect_returns_bool(self):
         det = StubDetector(result=True)
@@ -146,7 +146,7 @@ class TestDetectorABC:
 class TestLocalizerABC:
     def test_cannot_instantiate(self):
         with pytest.raises(TypeError):
-            Localizer()
+            Localizer()  # pyright: ignore[reportAbstractUsage]
 
     def test_localize_returns_bboxes(self):
         boxes = [

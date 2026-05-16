@@ -259,9 +259,9 @@ class TestSiglipBulkOverride:
         assert len(out) == 3
         assert all(v is not None for v in out)
         # Position-based vectors confirm slot alignment.
-        assert out[0][0] == 0.0
-        assert out[1][0] == 1.0
-        assert out[2][0] == 2.0
+        assert out[0][0] == 0.0  # pyright: ignore[reportOptionalSubscript]
+        assert out[1][0] == 1.0  # pyright: ignore[reportOptionalSubscript]
+        assert out[2][0] == 2.0  # pyright: ignore[reportOptionalSubscript]
 
     def test_routes_through_bulk_helper(self, tmp_path):
         from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
@@ -329,7 +329,8 @@ class TestDinov2BulkOverride:
             _write_image(p)
 
         out = emb.embed_media_bulk([_media(p) for p in paths])
-        assert [v[0] for v in out] == [0.0, 1.0]
+        assert all(v is not None for v in out)
+        assert [v[0] for v in out if v is not None] == [0.0, 1.0]
 
 
 class TestDinov3BulkOverride:
@@ -368,7 +369,8 @@ class TestEupeBulkOverride:
             _write_image(p)
 
         out = emb.embed_media_bulk([_media(p) for p in paths])
-        assert [v[0] for v in out] == [0.0, 1.0, 2.0]
+        assert all(v is not None for v in out)
+        assert [v[0] for v in out if v is not None] == [0.0, 1.0, 2.0]
 
 
 # ---------------------------------------------------------------------------
@@ -461,7 +463,7 @@ class TestPatchForwardBulkOverrides:
             seen.append(len(images))
             return [{"i": i} for i, _ in enumerate(images)]
 
-        emb._patch_forward_pil_batch = fake_patch_forward
+        emb._patch_forward_pil_batch = fake_patch_forward  # pyright: ignore[reportAttributeAccessIssue]
 
         paths = [tmp_path / f"img_{i}.png" for i in range(3)]
         for p in paths:
@@ -484,7 +486,7 @@ class TestPatchForwardBulkOverrides:
         def fake_patch_forward(images):
             return [{"i": i} for i, _ in enumerate(images)]
 
-        emb._patch_forward_pil_batch = fake_patch_forward
+        emb._patch_forward_pil_batch = fake_patch_forward  # pyright: ignore[reportAttributeAccessIssue]
 
         p = tmp_path / "img.png"
         _write_image(p)

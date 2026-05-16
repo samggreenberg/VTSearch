@@ -37,7 +37,7 @@ class TestExtractorABC:
 
     def test_cannot_instantiate_abc(self):
         with pytest.raises(TypeError):
-            Extractor()
+            Extractor()  # pyright: ignore[reportAbstractUsage]
 
     def test_stub_extractor_name(self):
         ext = StubExtractor(name="my-ext")

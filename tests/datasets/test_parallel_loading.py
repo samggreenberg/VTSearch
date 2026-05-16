@@ -542,8 +542,8 @@ class TestConcurrentModelLoading:
         proceed = threading.Event()
 
         class FakeEmbedder(MediaEmbedder):
-            name = "fake"
-            media_type_id = "test"
+            name = "fake"  # pyright: ignore[reportAssignmentType]
+            media_type_id = "test"  # pyright: ignore[reportAssignmentType]
 
             def __init__(self):
                 super().__init__()

@@ -1,6 +1,7 @@
 """Tests for UCSF Industry Documents demo dataset download and load_demo_source integration."""
 
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -222,7 +223,9 @@ class TestLoadDemoSourceUcsfDocuments:
     def _make_image_media_type(self):
         from vtsearch.media.image.media_type import ImageMediaType
 
-        mt = ImageMediaType()
+        # _model / _processor are runtime-only attrs set by load_models on the
+        # subclass; not declared on the ABC, so cast to Any to assign them.
+        mt = cast(Any, ImageMediaType())
         mt._model = MagicMock()
         mt._processor = MagicMock()
         return mt

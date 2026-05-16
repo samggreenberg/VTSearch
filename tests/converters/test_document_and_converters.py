@@ -75,7 +75,8 @@ def _make_minimal_video(frames: int = 30, width: int = 64, height: int = 64) -> 
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
         tmp_path = f.name
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    # cv2 stubs miss VideoWriter_fourcc (runtime-only opencv builtin).
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # pyright: ignore[reportAttributeAccessIssue]
     writer = cv2.VideoWriter(tmp_path, fourcc, 10.0, (width, height))
     for i in range(frames):
         frame = np.full((height, width, 3), fill_value=(i * 8) % 256, dtype=np.uint8)
@@ -200,7 +201,7 @@ class TestDocumentRegistration:
 class TestMediaConverterAbstract:
     def test_cannot_instantiate(self):
         with pytest.raises(TypeError):
-            MediaConverter()
+            MediaConverter()  # pyright: ignore[reportAbstractUsage]
 
     def test_concrete_subclass(self):
         class DummyConverter(MediaConverter):
