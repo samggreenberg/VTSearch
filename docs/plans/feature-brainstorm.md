@@ -526,8 +526,10 @@ Original idea: migrate hot paths (sorting, scoring) to Quart or FastAPI for true
 ### 12.15 Structured logging + request IDs ★★ S
 Today logs are print-style. JSON logs with `dataset_id`/`detector_id`/`request_id` make production debugging tractable.
 
-### 12.16 Prometheus metrics ★★ S
+### 12.16 Prometheus metrics ★★ S — considered, declined for now
 `/metrics` endpoint with vote count, embedding latency, training time, RAM usage by dataset.
+
+Prototyped (PR #1366, closed unmerged) and declined. The pros — real percentiles via histograms, standard tooling, complements §12.15's structured logs — only pay off when a scraper is actually consuming the endpoint, which the current single-user / local-Flask deployment doesn't have. What pushed against shipping: a new runtime dependency (`prometheus-client`), per-worker counter state under gunicorn (correct cluster totals would require `prometheus_client.multiprocess` mode and extra setup), latent label-cardinality footguns if anyone later labels by `user_id` / `dataset_id` on counters, and a small but non-zero perf cost on every vote / embed / train hot path. Worth revisiting when VTSearch grows a multi-tenant or k8s deployment story — at that point the scraper exists and the implementation effort stays small (≈300 LoC plus tests).
 
 ### 12.17 Pydantic models for settings ★ S
 The `_SETTING_SPECS` table is clever but custom; Pydantic v2 would generalise it and produce JSON schemas for free.
