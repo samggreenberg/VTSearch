@@ -2,33 +2,36 @@ import { HttpContextToken, HttpErrorResponse, HttpInterceptorFn } from '@angular
 import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { ActiveContextService } from '../services/active-context.service';
-import { ErrorContext, ErrorService } from '../services/error.service';
+import { ErrorContext, ToastService } from '../services/toast.service';
 
 /**
- * Opt out of the global error banner for a single request.
+ * Opt out of the global error toast for a single request.
  *
  * Use when the caller handles the failure itself (e.g. a probe that
  * expects 404, a retry loop, or a form that renders inline validation).
  * The error still propagates through ``catchError``/``error:`` handlers
- * exactly as before — only the global UI banner is suppressed.
+ * exactly as before — only the global UI toast is suppressed.
  *
  * Example::
  *
  *     http.get('/api/foo', {
- *       context: new HttpContext().set(SKIP_ERROR_BANNER, true),
+ *       context: new HttpContext().set(SKIP_ERROR_TOAST, true),
  *     });
  */
-export const SKIP_ERROR_BANNER = new HttpContextToken<boolean>(() => false);
+export const SKIP_ERROR_TOAST = new HttpContextToken<boolean>(() => false);
 
 /**
  * Captures every failed HTTP response and pushes a structured
- * ``ErrorContext`` to ``ErrorService`` so the global banner can render
- * it. Enriches the response with the active dataset/detector IDs and
- * the server-side request_id (from the response body and/or
- * ``X-Request-Id`` header).
+ * ``ErrorContext`` to ``ToastService`` as an error toast. Enriches the
+ * response with the active dataset/detector IDs and the server-side
+ * request_id (from the response body and/or ``X-Request-Id`` header).
+ *
+ * Repeating the same endpoint+status (e.g. a retry loop hammering a
+ * broken backend) replaces the existing toast via dedup key rather
+ * than stacking duplicates.
  */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
-  const errorService = inject(ErrorService);
+  const toast = inject(ToastService);
   const ctx = inject(ActiveContextService);
 
   return next(req).pipe(
@@ -36,7 +39,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       if (!(err instanceof HttpErrorResponse)) {
         return throwError(() => err);
       }
-      if (req.context.get(SKIP_ERROR_BANNER)) {
+      if (req.context.get(SKIP_ERROR_TOAST)) {
         return throwError(() => err);
       }
       const parsed = parseErrorBody(err);
@@ -44,13 +47,14 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         parsed.requestId || err.headers?.get('X-Request-Id') || undefined;
       const datasetId = req.headers.get('X-Dataset-Id') || ctx.datasetId || undefined;
       const detectorId = req.headers.get('X-Detector-Id') || ctx.modelId || undefined;
+      const url = stripOrigin(req.url);
       const errorCtx: ErrorContext = {
         message: parsed.message || defaultMessage(err),
         detail: parsed.detail,
         status: err.status,
         statusText: err.statusText,
         method: req.method,
-        url: stripOrigin(req.url),
+        url,
         requestId,
         datasetId,
         detectorId,
@@ -58,7 +62,12 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         extra: parsed.extra,
         timestamp: new Date().toISOString(),
       };
-      errorService.show(errorCtx);
+      toast.error({
+        message: errorCtx.message,
+        detail: errorCtx.detail,
+        errorContext: errorCtx,
+        dedupKey: `http:${req.method}:${url}:${err.status}`,
+      });
       return throwError(() => err);
     }),
   );

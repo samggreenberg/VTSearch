@@ -1,4 +1,4 @@
-<vt-error-banner />
+<vt-toast-container />
 @if (auth.needsLogin) {
   <vt-login (loggedIn)="auth.checkStatus()" />
 } @else {
