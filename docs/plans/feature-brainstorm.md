@@ -679,8 +679,8 @@ Discoverability without grepping source.
 ### 17.2 Detector input-spec auto-detect ★★ M
 Already designed in `docs/design/cli-detector-converter.md`; ship it.
 
-### 17.3 Pipeline file ★ M
-`python app.py --pipeline pipeline.yaml` runs an importer → clipper → embedder → detector → exporter sequence declared in YAML. Replaces N CLI flags with one config file. Repeatable for cron.
+### 17.3 Pipeline file ★ M ✅ shipped
+`python app.py --pipeline pipeline.yaml` runs an importer → detector → exporter sequence declared in YAML. Replaces the N `--autodetect` flags with one config file. Repeatable for cron. See `docs/CLI.md § Pipeline file` for the schema. (Clipper/embedder are derived from the dataset/detector media type — not user-selectable knobs today — so the YAML mirrors the actually-exposed flag set.)
 
 ### ~~17.4 Watch mode ★ S~~ — unnecessary
 ~~`--watch /path/to/inbox` re-runs autodetect whenever new files appear.~~

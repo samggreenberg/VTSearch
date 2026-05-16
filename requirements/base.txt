@@ -17,6 +17,7 @@ tqdm
 scikit-learn
 transformers
 pandas
+pyyaml
 
 # ── Eval / visualization ────────────────────────────────────────────
 matplotlib
