@@ -24,6 +24,15 @@ GET  /api/detectors/<name>/labels/<element_id>/thumbnail
 
 POST /api/detectors/<name>/labels/<element_id>/vote
     Toggle the label on a saved labelset element.
+
+Migrated to ``flask_smorest`` for the JSON-shaped routes (save, labels-detail,
+vote). ``import-labels`` stays on the legacy plain-Flask path — its body is
+the chosen importer's plugin fields (see *Open questions / Plugin field
+endpoints* in ``docs/plans/openapi-schema.md``). The ``preview`` and
+``thumbnail`` routes serve binary bodies (or a tiny content-only JSON for
+text media); they declare their non-default JSON error responses via
+``alt_response`` but no success schema, so OpenAPI describes the error
+shape without lying about the success body.
 """
 
 from __future__ import annotations
@@ -33,7 +42,8 @@ import logging
 import time
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import jsonify, send_file
+from flask_smorest import Blueprint, abort
 
 from vtsearch.detectors.store import (
     _detector_path,
@@ -41,10 +51,20 @@ from vtsearch.detectors.store import (
     _write_detector,
 )
 from vtsearch.detectors.workflow import apply_and_retrain as _apply_and_retrain
+from vtsearch.schemas.detectors import (
+    DetectorLabelsDetailResponseSchema,
+    DetectorLabelVoteRequestSchema,
+    DetectorLabelVoteResponseSchema,
+    DetectorSaveLabelsResponseSchema,
+)
 
 logger = logging.getLogger(__name__)
 
-detectors_labels_bp = Blueprint("detectors_labels", __name__)
+detectors_labels_bp = Blueprint(
+    "detectors_labels",
+    __name__,
+    description="Persist, list, preview, and vote on a detector's labelset.",
+)
 
 
 _MIMETYPE_BY_SUFFIX = {
@@ -81,6 +101,8 @@ _DEFAULT_MIMETYPE_BY_TYPE = {
 
 
 @detectors_labels_bp.route("/api/detectors/<name>/labels", methods=["POST"])
+@detectors_labels_bp.response(200, DetectorSaveLabelsResponseSchema)
+@detectors_labels_bp.alt_response(404, description="Detector not found.")
 def save_detector_labels(name: str):
     """Save the current votes as the detector's labelset.
 
@@ -90,7 +112,7 @@ def save_detector_labels(name: str):
     path = _detector_path(name)
     data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        abort(404, message=f"Detector '{name}' not found")
 
     from vtsearch.datasets.labelset import LabelSet
     from vtsearch.state import (
@@ -119,17 +141,20 @@ def save_detector_labels(name: str):
     if reg_entry:
         update_detector(reg_entry["id"], num_training=len(labelset), last_trained_at=_time.time())
 
-    return jsonify(
-        {
-            "success": True,
-            "name": name,
-            "num_labels": len(labelset),
-        }
-    )
+    return {
+        "success": True,
+        "name": name,
+        "num_labels": len(labelset),
+    }
 
 
 # ---------------------------------------------------------------------------
 # POST /api/detectors/<name>/import-labels/<importer_name>
+#
+# Plugin-field route — stays on the legacy ``request.get_json`` path. The
+# request body is the importer's declared ``fields`` (file uploads,
+# free-form params) and doesn't fit a static marshmallow schema. See
+# ``docs/plans/openapi-schema.md`` (Open questions / Plugin field endpoints).
 # ---------------------------------------------------------------------------
 
 
@@ -151,8 +176,7 @@ def import_labels_into_detector(name: str, importer_name: str):
     a fresh MLP is trained with a cross-validated threshold — all inside the
     loaded detector context.
 
-    Returns JSON with ``applied``, ``skipped``, ``num_labels``, and
-    ``message`` keys.
+    Plugin-dependent body shape: not described in the OpenAPI spec.
     """
     path = _detector_path(name)
     data = _read_detector(path)
@@ -268,6 +292,8 @@ def import_labels_into_detector(name: str, importer_name: str):
 
 
 @detectors_labels_bp.route("/api/detectors/<name>/labels-detail", methods=["GET"])
+@detectors_labels_bp.response(200, DetectorLabelsDetailResponseSchema)
+@detectors_labels_bp.alt_response(404, description="Detector not found.")
 def get_detector_labels_detail(name: str):
     """Return the detector's saved labelset elements with right-pane render data.
 
@@ -285,12 +311,15 @@ def get_detector_labels_detail(name: str):
     path = _detector_path(name)
     data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
-    return jsonify(build_labels_detail(data))
+        abort(404, message=f"Detector '{name}' not found")
+    return build_labels_detail(data)
 
 
 # ---------------------------------------------------------------------------
 # GET /api/detectors/<name>/labels/<element_id>/preview
+#
+# Binary response (or a small content-only JSON for text). flask-smorest only
+# describes the alt error responses; the success body is not modeled.
 # ---------------------------------------------------------------------------
 
 
@@ -298,6 +327,7 @@ def get_detector_labels_detail(name: str):
     "/api/detectors/<name>/labels/<element_id>/preview",
     methods=["GET"],
 )
+@detectors_labels_bp.alt_response(404, description="Detector, element, or media file not found.")
 def preview_detector_label(name: str, element_id: str):
     """Stream the underlying media file for a saved labelset element.
 
@@ -312,25 +342,25 @@ def preview_detector_label(name: str, element_id: str):
     path = _detector_path(name)
     data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        abort(404, message=f"Detector '{name}' not found")
 
     labelset = LabelSet.from_dict(data.get("labelset") or {})
     found = find_element_by_id(labelset.elements, element_id)
     if found is None:
-        return jsonify({"error": "Label element not found"}), 404
+        abort(404, message="Label element not found")
 
     _, elem = found
     media_type = data.get("media_type", "")
 
     with resolve_element_to_path(elem) as file_path:
         if file_path is None or not file_path.is_file():
-            return jsonify({"error": "Element media file unavailable"}), 404
+            abort(404, message="Element media file unavailable")
 
         if media_type == "text":
             try:
                 content = file_path.read_text(encoding="utf-8", errors="replace").strip()
             except OSError:
-                return jsonify({"error": "Element media file unreadable"}), 404
+                abort(404, message="Element media file unreadable")
             return jsonify(
                 {
                     "content": content,
@@ -342,7 +372,7 @@ def preview_detector_label(name: str, element_id: str):
         try:
             file_bytes = file_path.read_bytes()
         except OSError:
-            return jsonify({"error": "Element media file unreadable"}), 404
+            abort(404, message="Element media file unreadable")
 
         suffix = file_path.suffix.lower()
 
@@ -356,6 +386,8 @@ def preview_detector_label(name: str, element_id: str):
 
 # ---------------------------------------------------------------------------
 # GET /api/detectors/<name>/labels/<element_id>/thumbnail
+#
+# Binary response. See note above ``preview``.
 # ---------------------------------------------------------------------------
 
 
@@ -409,14 +441,14 @@ def _origin_thumbnail_response(file_path: Path, media_type: str, elem):
                 download_name=elem.origin_name or elem.filename or f"label{suffix}",
             )
         except OSError:
-            return jsonify({"error": "Element media file unreadable"}), 404
+            abort(404, message="Element media file unreadable")
 
     if media_type == "audio":
         from vtsearch.media.audio.media_type import generate_waveform_thumbnail_from_file  # noqa: PLC0415
 
         thumb = generate_waveform_thumbnail_from_file(file_path)
         if thumb is None:
-            return jsonify({"error": "Could not generate audio thumbnail"}), 500
+            abort(500, message="Could not generate audio thumbnail")
         return send_file(
             io.BytesIO(thumb),
             mimetype="image/png",
@@ -428,20 +460,22 @@ def _origin_thumbnail_response(file_path: Path, media_type: str, elem):
 
         thumb = generate_video_thumbnail_from_file(file_path)
         if thumb is None:
-            return jsonify({"error": "Could not generate video thumbnail"}), 500
+            abort(500, message="Could not generate video thumbnail")
         return send_file(
             io.BytesIO(thumb),
             mimetype="image/png",
             download_name=f"{file_path.stem}_frame.png",
         )
 
-    return jsonify({"error": f"No thumbnail for media type '{media_type}'"}), 404
+    abort(404, message=f"No thumbnail for media type '{media_type}'")
 
 
 @detectors_labels_bp.route(
     "/api/detectors/<name>/labels/<element_id>/thumbnail",
     methods=["GET"],
 )
+@detectors_labels_bp.alt_response(404, description="Detector, element, or media file not found.")
+@detectors_labels_bp.alt_response(500, description="Thumbnail could not be generated.")
 def thumbnail_detector_label(name: str, element_id: str):
     """Stream a small thumbnail image for a saved labelset element.
 
@@ -463,12 +497,12 @@ def thumbnail_detector_label(name: str, element_id: str):
     path = _detector_path(name)
     data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        abort(404, message=f"Detector '{name}' not found")
 
     labelset = LabelSet.from_dict(data.get("labelset") or {})
     found = find_element_by_id(labelset.elements, element_id)
     if found is None:
-        return jsonify({"error": "Label element not found"}), 404
+        abort(404, message="Label element not found")
 
     _, elem = found
     media_type = data.get("media_type", "") or ""
@@ -483,7 +517,7 @@ def thumbnail_detector_label(name: str, element_id: str):
 
     with resolve_element_to_path(elem) as file_path:
         if file_path is None or not file_path.is_file():
-            return jsonify({"error": "Element media file unavailable"}), 404
+            abort(404, message="Element media file unavailable")
 
         return _origin_thumbnail_response(file_path, media_type, elem)
 
@@ -497,7 +531,10 @@ def thumbnail_detector_label(name: str, element_id: str):
     "/api/detectors/<name>/labels/<element_id>/vote",
     methods=["POST"],
 )
-def vote_detector_label(name: str, element_id: str):
+@detectors_labels_bp.arguments(DetectorLabelVoteRequestSchema)
+@detectors_labels_bp.response(200, DetectorLabelVoteResponseSchema)
+@detectors_labels_bp.alt_response(404, description="Detector or label element not found.")
+def vote_detector_label(body: dict, name: str, element_id: str):
     """Toggle the label on a saved labelset element.
 
     Body: ``{"vote": "good"}`` or ``{"vote": "bad"}``.
@@ -513,15 +550,12 @@ def vote_detector_label(name: str, element_id: str):
         resolve_current_dataset_cid,
     )
 
-    body = request.get_json(force=True, silent=True) or {}
-    vote = body.get("vote", "")
-    if vote not in ("good", "bad"):
-        return jsonify({"error": "vote must be 'good' or 'bad'"}), 400
+    vote = body["vote"]
 
     path = _detector_path(name)
     data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        abort(404, message=f"Detector '{name}' not found")
 
     from vtsearch.datasets.labelset import LabelSet
     from vtsearch.detectors.labelset_elements import find_element_by_id
@@ -529,14 +563,14 @@ def vote_detector_label(name: str, element_id: str):
     pre_labelset = LabelSet.from_dict(data.get("labelset") or {})
     pre_found = find_element_by_id(pre_labelset.elements, element_id)
     if pre_found is None:
-        return jsonify({"error": "Label element not found"}), 404
+        abort(404, message="Label element not found")
     _, pre_elem = pre_found
 
     cid_before = resolve_current_dataset_cid(pre_elem)
 
     changed, _updated, action = apply_element_vote_in_data(data, element_id, vote)
     if not changed:
-        return jsonify({"ok": True, "action": action})
+        return {"ok": True, "action": action}
 
     _write_detector(path, data)
 
@@ -554,4 +588,4 @@ def vote_detector_label(name: str, element_id: str):
         new_count = len(LabelSet.from_dict(data.get("labelset") or {}))
         update_detector(reg_entry["id"], num_training=new_count, last_trained_at=time.time())
 
-    return jsonify({"ok": True, "action": action})
+    return {"ok": True, "action": action}

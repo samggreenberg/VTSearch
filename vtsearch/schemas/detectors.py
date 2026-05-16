@@ -1,4 +1,4 @@
-"""Schemas for the detector CRUD and registry APIs (``/api/detectors/*``).
+"""Schemas for the detector CRUD, registry, scoring, find, and label APIs.
 
 CRUD endpoints (``vtsearch/routes/detectors/crud.py``):
 
@@ -29,8 +29,35 @@ Registry endpoints (``vtsearch/routes/detectors/registry.py``):
                                                          :class:`DetectorRegistryAutorunResponseSchema`
 * ``POST   /api/detectors/cancel/<task_id>``           — :class:`DetectorCancelResponseSchema`
 
-The ``POST /api/detectors/registry/from-labelset/<importer>`` route stays on
-the legacy flask pattern: its request shape depends on the chosen label
+Scoring endpoints (``vtsearch/routes/detectors/scoring.py``):
+
+* ``POST /api/find-label`` — :class:`FindLabelRequestSchema` →
+                              :class:`FindLabelResponseSchema`
+* ``POST /api/auto-detect`` — :class:`AutoDetectRequestSchema` →
+                              :class:`AutoDetectResponseSchema`
+
+Find endpoints (``vtsearch/routes/detectors/find.py``):
+
+* ``POST /api/find/check-labels`` — :class:`FindCheckLabelsRequestSchema` →
+                                    :class:`FindCheckLabelsResponseSchema`
+* ``POST /api/find`` — :class:`FindRequestSchema` →
+                      :class:`FindResponseSchema`
+
+Label endpoints (``vtsearch/routes/detectors/labels.py``):
+
+* ``POST /api/detectors/<name>/labels`` — :class:`DetectorSaveLabelsResponseSchema`
+* ``GET  /api/detectors/<name>/labels-detail`` — :class:`DetectorLabelsDetailResponseSchema`
+* ``POST /api/detectors/<name>/labels/<element_id>/vote`` —
+        :class:`DetectorLabelVoteRequestSchema` → :class:`DetectorLabelVoteResponseSchema`
+* ``GET  /api/detectors/<name>/labels/<element_id>/preview`` and
+  ``GET  /api/detectors/<name>/labels/<element_id>/thumbnail`` serve binary
+  responses (or a text-content JSON for text media). These routes declare
+  their non-default JSON responses via ``alt_response``; the success body is
+  not described in the spec.
+
+The ``POST /api/detectors/<name>/import-labels/<importer_name>`` and
+``POST /api/detectors/registry/from-labelset/<importer>`` routes stay on the
+legacy flask pattern: their request shape depends on the chosen label
 importer's plugin fields, which don't fit a static marshmallow schema (see the
 *Open questions / Plugin field endpoints* section of
 ``docs/plans/openapi-schema.md``).
@@ -341,7 +368,237 @@ class DetectorCancelResponseSchema(Schema):
     ok = fields.Boolean(required=True)
 
 
+# ---------------------------------------------------------------------------
+# Scoring schemas (vtsearch/routes/detectors/scoring.py)
+# ---------------------------------------------------------------------------
+
+
+class _FindLabelResultSchema(Schema):
+    """One ``{id, score}`` entry in the ``results`` list returned by find-label."""
+
+    id = fields.Integer(required=True)
+    score = fields.Float(required=True)
+
+
+class FindLabelRequestSchema(Schema):
+    """Body for ``POST /api/find-label``.
+
+    ``dataset_id`` is optional and overrides the request-scoped dataset
+    context when present, so a single Find run can target a dataset that
+    isn't the active one in the frontend.
+    """
+
+    detector_id = fields.String(required=True, validate=validate.Length(min=1))
+    dataset_id = fields.String(load_default="")
+
+
+class FindLabelResponseSchema(Schema):
+    """Response for ``POST /api/find-label`` (success path)."""
+
+    ok = fields.Boolean(required=True)
+    results = fields.List(fields.Nested(_FindLabelResultSchema), required=True)
+    threshold = fields.Float(required=True)
+    good_count = fields.Integer(required=True)
+    bad_count = fields.Integer(required=True)
+    detector_name = fields.String(required=True)
+
+
+class _HitSchema(Schema):
+    """One scored media entry inside an auto-detect / find ``hits`` list.
+
+    The shape is a media dict (filename, type, md5, origin, ...) augmented
+    with a ``score`` (and, for ``/api/find``, a ``verdict``). The set of
+    media-dict fields is intentionally open — different importers
+    populate different keys.
+    """
+
+    id = fields.Integer(required=True)
+    score = fields.Float(required=True)
+
+    class Meta:
+        unknown = "include"
+
+
+class _AutoDetectResultSchema(Schema):
+    """One entry in ``AutoDetectResponseSchema.results``."""
+
+    detector_name = fields.String(required=True)
+    threshold = fields.Float(required=True)
+    total_hits = fields.Integer(required=True)
+    hits = fields.List(fields.Nested(_HitSchema), required=True)
+    negative_hits = fields.List(fields.Nested(_HitSchema), required=True)
+
+
+class AutoDetectRequestSchema(Schema):
+    """Body for ``POST /api/auto-detect``.
+
+    The body is optional; omitting ``detector_name`` runs every autorun
+    detector for the active dataset's media type. Passing a name restricts
+    the run to that one detector (which must already be flagged for
+    autorun — otherwise the handler returns 404).
+    """
+
+    detector_name = fields.String(load_default="")
+
+
+class AutoDetectResponseSchema(Schema):
+    """Response for ``POST /api/auto-detect`` (success path).
+
+    ``results`` is keyed by detector name. flask-smorest dumps ``Dict``
+    fields as ``additionalProperties`` in the OpenAPI spec.
+    """
+
+    media_type = fields.String(required=True)
+    detectors_run = fields.Integer(required=True)
+    results = fields.Dict(
+        keys=fields.String(),
+        values=fields.Nested(_AutoDetectResultSchema),
+        required=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Find schemas (vtsearch/routes/detectors/find.py)
+# ---------------------------------------------------------------------------
+
+
+class FindCheckLabelsRequestSchema(Schema):
+    """Body for ``POST /api/find/check-labels``.
+
+    Both arrays default to empty — the route returns an empty
+    ``warnings`` list when either is missing.
+    """
+
+    dataset_ids = fields.List(fields.String(), load_default=list)
+    detector_ids = fields.List(fields.String(), load_default=list)
+
+
+class _FindCheckLabelsWarningSchema(Schema):
+    """One per-detector resolution warning."""
+
+    detector_name = fields.String(required=True)
+    total_labels = fields.Integer(required=True)
+    resolved_labels = fields.Integer(required=True)
+    failed_labels = fields.Integer(required=True)
+
+
+class FindCheckLabelsResponseSchema(Schema):
+    """Response for ``POST /api/find/check-labels``."""
+
+    warnings = fields.List(fields.Nested(_FindCheckLabelsWarningSchema), required=True)
+
+
+class FindRequestSchema(Schema):
+    """Body for ``POST /api/find``.
+
+    Empty arrays are accepted at the schema layer — the handler rejects
+    them with a 400 + ``message`` so it can reset ``find_progress`` to
+    idle on the way out (schema-level validation skips the handler
+    entirely, leaving the tracker stale).
+    """
+
+    dataset_ids = fields.List(fields.String(), load_default=list)
+    detector_ids = fields.List(fields.String(), load_default=list)
+
+
+class _FindVerdictSchema(Schema):
+    """One entry in a result row's ``detector_verdicts`` map.
+
+    Verdict is ``"Good"``, ``"Bad"``, ``"Error"``, or ``"N/A"``.
+    """
+
+    verdict = fields.String(required=True, validate=validate.OneOf(["Good", "Bad", "Error", "N/A"]))
+    score = fields.Float(required=True)
+
+
+class _FindResultRowSchema(Schema):
+    """One row in ``FindResponseSchema.results`` / ``negative_results``."""
+
+    id = fields.Integer(required=True)
+    filename = fields.String(required=True)
+    md5 = fields.String(required=True)
+    origin_name = fields.String(required=True)
+    origin = fields.Dict(allow_none=True)
+    dataset_name = fields.String(required=True)
+    detector_verdicts = fields.Dict(
+        keys=fields.String(),
+        values=fields.Nested(_FindVerdictSchema),
+        required=True,
+    )
+
+
+class FindResponseSchema(Schema):
+    """Response for ``POST /api/find`` (success path)."""
+
+    results = fields.List(fields.Nested(_FindResultRowSchema), required=True)
+    negative_results = fields.List(fields.Nested(_FindResultRowSchema), required=True)
+    datasets = fields.List(fields.String(), required=True)
+    detectors = fields.List(fields.String(), required=True)
+    media_type = fields.String(required=True)
+    multiple_datasets = fields.Boolean(required=True)
+    multiple_detectors = fields.Boolean(required=True)
+    total_hits = fields.Integer(required=True)
+
+
+# ---------------------------------------------------------------------------
+# Label schemas (vtsearch/routes/detectors/labels.py)
+# ---------------------------------------------------------------------------
+
+
+class DetectorSaveLabelsResponseSchema(Schema):
+    """Response for ``POST /api/detectors/<name>/labels``."""
+
+    success = fields.Boolean(required=True)
+    name = fields.String(required=True)
+    num_labels = fields.Integer(required=True)
+
+
+class _DetectorLabelViewSchema(Schema):
+    """One element in a detector's labels-detail response.
+
+    Mirrors :func:`vtsearch.detectors.labelset_elements.build_element_view`.
+    """
+
+    id = fields.String(required=True)
+    label = fields.String(required=True, validate=validate.OneOf(["good", "bad"]))
+    media_type = fields.String(required=True)
+    name = fields.String(required=True)
+    filename = fields.String(required=True)
+    origin_name = fields.String(required=True)
+    md5 = fields.String(required=True)
+    cid = fields.Integer(allow_none=True)
+    time = fields.Float(required=True)
+    score = fields.Float(required=True)
+
+
+class DetectorLabelsDetailResponseSchema(Schema):
+    """Response for ``GET /api/detectors/<name>/labels-detail``."""
+
+    good = fields.List(fields.Nested(_DetectorLabelViewSchema), required=True)
+    bad = fields.List(fields.Nested(_DetectorLabelViewSchema), required=True)
+    media_type = fields.String(required=True)
+
+
+class DetectorLabelVoteRequestSchema(Schema):
+    """Body for ``POST /api/detectors/<name>/labels/<element_id>/vote``."""
+
+    vote = fields.String(required=True, validate=validate.OneOf(["good", "bad"]))
+
+
+class DetectorLabelVoteResponseSchema(Schema):
+    """Response for ``POST /api/detectors/<name>/labels/<element_id>/vote``.
+
+    ``action`` is one of ``"removed"``, ``"flipped"``, ``"unchanged"``, or
+    ``"not_found"``.
+    """
+
+    ok = fields.Boolean(required=True)
+    action = fields.String(required=True)
+
+
 __all__ = [
+    "AutoDetectRequestSchema",
+    "AutoDetectResponseSchema",
     "DetectorCancelResponseSchema",
     "DetectorCombineRequestSchema",
     "DetectorCombineResponseSchema",
@@ -351,6 +608,9 @@ __all__ = [
     "DetectorDetailSchema",
     "DetectorExamplesRequestSchema",
     "DetectorExamplesResponseSchema",
+    "DetectorLabelsDetailResponseSchema",
+    "DetectorLabelVoteRequestSchema",
+    "DetectorLabelVoteResponseSchema",
     "DetectorRegistryAutorunRequestSchema",
     "DetectorRegistryAutorunResponseSchema",
     "DetectorRegistryCreateRequestSchema",
@@ -365,5 +625,12 @@ __all__ = [
     "DetectorRegistryUnloadResponseSchema",
     "DetectorRenameRequestSchema",
     "DetectorRenameResponseSchema",
+    "DetectorSaveLabelsResponseSchema",
     "DetectorsListResponseSchema",
+    "FindCheckLabelsRequestSchema",
+    "FindCheckLabelsResponseSchema",
+    "FindLabelRequestSchema",
+    "FindLabelResponseSchema",
+    "FindRequestSchema",
+    "FindResponseSchema",
 ]

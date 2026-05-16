@@ -192,7 +192,7 @@ class TestLabelElementVote:
         )
         assert res.status_code == 404
 
-    def test_invalid_vote_value_400(self, client):
+    def test_invalid_vote_value_422(self, client):
         _seed_cross_dataset_model()
         detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         target = detail["good"][0]
@@ -200,7 +200,9 @@ class TestLabelElementVote:
             f"/api/detectors/cross-ds-model/labels/{target['id']}/vote",
             json={"vote": "maybe"},
         )
-        assert res.status_code == 400
+        # Schema-level OneOf validation → 422 with the standard errors envelope.
+        assert res.status_code == 422
+        assert "vote" in res.get_json()["errors"]["json"]
 
 
 # ---------------------------------------------------------------------------
