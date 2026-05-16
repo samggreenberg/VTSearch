@@ -30,27 +30,50 @@
       @if (tab === 'blank') {
         <div class="form-group">
           <label class="col-label" title="The type of media this model will process">Media Type</label>
-          <div class="custom-select" [class.open]="mediaTypeDropdownOpen" title="The type of media this model will process">
-            <button type="button" class="custom-select-trigger form-input" (click)="mediaTypeDropdownOpen = !mediaTypeDropdownOpen" title="Select the media type for this model">
-              <span class="select-option-content">
-                @if (getMediaTypeIcon(mediaType)) {
-                  <vt-icon [type]="getMediaTypeIcon(mediaType)" [size]="14"></vt-icon>
+          <div class="media-type-row">
+            <div class="custom-select"
+              [class.open]="mediaTypeDropdownOpen"
+              [class.locked]="mediaTypeLocked"
+              [title]="mediaTypeLocked ? 'Locked to the active dataset\'s media type. Click the unlock button to choose a different type.' : 'The type of media this model will process'">
+              <button type="button" class="custom-select-trigger form-input"
+                [class.is-locked]="mediaTypeLocked"
+                [disabled]="mediaTypeLocked"
+                [attr.aria-disabled]="mediaTypeLocked"
+                (click)="toggleMediaTypeDropdown()"
+                [title]="mediaTypeLocked ? 'Locked to the active dataset\'s media type' : 'Select the media type for this model'">
+                <span class="select-option-content">
+                  @if (getMediaTypeIcon(mediaType)) {
+                    <vt-icon [type]="getMediaTypeIcon(mediaType)" [size]="14"></vt-icon>
+                  }
+                  <span>{{ getMediaTypeLabel(mediaType) }}</span>
+                </span>
+                @if (!mediaTypeLocked) {
+                  <svg class="select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="currentColor" aria-hidden="true"><path d="M0 0l5 6 5-6z"/></svg>
                 }
-                <span>{{ getMediaTypeLabel(mediaType) }}</span>
-              </span>
-              <svg class="select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="currentColor" aria-hidden="true"><path d="M0 0l5 6 5-6z"/></svg>
-            </button>
-            @if (mediaTypeDropdownOpen) {
-              <div class="custom-select-options">
-                @for (mt of mediaTypes; track mt) {
-                  <button type="button" class="custom-select-option" [class.selected]="mt === mediaType" (click)="mediaType = mt; mediaTypeDropdownOpen = false">
-                    @if (getMediaTypeIcon(mt)) {
-                      <vt-icon [type]="getMediaTypeIcon(mt)" [size]="14"></vt-icon>
-                    }
-                    <span>{{ getMediaTypeLabel(mt) }}</span>
-                  </button>
-                }
-              </div>
+              </button>
+              @if (mediaTypeDropdownOpen && !mediaTypeLocked) {
+                <div class="custom-select-options">
+                  @for (mt of mediaTypes; track mt) {
+                    <button type="button" class="custom-select-option" [class.selected]="mt === mediaType" (click)="mediaType = mt; mediaTypeDropdownOpen = false">
+                      @if (getMediaTypeIcon(mt)) {
+                        <vt-icon [type]="getMediaTypeIcon(mt)" [size]="14"></vt-icon>
+                      }
+                      <span>{{ getMediaTypeLabel(mt) }}</span>
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+            @if (mediaTypeLocked) {
+              <button type="button" class="lock-toggle"
+                (click)="unlockMediaType()"
+                title="Unlock to choose a different media type"
+                aria-label="Unlock media type">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                </svg>
+              </button>
             }
           </div>
         </div>

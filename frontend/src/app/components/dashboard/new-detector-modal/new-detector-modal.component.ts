@@ -66,6 +66,11 @@ export class NewDetectorModalComponent implements OnInit {
   submitting = false;
   error = '';
   mediaTypeDropdownOpen = false;
+  /** True when the media-type field is locked to the active dataset's type.
+   *  Set on init whenever `defaultMediaType` is provided; cleared when the
+   *  user clicks the unlock button. The dropdown trigger is disabled while
+   *  locked so the user can't accidentally change it. */
+  mediaTypeLocked = false;
 
   // Single example (text or media, not both)
   exampleType: 'text' | 'media' | null = null;
@@ -197,8 +202,11 @@ export class NewDetectorModalComponent implements OnInit {
     });
 
     // Prefer the explicit default (active dataset's type) over the all-datasets guess.
+    // When the active dataset dictates the type, lock the field so the user
+    // can't change it without an explicit unlock click.
     if (this.defaultMediaType) {
       this.mediaType = this.defaultMediaType;
+      this.mediaTypeLocked = true;
     } else {
       this.datasetsApi.getRegistry().subscribe({
         next: (res) => {
@@ -211,6 +219,15 @@ export class NewDetectorModalComponent implements OnInit {
         },
       });
     }
+  }
+
+  unlockMediaType(): void {
+    this.mediaTypeLocked = false;
+  }
+
+  toggleMediaTypeDropdown(): void {
+    if (this.mediaTypeLocked) return;
+    this.mediaTypeDropdownOpen = !this.mediaTypeDropdownOpen;
   }
 
   get modalTitle(): string {
