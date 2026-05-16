@@ -687,8 +687,8 @@ Already designed in `docs/design/cli-detector-converter.md`; ship it.
 
 Dropped: not worth building. External schedulers (cron, systemd timers, file-watcher daemons like `inotifywait` / `entr`) can re-invoke `--autodetect` on new files without bloating the CLI surface or adding a long-running-process code path to maintain.
 
-### 17.5 Dry-run mode ★ XS
-`--dry-run` prints what would be embedded/scored/exported without doing it.
+### 17.5 Dry-run mode ★ XS ✅ shipped
+`--dry-run` prints what would be embedded/scored/exported without doing it. Validates importer/exporter names, settings file, dataset pickle existence, and required CLI field values, but loads no media and trains no models. See [CLI.md § Dry-run mode](../CLI.md#dry-run-mode).
 
 ### 17.6 Progress JSON output ★ S
 `--progress-format json` for scripted callers / CI integration.

@@ -501,6 +501,17 @@ if __name__ == "__main__":
         dest="label_importer_file",
         help=("Path passed to the label importer's ``filepath`` field. Used with --import-labels-into."),
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="dry_run",
+        help=(
+            "Print what --autodetect would embed, score, and export without "
+            "doing it. Validates importer/exporter names, settings file, and "
+            "any --import-labels-into request, but loads no media and trains "
+            "no models."
+        ),
+    )
 
     # Two-pass parsing: first pass gets --importer and --exporter names;
     # second pass adds their plugin-specific arguments and re-parses.
@@ -576,6 +587,8 @@ if __name__ == "__main__":
 
         chunk_size = getattr(args, "chunk_size", None)
 
+        dry_run = bool(getattr(args, "dry_run", False))
+
         # Optional one-shot label import into a detector before scoring.
         # The merged labelset is picked up by the autodetect pipeline below.
         if args.import_labels_into:
@@ -586,22 +599,31 @@ if __name__ == "__main__":
                 from vtsearch.settings import set_settings_path
 
                 set_settings_path(settings_path)
-            from vtsearch.cli import import_labels_into_detector_from_file
-
-            try:
-                applied, skipped = import_labels_into_detector_from_file(
-                    args.import_labels_into,
-                    args.label_importer,
-                    args.label_importer_file,
-                )
+            if dry_run:
                 print(
-                    f"Imported {applied} label(s) into detector "
-                    f"'{args.import_labels_into}' (skipped {skipped} duplicate/invalid).",
+                    f"DRY RUN — would import labels from {args.label_importer_file!r} "
+                    f"via importer {args.label_importer!r} into detector "
+                    f"{args.import_labels_into!r}.",
                     flush=True,
                 )
-            except (FileNotFoundError, ValueError) as exc:
-                print(f"Error importing labels: {exc}", file=sys.stderr)
-                sys.exit(1)
+                print("", flush=True)
+            else:
+                from vtsearch.cli import import_labels_into_detector_from_file
+
+                try:
+                    applied, skipped = import_labels_into_detector_from_file(
+                        args.import_labels_into,
+                        args.label_importer,
+                        args.label_importer_file,
+                    )
+                    print(
+                        f"Imported {applied} label(s) into detector "
+                        f"'{args.import_labels_into}' (skipped {skipped} duplicate/invalid).",
+                        flush=True,
+                    )
+                except (FileNotFoundError, ValueError) as exc:
+                    print(f"Error importing labels: {exc}", file=sys.stderr)
+                    sys.exit(1)
 
         if args.importer:
             # Importer-based path
@@ -611,13 +633,24 @@ if __name__ == "__main__":
                 from vtsearch.cli import autodetect_importer_main_chunked
 
                 autodetect_importer_main_chunked(
-                    args.importer, field_values, chunk_size, settings_path, args.exporter, exporter_field_values
+                    args.importer,
+                    field_values,
+                    chunk_size,
+                    settings_path,
+                    args.exporter,
+                    exporter_field_values,
+                    dry_run=dry_run,
                 )
             else:
                 from vtsearch.cli import autodetect_importer_main
 
                 autodetect_importer_main(
-                    args.importer, field_values, settings_path, args.exporter, exporter_field_values
+                    args.importer,
+                    field_values,
+                    settings_path,
+                    args.exporter,
+                    exporter_field_values,
+                    dry_run=dry_run,
                 )
 
         elif args.dataset:
@@ -625,11 +658,24 @@ if __name__ == "__main__":
             if chunk_size:
                 from vtsearch.cli import autodetect_main_chunked
 
-                autodetect_main_chunked(args.dataset, chunk_size, settings_path, args.exporter, exporter_field_values)
+                autodetect_main_chunked(
+                    args.dataset,
+                    chunk_size,
+                    settings_path,
+                    args.exporter,
+                    exporter_field_values,
+                    dry_run=dry_run,
+                )
             else:
                 from vtsearch.cli import autodetect_main
 
-                autodetect_main(args.dataset, settings_path, args.exporter, exporter_field_values)
+                autodetect_main(
+                    args.dataset,
+                    settings_path,
+                    args.exporter,
+                    exporter_field_values,
+                    dry_run=dry_run,
+                )
 
         else:
             parser.error("--autodetect requires either --dataset <file.pkl> or --importer <name>")

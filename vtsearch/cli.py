@@ -24,6 +24,87 @@ def _list_importer_names() -> list[str]:
     return [imp.name for imp in list_importers()]
 
 
+def _summarize_autorun_detectors(detector_names: list[str]) -> list[dict[str, Any]]:
+    """Read each named detector's on-disk JSON and return a small summary.
+
+    Used by ``--dry-run`` to describe which detectors would be trained and
+    scored without actually loading models or embedding any media.
+    """
+    from vtsearch.detectors.store import _detector_path, _read_detector
+
+    summaries: list[dict[str, Any]] = []
+    for name in detector_names:
+        path = _detector_path(name)
+        data = _read_detector(path)
+        if data is None:
+            summaries.append({"name": name, "path": str(path), "missing": True})
+            continue
+        labelset = data.get("labelset") or {}
+        labels = labelset.get("labels") if isinstance(labelset, dict) else None
+        n_labels = len(labels) if isinstance(labels, list) else 0
+        summaries.append(
+            {
+                "name": name,
+                "path": str(path),
+                "media_type": data.get("media_type", "") or "",
+                "labels": n_labels,
+                "missing": False,
+            }
+        )
+    return summaries
+
+
+def _print_dry_run_plan(
+    *,
+    source_description: dict[str, Any],
+    settings_path: str | None,
+    autorun_detectors: list[str],
+    exporter_name: str | None,
+    exporter_field_values: dict[str, Any] | None,
+) -> None:
+    """Print the autodetect plan that ``--dry-run`` would otherwise execute."""
+    print("DRY RUN — no media will be loaded, embedded, scored, or exported.", flush=True)
+    print("", flush=True)
+
+    print("Source:", flush=True)
+    kind = source_description.get("kind", "")
+    if kind == "pickle":
+        print(f"  Dataset pickle: {source_description.get('dataset', '')}", flush=True)
+    elif kind == "importer":
+        print(f"  Importer: {source_description.get('importer', '')}", flush=True)
+        params = source_description.get("params") or {}
+        if params:
+            print("  Params:", flush=True)
+            for k, v in params.items():
+                print(f"    {k}: {v if v != '' else '(empty)'}", flush=True)
+        else:
+            print("  Params: (none)", flush=True)
+    chunk_size = source_description.get("chunk_size")
+    print(f"  Chunk size: {chunk_size if chunk_size else 'whole dataset'}", flush=True)
+    print("", flush=True)
+
+    print(f"Settings: {settings_path or '(default: data/settings.json)'}", flush=True)
+    if not autorun_detectors:
+        print("Autorun detectors: (none — pipeline would abort with an error)", flush=True)
+    else:
+        summaries = _summarize_autorun_detectors(autorun_detectors)
+        print(f"Autorun detectors ({len(summaries)}):", flush=True)
+        for s in summaries:
+            if s.get("missing"):
+                print(f"  - {s['name']}  [MISSING — {s['path']}]", flush=True)
+            else:
+                print(
+                    f"  - {s['name']}  [media_type={s['media_type'] or '?'}, labels={s['labels']}, file={s['path']}]",
+                    flush=True,
+                )
+    print("", flush=True)
+
+    print(f"Exporter: {exporter_name or 'gui (default — print to console)'}", flush=True)
+    if exporter_field_values:
+        for k, v in exporter_field_values.items():
+            print(f"  {k}: {v if v != '' else '(empty)'}", flush=True)
+
+
 def _list_exporter_names() -> list[str]:
     """Return the names of all registered exporters."""
     from vtsearch.exporters import list_exporters
@@ -308,12 +389,18 @@ def _run_pipeline(
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
     empty_error: str = "No medias loaded",
+    dry_run: bool = False,
+    source_description: dict[str, Any] | None = None,
 ) -> None:
     """Shared pipeline: read settings, iterate media chunks, score, export.
 
     All four CLI entry points (pickle / importer, whole / chunked) delegate
     to this single function, differing only in the *media_source* iterator
     they supply.
+
+    When *dry_run* is True the function prints the plan derived from
+    *source_description* + the settings file and returns without consuming
+    the iterator, so no importer runs and no embedding or scoring occurs.
     """
     if settings_path:
         from vtsearch.settings import set_settings_path
@@ -321,6 +408,39 @@ def _run_pipeline(
         set_settings_path(settings_path)
 
     from vtsearch.settings import get_autorun_detectors
+
+    if dry_run:
+        sd = source_description or {}
+        if sd.get("kind") == "pickle":
+            dataset = sd.get("dataset", "")
+            if dataset and not Path(dataset).exists():
+                raise FileNotFoundError(f"Dataset file not found: {dataset}")
+        elif sd.get("kind") == "importer":
+            from vtsearch.datasets.importers import get_importer
+
+            importer_name = sd.get("importer", "")
+            importer = get_importer(importer_name)
+            if importer is None:
+                available = _list_importer_names()
+                raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
+            importer.validate_cli_field_values(sd.get("params") or {})
+
+        if exporter_name:
+            from vtsearch.exporters import get_exporter
+
+            exporter = get_exporter(exporter_name)
+            if exporter is None:
+                available = _list_exporter_names()
+                raise ValueError(f"Unknown exporter: {exporter_name}. Available: {', '.join(available)}")
+            exporter.validate_cli_field_values(exporter_field_values or {})
+        _print_dry_run_plan(
+            source_description=source_description or {},
+            settings_path=settings_path,
+            autorun_detectors=get_autorun_detectors(),
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+        )
+        return
 
     merged_results: dict[str, dict[str, Any]] = {}
     media_type: str | None = None
@@ -375,15 +495,19 @@ def autodetect_main(
     settings_path: str | None = None,
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
+    *,
+    dry_run: bool = False,
 ) -> None:
     """CLI entry point: run autodetect with all autorun detectors."""
     try:
         _run_pipeline(
-            _load_pickle_whole(dataset_path),
+            _load_pickle_whole(dataset_path) if not dry_run else iter(()),
             settings_path=settings_path,
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
             empty_error=f"No medias loaded from dataset: {dataset_path}",
+            dry_run=dry_run,
+            source_description={"kind": "pickle", "dataset": dataset_path, "chunk_size": None},
         )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -396,15 +520,24 @@ def autodetect_importer_main(
     settings_path: str | None = None,
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
+    *,
+    dry_run: bool = False,
 ) -> None:
     """CLI entry point: run autodetect with a named importer and output results."""
     try:
         _run_pipeline(
-            _load_importer_whole(importer_name, field_values),
+            _load_importer_whole(importer_name, field_values) if not dry_run else iter(()),
             settings_path=settings_path,
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
             empty_error=f"No medias loaded by importer '{importer_name}'",
+            dry_run=dry_run,
+            source_description={
+                "kind": "importer",
+                "importer": importer_name,
+                "params": field_values,
+                "chunk_size": None,
+            },
         )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -417,15 +550,19 @@ def autodetect_main_chunked(
     settings_path: str | None = None,
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
+    *,
+    dry_run: bool = False,
 ) -> None:
     """CLI entry point: chunked autodetect on a pickle dataset."""
     try:
         _run_pipeline(
-            _load_pickle_chunked(dataset_path, chunk_size),
+            _load_pickle_chunked(dataset_path, chunk_size) if not dry_run else iter(()),
             settings_path=settings_path,
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
             empty_error=f"No medias loaded from dataset: {dataset_path}",
+            dry_run=dry_run,
+            source_description={"kind": "pickle", "dataset": dataset_path, "chunk_size": chunk_size},
         )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -439,15 +576,24 @@ def autodetect_importer_main_chunked(
     settings_path: str | None = None,
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
+    *,
+    dry_run: bool = False,
 ) -> None:
     """CLI entry point: chunked autodetect with a named importer."""
     try:
         _run_pipeline(
-            _load_importer_chunked(importer_name, field_values, chunk_size),
+            _load_importer_chunked(importer_name, field_values, chunk_size) if not dry_run else iter(()),
             settings_path=settings_path,
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
             empty_error=f"No medias loaded by importer '{importer_name}'",
+            dry_run=dry_run,
+            source_description={
+                "kind": "importer",
+                "importer": importer_name,
+                "params": field_values,
+                "chunk_size": chunk_size,
+            },
         )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
