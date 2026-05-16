@@ -96,18 +96,29 @@ class TestEmbeddingLatency:
         assert _sample_value(body, count_line) >= 1.0
 
     def test_embedder_embed_media_records_latency(self, client):
-        """MediaEmbedder.embed_media wraps each call with time_embedding."""
+        """MediaEmbedder.embed_media wraps each call with time_embedding.
+
+        The conftest replaces ``embed_media`` on every embedder instance
+        with a Mock, which would mask the wrap. Calling the method off
+        the class (``type(emb).embed_media``) bypasses the instance-level
+        Mock and exercises the real wrapped implementation against a
+        stubbed ``_embed_media_impl``.
+        """
+        from unittest.mock import patch
+
+        import numpy as np
+
         from vtsearch.media import embedders_for_type
-        from vtsearch.state import medias
 
         audio_emb = embedders_for_type("audio")[0]
-        media = next(iter(medias.values()))
 
         before = _sample_value(
             _scrape(client),
             f'vtsearch_embedding_seconds_count{{embedder="{audio_emb.name}",media_type="audio"}}',
         )
-        audio_emb.embed_media(media)
+        with patch.object(audio_emb, "_embed_media_impl", return_value=np.zeros(4, dtype=np.float32)):
+            result = type(audio_emb).embed_media(audio_emb, {"type": "audio"})
+        assert result is not None
         after = _sample_value(
             _scrape(client),
             f'vtsearch_embedding_seconds_count{{embedder="{audio_emb.name}",media_type="audio"}}',
@@ -178,21 +189,27 @@ class TestDatasetMemoryGauge:
 
 
 def _sample_value(body: str, line_prefix: str) -> float:
-    """Return the numeric sample for the first metric line starting with *prefix*.
+    """Return the summed sample value for every metric line starting with *prefix*.
 
-    Returns 0.0 if no matching line is found — useful for "before" reads
-    where the counter may not yet have been initialised. Comment lines
-    (``# HELP`` / ``# TYPE``) are ignored.
+    The Prometheus text format emits one line per label combination, so a
+    bare metric name like ``vtsearch_votes_total`` matches several rows.
+    Tests that want a single label combination should pass the full
+    ``name{label="value"}`` prefix; tests that want the grand total can
+    pass the bare name.
+
+    Returns 0.0 when no line matches.
     """
+    total = 0.0
+    matched = False
     for line in body.splitlines():
         if line.startswith("#"):
             continue
         if line.startswith(line_prefix):
-            # The exposition format is "<series> <value> [<timestamp>]"
             parts = line.rsplit(" ", 1)
             if len(parts) == 2:
                 try:
-                    return float(parts[1])
+                    total += float(parts[1])
+                    matched = True
                 except ValueError:
-                    return 0.0
-    return 0.0
+                    continue
+    return total if matched else 0.0
