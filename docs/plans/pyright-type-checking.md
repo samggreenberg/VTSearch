@@ -12,8 +12,10 @@ package. Rolled out in stages so each PR stays reviewable.
   count to the GitHub step summary.
 - **Stage 2:** ✅ shipped. Adds `settings.py`, `settings_factory.py`,
   `state/`, `security/` to the gated scope (31 real errors fixed).
-- **Stage 3:** ⏳ next — `datasets/`, `detectors/`, `eval/`, `models/`.
-- **Stages 4–6:** 📋 not started.
+- **Stage 3:** ✅ shipped. Adds `datasets/`, `detectors/`, `eval/`,
+  `embedding/`, `training/` to the gated scope (38 real errors fixed).
+- **Stage 4:** ⏳ next — `routes/`, `converters/`.
+- **Stages 5–6:** 📋 not started.
 - **Stage 7 (`tests/`):** 📋 optional, deferred.
 
 ## Goal
@@ -84,6 +86,21 @@ After Stage 2 shipped, `pyright vtsearch/` with deps installed reports
 (`models/` no longer exists — its contents were redistributed into
 `detectors/`, `training/`, and `embedding/` during a separate reorg.)
 
+### Post-Stage-3 advisory count
+
+After Stage 3 shipped, `pyright vtsearch/` with deps installed reports
+**137 errors** across the remaining out-of-gate scopes:
+
+| Dir | Errors |
+|---|---:|
+| `media/` | 97 |
+| `routes/` | 37 |
+| `converters/` | 3 |
+
+(`media/` ticked up by one against the Stage-2 snapshot because of an
+unrelated refactor between the two stages — not new regression from
+Stage 3's fixes.)
+
 ## Stages
 
 Each stage is a separate PR. The "errors to fix" column counts real
@@ -94,8 +111,8 @@ Each stage is a separate PR. The "errors to fix" column counts real
 | 0 | (no scope; config + advisory CI only) | 0 | ✅ shipped (PR #1349) |
 | 1 | `utils/`, `auth/`, `plugins/`, `sync/`, `concurrency/`, `exporters/`, `labels/`, `settings_io/`, `cli.py`, `config.py` | 4 | ✅ shipped (PR #1349) |
 | 2 | `settings.py`, `settings_factory.py`, `state/`, `security/` | 31 | ✅ shipped |
-| **3** | `datasets/`, `detectors/`, `eval/`, `embedding/`, `training/` | ~38 | ⏳ next |
-| 4 | `routes/`, `converters/` | ~40 | 📋 |
+| 3 | `datasets/`, `detectors/`, `eval/`, `embedding/`, `training/` | 38 | ✅ shipped |
+| **4** | `routes/`, `converters/` | ~40 | ⏳ next |
 | 5 | `media/` (heaviest — may need `.pyi` stubs or per-file `# pyright: ignore`) | ~96 | 📋 |
 | 6 | Whole `vtsearch/` (incl. `achievements.py`, `logging_config.py`, `openapi.py`, `schemas/`) — advisory job removed | 0 | 📋 |
 | 7 *(optional)* | `tests/` | TBD | 📋 |
@@ -162,6 +179,62 @@ Patterns that recurred enough to document:
    `# pyright: ignore[reportArgumentType]` rather than `int -> str`
    gymnastics. `KMeans.inertia_` is typed `Optional[float]`; assign to
    a local and narrow before comparing.
+
+### Stage 3 fixes (shipped)
+
+Patterns that recurred enough to document:
+
+1. **Methods only on a subclass, not the ABC.** `embed_pil_image` lives
+   on every image-embedder subclass but not on `MediaEmbedder`; same
+   for `_get_model_and_processor` / `_get_model` on the audio/video/text
+   subclasses. Callers know their embedder is the right kind by
+   construction (`embedders_for_type("image")[0]`, `get_embedder("clap")`).
+   Fix at the call site: `cast(Any, emb).embed_pil_image(...)`. Lifting
+   the method onto the ABC isn't right either — it isn't part of the
+   contract for non-image embedders.
+2. **`Optional` ABC params losing all attribute info.** A
+   `det_ctx: object` parameter blocks `det_ctx.model = ...` assignments
+   because `object` has no `model`. Use a `TYPE_CHECKING`-guarded
+   import of the real class (`DetectorContext`) and annotate with the
+   forward reference; avoids a runtime import cycle while restoring
+   attribute access for the checker.
+3. **`elem.origin or {}` does not narrow `elem.origin` for downstream
+   code.** Pyright narrows the expression itself, not the original
+   attribute. Bind to a local first
+   (`origin = elem.origin or {}; ... call(origin)`) so the narrow
+   applies to the value flowing into the call.
+4. **`ProgressCallback` is `Callable[[str, str, int, int], None]` — pass
+   all four args.** Several loader call sites passed only two
+   (`on_progress("idle", "Done")`), which pyright caught as missing
+   positional arguments. Pass `0, 0` for the count/total of a no-op
+   completion message.
+5. **sklearn return-type unions driven by overloads.** `fetch_20newsgroups`
+   has a `return_X_y` overload that widens the return type to
+   `Bunch | tuple`, so `.data` / `.target` / `.target_names` access
+   fails. With `return_X_y` defaulted to `False` (the only mode we use)
+   the runtime value is always a Bunch. `cast(Any, fetch_20newsgroups(...))`
+   is the pragmatic fix.
+6. **sklearn `GaussianMixture.means_` is `Optional[ndarray]`.** It's
+   always set after `.fit()`. `assert gmm.means_ is not None` before
+   use; pyright narrows from there.
+7. **Pillow `Image.frombytes(mode, size, data)` expects
+   `tuple[int, int]`, not `list[int]`.** `[pix.width, pix.height]` →
+   `(pix.width, pix.height)`.
+8. **Pillow `Image.crop(box)` expects
+   `tuple[float, float, float, float]`.** `tuple(some_list)` is
+   `tuple[int, ...]` with indeterminate length — too loose. Build the
+   tuple from indexed elements (`(parts[0], parts[1], parts[2], parts[3])`)
+   after a length check.
+9. **Optional dict args called with `None` from a sibling helper.**
+   `_load_embedder_with_progress(media_dict: dict, ...)` was called by
+   `_load_embedder_for_clips()` as `(None, ...)`. The body already
+   handles `None`; widen the param type to `dict | None`.
+10. **Pandas `Series` row scalars confuse builtin coercions.**
+    `int(row["n_labels"])` errors because pandas stubs widen the
+    cell type to `ndarray | Series | Any`. The value is a scalar at
+    runtime; a localized `# pyright: ignore[reportArgumentType]` is
+    the right escape hatch rather than wrapping every cell access in
+    `cast`.
 
 ### Operational notes from Stage 1
 

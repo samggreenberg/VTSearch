@@ -4,6 +4,10 @@
     "vtsearch/cli.py",
     "vtsearch/concurrency",
     "vtsearch/config.py",
+    "vtsearch/datasets",
+    "vtsearch/detectors",
+    "vtsearch/embedding",
+    "vtsearch/eval",
     "vtsearch/exporters",
     "vtsearch/labels",
     "vtsearch/plugins",
@@ -13,6 +17,7 @@
     "vtsearch/settings_io",
     "vtsearch/state",
     "vtsearch/sync",
+    "vtsearch/training",
     "vtsearch/utils"
   ],
   "exclude": [

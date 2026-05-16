@@ -12,6 +12,7 @@ to work unchanged.
 
 import gc
 import sys
+from typing import Any, cast
 
 from vtsearch.config import MODELS_CACHE_DIR, resolve_device
 from vtsearch.media.torch_setup import ensure_torch_configured
@@ -199,7 +200,8 @@ def get_clap_model():
     from vtsearch.media import get_embedder
 
     emb = get_embedder("clap")
-    return emb._get_model_and_processor()
+    # _get_model_and_processor is defined on the CLAP subclass, not the ABC.
+    return cast(Any, emb)._get_model_and_processor()
 
 
 def get_xclip_model():
@@ -207,7 +209,7 @@ def get_xclip_model():
     from vtsearch.media import get_embedder
 
     emb = get_embedder("xclip")
-    return emb._get_model_and_processor()
+    return cast(Any, emb)._get_model_and_processor()
 
 
 def get_e5_model():
@@ -215,4 +217,4 @@ def get_e5_model():
     from vtsearch.media import get_embedder
 
     emb = get_embedder("e5")
-    return emb._get_model()
+    return cast(Any, emb)._get_model()

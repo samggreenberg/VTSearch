@@ -95,6 +95,9 @@ def train_and_threshold(
     if safe:
         from vtsearch.embedding.matrix import get_embedding_matrix_for_snap
 
+        # `safe` is only True when `snap` is truthy (see assignment above),
+        # so the narrowing is real even though pyright can't track it.
+        assert snap is not None
         _all_ids, all_embs = get_embedding_matrix_for_snap(snap)
         X_all = torch.from_numpy(all_embs)
         with torch.no_grad():

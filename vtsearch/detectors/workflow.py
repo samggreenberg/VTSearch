@@ -7,10 +7,15 @@ cross-validated threshold.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from vtsearch.state.core import DetectorContext
+
 
 def apply_and_retrain(
     detector_id: str,
-    det_ctx: object,
+    det_ctx: "DetectorContext",
     new_entries: list[dict],
     detector_name: str,
 ) -> tuple[int, bool]:

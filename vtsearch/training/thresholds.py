@@ -42,7 +42,9 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
         gmm: GaussianMixture = GaussianMixture(n_components=2, random_state=42)
         gmm.fit(X)
 
-        # Get the means of the two components
+        # Get the means of the two components.  The stub types `means_`
+        # as `np.ndarray | None`; after `fit` it's always set.
+        assert gmm.means_ is not None
         means = np.ravel(gmm.means_)
 
         # Identify which component is "low" (Bad) and which is "high" (Good)

@@ -130,7 +130,7 @@ def load_demo_dataset(
                 # Old pickles (created before origin stamping) may have empty
                 # params — this ensures they are corrected on load.
                 _stamp_demo_origin(medias, dataset_name, converter_name)
-                on_progress("idle", f"Loaded {dataset_name} dataset")
+                on_progress("idle", f"Loaded {dataset_name} dataset", 0, 0)
                 return
 
     # Resolve the embedder
@@ -222,4 +222,4 @@ def load_demo_dataset(
     # Write a clipper sidecar so the demo list can check readiness.
     _loader._write_clipper_sidecar(pkl_file, clipper_name)
 
-    on_progress("idle", f"Loaded {dataset_name} dataset")
+    on_progress("idle", f"Loaded {dataset_name} dataset", 0, 0)
