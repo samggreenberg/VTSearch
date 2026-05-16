@@ -90,23 +90,37 @@ class TestUncaughtExceptionHandler:
     """Uncaught exceptions on /api/ become JSON 500 with our envelope."""
 
     def test_uncaught_exception_returns_json_500(self, client, monkeypatch):
-        # Inject a route that raises so we exercise the global handler.
+        # Hijack an existing view function so we exercise the global
+        # error handler against a real request. We can't add a new route
+        # to the app at test time — Flask freezes the URL map after the
+        # first request, which has already happened by the time the api/
+        # suite reaches this test.
         from app import app as flask_app
 
-        @flask_app.route("/api/_test_boom")
-        def _boom():
+        target_endpoint = None
+        for ep, view in flask_app.view_functions.items():
+            for rule in flask_app.url_map.iter_rules(endpoint=ep):
+                if rule.rule.startswith("/api/") and "GET" in (rule.methods or set()):
+                    target_endpoint = ep
+                    target_rule = rule.rule
+                    break
+            if target_endpoint:
+                break
+        assert target_endpoint is not None, "no /api/ GET route found"
+
+        def boom(*a, **kw):
             raise RuntimeError("boom!")
 
-        try:
-            resp = client.get("/api/_test_boom")
-            assert resp.status_code == 500
-            body = json.loads(resp.data)
-            assert body["error"] == "Internal server error"
-            assert "RuntimeError" in body.get("detail", "")
-            assert "request_id" in body
-        finally:
-            # Strip the test route so other tests don't see it.
-            rules = [r for r in flask_app.url_map.iter_rules() if r.endpoint == "_boom"]
-            for r in rules:
-                flask_app.url_map._rules.remove(r)
-            flask_app.view_functions.pop("_boom", None)
+        monkeypatch.setitem(flask_app.view_functions, target_endpoint, boom)
+
+        # Use a concrete path (the rule may have variables we'd need to
+        # substitute). For most /api/ routes the path itself is literal.
+        path = target_rule.split("<")[0]  # strip any url variables
+        if not path.startswith("/api/"):
+            path = "/api/" + path.lstrip("/")
+        resp = client.get(path)
+        assert resp.status_code == 500
+        body = json.loads(resp.data)
+        assert body["error"] == "Internal server error"
+        assert "RuntimeError" in body.get("detail", "")
+        assert "request_id" in body
