@@ -64,6 +64,10 @@ class TextBGEEmbedder(MediaEmbedder):
         return "bge"
 
     @property
+    def display_name(self) -> str:
+        return "BGE (text)"
+
+    @property
     def media_type_id(self) -> str:
         return "text"
 

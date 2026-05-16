@@ -439,6 +439,17 @@ class MediaEmbedder(ABC):
         """Unique identifier for this embedder, e.g. ``"clap"``, ``"siglip"``."""
 
     @property
+    def display_name(self) -> str:
+        """Human-readable label for this embedder, shown in pickers.
+
+        Defaults to :attr:`name` so legacy embedders keep working unchanged.
+        Subclasses should override to surface a friendlier label (e.g.
+        ``"SigLIP (general images)"``) while the raw :attr:`name` stays
+        available as a secondary line for power users.
+        """
+        return self.name
+
+    @property
     @abstractmethod
     def media_type_id(self) -> str:
         """The ``type_id`` of the media type this embedder works with."""
@@ -731,6 +742,7 @@ class MediaEmbedder(ABC):
         """Return a JSON-serialisable summary of this embedder."""
         return {
             "name": self.name,
+            "display_name": self.display_name,
             "media_type_id": self.media_type_id,
             "is_default": self.is_default,
             "supports_text": self.supports_text,

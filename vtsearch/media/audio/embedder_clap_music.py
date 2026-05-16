@@ -45,6 +45,10 @@ class AudioClapMusicEmbedder(MediaEmbedder):
         return "clap_music"
 
     @property
+    def display_name(self) -> str:
+        return "CLAP (music)"
+
+    @property
     def media_type_id(self) -> str:
         return "audio"
 

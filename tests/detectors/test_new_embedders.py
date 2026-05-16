@@ -54,6 +54,7 @@ class TestImageSiglipEmbedderProperties:
         d = emb.to_dict()
         assert d == {
             "name": "siglip",
+            "display_name": "SigLIP (general images)",
             "media_type_id": "image",
             "is_default": True,
             "supports_text": True,
@@ -149,6 +150,7 @@ class TestAudioClapMusicEmbedderProperties:
         d = emb.to_dict()
         assert d == {
             "name": "clap_music",
+            "display_name": "CLAP (music)",
             "media_type_id": "audio",
             "is_default": False,
             "supports_text": True,
@@ -231,6 +233,7 @@ class TestTextBGEEmbedderProperties:
         d = emb.to_dict()
         assert d == {
             "name": "bge",
+            "display_name": "BGE (text)",
             "media_type_id": "text",
             "is_default": False,
             "supports_text": True,
@@ -360,6 +363,7 @@ class TestVideoLanguageBindEmbedderProperties:
         d = emb.to_dict()
         assert d == {
             "name": "languagebind",
+            "display_name": "LanguageBind (video)",
             "media_type_id": "video",
             "is_default": False,
             "supports_text": True,

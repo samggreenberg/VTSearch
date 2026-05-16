@@ -49,6 +49,10 @@ class ImageSiglipEmbedder(MediaEmbedder):
         return "siglip"
 
     @property
+    def display_name(self) -> str:
+        return "SigLIP (general images)"
+
+    @property
     def media_type_id(self) -> str:
         return "image"
 
