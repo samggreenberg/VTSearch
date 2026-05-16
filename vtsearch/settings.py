@@ -34,7 +34,6 @@ from vtsearch.settings_models import (
     VALID_FOCUS_MODES,
     VALID_GRID_ICON_SIZES,
     VALID_PANEL_PX,
-    VALID_THEMES,
     VALID_VIEW_MODES,
     ServerSettings,
     UserSettings,
