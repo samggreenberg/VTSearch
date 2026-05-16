@@ -352,8 +352,35 @@ request/response gates getting in the way during their migration.
       ``tests/integration/test_multi_media_coverage.py``,
       ``tests/datasets/test_media_sources.py``, and
       ``tests/cli/test_load_sort_window.py`` updated to match.
+- [x] `datasets/listings.py`, `datasets/status.py`, `datasets/ui.py`
+      migrated to flask-smorest (media-types / embedders / clippers /
+      converters / importers listings; dataset status + cancel; demo-list
+      + demo-categories + browse-media-files (+select) + dashboard
+      info/rename/disk-usage). The plugin ``to_dict()`` payloads are
+      declared as ``fields.Dict()`` rather than nested schemas — the
+      inner shapes are plugin-dependent and already round-trip cleanly
+      via ``to_dict()``; redeclaring every field would only duplicate
+      the source of truth. Schema-level validation failures (missing
+      required ``source`` / ``path`` on the select endpoint) surface as
+      422 with the standard ``errors`` envelope; handler-level rejects
+      (unknown demo dataset, unknown source, path traversal, unknown
+      cancel task id, no dataset loaded, whitespace-only rename) keep
+      their HTTP codes (400 / 404) with the standard ``message``
+      envelope. Tests in ``tests/api/test_dashboard.py`` and
+      ``tests/datasets/test_datasets.py`` updated to read ``message``
+      instead of ``error``. The heavier dataset modules
+      (``load.py``, ``staging.py``, ``registry.py``) stay on plain Flask
+      blueprints for now — they involve multipart uploads, binary
+      streaming, dataset-loading orchestration, and plugin-field
+      shapes that need either ``alt_response``-only treatment (binary)
+      or the *Open questions / Plugin field endpoints* decision
+      (importer staging / import).
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
+- [ ] Remaining dataset blueprints: ``datasets/load.py``,
+      ``datasets/staging.py``, ``datasets/registry.py`` (multipart
+      upload + plugin-field shapes — needs the *Open questions / Plugin
+      field endpoints* decision before staging/load can fully migrate).
 - [ ] Remaining blueprints (see Order above)
 - [ ] Delete the pre-existing permissive `/openapi.json` +
       `--openapi-schema` once flask-smorest covers every blueprint
