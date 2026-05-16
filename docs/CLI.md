@@ -124,8 +124,22 @@ python app.py --list-plugins --plugin-family importers --format names
                                                       # one bare name per line — completion-friendly
 ```
 
-Use `--format names --plugin-family <family>` from a shell-completion
-script to suggest valid values for `--importer`, `--exporter`, etc.
+Per-family shortcuts are available for every plugin family — they're
+equivalent to `--list-plugins --plugin-family <family>` and accept the
+same `--format` flag:
+
+```bash
+python app.py --list-importers                        # dataset importers
+python app.py --list-exporters --format names         # results exporters, bare names
+python app.py --list-embedders --format json          # embedders as JSON
+# Also: --list-converters, --list-clippers, --list-media-types,
+# --list-media-sources, --list-label-importers, --list-labelset-sources,
+# --list-settings-importers, --list-settings-exporters, --list-settings-sources.
+```
+
+Use `--format names --plugin-family <family>` (or any `--list-<family>
+--format names` shortcut) from a shell-completion script to suggest
+valid values for `--importer`, `--exporter`, etc.
 
 `python app.py --openapi-schema` prints an OpenAPI 3.0 document for the
 HTTP API to stdout and exits — same content as `GET /openapi.json` on
