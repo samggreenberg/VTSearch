@@ -139,6 +139,26 @@ class MediaClipper(ABC):
         """
 
     # ------------------------------------------------------------------
+    # Dataset-level resolution
+    # ------------------------------------------------------------------
+
+    def resolve_for_durations(self, durations: list[float]) -> "MediaClipper":
+        """Return a concrete clipper for the dataset given its media durations.
+
+        Called by the load pipeline once per dataset, before any
+        :meth:`clip` calls.  Most clippers ignore *durations* and return
+        ``self``.  Auto-selecting clippers (e.g. ``SoundAutoClipper``)
+        override this to pick a different concrete clipper based on the
+        dataset's typical duration — for example, pass-through for short
+        clips, tiling for longer ones.
+
+        The resolved clipper's :attr:`name` and parameter values are what
+        get recorded in each clip's origin, so cross-dataset replay is
+        deterministic regardless of the original auto policy.
+        """
+        return self
+
+    # ------------------------------------------------------------------
     # Serialisation
     # ------------------------------------------------------------------
 

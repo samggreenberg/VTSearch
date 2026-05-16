@@ -52,6 +52,8 @@ Demo dataset picker re-asks for embedder every time. Remember the last embedder 
 ### 1.10 Clipper default from media type + duration ★ M
 Most users don't know what a clipper is. For audio, default to `null_clipper` for clips < 30s and `overlap_chunks` for longer. For video, default to `chunks` with frame-aware step size. The "Clipper" button can hide entirely until the user opens `Advanced`.
 
+→ Promoted to [smart-clipper-defaults.md](smart-clipper-defaults.md). Phase 1 (per-dataset "Auto (recommended)" picker entry) shipped; Phase 2 (per-media routing via MediaClipper options) deferred.
+
 ### 1.11 Detector name from query/seed ★ XS
 The new-detector modal asks for a `name` and a text/media seed. If the user typed a seed query first, pre-fill `name` with it (sanitized). They almost always type the same thing twice today.
 
