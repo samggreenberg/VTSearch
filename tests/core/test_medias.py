@@ -376,12 +376,15 @@ class TestBatchMedias:
         assert resp.get_json() == []
 
     def test_missing_ids_field(self, client):
+        # Marshmallow-validated route: missing required ``ids`` field
+        # surfaces as 422 with the flask-smorest error envelope.
         resp = client.post("/api/medias/batch", json={"foo": "bar"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_non_list_ids(self, client):
+        # Type-coercion failure on ``ids`` → 422 with the ``errors`` envelope.
         resp = client.post("/api/medias/batch", json={"ids": "not a list"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 class TestMediaThumbnailBytes:
@@ -457,10 +460,13 @@ class TestMediaAudio:
             assert wf.getsampwidth() == 2
 
     def test_returns_404_for_invalid_id(self, client):
+        # The media blueprint now uses flask-smorest's standard error
+        # envelope (``message`` for the handler-supplied text, ``status``
+        # for the HTTP reason phrase).
         resp = client.get("/api/medias/9999/audio")
         assert resp.status_code == 404
         data = resp.get_json()
-        assert data["error"] == "not found"
+        assert data["message"] == "not found"
 
     def test_returns_404_for_zero_id(self, client):
         resp = client.get("/api/medias/0/audio")

@@ -81,8 +81,7 @@ def _get_server_media_dir() -> Path:
 @media_server_bp.alt_response(
     400,
     description=(
-        "Missing or malformed multipart body (no file / no filename / "
-        "invalid crop_params for the given media type)."
+        "Missing or malformed multipart body (no file / no filename / invalid crop_params for the given media type)."
     ),
 )
 def upload_server_media_file():

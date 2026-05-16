@@ -129,6 +129,10 @@ class MediaVoteRequestSchema(Schema):
     x1, y1]`` in ``[0, 1]``). Per the patch-embedder v2 design, only
     good votes may carry a region; the handler rejects bad votes with a
     region_box.
+
+    Unknown fields are silently dropped so the frontend can attach
+    advisory keys (e.g. ``confidence``, ``note``) without breaking the
+    schema check.
     """
 
     vote = fields.String(
@@ -146,6 +150,9 @@ class MediaVoteRequestSchema(Schema):
             ),
         },
     )
+
+    class Meta:
+        unknown = "exclude"
 
 
 class MediaVoteResponseSchema(Schema):
