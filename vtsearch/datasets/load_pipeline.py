@@ -265,6 +265,13 @@ def _apply_clipper(
     if clipper_params:
         clipper = clipper.with_params(clipper_params)
 
+    # Resolve auto-selecting clippers to a concrete clipper for the
+    # whole dataset based on its typical media duration.  Non-auto
+    # clippers return self, so this is a no-op for them.
+    durations = [float(m.get("duration", 0) or 0) for m in clips_dict.values()]
+    clipper = clipper.resolve_for_durations(durations)
+    clipper_name = clipper.name
+
     # Extract the effective clipper parameter values so they can be
     # stored in each clip's origin.  This uses to_dict() which concrete
     # clippers override to add their current values (duration, threshold,
