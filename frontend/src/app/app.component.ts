@@ -3,7 +3,7 @@ import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
-import { ErrorBannerComponent } from './components/error-banner/error-banner.component';
+import { ToastContainerComponent } from './components/toast-container/toast-container.component';
 import { AchievementUnlockHostComponent } from './components/achievement-unlock-host/achievement-unlock-host.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
 import { KeyboardHelpModalComponent } from './components/modals/keyboard-help-modal/keyboard-help-modal.component';
@@ -15,9 +15,10 @@ import { TopBarStateService } from './services/top-bar-state.service';
 import { AuthService } from './services/auth.service';
 import { AchievementsService } from './services/achievements.service';
 import { ThemeService } from './services/theme.service';
+import { ToastService } from './services/toast.service';
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterOutlet, DialogHostComponent, ErrorBannerComponent, AchievementUnlockHostComponent, SettingsModalComponent, KeyboardHelpModalComponent, LoginComponent],
+  imports: [CommonModule, RouterOutlet, DialogHostComponent, ToastContainerComponent, AchievementUnlockHostComponent, SettingsModalComponent, KeyboardHelpModalComponent, LoginComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
@@ -41,6 +42,7 @@ export class AppComponent {
     public auth: AuthService,
     private achievements: AchievementsService,
     private themeService: ThemeService,
+    _toast: ToastService,
   ) {
     this.auth.checkStatus();
     this.achievements.refresh();

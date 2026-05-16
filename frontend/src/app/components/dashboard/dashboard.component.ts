@@ -350,10 +350,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.datasetState.progressMessage;
   }
 
-  get errorMessage(): string {
-    return this.datasetState.errorMessage;
-  }
-
   /** Map dataset_id → LoadingTask for tasks that match an existing dataset row. */
   get inlineTaskMap(): Map<string, LoadingTask> {
     const map = new Map<string, LoadingTask>();
@@ -374,10 +370,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   getInlineTask(datasetId: string): LoadingTask | undefined {
     return this.inlineTaskMap.get(datasetId);
-  }
-
-  dismissError(): void {
-    this.datasetState.setErrorMessage('');
   }
 
   refresh(): void {
@@ -997,8 +989,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Progress polling ---
 
   startProgressPolling(onComplete?: () => void): void {
-    this.datasetState.setErrorMessage('');
-
     // If polling is already active, don't restart — the existing loop
     // already covers all tasks.  This avoids clearing completedTaskIds
     // and losing track of tasks that just finished.
@@ -1012,13 +1002,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.polling$), takeUntil(this.destroy$))
       .subscribe({
         next: (tasks: LoadingTask[]) => {
-          // Separate active from finished
+          // Separate active from finished. Failed tasks are surfaced
+          // globally by SseErrorRouterService → ToastService; we just
+          // keep them in the inline list so the row still shows the
+          // dashed loading bar with the error text.
           const active = tasks.filter((t) => t.status !== 'idle');
           const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
-          const cancelled = errored.filter((t) => t.error === 'Cancelled');
           const failed = errored.filter((t) => t.error !== 'Cancelled');
 
-          // Show both active tasks and failed tasks (so users see the error)
           this.loadingTasks = [...active, ...failed];
           this.datasetState.setLoadingTasks(active);
 
@@ -1033,11 +1024,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
           if (justFinished.length > 0) {
             this.datasetState.refresh();
             this.achievements.refresh();
-          }
-
-          // Also set the top-level error banner for failed tasks
-          for (const t of failed) {
-            this.datasetState.setErrorMessage(t.error!);
           }
 
           this.datasetState.setLoading(active.length > 0);
@@ -1085,10 +1071,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
           if (justFinished.length > 0) {
             this.datasetState.refresh();
             this.achievements.refresh();
-          }
-
-          for (const t of failed) {
-            this.datasetState.setErrorMessage(t.error!);
           }
 
           if (active.length === 0) {

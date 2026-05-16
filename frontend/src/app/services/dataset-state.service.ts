@@ -12,7 +12,6 @@ export class DatasetStateService implements OnDestroy {
   private readonly loadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
   private readonly loadingSubject = new BehaviorSubject<boolean>(false);
   private readonly progressMessageSubject = new BehaviorSubject<string>('');
-  private readonly errorMessageSubject = new BehaviorSubject<string>('');
   private readonly destroy$ = new Subject<void>();
   /** Emits whenever a refresh is requested; switchMap ensures only the latest response is used. */
   private readonly refreshTrigger$ = new Subject<void>();
@@ -22,7 +21,6 @@ export class DatasetStateService implements OnDestroy {
   readonly loadingTasks$ = this.loadingTasksSubject.asObservable();
   readonly loading$ = this.loadingSubject.asObservable();
   readonly progressMessage$ = this.progressMessageSubject.asObservable();
-  readonly errorMessage$ = this.errorMessageSubject.asObservable();
 
   constructor(
     private datasetsApi: DatasetsApiService,
@@ -78,20 +76,12 @@ export class DatasetStateService implements OnDestroy {
     return this.progressMessageSubject.value;
   }
 
-  get errorMessage(): string {
-    return this.errorMessageSubject.value;
-  }
-
   setLoading(loading: boolean): void {
     this.loadingSubject.next(loading);
   }
 
   setProgressMessage(message: string): void {
     this.progressMessageSubject.next(message);
-  }
-
-  setErrorMessage(message: string): void {
-    this.errorMessageSubject.next(message);
   }
 
   refresh(): void {
@@ -104,6 +94,5 @@ export class DatasetStateService implements OnDestroy {
     this.loadingTasksSubject.next([]);
     this.loadingSubject.next(false);
     this.progressMessageSubject.next('');
-    this.errorMessageSubject.next('');
   }
 }

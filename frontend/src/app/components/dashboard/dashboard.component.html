@@ -4,12 +4,6 @@
   <div class="dashboard-section">
     <div class="dashboard-section-header">
       <span class="dashboard-section-title" title="Imported datasets available for labeling and searching"><vt-icon type="cubes" [size]="18"></vt-icon> Datasets</span>
-      @if (errorMessage) {
-        <div class="dashboard-error">
-          <span class="error-msg">{{ errorMessage }}</span>
-          <button class="btn btn--cancel btn--sm" (click)="dismissError()" title="Dismiss error">Dismiss</button>
-        </div>
-      }
       <div class="dashboard-section-actions">
         <button class="btn btn--primary btn--sm"
           [disabled]="isLoading"

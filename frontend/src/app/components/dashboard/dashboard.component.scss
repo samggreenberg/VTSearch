@@ -165,34 +165,6 @@
   flex: 1;
 }
 
-.dashboard-error {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--error-bg);
-  border: 1px solid var(--error-border);
-  border-radius: 6px;
-  padding: 6px 12px;
-
-  .error-msg {
-    flex: 1;
-    font-size: 0.8rem;
-    color: var(--error-text);
-  }
-
-  .btn--cancel {
-    background: transparent;
-    color: var(--error-text);
-    border: 1px solid var(--error-border);
-
-    &:hover {
-      background: var(--error-border);
-      color: var(--btn-filled-text);
-    }
-  }
-}
-
 .dashboard-section-actions {
   margin-left: auto;
 }
