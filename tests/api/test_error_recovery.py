@@ -28,12 +28,16 @@ class TestInvalidRequestBodies:
     """Routes should handle malformed or missing JSON gracefully."""
 
     def test_sort_with_no_body(self, client):
+        # Marshmallow-validated route: empty body fails the required
+        # ``text`` check → 422 with the standard ``errors`` envelope.
         resp = client.post("/api/sort", content_type="application/json")
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_sort_with_non_json_string(self, client):
+        # Marshmallow-validated route: a non-JSON body fails the required
+        # ``text`` check → 422 with the standard ``errors`` envelope.
         resp = client.post("/api/sort", data="not json", content_type="text/plain")
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_vote_with_empty_json(self, client):
         # Marshmallow-validated route: missing required ``vote`` surfaces
@@ -90,12 +94,14 @@ class TestInvalidRequestBodies:
         assert resp.status_code == 422
 
     def test_textsort_suggestion_with_null_body(self, client):
+        # Marshmallow-validated route: ``null`` is not a valid object
+        # for the TextsortSuggestionRequest schema → 422.
         resp = client.post(
             "/api/textsort-suggestions",
             data="null",
             content_type="application/json",
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_register_model_with_null_body(self, client):
         resp = client.post(
@@ -111,8 +117,9 @@ class TestMissingRequiredFields:
     """Routes should reject requests missing required fields."""
 
     def test_sort_missing_text(self, client):
+        # Required-field validation runs in the SortRequest schema → 422.
         resp = client.post("/api/sort", json={"query": "hello"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_vote_missing_vote_field(self, client):
         resp = client.post("/api/medias/1/vote", json={"label": "good"})
@@ -207,12 +214,17 @@ class TestTypeMismatches:
         assert resp.status_code == 422
 
     def test_safe_thresholds_string_value(self, client):
+        # Marshmallow-validated route: string-form booleans (``"yes"`` /
+        # ``"no"`` / ``"true"`` / ``"1"``) are rejected by the
+        # truthy/falsy-restricted Boolean field → 422.
         resp = client.post("/api/safe-thresholds", json={"safe_thresholds": "yes"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_safe_thresholds_number_value(self, client):
+        # Marshmallow-validated route: numeric ``1`` / ``0`` are rejected
+        # by the truthy/falsy-restricted Boolean field → 422.
         resp = client.post("/api/safe-thresholds", json={"safe_thresholds": 1})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_settings_volume_string(self, client):
         resp = client.put("/api/settings", json={"volume": "loud"})
@@ -365,14 +377,18 @@ class TestEmptyState:
         try:
             resp = client.post("/api/sort", json={"text": "test"})
             assert resp.status_code == 400
-            assert "No medias" in resp.get_json()["error"]
+            # Migrated to flask-smorest: handler-level rejects surface
+            # under ``message``, not the legacy ``error`` key.
+            assert "No medias" in resp.get_json()["message"]
         finally:
             medias.update(saved)
 
     def test_learned_sort_no_votes(self, client):
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
-        assert "need at least" in resp.get_json()["error"]
+        # Migrated to flask-smorest: handler-level rejects surface under
+        # ``message``, not the legacy ``error`` key.
+        assert "need at least" in resp.get_json()["message"]
 
     def test_learned_sort_only_good_votes(self, client):
         good_votes[1] = None
@@ -637,7 +653,10 @@ class TestPathTraversalPrevention:
         )
         # All paths rejected → too few valid files → 400
         assert resp.status_code == 400
-        assert "2 valid" in resp.get_json()["error"] or "loaded 0" in resp.get_json()["error"]
+        # Migrated to flask-smorest: handler-level rejects surface under
+        # ``message``, not the legacy ``error`` key.
+        message = resp.get_json()["message"]
+        assert "2 valid" in message or "loaded 0" in message
 
     def test_label_file_sort_rejects_relative_traversal(self, client):
         """Relative paths that traverse out of DATA_DIR must be skipped."""

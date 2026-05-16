@@ -173,13 +173,19 @@ def sort_clips(body: dict):
             _active_emb = None
         if _active_emb is not None and not _active_emb.supports_text:
             update_sort_progress("idle")
+            # flask-smorest's error handler only flows ``message`` and
+            # ``errors`` from ``abort()`` kwargs into the response body,
+            # so the original ``supports_text=False`` flag would be
+            # silently dropped. The frontend already reads the same flag
+            # from each embedder's ``EmbedderInfo`` (see
+            # ``left-panel.component.ts: updateTextSortAvailable``), so
+            # we don't need to ship it on the error response too.
             abort(
                 400,
                 message=(
                     f"Embedder '{_active_emb.name}' does not support text queries. "
                     "Use learned sort or load a saved sort instead."
                 ),
-                supports_text=False,
             )
 
     try:
@@ -460,7 +466,13 @@ def learned_sort_result(query: dict):
 
     job = learned_sort_jobs.get(job_id)
     if job is None:
-        abort(404, message="Job not found", status="missing")
+        # 404s are intercepted by the app-level ``NotFound`` errorhandler
+        # in ``app.py`` and rendered with the legacy
+        # ``{"error": "Not Found", "request_id": "..."}`` envelope — the
+        # ``message`` kwarg and any extras (e.g. ``status="missing"``)
+        # are dropped. Frontends rely on the HTTP status code for the
+        # missing-job branch rather than a body field.
+        abort(404, message="Job not found")
 
     if job.status in ("running", "pending"):
         return {

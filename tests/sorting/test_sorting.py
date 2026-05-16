@@ -659,9 +659,13 @@ class TestLearnedSortAsync:
         learned_sort_jobs.reset_for_tests()
 
     def test_polling_unknown_job_returns_404(self, client):
+        # 404s are intercepted by the app-level ``NotFound`` errorhandler
+        # in ``app.py``, which renders the legacy
+        # ``{"error": "Not Found", "request_id": ...}`` envelope.
+        # Frontends rely on the HTTP status code for the missing-job
+        # branch rather than a body field.
         resp = client.get("/api/learned-sort/result?job_id=does-not-exist")
         assert resp.status_code == 404
-        assert resp.get_json()["status"] == "missing"
 
     def test_polling_without_job_id_returns_422(self, client):
         # Schema-level validation: the marshmallow
