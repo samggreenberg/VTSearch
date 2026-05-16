@@ -16,8 +16,17 @@ package. Rolled out in stages so each PR stays reviewable.
   `embedding/`, `training/` to the gated scope (38 real errors fixed).
 - **Stage 4:** ✅ shipped. Adds `routes/`, `converters/` to the gated
   scope (40 real errors fixed).
-- **Stage 5:** ⏳ next — `media/`.
-- **Stage 6:** 📋 not started.
+- **Stage 5:** ✅ shipped. Adds `media/` to the gated scope (97 real
+  errors fixed). Also clears the stale `vtsearch/settings_factory.py`
+  entry from `include` (the module was merged into
+  `vtsearch/settings_models.py` during an unrelated reorg).
+- **Stage 6:** ⏳ next — the whole `vtsearch/` package. Post-Stage-5
+  advisory is **0 errors**, so Stage 6 is the cleanup PR: switch
+  `include` to a single `"vtsearch"` entry (or add the remaining
+  top-level files: `__init__.py`, `achievements.py`, `cli_pipeline.py`,
+  `cli_progress.py`, `logging_config.py`, `openapi.py`,
+  `settings_models.py`, and `vtsearch/schemas/`) and delete the
+  advisory job from `.github/workflows/pyright.yml`.
 - **Stage 7 (`tests/`):** 📋 optional, deferred.
 
 ## Goal
@@ -113,6 +122,11 @@ remaining work for Stage 5.
 |---|---:|
 | `media/` | 97 |
 
+### Post-Stage-5 advisory count
+
+After Stage 5 shipped, `pyright vtsearch/` with deps installed reports
+**0 errors**. The advisory job is now a no-op — Stage 6 deletes it.
+
 ## Stages
 
 Each stage is a separate PR. The "errors to fix" column counts real
@@ -125,8 +139,8 @@ Each stage is a separate PR. The "errors to fix" column counts real
 | 2 | `settings.py`, `settings_factory.py`, `state/`, `security/` | 31 | ✅ shipped |
 | 3 | `datasets/`, `detectors/`, `eval/`, `embedding/`, `training/` | 38 | ✅ shipped |
 | 4 | `routes/`, `converters/` | 40 | ✅ shipped |
-| **5** | `media/` (heaviest — may need `.pyi` stubs or per-file `# pyright: ignore`) | ~97 | ⏳ next |
-| 6 | Whole `vtsearch/` (incl. `achievements.py`, `logging_config.py`, `openapi.py`, `schemas/`) — advisory job removed | 0 | 📋 |
+| 5 | `media/` (heaviest — turned out to be the HF-stub gap pattern, not stubs) | 97 | ✅ shipped |
+| **6** | Whole `vtsearch/` (incl. `achievements.py`, `logging_config.py`, `openapi.py`, `schemas/`) — advisory job removed | 0 | ⏳ next |
 | 7 *(optional)* | `tests/` | TBD | 📋 |
 
 **Stage 0 + Stage 1 landed together in PR #1349.** Subsequent stages are
@@ -311,6 +325,106 @@ Patterns that recurred enough to document:
    plugin actually returned `None`) or the explicit assert. Stage 4
    used `or {}` for the dict-unpack site since the value is genuinely
    optional at the plugin contract level.
+
+### Stage 5 fixes (shipped)
+
+`media/` is the package with the heaviest interaction with the
+HuggingFace `transformers` stubs (CLAP, CLIP, SigLIP, SigLIP 2, X-CLIP,
+DINOv2, DINOv3, EUPE — eight backbones, each with model + processor
+load + forward calls). All 97 errors collapsed onto these patterns:
+
+1. **`Optional[<ConcreteHFClass>]` for `self._model` / `self._processor`
+   is a footgun.** The combination of `load_pretrained_local_first`
+   returning `Any` and HF stubs' `from_pretrained` returning
+   `Optional[T]` means pyright keeps the attribute's static type as
+   `Optional[T]` even right after assignment. Then `self._model.to(...)`
+   fails with *"to" is not a known attribute of "None"*. Worse, the HF
+   processor stubs' `__call__` doesn't list the kwargs we actually pass
+   (`sampling_rate=`, `return_tensors=`, `padding=`, `max_length=`,
+   `truncation=`), so even the call sites fail with
+   `reportCallIssue: No parameter named "X"`. Both problems vanish if
+   you change the annotation to `Any`. Stage 5 made
+   `self._model: Any = None` / `self._processor: Any = None` the
+   standard pattern across every embedder, with a one-line comment
+   pointing at the stub gap. The runtime `if self._model is None`
+   guards already in place are the safety net.
+2. **String forward references that aren't imported at module scope
+   fail under pyright.** `vtsearch/media/embedder.py` declared
+   `def patch_forward(self, media: dict) -> Optional["PatchEmbedOutput"]`
+   five times, but `PatchEmbedOutput` was only imported inside the
+   function body. `from __future__ import annotations` made this work
+   at runtime but pyright still resolves the forward reference. Fix:
+   add a `TYPE_CHECKING`-guarded `from vtsearch.media.patch_embed
+   import PatchEmbedOutput` at the top of the module. (Same shape as
+   Stage 1 fix #1, recurring in a different module.)
+3. **ABC attributes that subclasses set dynamically must be declared
+   on the ABC.** `vtsearch/media/__init__.py` does
+   `mt._on_progress = callback` for every `MediaType` in the registry,
+   but `MediaType` didn't declare `_on_progress`. Fix: add
+   `_on_progress: ProgressCallback = _noop_progress` as a class-level
+   default on `MediaType` (mirroring what `MediaEmbedder` already does
+   in its `__init__`). This also lets media-type subclasses drop their
+   ad-hoc `self._on_progress = _noop_progress` lines in `__init__`,
+   though Stage 5 left the existing inits untouched.
+4. **`torch.hub.load` returns `object`, which propagates through every
+   attribute access.** EUPE loads its backbone via
+   `torch.hub.load("facebookresearch/EUPE", ...)`. The stub return type
+   is `object`, so `self._model.to("cpu")`, `.parameters()`,
+   `.forward_features(...)` all fail. Same `self._model: Any = None`
+   fix applies — covered by pattern #1. Also `torch.hub.load(...,
+   trust_repo=True, ...)` errors because the stub claims `trust_repo`
+   must be `str`; runtime accepts `bool` per the PyTorch docs.
+   Stage 5 used `# pyright: ignore[reportArgumentType]` with a one-line
+   comment rather than touching the stub.
+5. **`transformers.modeling_utils.set_module_tensor_to_device` isn't
+   in the stubs.** It exists at runtime (re-exported from `accelerate`
+   under HF's lazy-import scheme) but pyright errors on the attribute
+   read. The surrounding code already catches `AttributeError`, so
+   `# pyright: ignore[reportAttributeAccessIssue]` is the right escape
+   hatch — adding a runtime check is redundant.
+6. **`SentenceTransformer.encode()` returns `Tensor | ndarray |
+   list[Tensor]` per stubs.** Even when you pass
+   `convert_to_numpy=True` (the default), the overload picks the union.
+   The text embedders' `_embed_media_impl` / `embed_text_passage` /
+   `embed_text` return types are `Optional[np.ndarray]`, so the bare
+   `return self._model.encode(...)` errors with
+   `reportReturnType: "Tensor" is not assignable to "ndarray"`. Fix:
+   wrap the call with `np.asarray(...)` — cheap at runtime (no-op for
+   already-ndarray values, conversion for Tensor).
+7. **Soft-dependency imports for `whisper`, `mediapipe`, `paddleocr`
+   still trip `reportMissingImports`** — same shape as Stage 4 fix #6
+   (`paddleocr`). These are optional plugin deps not pinned in
+   `requirements/base.txt`, so the per-import
+   `# pyright: ignore[reportMissingImports]` is the right answer.
+8. **`from ultralytics import YOLO` is the documented public API but
+   the stub considers it private.** The stub diagnostic suggests
+   "Import from `.yolo` instead", but the runtime module re-exports
+   `YOLO` at the package root and that's what the upstream README
+   tells users to write. `# pyright:
+   ignore[reportPrivateImportUsage]` is the right answer here too —
+   moving to the private path would just create maintenance debt the
+   next time ultralytics rearranges internals.
+9. **Annotation drift in `_frame_at_time`.** The helper's signature
+   was `def _frame_at_time(cap, time_seconds: float) -> "tuple |
+   None":`, but at runtime it returns the raw numpy frame from
+   `cap.read()`. Two callers feed the result straight into
+   `cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)`, which then fails because
+   pyright thinks `frame` is a tuple. Fix: correct the annotation to
+   `"np.ndarray | None"` with a `TYPE_CHECKING` import for numpy.
+10. **`cast(Any, embedder).embed_pil_image(...)` /
+    `cast(Any, embedder).embed_text_passage(...)`.** Same shape as
+    Stage 3 fix #1: image and text demo loaders know they got an
+    embedder of the right kind but the method only exists on the
+    subclass. Two extra call sites (`_demo_sources.py` x2,
+    `media_type.py` x1) needed the cast.
+11. **Stale `include` entry for a renamed module.** Cleaning out the
+    `vtsearch/settings_factory.py` line from `pyrightconfig.json`
+    (the module was merged into `settings_models.py` between Stages 2
+    and 5). Pyright doesn't fail on missing `include` paths — it
+    silently prints *"File or directory ... does not exist."* and
+    moves on — so the stale entry could have sat there forever.
+    Worth a `grep` of `include` against the on-disk layout when bumping
+    the gated scope.
 
 ### Operational notes from Stage 1
 

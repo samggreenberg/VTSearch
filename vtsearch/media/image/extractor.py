@@ -72,7 +72,7 @@ class ImageClassExtractor(Extractor):
     def load_model(self) -> None:
         if self._model is not None:
             return
-        from ultralytics import YOLO
+        from ultralytics import YOLO  # pyright: ignore[reportPrivateImportUsage]
 
         self._model = YOLO(self._model_id)
 

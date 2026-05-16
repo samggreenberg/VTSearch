@@ -9,11 +9,14 @@ import os
 import threading
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import numpy as np
 
 from vtsearch.media.base import ProgressCallback, _noop_progress
+
+if TYPE_CHECKING:
+    from vtsearch.media.patch_embed import PatchEmbedOutput
 
 __all__ = [
     "DEFAULT_EMBED_BATCH_SIZE",
@@ -339,7 +342,10 @@ def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "
     try:
         import transformers.modeling_utils as _tm  # noqa: PLC0415
 
-        _orig_smttd = _tm.set_module_tensor_to_device
+        # pyright: ignore[reportAttributeAccessIssue] — set_module_tensor_to_device
+        # is re-exported from accelerate at runtime but isn't in the transformers
+        # stubs. The AttributeError catch below handles missing-attribute drift.
+        _orig_smttd = _tm.set_module_tensor_to_device  # pyright: ignore[reportAttributeAccessIssue]
 
         def _tracked_smttd(*a: Any, **kw: Any) -> Any:
             r = _orig_smttd(*a, **kw)
@@ -347,7 +353,7 @@ def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "
             _report()
             return r
 
-        _tm.set_module_tensor_to_device = _tracked_smttd
+        _tm.set_module_tensor_to_device = _tracked_smttd  # pyright: ignore[reportAttributeAccessIssue]
         _patches.append((_tm, "set_module_tensor_to_device", _orig_smttd))
     except (ImportError, AttributeError):
         pass

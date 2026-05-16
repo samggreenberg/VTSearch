@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
@@ -22,7 +22,6 @@ from vtsearch.media.image._image_bulk import bulk_embed_image_files
 
 if TYPE_CHECKING:
     from PIL import Image
-    from transformers import SiglipModel, SiglipProcessor
 
 
 class ImageSiglipEmbedder(MediaEmbedder):
@@ -36,8 +35,10 @@ class ImageSiglipEmbedder(MediaEmbedder):
 
     def __init__(self) -> None:
         super().__init__()
-        self._model: Optional[SiglipModel] = None
-        self._processor: Optional[SiglipProcessor] = None
+        # Typed ``Any``: transformers stubs miss several ``SiglipProcessor.__call__``
+        # kwargs we pass at runtime; runtime ``None`` checks guard the calls.
+        self._model: Any = None
+        self._processor: Any = None
 
     # ------------------------------------------------------------------
     # Identity

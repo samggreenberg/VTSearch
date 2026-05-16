@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -17,9 +17,6 @@ from vtsearch.media.embedder import (
     timed_progress,
 )
 
-if TYPE_CHECKING:
-    from transformers import ClapModel, ClapProcessor
-
 
 class AudioClapEmbedder(MediaEmbedder):
     """Embeds audio files using the CLAP model (laion/clap-htsat-unfused).
@@ -30,8 +27,10 @@ class AudioClapEmbedder(MediaEmbedder):
 
     def __init__(self) -> None:
         super().__init__()
-        self._model: Optional[ClapModel] = None
-        self._processor: Optional[ClapProcessor] = None
+        # Typed ``Any``: transformers stubs miss several ``ClapProcessor.__call__``
+        # kwargs we pass at runtime; runtime ``None`` checks guard the calls.
+        self._model: Any = None
+        self._processor: Any = None
 
     # ------------------------------------------------------------------
     # Identity
@@ -153,7 +152,11 @@ class AudioClapEmbedder(MediaEmbedder):
             import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
-            source = io.BytesIO(bytes(audio_bytes)) if audio_bytes is not None else file_path
+            if audio_bytes is not None:
+                source: io.BytesIO | Path = io.BytesIO(bytes(audio_bytes))
+            else:
+                assert file_path is not None  # narrowed by the path_str check above
+                source = file_path
             audio_data, _sr = librosa.load(source, sr=CLAP_SAMPLE_RATE, mono=True)
             inputs = self._processor(
                 audio=audio_data,

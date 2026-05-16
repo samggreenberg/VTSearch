@@ -67,7 +67,7 @@ class FaceLocalizer(Localizer):
     def load_model(self) -> None:
         if self._detector is not None:
             return
-        import mediapipe as mp  # noqa: PLC0415
+        import mediapipe as mp  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
         self._detector = mp.solutions.face_detection.FaceDetection(
             min_detection_confidence=self._threshold,

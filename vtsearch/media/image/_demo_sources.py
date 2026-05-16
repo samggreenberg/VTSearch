@@ -13,6 +13,7 @@ splitting them out keeps ``media_type.py`` focused on the
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 from vtsearch.config import DATA_DIR
 from vtsearch.media.base import DemoDataset, demo_slice
@@ -617,7 +618,7 @@ def load_demo_source(
 
         for i, (page_name, pil_image, category) in enumerate(selected_pages):
             on_progress("embedding", f"Embedding {page_name}", i + 1, total)
-            embedding = embedder.embed_pil_image(pil_image)
+            embedding = cast(Any, embedder).embed_pil_image(pil_image)
             if embedding is None:
                 continue
             img_buffer = _io.BytesIO()
@@ -688,7 +689,7 @@ def load_demo_source(
             img_buffer = _io.BytesIO()
             img.save(img_buffer, format="PNG")
             image_bytes = img_buffer.getvalue()
-            embedding = embedder.embed_pil_image(img)
+            embedding = cast(Any, embedder).embed_pil_image(img)
             if embedding is None:
                 continue
             fname = f"{category}/{category}_{clip_id}.png"
