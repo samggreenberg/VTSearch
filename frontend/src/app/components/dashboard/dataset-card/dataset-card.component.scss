@@ -222,10 +222,17 @@ td.actions-col {
   }
 }
 
+// Leftmost select column matches the dashboard's header select-col width so
+// the checkbox in each row lines up under the master checkbox.
+td.select-col {
+  width: 36px;
+  padding-left: 8px;
+  padding-right: 0;
+  text-align: center;
+  overflow: visible;
+}
+
 .select-checkbox {
-  // Sit ~one action-button-width away from the row's other action icons
-  // (an icon button is ~22px: 14px svg + 4px padding both sides).
-  margin-left: 1.375rem;
   background: none;
   border: none;
   color: var(--text-primary);

@@ -55,11 +55,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   selectedDatasetIds: Set<string> = new Set();
   selectedDetectorIds: Set<string> = new Set();
 
-  // Animation flags for the right-side bulk-action column.
-  // Spin flags fire a one-shot 90° rotation on the tristate select toggle;
-  // the animationend handler clears them so the icon snaps back.
-  spinDatasetSelectToggle = false;
-  spinDetectorSelectToggle = false;
   // Confirm flags hold the trash icon at 90° while the confirm dialog is up,
   // and play a reverse animation back to 0° once the dialog resolves.
   deletingSelectedDatasetsConfirm = false;
@@ -442,7 +437,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   toggleAllDatasets(): void {
-    this.spinDatasetSelectToggle = true;
     if (this.datasetSelectionState === 'all') {
       this.selectedDatasetIds.clear();
     } else {
@@ -530,10 +524,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  onSpinDatasetSelectToggleEnd(): void {
-    this.spinDatasetSelectToggle = false;
-  }
-
   onDeleteSelectedDatasetsAnimationEnd(): void {
     if (!this.deletingSelectedDatasetsConfirm) {
       this.wasDeletingSelectedDatasetsConfirm = false;
@@ -581,7 +571,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   toggleAllDetectors(): void {
-    this.spinDetectorSelectToggle = true;
     if (this.detectorSelectionState === 'all') {
       this.selectedDetectorIds.clear();
     } else {
@@ -671,10 +660,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // new-id auto-select logic; nothing more to do besides refreshing.
     this.datasetState.refresh();
     void newName;
-  }
-
-  onSpinDetectorSelectToggleEnd(): void {
-    this.spinDetectorSelectToggle = false;
   }
 
   onDeleteSelectedDetectorsAnimationEnd(): void {
