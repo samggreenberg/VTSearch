@@ -84,7 +84,7 @@ def _extract_archive(
 
     elif name.endswith(".rar"):
         try:
-            import rarfile  # optional dependency
+            import rarfile  # optional dependency  # pyright: ignore[reportMissingImports]
         except ImportError as exc:
             raise RuntimeError(
                 "RAR extraction requires the 'rarfile' package. Install it with: pip install rarfile"

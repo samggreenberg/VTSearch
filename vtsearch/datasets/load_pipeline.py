@@ -144,7 +144,7 @@ def _get_embedder_for_clips():
 
 
 def _load_embedder_with_progress(
-    media_dict: dict,
+    media_dict: dict | None,
     progress_fn,
     step: int | None = None,
     total_steps: int | None = None,

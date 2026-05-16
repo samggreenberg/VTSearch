@@ -14,7 +14,7 @@ import hashlib
 import json as _json
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 from vtsearch.datasets.labelset import LabeledElement, LabelSet, element_key
 
@@ -88,8 +88,8 @@ def build_element_view(
     elem: LabeledElement,
     *,
     media_type: str,
-    click_times: dict[int, float],
-    learned_scores: dict[int, float],
+    click_times: Mapping[int, float | int],
+    learned_scores: Mapping[int, float],
 ) -> dict[str, Any]:
     """Build the JSON-serialisable dict the frontend consumes for *elem*.
 

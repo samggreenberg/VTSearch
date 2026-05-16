@@ -37,7 +37,7 @@ def render_pdf_pages(pdf_path: Path, dpi: int = 150) -> list[tuple[str, "Image.I
         for page_num in range(len(doc)):
             page = doc[page_num]
             pix = page.get_pixmap(matrix=matrix)
-            img = PILImage.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img = PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
             page_name = f"{pdf_path.name}-{page_num + 1}"
             pages.append((page_name, img))
     finally:

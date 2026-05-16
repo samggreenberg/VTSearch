@@ -512,7 +512,7 @@ def load_dataset_from_folder(
             "Try a smaller dataset or free up system RAM."
         )
 
-    on_progress("idle", f"Loaded {len(medias)} {media_type} medias from folder")
+    on_progress("idle", f"Loaded {len(medias)} {media_type} medias from folder", 0, 0)
 
 
 def apply_custom_metadata_md5(media_dict: dict[int, dict[str, Any]]) -> int:
@@ -797,4 +797,4 @@ def load_dataset_from_folder_chunked(
         if chunk_medias:
             yield chunk_medias
 
-    on_progress("idle", f"Finished chunked loading of {total_files} {media_type} files")
+    on_progress("idle", f"Finished chunked loading of {total_files} {media_type} files", 0, 0)

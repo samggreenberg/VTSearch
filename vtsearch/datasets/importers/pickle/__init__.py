@@ -91,7 +91,9 @@ class PickleDatasetImporter(DatasetImporter):
     def default_display_name(self, field_values: dict[str, Any]) -> str:
         file_obj = field_values.get("file")
         candidate = ""
-        if hasattr(file_obj, "filename") and file_obj.filename:
+        if file_obj is None:
+            pass
+        elif hasattr(file_obj, "filename") and file_obj.filename:
             candidate = file_obj.filename
         elif hasattr(file_obj, "name") and file_obj.name:
             candidate = file_obj.name

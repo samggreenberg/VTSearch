@@ -487,9 +487,12 @@ def _apply_clip_and_embed(
 
             from PIL import Image
 
-            box_values = [int(float(v)) for v in clip_box.split(",")]
+            parts = [int(float(v)) for v in clip_box.split(",")]
+            if len(parts) != 4:
+                raise ValueError(f"clip_box must have 4 values, got {len(parts)}")
+            box_values: tuple[int, int, int, int] = (parts[0], parts[1], parts[2], parts[3])
             with Image.open(file_path) as img:
-                cropped = img.crop(tuple(box_values))
+                cropped = img.crop(box_values)
                 buf = _io.BytesIO()
                 cropped.save(buf, format=img.format or "PNG")
             crop_bytes = buf.getvalue()

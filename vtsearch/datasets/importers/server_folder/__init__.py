@@ -23,7 +23,7 @@ from __future__ import annotations
 import hashlib
 import io
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, cast
 
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
@@ -89,7 +89,9 @@ def _load_pdf_images(
         pdf_rel = pdf_path.relative_to(folder).as_posix()
 
         for page_name, pil_image in pages:
-            embedding = emb.embed_pil_image(pil_image)
+            # Image-type embedders all implement embed_pil_image, but
+            # it's not declared on the MediaEmbedder ABC.
+            embedding = cast(Any, emb).embed_pil_image(pil_image)
             if embedding is None:
                 continue
 

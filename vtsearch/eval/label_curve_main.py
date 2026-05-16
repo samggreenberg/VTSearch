@@ -50,9 +50,11 @@ def _print_summary(summary: pd.DataFrame) -> None:
         print("(no rows — every cell was skipped)")
         return
     for _, row in summary.iterrows():
+        # row['n_labels'] is a scalar at runtime but pandas stubs widen it.
+        n_labels = int(row["n_labels"])  # pyright: ignore[reportArgumentType]
         print(
             f"  {row['dataset']:>14s} | {row['category']:>20s} | "
-            f"{row['trainer']:>10s} | N={int(row['n_labels']):>3d} | "
+            f"{row['trainer']:>10s} | N={n_labels:>3d} | "
             f"AUROC={row['auroc_mean']:.3f}±{row['auroc_std']:.3f}  "
             f"AP={row['average_precision_mean']:.3f}±{row['average_precision_std']:.3f}  "
             f"bestF1={row['best_f1_mean']:.3f}  "
