@@ -7,8 +7,7 @@ on:
 
 jobs:
   # Hard gate: must pass for the PR to merge.
-  # Covers the directories listed in pyrightconfig.json `include`.
-  # Scope expands stage-by-stage per docs/plans/pyright-type-checking.md.
+  # Covers the whole vtsearch/ package (pyrightconfig.json `include`).
   gated:
     runs-on: ubuntu-latest
     steps:
@@ -54,50 +53,3 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit $status
-
-  # Advisory: full vtsearch/ package. Does not fail the build — its job
-  # is to surface the residual error count so the next stage can size
-  # the work. Removed in Stage 6 of docs/plans/pyright-type-checking.md.
-  advisory:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install vtsearch + deps (CPU)
-        run: |
-          set +e
-          bash scripts/install-cpu.sh 2>&1 | tee /tmp/install.log
-          status=${PIPESTATUS[0]}
-          {
-            echo "## Install step (exit=$status)"
-            echo ""
-            echo '```'
-            tail -c 60000 /tmp/install.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit $status
-
-      - name: Install pyright
-        run: npm install -g pyright@1.1.408
-
-      - name: Pyright (full vtsearch/ — advisory)
-        run: |
-          set +e
-          pyright --outputjson vtsearch > pyright-full.json
-          status=$?
-          python -c "
-          import json
-          d = json.load(open('pyright-full.json'))
-          s = d['summary']
-          print(f\"errors: {s['errorCount']}  warnings: {s['warningCount']}  files: {s['filesAnalyzed']}\")
-          " | tee -a "$GITHUB_STEP_SUMMARY"
-          exit 0

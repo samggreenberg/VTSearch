@@ -7,9 +7,9 @@ package. Rolled out in stages so each PR stays reviewable.
 
 - **Stage 0 + Stage 1:** ✅ shipped in PR #1349. The gated CI job covers
   `auth/`, `cli.py`, `concurrency/`, `config.py`, `exporters/`, `labels/`,
-  `plugins/`, `settings_io/`, `sync/`, `utils/`. The advisory job runs over
-  the full `vtsearch/` package on every PR and prints the residual error
-  count to the GitHub step summary.
+  `plugins/`, `settings_io/`, `sync/`, `utils/`. The advisory job (now
+  removed in Stage 6) ran over the full `vtsearch/` package on every PR
+  and printed the residual error count to the GitHub step summary.
 - **Stage 2:** ✅ shipped. Adds `settings.py`, `settings_factory.py`,
   `state/`, `security/` to the gated scope (31 real errors fixed).
 - **Stage 3:** ✅ shipped. Adds `datasets/`, `detectors/`, `eval/`,
@@ -20,26 +20,26 @@ package. Rolled out in stages so each PR stays reviewable.
   errors fixed). Also clears the stale `vtsearch/settings_factory.py`
   entry from `include` (the module was merged into
   `vtsearch/settings_models.py` during an unrelated reorg).
-- **Stage 6:** ⏳ next — the whole `vtsearch/` package. Post-Stage-5
-  advisory is **0 errors**, so Stage 6 is the cleanup PR: switch
-  `include` to a single `"vtsearch"` entry (or add the remaining
-  top-level files: `__init__.py`, `achievements.py`, `cli_pipeline.py`,
-  `cli_progress.py`, `logging_config.py`, `openapi.py`,
-  `settings_models.py`, and `vtsearch/schemas/`) and delete the
-  advisory job from `.github/workflows/pyright.yml`.
+- **Stage 6:** ✅ shipped. Collapses `include` to a single `"vtsearch"`
+  entry (picks up the previously-out-of-gate top-level files
+  `__init__.py`, `achievements.py`, `cli_pipeline.py`, `cli_progress.py`,
+  `logging_config.py`, `openapi.py`, `settings_models.py`, and the
+  `schemas/` package — 17 files, 0 new errors) and deletes the advisory
+  job from `.github/workflows/pyright.yml`. Gated scope now equals the
+  whole `vtsearch/` package (245 files, 0 errors).
 - **Stage 7 (`tests/`):** 📋 optional, deferred.
 
 ## Goal
 
 - `pyrightconfig.json` at repo root with `typeCheckingMode: "basic"`.
 - A CI job (`.github/workflows/pyright.yml`) that fails the build on any
-  pyright error in the **gated** scope.
-- An **advisory** CI step that runs pyright over the entire `vtsearch/`
-  package on every PR (does not fail the build) so we always know the
-  residual error count for the next stage.
-- Each stage expands the gated scope by editing `include` in
-  `pyrightconfig.json`. Once stage 6 lands, the gated scope == the
-  advisory scope and the advisory job goes away.
+  pyright error across the whole `vtsearch/` package.
+- (Historical, Stages 0–5.) An **advisory** CI step that ran pyright
+  over the entire `vtsearch/` package on every PR without failing the
+  build, so we always knew the residual error count for the next stage.
+  Each stage expanded the gated scope by editing `include` in
+  `pyrightconfig.json`; once Stage 6 landed and the gated scope reached
+  the whole package, the advisory job was deleted.
 
 ## Why pyright, why basic mode
 
@@ -125,7 +125,8 @@ remaining work for Stage 5.
 ### Post-Stage-5 advisory count
 
 After Stage 5 shipped, `pyright vtsearch/` with deps installed reports
-**0 errors**. The advisory job is now a no-op — Stage 6 deletes it.
+**0 errors**. The advisory job was a no-op at this point — Stage 6
+deleted it.
 
 ## Stages
 
@@ -140,7 +141,7 @@ Each stage is a separate PR. The "errors to fix" column counts real
 | 3 | `datasets/`, `detectors/`, `eval/`, `embedding/`, `training/` | 38 | ✅ shipped |
 | 4 | `routes/`, `converters/` | 40 | ✅ shipped |
 | 5 | `media/` (heaviest — turned out to be the HF-stub gap pattern, not stubs) | 97 | ✅ shipped |
-| **6** | Whole `vtsearch/` (incl. `achievements.py`, `logging_config.py`, `openapi.py`, `schemas/`) — advisory job removed | 0 | ⏳ next |
+| 6 | Whole `vtsearch/` (incl. `achievements.py`, `logging_config.py`, `openapi.py`, `schemas/`) — advisory job removed | 0 | ✅ shipped |
 | 7 *(optional)* | `tests/` | TBD | 📋 |
 
 **Stage 0 + Stage 1 landed together in PR #1349.** Subsequent stages are
@@ -426,6 +427,25 @@ load + forward calls). All 97 errors collapsed onto these patterns:
     Worth a `grep` of `include` against the on-disk layout when bumping
     the gated scope.
 
+### Stage 6 fixes (shipped)
+
+Zero. The advisory job had reported 0 errors since the end of Stage 5,
+and that held all the way through Stage 6: collapsing `include` to a
+single `"vtsearch"` entry pulled the previously-only-in-advisory files
+(`__init__.py`, `achievements.py`, `cli_pipeline.py`, `cli_progress.py`,
+`logging_config.py`, `openapi.py`, `settings_models.py`, and
+`vtsearch/schemas/` — 17 files in all) into the gated scope without
+producing a single new error. Stage 6 is therefore config-only:
+
+1. Replace the per-directory `include` array in `pyrightconfig.json`
+   with the single entry `["vtsearch"]`. This keeps the gate aligned
+   with the on-disk layout going forward (new top-level modules under
+   `vtsearch/` are picked up automatically — no more
+   stage-bumps-as-PR-titles).
+2. Delete the `advisory` job from `.github/workflows/pyright.yml`. The
+   gated job now covers the whole package, so the advisory job has no
+   independent signal to provide.
+
 ### Operational notes from Stage 1
 
 - The CI workflow tees the install-step output and the gated pyright
@@ -442,7 +462,7 @@ load + forward calls). All 97 errors collapsed onto these patterns:
 
 ```json
 {
-  "include": ["..."],
+  "include": ["vtsearch"],
   "exclude": ["**/__pycache__", "**/node_modules", "tests", "frontend", "scripts", "data"],
   "pythonVersion": "3.10",
   "typeCheckingMode": "basic",
@@ -460,15 +480,16 @@ load + forward calls). All 97 errors collapsed onto these patterns:
 
 ## CI shape
 
-Single workflow `.github/workflows/pyright.yml`:
+Single workflow `.github/workflows/pyright.yml`, one job:
 
 1. **`gated` job** — installs deps, runs `pyright` (uses
-   `pyrightconfig.json` `include`). Hard gate.
-2. **`advisory` job** — installs deps, runs
-   `pyright vtsearch/ || true`. Posts the error count in the job
-   summary. Does not fail the build.
+   `pyrightconfig.json` `include: ["vtsearch"]`). Hard gate over the
+   whole package.
 
-The advisory job is deleted in Stage 6.
+Through Stages 0–5 there was also an `advisory` job that ran
+`pyright vtsearch/ || true` and posted the residual error count to the
+GitHub step summary. It was deleted in Stage 6 once the gated scope
+caught up to the full package.
 
 ## Non-goals (now)
 
@@ -483,8 +504,7 @@ The advisory job is deleted in Stage 6.
 ```bash
 pip install pyright              # or use pre-built CI binary
 bash scripts/install-cpu.sh      # so reportMissingImports passes
-pyright                          # gated scope (matches CI hard gate)
-pyright vtsearch/                # full-package check (matches advisory job)
+pyright                          # whole vtsearch/ package (matches CI gate)
 ```
 
 ## Backwards compatibility
