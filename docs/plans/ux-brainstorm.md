@@ -244,8 +244,15 @@ The "where do I put this file?" concept appears across plugins as `filepath`, `p
 ### 6.4 Modal back-button conventions ★★ XS — SHIPPED
 Convention: every nested-modal flow renders a left-aligned `&larr; Back` button using the shared `btn btn--secondary btn--sm back-btn` class combination (styled by `.back-btn` in `frontend/src/scss/_components.scss`). Documented under "Nested-modal back buttons" in `CLAUDE.md`. All current nested flows (processor / settings / label importer modals, settings exporter, load-sort, resort-prompt, new-detector → media picker, new-detector → trained-importer form) already follow this convention.
 
-### 6.5 Confirm-on-destructive ★★ S
+### 6.5 Confirm-on-destructive ★★ S — shipped
 Delete dataset, delete detector, delete label entry, clear votes, reset settings — currently a mix of inline-hover-confirm, modal-confirm, and no-confirm. Standardize on a single confirm pattern, with the operation name in the confirmation: *"Delete detector 'cats'? This removes its labelset and training metadata. The dataset is unaffected."*
+
+**What shipped**: Added `VtDialogService.confirmDestructive(question, detail, actionLabel?)` and routed every destructive action with a UI surface through it: delete dataset (single + bulk), delete model (single + bulk), reset settings. Messages follow the `<Action>? <What is removed; what is unaffected>.` template, and the primary button uses the action verb ("Delete" / "Reset") instead of "OK".
+
+**Open follow-ups**:
+- *Delete label entry* and *Clear votes* were listed in the original item but don't have any UI surface today (only the `clearVotes()` API client exists, with no caller). When those actions get a button, wire them through `confirmDestructive` — e.g. `"Clear all votes for detector 'X'? This deletes every saved label for this model and cannot be undone."`
+- The labeling-view "press ← twice to vote no and discard the box" inline-confirm is a different UX (two-key chord, not a delete) and was intentionally left as-is. If we ever consolidate it, treat it as its own pattern rather than forcing it through the modal.
+- The destructive primary button has no distinct danger styling yet — it reuses `.btn--primary`. A red variant would make the modal even harder to dismiss-by-accident; deferred.
 
 ### 6.6 Toast / banner / inline error styling ★★ S
 Errors appear in at least three styles: red banner inline, modal-level red text, console-log only. Add a single toast service and route all `error` SSE events + HTTP failure responses through it.
