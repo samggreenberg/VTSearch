@@ -22,7 +22,7 @@ class LocalFileSettingsImporter(SettingsImporter):
     fields = [
         SettingsImporterField(
             key="file",
-            label="Settings File",
+            label="Upload a file",
             field_type="file",
             description="A VTSearch settings JSON file.",
             accept=".json",

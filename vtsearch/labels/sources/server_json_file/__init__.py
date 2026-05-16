@@ -28,7 +28,7 @@ class ServerFileLabelsetSource(LabelsetSource):
     fields = [
         LabelsetSourceField(
             key="filepath",
-            label="Server File Path",
+            label="Save to (server path)",
             field_type="server_path",
             description=(
                 "Absolute or relative path to a labels JSON file on the "

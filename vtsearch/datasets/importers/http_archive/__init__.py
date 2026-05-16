@@ -170,7 +170,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
     fields = [
         ImporterField(
             key="url",
-            label="Archive URL",
+            label="Path or URL",
             field_type="url",
             description="URL to a publicly accessible archive (.zip, .tar.gz, .rar, \u2026) of media files.",
         ),
