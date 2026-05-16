@@ -497,7 +497,9 @@ class TestSettingsModule:
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()
         assert defaults["volume"] == 1.0
-        assert defaults["theme"] == "dark"
+        # Theme defaults to ``"system"`` — the frontend resolves this to
+        # the OS ``prefers-color-scheme`` at render time.
+        assert defaults["theme"] == "system"
         assert defaults["calibrate_count"] == 1
         assert defaults["calibration_fraction"] == 0.5
         assert defaults["safe_thresholds"] is False

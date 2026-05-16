@@ -121,7 +121,9 @@ class TestSettingsAPI:
         assert res.status_code == 200
         data = res.get_json()
         assert data["volume"] == 1.0
-        assert data["theme"] == "dark"
+        # Theme defaults to ``"system"`` — the frontend resolves this to
+        # the OS ``prefers-color-scheme`` at render time.
+        assert data["theme"] == "system"
         assert data["calibrate_count"] == 1
         assert data["calibration_fraction"] == 0.5
         assert data["safe_thresholds"] is False

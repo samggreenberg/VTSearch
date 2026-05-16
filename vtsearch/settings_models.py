@@ -43,12 +43,12 @@ __all__ = [
 ]
 
 
-Theme = Literal["dark", "light", "highviz"]
+Theme = Literal["dark", "light", "highviz", "system"]
 ViewMode = Literal["grid", "list"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
 
-VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz")
+VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_VIEW_MODES: tuple[str, ...] = ("grid", "list")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
@@ -127,7 +127,10 @@ class UserSettings(BaseModel):
 
     volume: Annotated[float, _clamp(0.0, 1.0)] = 1.0
     inclusion: Annotated[int, _clamp(-10, 10)] = 0
-    theme: Theme = "dark"
+    # ``"system"`` resolves to the OS ``prefers-color-scheme`` value
+    # (dark or light) at render time on the frontend. Users can pick a
+    # concrete theme to opt out and return to "system" to opt back in.
+    theme: Theme = "system"
     enrich_descriptions: bool = False
     safe_thresholds: bool = False
     calibrate_count: Annotated[int, _clamp(1, 100)] = DEFAULT_CALIBRATE_COUNT

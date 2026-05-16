@@ -45,6 +45,7 @@
           <div class="form-group">
             <label class="form-label" title="Color theme for the application interface">Theme</label>
             <select class="form-select" [ngModel]="settings.theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme" aria-label="Theme">
+              <option value="system">System</option>
               <option value="dark">Dark</option>
               <option value="light">Light</option>
               <option value="highviz">High Visibility</option>
