@@ -452,6 +452,43 @@ request/response gates getting in the way during their migration.
       ``tests/converters/test_document_and_converters.py``, and
       ``tests/converters/test_converter_selection.py`` updated to
       read ``message`` instead of ``error``.
+- [x] `sorting.py` migrated to flask-smorest (sort / learned-sort start +
+      result, votes get/clear/seed-from-examples, textsort-suggestions
+      get/post, inclusion get/post, safe-thresholds get/post,
+      diversity-tree/next, plus the two multipart routes
+      example-sort and label-file-sort). Schema-level validation
+      failures (missing required ``text`` / ``job_id`` / ``examples`` /
+      ``inclusion`` / ``safe_thresholds``; type-mismatched
+      ``inclusion`` / ``safe_thresholds``) surface as 422 with the
+      standard ``errors`` envelope. The ``inclusion`` field is
+      declared as ``fields.Raw`` with a custom validator (rather than
+      ``fields.Integer(strict=True)``) so that ``3.7`` continues to
+      round to ``3`` while booleans are still rejected explicitly —
+      preserving the pre-migration coercion behavior. Handler-level
+      rejects (empty / whitespace ``text``, no good/bad votes, no
+      medias loaded, embedder doesn't support text, multipart no-file
+      cases, invalid label file, etc.) keep their HTTP codes (400 /
+      404 / 500) with the standard ``message`` envelope. The
+      ``supports_text=false`` flag and the missing-job ``status=missing``
+      flag flow through as extra ``abort()`` kwargs. The
+      ``diversity-tree/next`` route serves both GET and POST on the
+      same function and reads its optional body with
+      ``request.get_json(silent=True)`` rather than ``@arguments`` so
+      the two methods behave identically (a missing body must not
+      422). Tests in ``tests/sorting/test_sorting.py``,
+      ``tests/sorting/test_safe_thresholds.py``,
+      ``tests/sorting/test_label_sorting.py``,
+      ``tests/core/test_inclusion.py``,
+      ``tests/api/test_api_contracts.py``,
+      ``tests/api/test_error_recovery.py``,
+      ``tests/api/test_error_envelope.py``, and
+      ``tests/detectors/test_image_embedders.py`` updated to match
+      (``message`` for 400, ``errors`` for 422; the error-envelope
+      test that pinned the legacy ``{"error": ..., "request_id": ...}``
+      shape was repointed at ``/api/embed``, which is still on the
+      legacy ``get_json_or_400`` helper because its dual-mode
+      multipart-or-JSON dispatcher doesn't fit a single marshmallow
+      schema).
 - [ ] Frontend `SettingsApiService` rewired to generated client
 - [ ] `frontend/src/app/models/api.models.ts` settings section deleted
 - [ ] Remaining dataset blueprints: ``datasets/staging.py`` and

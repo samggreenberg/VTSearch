@@ -579,8 +579,12 @@ class TestSortRouteRejectsTextWhenUnsupported:
             resp = client.post("/api/sort", json={"text": "a cat"})
             assert resp.status_code == 400
             body = resp.get_json()
-            assert body.get("supports_text") is False
-            assert "dinov3_single" in body["error"]
+            # Migrated to flask-smorest: handler-level rejects surface
+            # under ``message``. The frontend already reads the
+            # ``supports_text`` flag from each embedder's
+            # ``EmbedderInfo`` directly, so the legacy body field that
+            # used to ride along on this error has been dropped.
+            assert "dinov3_single" in body["message"]
         finally:
             medias.clear()
             medias.update(saved)

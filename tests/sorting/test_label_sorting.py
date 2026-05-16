@@ -201,7 +201,9 @@ class TestLabelFileSortModelSelection:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "invalid" in resp.get_json()["error"].lower()
+        # Migrated to flask-smorest: handler-level rejects use ``message``,
+        # not the legacy ``error`` key.
+        assert "invalid" in resp.get_json()["message"].lower()
 
     def test_empty_labels_returns_400(self, client):
         buf = io.BytesIO(json.dumps({"labels": []}).encode())

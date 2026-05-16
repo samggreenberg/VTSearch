@@ -39,7 +39,9 @@ class TestExampleSort:
     def test_no_file_returns_400(self, client):
         resp = client.post("/api/example-sort")
         assert resp.status_code == 400
-        assert "file" in resp.get_json()["error"].lower()
+        # Migrated to flask-smorest: handler-level rejects surface under
+        # ``message``, not the legacy ``error`` key.
+        assert "file" in resp.get_json()["message"].lower()
 
     def test_example_sort_returns_results_and_threshold(self, client):
         wav_buf = self._make_wav_bytes()
