@@ -185,9 +185,7 @@ class TestExporterRegistry:
                     "server_path",
                     "url",
                     "number",
-                ), (
-                    f"{exp.name} field '{f.key}' has unknown type '{f.field_type}'"
-                )
+                ), f"{exp.name} field '{f.key}' has unknown type '{f.field_type}'"
 
 
 # ---------------------------------------------------------------------------

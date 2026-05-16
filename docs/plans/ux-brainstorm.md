@@ -263,8 +263,20 @@ Each long-running operation emits a slightly different progress payload (`step`/
 ### 6.11 Active-dataset/detector indicator ★★ S
 Inside Train/Find views there's no clear top-bar indicator of which dataset/detector is active. The frontend already sets `X-Dataset-Id` / `X-Detector-Id` headers — surface those names in a fixed header strip "🗂 Dataset: foo · 🧪 Detector: cats" with a click-to-switch dropdown. Removes the dashboard round-trip from §5 of the workflow trace.
 
-### 6.12 Plugin field types ★ S
+### 6.12 Plugin field types ★ S — shipped
 Free-text fields that should be numbers (`n_mels`, `time_window_s`, `size` for synthetic), enums that should be selects (`colormap`, `language` for OCR), and password fields disguised as text (`auth_header`). Tighten the `PluginField` type system and migrate.
+
+**What shipped:** added `"number"` to `FieldType` (with new `min`/`max`/`step` attrs and a `PluginField.is_integer_number()` heuristic so the CLI parses with `int` vs `float`). Migrated:
+- `n_mels`, `time_window_s` (audio2image): `text` → `number`
+- `colormap` (audio2image): `text` → `select` (curated matplotlib colormap list)
+- `language`, `threshold` (image2text): `text` → `select` / `number`
+- `n_clips` (video2image), `ffmpeg_timeout` (video2audio): `text` → `number`
+- `size` (synthetic importer): `text` → `number`
+- `url` (webhook exporter): `text` → `url` (the auth header was already `password`)
+
+Frontend: every plugin-field renderer (dataset/processor/label/settings importer modals, settings exporter modal, export modal, autodetect results modal, new-detector modal, plus the three converter-param sections inside dataset-importer-modal) now switches on `field_type` and renders `number`/`url`/`password`/`email` inputs with `min`/`max`/`step` attributes where applicable.
+
+Backend coercion is unchanged — values still arrive as strings from the web and as `int`/`float` from argparse (driven by the new `is_integer_number()` heuristic over `step`/`default`/`min`/`max`).
 
 ---
 
