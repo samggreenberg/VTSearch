@@ -616,6 +616,12 @@ export interface EmbedderInfo {
   name: string;
   media_type_id: string;
   /**
+   * Whether this embedder is the recommended default for its media type
+   * (exactly one per media type). The dropdown surfaces this entry under a
+   * "Recommended" optgroup and tucks the rest under "Advanced".
+   */
+  is_default?: boolean;
+  /**
    * Whether this embedder can embed text queries into the same vector space as
    * its media. ``false`` for vision-only encoders (DINOv3, Perception Encoder)
    * — the UI hides text-search affordances for datasets using them.

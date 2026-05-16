@@ -37,6 +37,7 @@ class TestImageClipEmbedder:
         assert ImageClipEmbedder().to_dict() == {
             "name": "clip",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -107,6 +108,7 @@ class TestImageSiglip2Embedder:
         assert ImageSiglip2Embedder().to_dict() == {
             "name": "siglip2",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -173,6 +175,7 @@ class TestImageDinov2SingleEmbedder:
         assert ImageDinov2SingleEmbedder().to_dict() == {
             "name": "dinov2_single",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": False,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -236,6 +239,7 @@ class TestImageDinov2PatchEmbedder:
         assert ImageDinov2PatchEmbedder().to_dict() == {
             "name": "dinov2_patch",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": False,
             "supports_patch_regions": True,
             "license_notice": None,
@@ -281,6 +285,7 @@ class TestImageDinov3SingleEmbedder:
         assert ImageDinov3SingleEmbedder().to_dict() == {
             "name": "dinov3_single",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": False,
             "supports_patch_regions": False,
             "license_notice": None,
@@ -342,6 +347,7 @@ class TestImageDinov3PatchEmbedder:
         assert ImageDinov3PatchEmbedder().to_dict() == {
             "name": "dinov3_patch",
             "media_type_id": "image",
+            "is_default": False,
             "supports_text": False,
             "supports_patch_regions": True,
             "license_notice": None,

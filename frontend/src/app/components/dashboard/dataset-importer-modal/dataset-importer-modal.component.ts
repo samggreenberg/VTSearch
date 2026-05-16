@@ -712,6 +712,16 @@ export class DatasetImporterModalComponent implements OnInit {
     return found?.license_notice ?? null;
   }
 
+  /** Embedders flagged ``is_default`` for the active media type. */
+  recommendedEmbedders(list: EmbedderInfo[]): EmbedderInfo[] {
+    return list.filter((e) => e.is_default);
+  }
+
+  /** Non-default embedders, shown under the "Advanced" optgroup. */
+  advancedEmbedders(list: EmbedderInfo[]): EmbedderInfo[] {
+    return list.filter((e) => !e.is_default);
+  }
+
   selectDemo(demo: DemoDataset): void {
     const userName = (this.demoDatasetName || '').trim();
     this.demoSelected.emit({

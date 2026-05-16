@@ -80,8 +80,19 @@
                 [ngModel]="selectedDemoEmbedder"
                 (ngModelChange)="onDemoEmbedderChange($event)"
               >
-                @for (embedder of demoEmbedders; track embedder.name) {
-                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                @if (recommendedEmbedders(demoEmbedders).length > 0) {
+                  <optgroup label="Recommended">
+                    @for (embedder of recommendedEmbedders(demoEmbedders); track embedder.name) {
+                      <option [value]="embedder.name">{{ embedder.name }}</option>
+                    }
+                  </optgroup>
+                }
+                @if (advancedEmbedders(demoEmbedders).length > 0) {
+                  <optgroup label="Advanced ▾">
+                    @for (embedder of advancedEmbedders(demoEmbedders); track embedder.name) {
+                      <option [value]="embedder.name">{{ embedder.name }}</option>
+                    }
+                  </optgroup>
                 }
               </select>
             }
@@ -285,8 +296,19 @@
             class="form-select"
             [(ngModel)]="selectedEmbedder"
           >
-            @for (embedder of availableEmbedders; track embedder.name) {
-              <option [value]="embedder.name">{{ embedder.name }}</option>
+            @if (recommendedEmbedders(availableEmbedders).length > 0) {
+              <optgroup label="Recommended">
+                @for (embedder of recommendedEmbedders(availableEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                }
+              </optgroup>
+            }
+            @if (advancedEmbedders(availableEmbedders).length > 0) {
+              <optgroup label="Advanced ▾">
+                @for (embedder of advancedEmbedders(availableEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                }
+              </optgroup>
             }
           </select>
           @if (licenseNoticeFor(selectedEmbedder, availableEmbedders); as notice) {
@@ -479,8 +501,19 @@
             class="form-select"
             [(ngModel)]="lfSelectedEmbedder"
           >
-            @for (embedder of lfEmbedders; track embedder.name) {
-              <option [value]="embedder.name">{{ embedder.name }}</option>
+            @if (recommendedEmbedders(lfEmbedders).length > 0) {
+              <optgroup label="Recommended">
+                @for (embedder of recommendedEmbedders(lfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                }
+              </optgroup>
+            }
+            @if (advancedEmbedders(lfEmbedders).length > 0) {
+              <optgroup label="Advanced ▾">
+                @for (embedder of advancedEmbedders(lfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                }
+              </optgroup>
             }
           </select>
           @if (licenseNoticeFor(lfSelectedEmbedder, lfEmbedders); as notice) {
@@ -644,8 +677,19 @@
             class="form-select"
             [(ngModel)]="sfSelectedEmbedder"
           >
-            @for (embedder of sfEmbedders; track embedder.name) {
-              <option [value]="embedder.name">{{ embedder.name }}</option>
+            @if (recommendedEmbedders(sfEmbedders).length > 0) {
+              <optgroup label="Recommended">
+                @for (embedder of recommendedEmbedders(sfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                }
+              </optgroup>
+            }
+            @if (advancedEmbedders(sfEmbedders).length > 0) {
+              <optgroup label="Advanced ▾">
+                @for (embedder of advancedEmbedders(sfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedder.name }}</option>
+                }
+              </optgroup>
             }
           </select>
           @if (licenseNoticeFor(sfSelectedEmbedder, sfEmbedders); as notice) {
