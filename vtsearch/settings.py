@@ -27,7 +27,18 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from vtsearch.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
+from pydantic import ValidationError
+
+from vtsearch.config import DATA_DIR
+from vtsearch.settings_models import (
+    VALID_FOCUS_MODES,
+    VALID_GRID_ICON_SIZES,
+    VALID_PANEL_PX,
+    VALID_THEMES,
+    VALID_VIEW_MODES,
+    ServerSettings,
+    UserSettings,
+)
 
 if TYPE_CHECKING:
     # The accessors below are generated dynamically by the loop at the
@@ -115,49 +126,17 @@ _USER_DATA_DIR_OVERRIDE: Path | None = None
 # Defaults, partitioned by tier
 # ---------------------------------------------------------------------------
 
-#: Server-tier defaults (keys that live in :data:`SETTINGS_PATH`).
-_SERVER_DEFAULTS: dict[str, Any] = {
-    "saved_datasets_dir": str(DATA_DIR / "saved_datasets"),
-    "detectors_dir": str(DATA_DIR / "detectors"),
-    "max_concurrent_dataset_downloads": 1,
-    "max_concurrent_dataset_embeddings": 1,
-    "autorun_detectors": [],
-}
+#: Server-tier defaults derived from the :class:`ServerSettings` model.
+_SERVER_DEFAULTS: dict[str, Any] = ServerSettings().model_dump()
 
-#: Per-user defaults (keys that live in
-#: ``<get_user_data_dir(user)>/user_settings.json``).
-_USER_DEFAULTS: dict[str, Any] = {
-    "volume": 1.0,
-    "inclusion": 0,
-    "theme": "dark",
-    "enrich_descriptions": False,
-    "safe_thresholds": False,
-    "calibrate_count": DEFAULT_CALIBRATE_COUNT,
-    "calibration_fraction": 0.5,
-    "audio_playing": True,
-    "swipe_animation": True,
-    "show_metadata": True,
-    "view_mode_left": {},
-    "view_mode_right": {},
-    "grid_icon_size_left": {},
-    "grid_icon_size_right": {},
-    "focus_mode_left": {},
-    "focus_mode_right": {},
-    "panel_pct_left": {},
-    "panel_pct_right": {},
-    "autopilot_enabled": True,
-    "hide_autopilot": False,
-    "autopilot_top_greens": 3,
-    "autopilot_hard_reds": 4,
-    "autopilot_resort_interval": 10,
-    "autopilot_goal_diversity": 40,
-}
+#: Per-user defaults derived from the :class:`UserSettings` model.
+_USER_DEFAULTS: dict[str, Any] = UserSettings().model_dump()
 
 #: Combined defaults for callers that want a flat view of every key.
 _DEFAULTS: dict[str, Any] = {**_SERVER_DEFAULTS, **_USER_DEFAULTS}
 
 #: Set of keys that belong to the server tier (everything else is per-user).
-_SERVER_KEYS: frozenset[str] = frozenset(_SERVER_DEFAULTS.keys())
+_SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
 #: should not be reset by the Default button).
@@ -484,65 +463,101 @@ def get_all() -> dict[str, Any]:
         return result
 
 
-VALID_THEMES = ("dark", "light", "highviz")
-VALID_VIEW_MODES = ("grid", "list")
-VALID_GRID_ICON_SIZES = ("XS", "S", "M", "L", "XL")
-VALID_FOCUS_MODES = ("click", "hover")
+# -------------------------------------------------------------------
+# Pydantic-driven generation of simple get_<key> / set_<key> pairs.
+#
+# Each :class:`UserSettings` / :class:`ServerSettings` field becomes a
+# pair of module-level accessors. Validation (clamping, one-of) lives
+# on the model; the shims below only marshal values between the cache
+# dict and ``model_validate({key: value})``.
+# -------------------------------------------------------------------
+
+
+def _validate_field(model: type, key: str, value: Any) -> Any:
+    """Run *value* through *model*'s validator for *key* and return the result.
+
+    Uses ``model_validate`` with a single-key dict so per-field
+    ``BeforeValidator`` clamps and enum checks fire as if the value had
+    been loaded from disk. A :class:`pydantic.ValidationError` is
+    surfaced as :class:`ValueError` with a compact message — matches the
+    error shape callers expect from the legacy spec-driven setters.
+    """
+    try:
+        validated = model.model_validate({key: value}).model_dump()
+    except ValidationError as exc:
+        first = exc.errors()[0] if exc.errors() else {"msg": str(exc)}
+        raise ValueError(f"Invalid {key}: {first.get('msg', exc)}") from None
+    return validated[key]
+
+
+def _make_scalar_accessors(model: type, key: str):
+    def getter():
+        with _settings_lock:
+            raw = _read_value(key)
+        try:
+            return _validate_field(model, key, raw)
+        except ValueError:
+            # Corrupt disk value — fall back to the default so callers
+            # never see partially-typed garbage.
+            return model.model_fields[key].get_default(call_default_factory=True)
+
+    def setter(value):
+        coerced = _validate_field(model, key, value)
+        with _settings_lock:
+            _write_value(key, coerced)
+
+    getter.__name__ = f"get_{key}"
+    setter.__name__ = f"set_{key}"
+    return getter, setter
+
+
+# Generate accessors for every field in both models. The ``autorun_detectors``
+# key on ServerSettings is excluded because it has hand-written accessors
+# below with extra semantics (dedupe, add/remove/is_).
+_SKIP_AUTOGEN = {"autorun_detectors", "saved_datasets_dir", "detectors_dir"}
+_PER_SIDE_KEYS = {
+    "view_mode_left",
+    "view_mode_right",
+    "grid_icon_size_left",
+    "grid_icon_size_right",
+    "focus_mode_left",
+    "focus_mode_right",
+    "panel_pct_left",
+    "panel_pct_right",
+}
+
+for _model in (ServerSettings, UserSettings):
+    for _field_name in _model.model_fields:
+        if _field_name in _SKIP_AUTOGEN or _field_name in _PER_SIDE_KEYS:
+            continue
+        _g, _s = _make_scalar_accessors(_model, _field_name)
+        globals()[f"get_{_field_name}"] = _g
+        globals()[f"set_{_field_name}"] = _s
+
+del _model, _field_name, _g, _s
 
 
 # -------------------------------------------------------------------
-# Spec-driven generation of simple get_<key> / set_<key> pairs.
-# Factories live in :mod:`vtsearch.settings_factory`.
+# Per-media-type per-side settings
+#
+# These eight settings (``view_mode_{left,right}``,
+# ``grid_icon_size_{left,right}``, ``focus_mode_{left,right}``,
+# ``panel_pct_{left,right}``) store a ``{media_type_id: value}`` dict.
+# Their validation rules differ from the simple settings in two ways:
+#
+# 1. The set of valid media-type IDs is resolved dynamically from
+#    :func:`vtsearch.media.all_type_ids` (plugins may register more).
+# 2. ``panel_pct_*`` raises on out-of-range writes but clamps on reads
+#    (the disk value can become invalid via direct file edits).
+#
+# We keep a small shim layer that delegates per-element validation to
+# the Pydantic models defined in :mod:`vtsearch.settings_models`.
 # -------------------------------------------------------------------
 
-from vtsearch.settings_factory import (  # noqa: E402
-    clamp as _clamp,
-    clamp_min as _clamp_min,
-    make_accessors as _make_accessors,
-    make_per_side_setting as _make_per_side_setting_impl,
-    one_of as _one_of,
-)
-
-
-# (key, cast, coerce_or_None)
-_SETTING_SPECS: list[tuple] = [
-    ("volume", float, _clamp(float, 0.0, 1.0)),
-    ("inclusion", int, _clamp(int, -10, 10)),
-    ("theme", str, _one_of("theme", VALID_THEMES)),
-    ("enrich_descriptions", bool, None),
-    ("safe_thresholds", bool, None),
-    ("calibrate_count", int, _clamp(int, 1, 100)),
-    ("calibration_fraction", float, _clamp(float, 0.0, 1.0)),
-    ("audio_playing", bool, None),
-    ("swipe_animation", bool, None),
-    ("show_metadata", bool, None),
-    ("autopilot_enabled", bool, None),
-    ("hide_autopilot", bool, None),
-    ("autopilot_top_greens", int, _clamp_min(int, 1)),
-    ("autopilot_hard_reds", int, _clamp_min(int, 1)),
-    ("autopilot_resort_interval", int, _clamp_min(int, 1)),
-    ("autopilot_goal_diversity", int, _clamp_min(int, 1)),
-    ("max_concurrent_dataset_downloads", int, _clamp(int, 1, 16)),
-    ("max_concurrent_dataset_embeddings", int, _clamp(int, 1, 16)),
-]
-
-for _key, _cast, _coerce in _SETTING_SPECS:
-    _g, _s = _make_accessors(_key, _cast, _coerce)
-    globals()[f"get_{_key}"] = _g
-    globals()[f"set_{_key}"] = _s
-
-del _key, _cast, _coerce, _g, _s
-
-
-# -------------------------------------------------------------------
-# Per-media-type per-side settings factory
-# -------------------------------------------------------------------
-
-_VIEW_MODE_DEFAULTS = {"left": "list", "right": "grid"}
-_GRID_ICON_SIZE_DEFAULT = "M"
-_FOCUS_MODE_DEFAULTS = {"left": "click", "right": "click"}
+_VIEW_MODE_DEFAULTS: dict[str, str] = {"left": "list", "right": "grid"}
+_GRID_ICON_SIZE_DEFAULT: str = "M"
+_FOCUS_MODE_DEFAULTS: dict[str, str] = {"left": "click", "right": "click"}
 _PANEL_PX_DEFAULTS: dict[str, int] = {"left": 260, "right": 300}
-VALID_PANEL_PX = (150, 500)  # pixel range matching frontend LEFT/RIGHT_MIN/MAX
 
 
 def _valid_media_types() -> tuple[str, ...]:
@@ -555,36 +570,117 @@ def _valid_media_types() -> tuple[str, ...]:
 def _make_per_side_setting(
     key_base: str,
     defaults: dict[str, Any],
-    valid_values: tuple[str, ...] | None = None,
     *,
     normalize=None,
     value_type: str = "str",
+    valid_values: tuple[str, ...] | None = None,
 ):
-    """Thin wrapper around :func:`settings_factory.make_per_side_setting`
-    that injects this module's ``VALID_PANEL_PX`` constant."""
-    return _make_per_side_setting_impl(
-        key_base,
-        defaults,
-        valid_values,
-        valid_panel_px=VALID_PANEL_PX,
-        normalize=normalize,
-        value_type=value_type,
-    )
+    """Build ``get_{base}_left``/``_right`` and ``set_{base}_left``/``_right``.
 
+    *normalize* is applied to string values on read and write (e.g.
+    :func:`str.upper`). *valid_values* enables enum membership checks
+    for string types. For ``value_type="int"`` the value is clamped to
+    :data:`VALID_PANEL_PX` on read and raises on out-of-range writes.
+    """
+    lo_hi = VALID_PANEL_PX if value_type == "int" else None
 
-# Generate all four per-side settings
+    def _validate_entry(v, key: str, tid: str | None = None):
+        if value_type == "str":
+            if normalize is not None and isinstance(v, str):
+                v = normalize(v)
+            if valid_values is not None and v not in valid_values:
+                label = f"{key} value for {tid}" if tid else key
+                raise ValueError(f"Invalid {label}: {v!r}")
+            return v
+        # int (panel_pct): raise on out-of-range writes
+        lo, hi = lo_hi  # type: ignore[misc]
+        try:
+            v = int(round(float(v)))
+        except (ValueError, TypeError):
+            label = f"{key} value for {tid}" if tid else key
+            raise ValueError(f"Invalid {label}: {v!r}") from None
+        if not (lo <= v <= hi):
+            label = f"{key} value for {tid}" if tid else key
+            raise ValueError(f"Invalid {label}: {v} (must be between {lo} and {hi})")
+        return v
+
+    def _get_dict(key: str) -> dict[str, Any]:
+        side = key[len(key_base) + 1 :]
+        default_val = defaults.get(side, next(iter(defaults.values())))
+        with _settings_lock:
+            raw = _read_value(key)
+        types = _valid_media_types()
+        if not isinstance(raw, dict):
+            return {tid: default_val for tid in types}
+
+        result: dict[str, Any] = {}
+        for tid in types:
+            v = raw.get(tid, default_val)
+            if normalize is not None and isinstance(v, str):
+                v = normalize(v)
+            if valid_values is not None and v not in valid_values:
+                v = default_val
+            elif value_type == "int":
+                lo, hi = lo_hi  # type: ignore[misc]
+                try:
+                    v = max(lo, min(hi, int(round(float(v)))))
+                except (ValueError, TypeError):
+                    v = default_val
+            result[tid] = v
+        return result
+
+    def _set_dict(key: str, value) -> None:
+        valid_types = _valid_media_types()
+
+        # Scalar expansion: "grid" → {"audio": "grid", "image": "grid", ...}
+        if value_type == "str" and isinstance(value, str):
+            value = {tid: _validate_entry(value, key) for tid in valid_types}
+        elif value_type == "int" and isinstance(value, (int, float)):
+            value = {tid: _validate_entry(value, key) for tid in valid_types}
+
+        if not isinstance(value, dict):
+            expected = "dict or string" if value_type == "str" else "dict or number"
+            raise ValueError(f"{key} must be a {expected}")
+
+        coerced: dict[str, Any] = {}
+        for tid, v in value.items():
+            if tid not in valid_types:
+                raise ValueError(f"Invalid media type: {tid!r}")
+            coerced[tid] = _validate_entry(v, key, tid)
+
+        with _settings_lock:
+            _write_value(key, coerced)
+
+    def get_left():
+        return _get_dict(f"{key_base}_left")
+
+    def get_right():
+        return _get_dict(f"{key_base}_right")
+
+    def set_left(value):
+        _set_dict(f"{key_base}_left", value)
+
+    def set_right(value):
+        _set_dict(f"{key_base}_right", value)
+
+    get_left.__name__ = f"get_{key_base}_left"
+    get_right.__name__ = f"get_{key_base}_right"
+    set_left.__name__ = f"set_{key_base}_left"
+    set_right.__name__ = f"set_{key_base}_right"
+    return get_left, get_right, set_left, set_right
+
 
 get_view_mode_left, get_view_mode_right, set_view_mode_left, set_view_mode_right = _make_per_side_setting(
     "view_mode",
     _VIEW_MODE_DEFAULTS,
-    VALID_VIEW_MODES,
+    valid_values=VALID_VIEW_MODES,
 )
 
 get_grid_icon_size_left, get_grid_icon_size_right, set_grid_icon_size_left, set_grid_icon_size_right = (
     _make_per_side_setting(
         "grid_icon_size",
         {"left": _GRID_ICON_SIZE_DEFAULT, "right": _GRID_ICON_SIZE_DEFAULT},
-        VALID_GRID_ICON_SIZES,
+        valid_values=VALID_GRID_ICON_SIZES,
         normalize=str.upper,
     )
 )
@@ -592,13 +688,12 @@ get_grid_icon_size_left, get_grid_icon_size_right, set_grid_icon_size_left, set_
 get_focus_mode_left, get_focus_mode_right, set_focus_mode_left, set_focus_mode_right = _make_per_side_setting(
     "focus_mode",
     _FOCUS_MODE_DEFAULTS,
-    VALID_FOCUS_MODES,
+    valid_values=VALID_FOCUS_MODES,
 )
 
 get_panel_pct_left, get_panel_pct_right, set_panel_pct_left, set_panel_pct_right = _make_per_side_setting(
     "panel_pct",
     _PANEL_PX_DEFAULTS,
-    None,
     value_type="int",
 )
 
