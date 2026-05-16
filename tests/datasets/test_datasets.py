@@ -221,6 +221,42 @@ class TestDatasetEndpoints:
         resp = client.get("/api/dataset/detect-media-type?source=demo:nonexistent_xyz&path=")
         assert resp.status_code == 404
 
+    def test_detect_media_type_directory_cap(self, tmp_path):
+        """The helper stops walking after ``max_dirs`` directories, even when
+        the sample is far from full.  This guards against pathological
+        folder shapes that would otherwise blow up the wall-clock budget."""
+        from vtsearch.datasets.media_type_detection import detect_media_types_in_folder
+
+        root = tmp_path / "media"
+        root.mkdir()
+        # 50 empty sub-directories.  Walking all of them is fine in a
+        # unit test, but the function should still report ``truncated``
+        # when the cap is set low enough to bite.
+        for i in range(50):
+            (root / f"empty_{i:02d}").mkdir()
+        data = detect_media_types_in_folder(root, recursive=True, max_dirs=5)
+        assert data["sample_size"] == 0
+        assert data["dominant"] is None
+        assert data["truncated"] is True
+
+    def test_detect_media_type_does_not_follow_symlinks(self, tmp_path):
+        """The recursive walk does not follow symlinked directories: the
+        sample stays inside *folder* even when a symlink points elsewhere."""
+        from vtsearch.datasets.media_type_detection import detect_media_types_in_folder
+
+        root = tmp_path / "root"
+        root.mkdir()
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "lots_of_audio.wav").write_bytes(b"RIFF")
+        try:
+            (root / "link").symlink_to(elsewhere)
+        except OSError:
+            pytest.skip("symlinks not supported on this platform")
+        data = detect_media_types_in_folder(root, recursive=True)
+        assert data["sample_size"] == 0
+        assert data["dominant"] is None
+
     def test_select_browsed_file_traversal_blocked(self, client, tmp_path):
         """POST /api/browse-media-files/select rejects traversal paths."""
         from unittest.mock import patch
