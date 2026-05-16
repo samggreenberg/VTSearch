@@ -93,7 +93,7 @@ export class LoadSortModalComponent implements OnInit {
   // --- Model loading ---
 
   loadRegistryModel(model: DetectorRegistryEntry): void {
-    this.status = 'Loading model…';
+    this.status = 'Loading detector…';
     this.modelSelected.emit(model.id);
     this.closed.emit();
   }

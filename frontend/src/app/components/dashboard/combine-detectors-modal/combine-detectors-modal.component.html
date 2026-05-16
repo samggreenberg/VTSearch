@@ -1,7 +1,7 @@
-<vt-modal [open]="true" title="Combine Trainable Models" [showCloseButton]="false" (closed)="close()">
+<vt-modal [open]="true" title="Combine Trainable Detectors" [showCloseButton]="false" (closed)="close()">
   <form class="combine-form" (ngSubmit)="submit()">
     <div class="form-group">
-      <label class="col-label" title="Trainable models being combined">Sources</label>
+      <label class="col-label" title="Trainable detectors being combined">Sources</label>
       <ul class="source-list">
         @for (row of rows; track row.name) {
           <li class="source-row">
@@ -15,18 +15,18 @@
           </li>
         }
       </ul>
-      <p class="info-text">{{ rows.length }} models · {{ totalLabels }} total labels (will dedupe + drop conflicts) · media type: {{ mediaType }}</p>
+      <p class="info-text">{{ rows.length }} detectors · {{ totalLabels }} total labels (will dedupe + drop conflicts) · media type: {{ mediaType }}</p>
     </div>
 
     <div class="form-group">
-      <label class="col-label" for="combine-new-name" title="The name of the new combined model">New Name <span class="required">*</span></label>
+      <label class="col-label" for="combine-new-name" title="The name of the new combined detector">New Name <span class="required">*</span></label>
       <input
         id="combine-new-name"
         class="form-input"
         [(ngModel)]="newName"
         name="newName"
         placeholder="e.g. All Dog Barks"
-        title="A short name for the combined model"
+        title="A short name for the combined detector"
         autofocus
       />
       @if (nameValidationMessage) {
@@ -56,7 +56,7 @@
 
   <div modal-footer>
     <button type="button" class="btn btn--secondary" [disabled]="submitting" (click)="close()" title="Discard and close the dialog">Cancel</button>
-    <button type="button" class="btn btn--primary" [disabled]="!canSubmit" (click)="submit()" title="Combine the selected models into a new one">
+    <button type="button" class="btn btn--primary" [disabled]="!canSubmit" (click)="submit()" title="Combine the selected detectors into a new one">
       {{ submitting ? 'Combining...' : 'Combine' }}
     </button>
   </div>

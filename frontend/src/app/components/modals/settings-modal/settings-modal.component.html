@@ -154,7 +154,7 @@
             <input type="checkbox" [ngModel]="settings.enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
             Enrich descriptions
           </label>
-          <label class="checkbox-row" title="Blend the learned threshold toward 0.5 to reduce aggressive inclusion/exclusion. Useful when the model has few training examples.">
+          <label class="checkbox-row" title="Blend the learned threshold toward 0.5 to reduce aggressive inclusion/exclusion. Useful when the detector has few training examples.">
             <input type="checkbox" [ngModel]="settings.safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
             Safe thresholds
           </label>

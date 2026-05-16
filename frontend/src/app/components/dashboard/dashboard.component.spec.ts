@@ -272,7 +272,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       component.selectedDatasetIds.add('d1');
       component.selectedDetectorIds.clear();
-      expect(component.labelHint).toBe('Select a model');
+      expect(component.labelHint).toBe('Select a detector');
     });
 
     it('should hint about multiple datasets', () => {
@@ -287,7 +287,7 @@ describe('DashboardComponent', () => {
       component.selectedDatasetIds.add('d1');
       component.selectedDetectorIds.add('m1');
       component.selectedDetectorIds.add('m2');
-      expect(component.labelHint).toBe('Select exactly 1 model');
+      expect(component.labelHint).toBe('Select exactly 1 detector');
     });
 
     it('should hint about media type mismatch', () => {
@@ -301,7 +301,7 @@ describe('DashboardComponent', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
-      expect(component.labelHint).toBe('Open Train Mode with the selected dataset and model');
+      expect(component.labelHint).toBe('Open Train Mode with the selected dataset and detector');
     });
   });
 
@@ -310,7 +310,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
       component.selectedDetectorIds.clear();
-      expect(component.findHint).toBe('Select a dataset and a model');
+      expect(component.findHint).toBe('Select a dataset and a detector');
     });
 
     it('should hint about missing dataset', () => {
@@ -324,7 +324,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       component.selectedDatasetIds.add('d1');
       component.selectedDetectorIds.clear();
-      expect(component.findHint).toBe('Select a model');
+      expect(component.findHint).toBe('Select a detector');
     });
 
     it('should hint about media type mismatch', () => {
@@ -338,14 +338,14 @@ describe('DashboardComponent', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
-      expect(component.findHint).toBe('Score selected datasets with selected models');
+      expect(component.findHint).toBe('Score selected datasets with selected detectors');
     });
 
     it('should hint about untrained model', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0 }];
       flushInitialRequests(datasets, models);
-      expect(component.findHint).toBe('Selected model has no training labels');
+      expect(component.findHint).toBe('Selected detector has no training labels');
     });
   });
 
