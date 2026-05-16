@@ -306,21 +306,27 @@ class TestSaveLabels:
 
     def test_save_labels_captures_active_clipper_into_input_spec(self, client):
         """When the active dataset has a clipper, save_detector_labels stamps it onto input_spec."""
+        from vtsearch.detectors.store import _detector_path, _read_detector
         from vtsearch.state import medias
 
         if not medias:
             pytest.skip("No medias loaded for this test")
 
-        first_id = next(iter(medias))
-        original = medias[first_id].get("origin")
+        # Stamp every media's origin with the same clipper config — the
+        # extractor scans the dict order until it finds a clipped media,
+        # so doing it everywhere matches what the loader does in real life
+        # and removes any iteration-order flakiness.
+        originals: dict[int, object] = {}
         try:
-            medias[first_id]["origin"] = {
-                "importer": "test",
-                "params": {
-                    "clipper": "sound_tiling",
-                    "clipper_duration": "2.0",
-                },
-            }
+            for mid, media in medias.items():
+                originals[mid] = media.get("origin")
+                media["origin"] = {
+                    "importer": "test",
+                    "params": {
+                        "clipper": "sound_tiling",
+                        "clipper_duration": "2.0",
+                    },
+                }
 
             client.post(
                 "/api/detectors",
@@ -329,13 +335,18 @@ class TestSaveLabels:
             res = client.post("/api/detectors/ClipperCapture/labels")
             assert res.status_code == 200
 
-            model_data = client.get("/api/detectors/ClipperCapture").get_json()
-            assert model_data["input_spec"] == {
+            # Read straight off disk so we don't depend on the GET route's
+            # serialisation behaviour for an unknown-include field.
+            disk = _read_detector(_detector_path("ClipperCapture"))
+            assert disk is not None
+            assert disk["input_spec"] == {
                 "clipper": "sound_tiling",
                 "clipper_params": {"duration": "2.0"},
             }
         finally:
-            medias[first_id]["origin"] = original
+            for mid, origin in originals.items():
+                if mid in medias:
+                    medias[mid]["origin"] = origin
 
     def test_save_labels_drops_input_spec_when_dataset_has_no_clipper(self, client):
         """Re-saving labels against an unclipped dataset clears any stale input_spec."""

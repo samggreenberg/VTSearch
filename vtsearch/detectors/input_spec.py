@@ -45,7 +45,10 @@ def extract_input_spec_from_medias(
             continue
         clipper_name = params.get("clipper", "")
         if not clipper_name or clipper_name.endswith("_default"):
-            return None
+            # A media with no clipper (or the default pass-through) is
+            # uninformative — keep scanning in case a clipped media
+            # appears later in iteration order.
+            continue
         clipper_params: dict[str, str] = {}
         for key, value in params.items():
             if not isinstance(key, str) or not key.startswith("clipper_"):
