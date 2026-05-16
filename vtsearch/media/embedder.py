@@ -732,6 +732,7 @@ class MediaEmbedder(ABC):
         return {
             "name": self.name,
             "media_type_id": self.media_type_id,
+            "is_default": self.is_default,
             "supports_text": self.supports_text,
             "supports_patch_regions": self.supports_patch_regions,
             "license_notice": self.license_notice,
