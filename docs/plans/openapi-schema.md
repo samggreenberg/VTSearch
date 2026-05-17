@@ -604,15 +604,33 @@ checks off this follow-up.
       ``docs/API.md § Machine-readable schema`` and ``docs/CLI.md``
       both point at ``GET /api/openapi.json`` (and Swagger UI at
       ``/api/docs``) as the single source.
+- [x] ``AuthService`` and ``AchievementsService`` rewired to the
+      generated TS client. ``AuthService`` now calls
+      ``apiAuthStatusGet`` / ``apiAuthLoginPost`` / ``apiAuthLogoutPost``;
+      ``AchievementsService`` now calls ``apiAchievementsGet`` /
+      ``apiAchievementsCategoryIdAcknowledgePost`` /
+      ``apiAchievementsCheckPhrasePost``. The local
+      ``AuthStatus`` / ``AchievementInfo`` / ``AchievementsState`` /
+      ``DocInfo`` / ``PendingAnnouncement`` / ``PhraseCheckResult``
+      interfaces were deleted from the service files; consumers
+      (``achievements-tab``, ``achievement-unlock-host``)
+      ``import type``-only the generated ``AchievementEntry`` /
+      ``AchievementState`` / ``DocEntry`` / ``PendingAnnouncement`` from
+      their direct module paths under ``generated/api-client/models/``.
+      ``HttpContext``-based ``SKIP_ERROR_TOAST`` flagging on
+      ``/api/auth/status`` and ``/api/auth/login`` is preserved by
+      passing the ``HttpContext`` through the generated function's
+      4th-positional ``context`` argument.
 
 ## Open follow-ups
 
 - **Migrate the remaining Angular services to the generated client.**
-  The settings pilot proves the pattern. Each follow-up PR picks one
-  blueprint area (medias, sorting, detectors, datasets, eval, …),
-  rewires the matching Angular service(s) to call the generated
-  function modules under ``frontend/src/app/generated/api-client/fn/``,
-  and deletes the corresponding hand-maintained interfaces from
+  Settings, auth, and achievements have all moved over. Each follow-up
+  PR picks one blueprint area (medias, sorting, detectors, datasets,
+  eval, labels, exporters, …), rewires the matching Angular service(s)
+  to call the generated function modules under
+  ``frontend/src/app/generated/api-client/fn/``, and deletes the
+  corresponding hand-maintained interfaces from
   ``frontend/src/app/models/api.models.ts``. The hybrid imports
   (``import type`` for DTOs, direct function-module paths for
   runtime symbols, no barrel) are required to keep the initial bundle

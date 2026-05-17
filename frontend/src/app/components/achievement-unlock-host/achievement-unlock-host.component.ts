@@ -4,10 +4,8 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../modal/modal.component';
 import { AchievementBadgeComponent } from '../achievement-badge/achievement-badge.component';
-import {
-  AchievementsService,
-  PendingAnnouncement,
-} from '../../services/achievements.service';
+import { AchievementsService } from '../../services/achievements.service';
+import type { PendingAnnouncement } from '../../generated/api-client/models/pending-announcement';
 
 /**
  * Global host that listens to `AchievementsService.unlocks` and pops a
