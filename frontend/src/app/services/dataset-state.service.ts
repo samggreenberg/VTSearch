@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import { BehaviorSubject, Subject, forkJoin } from 'rxjs';
-import { switchMap, takeUntil } from 'rxjs/operators';
+import { BehaviorSubject, Subject, forkJoin, of } from 'rxjs';
+import { catchError, switchMap, takeUntil } from 'rxjs/operators';
 import { DatasetRegistryEntry, LoadingTask, DetectorRegistryEntry } from '../models/api.models';
 import { DatasetsApiService } from './datasets-api.service';
 import { DetectorsApiService } from './detectors-api.service';
@@ -12,6 +12,16 @@ export class DatasetStateService implements OnDestroy {
   private readonly loadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
   private readonly loadingSubject = new BehaviorSubject<boolean>(false);
   private readonly progressMessageSubject = new BehaviorSubject<string>('');
+  /** Last registry-fetch error, or null if the most recent fetch
+   *  succeeded. Surfaced inline in the context-pulldowns so the user can
+   *  retry without leaving their current view. */
+  private readonly errorSubject = new BehaviorSubject<string | null>(null);
+  /** Flips to `true` the first time the registry returns from the
+   *  server, success or empty. Used by the active-context route guard
+   *  to know when it's safe to validate a URL pair against the
+   *  registry — on a deep-link cold start, the guard may run before the
+   *  initial fetch lands. */
+  private readonly loadedSubject = new BehaviorSubject<boolean>(false);
   private readonly destroy$ = new Subject<void>();
   /** Emits whenever a refresh is requested; switchMap ensures only the latest response is used. */
   private readonly refreshTrigger$ = new Subject<void>();
@@ -21,6 +31,8 @@ export class DatasetStateService implements OnDestroy {
   readonly loadingTasks$ = this.loadingTasksSubject.asObservable();
   readonly loading$ = this.loadingSubject.asObservable();
   readonly progressMessage$ = this.progressMessageSubject.asObservable();
+  readonly error$ = this.errorSubject.asObservable();
+  readonly loaded$ = this.loadedSubject.asObservable();
 
   constructor(
     private datasetsApi: DatasetsApiService,
@@ -28,21 +40,31 @@ export class DatasetStateService implements OnDestroy {
   ) {
     // Single subscription that uses switchMap to cancel in-flight requests
     // when a new refresh is triggered, preventing stale responses from
-    // overwriting fresh data.
+    // overwriting fresh data. `catchError` keeps the outer pipeline alive
+    // after a failed fetch so the next `refresh()` can retry.
     this.refreshTrigger$
       .pipe(
         switchMap(() =>
           forkJoin({
             datasets: this.datasetsApi.getRegistry(),
             detectors: this.detectorsApi.getRegistry(),
-          }),
+          }).pipe(catchError(() => of(null))),
         ),
         takeUntil(this.destroy$),
       )
       .subscribe({
-        next: ({ datasets, detectors }) => {
-          this.datasetsSubject.next(datasets.datasets || []);
-          this.detectorsSubject.next(detectors.detectors || []);
+        next: (res) => {
+          if (res === null) {
+            this.errorSubject.next("Couldn't load datasets and detectors.");
+            // A failed fetch still resolves the "have we tried?" question,
+            // so the route guard doesn't hang forever.
+            if (!this.loadedSubject.value) this.loadedSubject.next(true);
+            return;
+          }
+          this.datasetsSubject.next(res.datasets.datasets || []);
+          this.detectorsSubject.next(res.detectors.detectors || []);
+          if (this.errorSubject.value !== null) this.errorSubject.next(null);
+          if (!this.loadedSubject.value) this.loadedSubject.next(true);
         },
       });
   }
@@ -76,6 +98,14 @@ export class DatasetStateService implements OnDestroy {
     return this.progressMessageSubject.value;
   }
 
+  get error(): string | null {
+    return this.errorSubject.value;
+  }
+
+  get loaded(): boolean {
+    return this.loadedSubject.value;
+  }
+
   setLoading(loading: boolean): void {
     this.loadingSubject.next(loading);
   }
@@ -94,5 +124,7 @@ export class DatasetStateService implements OnDestroy {
     this.loadingTasksSubject.next([]);
     this.loadingSubject.next(false);
     this.progressMessageSubject.next('');
+    this.errorSubject.next(null);
+    this.loadedSubject.next(false);
   }
 }

@@ -49,22 +49,15 @@ export class ActiveContextService {
     return this.modelIdSubject.value;
   }
 
-  setDatasetId(id: string): void {
-    if (this.datasetIdSubject.value === id) return;
-    this.datasetIdSubject.next(id);
-    this.pairSubject.next({ datasetId: id, modelId: this.modelIdSubject.value });
-  }
-
-  setModelId(id: string): void {
-    if (this.modelIdSubject.value === id) return;
-    this.modelIdSubject.next(id);
-    this.pairSubject.next({ datasetId: this.datasetIdSubject.value, modelId: id });
-  }
-
   /**
-   * Set both halves of the active pair in a single change. Avoids the
-   * transient mismatched-pair window that would result from two separate
-   * setter calls fighting through the HTTP interceptor.
+   * Set both halves of the active pair in a single change.
+   *
+   * Phase 2 made the URL authoritative — call this only from the
+   * `activeContextGuard` (via `ContextSwitchService.applyActivePair`)
+   * or from internal recovery paths (e.g. `ActiveContextWatcherService`
+   * clearing a deleted half). UI code that wants to change the pair
+   * should `router.navigate(['/label', ds, det])` and let the guard
+   * write through here.
    */
   setActivePair(datasetId: string, modelId: string): void {
     const dsChanged = this.datasetIdSubject.value !== datasetId;

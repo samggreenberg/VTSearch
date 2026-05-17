@@ -24,6 +24,7 @@ import { AuthService } from './services/auth.service';
 import { AchievementsService } from './services/achievements.service';
 import { ThemeService } from './services/theme.service';
 import { ToastService } from './services/toast.service';
+import { ActiveContextWatcherService } from './services/active-context-watcher.service';
 import {
   NewThingFlowsService,
   ImporterFlowState,
@@ -85,10 +86,12 @@ export class AppComponent {
     private themeService: ThemeService,
     private newThingFlows: NewThingFlowsService,
     _toast: ToastService,
+    activeContextWatcher: ActiveContextWatcherService,
   ) {
     this.auth.checkStatus();
     this.achievements.refresh();
     this.themeService.loadFromSettings();
+    activeContextWatcher.start();
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {

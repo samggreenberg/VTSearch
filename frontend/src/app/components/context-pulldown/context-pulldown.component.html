@@ -22,6 +22,12 @@
     (mousedown)="onMenuMouseDown($event)"
     (keydown)="onKeydown($event)"
   >
+    @if (registryError) {
+      <div class="pulldown-error" role="alert">
+        <span class="pulldown-error__msg">Couldn't load {{ isDataset ? 'datasets' : 'detectors' }}.</span>
+        <button type="button" class="pulldown-error__retry" (click)="retryRegistry()">Retry</button>
+      </div>
+    }
     @if (rows.length === 0) {
       <div class="pulldown-empty">No {{ isDataset ? 'datasets' : 'detectors' }} yet.</div>
     } @else {

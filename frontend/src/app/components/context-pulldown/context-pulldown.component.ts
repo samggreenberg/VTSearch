@@ -1,11 +1,14 @@
 import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
+import { PulldownControlService } from '../../services/pulldown-control.service';
+import { DashboardColumnsService } from '../../services/dashboard-columns.service';
+import { SortState } from '../../utils/managed-columns';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.models';
 import { isPairCompatible } from '../../utils/context-compat';
 
@@ -50,8 +53,28 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   rows: PulldownRow[] = [];
   activeName = '';
   activeRowExists = false;
+  registryError: string | null = null;
+
+  /** True between an "Add New" click in this pulldown and the resulting
+   *  registry-update that auto-selects the new item. Reset on success
+   *  or on dismissal of the underlying modal. */
+  private awaitingNew = false;
+  /** Set when the modal we opened has emitted its success signal
+   *  (`created$` for the detector flow, `importStarted$` for the dataset
+   *  flow). Distinguishes a user-dismissal from a real submit so the
+   *  modal-close handler knows whether to keep waiting. */
+  private sawSuccessSignal = false;
+  /** Dataset-flow only: snapshot of registry ids taken when the add
+   *  started, so a fresh id can be detected once the load completes. */
+  private knownIdsAtAddStart = new Set<string>();
+  private prevImporterOpen = false;
+  private prevDetectorOpen = false;
 
   private destroy$ = new Subject<void>();
+
+  /** Live mirror of the Dashboard's sort for this pulldown's table. Kept
+   *  in sync via a subscription in `ngOnInit`. */
+  private sortState: SortState = { column: 'name', asc: true };
 
   constructor(
     private host: ElementRef<HTMLElement>,
@@ -59,12 +82,65 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     private activeContext: ActiveContextService,
     private contextSwitch: ContextSwitchService,
     private newThingFlows: NewThingFlowsService,
+    private pulldownControl: PulldownControlService,
+    private dashboardColumns: DashboardColumnsService,
   ) {}
 
   ngOnInit(): void {
-    this.datasetState.datasets$.pipe(takeUntil(this.destroy$)).subscribe(() => this.rebuildRows());
+    this.datasetState.datasets$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.rebuildRows();
+      this.maybeAutoSelectNewDataset();
+    });
     this.datasetState.detectors$.pipe(takeUntil(this.destroy$)).subscribe(() => this.rebuildRows());
     this.activeContext.pair$.pipe(takeUntil(this.destroy$)).subscribe(() => this.rebuildRows());
+    this.datasetState.error$.pipe(takeUntil(this.destroy$)).subscribe((err) => {
+      this.registryError = err;
+    });
+
+    this.newThingFlows.created$.pipe(takeUntil(this.destroy$)).subscribe(({ kind, id }) => {
+      if (kind !== this.kind || !id || !this.awaitingNew) return;
+      this.sawSuccessSignal = true;
+      this.awaitingNew = false;
+      this.switchToNewItem(id);
+    });
+    if (this.isDataset) {
+      this.newThingFlows.importStarted$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+        if (!this.awaitingNew) return;
+        this.sawSuccessSignal = true;
+        this.knownIdsAtAddStart = new Set(this.datasetState.datasets.map((d) => d.id));
+      });
+    }
+    // Cancel the await if the user dismisses the underlying modal
+    // without submitting. Without this, a later registry refresh from
+    // an unrelated source would auto-select an unrelated dataset.
+    this.newThingFlows.importer$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+      const closing = this.prevImporterOpen && !state.open;
+      this.prevImporterOpen = state.open;
+      if (!closing || !this.isDataset) return;
+      if (this.awaitingNew && !this.sawSuccessSignal) this.awaitingNew = false;
+    });
+    this.newThingFlows.newDetector$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+      const closing = this.prevDetectorOpen && !state.open;
+      this.prevDetectorOpen = state.open;
+      if (!closing || this.isDataset) return;
+      if (this.awaitingNew && !this.sawSuccessSignal) this.awaitingNew = false;
+    });
+
+    this.pulldownControl
+      .openSignal$(this.kind)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.openMenu());
+
+    // Erase the column-type union to a plain `SortState` — the pulldown
+    // doesn't care which specific column-type union the source carries.
+    const sortState$: Observable<SortState> = this.isDataset
+      ? this.dashboardColumns.datasetCols.sortState$
+      : this.dashboardColumns.detectorCols.sortState$;
+    sortState$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+      this.sortState = state;
+      this.rebuildRows();
+    });
+
     this.rebuildRows();
   }
 
@@ -96,8 +172,25 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   toggle(): void {
-    this.open = !this.open;
-    this.focusedIndex = this.open ? this.findActiveIndex() : -1;
+    if (this.open) this.close();
+    else this.openMenu();
+  }
+
+  /**
+   * Open the dropdown and pre-focus the first compatible row (or the
+   * active row if all rows are incompatible / there's no other-half
+   * context yet). Scrolls the focused row into view on the next tick.
+   * Idempotent — calling on an already-open menu just re-focuses.
+   */
+  openMenu(): void {
+    this.open = true;
+    const firstCompat = this.rows.findIndex((r) => r.compatibleWithOther);
+    if (firstCompat >= 0) this.focusedIndex = firstCompat;
+    else {
+      const i = this.findActiveIndex();
+      this.focusedIndex = i >= 0 ? i : -1;
+    }
+    setTimeout(() => this.scrollFocusedIntoView(), 0);
   }
 
   close(): void {
@@ -120,7 +213,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
   addNew(): void {
     this.close();
+    this.awaitingNew = true;
+    this.sawSuccessSignal = false;
     if (this.isDataset) {
+      this.knownIdsAtAddStart = new Set(this.datasetState.datasets.map((d) => d.id));
       this.newThingFlows.openImporter();
     } else {
       const other = this.activeContext.datasetId
@@ -128,6 +224,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
         : null;
       this.newThingFlows.openNewDetector({ defaultMediaType: other?.media_type || '' });
     }
+  }
+
+  retryRegistry(): void {
+    this.datasetState.refresh();
   }
 
   /** Row click in the Add-New footer should swallow the click so the
@@ -156,6 +256,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
         } else {
           this.focusedIndex += 1;
         }
+        this.scrollFocusedIntoView();
         break;
       case 'ArrowUp':
         event.preventDefault();
@@ -166,14 +267,17 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
         } else {
           this.focusedIndex -= 1;
         }
+        this.scrollFocusedIntoView();
         break;
       case 'Home':
         event.preventDefault();
         if (rowsLen > 0) this.focusedIndex = 0;
+        this.scrollFocusedIntoView();
         break;
       case 'End':
         event.preventDefault();
         if (rowsLen > 0) this.focusedIndex = rowsLen - 1;
+        this.scrollFocusedIntoView();
         break;
       case 'Enter':
       case ' ':
@@ -214,9 +318,52 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     return row.id;
   }
 
+  /** Sort registry entries the same way the Dashboard's tables sort them
+   *  (column + direction read from `DashboardColumnsService`). Mirrors
+   *  the comparator in `DashboardComponent.sortedDatasets` /
+   *  `sortedDetectors`. */
+  private applySort<T extends { name: string; [k: string]: unknown }>(arr: T[]): T[] {
+    const { column, asc } = this.sortState;
+    const dir = asc ? 1 : -1;
+    return [...arr].sort((a, b) => {
+      const va = a[column] ?? '';
+      const vb = b[column] ?? '';
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }
+
   private findActiveIndex(): number {
     const id = this.isDataset ? this.activeContext.datasetId : this.activeContext.modelId;
     return this.rows.findIndex((r) => r.id === id);
+  }
+
+  private scrollFocusedIntoView(): void {
+    const menu = this.menuRef?.nativeElement;
+    if (!menu || this.focusedIndex < 0) return;
+    const rowEl = menu.querySelectorAll('.pulldown-row')[this.focusedIndex] as
+      | HTMLElement
+      | undefined;
+    rowEl?.scrollIntoView({ block: 'nearest' });
+  }
+
+  private maybeAutoSelectNewDataset(): void {
+    if (!this.isDataset || !this.awaitingNew || !this.sawSuccessSignal) return;
+    const newOne = this.datasetState.datasets.find(
+      (d) => !this.knownIdsAtAddStart.has(d.id),
+    );
+    if (!newOne) return;
+    this.awaitingNew = false;
+    this.sawSuccessSignal = false;
+    this.switchToNewItem(newOne.id);
+  }
+
+  private switchToNewItem(id: string): void {
+    if (this.isDataset) {
+      this.contextSwitch.switchTo(id, this.activeContext.modelId);
+    } else {
+      this.contextSwitch.switchTo(this.activeContext.datasetId, id);
+    }
   }
 
   private rebuildRows(): void {
@@ -227,14 +374,11 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     const activeDataset = activeDsId ? datasets.find((d) => d.id === activeDsId) : null;
     const activeDetector = activeDetId ? detectors.find((d) => d.id === activeDetId) : null;
 
-    const sortByName = <T extends { name: string }>(arr: T[]): T[] =>
-      [...arr].sort((a, b) => a.name.localeCompare(b.name));
-
     if (this.isDataset) {
-      const sorted = sortByName(datasets);
+      const sorted = this.applySort(datasets);
       this.rows = sorted.map((d) => this.datasetRow(d, activeDsId, activeDetector));
     } else {
-      const sorted = sortByName(detectors);
+      const sorted = this.applySort(detectors);
       this.rows = sorted.map((d) => this.detectorRow(d, activeDetId, activeDataset));
     }
 

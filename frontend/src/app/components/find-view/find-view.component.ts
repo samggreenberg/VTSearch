@@ -8,8 +8,8 @@ import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
 import { DatasetsApiService } from '../../services/datasets-api.service';
-import { FindSessionService } from '../../services/find-session.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { DatasetStateService } from '../../services/dataset-state.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
@@ -60,8 +60,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private detectorsApi: DetectorsApiService,
     private datasetsApi: DatasetsApiService,
     private ngZone: NgZone,
-    private findSession: FindSessionService,
     private activeContext: ActiveContextService,
+    private datasetState: DatasetStateService,
     public mediaState: MediaStateService,
     public voteState: VoteStateService,
     public sortState: SortStateService,
@@ -100,21 +100,17 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.runFindLabel();
 
     // Reload + rescore when the active pair changes via the top-bar
-    // switcher. Skip the first emission (ngOnInit already triggered the
-    // initial loads + runFindLabel call above).
+    // switcher or a route-param swap (`/find/:ds/:det` → `/find/:ds2/:det2`).
+    // Skip the first emission (ngOnInit already triggered the initial
+    // loads + runFindLabel call above).
     let firstPair = true;
     this.activeContext.pair$
       .pipe(takeUntil(this.destroy$))
-      .subscribe((pair) => {
+      .subscribe(() => {
         if (firstPair) {
           firstPair = false;
           return;
         }
-        // FindSessionService was populated by the Dashboard on the
-        // original entry; the switcher does not write to it. Refresh it
-        // from the active context so runFindLabel() uses the new pair.
-        this.findSession.datasetId = pair.datasetId;
-        this.findSession.modelId = pair.modelId;
         this.reloadForNewPair();
       });
   }
@@ -174,7 +170,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private runFindLabel(): void {
-    const modelId = this.findSession.modelId;
+    const modelId = this.activeContext.modelId;
     if (!modelId) return;
 
     this.sortState.setSortBusy(true);
@@ -184,7 +180,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Start polling for progress concurrently
     this.startProgressPolling();
 
-    const datasetId = this.findSession.datasetId;
+    const datasetId = this.activeContext.datasetId;
+    const modelName =
+      this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
     this.detectorsApi.findLabel({ detector_id: modelId, ...(datasetId ? { dataset_id: datasetId } : {}) })
       .pipe(
         takeUntil(this.destroy$),
@@ -199,7 +197,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           const threshold = response.threshold;
           // Set sort results for stripe display
           this.sortState.setSortResults(sorted, threshold);
-          this.sortState.setLoadSortLabel(this.findSession.modelName || 'Detector');
+          this.sortState.setLoadSortLabel(modelName);
           this.sortState.setSortStatus('');
           this.sortState.setSortProgress(0, 0);
           // Select the item just above the threshold (last item with score >= threshold)

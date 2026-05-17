@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, EMPTY, Observable, Subject } from 'rxjs';
+import { BehaviorSubject, EMPTY, Observable, ReplaySubject, Subject } from 'rxjs';
 import { catchError, filter, take, takeUntil } from 'rxjs/operators';
+import { Router } from '@angular/router';
 import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
 import { DatasetsApiService } from './datasets-api.service';
@@ -14,6 +15,10 @@ interface ActiveSwitch {
   detectorId: string;
   cancelled: boolean;
   cancellable: Subject<void>;
+  /** ReplaySubject(1) so late subscribers (e.g. the route guard
+   *  attaching after a synchronous fast-path completion) still see the
+   *  completion signal. */
+  completion: ReplaySubject<void>;
 }
 
 /**
@@ -29,6 +34,17 @@ interface ActiveSwitch {
  * is also cancelled when possible. See
  * `docs/plans/active-context-switcher.md` § "Cancel-and-replace on
  * rapid re-click".
+ *
+ * Phase 2 added two entry points:
+ *
+ *  - `switchTo(ds, det)` — called by the top-bar pulldowns. When the
+ *    user is on `/label/:ds/:det` or `/find/:ds/:det`, it navigates to
+ *    the new URL (the route guard then calls `applyActivePair`). On
+ *    other routes (e.g. `/dashboard`) it flips the pair imperatively.
+ *  - `applyActivePair(ds, det)` — called by the active-context route
+ *    guard. Flips the pair imperatively (no navigation) and returns an
+ *    Observable that completes when any required loads complete, so
+ *    the guard can hold the route until prep is done.
  */
 @Injectable({ providedIn: 'root' })
 export class ContextSwitchService {
@@ -43,6 +59,7 @@ export class ContextSwitchService {
     private datasetsApi: DatasetsApiService,
     private detectorsApi: DetectorsApiService,
     private progressEvents: ProgressEventsService,
+    private router: Router,
   ) {}
 
   get switching(): boolean {
@@ -50,18 +67,47 @@ export class ContextSwitchService {
   }
 
   /**
-   * Switch the active pair, kicking off any needed dataset / detector
-   * loads. Returns nothing — callers observe completion via
-   * `activeContext.pair$` (set as soon as the pair flips) plus the
-   * `datasetState.loading$` signal.
+   * Pulldown-initiated switch. On `/label` or `/find`, navigates to the
+   * matching `/<view>/:ds/:det` URL — the route guard then drives the
+   * active-pair flip via `applyActivePair`. On other routes, flips the
+   * pair imperatively (no navigation).
    *
    * Passing `''` for either half clears that half — no load is fired
-   * for an empty id.
+   * for an empty id, and we never navigate to a partial URL.
    */
   switchTo(datasetId: string, detectorId: string): void {
-    const previous = this.active;
-    if (previous && previous.datasetId === datasetId && previous.detectorId === detectorId) {
+    const currentUrl = this.router.url.split('?')[0];
+    const onLabel = currentUrl.startsWith('/label');
+    const onFind = currentUrl.startsWith('/find');
+    if ((onLabel || onFind) && datasetId && detectorId) {
+      const seg = onFind ? 'find' : 'label';
+      this.router.navigate(['/', seg, datasetId, detectorId]);
       return;
+    }
+    this.flipAndLoad(datasetId, detectorId).subscribe();
+  }
+
+  /**
+   * Called by `activeContextGuard`. Atomically flips the active pair
+   * and kicks off any dataset / detector loads, returning an Observable
+   * that completes when all loads finish (or immediately if nothing was
+   * needed). The guard holds the route activation until this completes
+   * so the view doesn't render against half-loaded state.
+   */
+  applyActivePair(datasetId: string, detectorId: string): Observable<void> {
+    return this.flipAndLoad(datasetId, detectorId);
+  }
+
+  private flipAndLoad(datasetId: string, detectorId: string): Observable<void> {
+    const previous = this.active;
+    if (
+      previous &&
+      previous.datasetId === datasetId &&
+      previous.detectorId === detectorId &&
+      !previous.cancelled
+    ) {
+      // Same pair, same in-flight switch — share the completion signal.
+      return previous.completion.asObservable();
     }
 
     // Cancel any in-flight prep — best effort. The request-id check on
@@ -70,6 +116,7 @@ export class ContextSwitchService {
       previous.cancelled = true;
       previous.cancellable.next();
       previous.cancellable.complete();
+      previous.completion.complete();
       this.cancelInFlightLoads();
     }
 
@@ -80,6 +127,7 @@ export class ContextSwitchService {
       detectorId,
       cancelled: false,
       cancellable: new Subject<void>(),
+      completion: new ReplaySubject<void>(1),
     };
     this.active = current;
 
@@ -97,7 +145,7 @@ export class ContextSwitchService {
 
     if (!needsDatasetLoad && !needsDetectorLoad) {
       this.finishIfCurrent(current);
-      return;
+      return current.completion.asObservable();
     }
 
     this.switchingSubject.next(true);
@@ -121,6 +169,8 @@ export class ContextSwitchService {
         next: tick,
       });
     }
+
+    return current.completion.asObservable();
   }
 
   private runDatasetLoad(current: ActiveSwitch, datasetId: string): Observable<void> {
@@ -221,6 +271,8 @@ export class ContextSwitchService {
     this.switchingSubject.next(false);
     this.datasetState.setLoading(false);
     this.active = null;
+    current.completion.next();
+    current.completion.complete();
   }
 
   private cancelInFlightLoads(): void {
