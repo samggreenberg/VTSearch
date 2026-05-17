@@ -1,6 +1,6 @@
 # Active-context switcher (top-bar dataset/detector pulldowns)
 
-*Status: Proposed (no code yet). Three phases — each ships independently.*
+*Status: Phase 1 shipped (core switching, "+ Add New" footers, incompatible-pair explainer). Phase 2 (URL-driven context) and Phase 3 (in-flight job affordances) deferred — see "Open follow-ups" below.*
 
 This plan implements [ux-brainstorm.md §6.11](ux-brainstorm.md#611-active-datasetdetector-indicator--s) ("Active-dataset/detector indicator") and largely closes [§8.2](ux-brainstorm.md#82-switching-active-datasetdetector--s) ("Switching active dataset/detector"). It supersedes both entries as the canonical design — when this plan ships those entries will be marked SHIPPED and link here.
 
@@ -253,6 +253,31 @@ These came up in design and were deliberately deferred or rejected.
 - **Compatibility predicate beyond media-type equality** — Datasets and detectors each have a single `media_type`; multi-MediaType detectors don't exist today and adding the abstraction prematurely would be speculative.
 - **Cross-session "remember my last pair" persistence** — Not part of the switcher itself. If wanted, layer on as a separate per-user setting that the Dashboard's Train/Find buttons consult for default selection. Out of scope here so Phase 2 stays focused on URL-as-identity.
 - **Notification when a backgrounded job completes** — The app has no general notification system; adding one is much bigger than this plan. Phase 3's spinner-disappears-when-done is the affordance for v1.
+
+## What shipped (Phase 1)
+
+- **`utils/context-compat.ts`** with `isPairCompatible()` — single source of truth for the media-type-equality predicate.
+- **`services/active-context.service.ts`** gained `setActivePair(datasetId, modelId)`, `pair$` (atomic-pair observable), `pairKey$` (joined-key for switchMap triggers), `nextRequestId()` / `currentRequestId` for cancel-and-replace tracking.
+- **`services/new-thing-flows.service.ts`** — singleton openers for the dataset importer + new-detector modals plus emit subjects (`importStarted$`, `demoSelected$`, `created$`) so the modals can be invoked from outside the Dashboard.
+- **`services/context-switch.service.ts`** — drives a pulldown-initiated pair change end-to-end (atomic flip, parallel dataset/detector load, request-id guard, best-effort cancellation of stale loads).
+- **`components/context-pulldown/context-pulldown.component.*`** — top-bar pulldown with closed-state button + dropdown listbox (one row per registry entry, loaded/active glyph, dimmed-when-incompatible row, ellipsis truncation, "+ Add New" footer). Keyboard: ArrowUp / ArrowDown / Home / End / Enter / Escape.
+- **`components/context-pulldown/incompatible-pair-explainer.component.*`** — sibling of `<router-outlet />` that takes over `/label` and `/find` when the active pair is incompatible (mismatch, half-set, or fully empty).
+- **`app.component.*`** — replaced the read-only `Data: foo` / `Detector: cats` spans with `<vt-context-pulldown>` instances. Hosts the hoisted importer + new-detector modals via `@defer` blocks so they lazy-load (kept initial bundle at 476 kB, well under the 525 kB budget) and the explainer overlay.
+- **`components/dashboard/dashboard.component.*`** — opens its two `+` modals through `NewThingFlowsService` (instead of owning the open-state), and subscribes to the service's `importStarted$` / `demoSelected$` / `created$` so the existing post-action flows (progress polling, train-after-create) still work. Combine modals remain Dashboard-local.
+- **`components/find-view`, `components/label-view`** — subscribe to `activeContext.pair$` and re-run their loads when the pair changes mid-route, so a pulldown click on `/label` or `/find` re-prepares against the new pair.
+- **Tests**: `./run-tests.sh` green (3615 passed, 1 skipped, 2 xpassed). Dashboard specs updated to drive `NewThingFlowsService` directly for the two affected cases.
+
+## Open follow-ups (Phase 1)
+
+These came out of Phase 1 build-out but were deliberately scoped out for the first cut; pick them up in a follow-on PR or fold them into Phase 2 / 3 work.
+
+- **Focus-other-pulldown affordance on the explainer** — the design called for a `[ Pick a compatible detector ]` button that opens the *other* pulldown with its menu open and scrolled to the first compatible row. Phase 1 only renders the `Go to Dashboard` button. Wiring this needs a shared "open this pulldown programmatically" signal (e.g. a method on `ContextPulldownComponent` driven via a shared service or `@ViewChild`).
+- **"Re-resolving labels for X's embedder…" progress message** — the design called for a custom progress message when the new dataset's embedder differs from the previous one. Phase 1 reuses the generic loading affordance; the message is just whatever the dataset-load progress tracker emits.
+- **Toast when the active item is deleted/unregistered** — design § "Edge cases" #3 says we should detect via subscription and clear that half via `setActivePair(..., '')` with a toast `"Dataset 'Foo' was removed. Pick another."`. Not implemented in Phase 1 — the pulldown will just stop showing the deleted item, but the active-context ids remain pointing at the dead entry until the user picks a new one.
+- **Empty-registry error affordance** — design § "Edge cases" #6 says the pulldown should show an inline `"Couldn't load datasets — retry?"` when the registry endpoint errors. Phase 1 just shows the empty state.
+- **"Add New" footer auto-selects the new item** — design says: on successful create, the pulldown listens to `created$` and `setActivePair(...)` with the new id in its half. Phase 1 wires the `created$` emit but the pulldown doesn't yet auto-select. (The Dashboard's auto-select-newly-added logic still fires for the Dashboard route.)
+- **Pulldown row order should mirror Dashboard grid sort** — design § Pulldown behavior says "mirror the Dashboard grid's order exactly." Phase 1 sorts by name (the Dashboard's default), but doesn't track the user's column-sort preference. Plumbing this would require sharing the `ManagedColumns` sort key out of `DashboardComponent`.
+- **`FindSessionService` deletion** — the plan notes this service "will likely be deletable once Phase 2 lands." Phase 1 still uses it (writes datasetId/modelId on pair change so `runFindLabel()` picks up the new pair). Defer the deletion to the Phase 2 URL refactor.
 
 ## Open questions
 
