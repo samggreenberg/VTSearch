@@ -30,8 +30,13 @@ torch>=2.0.0
 # ── Dev tools ────────────────────────────────────────────────────────
 pytest
 pytest-xdist
+pytest-cov
 ruff
 pre-commit
+codespell
+deptry
+vulture
+pip-audit
 
 # ── Plugin dependencies (auto-discovered) ────────────────────────────
 # Regenerate with:  bash scripts/install-plugin-deps.sh

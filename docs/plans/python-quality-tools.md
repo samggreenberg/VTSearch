@@ -1,8 +1,9 @@
 # Python quality tools
 
-*Status: Phase 1 shipped — pre-commit (ruff + safety hooks) is wired up
-and `pip-audit` runs in CI. Phases 2 and 3 are proposed; see "Open
-follow-ups" at the bottom for what's still owed.*
+*Status: Phases 1 + 2 + 3 shipped. deptry, codespell, ruff's `S`
+ruleset, opt-in coverage, and a vulture whitelist are all in place
+alongside the original pre-commit + pip-audit. See "Open follow-ups"
+at the bottom for the remaining maintenance items.*
 
 The ruff + pyright + pytest stack already covers the modern core of
 Python quality tooling. This plan tracks what else is worth adding,
@@ -13,9 +14,10 @@ wire it", and a success criterion so it's a one-sitting task.
 
 - **pre-commit** (`.pre-commit-config.yaml`) — runs `ruff check`,
   `ruff format`, trailing-whitespace, end-of-file-fixer, yaml/toml/json
-  syntax checks, merge-conflict markers, and a 500 KB large-file guard
-  at commit time. Pinned to `ruff-pre-commit v0.15.8` and
-  `pre-commit-hooks v5.0.0`; bump with `pre-commit autoupdate`.
+  syntax checks, merge-conflict markers, a 500 KB large-file guard,
+  plus codespell and deptry at commit time. Pinned to
+  `ruff-pre-commit v0.15.8`, `pre-commit-hooks v5.0.0`, and
+  `codespell v2.4.2`; bump with `pre-commit autoupdate`.
 - **`pip-audit`** (`.github/workflows/audit.yml`) — scans installed
   packages against the PyPI advisory database. Runs on PRs that touch
   `requirements/**` or `pyproject.toml`, on pushes to `main`/`dev`, and
@@ -25,6 +27,59 @@ wire it", and a success criterion so it's a one-sitting task.
   `scripts/install-cpu.sh` runs `pre-commit install --install-hooks`
   automatically when `.git` is present so contributors get the git hook
   on first install.
+
+## What shipped (Phase 2)
+
+- **deptry** (`[tool.deptry]` in `pyproject.toml`, `.pre-commit-config.yaml`
+  local hook, `.github/workflows/lint.yml` job) — verifies that every
+  imported package is declared as a runtime dependency. Configured with
+  a `package_module_name_map` for the usual module/distribution
+  mismatches (`PIL`/`Pillow`, `cv2`/`opencv-python-headless`,
+  `sklearn`/`scikit-learn`, `fitz`/`PyMuPDF`, `dns`/`dnspython`, etc.)
+  and a `per_rule_ignores` list for optional/dev-only deps
+  (`paddleocr`, `whisper`, `mediapipe`, `rarfile`, `torchvision`,
+  `safetensors`, `huggingface_hub` for DEP001; `pytest`, `ruff`,
+  `gunicorn`, `sentencepiece`, `protobuf`, etc. for DEP002). The runtime
+  dep list lives in `[project.dependencies]` so deptry sees it; the
+  install spec (with `--extra-index-url` and the plugin `.txt`
+  fan-out) remains `requirements/base.txt`.
+- **codespell** (`[tool.codespell]` in `pyproject.toml`,
+  `.pre-commit-config.yaml`, `.github/workflows/lint.yml` job) — catches
+  typos in identifiers, comments, docstrings, and Markdown. Configured
+  with a `skip` list for generated/binary files and an
+  `ignore-words-list` of project-specific terms (embedder names like
+  `clap`/`siglip`/`xclip`, code identifiers like `numer`/`denom`/`medias`/`fpr`,
+  and stylistic spellings the project uses consistently like `re-use`
+  and `pre-select`).
+
+## What shipped (Phase 3)
+
+- **Ruff `S` ruleset** (`select = ["E4", "E7", "E9", "F", "S"]` in
+  `[tool.ruff.lint]`) — flake8-bandit security checks now run as part
+  of `ruff check`. Several rules are globally disabled because they
+  don't match VTSearch's threat model (single-user, on-prem) and
+  produce noise more than signal: S101 (assert used for type
+  narrowing), S104 (bind 0.0.0.0 is intentional for the dev server),
+  S105 (false-positive-prone on env-var names), S110/S112 (silent
+  except is intentional in best-effort code paths), S311 (random
+  used for dataset splitting, not crypto), S324 (md5/sha1 used as
+  content fingerprints). Real security-relevant rules — S301
+  (pickle.load), S314 (xml parsing), S603/S607 (subprocess) — stay
+  enabled with targeted per-file ignores for the few legitimate
+  uses (`safe_pickle_load`, the arXiv RSS-feed parser, git/ffmpeg/unrar
+  invocations).
+- **Coverage via `pytest-cov`** (`[tool.coverage]` in `pyproject.toml`,
+  opt-in flag in `run-tests.sh`) — coverage is gathered when
+  `VTSEARCH_COVERAGE=1 ./run-tests.sh` is run; off by default to keep
+  the fast-loop test time unchanged. No PR gate yet — the next step is
+  to publish a step summary in CI and then decide on a delta gate.
+- **Vulture whitelist** (`.vulture-whitelist.py`) — a curated list of
+  plugin sentinels (`IMPORTER`, `EXPORTER`, `CONVERTER`, `SOURCE`,
+  etc.) and other reflectively-referenced symbols, so
+  `vulture vtsearch .vulture-whitelist.py --min-confidence 80` runs
+  cleanly. Vulture is intentionally NOT a CI gate — it's a manual
+  pre-release audit since lower confidence settings produce too many
+  false positives against the plugin-discovery pattern.
 
 ## Phase 2 — Low-friction additions
 
@@ -217,14 +272,26 @@ added to the whitelist with a comment explaining why.
 
 ## Open follow-ups
 
-- Phase 2: wire up **deptry** and **codespell** (both ~1-hour tasks).
-- Phase 3a: turn on **ruff `S` ruleset** (covers most of what bandit
-  would). Triage the first-run findings, add targeted ignores.
-- Phase 3b: wire up **coverage** via `pytest-cov`. Publish-only first;
-  decide on a delta gate after we see real numbers.
-- Phase 3c: one-shot **vulture** audit. Build a whitelist for the
-  plugin sentinels, delete what's actually dead, then leave vulture as
-  a manual pre-release command rather than a CI gate.
+- **Coverage publish in CI.** `VTSEARCH_COVERAGE=1` runs locally but
+  there's no CI publication yet. Next step: add a `coverage` job (or
+  extend the existing test job) to upload an HTML report as an
+  artifact and write a per-file summary to `$GITHUB_STEP_SUMMARY`.
+  Decide on a delta gate (e.g. `diff-cover`) once we have a baseline.
+- **Vulture audit pass.** The whitelist makes `--min-confidence 80`
+  clean; doing a real pass at 60 % and deleting confirmed dead code
+  (after extending the whitelist for plugin/reflective references) is
+  still outstanding. Run before each release rather than as a CI gate.
+- **Pyright `S`-equivalent and `C901` complexity.** ruff has McCabe
+  complexity via `C901`; consider enabling alongside future
+  security-rule tightening if we want a complexity gate.
+- **`[project.dependencies]` vs `requirements/base.txt` drift.**
+  Phase 2's deptry config duplicates the runtime dep list across both
+  files (pyproject.toml for deptry, requirements/base.txt for the
+  pinned install). deptry will catch new imports missing from
+  pyproject.toml, but a contributor adding a dep to `requirements/`
+  alone won't see a failure. Consider consolidating to
+  `-e .[plugins,dev]` in `requirements/base.txt` so the project
+  metadata becomes the single source of truth.
 - Periodic: `pre-commit autoupdate` on a cadence so pinned hook
   versions don't drift too far from CI's `pip install ruff` (which
   always pulls latest). Worth a quarterly reminder.

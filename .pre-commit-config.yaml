@@ -35,3 +35,21 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: ["--maxkb=500"]
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
+    hooks:
+      - id: codespell
+        additional_dependencies: [tomli]
+
+  # deptry needs the project's venv to resolve imports, so it runs as
+  # a local hook against `python -m deptry` (installed via
+  # requirements/base.txt's `[dev]` extra).
+  - repo: local
+    hooks:
+      - id: deptry
+        name: deptry
+        entry: python -m deptry .
+        language: system
+        pass_filenames: false
+        files: ^(vtsearch/|pyproject\.toml|requirements/)
