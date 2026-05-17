@@ -29,46 +29,6 @@ export interface MediaItem {
 
 // --- Sorting ---
 
-export interface SortResult {
-  id: number;
-  similarity: number;
-  /** Patch-region-aware embedders only: normalised [x0, y0, x1, y1] of the
-   *  region that scored highest against the query. */
-  best_region?: number[];
-}
-
-export interface SortResponse {
-  results: SortResult[];
-  threshold: number;
-}
-
-export interface LearnedSortResult {
-  id: number;
-  score: number;
-  /** Patch-region-aware embedders only: normalised [x0, y0, x1, y1] of the
-   *  region that scored highest under the MLP. */
-  best_region?: number[];
-}
-
-export interface LearnedSortResponse {
-  results: LearnedSortResult[];
-  threshold: number;
-}
-
-/** Initial response to ``POST /api/learned-sort`` and shape returned by the
- *  result-polling endpoint.  ``status: "done"`` carries the full result;
- *  ``status: "running"`` means the client should poll
- *  ``GET /api/learned-sort/result?job_id=…`` until done. */
-export interface LearnedSortJobResponse {
-  job_id: string;
-  status: 'running' | 'done' | 'error' | 'cancelled' | 'missing';
-  results?: LearnedSortResult[];
-  threshold?: number;
-  current?: number;
-  total?: number;
-  error?: string;
-}
-
 export interface VotesResponse {
   good: number[];
   bad: number[];
@@ -76,65 +36,6 @@ export interface VotesResponse {
   learned_scores: Record<string, number>;
   labelset_good_count?: number;
   labelset_bad_count?: number;
-}
-
-export interface InclusionResponse {
-  inclusion: number;
-}
-
-export interface SafeThresholdsResponse {
-  safe_thresholds: boolean;
-}
-
-export interface TextsortSuggestionsResponse {
-  suggestions: string[];
-}
-
-export interface FillFromSortRequest {
-  sort_results: { id: number; score: number }[];
-  threshold: number;
-  sides: string;
-  confirm: boolean;
-}
-
-export interface FillFromSortDryRunResponse {
-  good_count: number;
-  bad_count: number;
-}
-
-export interface FillFromSortConfirmResponse {
-  good_applied: number;
-  bad_applied: number;
-  results: Record<string, unknown>;
-}
-
-export interface DiversityTreeNextResponse {
-  id: number | null;
-  diversity_level: number;
-  exhausted: boolean;
-}
-
-// --- Labels ---
-
-export interface LabelEntry {
-  md5: string;
-  label: 'good' | 'bad';
-  origin_name?: string;
-  filename?: string;
-  category?: string;
-  is_correction?: boolean;
-  custom_metadata?: Record<string, unknown>;
-  [key: string]: unknown;
-}
-
-export interface LabelsExportResponse {
-  labels: LabelEntry[];
-  available_columns?: string[];
-}
-
-export interface LabelsImportResponse {
-  applied: number;
-  skipped: number;
 }
 
 // --- Labeling Status ---
@@ -471,19 +372,6 @@ export interface OkResponse {
   ok: boolean;
 }
 
-// --- Server Files ---
-
-export interface ServerFileEntry {
-  name: string;
-  filename?: string;
-  path?: string;
-  size_bytes?: number;
-}
-
-export interface ServerMediaFilesResponse {
-  files: ServerFileEntry[];
-}
-
 // --- Eval / Progress Charts ---
 
 export interface ErrorCostDataPoint {
@@ -500,32 +388,6 @@ export interface DiversityDataPoint {
   num_labels: number;
   diversity_level: number;
   depth: number;
-}
-
-export interface TrainAndScoreResponse {
-  error_cost?: ErrorCostDataPoint[];
-  stability?: StabilityDataPoint[];
-  diversity?: DiversityDataPoint[];
-  [key: string]: unknown;
-}
-
-/** Job envelope for ``/api/eval/train-and-score``.  Mirrors
- *  :class:`LearnedSortJobResponse`. */
-export interface EvalTrainAndScoreJobResponse {
-  job_id: string;
-  status: 'running' | 'done' | 'error' | 'cancelled' | 'missing';
-  metric?: 'smart' | 'stable' | 'diverse';
-  error_cost?: ErrorCostDataPoint[];
-  stability?: StabilityDataPoint[];
-  diversity?: DiversityDataPoint[];
-  current?: number;
-  total?: number;
-  error?: string;
-}
-
-export interface IndicatorScoreHistoryResponse {
-  metric: string;
-  history: ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[];
 }
 
 export interface VotingIterationsResponse {

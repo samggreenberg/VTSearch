@@ -12,8 +12,9 @@ import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { LabelSessionService } from '../../../services/label-session.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
-import { ImporterField, LabelEntry } from '../../../models/api.models';
+import { ImporterField } from '../../../models/api.models';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
+import type { LabeledElement } from '../../../generated/api-client/models/labeled-element';
 
 export interface ColumnDef {
   key: string;
@@ -40,7 +41,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   status = '';
 
   /** Labels fetched from the server. */
-  labels: LabelEntry[] = [];
+  labels: LabeledElement[] = [];
   labelsLoaded = false;
 
   /** Column definitions with selection state — built dynamically from API response. */
@@ -167,7 +168,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     return this.columns.filter((c) => c.enabled);
   }
 
-  get filteredLabels(): LabelEntry[] {
+  get filteredLabels(): LabeledElement[] {
     if (this.labelFilter === 'good') {
       return this.labels.filter((e) => e.label === 'good');
     }
@@ -185,7 +186,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     return this.labels.some((e) => e.is_correction === true);
   }
 
-  get previewLabels(): LabelEntry[] {
+  get previewLabels(): LabeledElement[] {
     return this.filteredLabels.slice(0, 50);
   }
 
@@ -197,7 +198,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     return this.selectedExporter !== null;
   }
 
-  getCellValue(entry: LabelEntry, col: ColumnDef): string {
+  getCellValue(entry: LabeledElement, col: ColumnDef): string {
     if (col.isMetadata) {
       const meta = entry.custom_metadata;
       if (meta && col.key in meta) {
