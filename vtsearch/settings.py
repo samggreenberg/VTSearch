@@ -333,16 +333,6 @@ def _save_user(username: str) -> None:
         _sync_to_source(username, cache)
 
 
-def _save_for_key(key: str) -> None:
-    """Persist whichever tier *key* belongs to."""
-    if key in _SERVER_KEYS:
-        _save_server()
-    else:
-        from vtsearch.auth import get_current_user
-
-        _save_user(get_current_user())
-
-
 # ---------------------------------------------------------------------------
 # Low-level value get/set used by accessor factories
 # ---------------------------------------------------------------------------
@@ -375,20 +365,6 @@ def _write_value(key: str, value: Any) -> None:
     cache = _ensure_user_loaded(username)
     cache[key] = value
     _save_user(username)
-
-
-def _get_active_cache_for_key(key: str) -> dict[str, Any]:
-    """Return the underlying cache dict that owns *key* for the active user.
-
-    Exposed for backwards compatibility with accessor factories that
-    previously called ``_ensure_loaded()`` and mutated the returned dict
-    directly.
-    """
-    if key in _SERVER_KEYS:
-        return _ensure_server_loaded()
-    from vtsearch.auth import get_current_user
-
-    return _ensure_user_loaded(get_current_user())
 
 
 # ---------------------------------------------------------------------------

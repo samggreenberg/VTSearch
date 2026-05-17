@@ -1,6 +1,5 @@
 """Tests for the Document media type and MediaConverter framework."""
 
-import io
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -45,21 +44,6 @@ def _make_two_page_pdf() -> bytes:
     pdf_bytes = doc.tobytes()
     doc.close()
     return pdf_bytes
-
-
-def _make_minimal_wav(duration_s: float = 0.1, sample_rate: int = 16000) -> bytes:
-    """Build a minimal WAV file (mono, 16-bit PCM)."""
-    n_samples = int(duration_s * sample_rate)
-    samples = np.zeros(n_samples, dtype=np.int16)
-    buf = io.BytesIO()
-    import wave
-
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(samples.tobytes())
-    return buf.getvalue()
 
 
 def _make_minimal_video(frames: int = 30, width: int = 64, height: int = 64) -> bytes:

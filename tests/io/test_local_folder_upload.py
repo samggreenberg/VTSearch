@@ -112,9 +112,6 @@ class TestImportLocalFolderEndpoint:
             captured["origin"] = origin
             captured["kwargs"] = kwargs
 
-            class _StubMedias(dict):
-                pass
-
             # Don't actually invoke the real folder importer (that would try
             # to embed audio).  Just record that load_fn is callable.
             captured["load_fn"] = load_fn

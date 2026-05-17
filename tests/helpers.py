@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import json
 import struct
 import wave
 from pathlib import Path
@@ -100,37 +99,6 @@ def make_minimal_mp4_bytes() -> bytes:
     )
 
 
-def make_minimal_pdf_bytes() -> bytes:
-    """Return a minimal valid PDF byte string.
-
-    Attempts to use PyMuPDF (fitz) for a real, renderable single-page PDF; if
-    that is unavailable, falls back to a handcrafted PDF that is parseable by
-    PyPDF-style readers.
-    """
-    try:
-        import fitz  # type: ignore  # noqa: PLC0415
-    except ImportError:
-        # Minimal valid PDF 1.4 with one empty page
-        return (
-            b"%PDF-1.4\n"
-            b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
-            b"2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n"
-            b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\n"
-            b"xref\n0 4\n"
-            b"0000000000 65535 f \n"
-            b"0000000009 00000 n \n"
-            b"0000000053 00000 n \n"
-            b"0000000098 00000 n \n"
-            b"trailer<</Size 4/Root 1 0 R>>\n"
-            b"startxref\n152\n%%EOF\n"
-        )
-    doc = fitz.open()
-    doc.new_page()
-    data = doc.tobytes()
-    doc.close()
-    return data
-
-
 def make_image_media(media_id: int, embedding_dim: int = 512) -> dict:
     """Build a test image media dict with a solid-color PNG and fake embedding."""
     import hashlib  # noqa: PLC0415
@@ -204,74 +172,6 @@ def make_video_media(media_id: int, embedding_dim: int = 512) -> dict:
         "origin": {"importer": "test", "params": {}},
         "origin_name": f"video_{media_id}.mp4",
     }
-
-
-def make_document_media(media_id: int, embedding_dim: int = 512) -> dict:
-    """Build a test document media dict with a minimal PDF and fake embedding."""
-    import hashlib  # noqa: PLC0415
-
-    import numpy as np  # noqa: PLC0415
-
-    pdf = make_minimal_pdf_bytes()
-    rng = np.random.RandomState(media_id + 3000)
-    return {
-        "id": media_id,
-        "type": "document",
-        "embedder": "siglip",  # via document→image converter
-        "file_size": len(pdf),
-        "md5": hashlib.md5(pdf).hexdigest(),
-        "embedding": rng.randn(embedding_dim).astype("float32"),
-        "media_bytes": pdf,
-        "filename": f"doc_{media_id}.pdf",
-        "category": "test-doc",
-        "origin": {"importer": "test", "params": {}},
-        "origin_name": f"doc_{media_id}.pdf",
-    }
-
-
-# ---------------------------------------------------------------------------
-# Trainable model / results helpers
-# ---------------------------------------------------------------------------
-
-
-def build_results_dict(hits, model_name, media_type="unknown"):
-    """Build a single-model results dict (same shape as exporter input)."""
-    return {
-        "media_type": media_type,
-        "detectors_run": 1,
-        "results": {
-            model_name: {
-                "detector_name": model_name,
-                "threshold": 0.5,
-                "total_hits": len(hits),
-                "hits": hits,
-            }
-        },
-    }
-
-
-def make_trainable_model_file(tmp_path, name, good_ids, bad_ids, snap, media_type="audio"):
-    """Write a detector JSON file populated from *snap* and votes.
-
-    Returns the path to the written JSON file.
-    """
-    from vtsearch.datasets.labelset import LabelSet  # noqa: PLC0415
-
-    good_votes_dict = {k: None for k in good_ids}
-    bad_votes_dict = {k: None for k in bad_ids}
-    labelset = LabelSet.from_clips_and_votes(snap, good_votes_dict, bad_votes_dict, expand_dupes=False)
-
-    data = {
-        "name": name,
-        "text_query": "",
-        "media_example": "",
-        "media_type": media_type,
-        "examples": [],
-        "labelset": labelset.to_dict(),
-    }
-    path = tmp_path / f"{name}.json"
-    path.write_text(json.dumps(data))
-    return path
 
 
 def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type="audio"):

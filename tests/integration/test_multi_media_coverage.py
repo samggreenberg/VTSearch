@@ -31,24 +31,6 @@ from vtsearch.state import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _populate(media_factory, count=10, start_id=1):
-    """Clear medias and populate with the given factory."""
-    saved = dict(medias)
-    medias.clear()
-    try:
-        for i in range(start_id, start_id + count):
-            medias[i] = media_factory(i)
-        yield
-    finally:
-        medias.clear()
-        medias.update(saved)
-
-
 # ===================================================================
 # TEXT SORT across media types
 # ===================================================================

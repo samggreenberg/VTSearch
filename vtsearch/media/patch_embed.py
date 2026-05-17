@@ -29,7 +29,7 @@ and in :mod:`vtsearch.training.region_similarity`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple, Optional
 
 import numpy as np
@@ -253,21 +253,6 @@ def eupe_features_to_patch_output(
         patch_grid=_norm_torch(patch_grid).astype(np.float32),
         patch_saliency=saliency.detach().cpu().float().numpy().astype(np.float32),
     )
-
-
-@dataclass
-class _ProtoLeaf:
-    """Intermediate leaf representation during clustering.
-
-    Carries the cell-index set so we can compute the bounding box and the
-    saliency-weighted vector after assignment is finalised.
-    """
-
-    cells: list[tuple[int, int]] = field(default_factory=list)
-    """``(row, col)`` patch-grid indices that landed in this leaf."""
-
-    seed: tuple[int, int] = (0, 0)
-    """The peak cell this leaf is built around."""
 
 
 def propose_leaves(
