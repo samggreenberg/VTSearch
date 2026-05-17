@@ -744,14 +744,89 @@ checks off this follow-up.
       structural subtypes of ``MediaItem`` (every required field
       matches; the extra required fields on ``MediaBatchResponse`` are a
       no-op against ``MediaItem``'s all-optional shape).
+- [x] ``SortingApiService`` rewired to the generated TS client. The
+      service now calls ``apiSortPost`` / ``apiLearnedSortPost`` /
+      ``apiLearnedSortResultGet`` / ``apiVotesGet`` / ``apiVotesClearPost`` /
+      ``apiInclusionGet`` / ``apiInclusionPost`` /
+      ``apiSafeThresholdsGet`` / ``apiSafeThresholdsPost`` /
+      ``apiTextsortSuggestionsGet`` / ``apiTextsortSuggestionsPost`` /
+      ``apiDiversityTreeNextGet`` from ``generated/api-client/fn/sorting/``,
+      plus ``apiLabelsExportGet`` / ``apiLabelsImportPost`` /
+      ``apiLabelsFillFromSortPost`` from ``fn/labels/``,
+      ``apiLabelingStatusGet`` / ``apiIndicatorScoreHistoryGet`` /
+      ``apiEvalTrainAndScorePost`` / ``apiEvalTrainAndScoreResultGet``
+      from ``fn/eval/``, and ``apiServerMediaFilesGet`` /
+      ``apiExampleSortServerPost`` / ``apiExampleSortOriginPost`` from
+      ``fn/media-server/``.
+
+      Return types tightened to the generated DTOs throughout (``SortResponse``,
+      ``LearnedSortResponse``, ``VotesResponse``, ``InclusionResponse``,
+      ``SafeThresholdsResponse``, ``LabelsExportResponse``,
+      ``LabelsImportResponse``, ``FillFromSortResponse``,
+      ``EvalTrainAndScoreResponse``, ``IndicatorScoreHistoryResponse``,
+      ``LabelingStatusResponse``, ``DiversityTreeNextResponse``,
+      ``ExampleSortResponse``, ``LabelFileSortResponse``,
+      ``ServerMediaListResponse``, ``ServerMediaUploadResponse``,
+      ``TextsortSuggestionsResponse``).
+
+      Multipart routes (``exampleSort``, ``labelFileSort``,
+      ``uploadServerMediaFile``) stay on plain ``HttpClient.post`` — same
+      pattern as ``MediasApiService.addToPile``. The
+      ``getDiversityTreeNext`` POST branch (which carries an optional
+      ``{scores, threshold}`` body that the backend reads via
+      ``request.get_json(silent=True)`` and the spec intentionally omits)
+      also stays on plain ``HttpClient.post``; the GET branch uses the
+      generated ``apiDiversityTreeNextGet``. ``getLabelingProgress`` keeps
+      a tiny plain-``HttpClient.post`` wrapper for parity with the legacy
+      surface — production callers were already removed and the spec has
+      no request body for the route.
+
+      Consumers updated:
+
+      * ``ExportModalComponent`` swapped ``LabelEntry`` (legacy) for
+        ``LabeledElement`` (generated).
+      * ``LoadSortModalComponent`` swapped ``ServerFileEntry`` for
+        ``ServerMediaFileEntry``.
+      * ``ProgressModalComponent`` swapped ``EvalTrainAndScoreJobResponse``
+        for the generated ``EvalTrainAndScoreResponse``; the
+        chart-data assignments narrow ``Array<{[key:string]:any}>`` to
+        ``ErrorCostDataPoint[]`` / ``StabilityDataPoint[]`` /
+        ``DiversityDataPoint[]`` via a cast (the chart point types stay
+        in ``api.models.ts`` because ``ChartsService`` consumes them).
+      * ``LabelViewComponent`` swapped ``LearnedSortJobResponse`` for
+        the generated ``LearnedSortResponse``; the inner
+        ``Array<{[key:string]:any}>`` rows are indexed with bracket
+        access (``r['id']`` / ``r['similarity']`` / ``r['best_region']``
+        / ``r['score']``) to satisfy ``noPropertyAccessFromIndexSignature``.
+        The ``labelingStatus`` field stays typed as the legacy
+        ``LabelingStatusResponse`` (a ``StatusIndicator``-bearing shape)
+        with a single cast at the polling subscribe — the autopilot
+        consumer chain (``AutopilotStateService``,
+        ``AutopilotPanelComponent``, ``LeftPanelComponent``) is too wide
+        to retype in this PR and is captured as a follow-up below.
+
+      Deleted from ``frontend/src/app/models/api.models.ts``:
+      ``SortResult``, ``SortResponse``, ``LearnedSortResult``,
+      ``LearnedSortResponse``, ``LearnedSortJobResponse``,
+      ``InclusionResponse``, ``SafeThresholdsResponse``,
+      ``TextsortSuggestionsResponse``, ``FillFromSortRequest``,
+      ``FillFromSortDryRunResponse``, ``FillFromSortConfirmResponse``,
+      ``DiversityTreeNextResponse``, ``LabelEntry``,
+      ``LabelsExportResponse``, ``LabelsImportResponse``,
+      ``ServerFileEntry``, ``ServerMediaFilesResponse``,
+      ``TrainAndScoreResponse``, ``EvalTrainAndScoreJobResponse``,
+      ``IndicatorScoreHistoryResponse``. ``VotesResponse``,
+      ``StatusIndicator``, ``LabelingStatusResponse``,
+      ``SortProgressResponse``, and the three chart-point types stay
+      because they still have non-service consumers.
 
 ## Open follow-ups
 
 - **Migrate the remaining Angular services to the generated client.**
   Settings, auth, achievements, file-browser, exporters, settings-io,
-  label-importers, and medias have all moved over. Each follow-up PR
-  picks one blueprint area (sorting, detectors, datasets, eval,
-  labels, …), rewires the matching Angular service(s) to call the
+  label-importers, medias, and sorting have all moved over. Each
+  follow-up PR picks one blueprint area (detectors, datasets,
+  processors, …), rewires the matching Angular service(s) to call the
   generated function modules under
   ``frontend/src/app/generated/api-client/fn/``, and deletes the
   corresponding hand-maintained interfaces from
@@ -759,6 +834,21 @@ checks off this follow-up.
   (``import type`` for DTOs, direct function-module paths for
   runtime symbols, no barrel) are required to keep the initial bundle
   under the 525 kB budget — see *Bundle-size discipline* above.
+- **Tighten ``LabelingStatusResponse`` consumers to the generated
+  shape.** ``SortingApiService.getLabelingStatus`` returns the generated
+  ``LabelingStatusResponse`` (``smart``/``stable``/``span`` typed as
+  ``{[key: string]: any}``), but ``LabelViewComponent`` keeps the legacy
+  ``LabelingStatusResponse`` (with ``StatusIndicator``-bearing fields)
+  for its ``labelingStatus`` member because the downstream chain
+  (``AutopilotStateService``, ``AutopilotPanelComponent``,
+  ``LeftPanelComponent`` and their spec files) all read
+  ``status.smart?.status`` / ``status.stable?.status`` /
+  ``status.span?.status``. A single cast at the polling subscribe
+  bridges the type gap. A follow-up PR can either retype every consumer
+  to the generated shape (and update the spec literals to include the
+  newly-required ``good_count`` / ``bad_count`` / ``total_count`` /
+  ``smart.status`` / ``stable.status`` / ``span.status`` fields) or
+  introduce a narrow ``StatusIndicator`` typed-projection layer.
 - **Replace ``MediaItem`` with the generated ``MediaIdsListResponse`` /
   ``MediaBatchResponse`` pair.** ``MediaItem`` is the loose union type
   consumed by ~20 components and the metadata cache. The

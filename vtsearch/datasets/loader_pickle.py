@@ -11,10 +11,9 @@ from __future__ import annotations
 import gc
 import hashlib
 from pathlib import Path
-from typing import Any, Iterator, Optional, cast
+from typing import Any, Iterator
 
 import numpy as np
-from PIL import Image
 
 from vtsearch.datasets.loader import (
     ProgressCallback,
@@ -368,37 +367,6 @@ def load_dataset_from_pickle_chunked(
 
         if chunk_medias:
             yield chunk_medias
-
-
-def embed_image_file_from_pil(image: Image.Image, embedder_name: str = "") -> Optional[np.ndarray]:
-    """Generate a CLIP embedding vector for a PIL Image object.
-
-    A convenience wrapper for cases where the image is already in memory
-    (e.g. reconstructed from a NumPy array during CIFAR-10 loading).
-
-    Delegates to the image embedder's ``embed_pil_image`` method.
-
-    Args:
-        image: A PIL Image in any mode.
-        embedder_name: Optional name of a registered embedder.  When empty,
-            the first image embedder is used.
-
-    Returns:
-        A 1-D ``numpy.ndarray`` of shape ``(embedding_dim,)``, or ``None`` if
-        no image embedder is available or an exception occurs.
-    """
-    from vtsearch.media import embedders_for_type, get_embedder
-
-    if embedder_name:
-        emb = get_embedder(embedder_name)
-    else:
-        avail = embedders_for_type("image")
-        if not avail:
-            return None
-        emb = avail[0]
-    # Image-type embedders all implement embed_pil_image, but the method
-    # is not on the MediaEmbedder ABC (only image subclasses define it).
-    return cast(Any, emb).embed_pil_image(image)
 
 
 def _write_embedder_sidecar(pkl_path: Path, embedder_name: str) -> None:

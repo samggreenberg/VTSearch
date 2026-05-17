@@ -299,7 +299,7 @@ class TestDownloadAndExtract:
         # Find extraction progress calls (not the initial 0/0 announcement)
         extract_progress = [(msg, cur, tot) for _, msg, cur, tot in progress_calls if "Extracting" in msg and tot > 0]
         assert len(extract_progress) > 0, "Expected determinate extraction progress"
-        last_msg, last_cur, last_tot = extract_progress[-1]
+        _last_msg, last_cur, last_tot = extract_progress[-1]
         assert last_cur == last_tot, "Final progress should show completion"
 
 
@@ -535,7 +535,7 @@ class TestCaltech101ExtractionProgress:
             if "Extracting 101_ObjectCategories" in msg and tot > 0
         ]
         assert len(inner_progress) > 0, "Inner tar extraction should report progress with total"
-        last_msg, last_cur, last_tot = inner_progress[-1]
+        _last_msg, last_cur, last_tot = inner_progress[-1]
         assert last_cur == last_tot
 
 
@@ -580,7 +580,7 @@ class TestBbcNewsExtractionProgress:
             (msg, cur, tot) for _, msg, cur, tot in progress_calls if "Extracting BBC News dataset" in msg and tot > 0
         ]
         assert len(extract_progress) > 0, "BBC News extraction should report progress with total"
-        last_msg, last_cur, last_tot = extract_progress[-1]
+        _last_msg, last_cur, last_tot = extract_progress[-1]
         assert last_cur == last_tot
 
 

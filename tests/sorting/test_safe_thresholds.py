@@ -105,7 +105,7 @@ class TestTrainAndScoreWithSafeThresholds:
         """
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        _, thresh_off, _m1 = train_and_score(
+        _, _thresh_off, _m1 = train_and_score(
             app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=False
         )
         _, thresh_on, _m2 = train_and_score(

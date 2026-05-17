@@ -22,13 +22,6 @@ from vtsearch.datasets.loader import (
 from helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file  # noqa: F401
 
 
-def _make_text_file(tmp_dir: Path, name: str, content: str) -> Path:
-    """Write a text file and return its path."""
-    p = tmp_dir / name
-    p.write_text(content, encoding="utf-8")
-    return p
-
-
 class TestStreamingMD5:
     def test_matches_regular_md5(self, tmp_path):
         content = b"hello world test data"

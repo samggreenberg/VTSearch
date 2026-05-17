@@ -52,10 +52,10 @@ class TestSettingsSourceBase:
             description = "Minimal source."
             fields = []
 
-            def load(self, fv):
+            def load(self, _fv):
                 return {}
 
-            def save(self, data, fv):
+            def save(self, _data, _fv):
                 pass
 
         d = Minimal().to_dict()
@@ -99,10 +99,10 @@ class TestLabelsetSourceBase:
             description = "Minimal source."
             fields = []
 
-            def load(self, fv):
+            def load(self, _fv):
                 return []
 
-            def save(self, labelset, fv):
+            def save(self, _labelset, _fv):
                 pass
 
         d = Minimal().to_dict()

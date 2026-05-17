@@ -91,15 +91,6 @@ def _get_md5_value(d: dict[str, Any]) -> str:
     return d.get("md5") or d.get("MD5") or ""
 
 
-def _pop_embedding_key(d: dict[str, Any]) -> Any:
-    """Pop and return the embedding value from *d*, trying ``"embedding"`` key.
-
-    Returns the value (or ``None`` if the key is absent) and removes the
-    matched key from *d* so it doesn't leak into downstream metadata.
-    """
-    return d.pop("embedding", None)
-
-
 def _get_embedding_value(d: dict[str, Any]) -> Any:
     """Return the embedding value from *d* without mutating it.
 
@@ -129,7 +120,6 @@ from vtsearch.datasets.loader_folder import (  # noqa: E402, F401
 from vtsearch.datasets.loader_pickle import (  # noqa: E402, F401
     _write_clipper_sidecar,
     _write_embedder_sidecar,
-    embed_image_file_from_pil,
     load_dataset_from_pickle,
     load_dataset_from_pickle_chunked,
     read_pkl_clipper,

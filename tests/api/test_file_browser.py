@@ -217,7 +217,7 @@ def _make_multi_user_provider(user_data_dir: Path, username: str = "alice"):
         def is_authenticated(self, request):
             return True
 
-        def get_user_data_dir(self, uname, base_data_dir):
+        def get_user_data_dir(self, _uname, _base_data_dir):
             return user_data_dir
 
     return _TestMultiProvider()

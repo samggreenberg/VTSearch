@@ -118,21 +118,6 @@ class TestLoadingTasksTrackerSubscriptions:
 # ---------------------------------------------------------------------------
 
 
-def _read_sse_event(stream, *, timeout=2.0):
-    """Pull one event:/data: pair from the SSE generator."""
-    deadline = time.monotonic() + timeout
-    buf = ""
-    while time.monotonic() < deadline:
-        chunk = next(stream, None)
-        if chunk is None:
-            break
-        buf += chunk
-        if "\n\n" in buf:
-            frame, _, buf = buf.partition("\n\n")
-            return frame, buf
-    return None, buf
-
-
 class TestEventsRoute:
     def test_initial_snapshot_includes_every_channel(self):
         frames = initial_snapshot()

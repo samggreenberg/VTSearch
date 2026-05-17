@@ -380,18 +380,4 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         return source.resolve_path(origin_name, filename)
 
 
-def _search_dir_for_file(directory: Path, origin_name: str, filename: str) -> Path | None:
-    """Search a directory for a file matching origin_name or filename."""
-    for name in [origin_name, filename]:
-        if not name:
-            continue
-        candidate = directory / name
-        if candidate.is_file():
-            return candidate
-        matches = list(directory.rglob(Path(name).name))
-        if matches:
-            return matches[0]
-    return None
-
-
 IMPORTER = HttpArchiveDatasetImporter()

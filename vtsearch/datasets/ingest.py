@@ -342,7 +342,7 @@ def ingest_missing_medias(
 
     total_ingested = 0
 
-    for origin_key, (origin_dict, entries) in groups.items():
+    for _origin_key, (origin_dict, entries) in groups.items():
         importer_name = origin_dict.get("importer", "")
 
         on_progress(

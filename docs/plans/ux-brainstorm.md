@@ -217,8 +217,10 @@ The right panel shows "Good" and "Bad" as two stacked stacks. There's no drag-to
 ### 5.10 Crop modal optionality ★ S
 After picking an example media, a crop modal appears even if the user wants to use the full file. Add a clear "Use full file" button alongside "Crop and confirm", and skip the modal entirely for text and audio < 5s.
 
-### 5.11 Settings tab nesting ★ S
+### 5.11 Settings tab nesting ★ S ❌
 The Settings modal has tabs → sub-tabs (per media type) → twin columns (left/right panel). That's three levels of nesting in a modal. Flatten by adopting (§5.4)'s mirror toggle and grouping per-media settings under a single accordion per type.
+
+**Rejected:** Not pursuing. The current Settings layout stays as-is — tabs → media-type sub-tabs → twin Left/Right columns.
 
 ### 5.12 "Achievements" tab discoverability ★ XS
 Achievements live in Settings, where users go for *settings*, not gamification rewards. Either move to its own menu item or a small trophy icon in the header.
