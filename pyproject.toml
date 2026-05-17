@@ -138,6 +138,16 @@ DEP001 = [
     "safetensors",
     "huggingface_hub",
 ]
+# DEP003 — imported as a transitive of another declared dependency.
+# ``safetensors`` and ``torchvision`` ship with ``transformers`` / ``torch``
+# (so they are always present in our supported install paths) but we
+# import them directly for embedder weight-loading progress and EUPE
+# preprocessing transforms. Declaring them as first-party doesn't add
+# anything: the install path already pins them through the parent.
+DEP003 = [
+    "safetensors",
+    "torchvision",
+]
 # DEP002 — declared but not imported. Tools we run via their CLIs
 # (pytest, ruff, …), runtime helpers loaded by name (gunicorn), or
 # tokenizer dependencies pulled in transitively by transformers
@@ -193,8 +203,9 @@ exclude_lines = [
 ]
 
 [tool.codespell]
-# Skip generated, binary, frontend node_modules, and serialized formats.
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,frontend/node_modules,data,static,model_cache,.git,*.ipynb,package-lock.json"
+# Skip generated, binary, frontend node_modules (including nested
+# node_modules npm installs), and serialized formats.
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # extension scaffold names), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method),
