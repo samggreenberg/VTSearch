@@ -11,7 +11,8 @@ import { ExportersApiService } from '../../../services/exporters-api.service';
 import { FindSessionService } from '../../../services/find-session.service';
 import { LabelSessionService } from '../../../services/label-session.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
-import { ExporterInfo, LabelEntry } from '../../../models/api.models';
+import { ImporterField, LabelEntry } from '../../../models/api.models';
+import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 
 export interface ColumnDef {
   key: string;
@@ -32,7 +33,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   @Output() closed = new EventEmitter<void>();
   @Output() exported = new EventEmitter<void>();
 
-  exporters: ExporterInfo[] = [];
+  exporters: ExporterEntry[] = [];
   loading = true;
   error = '';
   status = '';
@@ -60,7 +61,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   activeTab = 'clipboard';
 
   /** Exporter form state. */
-  selectedExporter: ExporterInfo | null = null;
+  selectedExporter: ExporterEntry | null = null;
   formValues: Record<string, string> = {};
   submitting = false;
 
@@ -249,9 +250,16 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     return `${stem}.${ext}`;
   }
 
+  /** The exporter's plugin-defined fields, narrowed to the legacy
+   *  ImporterField shape (the OpenAPI spec types it as an open dict
+   *  because plugin field schemas aren't part of the generated client). */
+  private exporterFieldsOf(exporter: ExporterEntry): ImporterField[] {
+    return (exporter.fields ?? []) as ImporterField[];
+  }
+
   /** Apply the dynamic default filename to the filepath form field if present. */
-  private applyDefaultFilename(exporter: ExporterInfo): void {
-    const filepathField = (exporter.fields || []).find((f) => f.key === 'filepath');
+  private applyDefaultFilename(exporter: ExporterEntry): void {
+    const filepathField = this.exporterFieldsOf(exporter).find((f) => f.key === 'filepath');
     if (filepathField) {
       const staticDefault = filepathField.default || '';
       // Derive extension from the static default (e.g. ".json", ".csv") or fall back
@@ -262,8 +270,8 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   }
 
   /** Start exporter flow — if no fields, export immediately. */
-  startExporter(exporter: ExporterInfo): void {
-    const fields = exporter.fields || [];
+  startExporter(exporter: ExporterEntry): void {
+    const fields = this.exporterFieldsOf(exporter);
     if (fields.length === 0) {
       this.exportLabelsWith(exporter, {});
       return;
@@ -279,11 +287,11 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   }
 
   /** Select an exporter tab and initialise its form values. */
-  selectExporterTab(exporter: ExporterInfo): void {
+  selectExporterTab(exporter: ExporterEntry): void {
     this.activeTab = exporter.name;
     this.selectedExporter = exporter;
     this.formValues = {};
-    for (const f of exporter.fields || []) {
+    for (const f of this.exporterFieldsOf(exporter)) {
       this.formValues[f.key] = f.default || '';
     }
     this.applyDefaultFilename(exporter);
@@ -300,9 +308,17 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   }
 
   /** The exporter object for the currently active tab (null if clipboard). */
-  get activeTabExporter(): ExporterInfo | null {
+  get activeTabExporter(): ExporterEntry | null {
     if (this.activeTab === 'clipboard') return null;
     return this.exporters.find((e) => e.name === this.activeTab) || null;
+  }
+
+  /** Typed view of the active tab's plugin fields for the template (the
+   *  generated ExporterEntry types `fields` as an open dict because plugin
+   *  field schemas aren't part of the OpenAPI client). */
+  get activeTabExporterFields(): ImporterField[] {
+    const exp = this.activeTabExporter;
+    return exp ? this.exporterFieldsOf(exp) : [];
   }
 
   /** Label for the action button on the active exporter tab. */
@@ -334,7 +350,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     this.exportLabelsWith(this.selectedExporter, { ...this.formValues });
   }
 
-  exportLabelsWith(exporter: ExporterInfo, fieldValues: Record<string, string>): void {
+  exportLabelsWith(exporter: ExporterEntry, fieldValues: Record<string, string>): void {
     this.status = 'Exporting...';
     this.error = '';
     this.submitting = true;
@@ -366,7 +382,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   }
 
   /** Map an exporter's emoji icon to an SVG icon type. */
-  getExporterIconType(exp: ExporterInfo): string {
+  getExporterIconType(exp: ExporterEntry): string {
     const icon = exp.icon || '';
     if (icon === '📧' || icon.includes('📧')) return 'email';
     if (icon === '🖥️' || icon === '\uD83D\uDDA5' || icon === '\uD83D\uDDA5\uFE0F') return 'server';

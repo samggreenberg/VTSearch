@@ -635,6 +635,34 @@ checks off this follow-up.
       generated entry types both carry ``modified_at`` as a required
       string (empty on stat failure), matching the backend's
       marshmallow schema.
+- [x] ``ExportersApiService`` (labelset exporters) rewired to the
+      generated TS client. The service now calls ``apiExportersGet`` /
+      ``apiExportersExportPost`` from
+      ``generated/api-client/fn/exporters/``; the ``runExport`` method's
+      argument type tightened from a free-form
+      ``{ exporter_name: string; [key: string]: unknown }`` to the
+      generated ``RunExportRequest`` (``exporter_name`` plus optional
+      ``field_values`` / ``results``). The three consumers
+      (``export-modal``, ``label-exporter-modal``,
+      ``autodetect-results-modal``) ``import type``-only the generated
+      ``ExporterEntry`` from
+      ``generated/api-client/models/exporter-entry``; ``ExporterInfo``
+      stays in ``api.models.ts`` for now because
+      ``settings-io-api.service.ts`` still uses it (the
+      ``/api/settings-exporters`` endpoint returns a different generated
+      type, ``SettingsExporterEntry``, so a separate follow-up rewires
+      that service and deletes ``ExporterInfo``). Plugin-field shapes
+      are not described in the OpenAPI spec, so ``ExporterEntry.fields``
+      is generated as ``Array<{[key: string]: any}>``; consumers cast it
+      to the legacy ``ImporterField[]`` at the point of use via a small
+      private helper. The ``export-modal`` template now iterates a typed
+      ``activeTabExporterFields: ImporterField[]`` getter (Angular's
+      template type-checker rejects dot-syntax access on index
+      signatures). A dead-code reference to ``exp['label']`` in the
+      ``autodetect-results-modal`` template — never populated by the
+      backend, always fell through to ``exp.name`` — was fixed to
+      ``exp.display_name || exp.name`` to match the actual response
+      shape.
 
 ## Open follow-ups
 
