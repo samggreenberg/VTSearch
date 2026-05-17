@@ -1,12 +1,14 @@
 import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { PulldownControlService } from '../../services/pulldown-control.service';
+import { DashboardColumnsService } from '../../services/dashboard-columns.service';
+import { SortState } from '../../utils/managed-columns';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.models';
 import { isPairCompatible } from '../../utils/context-compat';
 
@@ -70,6 +72,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
 
+  /** Live mirror of the Dashboard's sort for this pulldown's table. Kept
+   *  in sync via a subscription in `ngOnInit`. */
+  private sortState: SortState = { column: 'name', asc: true };
+
   constructor(
     private host: ElementRef<HTMLElement>,
     private datasetState: DatasetStateService,
@@ -77,6 +83,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     private contextSwitch: ContextSwitchService,
     private newThingFlows: NewThingFlowsService,
     private pulldownControl: PulldownControlService,
+    private dashboardColumns: DashboardColumnsService,
   ) {}
 
   ngOnInit(): void {
@@ -123,6 +130,16 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       .openSignal$(this.kind)
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.openMenu());
+
+    // Erase the column-type union to a plain `SortState` — the pulldown
+    // doesn't care which specific column-type union the source carries.
+    const sortState$: Observable<SortState> = this.isDataset
+      ? this.dashboardColumns.datasetCols.sortState$
+      : this.dashboardColumns.detectorCols.sortState$;
+    sortState$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+      this.sortState = state;
+      this.rebuildRows();
+    });
 
     this.rebuildRows();
   }
@@ -301,6 +318,21 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     return row.id;
   }
 
+  /** Sort registry entries the same way the Dashboard's tables sort them
+   *  (column + direction read from `DashboardColumnsService`). Mirrors
+   *  the comparator in `DashboardComponent.sortedDatasets` /
+   *  `sortedDetectors`. */
+  private applySort<T extends { name: string; [k: string]: unknown }>(arr: T[]): T[] {
+    const { column, asc } = this.sortState;
+    const dir = asc ? 1 : -1;
+    return [...arr].sort((a, b) => {
+      const va = a[column] ?? '';
+      const vb = b[column] ?? '';
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }
+
   private findActiveIndex(): number {
     const id = this.isDataset ? this.activeContext.datasetId : this.activeContext.modelId;
     return this.rows.findIndex((r) => r.id === id);
@@ -342,14 +374,11 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     const activeDataset = activeDsId ? datasets.find((d) => d.id === activeDsId) : null;
     const activeDetector = activeDetId ? detectors.find((d) => d.id === activeDetId) : null;
 
-    const sortByName = <T extends { name: string }>(arr: T[]): T[] =>
-      [...arr].sort((a, b) => a.name.localeCompare(b.name));
-
     if (this.isDataset) {
-      const sorted = sortByName(datasets);
+      const sorted = this.applySort(datasets);
       this.rows = sorted.map((d) => this.datasetRow(d, activeDsId, activeDetector));
     } else {
-      const sorted = sortByName(detectors);
+      const sorted = this.applySort(detectors);
       this.rows = sorted.map((d) => this.detectorRow(d, activeDetId, activeDataset));
     }
 

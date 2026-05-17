@@ -17,7 +17,11 @@ import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { AchievementsService } from '../../services/achievements.service';
 import { AutoDetectResultsData, DatasetRegistryEntry, DemoDataset, LoadingTask, DetectorRegistryEntry, ImporterInfo } from '../../models/api.models';
 import { formatProgressFraction } from '../../utils/format-progress';
-import { ColMeta, ManagedColumns } from '../../utils/managed-columns';
+import {
+  DashboardColumnsService,
+  DatasetColumn,
+  DetectorColumn,
+} from '../../services/dashboard-columns.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
@@ -94,69 +98,33 @@ export class DashboardComponent implements OnInit, OnDestroy {
   findLoading = false;
   trainAfterModelCreation = false;
 
-  // Column order. "name" is pinned at position 0 and "actions" is pinned at
-  // the far right; these arrays hold only the user-reorderable middle columns.
-  static readonly DATASET_COLUMNS_DEFAULT = [
-    'media_type', 'num_items', 'created_at', 'created_by', 'readers', 'loaded',
-  ];
-  static readonly DETECTOR_COLUMNS_DEFAULT = [
-    'media_type', 'num_training', 'autodetect', 'last_trained_at',
-    'created_at', 'detector_loaded',
-  ];
-  private static readonly DATASET_COL_ORDER_KEY = 'vtsearch.dashboard.datasetColumnOrder';
-  private static readonly DETECTOR_COL_ORDER_KEY = 'vtsearch.dashboard.detectorColumnOrder';
+  /** Lifted out of this component into `DashboardColumnsService` so the
+   *  top-bar context pulldowns can mirror the user's sort. Assigned in
+   *  the constructor; the template binds against these names unchanged. */
+  datasetCols!: DashboardColumnsService['datasetCols'];
+  detectorCols!: DashboardColumnsService['detectorCols'];
 
-  // Per-column display metadata. Keyed by `data-col` value; used both by the
-  // header template and by card components when rendering body cells in order.
-  static readonly DATASET_COL_META: Record<string, ColMeta> = {
-    name: { label: 'Name', title: 'Dataset display name (click to sort)', sortable: true },
-    media_type: { label: 'Type', title: 'Media type: audio, image, text, video, or document (click to sort)', sortable: true },
-    num_items: { label: '# Items', title: 'Number of media items in the dataset (click to sort)', sortable: true },
-    created_at: { label: 'Created', title: 'When the dataset was first imported (click to sort)', sortable: true },
-    created_by: { label: 'Creator', title: 'User who created this dataset (click to sort)', sortable: true },
-    readers: { label: 'Readers', title: 'Users with access to this dataset (click to sort)', sortable: true },
-    loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },
-    actions: { label: 'Actions', title: 'Available operations for this dataset', sortable: false },
-  };
-  static readonly DETECTOR_COL_META: Record<string, ColMeta> = {
-    name: { label: 'Name', title: 'Detector display name (click to sort)', sortable: true },
-    media_type: { label: 'Type', title: 'Media type this detector operates on (click to sort)', sortable: true },
-    num_training: { label: '# Training', title: 'Number of labeled training examples (click to sort)', sortable: true },
-    autodetect: { label: 'Autorun?', title: 'Include this detector in CLI autorun (click to sort)', sortable: true },
-    last_trained_at: { label: 'Last Trained', title: 'When the detector was last trained (click to sort)', sortable: true },
-    created_at: { label: 'Created', title: 'When the detector was created (click to sort)', sortable: true },
-    detector_loaded: { label: 'Loaded?', title: "Whether the detector's inference data is cached in memory", sortable: false },
-    actions: { label: 'Actions', title: 'Available operations for this detector', sortable: false },
-  };
-
-  datasetCols = new ManagedColumns(
-    DashboardComponent.DATASET_COLUMNS_DEFAULT,
-    DashboardComponent.DATASET_COL_META,
-    { initialSort: 'name', storageKey: DashboardComponent.DATASET_COL_ORDER_KEY },
-  );
-  detectorCols = new ManagedColumns(
-    DashboardComponent.DETECTOR_COLUMNS_DEFAULT,
-    DashboardComponent.DETECTOR_COL_META,
-    { initialSort: 'name', storageKey: DashboardComponent.DETECTOR_COL_ORDER_KEY },
-  );
-
-  get visibleDatasetColumns(): string[] {
+  get visibleDatasetColumns(): DatasetColumn[] {
     if (this.isDefaultLogin) {
       return this.datasetCols.columnOrder.filter((c) => c !== 'created_by' && c !== 'readers');
     }
     return this.datasetCols.columnOrder;
   }
 
-  get visibleDetectorColumns(): string[] {
+  get visibleDetectorColumns(): DetectorColumn[] {
     return this.detectorCols.columnOrder;
   }
 
   onDatasetHeaderClick(col: string): void {
-    if (this.datasetCols.meta(col).sortable) this.datasetCols.sortBy(col);
+    if (this.datasetCols.meta(col).sortable) {
+      this.datasetCols.sortBy(col as DatasetColumn);
+    }
   }
 
   onDetectorHeaderClick(col: string): void {
-    if (this.detectorCols.meta(col).sortable) this.detectorCols.sortBy(col);
+    if (this.detectorCols.meta(col).sortable) {
+      this.detectorCols.sortBy(col as DetectorColumn);
+    }
   }
 
   private destroy$ = new Subject<void>();
@@ -189,7 +157,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private newThingFlows: NewThingFlowsService,
     private achievements: AchievementsService,
     private progressEvents: ProgressEventsService,
-  ) {}
+    columnsService: DashboardColumnsService,
+  ) {
+    this.datasetCols = columnsService.datasetCols;
+    this.detectorCols = columnsService.detectorCols;
+  }
 
   ngOnInit(): void {
     this.authService.status$
