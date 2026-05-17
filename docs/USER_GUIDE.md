@@ -1,9 +1,10 @@
 # VTSearch User Guide
 
 A walkthrough for people who want to **use** VTSearch — not install,
-extend, or debug it. Open it, load a dataset, label a few things,
-export results. For installation see [SETUP.md](SETUP.md). For
-CLI workflows (no browser) see [CLI.md](CLI.md).
+extend, or debug it. Open it, load a dataset, train a detector (or
+apply an existing one), and export the matches. For installation see
+[SETUP.md](SETUP.md). For CLI workflows (no browser) see
+[CLI.md](CLI.md).
 
 ## Contents
 
@@ -25,18 +26,29 @@ CLI workflows (no browser) see [CLI.md](CLI.md).
 
 VTSearch helps you **find the items you care about** inside a large
 collection of audio clips, images, text paragraphs, videos, or
-documents. You vote items **good** or **bad**, and a small neural net
-learns from your votes to rank the rest of the collection by how likely
-each item is to match what you're looking for. You can also search by
-typing a natural-language description ("dog barking", "red car in
-snow"), and the app uses a pretrained embedding model to rank items
-by semantic similarity to your query.
+documents. You search using a **detector** — a small trained ranker
+that scores every item in the dataset by how well it matches what
+you're looking for. There are two ways to search:
 
-In practice, you usually combine the two: search for a rough starting
-point, vote a handful of items, and let the learned detector refine the
-ranking. VTSearch's **Autopilot** drives that loop for you — so most
-users never need to think about sort modes or selection strategies
-directly.
+1. **Train a new detector.** Vote a handful of items **good** or
+   **bad** and a small neural net learns from your votes to rank the
+   rest of the dataset. Detectors are reusable — once trained, you can
+   save one and re-apply it to any future dataset of the same media
+   type, or share it with another VTSearch user.
+2. **Use an existing detector.** Load one you (or someone else)
+   trained earlier and score a fresh dataset with it. No new labeling
+   required. Loaded detectors can also be re-trained against the new
+   dataset's votes if you want to refine them further.
+
+A natural-language query ("dog barking", "red car in snow") seeds
+either flow: a pretrained embedding model ranks items by semantic
+similarity to your query, giving the detector a useful starting point.
+The text-similarity ranking also works as a quick stand-alone search
+when you don't need the precision of a trained detector.
+
+VTSearch's **Autopilot** drives the training loop for you — picking
+which item to show next and when each phase ends — so most users never
+need to think about sort modes or selection strategies directly.
 
 ---
 

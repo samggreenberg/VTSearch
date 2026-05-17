@@ -1,6 +1,6 @@
 # VTSearch
 
-Media explorer web app for browsing/voting on audio, images, text, video, or documents. Semantic sorting (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) and learned sorting (neural net trained on votes). Flask + Angular + PyTorch.
+Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector** — a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a small MLP learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
 
 ## Branch Policy (CRITICAL)
 

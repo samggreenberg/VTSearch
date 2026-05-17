@@ -21,15 +21,22 @@ which pieces you need and how to pull them out.
 
 ## What VTSearch does
 
-VTSearch is a media-explorer web app for browsing, voting on, and
-semantically sorting collections of audio, images, text, video, or
-documents.  It combines:
+VTSearch is a trainable media search tool. The thing the user searches
+*with* is a **detector**: a small ranker that scores every item in a
+dataset by how well it matches. Detectors come from two places —
+either trained in the UI from good/bad votes in a labeling pass, or
+imported/loaded from disk and applied as-is. The architecture combines:
 
-- **Semantic sorting** — LAION-CLAP (audio), SigLIP (images), X-CLIP
-  (video), E5-base-v2 (text) for embedding-based similarity search,
-  with alternative embedders available (CLAP Music, BGE).
-- **Learned sorting** — a small MLP trained on user votes to predict
-  good/bad labels.
+- **Detectors (learned search)** — a small MLP trained on user votes
+  to predict good/bad labels. This is the primary search mechanism.
+  Detectors are persisted as **labelsets** (origin info + labels — never
+  weights; weights are an in-memory artifact, re-derived on demand from
+  origins and the active embedder).
+- **Semantic sort (text-similarity search)** — LAION-CLAP (audio),
+  SigLIP (images), X-CLIP (video), E5-base-v2 (text) for
+  embedding-based similarity search, with alternative embedders
+  available (CLAP Music, BGE). Used to seed a detector during the
+  training loop, or as a quick stand-alone search.
 - **Flask web UI** — Angular SPA frontend with a REST API.
 - **Plugin systems** — auto-discovered dataset importers, results
   exporters, label importers, and processor importers.
