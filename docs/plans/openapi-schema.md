@@ -621,6 +621,20 @@ checks off this follow-up.
       ``/api/auth/status`` and ``/api/auth/login`` is preserved by
       passing the ``HttpContext`` through the generated function's
       4th-positional ``context`` argument.
+- [x] ``FileBrowserApiService`` rewired to the generated TS client. The
+      service now calls ``apiBrowseGet`` from
+      ``generated/api-client/fn/file-browser/api-browse-get``; the local
+      ``BrowseEntry`` / ``BrowseResponse`` interfaces in the service
+      file were deleted. The sole consumer
+      (``components/file-browser/file-browser.component.ts``) now
+      ``import type``-only the generated ``BrowseDirectoryEntry`` /
+      ``BrowseFileEntry`` from their direct module paths under
+      ``generated/api-client/models/`` (directory and file entries are
+      now distinct types in the spec, where the legacy single
+      ``BrowseEntry`` had ``size_bytes`` as an optional field). The
+      generated entry types both carry ``modified_at`` as a required
+      string (empty on stat failure), matching the backend's
+      marshmallow schema.
 
 ## Open follow-ups
 
