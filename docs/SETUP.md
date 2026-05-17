@@ -282,7 +282,7 @@ docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
 
 ### LabBench (SigLIP-only image search)
 
-For the LabBench deployment — browsing/voting on images with the SigLIP
+For the LabBench deployment — image search with the SigLIP
 embedder — use the streamlined `docker/Dockerfile.labbench` variant. It skips
 audio, video, document, text, and extractor plugin dependencies, and **bakes
 the SigLIP model weights into the image at build time** so the container is

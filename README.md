@@ -1,6 +1,6 @@
 # VTSearch
 
-A media explorer web app. Browse collections of audio clips, images, text paragraphs, videos, or documents — listen/view them in the browser and vote items as "good" or "bad." Supports text-based semantic sorting (via LAION-CLAP, SigLIP, X-CLIP, or E5-base-v2 embeddings depending on media type) and learned sorting (via a small neural network trained on your votes). Several demo datasets can be loaded directly from the UI. Built with Flask (Python), Angular (TypeScript), and PyTorch.
+A trainable media search tool. VTSearch searches collections of audio clips, images, text paragraphs, videos, and documents using a **detector** — a small trained ranker that scores every item in the collection by how well it matches what you're looking for. You search either by **training a new detector** (vote a handful of items "good" or "bad" and a small neural net learns from your votes to rank the rest of the collection) or by **using an existing detector** (one you saved earlier, exported from another VTSearch instance, or imported from disk). Trained detectors are reusable — apply the same one to any future dataset of the same media type. A natural-language query ("dog barking", "red car in snow") seeds either flow via pretrained embeddings (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text), and also works as a quick stand-alone search when you don't need a trained detector. Several demo datasets are available directly from the UI. Built with Flask (Python), Angular (TypeScript), and PyTorch.
 
 ## Setup and running tests
 
@@ -32,11 +32,11 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 
 See [docs/SETUP.md](docs/SETUP.md#running-the-app) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
 
-> **New to VTSearch?** Read **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** — a walkthrough of loading a dataset, using Autopilot to label, and exporting results. Most users never need anything else.
+> **New to VTSearch?** Read **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** — a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
 
 ## Command-line interface
 
-VTSearch provides several CLI workflows for running detectors, importing labels, and importing processors — all without starting the web server. See [docs/CLI.md](docs/CLI.md) for the full CLI reference.
+VTSearch provides several CLI workflows for applying detectors to datasets, importing labels, and importing processors — all without starting the web server. See [docs/CLI.md](docs/CLI.md) for the full CLI reference.
 
 ## Loading a demo dataset
 
@@ -52,25 +52,37 @@ You can also load your own data from pickle files or folders via the same menu.
 ├── app.py                          # Flask entry point, registers blueprints, CLI arg parsing
 ├── gunicorn.conf.py                # Gunicorn WSGI config (single worker + threads)
 ├── vtsearch/                       # Main application package
-│   ├── config.py                   # Constants (CLAP_SAMPLE_RATE, paths, model IDs)
-│   ├── medias.py                   # Test media generation & embedding cache
+│   ├── config.py                   # Constants (paths, model IDs, sample rates)
 │   ├── cli.py                      # CLI utilities: autodetect workflow
-│   ├── settings.py                 # Persistent settings & autorun processors
+│   ├── cli_pipeline.py             # CLI orchestration shared by autodetect
+│   ├── cli_progress.py             # CLI progress bars
+│   ├── settings.py                 # Persistent settings (server tier + per-user tier)
+│   ├── settings_factory.py         # Accessor factories for the settings table
+│   ├── settings_models.py          # Settings dataclass schemas
+│   ├── achievements.py             # User-achievement state machine
+│   ├── logging_config.py           # Logging setup
 │   ├── auth/                       # Authentication (LoginProvider ABC, DefaultLoginProvider)
-│   ├── routes/                     # Flask blueprints
-│   ├── models/                     # ML models (embeddings, training, progress)
-│   ├── media/                      # Media type plugins (audio, image, text, video, document)
-│   ├── converters/                 # Media converters (document→image, video→audio, etc.)
-│   ├── datasets/                   # Dataset loading, downloading, importers
-│   ├── eval/                       # Evaluation framework (metrics, runner, visualisation)
+│   ├── routes/                     # Flask blueprints (datasets, detectors, processors, media, settings, labels, …)
+│   ├── detectors/                  # Detector lifecycle: registry, store, training, label sync, restoration
+│   ├── training/                   # Generic learned-sort training primitives (MLP, thresholds, SVM, region-sim)
+│   ├── embedding/                  # Embedder façades, torch runtime, smart preload, cached embedding matrix
+│   ├── media/                      # Media type plugins (audio, image, text, video, document) + embedders, clippers
+│   ├── converters/                 # Media converters (document→image/text, video→audio/image, audio→image, image→text)
+│   ├── datasets/                   # Dataset loading, importers, origin tracking, labelsets, media sources
+│   ├── eval/                       # Evaluation framework (metrics, runner, visualisation, voting iterations)
 │   ├── exporters/                  # Results exporter plugins
-│   ├── labels/                     # Label importers & labelset sync sources
-│   ├── processors/importers/       # Processor importer plugins
-│   ├── settings_io/                # Settings importers, exporters & sync sources
-│   ├── audio/                      # Audio generation utility
-│   └── utils/                      # State proxies (per-dataset/per-detector contexts) & progress helpers
+│   ├── labels/                     # Label importers and labelset sync sources
+│   ├── settings_io/                # Settings importers, exporters and sync sources
+│   ├── state/                      # Per-dataset / per-detector context registries; medias/votes proxies
+│   ├── plugins/                    # Plugin registry, PluginBase, sentinel-based discovery
+│   ├── sync/                       # Generic SyncSource base for settings + labelset sources
+│   ├── concurrency/                # Async job manager, memory-aware worker capping, progress trackers
+│   ├── security/                   # Path/URL/pickle safety validation
+│   ├── schemas/                    # JSON / OpenAPI schemas
+│   └── utils/                      # build_media_hit helper + offline synthetic-media generators
 ├── static/                         # Angular build output (HTML, JS, CSS, assets)
-├── tests/                          # Test suite (pytest)
+├── frontend/                       # Angular SPA source (TypeScript, SCSS) — builds into static/
+├── tests/                          # Test suite (pytest) — grouped by folder (core, api, sorting, datasets, io, …)
 ├── docs/                           # Extended documentation
 │   ├── HANDOFF.md                  # Project handoff & orientation guide
 │   ├── DEPLOYMENT.md               # Deployment, offline mode, operations
@@ -84,7 +96,7 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── CLI.md                      # CLI reference
 │   ├── ML.md                       # ML model details
 │   ├── SETUP.md                    # Setup instructions
-│   ├── USER_GUIDE.md               # End-user walkthrough (Autopilot, voting, sorting)
+│   ├── USER_GUIDE.md               # End-user walkthrough (training detectors, applying detectors, exporting)
 │   ├── demos.md                    # Demo dataset listing
 │   ├── plans/                      # Open design plans (see plans/README.md)
 │   └── design/                     # Architecture design documents
@@ -93,7 +105,7 @@ You can also load your own data from pickle files or folders via the same menu.
 
 ## HTTP API
 
-VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the full endpoint reference, including media listing, sorting, voting, dataset management, detector/exporter/importer operations, settings, and detectors.
+VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the full endpoint reference, including media listing, sorting, voting, dataset management, detector CRUD and scoring, exporter and importer operations, and settings.
 
 ## Deployment
 
