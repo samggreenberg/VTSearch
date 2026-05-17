@@ -1,9 +1,11 @@
 # Python quality tools
 
-*Status: Phases 1 + 2 + 3 shipped. deptry, codespell, ruff's `S`
-ruleset, opt-in coverage, and a vulture whitelist are all in place
-alongside the original pre-commit + pip-audit. See "Open follow-ups"
-at the bottom for the remaining maintenance items.*
+*Status: Phases 1 + 2 + 3 shipped, plus the pyproject-consolidation
+follow-up. deptry, codespell, ruff's `S` ruleset, opt-in coverage, and a
+vulture whitelist are all in place alongside the original pre-commit +
+pip-audit, and `pyproject.toml` is now the single source of truth for
+runtime + dev dependencies. See "Open follow-ups" at the bottom for the
+remaining maintenance items.*
 
 The ruff + pyright + pytest stack already covers the modern core of
 Python quality tooling. This plan tracks what else is worth adding,
@@ -51,6 +53,26 @@ wire it", and a success criterion so it's a one-sitting task.
   `clap`/`siglip`/`xclip`, code identifiers like `numer`/`denom`/`medias`/`fpr`,
   and stylistic spellings the project uses consistently like `re-use`
   and `pre-select`).
+
+## What shipped (pyproject consolidation)
+
+- **`pyproject.toml` is now the single source of truth for runtime + dev
+  dependencies.** `[project.dependencies]` and
+  `[project.optional-dependencies].dev` hold the full list; the
+  top-level `requirements/base.txt` (CPU) and `requirements/gpu.txt`
+  (GPU) just forward to it via `-e .[dev]`. The per-plugin
+  `vtsearch/.../requirements*.txt` files, the auto-generated
+  `requirements/plugins.txt`, and `scripts/install-plugin-deps.sh` are
+  gone — deptry now catches drift from either side because there is no
+  "other side" any more. The labbench /
+  image-embedders requirements files stay standalone (curated minimal
+  subsets for size-constrained Docker images). Updated:
+  `scripts/install-cpu.sh`, `scripts/install-gpu.sh`,
+  `docker/Dockerfile`, `docker/Dockerfile.gpu`,
+  `.claude/hooks/ensure-test-deps.sh`, the four plugin-family
+  `base.py` docstrings, and the docs (`SETUP.md`, `DEPLOYMENT.md`,
+  `HANDOFF.md`, `EXTENDING.md`, `EXTENDING-plugins.md`,
+  `plans/RCDatasetImporter.md`).
 
 ## What shipped (Phase 3)
 
@@ -284,14 +306,6 @@ added to the whitelist with a comment explaining why.
 - **Pyright `S`-equivalent and `C901` complexity.** ruff has McCabe
   complexity via `C901`; consider enabling alongside future
   security-rule tightening if we want a complexity gate.
-- **`[project.dependencies]` vs `requirements/base.txt` drift.**
-  Phase 2's deptry config duplicates the runtime dep list across both
-  files (pyproject.toml for deptry, requirements/base.txt for the
-  pinned install). deptry will catch new imports missing from
-  pyproject.toml, but a contributor adding a dep to `requirements/`
-  alone won't see a failure. Consider consolidating to
-  `-e .[plugins,dev]` in `requirements/base.txt` so the project
-  metadata becomes the single source of truth.
 - Periodic: `pre-commit autoupdate` on a cadence so pinned hook
   versions don't drift too far from CI's `pip install ruff` (which
   always pulls latest). Worth a quarterly reminder.

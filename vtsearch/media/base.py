@@ -3,8 +3,10 @@
 To add a new media type:
 
 1. Create a subdirectory under ``vtsearch/media/`` (e.g. ``vtsearch/media/code/``).
-2. Add a ``requirements.txt`` listing any pip packages your embedder needs
-   (auto-discovered by ``scripts/install-plugin-deps.sh``).
+2. Add any new pip packages your embedder needs to
+   ``[project.dependencies]`` in the repo's ``pyproject.toml``, then
+   re-run ``bash scripts/install-cpu.sh`` (or your editable install of
+   choice) to pick them up.
 3. Implement a subclass of :class:`MediaType` in ``media_type.py``.
 4. Register it in ``vtsearch/media/__init__.py``::
 

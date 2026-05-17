@@ -195,9 +195,10 @@ graph, plugin directories — see
   and dataset functions generally accept state as parameters, though
   some modules import specific helpers (e.g. `update_progress`,
   `next_media_id`) for progress reporting and ID generation.
-- **Each plugin is self-contained** in its own subdirectory. Dependencies
-  are declared in per-plugin `requirements.txt` files, auto-discovered
-  by `scripts/install-plugin-deps.sh`.
+- **Each plugin is self-contained** in its own subdirectory.
+  Runtime dependencies — including each plugin's extras — live in
+  `pyproject.toml` under `[project.dependencies]`; deptry verifies every
+  import is declared.
 
 ---
 

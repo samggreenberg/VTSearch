@@ -1,1 +1,0 @@
-# Server JSON label importer — no additional dependencies beyond core.

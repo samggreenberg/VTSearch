@@ -1,2 +1,0 @@
-# HTTP ZIP importer – no additional dependencies.
-# `requests` (used for the download) is already listed in the core requirements files.

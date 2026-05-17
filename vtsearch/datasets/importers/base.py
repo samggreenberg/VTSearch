@@ -42,9 +42,11 @@ Example – a minimal SFTP importer skeleton::
 
     IMPORTER = SftpImporter()
 
-If the importer needs extra packages, add them to a ``requirements.txt`` inside
-the importer's directory.  They will be auto-discovered and installed by
-``scripts/install-plugin-deps.sh``.
+If the importer needs extra packages, add them to
+``[project.dependencies]`` in the repo's ``pyproject.toml``. They are
+picked up the next time you run ``bash scripts/install-cpu.sh`` (or any
+editable install). pyproject.toml is the single source of truth — deptry
+verifies that every imported package is declared there.
 """
 
 from __future__ import annotations

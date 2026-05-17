@@ -1,2 +1,0 @@
-# YOLO extractor / face localizer dependencies
-ultralytics
