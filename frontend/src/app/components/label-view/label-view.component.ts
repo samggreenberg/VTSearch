@@ -122,6 +122,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((modelId) => this.refreshTrainableModelName(modelId));
     this.refreshTrainableModelName(this.activeContext.modelId);
 
+    // Reload data when the active pair changes via the top-bar switcher.
+    // Skip the first emission — `ngOnInit` above already triggered the
+    // initial loads.
+    let firstPair = true;
+    this.activeContext.pair$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        if (firstPair) {
+          firstPair = false;
+          return;
+        }
+        this.reloadForNewPair();
+      });
+
     this.mediaState.medias$
       .pipe(takeUntil(this.destroy$))
       .subscribe((medias) => {
@@ -175,6 +189,22 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     setTimeout(() => this.centerPanel?.init());
+  }
+
+  /** Triggered by the top-bar context switcher whenever the active
+   *  (dataset, detector) pair changes. Resets the view-local ephemeral
+   *  state (sort results, votes cache) and re-runs the same loads that
+   *  ngOnInit fires on first entry. */
+  private reloadForNewPair(): void {
+    this.sortState.setSortResults([], 0);
+    this.sortState.setSortStatus('');
+    this.sortState.setSortProgress(0, 0);
+    this.voteState.clear();
+    this.mediaState.loadMedias();
+    this.voteState.loadVotes();
+    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (status) => { this.datasetName = status.display_name || ''; },
+    });
   }
 
   ngOnDestroy(): void {

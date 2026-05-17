@@ -13,17 +13,16 @@ import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
+import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { AchievementsService } from '../../services/achievements.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, DetectorRegistryEntry, ImporterInfo } from '../../models/api.models';
+import { AutoDetectResultsData, DatasetRegistryEntry, DemoDataset, LoadingTask, DetectorRegistryEntry, ImporterInfo } from '../../models/api.models';
 import { formatProgressFraction } from '../../utils/format-progress';
 import { ColMeta, ManagedColumns } from '../../utils/managed-columns';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { DetectorCardComponent } from './detector-card/detector-card.component';
-import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { CombineDatasetsModalComponent } from './combine-datasets-modal/combine-datasets-modal.component';
-import { NewDetectorModalComponent } from './new-detector-modal/new-detector-modal.component';
 import { CombineDetectorsModalComponent } from './combine-detectors-modal/combine-detectors-modal.component';
 import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
@@ -40,9 +39,7 @@ import { DiskUsageComponent, DiskUsageBytes } from './disk-usage/disk-usage.comp
     AutoDetectResultsModalComponent,
     DatasetCardComponent,
     DetectorCardComponent,
-    DatasetImporterModalComponent,
     CombineDatasetsModalComponent,
-    NewDetectorModalComponent,
     CombineDetectorsModalComponent,
     LabelExporterModalComponent,
     LabelImporterModalComponent,
@@ -71,12 +68,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   loadingTasks: LoadingTask[] = [];
   detectorLoadingTasks: LoadingTask[] = [];
 
-  importerModalOpen = false;
   importerClosing = false;
-  /** Picker tab id the importer modal should pre-select when it next
-   *  opens — set by the welcome-banner CTA so a fresh user lands in
-   *  the right place. Empty for the normal "+" button flow. */
-  importerInitialTab = '';
   /** Visible importers (i.e. ``hidden_from_picker !== true``), fetched
    *  once on init so the welcome banner can detect Services-tab
    *  importers without waiting for the modal to open. */
@@ -84,7 +76,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   combineModalOpen = false;
   /** Datasets passed into the Combine modal when it opens. */
   combineModalDatasets: DatasetRegistryEntry[] = [];
-  newDetectorModalOpen = false;
   newDetectorClosing = false;
   combineDetectorsModalOpen = false;
   exportModalOpen = false;
@@ -195,6 +186,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private activeContext: ActiveContextService,
     private authService: AuthService,
     private topBarState: TopBarStateService,
+    private newThingFlows: NewThingFlowsService,
     private achievements: AchievementsService,
     private progressEvents: ProgressEventsService,
   ) {}
@@ -259,6 +251,65 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.visibleImporters = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
       },
     });
+    this.subscribeNewThingFlows();
+  }
+
+  /** Translate `NewThingFlowsService` events into the legacy Dashboard
+   *  behaviors: kick off background polls after an import, auto-select
+   *  newly created detectors, drive the `+` icon's close animation,
+   *  etc. The importer / new-detector modals themselves are hosted on
+   *  `AppComponent`; this component just reacts to their outcomes. */
+  private subscribeNewThingFlows(): void {
+    this.newThingFlows.importStarted$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.handleImportStarted());
+    this.newThingFlows.demoSelected$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(({ demo }) => this.handleDemoSelected(demo));
+    this.newThingFlows.created$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(({ kind, id }) => {
+        if (kind === 'detector') this.handleDetectorCreated(id);
+        else this.datasetState.refresh();
+      });
+    // Trigger the close-animation when the modal flips from open → closed.
+    let importerWasOpen = false;
+    this.newThingFlows.importer$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (importerWasOpen && !state.open) this.importerClosing = true;
+        importerWasOpen = state.open;
+      });
+    let detectorWasOpen = false;
+    this.newThingFlows.newDetector$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (detectorWasOpen && !state.open) {
+          this.newDetectorClosing = true;
+          // Reset the "navigate to Train after create" intent if the
+          // user dismissed without creating. The handler in
+          // handleDetectorCreated() also clears it on success.
+          this.trainAfterModelCreation = false;
+        }
+        detectorWasOpen = state.open;
+      });
+  }
+
+  private handleDetectorCreated(modelId: string): void {
+    this.datasetState.refresh();
+    if (this.trainAfterModelCreation && modelId) {
+      this.trainAfterModelCreation = false;
+      this.selectedDetectorIds.clear();
+      this.selectedDetectorIds.add(modelId);
+      this.knownDetectorIds.add(modelId);
+      this.datasetState.detectors$
+        .pipe(
+          filter((models) => models.some((m) => m.id === modelId)),
+          take(1),
+          takeUntil(this.destroy$),
+        )
+        .subscribe(() => this.onLabel());
+    }
   }
 
   private startDiskUsagePolling(): void {
@@ -816,23 +867,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   openImporterModal(): void {
-    this.importerInitialTab = '';
     this.importerClosing = false;
-    this.importerModalOpen = true;
+    this.newThingFlows.openImporter({
+      guessedMediaType: this.guessedMediaType,
+      guessedMediaEmbedder: this.guessedMediaEmbedder,
+    });
   }
 
   /** Welcome-banner CTA: open the importer modal with one of the picker
    *  tabs pre-selected so a fresh user lands on the relevant choices. */
   openImporterModalOnTab(tabId: string): void {
-    this.importerInitialTab = tabId;
     this.importerClosing = false;
-    this.importerModalOpen = true;
-  }
-
-  closeImporterModal(): void {
-    this.importerModalOpen = false;
-    this.importerClosing = true;
-    this.importerInitialTab = '';
+    this.newThingFlows.openImporter({
+      initialTab: tabId,
+      guessedMediaType: this.guessedMediaType,
+      guessedMediaEmbedder: this.guessedMediaEmbedder,
+    });
   }
 
   onImporterAnimationEnd(): void {
@@ -877,26 +927,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.servicesImporters.length > 0 ? 'services' : 'server';
   }
 
-  onImportComplete(): void {
-    this.importerModalOpen = false;
+  /** Open-state of the dataset importer modal (hosted on AppComponent;
+   *  this getter just proxies the singleton state). Drives the `+` icon
+   *  animation. */
+  get importerModalOpen(): boolean {
+    return this.newThingFlows.importer.open;
+  }
+
+  /** Open-state of the new-detector modal (hosted on AppComponent). */
+  get newDetectorModalOpen(): boolean {
+    return this.newThingFlows.newDetector.open;
+  }
+
+  private handleImportStarted(): void {
     this.importerClosing = true;
     this.startProgressPolling();
   }
 
-  onDemoSelected(demo: { label: string; name: string; embedder?: string; clipper?: string; dataset_name?: string }): void {
-    this.importerModalOpen = false;
+  private handleDemoSelected(demo: DemoDataset): void {
     this.importerClosing = true;
+    // The importer modal augments the DemoDataset payload with the
+    // user-chosen embedder / clipper / display name before emitting;
+    // those extras aren't part of the typed schema so we read them
+    // through a permissive cast.
+    const extras = demo as DemoDataset & {
+      embedder?: string;
+      clipper?: string;
+      dataset_name?: string;
+    };
     const params: Record<string, string> = {};
-    if (demo.embedder) {
-      params['embedder'] = demo.embedder;
-    }
-    if (demo.clipper) {
-      params['clipper'] = demo.clipper;
-    }
-    const userName = (demo.dataset_name || '').trim();
-    if (userName) {
-      params['dataset_name'] = userName;
-    }
+    if (extras.embedder) params['embedder'] = extras.embedder;
+    if (extras.clipper) params['clipper'] = extras.clipper;
+    const userName = (extras.dataset_name || '').trim();
+    if (userName) params['dataset_name'] = userName;
     this.datasetsApi.loadDemo(demo.name, params).subscribe({
       next: () => {
         this.startProgressPolling();
@@ -924,38 +987,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   openNewDetectorModal(): void {
     this.newDetectorClosing = false;
-    this.newDetectorModalOpen = true;
-  }
-
-  closeNewDetectorModal(): void {
-    this.newDetectorModalOpen = false;
-    this.newDetectorClosing = true;
-    this.trainAfterModelCreation = false;
+    this.newThingFlows.openNewDetector({ defaultMediaType: this.activeDatasetMediaType });
   }
 
   onNewDetectorAnimationEnd(): void {
     this.newDetectorClosing = false;
-  }
-
-  onDetectorCreated(modelId?: string): void {
-    this.newDetectorModalOpen = false;
-    this.newDetectorClosing = true;
-    this.datasetState.refresh();
-
-    if (this.trainAfterModelCreation && modelId) {
-      this.trainAfterModelCreation = false;
-      // Select the newly created model and proceed to training once models list is refreshed
-      this.selectedDetectorIds.clear();
-      this.selectedDetectorIds.add(modelId);
-      this.knownDetectorIds.add(modelId);
-      this.datasetState.detectors$
-        .pipe(
-          filter((models) => models.some((m) => m.id === modelId)),
-          take(1),
-          takeUntil(this.destroy$),
-        )
-        .subscribe(() => this.onLabel());
-    }
   }
 
   // --- Cancel ---

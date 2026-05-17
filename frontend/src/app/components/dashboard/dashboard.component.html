@@ -305,30 +305,11 @@
   </div>
 </div>
 
-@if (importerModalOpen) {
-  <vt-dataset-importer-modal
-    [guessedMediaType]="guessedMediaType"
-    [guessedMediaEmbedder]="guessedMediaEmbedder"
-    [initialTab]="importerInitialTab"
-    (closed)="closeImporterModal()"
-    (importStarted)="onImportComplete()"
-    (demoSelected)="onDemoSelected($event)"
-  />
-}
-
 @if (combineModalOpen) {
   <vt-combine-datasets-modal
     [datasets]="combineModalDatasets"
     (closed)="closeCombineModal()"
     (combineStarted)="onCombineStarted()"
-  />
-}
-
-@if (newDetectorModalOpen) {
-  <vt-new-detector-modal
-    [defaultMediaType]="activeDatasetMediaType"
-    (closed)="closeNewDetectorModal()"
-    (created)="onDetectorCreated($event)"
   />
 }
 
