@@ -1,11 +1,12 @@
 # Python quality tools
 
 *Status: Phases 1 + 2 + 3 shipped, plus the pyproject-consolidation
-follow-up. deptry, codespell, ruff's `S` ruleset, opt-in coverage, and a
-vulture whitelist are all in place alongside the original pre-commit +
-pip-audit, and `pyproject.toml` is now the single source of truth for
-runtime + dev dependencies. See "Open follow-ups" at the bottom for the
-remaining maintenance items.*
+follow-up and CI coverage publication. deptry, codespell, ruff's `S`
+ruleset, opt-in coverage (now also published in CI), and a vulture
+whitelist are all in place alongside the original pre-commit + pip-audit,
+and `pyproject.toml` is now the single source of truth for runtime + dev
+dependencies. See "Open follow-ups" at the bottom for the remaining
+maintenance items.*
 
 The ruff + pyright + pytest stack already covers the modern core of
 Python quality tooling. This plan tracks what else is worth adding,
@@ -73,6 +74,20 @@ wire it", and a success criterion so it's a one-sitting task.
   `base.py` docstrings, and the docs (`SETUP.md`, `DEPLOYMENT.md`,
   `HANDOFF.md`, `EXTENDING.md`, `EXTENDING-plugins.md`,
   `plans/RCDatasetImporter.md`).
+
+## What shipped (CI coverage publication)
+
+- **Coverage in CI** (`.github/workflows/coverage.yml`) — runs the fast
+  CPU test suite (`-m 'not gpu and not slow'`) with `pytest-cov`, then
+  publishes the per-file `coverage report --skip-covered --sort=cover`
+  table to `$GITHUB_STEP_SUMMARY` and uploads the HTML report (and the
+  raw `coverage.xml`) as artifacts with a 14-day retention. Runs on
+  every PR plus pushes to `main`/`dev`. This is the **first** workflow
+  that runs pytest in CI — prior to this, tests were only enforced via
+  local `./run-tests.sh` and pre-commit, so the new job also gates merges
+  on test pass/fail (a real failure surfaces in the same job that
+  publishes coverage). There is no coverage-delta gate yet; that
+  decision waits until we have a baseline.
 
 ## What shipped (Phase 3)
 
@@ -294,15 +309,39 @@ added to the whitelist with a comment explaining why.
 
 ## Open follow-ups
 
-- **Coverage publish in CI.** `VTSEARCH_COVERAGE=1` runs locally but
-  there's no CI publication yet. Next step: add a `coverage` job (or
-  extend the existing test job) to upload an HTML report as an
-  artifact and write a per-file summary to `$GITHUB_STEP_SUMMARY`.
-  Decide on a delta gate (e.g. `diff-cover`) once we have a baseline.
-- **Vulture audit pass.** The whitelist makes `--min-confidence 80`
-  clean; doing a real pass at 60 % and deleting confirmed dead code
-  (after extending the whitelist for plugin/reflective references) is
-  still outstanding. Run before each release rather than as a CI gate.
+- **Coverage-delta gate.** `coverage.yml` now publishes the baseline on
+  every PR. Next step (after a few PRs of data): wire `diff-cover`
+  against the merge base and fail the job when the patch's coverage
+  drops below a threshold. Don't gate on total coverage delta — too
+  noisy across unrelated test reshuffles — gate on **lines changed by
+  this PR**, which is what `diff-cover` measures.
+- **Vulture audit pass.** Concrete state after exploring at lower
+  confidence:
+  - `--min-confidence 80` is clean (current invocation).
+  - `--min-confidence 70` is also clean. The first findings appear at
+    60 %, with a baseline of ~410 reports.
+  - About a third of that baseline is Flask route handlers (vulture
+    doesn't follow `@bp.route(...)` decoration). Passing
+    `--ignore-decorators '@*.route,@*.before_request,@*.after_request,@*.errorhandler,@*.teardown_request,@*.context_processor,@bp.*,@app.*'`
+    cuts the 60 %-confidence count to ~260.
+  - The remaining noise dominates in three families: marshmallow
+    schema attributes (`vtsearch/schemas/*.py` — `Meta` inner classes,
+    field aliases, computed properties wired via `@post_load`/
+    `@validates`), CLI entry points dispatched through `app.py`'s
+    argparse layer (`autodetect_main*`, `autodetect_importer_main*`),
+    and HuggingFace model-internal attributes
+    (`_keys_to_ignore_on_load_unexpected`). Each family wants either a
+    targeted `--ignore-names` flag, a decorator filter, or whitelist
+    entries — and the schema family in particular needs care to
+    distinguish marshmallow-managed attributes from genuinely dead
+    fields.
+  - **Recommended approach for the audit:** start by writing the right
+    invocation (decorator filter + `--ignore-names` glob for the
+    schema patterns), get the 60 %-confidence count down to something
+    a human can review (target: under 100), then triage what remains
+    in a single sitting and either delete or whitelist each entry with
+    a one-line justification. Treat the audit as a release-gate task,
+    not a CI gate.
 - **Pyright `S`-equivalent and `C901` complexity.** ruff has McCabe
   complexity via `C901`; consider enabling alongside future
   security-rule tightening if we want a complexity gate.
