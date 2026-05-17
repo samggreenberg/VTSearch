@@ -264,8 +264,30 @@ Still on the legacy shim (will migrate in followups):
   `demo`. Each is mechanical — flip the flag and rewrite `run()` to
   iterate. ReCaller specifically waits on a working API client (see
   `plans/RCDatasetImporter.md`).
+- **Update all EXTENSIONS.** Outside-developed importers are the real
+  bottleneck here, not the in-tree six. Any third-party `DatasetImporter`
+  subclass that ships outside this repo still works today via the
+  `multi_media=False` shim, but it cannot expose the new Include-rows UI,
+  cannot accept user-tunable converter params, and pins us to keeping the
+  legacy `converters` field and `media_type`-as-scan-filter semantics
+  alive. Shim removal is gated on those extension maintainers flipping
+  their importers — we cannot just delete the legacy path on our own
+  schedule without breaking them. Concrete asks per extension:
+  1. Set `multi_media = True`.
+  2. Replace the `converters` field handling in `run()` with a loop over
+     `self.effective_source_specs(field_values)`.
+  3. If the importer is service-style (fetches from an API, not a
+     folder), add a `list_records_for_source(source_type, ...)` (or
+     equivalent) so each spec drives its own upstream fetch.
+  4. Update `build_origin()` to record `source_specs` instead of the
+     legacy `media_type` / `converters` pair.
+
+  Until every known external importer has flipped, the followup below
+  (delete the shim) stays blocked. Track known extensions and their
+  migration status here as they are surveyed.
 
 Followups (not in this PR):
 
-- Once everything in-tree is migrated, delete the shim and the legacy
-  `converters` form field, and rename `media_type` → `output_type`.
+- Once everything in-tree **and every known extension** is migrated,
+  delete the shim and the legacy `converters` form field, and rename
+  `media_type` → `output_type`.
