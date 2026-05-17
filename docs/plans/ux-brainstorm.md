@@ -132,8 +132,12 @@ Selecting 3 datasets and clicking the bulk-load action loads them serially due t
 ### 3.6 Lazy-create per-media-type panel preferences ★ XS
 First time a user opens a new media type, the panel settings (`view_mode_*`, `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`) all write to disk. Coalesce into one save. (Minor but the first-image-open feels janky on slow disks.)
 
-### 3.7 Don't re-embed text queries on every keystroke ★★ XS
-Verify: if the Text-sort input has live-search, debounce + cache. If it requires Enter, fine. Either way, cache the last 5 query embeddings keyed by `(media_type, query)` for instant re-sort when toggling sort modes.
+### 3.7 Don't re-embed text queries on every keystroke ★★ XS — **shipped**
+Was: 400ms debounced live-search on the Text-sort input (`sort-bar.component.ts`) firing `POST /api/sort` → `embed_text_query()` on every pause, with no caching frontend or backend.
+
+Now:
+- Frontend: live-search removed. The input only triggers a search on Enter or the new "Search" button (disabled while the trimmed query is empty). See `frontend/src/app/components/left-panel/sort-bar/sort-bar.component.{ts,html,scss}`.
+- Backend: 32-entry in-memory LRU in `vtsearch/embedding/helpers.py` keyed by `(embedder_name, media_type, enrich, text)`. Repeat queries — re-submitting the same string, toggling sort modes and back, or `eval/runner.py` calls — skip the text encoder. Cache is process-scoped (no persistence, per "No Persisted Vectors") and cleared between tests via the existing `reset_state` autouse fixture.
 
 ### 3.8 Skip diversity-tree rebuild on small updates ★ M
 When a few medias are added/removed (e.g. clip fix-up), today the whole diversity tree rebuilds. For incremental changes < 1% of dataset size, do an incremental insert/delete instead. Saves seconds on every clip-aware import.
