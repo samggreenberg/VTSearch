@@ -1,7 +1,8 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject, Observable } from 'rxjs';
 import { takeUntil, tap } from 'rxjs/operators';
-import { AppSettings } from '../models/api.models';
+import type { AppSettings } from '../generated/api-client/models/app-settings';
+import type { SettingsUpdate } from '../generated/api-client/models/settings-update';
 import { SettingsApiService } from './settings-api.service';
 
 @Injectable({ providedIn: 'root' })
@@ -40,7 +41,7 @@ export class SettingsStateService implements OnDestroy {
       });
   }
 
-  update(changes: Partial<AppSettings>): Observable<AppSettings> {
+  update(changes: SettingsUpdate): Observable<AppSettings> {
     return this.settingsApi.updateSettings(changes).pipe(
       takeUntil(this.destroy$),
       tap((updated) => this.settingsSubject.next(updated)),

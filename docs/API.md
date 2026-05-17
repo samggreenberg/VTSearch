@@ -40,24 +40,14 @@ Error.
 
 ## Machine-readable schema
 
-`GET /openapi.json` returns an auto-generated OpenAPI 3.0 document
-describing every route on the running app — every URL, HTTP method, path
-parameter, and the view function's docstring. It's regenerated on each
-request, so it always matches the running code. Use it to:
+`GET /api/openapi.json` returns an OpenAPI 3.0 document describing every
+route on the running app, with real request/response schemas declared
+via `flask-smorest` decorators. A browsable Swagger UI is served at
+`GET /api/docs`. Use it to:
 
-- Point a Swagger UI / Redoc instance at the running server.
+- Browse / try endpoints live via Swagger UI.
 - Generate a TypeScript / Python client.
 - Diff against a snapshot in CI to catch unintended API surface changes.
-
-You can also dump the spec without starting the server:
-
-```bash
-python app.py --openapi-schema > openapi.json
-```
-
-The spec intentionally keeps request/response **schemas** permissive —
-this page is still the canonical reference for body shapes. The OpenAPI
-doc's job is to keep the *route inventory* honest.
 
 ---
 

@@ -239,16 +239,10 @@ Use `--format names --plugin-family <family>` (or any `--list-<family>
 --format names` shortcut) from a shell-completion script to suggest
 valid values for `--importer`, `--exporter`, etc.
 
-`python app.py --openapi-schema` prints an OpenAPI 3.0 document for the
-HTTP API to stdout and exits — same content as `GET /openapi.json` on
-the running server:
-
-```bash
-python app.py --openapi-schema > openapi.json
-```
-
-See [API.md § Machine-readable schema](API.md#machine-readable-schema)
-for what's covered and what's intentionally left permissive.
+The HTTP API's machine-readable OpenAPI 3.0 spec is served at
+`GET /api/openapi.json` (and browsable via Swagger UI at `GET /api/docs`)
+on the running server. See
+[API.md § Machine-readable schema](API.md#machine-readable-schema).
 
 ---
 

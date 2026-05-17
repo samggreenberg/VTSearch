@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { AppSettings } from '../../models/api.models';
+import type { AppSettings } from '../../generated/api-client/models/app-settings';
+import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import { IconComponent } from '../icon/icon.component';
 
 const ICON_SIZES = ['XS', 'S', 'M', 'L', 'XL'] as const;
@@ -101,6 +102,6 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
   private save(prefix: 'view_mode' | 'focus_mode' | 'grid_icon_size', value: string): void {
     const key = this.key(prefix);
     const updated = { ...this.getDict(prefix), [this.currentMediaType]: value };
-    this.settingsState.update({ [key]: updated } as Partial<AppSettings>).subscribe();
+    this.settingsState.update({ [key]: updated } as SettingsUpdate).subscribe();
   }
 }

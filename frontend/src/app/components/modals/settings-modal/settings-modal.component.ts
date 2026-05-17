@@ -11,7 +11,8 @@ import { AchievementsTabComponent } from '../../achievements-tab/achievements-ta
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { AppSettings, MediaTypeInfo } from '../../../models/api.models';
+import type { AppSettings } from '../../../generated/api-client/models/app-settings';
+import { MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 import { formatVersion } from '../../../utils/format-date';
 import { VtDialogService } from '../../../services/dialog.service';
@@ -86,8 +87,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   onThemeChange(theme: string): void {
-    this.settings.theme = theme;
-    this.themeService.setTheme(theme as Theme);
+    const t = theme as Theme;
+    this.settings.theme = t;
+    this.themeService.setTheme(t);
     this.save();
   }
 

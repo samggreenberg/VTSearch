@@ -1,25 +1,34 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { AppSettings } from '../models/api.models';
+import { map } from 'rxjs/operators';
+
+import { ApiConfiguration } from '../generated/api-client/api-configuration';
+import type { AppSettings } from '../generated/api-client/models/app-settings';
+import type { SettingsUpdate } from '../generated/api-client/models/settings-update';
+import { apiSettingsDefaultsGet } from '../generated/api-client/fn/settings/api-settings-defaults-get';
+import { apiSettingsGet } from '../generated/api-client/fn/settings/api-settings-get';
+import { apiSettingsPut } from '../generated/api-client/fn/settings/api-settings-put';
+import { apiVersionGet } from '../generated/api-client/fn/main/api-version-get';
 
 @Injectable({ providedIn: 'root' })
 export class SettingsApiService {
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
+  private config = inject(ApiConfiguration);
 
   getSettings(): Observable<AppSettings> {
-    return this.http.get<AppSettings>('/api/settings');
+    return apiSettingsGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  updateSettings(data: Partial<AppSettings>): Observable<AppSettings> {
-    return this.http.put<AppSettings>('/api/settings', data);
+  updateSettings(data: SettingsUpdate): Observable<AppSettings> {
+    return apiSettingsPut(this.http, this.config.rootUrl, { body: data }).pipe(map((r) => r.body));
   }
 
   getDefaults(): Observable<AppSettings> {
-    return this.http.get<AppSettings>('/api/settings/defaults');
+    return apiSettingsDefaultsGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   getVersion(): Observable<{ version: string }> {
-    return this.http.get<{ version: string }>('/api/version');
+    return apiVersionGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 }

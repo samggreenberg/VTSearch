@@ -128,25 +128,51 @@ handle, not two.
 ### TS client generation
 
 ```
-npm run generate-api-client
+npm run generate-api-client                # regenerate TS client from frontend/openapi.json
+npm run regenerate-openapi-snapshot        # re-dump the spec from a fresh Flask import
 ```
 
-A new script under `frontend/scripts/` calls
-`openapi-typescript-codegen` (or `openapi-fetch`) against
-`/api/openapi.json` (or a checked-in snapshot for CI determinism) and
-writes typed clients + DTOs into
-`frontend/src/app/generated/api-client/`. The existing
-`SettingsApiService` and friends are rewritten to thin wrappers around
-the generated client; the hand-maintained interfaces in
-`frontend/src/app/models/api.models.ts` are deleted blueprint-by-
-blueprint as the corresponding backend route migrates.
+The generator is `ng-openapi-gen` (Angular-specific; emits HttpClient-
+based functions so the existing `activeContextInterceptor` keeps
+attaching `X-Dataset-Id` / `X-Detector-Id` headers without a separate
+fetch middleware). It reads `frontend/openapi.json` and writes typed
+clients + DTOs into `frontend/src/app/generated/api-client/`.
 
-CI guards drift two ways:
-1. A `regenerate-and-diff` job rebuilds the spec from a running Flask
-   instance and diffs against the checked-in snapshot. Mismatch fails
-   the build (you forgot to regenerate after changing a schema).
-2. `npm run build:prod` already typechecks every consumer; renaming a
-   field that the frontend reads now breaks compilation immediately.
+Hybrid checked-in policy (deviation from the original plan's "check in
+both"):
+
+- `frontend/openapi.json` IS tracked — small, semantically meaningful,
+  the git diff really does show API changes at PR time.
+- `frontend/src/app/generated/` is **gitignored** — generated TS is a
+  deterministic function of the spec + generator version, so checking
+  it in adds noisy diffs and merge conflicts for no benefit.
+- The Angular build's `prebuild` / `prebuild:prod` npm hooks run
+  `ng-openapi-gen` automatically before every `ng build`, so a fresh
+  checkout's first `npm run build:prod` populates the directory.
+
+CI guards drift three ways:
+1. The `Pyright` workflow gains a final "OpenAPI snapshot drift check"
+   step: it regenerates the spec via `python scripts/dump_openapi.py`
+   and diffs against `frontend/openapi.json`. Mismatch fails CI (you
+   changed a schema without re-running `npm run regenerate-openapi-snapshot`).
+2. `npm run build:prod` always re-runs the generator first (via the
+   `prebuild:prod` hook) and then typechecks every consumer, so
+   renaming a field that the frontend reads now breaks compilation.
+3. The `ApiConfiguration`, function modules, and model types are
+   reachable via direct paths under `generated/api-client/` only — the
+   barrel index files are intentionally disabled in
+   `ng-openapi-gen.json` (`indexFile: false`, `functionIndex: false`,
+   `modelIndex: false`) so that an unrelated import doesn't accidentally
+   drag the whole 186-model surface into the initial bundle.
+
+### Bundle-size discipline
+
+Consumers MUST `import type { Foo }` (not `import { Foo }`) for any
+generated DTO, and import functions / `ApiConfiguration` from their
+specific module paths under `generated/api-client/`. Pulling a model in
+as a runtime import (or going through a barrel) adds the entire
+`models/` graph to the initial chunk — measured at ~36 kB versus the
+~6 kB cost of importing just the functions a service actually calls.
 
 ## Migration strategy
 
@@ -197,28 +223,19 @@ When the migration completes, these files should not exist:
 
 The previous OpenAPI work (feature-brainstorm §12.9, shipped in commit
 `44e9657`) added a separate, lighter-weight implementation:
-`vtsearch.openapi.generate_openapi_spec` walks `app.url_map` and emits
-a permissive spec (every route/method/path-param/docstring, but
-`{type: object}` for every body and response). It's served at
+`vtsearch.openapi.generate_openapi_spec` walked `app.url_map` and
+emitted a permissive spec (every route/method/path-param/docstring, but
+`{type: object}` for every body and response). It was served at
 `/openapi.json` and dumpable via `python app.py --openapi-schema`.
 
-This plan's flask-smorest implementation serves a richer spec at
-`/api/openapi.json` (plus Swagger UI at `/api/docs`) with real
-request/response schemas. The two coexist today — same routes, two
-specs. Once enough blueprints have migrated that the flask-smorest
-spec covers the surface the permissive one does, **delete**:
-
-- `vtsearch/openapi/` — the url-map walker.
-- The `/openapi.json` Flask route registration in `app.py`.
-- The `--openapi-schema` CLI flag in `app.py`'s argparse setup.
-- The `--openapi-schema` references in `docs/CLI.md` and
-  `docs/API.md § Machine-readable schema`.
-
-The point of consolidation is "enough blueprints" — concretely, every
-blueprint listed in the migration order below. Until then, both
-endpoints are useful: integrators who only need the route inventory
-can read `/openapi.json` without flask-smorest's typed
-request/response gates getting in the way during their migration.
+That permissive spec has been **deleted** now that flask-smorest covers
+every blueprint and serves a richer spec at `/api/openapi.json` (plus
+Swagger UI at `/api/docs`) with real request/response schemas. The
+removals — `vtsearch/openapi.py`, the `/openapi.json` route on
+`main_bp`, the `--openapi-schema` CLI flag, the
+`tests/api/test_openapi_schema.py` tests, and the docs references in
+`docs/CLI.md` / `docs/API.md` — all landed together in the same PR that
+checks off this follow-up.
 
 ## Resolved questions
 
@@ -562,19 +579,44 @@ request/response gates getting in the way during their migration.
       ``test_missing_exporter_name_400`` test in
       ``tests/io/test_settings_io.py`` was updated to expect 422 with
       the ``errors`` envelope.
-- [ ] Frontend `SettingsApiService` rewired to generated client
-- [ ] `frontend/src/app/models/api.models.ts` settings section deleted
-- [ ] Delete the pre-existing permissive `/openapi.json` +
-      `--openapi-schema` now that flask-smorest covers every blueprint
-      (see "Relationship to the pre-existing permissive spec" above).
-      The url-map walker in ``vtsearch/openapi.py`` and the ``/openapi.json``
-      route on ``main_bp`` are still in place — flagged as deprecated in
-      their docstrings but kept until a follow-up PR removes them
-      together with the ``--openapi-schema`` CLI flag and the docs
-      references in ``docs/CLI.md`` / ``docs/API.md``.
+- [x] TS client generation pilot landed (settings only):
+      ``ng-openapi-gen`` wired up via ``frontend/ng-openapi-gen.json``;
+      ``frontend/openapi.json`` snapshot checked in;
+      ``frontend/src/app/generated/api-client/`` gitignored and
+      regenerated by the ``prebuild`` / ``prebuild:prod`` npm hooks
+      (and on demand via ``npm run generate-api-client``);
+      ``scripts/dump_openapi.py`` dumps the live flask-smorest spec for
+      both the snapshot regen (``npm run regenerate-openapi-snapshot``)
+      and the CI drift guard (new step on the ``Pyright`` workflow).
+      ``SettingsApiService`` and ``SettingsStateService`` now call the
+      generated ``apiSettingsGet`` / ``apiSettingsPut`` /
+      ``apiSettingsDefaultsGet`` / ``apiVersionGet`` functions; the
+      ``AppSettings`` interface was deleted from
+      ``frontend/src/app/models/api.models.ts`` and consumers
+      (``settings-modal``, ``view-controls``, ``settings-state``)
+      ``import type``-only it from the generated module.
+- [x] Pre-existing permissive `/openapi.json` + `--openapi-schema`
+      deleted. Removed ``vtsearch/openapi.py`` (the url-map walker),
+      the ``/openapi.json`` route on ``main_bp``, the
+      ``--openapi-schema`` CLI flag in ``app.py``, and
+      ``tests/api/test_openapi_schema.py``. The ``--format`` flag's
+      help text no longer mentions ``--openapi-schema``. Docs updated:
+      ``docs/API.md § Machine-readable schema`` and ``docs/CLI.md``
+      both point at ``GET /api/openapi.json`` (and Swagger UI at
+      ``/api/docs``) as the single source.
 
 ## Open follow-ups
 
+- **Migrate the remaining Angular services to the generated client.**
+  The settings pilot proves the pattern. Each follow-up PR picks one
+  blueprint area (medias, sorting, detectors, datasets, eval, …),
+  rewires the matching Angular service(s) to call the generated
+  function modules under ``frontend/src/app/generated/api-client/fn/``,
+  and deletes the corresponding hand-maintained interfaces from
+  ``frontend/src/app/models/api.models.ts``. The hybrid imports
+  (``import type`` for DTOs, direct function-module paths for
+  runtime symbols, no barrel) are required to keep the initial bundle
+  under the 525 kB budget — see *Bundle-size discipline* above.
 - **Per-plugin schemas for plugin-field routes.** The four routes
   whose request body is a plugin-field shape stay on the legacy
   plain-Flask path on their (now smorest-typed) blueprints:

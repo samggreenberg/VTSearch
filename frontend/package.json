@@ -4,9 +4,13 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
+    "prebuild": "ng-openapi-gen",
     "build": "ng build",
+    "prebuild:prod": "ng-openapi-gen",
     "build:prod": "NG_CLI_ANALYTICS=false ng build --configuration production",
     "watch": "ng build --watch --configuration development",
+    "generate-api-client": "ng-openapi-gen",
+    "regenerate-openapi-snapshot": "cd .. && python scripts/dump_openapi.py > frontend/openapi.json",
     "test": "echo 'Karma removed — no browser-based test runner configured. Run backend tests via ./run-tests.sh'"
   },
   "private": true,
@@ -28,6 +32,7 @@
     "@angular/cli": "^19.2.22",
     "@angular/compiler-cli": "^19.2.0",
     "@types/jasmine": "^6.0.0",
+    "ng-openapi-gen": "^1.0.5",
     "typescript": "~5.7.2"
   },
   "overrides": {
