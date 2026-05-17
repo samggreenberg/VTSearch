@@ -624,17 +624,6 @@ def _auto_register_dataset(
     return entry
 
 
-def _activate_new_context(dataset_id: str) -> DatasetContext:
-    """Create a fresh DatasetContext and register it.
-
-    The previous contexts (if any) are *preserved* in the context
-    store — nothing is cleared.  This enables the multi-dataset model.
-    """
-    ctx = DatasetContext(dataset_id)
-    register_context(ctx)
-    return ctx
-
-
 # ---------------------------------------------------------------------------
 # Parallel-safe background loading
 # ---------------------------------------------------------------------------

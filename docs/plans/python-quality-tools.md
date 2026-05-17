@@ -1,12 +1,12 @@
 # Python quality tools
 
 *Status: Phases 1 + 2 + 3 shipped, plus the pyproject-consolidation
-follow-up and CI coverage publication. deptry, codespell, ruff's `S`
-ruleset, opt-in coverage (now also published in CI), and a vulture
-whitelist are all in place alongside the original pre-commit + pip-audit,
-and `pyproject.toml` is now the single source of truth for runtime + dev
-dependencies. See "Open follow-ups" at the bottom for the remaining
-maintenance items.*
+follow-up, CI coverage publication, and the vulture audit pass. deptry,
+codespell, ruff's `S` ruleset, opt-in coverage (now also published in
+CI), and a tuned vulture invocation + whitelist are all in place
+alongside the original pre-commit + pip-audit, and `pyproject.toml` is
+now the single source of truth for runtime + dev dependencies. See
+"Open follow-ups" at the bottom for the remaining maintenance items.*
 
 The ruff + pyright + pytest stack already covers the modern core of
 Python quality tooling. This plan tracks what else is worth adding,
@@ -117,6 +117,49 @@ wire it", and a success criterion so it's a one-sitting task.
   cleanly. Vulture is intentionally NOT a CI gate — it's a manual
   pre-release audit since lower confidence settings produce too many
   false positives against the plugin-discovery pattern.
+- **Vulture audit pass** at `--min-confidence 60` — completed in
+  May 2026. The invocation now lives in `.vulture-whitelist.py`'s
+  module docstring and is referenced from `CLAUDE.md`'s commands list.
+  Key tunings: `--exclude` for `vtsearch/schemas/*` and
+  `vtsearch/settings_models.py` (every marshmallow field assignment and
+  pydantic field declaration looks "unused" to vulture because both
+  frameworks collect fields via metaclass — there is no static reference
+  to attach), `--ignore-decorators` covering the full Flask + pytest
+  decorator surface, and `--ignore-names` for Meta inner classes,
+  `model_config`, the HuggingFace `_keys_to_ignore_on_load_unexpected`
+  attribute, pytest `test_*`/`Test*`/`pytest_*`/`pytestmark` patterns,
+  and Python protocol dunders (`__enter__`, `__exit__`, `__package__`).
+  The triage:
+  * **Deleted as genuinely dead:** `serialize_job` and the unused
+    `finished_at` attribute in `vtsearch/concurrency/async_jobs.py`,
+    `_search_dir_for_file` in the http-archive importer,
+    `_activate_new_context` in `vtsearch/datasets/load_pipeline.py`,
+    `_pop_embedding_key` in `vtsearch/datasets/loader.py`,
+    `embed_image_file_from_pil` in `vtsearch/datasets/loader_pickle.py`,
+    `_ProtoLeaf` in `vtsearch/media/patch_embed.py`, `_save_for_key` and
+    `_get_active_cache_for_key` in `vtsearch/settings.py`, plus a
+    handful of dead test helpers (`_read_sse_event`, `_make_minimal_wav`,
+    `_make_text_file`, `make_document_media`, `make_minimal_pdf_bytes`,
+    `build_results_dict`, `make_trainable_model_file`, `_populate`,
+    `_StubMedias`) and several unused local variables. Renamed an
+    unused loop variable and a few unused function parameters to the
+    `_<name>` convention.
+  * **Whitelisted as public API / reflective use:** Flask's
+    `secret_key`, the API-symmetry progress wrappers
+    (`check_dataset_cancelled`, `get_sort_progress`, `get_find_progress`),
+    documented public constants (`SAVED_DATASETS_DIR`, `DETECTORS_DIR`,
+    `SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB`), public training/labelset APIs
+    (`find_by_pkl_path`, `recreate_model_at_time`, `update_cache_for_cid`,
+    `collect_media_origins`, `train_detector_from_origins`), the public
+    state context managers (`with_dataset_context`, `with_detector_context`),
+    `default_concurrent_downloads`/`default_concurrent_embeddings`
+    (called from the excluded `settings_models.py`), and the
+    TYPE_CHECKING-only settings accessor stubs that pyright needs but
+    vulture sees as orphans (`get_audio_playing`, `get_swipe_animation`,
+    `get_hide_autopilot`, `get_autopilot_resort_interval`).
+
+  The tuned invocation now exits 0 on a clean tree, so introducing a
+  new piece of dead code reliably surfaces in the audit.
 
 ## Phase 2 — Low-friction additions
 
@@ -315,33 +358,10 @@ added to the whitelist with a comment explaining why.
   drops below a threshold. Don't gate on total coverage delta — too
   noisy across unrelated test reshuffles — gate on **lines changed by
   this PR**, which is what `diff-cover` measures.
-- **Vulture audit pass.** Concrete state after exploring at lower
-  confidence:
-  - `--min-confidence 80` is clean (current invocation).
-  - `--min-confidence 70` is also clean. The first findings appear at
-    60 %, with a baseline of ~410 reports.
-  - About a third of that baseline is Flask route handlers (vulture
-    doesn't follow `@bp.route(...)` decoration). Passing
-    `--ignore-decorators '@*.route,@*.before_request,@*.after_request,@*.errorhandler,@*.teardown_request,@*.context_processor,@bp.*,@app.*'`
-    cuts the 60 %-confidence count to ~260.
-  - The remaining noise dominates in three families: marshmallow
-    schema attributes (`vtsearch/schemas/*.py` — `Meta` inner classes,
-    field aliases, computed properties wired via `@post_load`/
-    `@validates`), CLI entry points dispatched through `app.py`'s
-    argparse layer (`autodetect_main*`, `autodetect_importer_main*`),
-    and HuggingFace model-internal attributes
-    (`_keys_to_ignore_on_load_unexpected`). Each family wants either a
-    targeted `--ignore-names` flag, a decorator filter, or whitelist
-    entries — and the schema family in particular needs care to
-    distinguish marshmallow-managed attributes from genuinely dead
-    fields.
-  - **Recommended approach for the audit:** start by writing the right
-    invocation (decorator filter + `--ignore-names` glob for the
-    schema patterns), get the 60 %-confidence count down to something
-    a human can review (target: under 100), then triage what remains
-    in a single sitting and either delete or whitelist each entry with
-    a one-line justification. Treat the audit as a release-gate task,
-    not a CI gate.
+- **Vulture audit pass.** Completed — see "What shipped (Phase 3)"
+  above for the deletions, whitelist additions, and final tuned
+  invocation. The audit is meant to be re-run before each release;
+  introducing new dead code will surface there.
 - **Pyright `S`-equivalent and `C901` complexity.** ruff has McCabe
   complexity via `C901`; consider enabling alongside future
   security-rule tightening if we want a complexity gate.

@@ -49,7 +49,7 @@ class TestBuildCliArgs:
             description = "test"
             fields = [ImporterField("upload", "Upload", "file", accept=".pkl")]
 
-            def run(self, fv, c):
+            def run(self, _fv, _c):
                 pass
 
         imp = _FileImporter()

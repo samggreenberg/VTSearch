@@ -46,7 +46,6 @@ class AsyncJob:
     total: int = 0
     message: str = ""
     started_at: float = 0.0
-    finished_at: float = 0.0
     cancel_event: threading.Event = field(default_factory=threading.Event)
     done_event: threading.Event = field(default_factory=threading.Event)
     # Username of the request that spawned this job, captured at start()
@@ -225,7 +224,6 @@ class JobManager:
             with self._lock:
                 job.status = "error"
                 job.error = str(exc) or exc.__class__.__name__
-                job.finished_at = time.time()
                 job.done_event.set()
             self._promote_pending_if_any()
             return
@@ -233,7 +231,6 @@ class JobManager:
         next_job: AsyncJob | None = None
         next_target: Callable[[AsyncJob], Any] | None = None
         with self._lock:
-            job.finished_at = time.time()
             if job.is_cancelled and job.status == "running":
                 job.status = "cancelled"
             elif job.status == "running":
@@ -365,18 +362,3 @@ def reset_all_async_jobs_for_tests() -> None:
     """Reset every singleton job manager.  Called from the autouse fixture."""
     for mgr in JOB_MANAGERS.values():
         mgr.reset_for_tests()
-
-
-def serialize_job(job: AsyncJob) -> dict[str, Any]:
-    """Return a JSON-safe snapshot of *job* (without ``result``).
-
-    The result payload differs per endpoint and is added by the route.
-    """
-    return {
-        "job_id": job.job_id,
-        "status": job.status,
-        "current": job.current,
-        "total": job.total,
-        "message": job.message,
-        "error": job.error,
-    }

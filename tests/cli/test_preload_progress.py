@@ -116,7 +116,7 @@ class TestPreloadConsoleOutput:
 
     @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
     @patch("vtsearch.media.get_embedder")
-    def test_prints_preloading_banner_and_progress(self, mock_get_embedder, mock_predict, capsys):
+    def test_prints_preloading_banner_and_progress(self, mock_get_embedder, _mock_predict, capsys):
         """preload_predicted_embedders should print the banner and forward progress to console."""
         mock_emb = MagicMock()
         mock_emb.name = "clap"
@@ -145,7 +145,7 @@ class TestPreloadConsoleOutput:
 
     @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
     @patch("vtsearch.media.get_embedder")
-    def test_restores_original_callback_after_load(self, mock_get_embedder, mock_predict):
+    def test_restores_original_callback_after_load(self, mock_get_embedder, _mock_predict):
         """The original _on_progress callback should be restored after load_models."""
         original_cb = MagicMock()
         mock_emb = MagicMock()
@@ -160,7 +160,7 @@ class TestPreloadConsoleOutput:
 
     @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
     @patch("vtsearch.media.get_embedder")
-    def test_restores_callback_on_exception(self, mock_get_embedder, mock_predict, capsys):
+    def test_restores_callback_on_exception(self, mock_get_embedder, _mock_predict, capsys):
         """The original callback should be restored even when load_models raises."""
         original_cb = MagicMock()
         mock_emb = MagicMock()
@@ -177,7 +177,7 @@ class TestPreloadConsoleOutput:
         assert "Warning" in captured.out
 
     @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=[])
-    def test_no_predicted_embedders_produces_no_output(self, mock_predict, capsys):
+    def test_no_predicted_embedders_produces_no_output(self, _mock_predict, capsys):
         """When there are no predicted embedders, nothing should be printed."""
         result = preload_predicted_embedders()
 

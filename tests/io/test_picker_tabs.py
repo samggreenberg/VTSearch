@@ -36,13 +36,14 @@ class TestBuiltinTabs:
         assert orders == sorted(orders)
 
 
+@pytest.mark.usefixtures("restore_tabs")
 class TestRegisterPickerTab:
-    def test_register_appends_new_tab(self, restore_tabs):
+    def test_register_appends_new_tab(self):
         register_picker_tab({"id": "cloud", "label": "Cloud", "icon": "cloud", "order": 25})
         ids = [t["id"] for t in list_picker_tabs()]
         assert "cloud" in ids
 
-    def test_register_replaces_existing_tab(self, restore_tabs):
+    def test_register_replaces_existing_tab(self):
         register_picker_tab({"id": "server", "label": "Servers", "icon": "server", "order": 5})
         tabs = list_picker_tabs()
         server = next(t for t in tabs if t["id"] == "server")

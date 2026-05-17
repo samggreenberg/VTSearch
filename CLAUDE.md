@@ -118,7 +118,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Format**: `ruff format .`
 - **Spell check**: `codespell --toml pyproject.toml`
 - **Dependency check**: `python -m deptry .`
-- **Dead code audit** (manual, pre-release): `vulture vtsearch/ .vulture-whitelist.py --min-confidence 80`
+- **Dead code audit** (manual, pre-release): see `.vulture-whitelist.py` for the full invocation (60% confidence, with marshmallow/pydantic field directories excluded and pytest/Flask/dunder noise filtered). Run before each release; not a CI gate.
 
 ## Architecture
 - `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing, per-request user context via `before_request` middleware, per-request dataset/model context resolution from `X-Dataset-Id`/`X-Detector-Id` headers
