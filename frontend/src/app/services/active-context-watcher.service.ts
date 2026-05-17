@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { Router } from '@angular/router';
 import { combineLatest } from 'rxjs';
 import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
@@ -31,7 +32,20 @@ export class ActiveContextWatcherService {
     private activeContext: ActiveContextService,
     private datasetState: DatasetStateService,
     private toast: ToastService,
+    private router: Router,
   ) {}
+
+  /** Navigate to /dashboard when an active half is cleared from under
+   *  us. Phase 2 makes the URL the source of truth, so a half-set pair
+   *  is not a representable URL state — bouncing to /dashboard is the
+   *  only sensible recovery. No-op when the user is already on
+   *  `/dashboard`. */
+  private leaveBrokenPairView(): void {
+    const url = this.router.url.split('?')[0];
+    if (url.startsWith('/label') || url.startsWith('/find')) {
+      this.router.navigate(['/dashboard']);
+    }
+  }
 
   /** Idempotent — safe to call from multiple bootstrappers. */
   start(): void {
@@ -64,6 +78,7 @@ export class ActiveContextWatcherService {
           detail: 'Pick another from the top-bar pulldown.',
           dedupKey: `active-removed:dataset:${pair.datasetId}`,
         });
+        this.leaveBrokenPairView();
       }
 
       if (activeDetector) {
@@ -81,6 +96,7 @@ export class ActiveContextWatcherService {
           detail: 'Pick another from the top-bar pulldown.',
           dedupKey: `active-removed:detector:${pair.modelId}`,
         });
+        this.leaveBrokenPairView();
       }
     });
   }

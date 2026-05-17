@@ -26,6 +26,23 @@ describe('DatasetStateService', () => {
     expect(service.detectors).toEqual([]);
     expect(service.loading).toBeFalse();
     expect(service.progressMessage).toBe('');
+    expect(service.loaded).toBeFalse();
+  });
+
+  it('flips loaded$ once the first registry fetch returns (success)', () => {
+    expect(service.loaded).toBeFalse();
+    service.refresh();
+    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+    expect(service.loaded).toBeTrue();
+  });
+
+  it('flips loaded$ once the first registry fetch returns (error)', () => {
+    expect(service.loaded).toBeFalse();
+    service.refresh();
+    httpMock.expectOne('/api/datasets/registry').error(new ProgressEvent('Network'));
+    httpMock.expectOne('/api/detectors/registry').error(new ProgressEvent('Network'));
+    expect(service.loaded).toBeTrue();
   });
 
   it('refresh should fetch datasets and detectors', () => {

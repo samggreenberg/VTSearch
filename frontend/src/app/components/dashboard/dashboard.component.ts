@@ -1,6 +1,6 @@
 import { Component, HostListener, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
 import { catchError, filter, switchMap, take, takeUntil } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
@@ -8,9 +8,9 @@ import { DetectorsApiService } from '../../services/detectors-api.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
-import { FindSessionService } from '../../services/find-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { ContextSwitchService } from '../../services/context-switch.service';
 import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
@@ -94,9 +94,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   deletingDatasetId = '';
   deletingDetectorId = '';
   addLabelsDetectorId = '';
+  trainAfterModelCreation = false;
+  /** Mirrors the user's click intent so the Train/Find button icons
+   *  can waggle while the `activeContextGuard` waits between click and
+   *  route activation. Reset when `contextSwitch.switching$` settles
+   *  back to false (either route activated or canActivate denied). */
   trainLoading = false;
   findLoading = false;
-  trainAfterModelCreation = false;
 
   /** Lifted out of this component into `DashboardColumnsService` so the
    *  top-bar context pulldowns can mirror the user's sort. Assigned in
@@ -149,9 +153,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private detectorsApi: DetectorsApiService,
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
-    private findSession: FindSessionService,
     public datasetState: DatasetStateService,
     private activeContext: ActiveContextService,
+    private contextSwitch: ContextSwitchService,
     private authService: AuthService,
     private topBarState: TopBarStateService,
     private newThingFlows: NewThingFlowsService,
@@ -224,6 +228,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
       },
     });
     this.subscribeNewThingFlows();
+    // Reset the per-button waggle flags whenever a navigation
+    // initiated by onLabel/onFind settles (succeeded, cancelled by the
+    // guard, or errored). Without this, a guard redirect to /dashboard
+    // would leave the icon waggling forever.
+    this.router.events
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((e) => {
+        if (
+          e instanceof NavigationEnd ||
+          e instanceof NavigationCancel ||
+          e instanceof NavigationError
+        ) {
+          this.trainLoading = false;
+          this.findLoading = false;
+        }
+      });
   }
 
   /** Translate `NewThingFlowsService` events into the legacy Dashboard
@@ -1116,7 +1136,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Button state ---
 
   get isLoading(): boolean {
-    return this.trainLoading || this.findLoading;
+    // Phase 2: the `activeContextGuard` owns the dataset/detector load
+    // path the Train/Find buttons used to drive locally. We mirror its
+    // signals (plus the per-button click-intent flags) here so
+    // dashboard controls stay disabled while the guard waits between
+    // click and route activation.
+    return (
+      this.trainLoading ||
+      this.findLoading ||
+      this.contextSwitch.switching ||
+      this.datasetState.loading
+    );
   }
 
   get labelEnabled(): boolean {
@@ -1202,45 +1232,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.openNewDetectorModal();
       return;
     }
-    const model = modelId ? this.detectors.find((m) => m.id === modelId) : null;
 
     this.storeSelectedModelTextQuery();
+    // The `activeContextGuard` on /label/:datasetId/:detectorId flips
+    // ActiveContextService and runs any needed loads via
+    // ContextSwitchService before activating the route.
     this.trainLoading = true;
-
-    // Set active context so the HTTP interceptor attaches headers
-    this.activeContext.setDatasetId(dataset.id);
-    this.activeContext.setModelId(modelId || '');
-
-    // Gate: navigate only once both dataset and model are ready.
-    let pending = 2;
-    const gate = (): void => {
-      if (--pending === 0) {
-        this.trainLoading = false;
-        this.datasetState.refresh();
-        this.router.navigate(['/label']);
-      }
-    };
-
-    // --- Model loading (parallel) ---
-    if (model && !model.detector_loaded) {
-      this.detectorsApi.loadDetector(modelId).subscribe({
-        next: () => this.startDetectorProgressPolling(() => gate()),
-        error: () => gate(),
-      });
-    } else {
-      gate();
-    }
-
-    // --- Dataset loading (parallel) ---
-    if (dataset.loaded) {
-      gate();
-    } else {
-      this.datasetsApi.loadRegistered(dataset.id).subscribe({
-        next: () => {
-          this.startProgressPolling(() => gate());
-        },
-      });
-    }
+    this.router.navigate(['/label', dataset.id, modelId]);
   }
 
   onFind(): void {
@@ -1250,46 +1248,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const model = this.detectors.find((m) => this.selectedDetectorIds.has(m.id));
     if (!model) return;
 
-    // Store model and dataset info in the find session service
-    this.findSession.modelId = model.id;
-    this.findSession.modelName = model.name;
-    this.findSession.datasetId = dataset.id;
+    // See `onLabel` — the route guard owns context + loading.
     this.findLoading = true;
-
-    // Set active context so the HTTP interceptor attaches headers
-    this.activeContext.setDatasetId(dataset.id);
-    this.activeContext.setModelId(model.id);
-
-    // Gate: navigate only once both dataset and model are ready.
-    let pending = 2;
-    const gate = (): void => {
-      if (--pending === 0) {
-        this.findLoading = false;
-        this.datasetState.refresh();
-        this.router.navigate(['/find']);
-      }
-    };
-
-    // --- Model loading (parallel) ---
-    if (!model.detector_loaded) {
-      this.detectorsApi.loadDetector(model.id).subscribe({
-        next: () => this.startDetectorProgressPolling(() => gate()),
-        error: () => gate(),
-      });
-    } else {
-      gate();
-    }
-
-    // --- Dataset loading (parallel) ---
-    if (dataset.loaded) {
-      gate();
-    } else {
-      this.datasetsApi.loadRegistered(dataset.id).subscribe({
-        next: () => {
-          this.startProgressPolling(() => gate());
-        },
-      });
-    }
+    this.router.navigate(['/find', dataset.id, model.id]);
   }
 
   /** Old Find window — runs multi-dataset multi-detector find and shows results modal. */

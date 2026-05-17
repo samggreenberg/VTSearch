@@ -474,7 +474,13 @@ describe('DashboardComponent', () => {
   });
 
   describe('onLabel', () => {
-    it('should navigate directly when dataset is already loaded', () => {
+    // Phase 2: onLabel just navigates to the URL-encoded pair; the
+    // `activeContextGuard` owns the dataset/detector load and any
+    // progress polling. These tests cover the navigation contract,
+    // not the load orchestration (which moved to the guard +
+    // ContextSwitchService).
+
+    it('navigates to /label/:datasetId/:detectorId for the selected pair', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
@@ -482,17 +488,10 @@ describe('DashboardComponent', () => {
       const routerSpy = spyOn(component['router'], 'navigate');
       component.onLabel();
 
-      // Flush the loadDetector call
-      const loadModelReq = httpMock.expectOne('/api/detectors/registry/load');
-      expect(loadModelReq.request.method).toBe('POST');
-      expect(loadModelReq.request.body).toEqual({ detector_id: 'm1' });
-      loadModelReq.flush({ ok: true });
-
-      expect(routerSpy).toHaveBeenCalledWith(['/label']);
-      expect(component.loading).toBeFalse();
+      expect(routerSpy).toHaveBeenCalledWith(['/label', 'd1', 'm1']);
     });
 
-    it('should store selected model text_query in session before navigating', () => {
+    it('stores the selected model text_query in LabelSessionService before navigating', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', text_query: 'dog barking' }];
       flushInitialRequests(datasets, models);
@@ -501,72 +500,28 @@ describe('DashboardComponent', () => {
       spyOn(component['router'], 'navigate');
       component.onLabel();
 
-      const loadModelReq = httpMock.expectOne('/api/detectors/registry/load');
-      loadModelReq.flush({ ok: true });
-
       expect(session.textQuery).toBe('dog barking');
     });
 
-    it('should load dataset first when not loaded, then navigate', () => {
-      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: false }];
-      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
-      flushInitialRequests(datasets, models);
-
-      const routerSpy = spyOn(component['router'], 'navigate');
-      component.onLabel();
-
-      expect(component.loading).toBeTrue();
-      expect(component.progressMessage).toContain('DS');
-      expect(routerSpy).not.toHaveBeenCalled();
-
-      // Respond to load request
-      const loadReq = httpMock.expectOne('/api/datasets/registry/d1/load');
-      expect(loadReq.request.method).toBe('POST');
-      loadReq.flush({ ok: true });
-
-      // Progress polling returns idle -> should navigate
-      const progressReq = httpMock.expectOne('/api/dataset/progress');
-      progressReq.flush({ status: 'idle' });
-
-      // Flush the loadDetector call triggered after progress completes
-      const loadModelReq = httpMock.expectOne('/api/detectors/registry/load');
-      loadModelReq.flush({ ok: true });
-
-      expect(routerSpy).toHaveBeenCalledWith(['/label']);
-
-      // Refresh after completion
-      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
-    });
-
-    it('should not navigate on load error progress', () => {
-      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: false }];
-      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
-      flushInitialRequests(datasets, models);
-
-      const routerSpy = spyOn(component['router'], 'navigate');
-      component.onLabel();
-
-      const loadReq = httpMock.expectOne('/api/datasets/registry/d1/load');
-      loadReq.flush({ ok: true });
-
-      // Progress polling returns error
-      const progressReq = httpMock.expectOne('/api/dataset/progress');
-      progressReq.flush({ status: 'error', message: 'Out of memory' });
-
-      expect(routerSpy).not.toHaveBeenCalled();
-
-      // Refresh after error
-      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
-    });
-
-    it('should do nothing when no dataset is selected', () => {
+    it('does nothing when no dataset is selected', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
       const routerSpy = spyOn(component['router'], 'navigate');
       component.onLabel();
       expect(routerSpy).not.toHaveBeenCalled();
+    });
+
+    it('opens the new-detector modal (no navigation) when no model is selected', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true }];
+      flushInitialRequests(datasets, []);
+      component.selectedDetectorIds.clear();
+      const routerSpy = spyOn(component['router'], 'navigate');
+
+      component.onLabel();
+
+      expect(routerSpy).not.toHaveBeenCalled();
+      expect(component.newDetectorModalOpen).toBeTrue();
+      expect(component.trainAfterModelCreation).toBeTrue();
     });
   });
 

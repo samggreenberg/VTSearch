@@ -6,9 +6,10 @@ import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
 import { IconComponent } from '../../icon/icon.component';
+import { ActiveContextService } from '../../../services/active-context.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
-import { FindSessionService } from '../../../services/find-session.service';
 import { LabelSessionService } from '../../../services/label-session.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ExporterInfo, LabelEntry } from '../../../models/api.models';
@@ -86,14 +87,22 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   constructor(
     private datasetsApi: DatasetsApiService,
     private exportersApi: ExportersApiService,
-    private findSession: FindSessionService,
     private labelSession: LabelSessionService,
     private sortingApi: SortingApiService,
+    private activeContext: ActiveContextService,
+    private datasetState: DatasetStateService,
   ) {}
 
-  /** Detector/model name from any available source. */
+  /** Detector/model name from any available source. Falls back to the
+   *  registry entry for the active detector id when the
+   *  parent-supplied name and `labelSession.modelName` are both
+   *  empty — typical when this modal opens from the Find view. */
   private get effectiveDetectorName(): string {
-    return this.detectorName || this.labelSession.modelName || this.findSession.modelName || '';
+    if (this.detectorName) return this.detectorName;
+    if (this.labelSession.modelName) return this.labelSession.modelName;
+    const modelId = this.activeContext.modelId;
+    if (!modelId) return '';
+    return this.datasetState.detectors.find((d) => d.id === modelId)?.name || '';
   }
 
   ngOnInit(): void {

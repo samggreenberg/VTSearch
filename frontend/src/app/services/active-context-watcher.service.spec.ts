@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
 import { ActiveContextWatcherService } from './active-context-watcher.service';
 import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
@@ -34,7 +35,7 @@ describe('ActiveContextWatcherService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
     watcher = TestBed.inject(ActiveContextWatcherService);
     activeContext = TestBed.inject(ActiveContextService);
