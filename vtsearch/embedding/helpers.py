@@ -7,7 +7,9 @@ its original public API as thin wrappers so that existing callers
 without modification.
 """
 
+from collections import OrderedDict
 from pathlib import Path
+from threading import Lock
 from typing import Optional
 
 import numpy as np
@@ -47,12 +49,56 @@ def embed_paragraph_file(text_path: Path) -> Optional[np.ndarray]:
     return emb.embed_media(media_from_path(text_path)) if emb else None
 
 
+# In-memory LRU cache of recently-embedded text queries. Keyed by
+# (embedder_name, media_type, enrich, text); the embedder name is included
+# because the same string embedded by CLIP vs. SigLIP lands in different
+# vector spaces. Caching avoids re-running the text encoder when the user
+# toggles sort modes or re-submits the same query on a different dataset
+# that shares the embedder. Vectors are never persisted (see CLAUDE.md
+# "No Persisted Vectors or MLPs") — this lives for the process lifetime.
+_QUERY_CACHE_MAXSIZE = 32
+_query_cache: "OrderedDict[tuple[str, str, bool, str], np.ndarray]" = OrderedDict()
+_query_cache_lock = Lock()
+
+
+def _query_cache_get(key: tuple[str, str, bool, str]) -> Optional[np.ndarray]:
+    with _query_cache_lock:
+        vec = _query_cache.get(key)
+        if vec is not None:
+            _query_cache.move_to_end(key)
+        return vec
+
+
+def _query_cache_put(key: tuple[str, str, bool, str], vec: np.ndarray) -> None:
+    with _query_cache_lock:
+        _query_cache[key] = vec
+        _query_cache.move_to_end(key)
+        while len(_query_cache) > _QUERY_CACHE_MAXSIZE:
+            _query_cache.popitem(last=False)
+
+
+def clear_text_query_cache() -> None:
+    """Drop all cached query embeddings (test helper / manual reset)."""
+    with _query_cache_lock:
+        _query_cache.clear()
+
+
 def embed_text_query(text: str, media_type: str, enrich: bool = False, embedder_name: str = "") -> Optional[np.ndarray]:
     """Embed *text* in the vector space of the given *media_type* (or specific *embedder_name*).
 
     When *embedder_name* is provided, uses that specific embedder.  Otherwise
     falls back to the first registered embedder for the media type.
+
+    Results are cached in a small in-memory LRU keyed by
+    ``(embedder_name, media_type, enrich, text)`` so repeated queries
+    (e.g. switching sort modes and back, or re-submitting the same search)
+    skip the text encoder.
     """
+    cache_key = (embedder_name, media_type, bool(enrich), text)
+    cached = _query_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     if embedder_name:
         from vtsearch.media import get_embedder
 
@@ -66,6 +112,9 @@ def embed_text_query(text: str, media_type: str, enrich: bool = False, embedder_
     if emb is None:
         return None
 
-    if enrich:
-        return emb.embed_text_enriched(text)
-    return emb.embed_text(text)
+    vec = emb.embed_text_enriched(text) if enrich else emb.embed_text(text)
+    if vec is None:
+        return None
+
+    _query_cache_put(cache_key, vec)
+    return vec

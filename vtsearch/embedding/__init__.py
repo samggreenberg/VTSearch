@@ -7,6 +7,7 @@ package exposes thin call-sites used throughout the rest of VTSearch
 """
 
 from vtsearch.embedding.helpers import (
+    clear_text_query_cache,
     embed_audio_file,
     embed_image_file,
     embed_paragraph_file,
@@ -35,6 +36,7 @@ __all__ = [
     "embed_image_file",
     "embed_paragraph_file",
     "embed_text_query",
+    "clear_text_query_cache",
     "initialize_models",
     "predict_embedders_to_preload",
     "preload_predicted_embedders",

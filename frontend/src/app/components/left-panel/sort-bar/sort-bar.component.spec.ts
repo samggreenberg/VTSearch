@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SortBarComponent } from './sort-bar.component';
 
 describe('SortBarComponent', () => {
@@ -59,20 +59,43 @@ describe('SortBarComponent', () => {
     expect(component.loadSort.emit).toHaveBeenCalled();
   });
 
-  it('should debounce text input and emit textSort', fakeAsync(() => {
+  it('should not emit textSort on input alone', () => {
     spyOn(component.textSort, 'emit');
     component.onTextInput('hello world');
     expect(component.textSort.emit).not.toHaveBeenCalled();
-    tick(400);
-    expect(component.textSort.emit).toHaveBeenCalledWith('hello world');
-  }));
+  });
 
-  it('should not emit textSort for whitespace-only input', fakeAsync(() => {
+  it('should emit textSort on submitTextSort', () => {
+    spyOn(component.textSort, 'emit');
+    component.onTextInput('hello world');
+    component.submitTextSort();
+    expect(component.textSort.emit).toHaveBeenCalledWith('hello world');
+  });
+
+  it('should not emit textSort for whitespace-only input on submit', () => {
     spyOn(component.textSort, 'emit');
     component.onTextInput('   ');
-    tick(400);
+    component.submitTextSort();
     expect(component.textSort.emit).not.toHaveBeenCalled();
-  }));
+  });
+
+  it('should render a Search button alongside the text input', () => {
+    component.sortMode = 'text';
+    fixture.detectChanges();
+    const btn = fixture.nativeElement.querySelector('.text-sort-btn');
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toContain('Search');
+  });
+
+  it('should disable Search button when query is empty or whitespace', () => {
+    component.sortMode = 'text';
+    component.textQuery = '   ';
+    fixture.detectChanges();
+    expect(component.searchDisabled).toBe(true);
+    component.textQuery = 'cats';
+    fixture.detectChanges();
+    expect(component.searchDisabled).toBe(false);
+  });
 
   it('should show hint when learned is disabled', () => {
     component.sortMode = 'learned';
