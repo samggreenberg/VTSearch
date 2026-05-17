@@ -1,6 +1,6 @@
 # Active-context switcher (top-bar dataset/detector pulldowns)
 
-*Status: Phase 1 shipped (core switching, "+ Add New" footers, incompatible-pair explainer). Phase 1 follow-ups mostly shipped (focus-other-pulldown button, auto-select new item, deleted-item toast, registry-error retry, Dashboard-sort mirroring). Phase 2 (URL-driven context) and Phase 3 (in-flight job affordances) deferred — see "Open follow-ups" below.*
+*Status: Phase 1 + 2 shipped. Phase 1 covered the switcher UI, "+ Add New" footers, incompatible-pair explainer, and the five follow-ups (focus-other-pulldown button, auto-select new item, deleted-item toast, registry-error retry, Dashboard-sort mirroring). Phase 2 made the URL authoritative for the active pair — `/label/:datasetId/:detectorId` and `/find/:datasetId/:detectorId` with an `activeContextGuard` that validates, flips, and loads before the route activates. Phase 3 (in-flight job affordances) and one Phase 1 follow-up (embedder progress message) remain deferred — see "Open follow-ups" below.*
 
 This plan implements [ux-brainstorm.md §6.11](ux-brainstorm.md#611-active-datasetdetector-indicator--s) ("Active-dataset/detector indicator") and largely closes [§8.2](ux-brainstorm.md#82-switching-active-datasetdetector--s) ("Switching active dataset/detector"). It supersedes both entries as the canonical design — when this plan ships those entries will be marked SHIPPED and link here.
 
@@ -279,12 +279,26 @@ A second pass picked up four of the seven open items from the initial follow-up 
 
 Drive-by: `settings-state.service.spec.ts` mockSettings.theme widened to `string` rather than the typed union, which broke the `Expected<AppSettings>` typecheck. Fixed with `as const`.
 
-## Open follow-ups (Phase 1)
+## What shipped (Phase 2)
 
-Remaining from the original open list — picked up in a future PR or folded into Phase 2 / 3 work.
+- **Routes** (`frontend/src/app/app.routes.ts`) — Canonical view paths are now `/label/:datasetId/:detectorId` and `/find/:datasetId/:detectorId`, both gated by `activeContextGuard`. Bare `/label`, `/find`, and any unmatched path redirect to `/dashboard`.
+- **`frontend/src/app/guards/active-context.guard.ts`** — Reads `datasetId` / `detectorId` from the URL, waits for the registry to be loaded (`datasetState.loaded$`), validates both ids exist (toast + redirect on miss), then calls `ContextSwitchService.applyActivePair(...)` and holds the route until the returned Observable completes. Incompatible pairs are allowed through (the explainer handles them).
+- **`services/context-switch.service.ts`** — Split into two entry points: `applyActivePair(ds, det)` is called only by the guard (returns Observable that completes when prep finishes; uses a `ReplaySubject(1)` so late subscribers still see synchronous fast-path completion); `switchTo(ds, det)` is called by the top-bar pulldowns and now navigates to the new URL when on `/label` or `/find`, otherwise flips imperatively (so `/dashboard` pulldown clicks still work).
+- **`services/dataset-state.service.ts`** — Gained `loaded$` / `loaded`. Flips to `true` the first time the registry fetch settles (success or error), so the guard never hangs on a deep-link cold start.
+- **`services/active-context.service.ts`** — `setDatasetId` and `setModelId` removed (the guard owns mutation now via `setActivePair`).
+- **`services/active-context-watcher.service.ts`** — On detecting an active id was deleted from the registry, it now navigates to `/dashboard` after clearing the half (a half-pair URL is not representable).
+- **`components/dashboard/dashboard.component.ts`** — `onLabel` / `onFind` reduced to `router.navigate(['/label', ds, det])` / `['/find', ds, det]`. Per-button `trainLoading` / `findLoading` flags flip on click and reset on the next `NavigationEnd` / `NavigationCancel` / `NavigationError` so the icon waggle still works while the guard waits.
+- **`components/find-view/find-view.component.ts`** — Reads `datasetId` / `modelId` from `ActiveContextService` and the detector name from the registry; no longer depends on `FindSessionService`.
+- **`components/modals/export-modal/export-modal.component.ts`** — Falls back to a registry lookup against `ActiveContextService.modelId` when both upstream name sources are empty.
+- **Deleted**: `frontend/src/app/services/find-session.service.ts`. The active (dataset, detector) pair is the URL; the modelName is derivable from the registry.
+- **Tests**: `./run-tests.sh` green (3615 passed, 1 skipped, 2 xpassed). New specs for the guard and the new `loaded$` flag; Dashboard's `onLabel` spec rewritten around the navigation contract (the guard owns the load it used to test inline).
 
-- **"Re-resolving labels for X's embedder…" progress message** — the design called for a custom progress message when the new dataset's embedder differs from the previous one. Phase 1 reuses the generic loading affordance; the message is just whatever the dataset-load progress tracker emits. Implementing this is bigger than a copy change because: (a) `ContextSwitchService.switchTo` only triggers a detector re-load when `!detector_loaded`, so an embedder change on a detector that's already "loaded" against the previous dataset would leave its label embeddings in the old embedder's space — there's no current re-embed path to hang a custom progress message off; (b) the labelset re-resolve in `before_request` (`ensure_votes_match_active_dataset`) only re-keys cids by origin, it doesn't re-embed. To land this properly you need to (1) detect the embedder change on switch in `context-switch.service.ts`, (2) force a detector re-load (or add a new "re-embed labels only" path), (3) thread the new embedder's display name through to the progress tracker in `vtsearch/routes/detectors/registry.py`'s "Embedding labels…" step. Worth a small design pass before implementation.
-- **`FindSessionService` deletion** — the plan notes this service "will likely be deletable once Phase 2 lands." Phase 1 still uses it (writes datasetId/modelId on pair change so `runFindLabel()` picks up the new pair). Defer the deletion to the Phase 2 URL refactor.
+## Open follow-ups
+
+Carry-overs from earlier phases. Phase 2 closed the `FindSessionService` deletion item.
+
+- **"Re-resolving labels for X's embedder…" progress message** (Phase 1 follow-up) — the design called for a custom progress message when the new dataset's embedder differs from the previous one. Phase 1 reuses the generic loading affordance. Implementing this is bigger than a copy change because: (a) `ContextSwitchService.flipAndLoad` only triggers a detector re-load when `!detector_loaded`, so an embedder change on a detector that's already "loaded" against the previous dataset would leave its label embeddings in the old embedder's space — there's no current re-embed path to hang a custom progress message off; (b) the labelset re-resolve in `before_request` (`ensure_votes_match_active_dataset`) only re-keys cids by origin, it doesn't re-embed. To land this properly you need to (1) detect the embedder change on switch, (2) force a detector re-load (or add a new "re-embed labels only" path), (3) thread the new embedder's display name through to the progress tracker in `vtsearch/routes/detectors/registry.py`'s "Embedding labels…" step. Worth a small design pass before implementation.
+- **Phase 3 — in-flight job affordances** — Pulldown spinner glyph for rows whose pair has a running async job, plus the rehydration verification sweep across eval / labeling-progress / learned-sort views. See "Phase 3 — In-flight job affordances" above for the design.
 
 ## Open questions
 
