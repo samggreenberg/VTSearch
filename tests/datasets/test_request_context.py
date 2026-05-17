@@ -82,7 +82,8 @@ class TestRequestScopedDataset:
             assert 100 not in medias
 
         # Thread-local active pointer was NOT mutated
-        assert get_thread_dataset_context().dataset_id == "req_ds_a"
+        ctx_a = get_thread_dataset_context()
+        assert ctx_a is not None and ctx_a.dataset_id == "req_ds_a"
 
     def test_header_with_unloaded_id_falls_back_to_active(self, client):
         """If X-Dataset-Id refers to a dataset not in memory, fall back to global active."""
@@ -147,7 +148,8 @@ class TestRequestScopedModel:
         assert 1 not in good_ids
 
         # Thread-local active pointer was NOT mutated
-        assert get_thread_detector_context().detector_id == "req_det_a"
+        det_a = get_thread_detector_context()
+        assert det_a is not None and det_a.detector_id == "req_det_a"
 
     def test_model_header_with_unloaded_id_falls_back(self, client):
         """If X-Detector-Id refers to a detector not in memory, fall back to global."""
@@ -253,7 +255,8 @@ class TestRequestIsolation:
                 assert 900 in medias
 
         # Thread-local pointer untouched
-        assert get_thread_dataset_context().dataset_id == "req_nomut_a"
+        ctx_nomut = get_thread_dataset_context()
+        assert ctx_nomut is not None and ctx_nomut.dataset_id == "req_nomut_a"
         assert 800 in medias
 
 

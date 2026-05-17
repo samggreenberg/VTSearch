@@ -777,6 +777,7 @@ class TestVoteSyncsToLoadedModel:
 
         # Check that the registry entry was updated
         entry = get_detector(detector_id)
+        assert entry is not None
         assert entry["num_training"] == 1
         assert entry.get("last_trained_at") is not None
 
@@ -860,6 +861,7 @@ class TestVoteSyncsToLoadedModel:
         assert len(model_data["labelset"]["labels"]) == 1
 
         entry = get_detector(detector_id)
+        assert entry is not None
         assert entry["num_training"] == 1
 
 

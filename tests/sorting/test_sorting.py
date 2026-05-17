@@ -472,6 +472,7 @@ class TestCalibrationCache:
             app_module.bad_votes,
             det_ctx=det_ctx,
         )
+        assert det_ctx.calibration_cache is not None
         first_key = det_ctx.calibration_cache[0]
 
         # Flip one media's label — calibration must recompute.
@@ -490,6 +491,7 @@ class TestCalibrationCache:
                 det_ctx=det_ctx,
             )
         assert patched.call_count == 1
+        assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] != first_key
 
     def test_inclusion_change_invalidates_cache(self):

@@ -21,6 +21,7 @@ Coverage areas
 """
 
 import gc
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -463,7 +464,10 @@ class TestCLAPEmbeddingGPU:
     def test_clap_model_loads_on_gpu(self, device):
         from vtsearch.media.audio.media_type import AudioMediaType
 
-        mt = AudioMediaType()
+        # _model is set dynamically by load_models() on the subclass; not
+        # declared on the MediaType ABC, so pyright can't see it. cast keeps
+        # the runtime behaviour while satisfying the type-checker.
+        mt = cast(Any, AudioMediaType())
         mt.load_models()
         assert mt._model is not None
         mt._model = mt._model.to(device)
@@ -478,7 +482,8 @@ class TestCLAPEmbeddingGPU:
 
         cache_dir = str(MODELS_CACHE_DIR)
         model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir).to(device)
-        processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir)
+        # ClapProcessor's __call__ stub doesn't enumerate the runtime kwargs.
+        processor = cast(Any, ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir))
 
         inputs = processor(text=["a dog barking"], return_tensors="pt")
         inputs = {k: v.to(device) for k, v in inputs.items()}
@@ -504,7 +509,7 @@ class TestCLAPEmbeddingGPU:
 
         cache_dir = str(MODELS_CACHE_DIR)
         model = ClapModel.from_pretrained(CLAP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir).to(device)
-        processor = ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir)
+        processor = cast(Any, ClapProcessor.from_pretrained(CLAP_MODEL_ID, cache_dir=cache_dir))
 
         inputs = processor(
             audio=audio,
@@ -529,7 +534,7 @@ class TestXCLIPEmbeddingGPU:
     def test_xclip_model_loads_on_gpu(self, device):
         from vtsearch.media.video.media_type import VideoMediaType
 
-        mt = VideoMediaType()
+        mt = cast(Any, VideoMediaType())  # see _model note above
         mt.load_models()
         assert mt._model is not None
         mt._model = mt._model.to(device)

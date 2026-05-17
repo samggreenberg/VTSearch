@@ -617,6 +617,7 @@ class TestEmbedderSentinelDiscovery:
         like a flat ``embedder_*.py`` module.
         """
         import importlib
+        import importlib.util
         import sys
         from pathlib import Path
 
@@ -656,6 +657,7 @@ class TestEmbedderSentinelDiscovery:
             str(fake_pkg / "__init__.py"),
             submodule_search_locations=[str(fake_pkg)],
         )
+        assert spec is not None and spec.loader is not None
         mod = importlib.util.module_from_spec(spec)
         sys.modules[package_name] = mod
         try:
@@ -682,6 +684,7 @@ class TestEmbedderSentinelDiscovery:
         should be auto-discovered with no ``__init__.py`` edits.
         """
         import importlib
+        import importlib.util
         import sys
         from pathlib import Path
 
@@ -719,6 +722,7 @@ class TestEmbedderSentinelDiscovery:
             str(fake_pkg / "__init__.py"),
             submodule_search_locations=[str(fake_pkg)],
         )
+        assert spec is not None and spec.loader is not None
         mod = importlib.util.module_from_spec(spec)
         sys.modules[package_name] = mod
         try:

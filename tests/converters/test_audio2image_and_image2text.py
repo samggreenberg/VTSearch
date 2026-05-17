@@ -46,7 +46,7 @@ def _fake_paddleocr_module(fake_cls: type) -> object:
     import types
 
     mod = types.ModuleType("paddleocr")
-    mod.PaddleOCR = fake_cls
+    mod.PaddleOCR = fake_cls  # pyright: ignore[reportAttributeAccessIssue]
     return mod
 
 

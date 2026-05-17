@@ -11,6 +11,7 @@ class TestIndex:
     def test_serves_index_html(self, client):
         from pathlib import Path
 
+        assert app_module.app.static_folder is not None
         static_index = Path(app_module.app.static_folder) / "index.html"
         if not static_index.exists():
             pytest.skip("Angular build not present (run 'npm run build:prod' in frontend/)")

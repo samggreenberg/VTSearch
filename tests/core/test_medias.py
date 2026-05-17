@@ -50,6 +50,7 @@ class TestInitMedias:
         temp_path.write_bytes(media["media_bytes"])
         embedding = embed_audio_file(temp_path)
         temp_path.unlink(missing_ok=True)
+        assert embedding is not None
         np.testing.assert_array_almost_equal(embedding, media["embedding"])
 
 

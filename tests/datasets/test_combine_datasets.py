@@ -174,6 +174,7 @@ class TestCombineDatasetsEnabledFlag:
         registry.register_dataset(name="solo", media_type="audio", num_items=10, pkl_path="/tmp/solo.pkl")
         try:
             imp = self._find_combine(client)
+            assert imp is not None
             assert imp["enabled"] is False
         finally:
             entries = registry.list_datasets()
@@ -189,6 +190,7 @@ class TestCombineDatasetsEnabledFlag:
         e2 = registry.register_dataset(name="image_ds", media_type="image", num_items=10, pkl_path="/tmp/b.pkl")
         try:
             imp = self._find_combine(client)
+            assert imp is not None
             assert imp["enabled"] is False
         finally:
             registry.unregister_dataset(e1["id"])
@@ -202,6 +204,7 @@ class TestCombineDatasetsEnabledFlag:
         e2 = registry.register_dataset(name="audio_b", media_type="audio", num_items=5, pkl_path="/tmp/b.pkl")
         try:
             imp = self._find_combine(client)
+            assert imp is not None
             assert imp["enabled"] is True
         finally:
             registry.unregister_dataset(e1["id"])

@@ -380,10 +380,12 @@ class TestInterceptWeightLoadingProgress:
 
     def test_set_module_tensor_to_device_tracking(self):
         """set_module_tensor_to_device interception should count dispatched tensors."""
+        # ``set_module_tensor_to_device`` is re-exported from ``accelerate`` at
+        # runtime but isn't in the transformers stubs.
         try:
             import transformers.modeling_utils as tm
 
-            orig = tm.set_module_tensor_to_device
+            orig = tm.set_module_tensor_to_device  # pyright: ignore[reportAttributeAccessIssue]
         except (ImportError, AttributeError):
             # accelerate not installed — patch it onto transformers.modeling_utils
             # so the interceptor can find it
@@ -394,7 +396,7 @@ class TestInterceptWeightLoadingProgress:
             def fake_set_module(model, name, device, value=None, **kw):
                 call_log.append((name, device))
 
-            tm.set_module_tensor_to_device = fake_set_module
+            tm.set_module_tensor_to_device = fake_set_module  # pyright: ignore[reportAttributeAccessIssue]
             orig = None
 
         calls: list[tuple] = []
@@ -419,11 +421,11 @@ class TestInterceptWeightLoadingProgress:
                 # Simulate 5 tensor dispatches
                 model = nn.Linear(2, 2)
                 for i in range(5):
-                    tm.set_module_tensor_to_device(model, "weight", "cpu", torch.zeros(2, 2))
+                    tm.set_module_tensor_to_device(model, "weight", "cpu", torch.zeros(2, 2))  # pyright: ignore[reportAttributeAccessIssue]
         finally:
             st.load_file = original_lf
             if orig is not None:
-                tm.set_module_tensor_to_device = orig
+                tm.set_module_tensor_to_device = orig  # pyright: ignore[reportAttributeAccessIssue]
             else:
                 delattr(tm, "set_module_tensor_to_device")
 

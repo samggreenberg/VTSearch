@@ -23,7 +23,7 @@ class TestMediaItem:
     def test_frozen(self):
         item = MediaItem(key="k", filename="f", source_name="s")
         with pytest.raises(AttributeError):
-            item.key = "other"
+            item.key = "other"  # pyright: ignore[reportAttributeAccessIssue]
 
 
 # ── LocalFolderSource ─────────────────────────────────────────────────

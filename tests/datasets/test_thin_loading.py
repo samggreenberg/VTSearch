@@ -423,6 +423,7 @@ class TestClipResponseLazyLoading:
             "character_count": 0,
         }
         resp = mt.media_response(media)
+        assert isinstance(resp.data, dict)
         assert resp.data["content"] == content
         assert resp.data["word_count"] == 3  # "lazy loaded paragraph"
         assert resp.data["character_count"] == len(content)

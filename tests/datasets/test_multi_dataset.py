@@ -651,6 +651,7 @@ class TestSyncLabelsAcrossDatasets:
             assert resp.status_code == 200
 
             saved = _read_detector(tm_path)
+            assert saved is not None
             saved_labels = saved["labelset"]["labels"]
             assert len(saved_labels) == original_label_count, (
                 f"Expected {original_label_count} training labels but load_model "
@@ -723,6 +724,7 @@ class TestSyncLabelsAcrossDatasets:
 
             # The model file must still have the original labels
             saved = _read_detector(tm_path)
+            assert saved is not None
             saved_labels = saved["labelset"]["labels"]
             assert len(saved_labels) == original_label_count, (
                 f"Expected {original_label_count} training labels but load_model "

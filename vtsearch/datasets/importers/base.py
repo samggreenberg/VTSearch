@@ -239,7 +239,7 @@ class DatasetImporter(PluginBase):
         """
         return self.display_name
 
-    def resolve_display_name(self, field_values: dict[str, Any]) -> str:
+    def resolve_display_name(self, field_values: dict[str, Any] | None) -> str:
         """Return the human-readable name to use for a dataset loaded with *field_values*.
 
         Importer subclasses should override :meth:`default_display_name`

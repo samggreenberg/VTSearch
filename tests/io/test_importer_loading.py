@@ -71,7 +71,7 @@ class TestLoadDatasetContentVectors:
         medias: dict = {}
 
         def _noop(*a):
-            None
+            pass
 
         with self._patch_media_registry(mt):
             load_dataset_from_folder(
@@ -97,7 +97,7 @@ class TestLoadDatasetContentVectors:
         medias: dict = {}
 
         def _noop(*a):
-            None
+            pass
 
         with self._patch_media_registry(mt):
             load_dataset_from_folder(tmp_path, "audio", medias, content_vectors={}, on_progress=_noop)
@@ -124,7 +124,7 @@ class TestLoadDatasetContentVectors:
         medias: dict = {}
 
         def _noop(*a):
-            None
+            pass
 
         with self._patch_media_registry(mt):
             load_dataset_from_folder(
@@ -152,7 +152,7 @@ class TestLoadDatasetContentVectors:
         medias: dict = {}
 
         def _noop(*a):
-            None
+            pass
 
         with self._patch_media_registry(mt):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=_noop)
@@ -214,7 +214,7 @@ class TestLoadDatasetContentVectors:
         medias: dict = {}
 
         def _noop(*a):
-            None
+            pass
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
@@ -429,7 +429,7 @@ class TestLoadDatasetContentMD5s:
         medias: dict = {}
 
         def _noop(*a):
-            None
+            pass
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
@@ -455,7 +455,7 @@ class TestLoadDatasetContentMD5s:
         medias: dict = {}
 
         def _noop(*a):
-            None
+            pass
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, content_md5s={}, on_progress=_noop)
@@ -484,7 +484,7 @@ class TestLoadDatasetContentMD5s:
         medias: dict = {}
 
         def _noop(*a):
-            None
+            pass
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
@@ -512,7 +512,7 @@ class TestLoadDatasetContentMD5s:
         medias: dict = {}
 
         def _noop(*a):
-            None
+            pass
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=_noop)
@@ -537,7 +537,7 @@ class TestLoadDatasetContentMD5s:
         medias: dict = {}
 
         def _noop(*a):
-            None
+            pass
 
         with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(

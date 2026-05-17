@@ -108,6 +108,7 @@ class TestDiversityTreeNextSample:
     def test_advances_after_labeling(self):
         _build_tree()
         first = diversity_tree_next_sample()
+        assert first is not None
         diversity_tree_label(first)
         second = diversity_tree_next_sample()
         # After labeling the first sample, the tree should suggest

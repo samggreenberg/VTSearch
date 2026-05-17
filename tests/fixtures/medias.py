@@ -102,4 +102,4 @@ def init_medias():
         save_data = {"cache_key": np.array(cache_key)}
         for i in range(1, NUM_MEDIAS + 1):
             save_data[f"emb_{i}"] = medias[i]["embedding"]
-        np.savez(cache_path, **save_data)
+        np.savez(cache_path, **save_data)  # pyright: ignore[reportArgumentType]

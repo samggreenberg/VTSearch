@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import queue
 import time
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Generator
 
 from vtsearch.concurrency.progress import (
     LoadingTasksTracker,
@@ -63,7 +63,9 @@ def initial_snapshot() -> list[str]:
     return frames
 
 
-def stream_progress_events(*, heartbeat_seconds: float = HEARTBEAT_SECONDS, max_queue: int = 1024) -> Iterator[str]:
+def stream_progress_events(
+    *, heartbeat_seconds: float = HEARTBEAT_SECONDS, max_queue: int = 1024
+) -> Generator[str, None, None]:
     """Yield SSE-formatted strings for every progress channel until disconnect.
 
     Each connected client gets a private bounded queue; tracker subscriptions
