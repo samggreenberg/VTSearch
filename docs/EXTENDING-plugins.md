@@ -802,7 +802,7 @@ endpoints:
 |--------------------------------|--------|-------------------------------------------|-----------------|
 | `/api/dataset/export`          | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
 | `/api/labels/export`           | GET    | LabelSet — labels with per-element origin  | JSON            |
-| `/api/detectors/{name}` | GET    | Trainable model labelset + examples        | JSON            |
+| `/api/detectors/{name}` | GET    | Detector labelset + examples              | JSON            |
 
 ### Wiring up dependencies
 

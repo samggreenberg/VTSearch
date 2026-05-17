@@ -58,7 +58,7 @@ Available exporters: `server_json_file` (JSON to server path), `server_csv_file`
 }
 ```
 
-- **Trainable-model file** — Created from the dashboard by labeling items in the right pane. The file stores origin info plus labels (no weights); the MLP is rebuilt from origins at scoring time.
+- **Detector file** — Created from the dashboard by labeling items in the right pane. The file stores origin info plus labels (no weights); the MLP is rebuilt from origins at scoring time.
 
 **Example output:**
 

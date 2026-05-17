@@ -52,12 +52,11 @@ VTSearch is a desktop web app. **Do not design, implement, or test for mobile or
 
 ## No Persisted Vectors or MLPs (CRITICAL)
 
-**Embeddings and trained MLP weights are in-memory artifacts only.** Never serialize them to disk, to `data/settings.json`, to detector / detector JSON files, or to any other persistent store. Origins are the canonical persisted form: the system rederives `origin → file → embedding → MLP` on demand.
+**Embeddings and trained MLP weights are in-memory artifacts only.** Never serialize them to disk, to `data/settings.json`, to detector JSON files, or to any other persistent store. Origins are the canonical persisted form: the system rederives `origin → file → embedding → MLP` on demand.
 
-This rule applies to all detector- and model-related code:
+This rule applies to all detector code:
 
-- Trainable-model JSON files store `LabeledElement`s with origin info, never embeddings.
-- Detector JSON files (legacy) store origins; the `weights` field on disk is treated as deprecated and must not be written by new code.
+- Detector JSON files store `LabeledElement`s with origin info, never embeddings or MLP weights.
 - In-memory caches are fine and encouraged: `DetectorContext.label_embeddings`, `DetectorContext.model`, etc. — they live for the lifetime of the process and are repopulated from origins on the next start.
 - New features that cache vectors must use a process-scoped data structure (e.g. a field on `DetectorContext`), not a file or settings key.
 - Embedder version drift is impossible by construction because every load resolves+re-embeds against the active embedder.

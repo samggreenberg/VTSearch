@@ -81,7 +81,7 @@ middleware resolves the active contexts per request — so multiple users
 can work with different datasets/models simultaneously.
 
 The auth infrastructure supports ownership tracking (`created_by` on
-detectors, datasets, and detectors) and per-user data
+datasets and detectors) and per-user data
 directories via `get_user_data_dir(username, base)`. **Settings remain
 globally shared** across all users — there is no per-user settings
 isolation yet.

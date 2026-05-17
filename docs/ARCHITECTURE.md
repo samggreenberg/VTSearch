@@ -573,7 +573,7 @@ auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
 See `_DEFAULTS` in `settings.py` for the full list.
 Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
 
-Trainable models are persisted as JSON files in `data/detectors/`
+Detectors are persisted as JSON files in `data/detectors/`
 via the `detectors_crud_bp` / `detectors_labels_bp` route blueprints.
 Each stores a name, text query, media type, examples list, and labelset.
 
