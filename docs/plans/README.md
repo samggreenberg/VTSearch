@@ -18,6 +18,7 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | [ux-brainstorm.md](ux-brainstorm.md) | **Backlog** | Audit of friction across importers, labeling, sorting, settings, and progress UX. ~75 ideas across auto-fill, hints, speed-ups, clarity, streamlining, and consistency. Items graduate into their own plan doc as they mature. |
 | [smart-clipper-defaults.md](smart-clipper-defaults.md) | **Phase 1 shipped; Phase 2 deferred** | "Auto (recommended)" clipper entry for audio and video — resolves to pass-through or tiling per dataset based on median duration. Phase 2 (per-media routing via clipper options) deferred — see Open follow-ups. |
 | [active-context-switcher.md](active-context-switcher.md) | **Proposed** | Top-bar dataset/detector read-only fields become click-to-switch pulldowns (compatibility dim, "Add New" footers, in-place modal launching). Phase 2 encodes the active pair in the URL; Phase 3 surfaces in-flight job spinners + verifies each job-producing view rehydrates from `JobManager`'s signature cache. Graduates ux-brainstorm §6.11 + §8.2. |
+| [python-quality-tools.md](python-quality-tools.md) | **Phase 1 shipped; Phases 2–3 proposed** | pre-commit (ruff + safety hooks) wired up locally and `pip-audit` runs in CI. Phase 2 (deptry, codespell) and Phase 3 (coverage, ruff `S` rules / bandit, vulture) are designed and triaged into one-sitting tasks — see Open follow-ups. |
 
 ## Recently completed (removed)
 

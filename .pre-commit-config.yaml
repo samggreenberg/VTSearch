@@ -1,0 +1,37 @@
+# Pre-commit hooks for VTSearch.
+#
+# Install once after cloning:
+#   pre-commit install
+#
+# (scripts/install-cpu.sh runs this for you when a .git dir is present.)
+#
+# Run manually against every file:
+#   pre-commit run --all-files
+#
+# Bump pinned versions:
+#   pre-commit autoupdate
+#
+# CI (.github/workflows/lint.yml + pyright.yml + audit.yml) is the source
+# of truth — these hooks just shorten the feedback loop so violations
+# are caught at commit time instead of on the next push.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.8
+    hooks:
+      - id: ruff
+        name: ruff check
+      - id: ruff-format
+        name: ruff format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
