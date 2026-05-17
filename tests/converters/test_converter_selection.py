@@ -628,6 +628,7 @@ class TestEmbedAndMd5Helpers:
 
         result = _embed_converted_output(mock_mt, {"media_bytes": png_bytes, "filename": "test.png"})
 
+        assert result is not None
         assert np.array_equal(result, fake_embedding)
         mock_mt.embed_media.assert_called_once()
 
@@ -641,6 +642,7 @@ class TestEmbedAndMd5Helpers:
 
         result = _embed_converted_output(mock_mt, {"media_string": "hello world", "filename": "doc.txt"})
 
+        assert result is not None
         assert np.array_equal(result, fake_embedding)
         mock_mt.embed_media.assert_called_once()
 
@@ -946,6 +948,7 @@ class TestConverterFieldsInToDict:
         from vtsearch.converters import get_converter
 
         c = get_converter("video2image")
+        assert c is not None
         d = c.to_dict()
         fields = d.get("fields") or []
         assert any(f["key"] == "n_clips" for f in fields)
@@ -959,6 +962,7 @@ class TestConverterAcceptsParams:
         from vtsearch.converters import get_converter
 
         c = get_converter("video2audio")
+        assert c is not None
         # Empty params, empty source media → returns empty list (no crash).
         assert c.convert({}, {}) == []
 
@@ -966,6 +970,7 @@ class TestConverterAcceptsParams:
         from vtsearch.converters import get_converter
 
         c = get_converter("document2image")
+        assert c is not None
         assert c.convert({}, None) == []
 
     def test_video2image_reads_n_clips_param(self):
@@ -973,6 +978,7 @@ class TestConverterAcceptsParams:
         from vtsearch.converters import get_converter
 
         c = get_converter("video2image")
+        assert c is not None
         # Bogus media → empty list, but get_param resolution exercised below.
         assert c.get_param({"n_clips": "30"}, "n_clips") == "30"
         # Default falls back to the field's declared default.

@@ -119,6 +119,31 @@ api = Api(app)
 
 
 # ---------------------------------------------------------------------------
+# Test-time attributes
+# ---------------------------------------------------------------------------
+# ``tests/conftest.py`` attaches a handful of helpers and proxies to this
+# module so tests can use ``import app as app_module; app_module.medias`` etc.
+# Declaring them here in a ``TYPE_CHECKING`` block lets pyright resolve the
+# attribute accesses without changing runtime behaviour — the values are still
+# only set by conftest and are absent in production. Same pattern as
+# ``vtsearch/settings.py``'s dynamically generated accessors.
+from typing import TYPE_CHECKING  # noqa: E402
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    NUM_MEDIAS: int
+    SAMPLE_RATE: int
+    generate_wav: Callable[..., bytes]
+    train_and_score: Callable[..., Any]
+    medias: dict[int, dict[str, Any]]
+    good_votes: dict[int, None]
+    bad_votes: dict[int, None]
+    init_medias: Callable[[], None]
+
+
+# ---------------------------------------------------------------------------
 # Per-request user context
 # ---------------------------------------------------------------------------
 
@@ -325,18 +350,18 @@ api.register_blueprint(processors_crud_bp)
 api.register_blueprint(processors_scoring_bp)
 api.register_blueprint(datasets_listings_bp)
 api.register_blueprint(datasets_status_bp)
-app.register_blueprint(datasets_staging_bp)
+api.register_blueprint(datasets_staging_bp)
 api.register_blueprint(datasets_load_bp)
 api.register_blueprint(datasets_ui_bp)
-app.register_blueprint(datasets_registry_bp)
-app.register_blueprint(exporters_bp)
-app.register_blueprint(label_importers_bp)
+api.register_blueprint(datasets_registry_bp)
+api.register_blueprint(exporters_bp)
+api.register_blueprint(label_importers_bp)
 # settings_bp is a flask-smorest Blueprint (OpenAPI pilot); register
 # it via the Api so its routes appear in /api/openapi.json. Other
 # blueprints stay on the plain Flask path until migrated.
 api.register_blueprint(settings_bp)
-app.register_blueprint(settings_io_bp)
-app.register_blueprint(sync_sources_bp)
+api.register_blueprint(settings_io_bp)
+api.register_blueprint(sync_sources_bp)
 api.register_blueprint(detectors_crud_bp)
 api.register_blueprint(detectors_labels_bp)
 api.register_blueprint(detectors_registry_bp)

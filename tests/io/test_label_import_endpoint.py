@@ -229,6 +229,7 @@ class TestLabelImportEndpoint:
 
         # The registry entry should now reflect the updated label count
         updated = get_detector(entry["id"])
+        assert updated is not None
         assert updated["num_training"] == 1
 
     def test_path_traversal_absolute_rejected(self, client):

@@ -444,9 +444,11 @@ class TestVideoDemoDatasetRegistration:
         # Force lazy init
         demo_module._source_directory("hmdb51")
 
-        assert "hmdb51" in demo_module._SOURCE_DIRS
-        assert "ucf101_full" in demo_module._SOURCE_DIRS
-        assert "kth" in demo_module._SOURCE_DIRS
+        source_dirs = demo_module._SOURCE_DIRS
+        assert source_dirs is not None
+        assert "hmdb51" in source_dirs
+        assert "ucf101_full" in source_dirs
+        assert "kth" in source_dirs
 
 
 # ---------------------------------------------------------------------------

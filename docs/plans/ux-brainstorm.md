@@ -244,8 +244,15 @@ The "where do I put this file?" concept appears across plugins as `filepath`, `p
 ### 6.4 Modal back-button conventions ★★ XS — SHIPPED
 Convention: every nested-modal flow renders a left-aligned `&larr; Back` button using the shared `btn btn--secondary btn--sm back-btn` class combination (styled by `.back-btn` in `frontend/src/scss/_components.scss`). Documented under "Nested-modal back buttons" in `CLAUDE.md`. All current nested flows (processor / settings / label importer modals, settings exporter, load-sort, resort-prompt, new-detector → media picker, new-detector → trained-importer form) already follow this convention.
 
-### 6.5 Confirm-on-destructive ★★ S
+### 6.5 Confirm-on-destructive ★★ S — shipped
 Delete dataset, delete detector, delete label entry, clear votes, reset settings — currently a mix of inline-hover-confirm, modal-confirm, and no-confirm. Standardize on a single confirm pattern, with the operation name in the confirmation: *"Delete detector 'cats'? This removes its labelset and training metadata. The dataset is unaffected."*
+
+**What shipped**: Added `VtDialogService.confirmDestructive(question, detail, actionLabel?)` and routed every destructive action with a UI surface through it: delete dataset (single + bulk), delete model (single + bulk), reset settings. Messages follow the `<Action>? <What is removed; what is unaffected>.` template, and the primary button uses the action verb ("Delete" / "Reset") instead of "OK".
+
+**Open follow-ups**:
+- *Delete label entry* and *Clear votes* were listed in the original item but don't have any UI surface today (only the `clearVotes()` API client exists, with no caller). When those actions get a button, wire them through `confirmDestructive` — e.g. `"Clear all votes for detector 'X'? This deletes every saved label for this model and cannot be undone."`
+- The labeling-view "press ← twice to vote no and discard the box" inline-confirm is a different UX (two-key chord, not a delete) and was intentionally left as-is. If we ever consolidate it, treat it as its own pattern rather than forcing it through the modal.
+- The destructive primary button has no distinct danger styling yet — it reuses `.btn--primary`. A red variant would make the modal even harder to dismiss-by-accident; deferred.
 
 ### 6.6 Toast / banner / inline error styling ★★ S
 Errors appear in at least three styles: red banner inline, modal-level red text, console-log only. Add a single toast service and route all `error` SSE events + HTTP failure responses through it.
@@ -262,8 +269,8 @@ Each long-running operation emits a slightly different progress payload (`step`/
 ### 6.10 Date formatting ★ XS — SHIPPED
 "last_trained / created" columns format dates differently from the version string in the footer. ~~Use one formatter (relative for < 7d ago, absolute YYYY-MM-DD otherwise) everywhere.~~ Shipped: a single `frontend/src/app/utils/format-date.ts` is now called from all four sites (detector card, dataset card, dataset stats modal, settings-modal version footer). Always-absolute — no relative branch. Columns render `YYYY-MM-DD HH:MM` (local), version renders `YYYY-MM-DD` (UTC). Relative time was dropped deliberately: it drifts on every reload and the coarse buckets (`2w ago`) throw away precision that matters in a model-management dashboard.
 
-### 6.11 Active-dataset/detector indicator ★★ S
-Inside Train/Find views there's no clear top-bar indicator of which dataset/detector is active. The frontend already sets `X-Dataset-Id` / `X-Detector-Id` headers — surface those names in a fixed header strip "🗂 Dataset: foo · 🧪 Detector: cats" with a click-to-switch dropdown. Removes the dashboard round-trip from §5 of the workflow trace.
+### 6.11 Active-dataset/detector indicator ★★ S — graduated to plan
+**Indicator half is already shipped** as read-only top-bar text (`app.component.html:62-63`, `Data: foo` / `Detector: cats`, driven by `ActiveContextService`). **Switcher half** — turning the read-only fields into click-to-switch pulldowns with compatibility handling, "Add New" footers, in-place modal launching, URL-encoded active pair, and in-flight job spinners — is now scoped as a three-phase plan: see [active-context-switcher.md](active-context-switcher.md). That plan also largely closes [§8.2](#82-switching-active-datasetdetector--s).
 
 ### 6.12 Plugin field types ★ S — shipped
 Free-text fields that should be numbers (`n_mels`, `time_window_s`, `size` for synthetic), enums that should be selects (`colormap`, `language` for OCR), and password fields disguised as text (`auth_header`). Tighten the `PluginField` type system and migrate.
@@ -289,8 +296,10 @@ VTSearch has a few interactions that are clever but un-Google-able — replace w
 ### 7.1 Stripe histogram in left panel ★★ M
 The mini-histogram below the media list lets users click to jump to a score range. Most users never figure this out. Either remove or replace with a standard horizontal slider that filters the list. (Slider supports drag-to-zoom-window, is keyboard-friendly, and is familiar from price filters.)
 
-### 7.2 Side-toggle bulk-select on dashboard ★ S
+### 7.2 Side-toggle bulk-select on dashboard ★ S — SHIPPED
 The triangle-shaped mixed-state checkbox on the side of the dashboard tables is unusual. Move to a standard left-column checkbox per row with a top-of-column master checkbox (Gmail / Linear / GitHub pattern).
+
+**What shipped:** Per-row checkboxes moved to a new pinned leftmost `select-col` in both the Datasets and Detectors tables; the tri-state master checkbox now lives in that column's header. The right-side sidebar retains the Combine and Delete bulk-action buttons (no longer paired with a checkbox). Files: `frontend/src/app/components/dashboard/{dashboard,dataset-card/dataset-card,detector-card/detector-card}.component.{html,scss}`, plus `dashboard.component.ts` (removed unused `spinDataset/DetectorSelectToggle` animation state).
 
 ### 7.3 Hover-to-reveal delete confirmation ★★ XS
 Hover-only confirmation for destructive actions is unfamiliar and fragile. Replace with a standard modal confirm (matches §6.5).
@@ -326,8 +335,8 @@ Workflows the user *can* do today but that take too many steps and clicks.
 Today: open menu → pick importer category → pick importer → fill form → pick media type → pick embedder → submit → wait → close modal → select dataset → click "New detector" → fill form → click Train → vote 7 items → export → pick exporter → fill form → submit. That's ~15 clicks before the user has anything to show.
 **Compressed flow:** "Quick start" CTA on empty dashboard → pick a media type → upload a folder → app auto-creates a detector with the folder's name and drops the user into the labeling view. Export becomes a single header button with a recent-target fallback.
 
-### 8.2 Switching active dataset/detector ★★ S
-Today: navigate back to dashboard → reselect → click Train again. With (§6.11) in place, this becomes a 2-click dropdown switch from the label view. Bonus: the new selection inherits sort mode + query.
+### 8.2 Switching active dataset/detector ★★ S — graduated to plan
+Today: navigate back to dashboard → reselect → click Train again. Scoped together with §6.11 as the [active-context-switcher.md](active-context-switcher.md) plan: top-bar pulldowns make this a 1-click switch from any view. Sort mode is per-user-tier and survives the switch by design; view-local state (scroll, partial Find query) resets per Phase 1's "switch = re-entry" rule.
 
 ### 8.3 Cross-dataset training with a re-used labelset ★★ M
 The labelset-source machinery lets a detector pull labels from a different dataset, but using it requires:

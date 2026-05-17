@@ -88,7 +88,7 @@ class TestLabelsetSourceBase:
 
         src = LabelsetSource()
         with pytest.raises(NotImplementedError):
-            src.save(None, {})
+            src.save(None, {})  # pyright: ignore[reportArgumentType]
 
     def test_to_dict_contains_standard_keys(self):
         from vtsearch.labels.sources.base import LabelsetSource
@@ -346,6 +346,7 @@ class TestSettingsSourceConfig:
         settings.set_settings_source_config(config)
 
         result = settings.get_settings_source_config()
+        assert result is not None
         assert result["source_name"] == "server_json_file"
         assert result["field_values"]["filepath"] == "/tmp/test.json"
 

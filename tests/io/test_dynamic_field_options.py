@@ -149,7 +149,8 @@ class TestImporterFieldOptionsRoute:
             json={"field_key": "no_such_field", "values": {}},
         )
         assert resp.status_code == 400
-        assert "Unknown field" in resp.get_json()["error"]
+        # flask-smorest error envelope: handler-level rejects live under ``message``.
+        assert "Unknown field" in resp.get_json()["message"]
 
     def test_static_field_returns_400(self, client, registered_stub):
         # ``media_type`` is static, not dynamic — calling options on it is rejected.
@@ -158,21 +159,23 @@ class TestImporterFieldOptionsRoute:
             json={"field_key": "media_type", "values": {}},
         )
         assert resp.status_code == 400
-        assert "not dynamic" in resp.get_json()["error"]
+        assert "not dynamic" in resp.get_json()["message"]
 
     def test_missing_field_key_returns_400(self, client, registered_stub):
+        # Schema-level validation (required ``field_key``) → 422.
         resp = client.post(
             self.URL_TEMPLATE.format(name=registered_stub.name),
             json={"values": {}},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_non_object_values_returns_400(self, client, registered_stub):
+        # Schema-level validation (``values`` must be a dict) → 422.
         resp = client.post(
             self.URL_TEMPLATE.format(name=registered_stub.name),
             json={"field_key": "query_id", "values": "not-an-object"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_not_implemented_returns_501(self, client):
         from vtsearch.datasets.importers import get_importer
@@ -187,7 +190,7 @@ class TestImporterFieldOptionsRoute:
                 json={"field_key": "query_id", "values": {}},
             )
             assert resp.status_code == 501
-            assert resp.get_json()["error"] == "nope"
+            assert resp.get_json()["message"] == "nope"
         finally:
             registry._items.pop(stub.name, None)
 
@@ -204,7 +207,7 @@ class TestImporterFieldOptionsRoute:
                 json={"field_key": "query_id", "values": {}},
             )
             assert resp.status_code == 502
-            assert resp.get_json()["error"] == "remote service down"
+            assert resp.get_json()["message"] == "remote service down"
         finally:
             registry._items.pop(stub.name, None)
 

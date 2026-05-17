@@ -101,7 +101,12 @@ def _make_voting_iterations_df(n_seeds=2, n_steps=10) -> pd.DataFrame:
                     "elapsed_seconds": elapsed,
                 }
             )
-    return pd.DataFrame(rows, columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"])
+    # pandas' Python-3.10 _typing.py doesn't mark Axes as TypeAlias,
+    # so pyright can't see list[str] satisfies the Axes alias.
+    return pd.DataFrame(
+        rows,
+        columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"],  # pyright: ignore[reportArgumentType]
+    )
 
 
 # ------------------------------------------------------------------
@@ -200,7 +205,9 @@ class TestPlotVotingIterations:
             assert p.stat().st_size > 0
 
     def test_empty_dataframe_generates_no_plots(self, tmp_dir):
-        df = pd.DataFrame(columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"])
+        df = pd.DataFrame(
+            columns=["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"],  # pyright: ignore[reportArgumentType]
+        )
         paths = plot_voting_iterations(df, output_dir=tmp_dir)
         assert paths == []
 

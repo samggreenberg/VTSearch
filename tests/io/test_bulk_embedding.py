@@ -88,9 +88,10 @@ class TestEmbedderDefaults:
 
         vecs = emb.embed_media_bulk(medias)
         assert len(vecs) == 3
-        assert vecs[0][0] == 1.0
-        assert vecs[1][0] == 2.0
-        assert vecs[2][0] == 3.0
+        assert all(v is not None for v in vecs)
+        assert vecs[0][0] == 1.0  # pyright: ignore[reportOptionalSubscript]
+        assert vecs[1][0] == 2.0  # pyright: ignore[reportOptionalSubscript]
+        assert vecs[2][0] == 3.0  # pyright: ignore[reportOptionalSubscript]
 
     def test_default_bulk_impl_emits_per_item_progress(self, tmp_path):
         """The default bulk loop must call _on_progress on each iteration
@@ -381,9 +382,10 @@ class TestEmbedMediasDictWrapper:
         out = emb.embed_medias(medias)
 
         assert set(out.keys()) == {1, 2, 7}
-        assert out[1][0] == 10.0
-        assert out[2][0] == 20.0
-        assert out[7][0] == 70.0
+        assert all(v is not None for v in out.values())
+        assert out[1][0] == 10.0  # pyright: ignore[reportOptionalSubscript]
+        assert out[2][0] == 20.0  # pyright: ignore[reportOptionalSubscript]
+        assert out[7][0] == 70.0  # pyright: ignore[reportOptionalSubscript]
 
     def test_handles_sparse_keys(self):
         """Non-contiguous keys (e.g. post-collapse_duplicates) round-trip."""
@@ -410,6 +412,7 @@ class TestEmbedMediasDictWrapper:
         medias = {1: {"tag": 1}, 3: {"tag": 3}, 5: {"tag": 5}}
         out = emb.embed_medias(medias)
         assert list(out.keys()) == [1, 3, 5]
+        assert out[3] is not None
         assert out[3][0] == 3.0
 
     def test_propagates_none_for_failed_embeddings(self):
@@ -497,6 +500,7 @@ class TestEmbedMediasDictWrapper:
         assert len(captured) == 1
         assert captured[0] == [{"x": 1}, {"x": 2}, {"x": 3}]
         assert set(out.keys()) == {10, 20, 30}
-        assert out[10][0] == 1.0
-        assert out[20][0] == 2.0
-        assert out[30][0] == 3.0
+        assert all(v is not None for v in out.values())
+        assert out[10][0] == 1.0  # pyright: ignore[reportOptionalSubscript]
+        assert out[20][0] == 2.0  # pyright: ignore[reportOptionalSubscript]
+        assert out[30][0] == 3.0  # pyright: ignore[reportOptionalSubscript]

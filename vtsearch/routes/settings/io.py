@@ -1,5 +1,8 @@
 """Flask routes for the Settings Import/Export API.
 
+Migrated to ``flask_smorest`` so these routes appear in
+``/api/openapi.json``.  See ``docs/plans/openapi-schema.md``.
+
 Endpoints
 ---------
 GET  /api/settings-importers
@@ -7,35 +10,55 @@ GET  /api/settings-importers
 
 POST /api/settings-importers/import/<importer_name>
     Run the named settings importer and apply the imported settings.
+    The request body is a plugin-field shape and doesn't fit a static
+    marshmallow schema — this route stays on the legacy plain-Flask path
+    (no ``@arguments`` / ``@response`` decorators) and is omitted from
+    the OpenAPI spec.  See *Resolved questions / Plugin field endpoints*
+    in ``docs/plans/openapi-schema.md``.
 
 GET  /api/settings-exporters
     List all registered settings exporters with their metadata and fields.
 
 POST /api/settings-exporters/export
-    Run the named settings exporter on the current application settings.
+    Run the named settings exporter on the current per-user settings.
+    Schema-level validation failures (missing ``exporter_name``) surface
+    as 422; handler-level rejects (unknown exporter, missing plugin
+    field, invalid ``filepath``, exporter raised) keep their HTTP codes
+    (404 / 400 / 500) with the standard ``message`` envelope.
 """
 
 from __future__ import annotations
 
 import logging
 
-from flask import Blueprint, jsonify
+from flask import jsonify
+from flask_smorest import Blueprint, abort
 
 from vtsearch import settings
-
-logger = logging.getLogger(__name__)
 from vtsearch.routes._shared import (
     extract_plugin_fields,
-    get_json_safe,
     get_plugin_or_404,
     run_plugin_or_error,
     validate_filepath_field,
     validate_required_fields,
 )
+from vtsearch.schemas.settings_io import (
+    RunSettingsExportRequestSchema,
+    RunSettingsExportResponseSchema,
+    SettingsExporterEntrySchema,
+    SettingsImporterEntrySchema,
+)
 from vtsearch.settings_io.exporters import get_settings_exporter, list_settings_exporters
 from vtsearch.settings_io.importers import get_settings_importer, list_settings_importers
 
-settings_io_bp = Blueprint("settings_io", __name__)
+logger = logging.getLogger(__name__)
+
+
+settings_io_bp = Blueprint(
+    "settings_io",
+    __name__,
+    description="List and run settings importers / exporters.",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -44,19 +67,29 @@ settings_io_bp = Blueprint("settings_io", __name__)
 
 
 @settings_io_bp.route("/api/settings-importers", methods=["GET"])
+@settings_io_bp.response(200, SettingsImporterEntrySchema(many=True))
 def get_settings_importers():
     """Return a list of all registered settings importers."""
-    return jsonify([imp.to_dict() for imp in list_settings_importers()])
+    return [imp.to_dict() for imp in list_settings_importers()]
 
 
 # ---------------------------------------------------------------------------
 # POST /api/settings-importers/import/<importer_name>
+#
+# Plugin-field route — stays on the legacy ``request.get_json`` / multipart
+# path. The request body is the importer's declared ``fields`` (file
+# uploads, free-form params) and doesn't fit a static marshmallow schema.
+# See ``docs/plans/openapi-schema.md`` (Resolved questions / Plugin field
+# endpoints).  Not described in the OpenAPI spec.
 # ---------------------------------------------------------------------------
 
 
 @settings_io_bp.route("/api/settings-importers/import/<importer_name>", methods=["POST"])
 def run_settings_import(importer_name: str):
-    """Run the named settings importer and apply imported settings."""
+    """Run the named settings importer and apply imported settings.
+
+    Plugin-dependent body shape: not described in the OpenAPI spec.
+    """
     importer, err = get_plugin_or_404(
         get_settings_importer, list_settings_importers, importer_name, "settings importer"
     )
@@ -99,9 +132,10 @@ def run_settings_import(importer_name: str):
 
 
 @settings_io_bp.route("/api/settings-exporters", methods=["GET"])
+@settings_io_bp.response(200, SettingsExporterEntrySchema(many=True))
 def get_settings_exporters():
     """Return a list of all registered settings exporters."""
-    return jsonify([exp.to_dict() for exp in list_settings_exporters()])
+    return [exp.to_dict() for exp in list_settings_exporters()]
 
 
 # ---------------------------------------------------------------------------
@@ -110,35 +144,39 @@ def get_settings_exporters():
 
 
 @settings_io_bp.route("/api/settings-exporters/export", methods=["POST"])
-def run_settings_export():
-    """Run the named settings exporter on current application settings."""
-    data = get_json_safe()
-
-    exporter_name = data.get("exporter_name", "").strip()
+@settings_io_bp.arguments(RunSettingsExportRequestSchema)
+@settings_io_bp.response(200, RunSettingsExportResponseSchema)
+@settings_io_bp.alt_response(400, description="Missing plugin field or invalid filepath.")
+@settings_io_bp.alt_response(404, description="Unknown exporter name.")
+@settings_io_bp.alt_response(500, description="Exporter raised an unexpected error.")
+def run_settings_export(body: dict):
+    """Run the named settings exporter on the current per-user settings."""
+    exporter_name = body["exporter_name"].strip()
     if not exporter_name:
-        return jsonify({"error": "exporter_name is required"}), 400
+        abort(422, message="exporter_name is required")
 
-    exporter, err = get_plugin_or_404(
-        get_settings_exporter, list_settings_exporters, exporter_name, "settings exporter"
-    )
-    if err:
-        return err
-    assert exporter is not None  # narrowed by err check
+    exporter = get_settings_exporter(exporter_name)
+    if exporter is None:
+        known = [p.name for p in list_settings_exporters()]
+        abort(404, message=f"Unknown settings exporter '{exporter_name}'. Available: {known}")
 
-    field_values: dict = data.get("field_values", {}) or {}
+    field_values: dict = dict(body.get("field_values") or {})
 
-    # Validate required fields
     missing = [
         f.key
         for f in exporter.fields
         if f.required and (field_values.get(f.key) is None or not str(field_values.get(f.key, "")).strip())
     ]
     if missing:
-        return jsonify({"error": f"Missing required field(s): {missing}", "missing_fields": missing}), 400
+        abort(400, message=f"Missing required field(s): {missing}", missing_fields=missing)
 
-    err = validate_filepath_field(field_values)
-    if err:
-        return err
+    if "filepath" in field_values and str(field_values["filepath"]).strip():
+        import vtsearch.security.path_validation as _paths
+
+        try:
+            _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
+        except ValueError as exc:
+            abort(400, message=str(exc))
 
     # Export only the current user's per-user settings, not the merged
     # view (which would also carry shared server-tier infra keys).
@@ -147,12 +185,12 @@ def run_settings_export():
     try:
         outcome = exporter.export(settings_data, field_values)
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        abort(400, message=str(exc))
     except Exception as exc:
         logger.exception("Settings export failed (%s): %s", exporter_name, exc)
-        return jsonify({"error": f"Export failed: {exc}"}), 500
+        abort(500, message=f"Export failed: {exc}")
 
-    return jsonify({"success": True, **outcome})
+    return {"success": True, **(outcome or {})}
 
 
 # ---------------------------------------------------------------------------
@@ -160,4 +198,4 @@ def run_settings_export():
 # ---------------------------------------------------------------------------
 
 # Re-export from settings module for backward compatibility and local use.
-from vtsearch.settings import _apply_settings  # noqa: F401
+from vtsearch.settings import _apply_settings  # noqa: F401, E402

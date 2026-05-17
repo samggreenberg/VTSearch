@@ -363,6 +363,7 @@ class TestImportLabelsIntoDetectorCLI:
         assert skipped == 1
 
         saved = _read_detector(_detector_path("import-tm"))
+        assert saved is not None
         ls = LabelSet.from_dict(saved["labelset"])
         md5s = sorted(el.md5 for el in ls.elements)
         assert md5s == sorted(["a" * 32, "b" * 32, "c" * 32])

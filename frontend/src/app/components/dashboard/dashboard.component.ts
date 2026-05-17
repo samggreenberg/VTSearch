@@ -29,6 +29,7 @@ import { LabelExporterModalComponent } from '../modals/label-exporter-modal/labe
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
+import { DiskUsageComponent, DiskUsageBytes } from './disk-usage/disk-usage.component';
 
 @Component({
   selector: 'vt-dashboard',
@@ -47,6 +48,7 @@ import { IconComponent } from '../icon/icon.component';
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
     IconComponent,
+    DiskUsageComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -55,11 +57,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   selectedDatasetIds: Set<string> = new Set();
   selectedDetectorIds: Set<string> = new Set();
 
-  // Animation flags for the right-side bulk-action column.
-  // Spin flags fire a one-shot 90° rotation on the tristate select toggle;
-  // the animationend handler clears them so the icon snaps back.
-  spinDatasetSelectToggle = false;
-  spinDetectorSelectToggle = false;
   // Confirm flags hold the trash icon at 90° while the confirm dialog is up,
   // and play a reverse animation back to 0° once the dialog resolves.
   deletingSelectedDatasetsConfirm = false;
@@ -185,7 +182,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   currentUser = '';
   isDefaultLogin = true;
 
-  diskUsage: { total: number; used: number; free: number } | null = null;
+  diskUsage: DiskUsageBytes | null = null;
 
   constructor(
     private router: Router,
@@ -275,28 +272,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
   }
 
-  get diskUsedPct(): number {
-    if (!this.diskUsage || this.diskUsage.total <= 0) return 0;
-    return (this.diskUsage.used / this.diskUsage.total) * 100;
-  }
-
-  get diskFreeText(): string {
-    if (!this.diskUsage) return '';
-    return `${this.formatBytes(this.diskUsage.free)} free of ${this.formatBytes(this.diskUsage.total)}`;
-  }
-
-  private formatBytes(n: number): string {
-    if (n < 1024) return `${n} B`;
-    const units = ['KB', 'MB', 'GB', 'TB', 'PB'];
-    let v = n / 1024;
-    let i = 0;
-    while (v >= 1024 && i < units.length - 1) {
-      v /= 1024;
-      i++;
-    }
-    return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
-  }
-
   /** Check for in-progress loading tasks (e.g. after a page reload) and start watching. */
   private resumeActivePolling(): void {
     // SSE pushes the initial snapshot the moment we connect, so the first
@@ -355,10 +330,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.datasetState.progressMessage;
   }
 
-  get errorMessage(): string {
-    return this.datasetState.errorMessage;
-  }
-
   /** Map dataset_id → LoadingTask for tasks that match an existing dataset row. */
   get inlineTaskMap(): Map<string, LoadingTask> {
     const map = new Map<string, LoadingTask>();
@@ -379,10 +350,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   getInlineTask(datasetId: string): LoadingTask | undefined {
     return this.inlineTaskMap.get(datasetId);
-  }
-
-  dismissError(): void {
-    this.datasetState.setErrorMessage('');
   }
 
   refresh(): void {
@@ -442,7 +409,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   toggleAllDatasets(): void {
-    this.spinDatasetSelectToggle = true;
     if (this.datasetSelectionState === 'all') {
       this.selectedDatasetIds.clear();
     } else {
@@ -510,11 +476,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.deletingSelectedDatasetsConfirm = true;
     let ok = false;
     try {
-      ok = await this.dialog.confirm(
+      const question =
         targets.length === 1
           ? `Delete dataset ${names}?`
-          : `Delete ${targets.length} datasets: ${names}?`,
-      );
+          : `Delete ${targets.length} datasets: ${names}?`;
+      const detail =
+        targets.length === 1
+          ? 'This removes the dataset from the registry and deletes its cached pickle file. Detectors trained against it are unaffected.'
+          : 'This removes the datasets from the registry and deletes their cached pickle files. Detectors trained against them are unaffected.';
+      ok = await this.dialog.confirmDestructive(question, detail);
     } finally {
       this.deletingSelectedDatasetsConfirm = false;
       this.wasDeletingSelectedDatasetsConfirm = true;
@@ -528,10 +498,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         },
       });
     }
-  }
-
-  onSpinDatasetSelectToggleEnd(): void {
-    this.spinDatasetSelectToggle = false;
   }
 
   onDeleteSelectedDatasetsAnimationEnd(): void {
@@ -581,7 +547,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   toggleAllDetectors(): void {
-    this.spinDetectorSelectToggle = true;
     if (this.detectorSelectionState === 'all') {
       this.selectedDetectorIds.clear();
     } else {
@@ -601,11 +566,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.deletingSelectedDetectorsConfirm = true;
     let ok = false;
     try {
-      ok = await this.dialog.confirm(
+      const question =
         targets.length === 1
           ? `Delete detector ${names}?`
-          : `Delete ${targets.length} detectors: ${names}?`,
-      );
+          : `Delete ${targets.length} detectors: ${names}?`;
+      const detail =
+        targets.length === 1
+          ? 'This removes its labelset and training metadata. The dataset is unaffected.'
+          : 'This removes their labelsets and training metadata. The datasets are unaffected.';
+      ok = await this.dialog.confirmDestructive(question, detail);
     } finally {
       this.deletingSelectedDetectorsConfirm = false;
       this.wasDeletingSelectedDetectorsConfirm = true;
@@ -673,10 +642,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     void newName;
   }
 
-  onSpinDetectorSelectToggleEnd(): void {
-    this.spinDetectorSelectToggle = false;
-  }
-
   onDeleteSelectedDetectorsAnimationEnd(): void {
     if (!this.deletingSelectedDetectorsConfirm) {
       this.wasDeletingSelectedDetectorsConfirm = false;
@@ -693,7 +658,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   async deleteDataset(dataset: DatasetRegistryEntry): Promise<void> {
     this.deletingDatasetId = dataset.id;
-    const ok = await this.dialog.confirm(`Delete dataset "${dataset.name}"?`);
+    const ok = await this.dialog.confirmDestructive(
+      `Delete dataset "${dataset.name}"?`,
+      'This removes the dataset from the registry and deletes its cached pickle file. Detectors trained against it are unaffected.',
+    );
     this.deletingDatasetId = '';
     if (!ok) return;
     this.datasetsApi.deleteRegistered(dataset.id).subscribe({
@@ -742,7 +710,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
     this.deletingDetectorId = model.id;
-    const ok = await this.dialog.confirm(`Delete detector "${model.name}"?`);
+    const ok = await this.dialog.confirmDestructive(
+      `Delete detector "${model.name}"?`,
+      'This removes its labelset and training metadata. The dataset is unaffected.',
+    );
     this.deletingDetectorId = '';
     if (!ok) return;
     this.detectorsApi.deleteFromRegistry(model.id).subscribe({
@@ -1012,8 +983,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Progress polling ---
 
   startProgressPolling(onComplete?: () => void): void {
-    this.datasetState.setErrorMessage('');
-
     // If polling is already active, don't restart — the existing loop
     // already covers all tasks.  This avoids clearing completedTaskIds
     // and losing track of tasks that just finished.
@@ -1027,13 +996,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.polling$), takeUntil(this.destroy$))
       .subscribe({
         next: (tasks: LoadingTask[]) => {
-          // Separate active from finished
+          // Separate active from finished. Failed tasks are surfaced
+          // globally by SseErrorRouterService → ToastService; we just
+          // keep them in the inline list so the row still shows the
+          // dashed loading bar with the error text.
           const active = tasks.filter((t) => t.status !== 'idle');
           const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
-          const cancelled = errored.filter((t) => t.error === 'Cancelled');
           const failed = errored.filter((t) => t.error !== 'Cancelled');
 
-          // Show both active tasks and failed tasks (so users see the error)
           this.loadingTasks = [...active, ...failed];
           this.datasetState.setLoadingTasks(active);
 
@@ -1048,11 +1018,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
           if (justFinished.length > 0) {
             this.datasetState.refresh();
             this.achievements.refresh();
-          }
-
-          // Also set the top-level error banner for failed tasks
-          for (const t of failed) {
-            this.datasetState.setErrorMessage(t.error!);
           }
 
           this.datasetState.setLoading(active.length > 0);
@@ -1100,10 +1065,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
           if (justFinished.length > 0) {
             this.datasetState.refresh();
             this.achievements.refresh();
-          }
-
-          for (const t of failed) {
-            this.datasetState.setErrorMessage(t.error!);
           }
 
           if (active.length === 0) {

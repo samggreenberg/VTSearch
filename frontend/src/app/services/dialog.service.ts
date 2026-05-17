@@ -63,6 +63,27 @@ export class VtDialogService {
     }) as Promise<boolean>;
   }
 
+  /**
+   * Standardised confirmation for destructive actions.
+   *
+   * `question` should name the operation and its target, e.g.
+   *   "Delete detector 'cats'?"
+   * `detail` should explain what is removed and what is unaffected, e.g.
+   *   "This removes its labelset and training metadata. The dataset is unaffected."
+   * `actionLabel` is the verb on the primary button (default "Delete").
+   */
+  confirmDestructive(question: string, detail: string, actionLabel = 'Delete'): Promise<boolean> {
+    return this.show({
+      message: `${question} ${detail}`,
+      type: 'warning',
+      showInput: false,
+      buttons: [
+        { label: 'Cancel', primary: false, value: false },
+        { label: actionLabel, primary: true, value: true },
+      ],
+    }) as Promise<boolean>;
+  }
+
   prompt(message: string, defaultValue = '', type: DialogType = 'info'): Promise<string | null> {
     return this.show({
       message,

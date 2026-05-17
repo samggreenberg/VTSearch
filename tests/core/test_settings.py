@@ -481,7 +481,7 @@ class TestSettingsModule:
 
     def test_panel_pct_invalid_value(self):
         with pytest.raises(ValueError):
-            settings_mod.set_panel_pct_left({"audio": "invalid"})
+            settings_mod.set_panel_pct_left({"audio": "invalid"})  # pyright: ignore[reportArgumentType]
 
     def test_panel_pct_clamped_on_read(self, isolated_settings):
         """Out-of-range values stored on disk are clamped when read."""

@@ -53,7 +53,8 @@ class TestReadNpzFilenamesAndVectors:
         npz = tmp_path / "vecs.npz"
         v1 = np.array([1, 2, 3], dtype=np.float32)
         v2 = np.array([4, 5, 6], dtype=np.float32)
-        np.savez(npz, **{"x.wav": v1, "y.wav": v2})
+        # numpy savez stubs mis-bind unpacked kwargs to allow_pickle.
+        np.savez(npz, **{"x.wav": v1, "y.wav": v2})  # pyright: ignore[reportArgumentType]
 
         mapping = read_npz_filenames_and_vectors(npz)
         assert set(mapping) == {"x.wav", "y.wav"}
@@ -224,7 +225,7 @@ class TestServerFilesNpzRunsEndToEnd:
         # Per-key layout: each filename is a top-level key in the npz.
         vec = np.full(256, 7.0, dtype=np.float32)
         npz = tmp_path / "list.npz"
-        np.savez(npz, **{str(src): vec})
+        np.savez(npz, **{str(src): vec})  # pyright: ignore[reportArgumentType]
 
         imp = ServerFilesDatasetImporter()
         medias: dict = {}

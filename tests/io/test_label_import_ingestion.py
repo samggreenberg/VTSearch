@@ -14,19 +14,21 @@ from __future__ import annotations
 
 
 class TestIngestMissingEndpoint:
-    def test_empty_entries_returns_400(self, client):
+    def test_empty_entries_returns_422(self, client):
+        # Schema-level validation (entries Length >= 1) → 422.
         res = client.post(
             "/api/label-importers/ingest-missing",
             json={"entries": []},
         )
-        assert res.status_code == 400
+        assert res.status_code == 422
 
-    def test_missing_entries_key_returns_400(self, client):
+    def test_missing_entries_key_returns_422(self, client):
+        # Schema-level validation (required ``entries``) → 422.
         res = client.post(
             "/api/label-importers/ingest-missing",
             json={},
         )
-        assert res.status_code == 400
+        assert res.status_code == 422
 
     def test_ingest_with_unknown_origin_returns_zero(self, client):
         """Entries whose origin importer doesn't exist are gracefully skipped."""

@@ -196,6 +196,7 @@ class TestEmbedTextEnriched:
             embed_fn=mock_embed,
         )
         result = mt.embed_text_enriched("test")
+        assert result is not None
         assert abs(np.linalg.norm(result) - 1.0) < 1e-6
 
 

@@ -10,6 +10,7 @@ and assertions.
 
 from __future__ import annotations
 
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 
@@ -17,7 +18,9 @@ def make_text_media_type_stub(embedding_dim: int = 768):
     """Return a ``TextMediaType`` instance with its embedding model stubbed."""
     from vtsearch.media.text.media_type import TextMediaType
 
-    mt = TextMediaType()
+    # _model is a runtime-only attr set by load_models on the subclass; not
+    # declared on the ABC, so cast to Any to assign it directly.
+    mt = cast(Any, TextMediaType())
     stub_model = MagicMock()
     stub_model.encode.return_value = [0.1] * embedding_dim
     mt._model = stub_model

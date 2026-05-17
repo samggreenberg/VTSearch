@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
-import { SKIP_ERROR_BANNER } from '../interceptors/error.interceptor';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 
 export interface AuthStatus {
   provider: string;
@@ -27,7 +27,7 @@ export class AuthService {
     // Skip the global error banner: auth-status failures are handled inline
     // (we fall back to "no login required") and would otherwise pop up a
     // banner every time the user opens the app while offline.
-    const context = new HttpContext().set(SKIP_ERROR_BANNER, true);
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
     this.http.get<AuthStatus>('/api/auth/status', { context }).subscribe({
       next: (status) => {
         this.statusSubject.next(status);
@@ -55,7 +55,7 @@ export class AuthService {
   login(username: string): Observable<AuthStatus> {
     // Skip the global error banner: the login form renders its own
     // inline error message, and a duplicate banner would be redundant.
-    const context = new HttpContext().set(SKIP_ERROR_BANNER, true);
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
     return this.http
       .post<AuthStatus>('/api/auth/login', { username }, { context })
       .pipe(tap((status) => this.statusSubject.next(status)));

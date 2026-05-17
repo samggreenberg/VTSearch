@@ -19,6 +19,7 @@ class TestGenerateWaveformThumbnail:
 
         wav_bytes = app_module.generate_wav(440.0, 1.0)
         result = generate_waveform_thumbnail(wav_bytes)
+        assert result is not None
         img = Image.open(io.BytesIO(result))
         assert img.size == (128, 128)
 
@@ -27,6 +28,7 @@ class TestGenerateWaveformThumbnail:
 
         wav_bytes = app_module.generate_wav(440.0, 1.0)
         result = generate_waveform_thumbnail(wav_bytes, size=64)
+        assert result is not None
         img = Image.open(io.BytesIO(result))
         assert img.size == (64, 64)
 

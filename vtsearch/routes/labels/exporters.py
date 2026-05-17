@@ -1,5 +1,8 @@
 """Flask routes for the Labelset Exporter API.
 
+Migrated to ``flask_smorest`` so these routes appear in
+``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+
 Endpoints
 ---------
 GET  /api/exporters
@@ -7,92 +10,85 @@ GET  /api/exporters
 
 POST /api/exporters/export
     Run a specific exporter on auto-detect results supplied in the request
-    body.  Body (JSON)::
-
-        {
-            "exporter_name": "server_json_file",
-            "field_values":  {"filepath": "/home/user/results.json"},
-            "results":       { ...auto-detect results dict... }
-        }
-
-    Returns::
-
-        {"success": true, "message": "...", ...exporter-specific keys...}
+    body. ``field_values`` is permissive at the schema layer because its
+    inner keys depend on the named exporter; the handler validates it
+    against the selected plugin's :attr:`fields`. Schema-level failures
+    (missing ``exporter_name``) surface as 422; handler-level rejects
+    (unknown exporter, missing plugin field, invalid filepath, plugin
+    error) keep their original HTTP codes (404 / 400 / 500) with the
+    standard ``message`` envelope.
 """
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+import logging
+
+import vtsearch.security.path_validation as _paths
+from flask_smorest import Blueprint, abort
 
 from vtsearch.exporters import get_exporter, list_exporters
-from vtsearch.routes._shared import (
-    get_json_safe,
-    get_plugin_or_404,
-    run_plugin_or_error,
-    validate_filepath_field,
-    validate_required_fields,
+from vtsearch.schemas.labels import (
+    ExporterEntrySchema,
+    RunExportRequestSchema,
+    RunExportResponseSchema,
 )
 
-exporters_bp = Blueprint("exporters", __name__)
+logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# GET /api/exporters
-# ---------------------------------------------------------------------------
+exporters_bp = Blueprint(
+    "exporters",
+    __name__,
+    description="List and run labelset exporters.",
+)
 
 
 @exporters_bp.route("/api/exporters", methods=["GET"])
+@exporters_bp.response(200, ExporterEntrySchema(many=True))
 def get_exporters():
     """Return a list of all registered labelset exporters."""
-    return jsonify([exp.to_dict() for exp in list_exporters()])
-
-
-# ---------------------------------------------------------------------------
-# POST /api/exporters/export
-# ---------------------------------------------------------------------------
+    return [exp.to_dict() for exp in list_exporters()]
 
 
 @exporters_bp.route("/api/exporters/export", methods=["POST"])
-def run_export():
-    """Run the named exporter on the supplied auto-detect results.
-
-    Request body (JSON):
-
-    .. code-block:: json
-
-        {
-            "exporter_name": "server_json_file",
-            "field_values":  {"filepath": "/home/user/results.json"},
-            "results":       {}
-        }
-
-    ``field_values`` and ``results`` are both optional – they default to
-    empty dicts – but a valid ``exporter_name`` is required.
-    """
-    data = get_json_safe()
-
-    exporter_name = data.get("exporter_name", "").strip()
+@exporters_bp.arguments(RunExportRequestSchema)
+@exporters_bp.response(200, RunExportResponseSchema)
+@exporters_bp.alt_response(400, description="Missing plugin field or invalid filepath.")
+@exporters_bp.alt_response(404, description="Unknown exporter name.")
+@exporters_bp.alt_response(500, description="Exporter raised an unexpected error.")
+def run_export(body: dict):
+    """Run the named exporter on the supplied auto-detect results."""
+    exporter_name = body["exporter_name"].strip()
     if not exporter_name:
-        return jsonify({"error": "exporter_name is required"}), 400
+        abort(422, message="exporter_name is required")
 
-    exporter, err = get_plugin_or_404(get_exporter, list_exporters, exporter_name, "exporter")
-    if err:
-        return err
-    assert exporter is not None  # narrowed by err check
+    exporter = get_exporter(exporter_name)
+    if exporter is None:
+        known = [p.name for p in list_exporters()]
+        abort(404, message=f"Unknown exporter '{exporter_name}'. Available: {known}")
 
-    field_values: dict = data.get("field_values", {}) or {}
-    results: dict = data.get("results", {}) or {}
+    field_values: dict = dict(body.get("field_values") or {})
+    results: dict = dict(body.get("results") or {})
 
-    err = validate_required_fields(exporter, field_values)
-    if err:
-        return err
+    missing = [
+        f.key
+        for f in exporter.fields
+        if f.required and f.field_type != "file" and not str(field_values.get(f.key, "")).strip()
+    ]
+    if missing:
+        abort(400, message=f"Missing required field(s): {missing}")
 
-    err = validate_filepath_field(field_values)
-    if err:
-        return err
+    if "filepath" in field_values and str(field_values["filepath"]).strip():
+        try:
+            _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
+        except ValueError as exc:
+            abort(400, message=str(exc))
 
-    outcome, err = run_plugin_or_error(exporter, "export", results, field_values)
-    if err:
-        return err
+    try:
+        outcome = exporter.export(results, field_values)
+    except ValueError as exc:
+        abort(400, message=str(exc))
+    except Exception as exc:
+        logger.exception("%s.export() failed: %s", type(exporter).__name__, exc)
+        abort(500, message=str(exc))
 
-    return jsonify({"success": True, **(outcome or {})})
+    return {"success": True, **(outcome or {})}

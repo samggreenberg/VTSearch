@@ -8,9 +8,23 @@ Covers the three JSON-only routes in ``vtsearch/routes/labels/vote.py``:
 * ``POST /api/labels/fill-from-sort`` — :class:`FillFromSortRequestSchema` →
                                          :class:`FillFromSortResponseSchema`
 
-The plugin-field routes in ``importers.py`` / ``exporters.py`` are
-deferred — see the *Open questions* section of
-``docs/plans/openapi-schema.md`` (plugin field endpoints).
+Listing / non-plugin-field routes in ``importers.py`` / ``exporters.py``:
+
+* ``GET  /api/exporters``                       — :class:`ExportersListResponseSchema`
+* ``POST /api/exporters/export``                — :class:`RunExportRequestSchema` →
+                                                   :class:`RunExportResponseSchema`
+* ``GET  /api/label-importers``                 — :class:`LabelImportersListResponseSchema`
+* ``POST /api/label-importers/ingest-missing``  — :class:`IngestMissingRequestSchema` →
+                                                   :class:`IngestMissingResponseSchema`
+
+The per-plugin shape of ``field_values`` on ``POST /api/exporters/export``
+is intentionally declared as ``fields.Dict()``: the inner keys vary per
+exporter and ``field_values`` is validated inside the handler against the
+selected plugin's :attr:`fields` declaration. The multipart-or-JSON
+``POST /api/label-importers/import/<importer_name>`` route stays on the
+legacy plain-Flask path (no decorator) for the same reason — see the
+*Resolved questions / Plugin field endpoints* section of
+``docs/plans/openapi-schema.md``.
 """
 
 from __future__ import annotations
@@ -150,12 +164,124 @@ class FillFromSortResponseSchema(Schema):
     results = fields.Dict()
 
 
+# ---------------------------------------------------------------------------
+# Exporter and label-importer plugin routes
+# (vtsearch/routes/labels/exporters.py, vtsearch/routes/labels/importers.py)
+# ---------------------------------------------------------------------------
+
+
+class _PluginEntrySchema(Schema):
+    """Shared shape for plugin-listing endpoints.
+
+    Mirrors :meth:`vtsearch.plugins.PluginBase.to_dict`; the ``fields``
+    array's inner shape mirrors :meth:`vtsearch.plugins.PluginField.to_dict`
+    but is declared as ``fields.Dict()`` to avoid duplicating the source
+    of truth across schema and dataclass.
+    """
+
+    name = fields.String(required=True)
+    display_name = fields.String(required=True)
+    description = fields.String(required=True)
+    icon = fields.String(required=True)
+    ui_mode = fields.String(required=True)
+    hidden_from_picker = fields.Boolean(required=True)
+    # Renamed to avoid shadowing :attr:`marshmallow.Schema.fields` (a
+    # ``dict[str, Field]`` registry on the base class). ``data_key`` /
+    # ``attribute`` keep the wire name as ``"fields"`` on both load and
+    # dump.
+    plugin_fields = fields.List(
+        fields.Dict(),
+        required=True,
+        data_key="fields",
+        attribute="fields",
+    )
+
+
+class ExporterEntrySchema(_PluginEntrySchema):
+    """One entry in ``GET /api/exporters``."""
+
+
+class RunExportRequestSchema(Schema):
+    """Body for ``POST /api/exporters/export``.
+
+    ``field_values`` is permissive (``fields.Dict``) because its keys
+    depend on the named exporter; the handler validates the inner shape
+    against the selected plugin.
+    """
+
+    exporter_name = fields.String(required=True, validate=validate.Length(min=1))
+    field_values = fields.Dict(load_default=dict)
+    results = fields.Dict(load_default=dict)
+
+
+class RunExportResponseSchema(Schema):
+    """Response for ``POST /api/exporters/export``.
+
+    Each declared key corresponds to an exporter-specific payload field;
+    only ``success`` and ``message`` are always present, and the rest
+    are documented optionals. ``display_results`` is the GUI exporter's
+    pass-through of the auto-detect results dict (or LabelSet).
+    """
+
+    success = fields.Boolean(required=True)
+    message = fields.String()
+    display_results = fields.Raw()
+
+
+class LabelImporterEntrySchema(_PluginEntrySchema):
+    """One entry in ``GET /api/label-importers``."""
+
+
+class IngestMissingRequestSchema(Schema):
+    """Body for ``POST /api/label-importers/ingest-missing``."""
+
+    entries = fields.List(
+        fields.Dict(),
+        required=True,
+        validate=validate.Length(min=1),
+        metadata={"description": "Label entries whose medias must be re-ingested."},
+    )
+
+
+class IngestMissingResponseSchema(Schema):
+    """Response for ``POST /api/label-importers/ingest-missing``."""
+
+    ingested = fields.Integer(required=True)
+    applied = fields.Integer(required=True)
+    message = fields.String(required=True)
+
+
+class RunLabelImporterResponseSchema(Schema):
+    """Response for ``POST /api/label-importers/import/<importer_name>``.
+
+    The route stays on the legacy plain-Flask path (request body is a
+    plugin-field shape), but the success body is the same on every
+    importer, so we declare it here for cross-reference. Currently
+    *not* attached to the route via ``@response`` — kept for the
+    eventual unified plugin-field migration.
+    """
+
+    applied = fields.Integer(required=True)
+    skipped = fields.Integer(required=True)
+    missing_count = fields.Integer(required=True)
+    missing = fields.List(fields.Dict(), required=True)
+    ingested = fields.Integer(required=True)
+    message = fields.String(required=True)
+
+
 __all__ = [
+    "ExporterEntrySchema",
     "FillFromSortRequestSchema",
     "FillFromSortResponseSchema",
+    "IngestMissingRequestSchema",
+    "IngestMissingResponseSchema",
+    "LabelImporterEntrySchema",
     "LabeledElementSchema",
     "LabelsExportQuerySchema",
     "LabelsExportResponseSchema",
     "LabelsImportRequestSchema",
     "LabelsImportResponseSchema",
+    "RunExportRequestSchema",
+    "RunExportResponseSchema",
+    "RunLabelImporterResponseSchema",
 ]

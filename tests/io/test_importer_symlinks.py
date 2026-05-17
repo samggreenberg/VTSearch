@@ -42,6 +42,7 @@ class TestSymlinkedImporterDiscovery:
         import importlib
 
         parent = importlib.import_module("vtsearch.datasets.importers")
+        assert parent.__file__ is not None
         pkg_dir = os.path.dirname(parent.__file__)
         link = os.path.join(pkg_dir, "symlink_test_pkg")
         os.symlink(str(ext_pkg), link)
@@ -92,6 +93,7 @@ class TestSymlinkedImporterDiscovery:
         import importlib
 
         parent = importlib.import_module("vtsearch.datasets.importers")
+        assert parent.__file__ is not None
         pkg_dir = os.path.dirname(parent.__file__)
         link = os.path.join(pkg_dir, "dx_uuid.symbolic_link")
         os.symlink(str(ext_pkg), link)
@@ -138,6 +140,7 @@ class TestSymlinkedImporterDiscovery:
         import importlib
 
         parent = importlib.import_module("vtsearch.datasets.importers")
+        assert parent.__file__ is not None
         pkg_dir = os.path.dirname(parent.__file__)
         link = os.path.join(pkg_dir, "attr_check_pkg")
         os.symlink(str(ext_pkg), link)

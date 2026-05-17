@@ -421,6 +421,7 @@ class TestLabelExportWithClips:
             ls2 = LabelSet.from_dict(data)
             assert len(ls2) == 2
             for elem in ls2:
+                assert elem.origin is not None
                 assert elem.origin["params"]["clipper"] == "sound_tiling"
         finally:
             medias.clear()
