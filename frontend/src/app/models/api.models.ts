@@ -61,14 +61,6 @@ export interface SortProgressResponse {
 
 // --- Datasets ---
 
-export interface DatasetStatus {
-  loaded: boolean;
-  num_medias: number;
-  has_votes: boolean;
-  media_type?: string;
-  display_name?: string;
-}
-
 export interface DatasetProgress {
   status?: string;
   message?: string;
@@ -95,10 +87,6 @@ export interface LoadingTask {
   detector_id?: string;
   media_type?: string;
   embedder?: string;
-}
-
-export interface LoadingTasksResponse {
-  tasks: LoadingTask[];
 }
 
 export interface ImporterInfo {
@@ -176,14 +164,6 @@ export interface ImporterPickerTab {
   order?: number;
 }
 
-export interface ImportersResponse {
-  importers: ImporterInfo[];
-  /** Picker tab declarations.  When present, the frontend renders one tab
-   *  per entry; when absent (older backends) the frontend falls back to
-   *  inferring tabs from importer ``category`` values. */
-  tabs?: ImporterPickerTab[];
-}
-
 export interface DemoDataset {
   name: string;
   label: string;
@@ -196,10 +176,6 @@ export interface DemoDataset {
   num_categories: number;
   pkl_embedder?: string;
   pkl_clipper?: string;
-}
-
-export interface DemoListResponse {
-  datasets: DemoDataset[];
 }
 
 export interface MediaTypeInfo {
@@ -223,10 +199,6 @@ export interface MediaTypeDetectionResponse {
   truncated?: boolean;
 }
 
-export interface MediaTypesResponse {
-  media_types: MediaTypeInfo[];
-}
-
 export interface DatasetRegistryEntry {
   id: string;
   name: string;
@@ -236,57 +208,7 @@ export interface DatasetRegistryEntry {
   [key: string]: unknown;
 }
 
-export interface DatasetStatsResponse {
-  num_items: number;
-  num_dupes: number;
-  file_type_counts: Record<string, number>;
-  ingest_started_at: number | null;
-  ingest_finished_at: number | null;
-  origin: string;
-  source: { importer?: string; params?: Record<string, string> } | Record<string, unknown>;
-  clipper: string;
-  embedder: string;
-}
-
-export interface DatasetRegistryResponse {
-  datasets: DatasetRegistryEntry[];
-}
-
-// --- Detector scoring ---
-
-export interface AutoDetectResponse {
-  [key: string]: unknown;
-}
-
 // --- Detectors ---
-
-export interface Detector {
-  name: string;
-  [key: string]: unknown;
-}
-
-export interface DetectorsResponse {
-  detectors: Detector[];
-}
-
-export interface LabelElement {
-  id: string;
-  label: 'good' | 'bad';
-  media_type: string;
-  name: string;
-  filename: string;
-  origin_name: string;
-  md5: string;
-  cid: number | null;
-  time: number;
-  score: number;
-}
-
-export interface LabelsDetailResponse {
-  good: LabelElement[];
-  bad: LabelElement[];
-  media_type: string;
-}
 
 export interface DetectorRegistryEntry {
   id: string;
@@ -300,20 +222,6 @@ export interface DetectorRegistryEntry {
   autorun?: boolean;
   last_trained_at?: number | null;
   [key: string]: unknown;
-}
-
-export interface DetectorsRegistryResponse {
-  detectors: DetectorRegistryEntry[];
-}
-
-export interface CombineDetectorsResult {
-  success: boolean;
-  name: string;
-  media_type: string;
-  num_labels: number;
-  combined_from: string[];
-  source_label_counts: number[];
-  examples: { type: string; value: string }[];
 }
 
 // --- Clippers ---
@@ -337,32 +245,6 @@ export interface ClipperInfo {
   parameters?: ClipperParameter[];
   creation_questions?: ClipperParameter[];
   [key: string]: unknown;
-}
-
-export interface ClippersResponse {
-  clippers: ClipperInfo[];
-}
-
-// --- Converters ---
-
-export interface ConverterInfo {
-  [key: string]: unknown;
-}
-
-export interface ConvertersResponse {
-  converters: ConverterInfo[];
-}
-
-// --- Error ---
-
-export interface ApiError {
-  error: string;
-}
-
-// --- OK response ---
-
-export interface OkResponse {
-  ok: boolean;
 }
 
 // --- Eval / Progress Charts ---
@@ -465,14 +347,3 @@ export interface EmbedderInfo {
   license_notice?: string | null;
 }
 
-export interface EmbeddersResponse {
-  embedders: EmbedderInfo[];
-}
-
-// --- Export Result ---
-
-export interface ExportResult {
-  success: boolean;
-  message?: string;
-  error?: string;
-}

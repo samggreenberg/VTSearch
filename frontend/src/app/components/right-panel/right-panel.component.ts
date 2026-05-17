@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DetectorsApiService } from '../../services/detectors-api.service';
-import { LabelElement, MediaItem } from '../../models/api.models';
+import type { DetectorLabelView } from '../../generated/api-client/models/detector-label-view';
+import { MediaItem } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
@@ -59,8 +60,8 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   badIds: number[] = [];
   clickTimes: Record<string, number> = {};
   learnedScores: Record<string, number> = {};
-  goodElements: LabelElement[] = [];
-  badElements: LabelElement[] = [];
+  goodElements: DetectorLabelView[] = [];
+  badElements: DetectorLabelView[] = [];
   sortMode: LabelSortMode = 'time-desc';
   viewMode: 'grid' | 'list' = 'grid';
   gridGoalWidth: number = 80;
@@ -139,7 +140,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
    *  on the left when the element resolves into the active dataset;
    *  otherwise the element exists only in the labelset (e.g. trained on a
    *  different dataset) and there's nothing to focus. */
-  onLabelsetElementSelected(elem: LabelElement): void {
+  onLabelsetElementSelected(elem: DetectorLabelView): void {
     if (elem.cid !== null && elem.cid !== undefined) {
       this.mediaSelected.emit(elem.cid);
     }

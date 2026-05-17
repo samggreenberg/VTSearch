@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
-import { CombineDetectorsResult, DetectorRegistryEntry } from '../../../models/api.models';
+import type { DetectorCombineResponse } from '../../../generated/api-client/models/detector-combine-response';
+import { DetectorRegistryEntry } from '../../../models/api.models';
 
 interface SourceRow {
   name: string;
@@ -83,7 +84,7 @@ export class CombineDetectorsModalComponent implements OnInit {
     this.error = '';
 
     this.detectorsApi.combine(names, trimmed, this.conflictPolicy).subscribe({
-      next: (resp: CombineDetectorsResult) => {
+      next: (resp: DetectorCombineResponse) => {
         this.submitting = false;
         this.created.emit(resp?.name || trimmed);
       },

@@ -2,7 +2,7 @@ import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { DatasetStatsResponse } from '../../../models/api.models';
+import type { DatasetRegistryStatsResponse } from '../../../generated/api-client/models/dataset-registry-stats-response';
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
 
 @Component({
@@ -19,7 +19,7 @@ export class DatasetStatsModalComponent implements OnInit {
 
   loading = true;
   error = '';
-  stats: DatasetStatsResponse | null = null;
+  stats: DatasetRegistryStatsResponse | null = null;
 
   constructor(private datasetsApi: DatasetsApiService) {}
 
