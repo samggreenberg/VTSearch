@@ -425,13 +425,6 @@ export interface CombineDetectorsResult {
   examples: { type: string; value: string }[];
 }
 
-// --- Label Importers ---
-
-export interface LabelImporterInfo {
-  name: string;
-  [key: string]: unknown;
-}
-
 // --- Processor Importers ---
 
 export interface ProcessorImporterInfo {

@@ -8,16 +8,7 @@ import { LabelImportersApiService } from '../../../services/label-importers-api.
 import { MediasApiService } from '../../../services/medias-api.service';
 import { VoteStateService } from '../../../services/vote-state.service';
 import { ImporterField } from '../../../models/api.models';
-
-interface LabelImporterInfo {
-  name: string;
-  display_name?: string;
-  description?: string;
-  icon?: string;
-  fields?: ImporterField[];
-  ui_mode?: string;
-  hidden_from_picker?: boolean;
-}
+import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
 
 type ModalView = 'picker' | 'form';
 
@@ -40,9 +31,9 @@ export class LabelImporterModalComponent implements OnInit {
   @ViewChild('addBadInput') addBadInput!: ElementRef<HTMLInputElement>;
 
   view: ModalView = 'picker';
-  importers: LabelImporterInfo[] = [];
+  importers: LabelImporterEntry[] = [];
   loading = true;
-  selectedImporter: LabelImporterInfo | null = null;
+  selectedImporter: LabelImporterEntry | null = null;
   formValues: Record<string, string> = {};
   selectedFile: File | null = null;
   selectedFileFieldKey: string | null = null;
@@ -65,9 +56,16 @@ export class LabelImporterModalComponent implements OnInit {
     return this.targetModelName ? 'Add Labels to Detector' : 'Import Labels';
   }
 
+  /** Typed view of the selected importer's plugin fields for the template
+   *  (the generated LabelImporterEntry types `fields` as an open dict
+   *  because plugin field schemas aren't part of the OpenAPI client). */
+  get selectedImporterFields(): ImporterField[] {
+    return (this.selectedImporter?.fields ?? []) as ImporterField[];
+  }
+
   ngOnInit(): void {
     this.labelImportersApi.list().subscribe({
-      next: (list: any[]) => {
+      next: (list) => {
         this.importers = list.filter((imp) => !imp.hidden_from_picker);
         this.loading = false;
       },
@@ -78,17 +76,16 @@ export class LabelImporterModalComponent implements OnInit {
     });
   }
 
-  selectImporter(importer: LabelImporterInfo): void {
+  selectImporter(importer: LabelImporterEntry): void {
     this.selectedImporter = importer;
     this.formValues = {};
     this.selectedFile = null;
     this.selectedFileFieldKey = null;
     this.error = '';
     this.successMessage = '';
-    if (importer.fields) {
-      for (const field of importer.fields) {
-        if (field.default) this.formValues[field.key] = field.default;
-      }
+    const fields = (importer.fields ?? []) as ImporterField[];
+    for (const field of fields) {
+      if (field.default) this.formValues[field.key] = field.default;
     }
     this.view = 'form';
   }

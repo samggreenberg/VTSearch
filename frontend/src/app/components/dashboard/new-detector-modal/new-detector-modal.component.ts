@@ -15,6 +15,7 @@ import {
   ImporterPickerTab,
   MediaTypeInfo,
 } from '../../../models/api.models';
+import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
 import {
   MediaCropModalComponent,
   MediaCropResult,
@@ -27,15 +28,6 @@ interface BrowseEntry {
   size_bytes?: number;
   modified_at?: string;
   isDir: boolean;
-}
-
-interface LabelImporterInfo {
-  name: string;
-  display_name?: string;
-  description?: string;
-  icon?: string;
-  fields?: ImporterField[];
-  hidden_from_picker?: boolean;
 }
 
 type ModalView = 'main' | 'media-picker';
@@ -161,9 +153,9 @@ export class NewDetectorModalComponent implements OnInit {
 
   // "Trained" tab state
   trainedView: TrainedSubView = 'picker';
-  labelImporters: LabelImporterInfo[] = [];
+  labelImporters: LabelImporterEntry[] = [];
   labelImportersLoading = false;
-  selectedLabelImporter: LabelImporterInfo | null = null;
+  selectedLabelImporter: LabelImporterEntry | null = null;
   labelImporterValues: Record<string, string> = {};
   labelImporterFile: File | null = null;
   labelImporterFileFieldKey: string | null = null;
@@ -763,8 +755,8 @@ export class NewDetectorModalComponent implements OnInit {
     if (this.labelImporters.length > 0 || this.labelImportersLoading) return;
     this.labelImportersLoading = true;
     this.labelImportersApi.list().subscribe({
-      next: (list: any[]) => {
-        this.labelImporters = (list || []).filter((imp: LabelImporterInfo) => !imp.hidden_from_picker);
+      next: (list) => {
+        this.labelImporters = list.filter((imp) => !imp.hidden_from_picker);
         this.labelImportersLoading = false;
       },
       error: () => {
@@ -779,16 +771,22 @@ export class NewDetectorModalComponent implements OnInit {
     this.ensureLabelImportersLoaded();
   }
 
-  selectLabelImporter(importer: LabelImporterInfo): void {
+  /** Typed view of the selected label importer's plugin fields for the
+   *  template (the generated LabelImporterEntry types `fields` as an open
+   *  dict because plugin field schemas aren't part of the OpenAPI client). */
+  get selectedLabelImporterFields(): ImporterField[] {
+    return (this.selectedLabelImporter?.fields ?? []) as ImporterField[];
+  }
+
+  selectLabelImporter(importer: LabelImporterEntry): void {
     this.selectedLabelImporter = importer;
     this.labelImporterValues = {};
     this.labelImporterFile = null;
     this.labelImporterFileFieldKey = null;
     this.error = '';
-    if (importer.fields) {
-      for (const field of importer.fields) {
-        if (field.default) this.labelImporterValues[field.key] = field.default;
-      }
+    const fields = (importer.fields ?? []) as ImporterField[];
+    for (const field of fields) {
+      if (field.default) this.labelImporterValues[field.key] = field.default;
     }
     this.trainedView = 'form';
   }
