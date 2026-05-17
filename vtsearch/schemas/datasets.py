@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from marshmallow import Schema, ValidationError, fields, validate
 
+from vtsearch.schemas.file_browser import BrowseDirectoryEntrySchema, BrowseFileEntrySchema
+
 
 def _list_of_strings(value):
     """Validator: value must be a ``list`` whose every entry is a ``str``.
@@ -199,24 +201,19 @@ class BrowseMediaFilesQuerySchema(Schema):
     )
 
 
-class _BrowseDirectoryEntrySchema(Schema):
-    name = fields.String(required=True)
-    path = fields.String(required=True)
-    modified_at = fields.String(required=True)
-
-
-class _BrowseFileEntrySchema(Schema):
-    name = fields.String(required=True)
-    path = fields.String(required=True)
-    size_bytes = fields.Integer(required=True)
-    modified_at = fields.String(required=True)
-
-
 class BrowseMediaFilesResponseSchema(Schema):
-    """Response for ``GET /api/browse-media-files``."""
+    """Response for ``GET /api/browse-media-files``.
 
-    directories = fields.List(fields.Nested(_BrowseDirectoryEntrySchema), required=True)
-    files = fields.List(fields.Nested(_BrowseFileEntrySchema), required=True)
+    The directory- and file-entry shapes are identical to the ones
+    used by ``GET /api/browse`` (see ``vtsearch.schemas.file_browser``),
+    so reuse those nested schemas — registering distinct
+    ``_BrowseDirectoryEntry`` / ``_BrowseFileEntry`` schemas alongside
+    the public names made the generated TS client emit duplicate
+    identifiers (ng-openapi-gen strips the leading underscore).
+    """
+
+    directories = fields.List(fields.Nested(BrowseDirectoryEntrySchema), required=True)
+    files = fields.List(fields.Nested(BrowseFileEntrySchema), required=True)
     root_path = fields.String(required=True)
 
 

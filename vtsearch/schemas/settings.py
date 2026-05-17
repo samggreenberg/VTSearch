@@ -74,6 +74,12 @@ class AppSettingsSchema(Schema):
     max_concurrent_dataset_embeddings = fields.Integer()
     autorun_detectors = fields.List(fields.String())
 
+    # Per-user, ``{media_type_id: embedder_name}`` — the dataset-importer
+    # modal pre-selects the last embedder the user picked for each media
+    # type from this map when no loaded dataset is around to supply the
+    # same hint via ``guessedMediaEmbedder``.
+    last_embedder_per_media_type = _PerMediaTypeStringDict()
+
     class Meta:
         # Allow extra keys on dump so transitional fields (e.g.
         # ``settings_source`` config blobs, ``achievement_state``) flow
@@ -121,6 +127,8 @@ class SettingsUpdateSchema(Schema):
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()
+
+    last_embedder_per_media_type = fields.Raw()
 
     class Meta:
         # Reject keys we don't know — the frontend should never send
