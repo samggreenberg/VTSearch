@@ -1,6 +1,6 @@
 # Active-context switcher (top-bar dataset/detector pulldowns)
 
-*Status: Phase 1 shipped (core switching, "+ Add New" footers, incompatible-pair explainer). Phase 2 (URL-driven context) and Phase 3 (in-flight job affordances) deferred — see "Open follow-ups" below.*
+*Status: Phase 1 shipped (core switching, "+ Add New" footers, incompatible-pair explainer). Phase 1 follow-ups partially shipped (focus-other-pulldown button, auto-select new item, deleted-item toast, registry-error retry). Phase 2 (URL-driven context) and Phase 3 (in-flight job affordances) deferred — see "Open follow-ups" below.*
 
 This plan implements [ux-brainstorm.md §6.11](ux-brainstorm.md#611-active-datasetdetector-indicator--s) ("Active-dataset/detector indicator") and largely closes [§8.2](ux-brainstorm.md#82-switching-active-datasetdetector--s) ("Switching active dataset/detector"). It supersedes both entries as the canonical design — when this plan ships those entries will be marked SHIPPED and link here.
 
@@ -267,15 +267,22 @@ These came up in design and were deliberately deferred or rejected.
 - **`components/find-view`, `components/label-view`** — subscribe to `activeContext.pair$` and re-run their loads when the pair changes mid-route, so a pulldown click on `/label` or `/find` re-prepares against the new pair.
 - **Tests**: `./run-tests.sh` green (3615 passed, 1 skipped, 2 xpassed). Dashboard specs updated to drive `NewThingFlowsService` directly for the two affected cases.
 
+## Phase 1 follow-ups shipped
+
+A second pass picked up four of the seven open items from the initial follow-up list:
+
+- **Focus-other-pulldown affordance** — `vt-incompatible-pair-explainer` now renders a primary "Pick a compatible detector" / "Pick a dataset" button alongside `Go to Dashboard`. The button calls a new `PulldownControlService.requestOpen(kind)`, which `ContextPulldownComponent` subscribes to and uses to call `openMenu()` — auto-focusing the first compatible row and scrolling it into view. Default direction: for media-type mismatches, swap the detector (matches the design's "Pick a compatible detector" copy); for missing-half cases, focus the missing half.
+- **"Add New" footer auto-selects the new item** — the pulldown tracks an `awaitingNew` flag set when its own `addNew()` runs. Detector flow: subscribes to `NewThingFlowsService.created$` and switches on success. Dataset flow: subscribes to `importStarted$`, snapshots the current registry-id set, and switches when a new id appears via `datasets$`. Dashboard-initiated adds don't touch the pulldown's flag, so they remain a no-op for the pulldown. Modal-dismissal-without-success clears the flag so an unrelated later registry change can't false-trigger.
+- **Toast on active-item deletion** — new `ActiveContextWatcherService` (started by `AppComponent`) watches `combineLatest([pair$, datasets$, detectors$])`, remembers the last-seen name per active half, and when an active id disappears from a non-empty registry, clears that half via `setActivePair(...)` and emits a toast (`"Dataset 'Foo' was removed. Pick another from the top-bar pulldown."`). Idempotent `start()` and "only fires after the item has been seen at least once" guarantees protect against initial-load false positives.
+- **Empty-registry error retry** — `DatasetStateService` gained `error$` (BehaviorSubject<string | null>) and a `catchError` in the registry-fetch pipeline so a failed forkJoin no longer tears down the outer subscription. The pulldown renders an inline `"Couldn't load … Retry"` banner inside the dropdown when `error$` is set; the Retry button calls `refresh()`. Successful fetches clear the error.
+
+Drive-by: `settings-state.service.spec.ts` mockSettings.theme widened to `string` rather than the typed union, which broke the `Expected<AppSettings>` typecheck. Fixed with `as const`.
+
 ## Open follow-ups (Phase 1)
 
-These came out of Phase 1 build-out but were deliberately scoped out for the first cut; pick them up in a follow-on PR or fold them into Phase 2 / 3 work.
+Remaining from the original open list — picked up in a future PR or folded into Phase 2 / 3 work.
 
-- **Focus-other-pulldown affordance on the explainer** — the design called for a `[ Pick a compatible detector ]` button that opens the *other* pulldown with its menu open and scrolled to the first compatible row. Phase 1 only renders the `Go to Dashboard` button. Wiring this needs a shared "open this pulldown programmatically" signal (e.g. a method on `ContextPulldownComponent` driven via a shared service or `@ViewChild`).
 - **"Re-resolving labels for X's embedder…" progress message** — the design called for a custom progress message when the new dataset's embedder differs from the previous one. Phase 1 reuses the generic loading affordance; the message is just whatever the dataset-load progress tracker emits.
-- **Toast when the active item is deleted/unregistered** — design § "Edge cases" #3 says we should detect via subscription and clear that half via `setActivePair(..., '')` with a toast `"Dataset 'Foo' was removed. Pick another."`. Not implemented in Phase 1 — the pulldown will just stop showing the deleted item, but the active-context ids remain pointing at the dead entry until the user picks a new one.
-- **Empty-registry error affordance** — design § "Edge cases" #6 says the pulldown should show an inline `"Couldn't load datasets — retry?"` when the registry endpoint errors. Phase 1 just shows the empty state.
-- **"Add New" footer auto-selects the new item** — design says: on successful create, the pulldown listens to `created$` and `setActivePair(...)` with the new id in its half. Phase 1 wires the `created$` emit but the pulldown doesn't yet auto-select. (The Dashboard's auto-select-newly-added logic still fires for the Dashboard route.)
 - **Pulldown row order should mirror Dashboard grid sort** — design § Pulldown behavior says "mirror the Dashboard grid's order exactly." Phase 1 sorts by name (the Dashboard's default), but doesn't track the user's column-sort preference. Plumbing this would require sharing the `ManagedColumns` sort key out of `DashboardComponent`.
 - **`FindSessionService` deletion** — the plan notes this service "will likely be deletable once Phase 2 lands." Phase 1 still uses it (writes datasetId/modelId on pair change so `runFindLabel()` picks up the new pair). Defer the deletion to the Phase 2 URL refactor.
 
