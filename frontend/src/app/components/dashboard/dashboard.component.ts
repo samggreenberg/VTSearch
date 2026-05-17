@@ -29,6 +29,7 @@ import { LabelExporterModalComponent } from '../modals/label-exporter-modal/labe
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
+import { DiskUsageComponent, DiskUsageBytes } from './disk-usage/disk-usage.component';
 
 @Component({
   selector: 'vt-dashboard',
@@ -47,6 +48,7 @@ import { IconComponent } from '../icon/icon.component';
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
     IconComponent,
+    DiskUsageComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -180,7 +182,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   currentUser = '';
   isDefaultLogin = true;
 
-  diskUsage: { total: number; used: number; free: number } | null = null;
+  diskUsage: DiskUsageBytes | null = null;
 
   constructor(
     private router: Router,
@@ -268,28 +270,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .subscribe((usage) => {
         this.diskUsage = { total: usage.total, used: usage.used, free: usage.free };
       });
-  }
-
-  get diskUsedPct(): number {
-    if (!this.diskUsage || this.diskUsage.total <= 0) return 0;
-    return (this.diskUsage.used / this.diskUsage.total) * 100;
-  }
-
-  get diskFreeText(): string {
-    if (!this.diskUsage) return '';
-    return `${this.formatBytes(this.diskUsage.free)} free of ${this.formatBytes(this.diskUsage.total)}`;
-  }
-
-  private formatBytes(n: number): string {
-    if (n < 1024) return `${n} B`;
-    const units = ['KB', 'MB', 'GB', 'TB', 'PB'];
-    let v = n / 1024;
-    let i = 0;
-    while (v >= 1024 && i < units.length - 1) {
-      v /= 1024;
-      i++;
-    }
-    return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
   }
 
   /** Check for in-progress loading tasks (e.g. after a page reload) and start watching. */

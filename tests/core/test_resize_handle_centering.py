@@ -16,7 +16,7 @@ and offsets it by ``-6px`` so the 12px grab zone is symmetric across the
 divider, with the 2px visual indicator centered on top.
 
 If you are tempted to "tidy" the SCSS to remove the negative offset: don't.
-Read the comment in ``dashboard.component.scss`` first.
+Read the comment in ``_data-table.scss`` first.
 """
 
 from __future__ import annotations
@@ -27,13 +27,13 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-# Both dashboard tables (datagrid) and the shared importer-picker demo table
+# Both the dashboard datagrid and the shared importer-picker demo table
 # (used by both the Add Dataset and New Model > Browse Media modals) host
-# their own copies of the resize-handle rule.  The picker version lives in
-# the global ``_picker-shared.scss`` partial so the two modals don't have
-# duplicate scoped copies.
+# their own copies of the resize-handle rule.  The datagrid version lives
+# in ``_data-table.scss`` and the picker version in ``_picker-shared.scss``;
+# both are global partials so neither modal has a duplicate scoped copy.
 SCSS_FILES = [
-    REPO / "frontend/src/app/components/dashboard/dashboard.component.scss",
+    REPO / "frontend/src/scss/_data-table.scss",
     REPO / "frontend/src/scss/_picker-shared.scss",
 ]
 
