@@ -316,13 +316,6 @@ export interface CombineDetectorsResult {
   examples: { type: string; value: string }[];
 }
 
-// --- Processor Importers ---
-
-export interface ProcessorImporterInfo {
-  name: string;
-  [key: string]: unknown;
-}
-
 // --- Clippers ---
 
 export interface ClipperParameter {
