@@ -240,15 +240,22 @@ See `CLAUDE.md` for the complete group-to-file mapping.
   (~16 seconds each)
 - `gpu`: CUDA-only tests
 
-### Linting and formatting
+### Linting, formatting, and other quality tools
 
 ```bash
-ruff check .       # lint
-ruff format .      # format
+ruff check .                          # lint (default rules + flake8-bandit S)
+ruff format .                         # format
+codespell --toml pyproject.toml       # typo check
+python -m deptry .                    # unused / missing / transitive deps
+VTSEARCH_COVERAGE=1 ./run-tests.sh    # opt-in test coverage report
+vulture vtsearch/ .vulture-whitelist.py --min-confidence 80   # dead code audit
 ```
 
-Configuration is in `pyproject.toml` (E402 ignored, line-length 120,
-target Python 3.10).
+Configuration is in `pyproject.toml`. `pre-commit install` wires up
+ruff, codespell, and deptry as git hooks; the same checks plus
+`pip-audit` run on every push via the `Lint` and `Audit dependencies`
+workflows. See `docs/plans/python-quality-tools.md` for the rationale
+behind which security rules are enabled and which are ignored.
 
 ---
 

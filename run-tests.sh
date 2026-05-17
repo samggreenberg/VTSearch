@@ -43,6 +43,25 @@ if ! ruff format --check . ; then
     exit 1
 fi
 
+# codespell + deptry — same checks the lint workflow runs in CI. Cheap
+# locally and worth catching before pytest.
+echo "Running codespell..."
+if ! codespell --toml pyproject.toml ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: codespell found typos"
+    echo "============================================================"
+    exit 1
+fi
+echo "Running deptry..."
+if ! python -m deptry . ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: deptry found dependency issues"
+    echo "============================================================"
+    exit 1
+fi
+
 # Split arguments into groups and extra pytest args
 TEST_GROUPS=()
 EXTRA_ARGS=()
@@ -134,13 +153,21 @@ else
     done
 fi
 
+# Coverage is opt-in via VTSEARCH_COVERAGE=1 (or `--cov` as first arg).
+# Default off because tests already run in ~35s; coverage adds ~10-20%
+# overhead and the coverage report is most useful when explicitly asked for.
+COV_ARGS=()
+if [[ "${VTSEARCH_COVERAGE:-}" == "1" ]]; then
+    COV_ARGS=(--cov=vtsearch --cov-report=term-missing)
+fi
+
 # Run pytest with:
 #   --tb=short  — brief tracebacks (enough to diagnose, not overwhelming)
 #   --no-header — skip the platform/plugin header noise
 #   -q          — quiet mode (dots instead of full test names)
 #   -n auto     — parallel execution via pytest-xdist (one worker per CPU)
 if [[ -n "$MARKER_EXPR" ]]; then
-    python -m pytest tests/ -q --tb=short --no-header -n auto -m "$MARKER_EXPR" "${EXTRA_ARGS[@]}"
+    python -m pytest tests/ -q --tb=short --no-header -n auto -m "$MARKER_EXPR" "${COV_ARGS[@]}" "${EXTRA_ARGS[@]}"
 else
-    python -m pytest tests/ -q --tb=short --no-header -n auto "${EXTRA_ARGS[@]}"
+    python -m pytest tests/ -q --tb=short --no-header -n auto "${COV_ARGS[@]}" "${EXTRA_ARGS[@]}"
 fi

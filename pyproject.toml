@@ -1,12 +1,62 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "vtsearch"
 version = "0.1.0"
 requires-python = ">=3.10"
 description = "Media explorer for browsing and voting on audio, images, text, video, or documents"
 
-# All runtime dependencies live in requirements/base.txt (core) and per-plugin
-# requirements.txt files (auto-discovered by scripts/install-plugin-deps.sh).
-# This file is kept for editable installs (`pip install -e .`) and tool config.
+# Runtime dependencies. These mirror requirements/base.txt + the per-plugin
+# requirements.txt files so deptry can verify that every imported package is
+# declared. requirements/base.txt remains the install spec (pins,
+# --extra-index-url, plugin .txt fan-out); pyproject.toml is the source of
+# truth deptry reads from.
+dependencies = [
+    # Core framework
+    "flask",
+    "flask-smorest",
+    "marshmallow",
+    "pydantic>=2",
+    "gunicorn",
+    "werkzeug",
+    "numpy",
+    "requests",
+    "tqdm",
+    "scikit-learn",
+    "transformers",
+    "pandas",
+    "pyyaml",
+    "matplotlib",
+    "scipy",
+    "torch>=2.0.0",
+    # Plugin deps that are imported from the codebase
+    "sentence-transformers",
+    "dnspython>=2.0.0",
+    "PyMuPDF",
+    "librosa",
+    "soundfile",
+    "sentencepiece",
+    "protobuf",
+    "Pillow",
+    "ultralytics",
+    "opencv-python-headless",
+    "imageio-ffmpeg",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-xdist",
+    "pytest-cov",
+    "ruff",
+    "pre-commit",
+    "deptry",
+    "codespell",
+    "vulture",
+    "pip-audit",
+]
 
 [tool.setuptools.packages.find]
 include = ["vtsearch*"]
@@ -16,12 +66,97 @@ line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
-# E402: Module level import not at top of file
-ignore = ["E402"]
+# Default rules (E4, E7, E9, F) + flake8-bandit (S) security checks.
+# Stays conservative on style rules (E501 line-length etc. remain off)
+# while adding the security backstop.
+select = ["E4", "E7", "E9", "F", "S"]
+# E402: Module level import not at top of file.
+# S101 (assert): used for type narrowing where pyright needs help; the
+#   project never runs under `python -O`.
+# S104 (bind 0.0.0.0): intentional for `python app.py --host 0.0.0.0`,
+#   and tests/api/test_ssrf_validation.py uses the literal as a fixture.
+# S105 (hardcoded password): false-positive-prone on env-var name strings.
+# S110/S112 (silent except): used as best-effort fallbacks for optional
+#   imports, logging setup, and progress-tracker teardown.
+# S311 (non-crypto random): used for dataset splitting and shuffling.
+# S324 (md5/sha1): used as content fingerprints throughout the codebase,
+#   never for cryptographic purposes.
+ignore = ["E402", "S101", "S104", "S105", "S110", "S112", "S311", "S324"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use /tmp paths, pickle round-trips, and xml fixtures freely.
+"tests/**" = ["S108", "S301", "S314"]
+# safe_pickle_load is the centralized helper that calls pickle.load on
+# whitelisted bytes — flagging it would defeat the purpose of the wrapper.
+"vtsearch/security/pickle.py" = ["S301"]
+# Intentional `git` / `unrar` / `ffmpeg` invocations: arguments are
+# project-controlled paths, no shell expansion.
+"vtsearch/__init__.py" = ["S603", "S607"]
+"vtsearch/converters/video2audio.py" = ["S603"]
+"vtsearch/datasets/downloader/video.py" = ["S603", "S607"]
+"vtsearch/routes/media/list.py" = ["S603"]
+# Atom feed parsing for the arXiv text-dataset downloader.
+"vtsearch/datasets/downloader/text.py" = ["S314"]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.deptry]
+# scripts/ and tests/ pull in dev-only deps; data/ and frontend/ aren't Python.
+extend_exclude = [
+    "scripts",
+    "frontend",
+    "data",
+    "static",
+    "model_cache",
+]
+
+# Module name → distribution name. Deptry needs these when the importable
+# module differs from the PyPI package.
+[tool.deptry.package_module_name_map]
+"scikit-learn" = "sklearn"
+"opencv-python-headless" = "cv2"
+"PyMuPDF" = "fitz"
+"Pillow" = "PIL"
+"pyyaml" = "yaml"
+"dnspython" = "dns"
+"imageio-ffmpeg" = "imageio_ffmpeg"
+"flask-smorest" = "flask_smorest"
+"sentence-transformers" = "sentence_transformers"
+
+[tool.deptry.per_rule_ignores]
+# DEP001 — imported but not declared. These are optional / opportunistic
+# imports that the codebase guards with try/except or pyright ignores;
+# users opt in by installing the extra package.
+DEP001 = [
+    "paddleocr",
+    "rarfile",
+    "whisper",
+    "mediapipe",
+    "torchvision",
+    "safetensors",
+    "huggingface_hub",
+]
+# DEP002 — declared but not imported. Tools we run via their CLIs
+# (pytest, ruff, …), runtime helpers loaded by name (gunicorn), or
+# tokenizer dependencies pulled in transitively by transformers
+# (sentencepiece, protobuf) that are needed at runtime even though
+# our code never imports them directly.
+DEP002 = [
+    "pytest",
+    "pytest-xdist",
+    "pytest-cov",
+    "ruff",
+    "pre-commit",
+    "deptry",
+    "codespell",
+    "vulture",
+    "pip-audit",
+    "gunicorn",
+    "sentencepiece",
+    "protobuf",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -41,3 +176,28 @@ markers = [
     "converters: document and media converters",
 ]
 addopts = "-m 'not gpu and not slow'"
+
+[tool.coverage.run]
+source = ["vtsearch"]
+branch = true
+omit = [
+    "vtsearch/_version.txt",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.codespell]
+# Skip generated, binary, frontend node_modules, and serialized formats.
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,frontend/node_modules,data,static,model_cache,.git,*.ipynb,package-lock.json"
+# Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
+# extension scaffold names), legitimate code identifiers (numer/denom in
+# slope formulas, medias as the global state proxy, goup as a TS method),
+# and stylistic spellings the project uses consistently (re-use,
+# pre-select, unparseable, invokable).
+ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te"
