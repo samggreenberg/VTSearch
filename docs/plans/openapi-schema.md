@@ -663,6 +663,36 @@ checks off this follow-up.
       backend, always fell through to ``exp.name`` — was fixed to
       ``exp.display_name || exp.name`` to match the actual response
       shape.
+- [x] ``SettingsIoApiService`` rewired to the generated TS client. The
+      service now calls ``apiSettingsImportersGet`` /
+      ``apiSettingsExportersGet`` / ``apiSettingsExportersExportPost``
+      from ``generated/api-client/fn/settings-io/``; ``runExport``'s
+      response tightens from a local ``SettingsExportResponse`` to the
+      generated ``RunSettingsExportResponse``. The plugin-field
+      ``POST /api/settings-importers/import/<importer_name>`` route
+      stays on plain ``HttpClient.post`` (same pattern as
+      ``LabelImportersApiService.runImport``) — its body shape is
+      plugin-dependent and not described in the OpenAPI spec; the local
+      ``SettingsImportResponse`` interface stays in the service file for
+      the same reason (the spec types the route's response as just
+      ``Error``, but the backend actually returns
+      ``{success, message, keys?}``). The two consumers
+      (``settings-exporter-modal``, ``settings-importer-modal``)
+      replaced their local ``SettingsExporterInfo`` /
+      ``SettingsImporterInfo`` shim interfaces with
+      ``import type``-only ``SettingsExporterEntry`` /
+      ``SettingsImporterEntry`` from
+      ``generated/api-client/models/``; both modal templates now iterate
+      typed ``selectedExporterFields`` / ``selectedImporterFields``
+      getters (same Angular template-type-checker workaround as
+      ``export-modal``). With this migration ``settings-io`` no longer
+      imports ``ExporterInfo``, so the ``ExporterInfo`` interface was
+      deleted from ``frontend/src/app/models/api.models.ts`` (no
+      remaining consumers — ``settings-exporter-modal``'s local
+      ``SettingsExporterInfo`` was a separately-named shim, not a
+      reference). ``ImporterInfo`` stays because many other services
+      (label-importers, processor-importers, dataset-importer-modal,
+      etc.) still use it.
 
 ## Open follow-ups
 

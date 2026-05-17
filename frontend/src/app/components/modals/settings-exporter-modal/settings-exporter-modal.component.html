@@ -29,8 +29,8 @@
     <div class="exporter-form">
       <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to exporter list">&larr; Back</button>
 
-      @if (selectedExporter.fields && selectedExporter.fields.length > 0) {
-        @for (field of selectedExporter.fields; track field.key) {
+      @if (selectedExporterFields.length > 0) {
+        @for (field of selectedExporterFields; track field.key) {
           <div class="form-group">
             <label class="form-label" [for]="'sef-' + field.key">
               {{ field.label || field.key }}

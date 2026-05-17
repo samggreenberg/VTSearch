@@ -367,19 +367,6 @@ export interface AutoDetectResponse {
   [key: string]: unknown;
 }
 
-// --- Exporters ---
-
-export interface ExporterInfo {
-  name: string;
-  display_name?: string;
-  description?: string;
-  icon?: string;
-  fields?: ImporterField[];
-  ui_mode?: string;
-  hidden_from_picker?: boolean;
-  [key: string]: unknown;
-}
-
 // --- Detectors ---
 
 export interface Detector {

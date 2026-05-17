@@ -4,18 +4,10 @@ import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
 import { IconComponent } from '../../icon/icon.component';
-import { SettingsIoApiService, SettingsExportResponse } from '../../../services/settings-io-api.service';
+import { SettingsIoApiService } from '../../../services/settings-io-api.service';
 import { ImporterField } from '../../../models/api.models';
-
-interface SettingsExporterInfo {
-  name: string;
-  display_name?: string;
-  description?: string;
-  icon?: string;
-  fields?: ImporterField[];
-  ui_mode?: string;
-  hidden_from_picker?: boolean;
-}
+import type { SettingsExporterEntry } from '../../../generated/api-client/models/settings-exporter-entry';
+import type { RunSettingsExportResponse } from '../../../generated/api-client/models/run-settings-export-response';
 
 type ModalView = 'picker' | 'form';
 
@@ -31,9 +23,9 @@ export class SettingsExporterModalComponent implements OnInit {
   @Output() exported = new EventEmitter<void>();
 
   view: ModalView = 'picker';
-  exporters: SettingsExporterInfo[] = [];
+  exporters: SettingsExporterEntry[] = [];
   loading = true;
-  selectedExporter: SettingsExporterInfo | null = null;
+  selectedExporter: SettingsExporterEntry | null = null;
   formValues: Record<string, string> = {};
   submitting = false;
   error = '';
@@ -48,9 +40,16 @@ export class SettingsExporterModalComponent implements OnInit {
     return 'Export Settings';
   }
 
+  /** Typed view of the selected exporter's plugin fields for the template
+   *  (the generated SettingsExporterEntry types `fields` as an open dict
+   *  because plugin field schemas aren't part of the OpenAPI client). */
+  get selectedExporterFields(): ImporterField[] {
+    return (this.selectedExporter?.fields ?? []) as ImporterField[];
+  }
+
   ngOnInit(): void {
     this.settingsIoApi.listExporters().subscribe({
-      next: (list: SettingsExporterInfo[]) => {
+      next: (list) => {
         this.exporters = list.filter((exp) => !exp.hidden_from_picker);
         this.loading = false;
       },
@@ -61,18 +60,17 @@ export class SettingsExporterModalComponent implements OnInit {
     });
   }
 
-  selectExporter(exporter: SettingsExporterInfo): void {
+  selectExporter(exporter: SettingsExporterEntry): void {
     this.selectedExporter = exporter;
     this.formValues = {};
     this.error = '';
     this.successMessage = '';
-    if (exporter.fields) {
-      for (const field of exporter.fields) {
-        if (field.default) this.formValues[field.key] = field.default;
-      }
+    const fields = (exporter.fields ?? []) as ImporterField[];
+    for (const field of fields) {
+      if (field.default) this.formValues[field.key] = field.default;
     }
     // If the exporter has no fields, submit immediately
-    if (!exporter.fields || exporter.fields.length === 0) {
+    if (fields.length === 0) {
       this.view = 'form';
       this.submit();
     } else {
@@ -94,7 +92,7 @@ export class SettingsExporterModalComponent implements OnInit {
     this.successMessage = '';
 
     this.settingsIoApi.runExport(this.selectedExporter.name, this.formValues).subscribe({
-      next: (res: SettingsExportResponse) => {
+      next: (res: RunSettingsExportResponse) => {
         this.submitting = false;
 
         // Handle browser download response
