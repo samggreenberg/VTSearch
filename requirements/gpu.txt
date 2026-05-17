@@ -1,29 +1,9 @@
-# VTSearch — GPU dependencies
+# VTSearch — GPU dependencies (CUDA)
 #
-# Not used directly — scripts/install-gpu.sh handles the CUDA version
-# selection and pre-installs binary wheels to avoid source builds.
-# This file exists for reference and for Dockerfiles.
+# Used by docker/Dockerfile.gpu (which pins cu121 at install time) and
+# scripts/install-gpu.sh (which passes the chosen CUDA tag's
+# --extra-index-url on the pip command line). Like requirements/base.txt
+# this forwards to pyproject.toml — `[project.dependencies]` plus the
+# `dev` extra.
 
-# ── Core framework ───────────────────────────────────────────────────
-flask
-gunicorn
-numpy
-requests
-tqdm
-scikit-learn
-transformers
-pandas
-
-# ── Eval / visualization ────────────────────────────────────────────
-matplotlib
-scipy
-
-# ── PyTorch (GPU — CUDA version set via --extra-index-url at install time)
-torch>=2.0.0
-
-# ── Dev tools ────────────────────────────────────────────────────────
-pytest
-ruff
-
-# ── Plugin dependencies (auto-discovered) ────────────────────────────
--r plugins.txt
+-e .[dev]

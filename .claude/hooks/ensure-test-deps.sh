@@ -29,16 +29,11 @@ pip install --upgrade setuptools -q
 # uninstall it).  Force-installing a fresh copy lets Flask pick it up.
 pip install --ignore-installed blinker -q
 
-# Regenerate requirements/plugins.txt from discovered plugin files.
-bash "$REPO_DIR/scripts/install-plugin-deps.sh" --dry-run
-
-# Install all dependencies (core + plugins) with CPU PyTorch.
+# Install all dependencies + editable install via pyproject.toml
+# (requirements/base.txt is just `-e .[dev]`).
 pip install --prefer-binary \
   -r "$REPO_DIR/requirements/base.txt" \
   -q
-
-# Editable install so 'import vtsearch' works.
-pip install --no-deps -e "$REPO_DIR" -q
 
 # Install frontend (Angular) dependencies.
 # Re-run npm install whenever package-lock.json is newer than node_modules,

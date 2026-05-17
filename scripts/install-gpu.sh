@@ -29,17 +29,12 @@ pip install --only-binary :all: \
   "scipy" \
   -q
 
-# Step 2: Regenerate requirements/plugins.txt from discovered plugin files.
-bash "$SCRIPT_DIR/install-plugin-deps.sh" --dry-run
-
-# Step 3: Install all dependencies (core + plugins) with GPU PyTorch.
+# Step 2: Install runtime + dev deps and the vtsearch package (editable)
+# via pyproject.toml. requirements/gpu.txt is just `-e .[dev]`.
 echo "Installing all dependencies..."
 pip install --extra-index-url "$EXTRA_INDEX" \
   --prefer-binary \
   -r "$REPO_ROOT/requirements/gpu.txt" \
   -q
-
-# Step 4: Editable install so 'import vtsearch' works.
-pip install --no-deps -e "$REPO_ROOT" -q
 
 echo "GPU dependencies installed successfully."

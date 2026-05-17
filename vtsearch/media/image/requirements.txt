@@ -1,2 +1,0 @@
-# Image media type — shared dependencies
-Pillow

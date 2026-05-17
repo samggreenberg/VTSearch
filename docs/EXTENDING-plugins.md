@@ -520,9 +520,10 @@ your `run()` expects non-string values (e.g. FileStorage objects).
 
 ### Wiring up dependencies
 
-Add any extra packages to a `requirements.txt` inside the plugin directory,
-then run `bash scripts/install-plugin-deps.sh` to regenerate the dependency
-tree. The next `pip install -r requirements/base.txt` will pick them up.
+Add any extra packages to `[project.dependencies]` in the repo's
+`pyproject.toml` — that's the single source of truth and deptry verifies
+every import is declared there. They are picked up the next time you run
+`bash scripts/install-cpu.sh` (or any editable install).
 
 ### Multi-media imports
 
@@ -806,9 +807,10 @@ endpoints:
 
 ### Wiring up dependencies
 
-Add any extra packages to a `requirements.txt` inside the plugin directory,
-then run `bash scripts/install-plugin-deps.sh` to regenerate the dependency
-tree. The next `pip install -r requirements/base.txt` will pick them up.
+Add any extra packages to `[project.dependencies]` in the repo's
+`pyproject.toml` — that's the single source of truth and deptry verifies
+every import is declared there. They are picked up the next time you run
+`bash scripts/install-cpu.sh` (or any editable install).
 
 ---
 

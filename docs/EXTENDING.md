@@ -20,8 +20,8 @@ discovery/registration works, and includes a complete example.
 
 - [Authentication Providers](#authentication-providers) — pluggable
   `LoginProvider` ABC
-- [Dependency Management](#dependency-management) — per-plugin
-  `requirements.txt` files and `scripts/install-plugin-deps.sh`
+- [Dependency Management](#dependency-management) — pyproject.toml as
+  the single source of truth, with deptry guarding drift
 - [Quick Reference: Checklist for Each Extension Type](#quick-reference-checklist-for-each-extension-type) —
   one checklist per extension family
 
@@ -90,31 +90,32 @@ isolation yet.
 
 ## Dependency Management
 
-Runtime dependencies are managed via **per-plugin `requirements.txt`
-files**, auto-discovered by `scripts/install-plugin-deps.sh`. Each plugin
-sub-package (media type, importer, exporter, etc.) can include its own
-`requirements.txt` in its directory.
+Runtime dependencies are declared in **`pyproject.toml`** under
+`[project.dependencies]` — that's the single source of truth, and deptry
+(wired into `lint.yml` and the pre-commit hook) verifies that every
+imported package is declared there. Dev tools (pytest, ruff,
+pre-commit, etc.) live under `[project.optional-dependencies].dev`.
 
 ```
-vtsearch/media/image/requirements.txt     # Pillow, ultralytics, …
-vtsearch/media/audio/requirements.txt     # librosa, soundfile, …
-vtsearch/exporters/webhook/requirements.txt
+pyproject.toml                       # [project.dependencies] + [project.optional-dependencies].dev
+requirements/base.txt                # `--extra-index-url <cpu wheel index>` + `-e .[dev]`
+requirements/gpu.txt                 # `-e .[dev]` (install-gpu.sh / Dockerfile.gpu set --extra-index-url)
+requirements/labbench.txt            # Standalone curated list for Dockerfile.labbench (image+SigLIP only)
+requirements/image-embedders*.txt    # Standalone curated lists for Dockerfile.image-embedders[.gpu]
 ```
 
-Running `bash scripts/install-plugin-deps.sh` regenerates
-`requirements/plugins.txt` with `-r` references to each plugin's file.
-The top-level `requirements/base.txt` includes this, so `pip install -r
-requirements/base.txt` installs everything.
-
-`pyproject.toml` is kept minimal — only `cpu`/`gpu` (for choosing the
-right PyTorch build) and `dev` (for test/lint tools) live there.
+The labbench / image-embedders requirements files are deliberately
+standalone (they pin a minimal subset for size-constrained Docker
+images) and do **not** flow through pyproject.
 
 ### For a new media type, importer, or exporter
 
-Add a `requirements.txt` inside your plugin's directory, then run
-`bash scripts/install-plugin-deps.sh` to regenerate the dependency tree.
+Add the extra packages to `[project.dependencies]` in `pyproject.toml`
+(or to `[project.optional-dependencies].dev` if they're test/lint-only),
+then re-run `bash scripts/install-cpu.sh` (or any editable install).
 Failed imports of a plugin's sub-package emit a warning rather than
-crashing, so missing dependencies degrade gracefully.
+crashing, so missing dependencies degrade gracefully — but deptry will
+flag any imported package missing from pyproject the next time CI runs.
 
 ---
 
@@ -130,7 +131,7 @@ See [EXTENDING-plugins.md § Adding a Data Importer](EXTENDING-plugins.md#adding
 - [ ] Subclass `DatasetImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values, medias, thin=False)` — populate `medias` in-place
 - [ ] Expose `IMPORTER = YourImporter()` at module level
-- [ ] Add a `requirements.txt` in the plugin directory and run `bash scripts/install-plugin-deps.sh`
+- [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/dataset/all-importers` includes your importer
 
 ### New Results Exporter Checklist
@@ -141,7 +142,7 @@ See [EXTENDING-plugins.md § Adding a Results Exporter](EXTENDING-plugins.md#add
 - [ ] Subclass `LabelsetExporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `export(self, results, field_values)` — return a dict with a `"message"` key
 - [ ] Expose `EXPORTER = YourExporter()` at module level
-- [ ] Add a `requirements.txt` in the plugin directory and run `bash scripts/install-plugin-deps.sh`
+- [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/exporters` includes your exporter
 
 ### New Label Importer Checklist
@@ -152,7 +153,7 @@ See [EXTENDING-plugins.md § Adding a Label Importer](EXTENDING-plugins.md#addin
 - [ ] Subclass `LabelImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values)` — return a list of `{"md5": ..., "label": ...}` dicts
 - [ ] Expose `LABEL_IMPORTER = YourImporter()` at module level
-- [ ] Add a `requirements.txt` in the plugin directory and run `bash scripts/install-plugin-deps.sh`
+- [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/label-importers` includes your importer
 
 ### New Processor Importer Checklist
@@ -163,7 +164,7 @@ See [EXTENDING-plugins.md § Adding a Processor Importer](EXTENDING-plugins.md#a
 - [ ] Subclass `ProcessorImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values)` — return a dict with `media_type`, `weights`, `threshold`
 - [ ] Expose `PROCESSOR_IMPORTER = YourImporter()` at module level
-- [ ] Add a `requirements.txt` in the plugin directory and run `bash scripts/install-plugin-deps.sh`
+- [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/processor-importers` includes your importer
 
 ### New Settings Source Checklist
@@ -175,7 +176,7 @@ See [EXTENDING-plugins.md § Adding a Settings Source](EXTENDING-plugins.md#addi
 - [ ] Implement `load(self, field_values)` — return a settings dict
 - [ ] Implement `save(self, settings_data, field_values)` — persist settings
 - [ ] Expose `SETTINGS_SOURCE = YourSource()` at module level
-- [ ] Add a `requirements.txt` in the plugin directory and run `bash scripts/install-plugin-deps.sh`
+- [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/settings-sources` includes your source
 
 ### New Labelset Source Checklist
@@ -187,7 +188,7 @@ See [EXTENDING-plugins.md § Adding a Labelset Source](EXTENDING-plugins.md#addi
 - [ ] Implement `load(self, field_values)` — return a list of label dicts
 - [ ] Implement `save(self, labelset, field_values)` — persist a `LabelSet`
 - [ ] Expose `LABELSET_SOURCE = YourSource()` at module level
-- [ ] Add a `requirements.txt` in the plugin directory and run `bash scripts/install-plugin-deps.sh`
+- [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/labelset-sources` includes your source
 
 ### New Settings Importer Checklist
@@ -227,7 +228,7 @@ See [EXTENDING-media.md § Adding a Media Type](EXTENDING-media.md#adding-a-medi
 - [ ] Create `vtsearch/media/<type>/` directory with `__init__.py`, `media_type.py`
 - [ ] Subclass `MediaType` and implement all abstract properties and methods
 - [ ] Expose `MEDIA_TYPE` and `CLIPPERS` sentinels in `__init__.py` (embedders are discovered per-module — see the embedder checklist below)
-- [ ] Add a `requirements.txt` in the plugin directory and run `bash scripts/install-plugin-deps.sh`
+- [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Override `pickle_extra_fields` if you use custom clip keys
 - [ ] Test: import a folder of your media type, verify clips appear and are sortable
 

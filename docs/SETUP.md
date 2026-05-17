@@ -146,7 +146,13 @@ When activated, you'll see `(venv)` at the start of your terminal prompt.
 
 ## Installing dependencies
 
-All dependencies live in `requirements.txt` files under `requirements/` (core, GPU, image-embedders, labbench, plugins). Each plugin (media type, importer, exporter) has its own `requirements.txt` in its directory. A script auto-discovers them all into a cascading tree (`requirements/plugins.txt`).
+Runtime + dev dependencies are declared in `pyproject.toml` (under
+`[project.dependencies]` and `[project.optional-dependencies].dev`).
+`requirements/base.txt` and `requirements/gpu.txt` just forward to it via
+`-e .[dev]`, so pyproject is the single source of truth and deptry
+catches any drift. The labbench / image-embedders requirements files
+under `requirements/` are deliberately standalone — they pin a minimal
+subset for size-constrained Docker images.
 
 **For CPU only** (recommended if you don't have a compatible GPU):
 
@@ -162,9 +168,13 @@ bash scripts/install-gpu.sh cu121    # for CUDA 12.1
 bash scripts/install-gpu.sh cu124    # for CUDA 12.4
 ```
 
-Both scripts are all-in-one — they run `scripts/install-plugin-deps.sh` automatically, install all dependencies, and do the editable install. No extra steps needed.
+Both scripts run `pip install -r requirements/{base,gpu}.txt`, which
+installs every runtime + dev dep and editable-installs the `vtsearch`
+package itself.
 
-The CPU `requirements/base.txt` includes `--extra-index-url` for the smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA build (~2 GB).
+The CPU `requirements/base.txt` includes `--extra-index-url` for the
+smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA
+build (~2 GB).
 
 ## Building the frontend
 

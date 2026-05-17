@@ -1,43 +1,12 @@
-# VTSearch — core dependencies
+# VTSearch — core dependencies for local development (CPU)
 #
 # Install:  pip install -r requirements/base.txt
 #
-# This file pulls in all core libraries, CPU PyTorch, dev tools,
-# and every plugin's own requirements.txt (auto-discovered).
+# This file forwards to the project metadata: runtime dependencies live in
+# `[project.dependencies]` and dev tools in `[project.optional-dependencies].dev`
+# in pyproject.toml. That makes pyproject.toml the single source of truth and
+# lets deptry catch drift from either side. The --extra-index-url pulls the
+# CPU-only torch wheel (~200 MB) instead of the default CUDA build (~2 GB).
 
-# ── Core framework ───────────────────────────────────────────────────
-flask
-flask-smorest
-marshmallow
-pydantic>=2
-gunicorn
-numpy
-requests
-tqdm
-scikit-learn
-transformers
-pandas
-pyyaml
-
-# ── Eval / visualization ────────────────────────────────────────────
-matplotlib
-scipy
-
-# ── PyTorch (CPU) ────────────────────────────────────────────────────
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch>=2.0.0
-
-# ── Dev tools ────────────────────────────────────────────────────────
-pytest
-pytest-xdist
-pytest-cov
-ruff
-pre-commit
-codespell
-deptry
-vulture
-pip-audit
-
-# ── Plugin dependencies (auto-discovered) ────────────────────────────
-# Regenerate with:  bash scripts/install-plugin-deps.sh
--r plugins.txt
+-e .[dev]

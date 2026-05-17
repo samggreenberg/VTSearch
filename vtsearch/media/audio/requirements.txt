@@ -1,2 +1,0 @@
-# Audio media type — shared dependencies
-librosa

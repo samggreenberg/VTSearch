@@ -1,6 +1,0 @@
-# Folder importer dependencies.
-# librosa (audio), opencv-python-headless (video), and Pillow (images) are
-# already listed in the core requirements files.
-
-# PDF page rendering (used when importing images from a folder containing PDFs)
-pymupdf
