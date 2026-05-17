@@ -7,8 +7,7 @@ import { DatasetRegistryEntry, DetectorRegistryEntry } from '../models/api.model
  * compatible when both halves are present and their media types match.
  *
  * Centralised so future generalisations (multi-media-type detectors,
- * embedder-family checks) have a single edit point. See
- * `docs/plans/active-context-switcher.md` § Compatibility predicate.
+ * embedder-family checks) have a single edit point.
  */
 export function isPairCompatible(
   dataset: DatasetRegistryEntry | null | undefined,

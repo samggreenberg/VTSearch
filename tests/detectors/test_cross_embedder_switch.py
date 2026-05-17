@@ -3,7 +3,7 @@
 When the active dataset changes and the new dataset's embedder differs from
 the one the loaded detector's label vectors were built with, mixing the two
 into a single MLP produces garbage. These tests guard the two halves of the
-fix recorded in ``docs/plans/active-context-switcher.md``:
+fix:
 
 1. ``populate_label_embeddings`` invalidates ``det_ctx.label_embeddings`` and
    re-stamps ``det_ctx.embedder`` when the active dataset's embedder differs

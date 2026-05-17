@@ -36,8 +36,6 @@ export interface DemoSelectedEvent {
  * The modal components themselves are rendered as siblings of the
  * router-outlet in `AppComponent` and bind to the state subjects on
  * this service.
- *
- * See `docs/plans/active-context-switcher.md` § "Add-new footer flow".
  */
 @Injectable({ providedIn: 'root' })
 export class NewThingFlowsService {

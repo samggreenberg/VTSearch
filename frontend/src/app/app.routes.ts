@@ -7,8 +7,6 @@ import { activeContextGuard } from './guards/active-context.guard';
  * carry the pair correctly. The bare `/label` and `/find` paths are
  * legacy redirects — they have no pair to encode and would land on a
  * broken view, so we bounce them back to the Dashboard.
- *
- * See `docs/plans/active-context-switcher.md` § Phase 2.
  */
 export const routes: Routes = [
   {

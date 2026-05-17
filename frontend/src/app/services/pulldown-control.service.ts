@@ -15,8 +15,7 @@ type PulldownKind = 'dataset' | 'detector';
  *
  * Kept intentionally tiny — no state, no behaviour beyond signal
  * dispatch — so it's safe to inject anywhere without coupling to
- * pulldown internals. See `docs/plans/active-context-switcher.md` §
- * "Open follow-ups (Phase 1)" — focus-other-pulldown affordance.
+ * pulldown internals.
  */
 @Injectable({ providedIn: 'root' })
 export class PulldownControlService {

@@ -71,9 +71,6 @@ export const DETECTOR_COL_META: Record<string, ColMeta> = {
  * (datasets, detectors). Lifting them out of `DashboardComponent` lets
  * the top-bar context pulldowns mirror the Dashboard's column sort
  * without coupling to the Dashboard component.
- *
- * See `docs/plans/active-context-switcher.md` § "Open follow-ups
- * (Phase 1)" — Pulldown row order should mirror Dashboard grid sort.
  */
 @Injectable({ providedIn: 'root' })
 export class DashboardColumnsService {

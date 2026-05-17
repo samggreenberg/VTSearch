@@ -31,11 +31,9 @@ interface ActiveSwitch {
  * each invocation with a monotonic request id. When a prep step
  * completes, the captured id is compared with the current id and the
  * result is discarded if they differ. The previous load's HTTP request
- * is also cancelled when possible. See
- * `docs/plans/active-context-switcher.md` § "Cancel-and-replace on
- * rapid re-click".
+ * is also cancelled when possible.
  *
- * Phase 2 added two entry points:
+ * Two entry points:
  *
  *  - `switchTo(ds, det)` — called by the top-bar pulldowns. When the
  *    user is on `/label/:ds/:det` or `/find/:ds/:det`, it navigates to
