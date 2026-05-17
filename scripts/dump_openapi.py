@@ -42,6 +42,15 @@ def main() -> int:
         sys.stdout = real_stdout
 
     spec = api.spec.to_dict()
+
+    # ``info.version`` is the HEAD commit's UTC timestamp (see
+    # ``vtsearch/__init__.py``), which changes on every rebase. Pin it to
+    # a fixed sentinel before writing so the snapshot reflects API
+    # surface only — the live ``/api/openapi.json`` still serves the
+    # real per-process version, but the diff guard wouldn't survive
+    # rebases otherwise.
+    spec.setdefault("info", {})["version"] = "snapshot"
+
     json.dump(spec, sys.stdout, indent=2, sort_keys=True)
     sys.stdout.write("\n")
     return 0

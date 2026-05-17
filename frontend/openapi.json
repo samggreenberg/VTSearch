@@ -4389,7 +4389,7 @@
   },
   "info": {
     "title": "VTSearch API",
-    "version": "2026-05-16T23:09:32Z"
+    "version": "snapshot"
   },
   "openapi": "3.0.3",
   "paths": {
