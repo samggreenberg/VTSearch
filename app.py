@@ -52,6 +52,7 @@ from vtsearch.routes import (  # noqa: E402
     events_bp,
     file_browser_bp,
     health_bp,
+    jobs_bp,
     labels_bp,
     media_server_bp,
     medias_bp,
@@ -341,6 +342,7 @@ api.register_blueprint(auth_bp)
 api.register_blueprint(eval_bp)
 api.register_blueprint(file_browser_bp)
 api.register_blueprint(health_bp)
+api.register_blueprint(jobs_bp)
 api.register_blueprint(labels_bp)
 api.register_blueprint(media_server_bp)
 api.register_blueprint(main_bp)

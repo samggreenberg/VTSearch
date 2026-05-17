@@ -8,6 +8,7 @@ import { ContextSwitchService } from '../../services/context-switch.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { PulldownControlService } from '../../services/pulldown-control.service';
 import { DashboardColumnsService } from '../../services/dashboard-columns.service';
+import { RunningJobsService, pairKey } from '../../services/running-jobs.service';
 import { SortState } from '../../utils/managed-columns';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.models';
 import { isPairCompatible } from '../../utils/context-compat';
@@ -22,6 +23,13 @@ interface PulldownRow {
   active: boolean;
   compatibleWithOther: boolean;
   incompatReason: string;
+  /** True if this row's id paired with the other half's *active* id has a
+   *  running or pending JobManager job. Drives the spinner glyph — see
+   *  Phase 3 of the active-context-switcher plan. */
+  busy: boolean;
+  /** Logical job-type names contributing to ``busy`` (``"learned-sort"``,
+   *  ``"eval"``, …). Used for the spinner's tooltip. */
+  busyJobTypes: string[];
 }
 
 /**
@@ -76,6 +84,11 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
    *  in sync via a subscription in `ngOnInit`. */
   private sortState: SortState = { column: 'name', asc: true };
 
+  /** Latest snapshot from `RunningJobsService.busyPairs$`. Re-read on every
+   *  rebuild so a busy-pair tick re-renders the spinner glyph without
+   *  needing a separate per-row subscription. */
+  private busyPairs: Map<string, string[]> = new Map();
+
   constructor(
     private host: ElementRef<HTMLElement>,
     private datasetState: DatasetStateService,
@@ -84,6 +97,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     private newThingFlows: NewThingFlowsService,
     private pulldownControl: PulldownControlService,
     private dashboardColumns: DashboardColumnsService,
+    private runningJobs: RunningJobsService,
   ) {}
 
   ngOnInit(): void {
@@ -138,6 +152,15 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       : this.dashboardColumns.detectorCols.sortState$;
     sortState$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
       this.sortState = state;
+      this.rebuildRows();
+    });
+
+    // Subscribe to the running-jobs poller so a job starting on another
+    // pair lights up the spinner glyph here. The service polls lazily —
+    // it only fires HTTP traffic while at least one component is
+    // subscribed.
+    this.runningJobs.busyPairs$.pipe(takeUntil(this.destroy$)).subscribe((pairs) => {
+      this.busyPairs = pairs;
       this.rebuildRows();
     });
 
@@ -404,6 +427,12 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     if (!compatible && activeDetector) {
       reason = `Active detector "${activeDetector.name}" works on ${activeDetector.media_type}; this dataset is ${dataset.media_type}.`;
     }
+    // Per-pair busy check: a dataset row shows the spinner when paired
+    // with the currently-active detector half has a running job. We
+    // never show a spinner on a row whose "other half" is empty — there
+    // is no real pair to attach work to.
+    const otherId = activeDetector?.id || '';
+    const busyJobTypes = otherId ? this.busyPairs.get(pairKey(dataset.id, otherId)) || [] : [];
     return {
       id: dataset.id,
       name: dataset.name,
@@ -412,6 +441,8 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       active: dataset.id === activeId,
       compatibleWithOther: compatible,
       incompatReason: reason,
+      busy: busyJobTypes.length > 0,
+      busyJobTypes,
     };
   }
 
@@ -427,6 +458,8 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     if (!compatible && activeDataset) {
       reason = `This detector embeds ${detector.media_type}; active dataset "${activeDataset.name}" is ${activeDataset.media_type}.`;
     }
+    const otherId = activeDataset?.id || '';
+    const busyJobTypes = otherId ? this.busyPairs.get(pairKey(otherId, detector.id)) || [] : [];
     return {
       id: detector.id,
       name: detector.name,
@@ -435,6 +468,18 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       active: detector.id === activeId,
       compatibleWithOther: compatible,
       incompatReason: reason,
+      busy: busyJobTypes.length > 0,
+      busyJobTypes,
     };
+  }
+
+  busyTitle(row: PulldownRow): string {
+    if (!row.busy) return '';
+    const labels: Record<string, string> = {
+      'learned-sort': 'Learned sort',
+      eval: 'Eval indicator',
+    };
+    const names = row.busyJobTypes.map((t) => labels[t] || t).join(', ');
+    return `${names} running on this pair`;
   }
 }

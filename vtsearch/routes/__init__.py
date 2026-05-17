@@ -21,6 +21,7 @@ from vtsearch.routes.eval import eval_bp
 from vtsearch.routes.events import events_bp
 from vtsearch.routes.file_browser import file_browser_bp
 from vtsearch.routes.health import health_bp
+from vtsearch.routes.jobs import jobs_bp
 from vtsearch.routes.labels import exporters_bp, label_importers_bp, labels_bp
 from vtsearch.routes.main import main_bp
 from vtsearch.routes.media import embed_bp, media_server_bp, medias_bp
@@ -48,6 +49,7 @@ __all__ = [
     "exporters_bp",
     "file_browser_bp",
     "health_bp",
+    "jobs_bp",
     "label_importers_bp",
     "labels_bp",
     "main_bp",

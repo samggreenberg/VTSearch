@@ -211,7 +211,12 @@ def eval_train_and_score(body: dict):
             set_thread_dataset_context(None)
             set_thread_detector_context(None)
 
-    job = eval_jobs.start(signature, _run)
+    job = eval_jobs.start(
+        signature,
+        _run,
+        dataset_id=ds_ctx.dataset_id,
+        detector_id=det_ctx.detector_id,
+    )
 
     if wait:
         job.done_event.wait(timeout=300)
