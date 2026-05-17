@@ -65,8 +65,8 @@
     <div class="importer-form">
       <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to importer list">&larr; Back</button>
 
-      @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
-        @for (field of selectedImporter.fields; track field.key) {
+      @if (selectedImporterFields.length > 0) {
+        @for (field of selectedImporterFields; track field.key) {
           <div class="form-group">
             <label class="form-label" [for]="'lif-' + field.key">
               {{ field.label || field.key }}

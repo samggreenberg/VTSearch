@@ -693,6 +693,29 @@ checks off this follow-up.
       reference). ``ImporterInfo`` stays because many other services
       (label-importers, processor-importers, dataset-importer-modal,
       etc.) still use it.
+- [x] ``LabelImportersApiService`` rewired to the generated TS client.
+      The service now calls ``apiLabelImportersGet`` /
+      ``apiLabelImportersIngestMissingPost`` from
+      ``generated/api-client/fn/label-importers/``; ``ingestMissing``'s
+      response tightens to the generated ``IngestMissingResponse``. The
+      two plugin-field routes (``runImport`` →
+      ``POST /api/label-importers/import/<importer_name>``,
+      ``runModelImport`` →
+      ``POST /api/detectors/<name>/import-labels/<importer_name>``)
+      stay on plain ``HttpClient.post`` — their body shapes are
+      plugin-dependent and not described in the OpenAPI spec, same
+      pattern as ``SettingsIoApiService.runImport``. The two consumers
+      (``label-importer-modal``,
+      ``new-detector-modal``) replaced their local
+      ``LabelImporterInfo`` shim interfaces with ``import type``-only
+      ``LabelImporterEntry`` from
+      ``generated/api-client/models/label-importer-entry``; both modal
+      templates now iterate typed ``selectedImporterFields`` /
+      ``selectedLabelImporterFields`` getters (same Angular
+      template-type-checker workaround as ``export-modal`` /
+      ``settings-importer-modal``). The ``LabelImporterInfo`` interface
+      was deleted from ``frontend/src/app/models/api.models.ts`` — no
+      remaining consumers.
 
 ## Open follow-ups
 
