@@ -177,6 +177,26 @@
     color: var(--text-dim);
     font-size: var(--font-xs);
   }
+
+  // Spinner glyph that appears at the right edge of a row whose pair
+  // (this row's id + the active id on the other half) has a running or
+  // pending JobManager job. The spinner is per-pair, not per-half —
+  // see docs/plans/active-context-switcher.md § Phase 3.
+  .row-spinner {
+    flex: 0 0 auto;
+    color: var(--accent);
+    font-family: monospace;
+    line-height: 1;
+    // Inline-block keeps the glyph rotating about its own centre rather
+    // than the text baseline.
+    display: inline-block;
+    animation: vt-pulldown-spin 1.4s linear infinite;
+  }
+}
+
+@keyframes vt-pulldown-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
 .pulldown-footer {

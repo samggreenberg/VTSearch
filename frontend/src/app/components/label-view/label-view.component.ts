@@ -79,6 +79,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private statusPolling$: Subscription | null = null;
   private scoringProgressPoll$: Subscription | null = null;
   private learnedSortPending = false;
+  /** Held subscription to the one-shot `labelsetGoodCount$` watcher that
+   *  re-fires `onLearnedSort` after a pair switch, when sortMode was
+   *  already `learned`. Cleared on each switch so back-to-back switches
+   *  don't leak handlers from earlier pairs. */
+  private rehydrateLearnedSub?: Subscription;
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
   private dragging = false;
@@ -194,8 +199,17 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Triggered by the top-bar context switcher whenever the active
    *  (dataset, detector) pair changes. Resets the view-local ephemeral
    *  state (sort results, votes cache) and re-runs the same loads that
-   *  ngOnInit fires on first entry. */
+   *  ngOnInit fires on first entry.
+   *
+   *  Phase 3 rehydration: if the user's sort mode is `learned` and the
+   *  reloaded labelset has both classes, fire one `onLearnedSort` call
+   *  after votes land. The server's signature cache short-circuits the
+   *  re-fire when the pair has been trained recently (free re-entry),
+   *  and starts a fresh job otherwise — either way the user lands on
+   *  learned-sorted content without a manual mode toggle. */
   private reloadForNewPair(): void {
+    this.rehydrateLearnedSub?.unsubscribe();
+    this.rehydrateLearnedSub = undefined;
     this.sortState.setSortResults([], 0);
     this.sortState.setSortStatus('');
     this.sortState.setSortProgress(0, 0);
@@ -205,6 +219,19 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
+
+    if (this.sortState.sortMode === 'learned') {
+      this.rehydrateLearnedSub = this.voteState.labelsetGoodCount$
+        .pipe(
+          takeUntil(this.destroy$),
+          filter(
+            () =>
+              this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable,
+          ),
+          take(1),
+        )
+        .subscribe(() => this.onLearnedSort(false));
+    }
   }
 
   ngOnDestroy(): void {

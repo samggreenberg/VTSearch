@@ -87,6 +87,48 @@
         ],
         "type": "object"
       },
+      "ActiveJobPair": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "description": "Registry id of the dataset the job is running against.",
+            "type": "string"
+          },
+          "detector_id": {
+            "description": "Registry id of the detector the job is running against.",
+            "type": "string"
+          },
+          "job_types": {
+            "description": "Logical job-type names with a running or pending slot on this pair (e.g. ``learned-sort``, ``eval``). Stable across releases.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "detector_id",
+          "job_types"
+        ],
+        "type": "object"
+      },
+      "ActiveJobsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "busy_pairs": {
+            "description": "Every pair with at least one active job, in arbitrary order.",
+            "items": {
+              "$ref": "#/components/schemas/ActiveJobPair"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "busy_pairs"
+        ],
+        "type": "object"
+      },
       "AppSettings": {
         "additionalProperties": true,
         "properties": {
@@ -8043,6 +8085,30 @@
         ]
       }
     },
+    "/api/jobs/active": {
+      "get": {
+        "description": "Used by the top-bar pulldown to render a spinner glyph on rows whose\npair has background work in flight (learned-sort, eval, \u2026). The endpoint\nis intentionally cheap \u2014 it walks the in-memory ``JOB_MANAGERS`` map and\nreads each manager's current/pending slot under the manager's own lock,\nnothing else. Safe to poll on a 2\u20133 second interval.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveJobsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return every ``(dataset, detector)`` pair with a running or pending job.",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
     "/api/label-file-sort": {
       "post": {
         "responses": {
@@ -9785,6 +9851,10 @@
     {
       "description": "Liveness and readiness probes for orchestrators (Kubernetes, ECS, etc.).",
       "name": "health"
+    },
+    {
+      "description": "Introspection endpoints for the JobManager singletons.",
+      "name": "jobs"
     },
     {
       "description": "Export, import, and bulk-fill label assignments.",
