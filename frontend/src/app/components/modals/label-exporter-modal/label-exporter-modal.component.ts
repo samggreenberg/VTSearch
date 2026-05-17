@@ -6,7 +6,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
-import { ExporterInfo } from '../../../models/api.models';
+import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 
 @Component({
   selector: 'vt-label-exporter-modal',
@@ -21,7 +21,7 @@ export class LabelExporterModalComponent implements OnInit, OnDestroy {
   @Output() closed = new EventEmitter<void>();
   @Output() exportComplete = new EventEmitter<void>();
 
-  exporters: ExporterInfo[] = [];
+  exporters: ExporterEntry[] = [];
   loading = true;
   error = '';
 
@@ -55,7 +55,7 @@ export class LabelExporterModalComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  selectExporter(exporter: ExporterInfo): void {
+  selectExporter(exporter: ExporterEntry): void {
     this.sortingApi.exportLabels(this.goodsOnly).subscribe({
       next: (labelsData) => {
         this.exportersApi
