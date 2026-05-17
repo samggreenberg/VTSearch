@@ -716,20 +716,57 @@ checks off this follow-up.
       ``settings-importer-modal``). The ``LabelImporterInfo`` interface
       was deleted from ``frontend/src/app/models/api.models.ts`` — no
       remaining consumers.
+- [x] ``MediasApiService`` rewired to the generated TS client. The
+      service now calls ``apiMediasIdsGet`` / ``apiMediasBatchPost`` /
+      ``apiMediasMediaIdTextGet`` / ``apiMediasMediaIdVotePost`` from
+      ``generated/api-client/fn/medias/``; return types tightened to the
+      generated ``MediaIdsListResponse`` / ``MediaBatchResponse`` /
+      ``MediaParagraphResponse`` / ``MediaVoteResponse`` /
+      ``MediaAddToPileResponse``, and the request body for ``vote`` now
+      uses the generated ``MediaVoteRequest``. The four binary-stream
+      routes (``getAudio`` / ``getVideo`` / ``getImage`` / ``getMedia``)
+      stay on plain ``HttpClient.get`` with ``responseType: 'blob'`` —
+      ng-openapi-gen doesn't model binary response bodies usefully (the
+      generated function declares the success body as ``Error`` because
+      the spec only carries error responses for these routes). The
+      multipart ``addToPile`` route stays on plain ``HttpClient.post``
+      because the generated function's ``$Params`` has no ``body`` field
+      — same pattern as ``server-media-files/upload``. The local
+      ``TextResponse`` and ``VoteResponse`` interfaces were deleted from
+      ``frontend/src/app/models/api.models.ts`` (no remaining consumers).
+      ``MediaItem`` stays in ``api.models.ts`` for now because it is the
+      loose union type consumed by ~20 components and the metadata
+      cache; rewiring those to the generated ``MediaIdsListResponse`` /
+      ``MediaBatchResponse`` pair is a separate follow-up. The existing
+      consumers (``MediaStateService`` storing ``MediaItem[]``,
+      ``MediaMetadataCacheService`` storing ``Map<number, MediaItem>``)
+      keep typechecking because both generated response types are
+      structural subtypes of ``MediaItem`` (every required field
+      matches; the extra required fields on ``MediaBatchResponse`` are a
+      no-op against ``MediaItem``'s all-optional shape).
 
 ## Open follow-ups
 
 - **Migrate the remaining Angular services to the generated client.**
-  Settings, auth, and achievements have all moved over. Each follow-up
-  PR picks one blueprint area (medias, sorting, detectors, datasets,
-  eval, labels, exporters, …), rewires the matching Angular service(s)
-  to call the generated function modules under
+  Settings, auth, achievements, file-browser, exporters, settings-io,
+  label-importers, and medias have all moved over. Each follow-up PR
+  picks one blueprint area (sorting, detectors, datasets, eval,
+  labels, …), rewires the matching Angular service(s) to call the
+  generated function modules under
   ``frontend/src/app/generated/api-client/fn/``, and deletes the
   corresponding hand-maintained interfaces from
   ``frontend/src/app/models/api.models.ts``. The hybrid imports
   (``import type`` for DTOs, direct function-module paths for
   runtime symbols, no barrel) are required to keep the initial bundle
   under the 525 kB budget — see *Bundle-size discipline* above.
+- **Replace ``MediaItem`` with the generated ``MediaIdsListResponse`` /
+  ``MediaBatchResponse`` pair.** ``MediaItem`` is the loose union type
+  consumed by ~20 components and the metadata cache. The
+  ``MediasApiService`` migration kept it in place because rewiring every
+  consumer is a larger task than swapping the service itself.  A
+  follow-up should narrow each consumer's type (lightweight stub vs.
+  full batch-response) and delete ``MediaItem`` from
+  ``api.models.ts``.
 - **Per-plugin schemas for plugin-field routes.** The four routes
   whose request body is a plugin-field shape stay on the legacy
   plain-Flask path on their (now smorest-typed) blueprints:
