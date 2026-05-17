@@ -27,16 +27,6 @@ export interface MediaItem {
   embedder?: string;
 }
 
-export interface TextResponse {
-  content: string;
-  word_count?: number;
-  character_count?: number;
-}
-
-export interface VoteResponse {
-  ok: boolean;
-}
-
 // --- Sorting ---
 
 export interface SortResult {
