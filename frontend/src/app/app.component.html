@@ -59,8 +59,8 @@
     (click)="onDashboard()"
     title="Return to the Dashboard to manage datasets and detectors"
   >Dashboard</button>
-  <span class="top-bar-field" title="The currently active dataset being browsed and labeled"><strong>Data:</strong> <span class="top-bar-value">{{ datasetDisplayName }}</span></span>
-  <span class="top-bar-field" title="The currently active detector used for scoring and sorting"><strong>Detector:</strong> <span class="top-bar-value">{{ modelDisplayName }}</span></span>
+  <vt-context-pulldown kind="dataset" />
+  <vt-context-pulldown kind="detector" />
   <span class="top-bar-spacer"></span>
   <button
     class="help-btn"
@@ -85,13 +85,42 @@
     </svg></button>
 </header>
 <div class="main-content" role="main">
-  <router-outlet />
+  @if (showIncompatibleExplainer) {
+    <vt-incompatible-pair-explainer />
+  } @else {
+    <router-outlet />
+  }
 </div>
-@if (showSettings) {
-  <vt-settings-modal [preselectedViewTab]="settingsViewTab" (closed)="onSettingsClosed()" />
+@defer (when importerFlow.open) {
+  @if (importerFlow.open) {
+    <vt-dataset-importer-modal
+      [guessedMediaType]="importerFlow.guessedMediaType"
+      [guessedMediaEmbedder]="importerFlow.guessedMediaEmbedder"
+      [initialTab]="importerFlow.initialTab"
+      (closed)="onImporterClosed()"
+      (importStarted)="onImportStarted()"
+      (demoSelected)="onDemoSelected($event)"
+    />
+  }
 }
-@if (showKeyboardHelp) {
-  <vt-keyboard-help-modal (closed)="onKeyboardHelpClosed()" />
+@defer (when newDetectorFlow.open) {
+  @if (newDetectorFlow.open) {
+    <vt-new-detector-modal
+      [defaultMediaType]="newDetectorFlow.defaultMediaType"
+      (closed)="onNewDetectorClosed()"
+      (created)="onDetectorCreated($event)"
+    />
+  }
+}
+@defer (when showSettings) {
+  @if (showSettings) {
+    <vt-settings-modal [preselectedViewTab]="settingsViewTab" (closed)="onSettingsClosed()" />
+  }
+}
+@defer (when showKeyboardHelp) {
+  @if (showKeyboardHelp) {
+    <vt-keyboard-help-modal (closed)="onKeyboardHelpClosed()" />
+  }
 }
 <vt-dialog-host />
 <vt-achievement-unlock-host />

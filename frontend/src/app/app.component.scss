@@ -136,26 +136,6 @@ header {
   }
 }
 
-.top-bar-field {
-  color: var(--header-text-dim);
-  font-size: var(--font-sm);
-  white-space: nowrap;
-  width: 160px;
-  min-width: 0;
-  overflow: hidden;
-  display: flex;
-
-  strong {
-    flex-shrink: 0;
-    margin-right: var(--space-xs);
-  }
-}
-
-.top-bar-value {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .top-bar-spacer {
   flex: 1;
 }

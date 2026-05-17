@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { DashboardComponent } from './dashboard.component';
 import { LabelSessionService } from '../../services/label-session.service';
+import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 
 describe('DashboardComponent', () => {
   let component: DashboardComponent;
@@ -385,12 +386,13 @@ describe('DashboardComponent', () => {
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   }));
 
-  it('should open and close importer modal', () => {
+  it('should open and close importer modal via NewThingFlowsService', () => {
     flushInitialRequests();
+    const flows = TestBed.inject(NewThingFlowsService);
     expect(component.importerModalOpen).toBeFalse();
     component.openImporterModal();
     expect(component.importerModalOpen).toBeTrue();
-    component.closeImporterModal();
+    flows.closeImporter();
     expect(component.importerModalOpen).toBeFalse();
   });
 
@@ -447,17 +449,19 @@ describe('DashboardComponent', () => {
 
     it('should open the importer modal pre-pinned to the chosen tab', () => {
       flushInitialRequests();
+      const flows = TestBed.inject(NewThingFlowsService);
       component.openImporterModalOnTab('services');
       expect(component.importerModalOpen).toBeTrue();
-      expect(component.importerInitialTab).toBe('services');
+      expect(flows.importer.initialTab).toBe('services');
     });
 
     it('should reset the initial tab when the modal closes', () => {
       flushInitialRequests();
+      const flows = TestBed.inject(NewThingFlowsService);
       component.openImporterModalOnTab('server');
-      expect(component.importerInitialTab).toBe('server');
-      component.closeImporterModal();
-      expect(component.importerInitialTab).toBe('');
+      expect(flows.importer.initialTab).toBe('server');
+      flows.closeImporter();
+      expect(flows.importer.initialTab).toBe('');
     });
   });
 
@@ -568,7 +572,8 @@ describe('DashboardComponent', () => {
 
   it('should continue polling after HTTP error on progress endpoint', fakeAsync(() => {
     flushInitialRequests();
-    component.onDemoSelected({ name: 'gtzan', label: 'GTZAN' });
+    const flows = TestBed.inject(NewThingFlowsService);
+    flows.emitDemoSelected({ name: 'gtzan', label: 'GTZAN' } as any);
 
     const demoReq = httpMock.expectOne('/api/dataset/load-demo');
     demoReq.flush({});
@@ -594,9 +599,12 @@ describe('DashboardComponent', () => {
 
   it('should load demo dataset on demoSelected', () => {
     flushInitialRequests();
-    component.importerModalOpen = true;
-    const demo = { name: 'gtzan', label: 'GTZAN' };
-    component.onDemoSelected(demo);
+    const flows = TestBed.inject(NewThingFlowsService);
+    flows.openImporter();
+    expect(component.importerModalOpen).toBeTrue();
+    const demo = { name: 'gtzan', label: 'GTZAN' } as any;
+    flows.emitDemoSelected(demo);
+    flows.closeImporter();
 
     expect(component.importerModalOpen).toBeFalse();
     expect(component.loading).toBeTrue();

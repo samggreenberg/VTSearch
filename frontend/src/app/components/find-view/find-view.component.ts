@@ -9,6 +9,7 @@ import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { FindSessionService } from '../../services/find-session.service';
+import { ActiveContextService } from '../../services/active-context.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
@@ -60,6 +61,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private datasetsApi: DatasetsApiService,
     private ngZone: NgZone,
     private findSession: FindSessionService,
+    private activeContext: ActiveContextService,
     public mediaState: MediaStateService,
     public voteState: VoteStateService,
     public sortState: SortStateService,
@@ -95,6 +97,38 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       });
 
     // Run find-label to score and label all medias
+    this.runFindLabel();
+
+    // Reload + rescore when the active pair changes via the top-bar
+    // switcher. Skip the first emission (ngOnInit already triggered the
+    // initial loads + runFindLabel call above).
+    let firstPair = true;
+    this.activeContext.pair$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((pair) => {
+        if (firstPair) {
+          firstPair = false;
+          return;
+        }
+        // FindSessionService was populated by the Dashboard on the
+        // original entry; the switcher does not write to it. Refresh it
+        // from the active context so runFindLabel() uses the new pair.
+        this.findSession.datasetId = pair.datasetId;
+        this.findSession.modelId = pair.modelId;
+        this.reloadForNewPair();
+      });
+  }
+
+  private reloadForNewPair(): void {
+    this.sortState.setSortResults([], 0);
+    this.sortState.setSortStatus('');
+    this.sortState.setSortProgress(0, 0);
+    this.voteState.clear();
+    this.mediaState.loadMedias();
+    this.voteState.loadVotes();
+    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (status) => { this.datasetName = status.display_name || ''; },
+    });
     this.runFindLabel();
   }
 
