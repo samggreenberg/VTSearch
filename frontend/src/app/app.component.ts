@@ -7,6 +7,7 @@ import { DialogHostComponent } from './components/dialog-host/dialog-host.compon
 import { ToastContainerComponent } from './components/toast-container/toast-container.component';
 import { AchievementUnlockHostComponent } from './components/achievement-unlock-host/achievement-unlock-host.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
+import { AchievementsModalComponent } from './components/modals/achievements-modal/achievements-modal.component';
 import { KeyboardHelpModalComponent } from './components/modals/keyboard-help-modal/keyboard-help-modal.component';
 import { LoginComponent } from './components/login/login.component';
 import { ContextPulldownComponent } from './components/context-pulldown/context-pulldown.component';
@@ -42,6 +43,7 @@ import { isPairCompatible } from './utils/context-compat';
     ToastContainerComponent,
     AchievementUnlockHostComponent,
     SettingsModalComponent,
+    AchievementsModalComponent,
     KeyboardHelpModalComponent,
     LoginComponent,
     ContextPulldownComponent,
@@ -56,6 +58,7 @@ export class AppComponent {
   title = 'VTSearch';
   menuOpen = false;
   showSettings = false;
+  showAchievements = false;
   showKeyboardHelp = false;
   gearClosing = false;
   isOnLabelView = false;
@@ -221,6 +224,15 @@ export class AppComponent {
   onSettingsClosed(): void {
     this.showSettings = false;
     this.gearClosing = true;
+  }
+
+  onAchievements(): void {
+    this.menuOpen = false;
+    this.showAchievements = true;
+  }
+
+  onAchievementsClosed(): void {
+    this.showAchievements = false;
   }
 
   onGearAnimationEnd(): void {

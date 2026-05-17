@@ -140,7 +140,8 @@ header {
   flex: 1;
 }
 
-.help-btn {
+.help-btn,
+.achievements-btn {
   background: transparent;
   border: 1px solid var(--header-btn-border);
   border-radius: var(--radius-md);
