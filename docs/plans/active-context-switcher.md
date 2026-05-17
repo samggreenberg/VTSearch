@@ -1,6 +1,6 @@
 # Active-context switcher (top-bar dataset/detector pulldowns)
 
-*Status: Phase 1 + 2 + 3 shipped. Phase 1 covered the switcher UI, "+ Add New" footers, incompatible-pair explainer, and the five follow-ups (focus-other-pulldown button, auto-select new item, deleted-item toast, registry-error retry, Dashboard-sort mirroring). Phase 2 made the URL authoritative for the active pair — `/label/:datasetId/:detectorId` and `/find/:datasetId/:detectorId` with an `activeContextGuard` that validates, flips, and loads before the route activates. Phase 3 added a per-pair spinner glyph on pulldown rows backed by a new `/api/jobs/active` endpoint, and rehydrates learned-sort on switch-back via the JobManager signature cache. One Phase 1 follow-up (embedder progress message) remains deferred — see "Open follow-ups" below.*
+*Status: Phase 1 + 2 + 3 shipped, plus the cross-embedder switch follow-up. Phase 1 covered the switcher UI, "+ Add New" footers, incompatible-pair explainer, and the five follow-ups (focus-other-pulldown button, auto-select new item, deleted-item toast, registry-error retry, Dashboard-sort mirroring). Phase 2 made the URL authoritative for the active pair — `/label/:datasetId/:detectorId` and `/find/:datasetId/:detectorId` with an `activeContextGuard` that validates, flips, and loads before the route activates. Phase 3 added a per-pair spinner glyph on pulldown rows backed by a new `/api/jobs/active` endpoint, and rehydrates learned-sort on switch-back via the JobManager signature cache. The cross-embedder follow-up closed the latent correctness gap surfaced in the Phase 3 audit and ships the "Re-resolving labels for X's embedder…" progress message — see "What shipped (cross-embedder switch)" below.*
 
 This plan implements [ux-brainstorm.md §6.11](ux-brainstorm.md#611-active-datasetdetector-indicator--s) ("Active-dataset/detector indicator") and largely closes [§8.2](ux-brainstorm.md#82-switching-active-datasetdetector--s) ("Switching active dataset/detector"). It supersedes both entries as the canonical design — when this plan ships those entries will be marked SHIPPED and link here.
 
@@ -313,24 +313,32 @@ Drive-by: `settings-state.service.spec.ts` mockSettings.theme widened to `string
 
 Choice on the "running + pending" tooltip case: a pair with both a running and a pending job on the same manager appears once with the manager's job-type listed once — the pending slot is the latest-wins handoff target and `list_active_pairs` deduplicates by `(ds, det)`. The user sees one spinner for "this pair is busy", which is the truthful UX (they don't need to know about the coalescing).
 
+## What shipped (cross-embedder switch follow-up)
+
+Carry-overs from earlier phases. Phase 2 closed the `FindSessionService` deletion item; Phase 3 closed the in-flight job affordances item; this pass closed the "Re-resolving labels for X's embedder…" progress message item along with the latent correctness gap surfaced during the Phase 3 audit.
+
+- **`vtsearch/detectors/labelset_training.py`** — `populate_label_embeddings` now invalidates `det_ctx.label_embeddings` when `det_ctx.embedder` and the active dataset's embedder differ (the decision the user made in the design pass: "we only deal with one embedder at a time, so invalidate everything at embedder change"), and stamps `det_ctx.embedder` with the new embedder after the resolve+embed pass so the next call has a stable comparison anchor. Empty-snap callers keep the existing cache (we can't tell which embedder the cache was built against, so dropping it would be speculative).
+
+- **`vtsearch/routes/detectors/registry.py`** — `POST /api/detectors/registry/load` no longer always returns the synchronous fast-path when `is_detector_loaded(detector_id)`. New helper `_maybe_start_label_reembed()` compares the active dataset's embedder (read from any media's `embedder` field) with the loaded detector's `det_ctx.embedder`; on mismatch it starts a background re-embed task on `detector_loading_tasks` with progress text `"Re-resolving labels for <embedder display name>…"`. The task re-runs `train_from_labelset` against the cached labelset only (no label-restoration or example-seeding step), so it skips the slow file-resolve work the user explicitly didn't want to repeat. The same endpoint also exposes `embedder` on each loaded entry in `GET /api/detectors/registry` so the frontend can decide whether to fire the call.
+
+- **`frontend/src/app/services/context-switch.service.ts`** — `flipAndLoad` extends its needs-detector-load predicate with a `needsLabelReembed` clause: when both the dataset and detector are loaded but `dataset.embedder !== detector.embedder` (and both values are populated), the service calls `loadDetector(id)` to trigger the re-embed task. The existing `waitForDetectorLoad` plumbing handles the rest — same progress-events SSE subscription, same `runDetectorLoad` retry/cancel surface, same `switching$` signalling.
+
+- **`frontend/src/app/models/api.models.ts`** — `DatasetRegistryEntry` and `DetectorRegistryEntry` now declare optional `embedder?: string` fields so the cross-embedder predicate type-checks cleanly. The dataset side has always been populated server-side; the detector side is populated only for loaded entries.
+
+- **OpenAPI snapshot** (`frontend/openapi.json`) regenerated to include the new `embedder` property on `DetectorRegistryEntry`. (The marshmallow schema in `vtsearch/schemas/detectors.py` is the source of truth; the snapshot is the diff-guard.)
+
+- **Tests** — New `tests/detectors/test_cross_embedder_switch.py` (7 tests): three unit tests for the `populate_label_embeddings` cache-invalidation behaviour (cleared on change, preserved when matching, preserved when active embedder is unknown), one integration test for the synchronous fast-path when the embedders match, one integration test that asserts the re-embed task is started and tagged with the new embedder when they differ, and two registry-list tests confirming the `embedder` field is exposed for loaded entries and empty for unloaded ones. `./run-tests.sh` green (3627 passed, 1 skipped, 2 xpassed); `npm run build:prod` green.
+
+### Behaviour notes carried into the implementation
+
+- **Stamp on every successful pass, not just the first.** The first `populate_label_embeddings` after detector load stamps `det_ctx.embedder`, and every subsequent pass re-stamps. This is what makes the second cross-embedder switch back to the original dataset cheap: if the labels happen to be already re-embedded in that space (e.g. a learned-sort run since the last stamp), the next pass sees the stamps agree and keeps the cache.
+- **Empty-snap = no invalidation.** When there's no active dataset, `_embedder_for_active_dataset(snap)` returns `""` and the invalidation branch is skipped. This avoids wiping the cache in tests / CLI flows that lazily build a detector context without an attached dataset.
+- **Detector registry only exposes `embedder` for loaded entries.** Unloaded entries have no embedder yet — it's inferred from the dataset at load time. The frontend predicate correctly treats an empty `detector.embedder` as "no mismatch known", so unloaded detectors fall through to the standard `!detector_loaded` path.
+- **Re-embed task does not re-run label restoration or example seeding.** Those steps don't depend on the embedder; re-running them would either duplicate votes or no-op pointlessly. `_maybe_start_label_reembed` calls `train_from_labelset` directly, which is exactly the work that needs the new embedder.
+
 ## Open follow-ups
 
-Carry-overs from earlier phases. Phase 2 closed the `FindSessionService` deletion item; Phase 3 closed the in-flight job affordances item.
-
-- **"Re-resolving labels for X's embedder…" progress message** (Phase 1 follow-up) — the design called for a custom progress message when the new dataset's embedder differs from the previous one. Phase 1 reuses the generic loading affordance. Implementing this is bigger than a copy change because: (a) `ContextSwitchService.flipAndLoad` only triggers a detector re-load when `!detector_loaded`, so an embedder change on a detector that's already "loaded" against the previous dataset would leave its label embeddings in the old embedder's space — there's no current re-embed path to hang a custom progress message off; (b) the labelset re-resolve in `before_request` (`ensure_votes_match_active_dataset`) only re-keys cids by origin, it doesn't re-embed.
-
-  **Latent correctness concern surfaced during the Phase 3 audit** (not yet exploited in normal use because most users keep one embedder per detector across datasets): `populate_label_embeddings` in `vtsearch/detectors/labelset_training.py:111` keys the cache by `stable_element_id` (origin/md5) only — *not* by embedder. So if a detector is loaded once against dataset A (embedder X) and then the user switches to dataset B (embedder Y), the cached `det_ctx.label_embeddings` are still X-space vectors but `_embedder_for_active_dataset(snap)` now returns Y. Any new label that's not yet cached gets embedded by Y; cached labels stay in X-space; learned-sort then trains an MLP on mixed-space inputs. `det_ctx.embedder` is recorded (sorting.py:425) but never consulted as a cache-invalidation key.
-
-  To land this properly:
-  1. Detect the embedder change on switch (compare `det_ctx.embedder` with the new active dataset's embedder via `_embedder_for_active_dataset`).
-  2. Either:
-     - Invalidate `det_ctx.label_embeddings` and force `train_from_labelset` to re-embed all elements against the new embedder, *or*
-     - Re-key the cache by `(stable_element_id, embedder_name)` so old vectors aren't reused but also aren't lost (saves re-embed when the user toggles back).
-  3. Add a "re-embed labels only" code path to `ContextSwitchService` (or fold into the existing detector-load flow) so the standard progress tracker shows the work — `ContextSwitchService.flipAndLoad` currently shortcuts on `detector_loaded`, which would skip the re-embed entirely.
-  4. Thread the new embedder's display name through to the progress tracker in `vtsearch/routes/detectors/registry.py:392`'s `"Embedding labels…"` step so the message reads `"Re-resolving labels for <embedder display name>…"` as the design called for.
-  5. Tests: `tests/detectors/` should gain a cross-embedder switch test that asserts `det_ctx.label_embeddings` is invalidated when the active dataset's embedder changes (currently no test guards this).
-
-  Worth a small design pass before implementation. Suggested entry points: `frontend/src/app/services/context-switch.service.ts:101` (`flipAndLoad`); `vtsearch/detectors/dataset_sync.py:28` (`ensure_votes_match_active_dataset`); `vtsearch/detectors/labelset_training.py:111` (`populate_label_embeddings`'s cache lookup).
+(None at this writing — all carry-overs from Phases 1-3 have shipped. New questions or polish items should be appended here so the next contributor picking up the area sees what's still owed.)
 
 ## Open questions
 
