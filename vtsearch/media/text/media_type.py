@@ -455,7 +455,7 @@ class TextMediaType(MediaType):
     # Demo dataset loading
     # ------------------------------------------------------------------
 
-    def load_demo_source(
+    def load_demo_source(  # noqa: C901
         self,
         source,
         categories,

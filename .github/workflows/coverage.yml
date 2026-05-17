@@ -1,11 +1,11 @@
 name: Coverage
 
-# Runs the fast CPU test suite with line + branch coverage and publishes
+# Runs the fast CPU test suite with line + branch coverage, publishes
 # the HTML report as an artifact + a per-file summary to the workflow's
-# step summary. Currently publish-only — there is no coverage-delta gate
-# yet. Tests themselves still gate the job (a failed test fails the
-# workflow); the "no PR gate" decision in docs/plans/python-quality-tools.md
-# is specifically about not failing on coverage thresholds.
+# step summary, and gates pull requests on the coverage of lines they
+# changed (via diff-cover).  The total-coverage number is *not* gated —
+# only patch-level coverage is — because total moves up and down with
+# unrelated test reshuffles and would be noisy.
 #
 # This is the first workflow that runs pytest in CI; local development
 # still uses `./run-tests.sh`. The marker expression (`not gpu and not
@@ -27,6 +27,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # diff-cover needs the merge-base commit to compute the patch
+          # diff.  Fetch the full history on PR runs; push runs only need
+          # the tip so leave them on the default shallow checkout.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
 
       - uses: actions/setup-python@v5
         with:
@@ -65,6 +70,10 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit $status
+
+      - name: Install diff-cover
+        if: github.event_name == 'pull_request'
+        run: pip install diff-cover
 
       - name: Run fast tests with coverage
         id: pytest
@@ -108,6 +117,36 @@ jobs:
             echo ""
             echo "Download the **coverage-html** artifact for the per-line drill-down."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Gate PRs on patch-level coverage only: how well the lines this PR
+      # added/changed are covered by tests.  Total-coverage gating is
+      # intentionally avoided — it moves with unrelated test reshuffles
+      # and produces noisy red on PRs that didn't touch tested code.
+      # Threshold of 80% is a starting point; revisit once we have a few
+      # PRs of data on how realistic it is.
+      - name: Patch coverage gate (diff-cover)
+        if: always() && github.event_name == 'pull_request' && hashFiles('coverage.xml') != ''
+        run: |
+          set +e
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          diff-cover coverage.xml \
+            --compare-branch="origin/${{ github.base_ref }}" \
+            --fail-under=80 \
+            --markdown-report=/tmp/diff-cover.md \
+            2>&1 | tee /tmp/diff-cover.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "## Patch coverage (diff-cover, fail-under=80%)"
+            echo ""
+            if [ -f /tmp/diff-cover.md ]; then
+              cat /tmp/diff-cover.md
+            else
+              echo '```'
+              tail -c 60000 /tmp/diff-cover.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: Upload HTML coverage report
         if: always() && hashFiles('coverage_html/index.html') != ''

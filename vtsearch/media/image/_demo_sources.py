@@ -337,7 +337,7 @@ def build_demo_datasets() -> list[DemoDataset]:
     ]
 
 
-def load_demo_source(
+def load_demo_source(  # noqa: C901
     source,
     categories,
     slice_start,

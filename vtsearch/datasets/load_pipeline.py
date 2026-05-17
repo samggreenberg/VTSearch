@@ -629,7 +629,7 @@ def _auto_register_dataset(
 # ---------------------------------------------------------------------------
 
 
-def _run_origin_load_in_background(
+def _run_origin_load_in_background(  # noqa: C901
     load_fn,
     origin: dict,
     *,
@@ -687,7 +687,7 @@ def _run_origin_load_in_background(
     # state (settings writes, settings_source sync) resolves correctly.
     _request_user = created_by or get_current_user()
 
-    def task():
+    def task():  # noqa: C901
         from vtsearch.auth import set_thread_user
 
         set_thread_user(_request_user)

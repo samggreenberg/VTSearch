@@ -21,7 +21,7 @@ from vtsearch.datasets.loader import (
 from vtsearch.security.pickle import safe_pickle_load
 
 
-def load_dataset_from_pickle(
+def load_dataset_from_pickle(  # noqa: C901
     file_path: Path,
     medias: dict[int, dict[str, Any]],
     thin: bool = False,

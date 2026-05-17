@@ -139,7 +139,7 @@ def find_check_labels(body: dict):
 )
 @detector_find_bp.alt_response(404, description="A selected dataset or detector ID is unknown / missing.")
 @detector_find_bp.alt_response(500, description="A dataset pkl file could not be loaded.")
-def multi_find(body: dict):
+def multi_find(body: dict):  # noqa: C901
     """Run selected detectors on selected datasets and return merged results.
 
     For each dataset: loads it from its saved pkl, then for each detector runs

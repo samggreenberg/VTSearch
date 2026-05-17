@@ -1,12 +1,13 @@
 # Python quality tools
 
-*Status: Phases 1 + 2 + 3 shipped, plus the pyproject-consolidation
-follow-up, CI coverage publication, and the vulture audit pass. deptry,
-codespell, ruff's `S` ruleset, opt-in coverage (now also published in
-CI), and a tuned vulture invocation + whitelist are all in place
-alongside the original pre-commit + pip-audit, and `pyproject.toml` is
-now the single source of truth for runtime + dev dependencies. See
-"Open follow-ups" at the bottom for the remaining maintenance items.*
+*Status: all planned phases shipped. The current stack: pre-commit +
+pip-audit (Phase 1); deptry + codespell (Phase 2); ruff `S` security
+ruleset + opt-in coverage + vulture whitelist (Phase 3); pyproject
+consolidation; CI coverage publication; full vulture audit pass; ruff
+`C901` McCabe complexity gate with `max-complexity = 25`; and a
+`diff-cover` patch-coverage gate on PRs. `pre-commit autoupdate` is the
+only remaining recurring maintenance item — see "Open follow-ups" at
+the bottom.*
 
 The ruff + pyright + pytest stack already covers the modern core of
 Python quality tooling. This plan tracks what else is worth adding,
@@ -161,176 +162,55 @@ wire it", and a success criterion so it's a one-sitting task.
   The tuned invocation now exits 0 on a clean tree, so introducing a
   new piece of dead code reliably surfaces in the audit.
 
-## Phase 2 — Low-friction additions
+## What shipped (C901 complexity gate)
 
-These are each a one-config-file change with an obvious failure mode.
-Worth doing soon; can be done independently in any order.
+- **Ruff `C901` McCabe complexity** added to `select` in
+  `[tool.ruff.lint]`, with `max-complexity = 25` configured under
+  `[tool.ruff.lint.mccabe]`. The bar is intentionally a *soft ceiling*
+  rather than the conventional 10: VTSearch's data-pipeline functions
+  (folder loaders, demo-source loaders, multi-find) legitimately weave
+  many branches, and forcing them down to 10 would mean a multi-day
+  refactor sprint without changing behaviour. 25 catches genuinely
+  runaway complexity — the rule fires on anything new that creeps into
+  the 25+ range — while letting the existing pipeline code stay as-is.
+  The ten functions currently above 25 are grandfathered with a
+  per-function `# noqa: C901` so the rule passes on a clean tree:
+  * `run_converters_on_folder` (28) — `vtsearch/converters/runner.py`
+  * `_run_origin_load_in_background` (31) and nested `task` (27) —
+    `vtsearch/datasets/load_pipeline.py`
+  * `load_dataset_from_folder` (34) and
+    `load_dataset_from_folder_chunked` (35) —
+    `vtsearch/datasets/loader_folder.py`
+  * `load_dataset_from_pickle` (26) —
+    `vtsearch/datasets/loader_pickle.py`
+  * `load_demo_source` (52) — `vtsearch/media/image/_demo_sources.py`
+  * `load_demo_source` (31) — `vtsearch/media/text/media_type.py`
+  * `multi_find` (41) — `vtsearch/routes/detectors/find.py`
+  * `learned_sort` (29) — `vtsearch/routes/sorting.py`
 
-### deptry — unused / missing / transitive deps
+  The intent is to ratchet `max-complexity` down over time as those
+  functions get split. Future contributors should prefer fixing the
+  underlying function over adding another `# noqa: C901` — adding a
+  noqa is allowed but counts as a known regression of the ratchet.
 
-Catches three kinds of dependency bugs:
+## What shipped (patch-coverage gate via diff-cover)
 
-- A package is imported but not listed in `requirements/base.txt` (works
-  on your laptop because something else dragged it in, breaks in a
-  fresh container).
-- A package is listed but never imported (dead weight in installs).
-- A package is imported but only available transitively (will break the
-  day the direct dep drops it).
-
-Important for VTSearch because plugin auto-discovery means
-`requirements/plugins.txt` can drift from the actual `import` graph
-quickly.
-
-**Wire-up:**
-- Add `deptry` to `requirements/base.txt` dev tools.
-- `[tool.deptry]` block in `pyproject.toml`:
-  - `extend_exclude = ["frontend", "scripts", "data"]`
-  - Map heavy-but-aliased packages (e.g. `torch` is `pytorch`?
-    `scikit-learn` is `sklearn`) via
-    `[tool.deptry.package_module_name_map]`.
-  - Mark `pytest`, `pytest-xdist`, `pre-commit`, `ruff`, `pip-audit` as
-    dev-only via `[tool.deptry.per_rule_ignores]` (DEP002) — they're
-    intentionally not imported.
-- Add to `.pre-commit-config.yaml` (local hook, since deptry needs the
-  project venv to resolve imports):
-  ```yaml
-  - repo: local
-    hooks:
-      - id: deptry
-        name: deptry
-        entry: deptry .
-        language: system
-        pass_filenames: false
-        files: ^(vtsearch/|pyproject\.toml|requirements/)
-  ```
-- Add a `deptry` job to `lint.yml` so PRs are gated.
-
-**Success criterion:** `deptry .` returns 0 against the current tree;
-introducing an unused import or a missing dep fails CI.
-
-### codespell — misspellings in code and docs
-
-Catches typos in identifiers, comments, docstrings, and Markdown. Very
-low signal-to-noise once configured. The cost is one config block to
-exclude domain-specific terms that aren't in the dictionary.
-
-**Wire-up:**
-- Add codespell hook to `.pre-commit-config.yaml`:
-  ```yaml
-  - repo: https://github.com/codespell-project/codespell
-    rev: v2.3.0
-    hooks:
-      - id: codespell
-        additional_dependencies: [tomli]
-  ```
-- `[tool.codespell]` block in `pyproject.toml` with:
-  - `skip = "*.lock,*.svg,*.json,frontend/node_modules,data,static,*.pkl"`
-  - `ignore-words-list = "..."` for ML terms it doesn't know
-    (`clap`, `siglip`, `xclip`, `wrest`, `caller`, etc. — populate as
-    false-positives surface).
-- Add codespell to `lint.yml` for the CI gate.
-
-**Success criterion:** `codespell` passes against the current tree;
-introducing a typo in a comment or docstring fails CI.
-
-## Phase 3 — Medium-friction additions
-
-These each need a real config pass — not because the tool is hard but
-because the first run will surface a backlog of findings that someone
-has to triage. Plan for an afternoon per tool, not five minutes.
-
-### coverage.py / pytest-cov — line + branch coverage
-
-Tells us which lines and branches the test suite exercises. Useful for
-two things: spotting modules without test coverage, and (eventually)
-gating PRs on "don't lower coverage by more than N%".
-
-**Open questions to settle before wiring:**
-- Coverage target — pick a starting number from the first measured run,
-  don't pluck one out of the air. (Realistic: VTSearch probably lands
-  in the 60–80% range given the size of the test suite.)
-- Whether to gate PRs on coverage delta (e.g. via `diff-cover`) or just
-  publish a report to the GitHub step summary. Start with publish-only
-  for the first cycle.
-
-**Wire-up:**
-- Add `pytest-cov` to `requirements/base.txt`.
-- `pyproject.toml`:
-  ```toml
-  [tool.coverage.run]
-  source = ["vtsearch"]
-  branch = true
-  omit = ["vtsearch/_version.txt"]
-
-  [tool.coverage.report]
-  exclude_lines = [
-      "pragma: no cover",
-      "if TYPE_CHECKING:",
-      "raise NotImplementedError",
-  ]
-  ```
-- `./run-tests.sh` invokes `pytest --cov=vtsearch --cov-report=term-missing`.
-- `lint.yml` (or a dedicated `coverage.yml`) uploads HTML report as an
-  artifact + writes summary to `$GITHUB_STEP_SUMMARY`.
-
-**Success criterion:** `./run-tests.sh` prints a coverage summary at
-the end; CI artifact shows the per-file breakdown.
-
-### bandit (or ruff's `S` ruleset) — security linter
-
-Catches `pickle.load` on untrusted input, `subprocess` with `shell=True`,
-weak crypto, hard-coded passwords, SQL injection patterns, etc. VTSearch
-already does some of this manually (`safe_pickle_load`,
-`validate_server_filepath`); a linter is a backstop.
-
-**Important call:** ruff has the `S` (flake8-bandit) ruleset built in.
-Enabling that is strictly simpler than adding bandit as a second tool —
-no new dep, no new CI job, and config lives in the existing ruff block.
-The catch is ruff's S rules are a subset of full bandit. For VTSearch's
-threat model (single-user, on-prem, no untrusted callers in the
-critical path), the ruff subset is enough.
-
-**Wire-up:**
-- Add to `[tool.ruff.lint]` in `pyproject.toml`:
-  ```toml
-  select = ["E", "F", "S"]   # default rules + flake8-bandit
-  ```
-- `[tool.ruff.lint.per-file-ignores]`:
-  - `"tests/**" = ["S101"]` (allow `assert` in tests)
-  - `"vtsearch/security/pickle.py" = ["S301"]` (the whole point of the
-    file is to call `pickle.load` carefully)
-  - Other case-by-case waivers as findings surface.
-- First-pass triage commit fixes the easy ones and adds targeted
-  `# noqa: S###` for the legitimate exceptions.
-
-**Success criterion:** `ruff check .` with `S` rules enabled returns 0
-against the current tree; introducing a new `subprocess(..., shell=True)`
-or `pickle.load` of untrusted bytes fails lint.
-
-### vulture — dead code finder
-
-Finds functions, classes, imports, and variables that are defined but
-never referenced. Best run as a periodic audit (it has false positives
-from dynamic dispatch and plugin discovery) rather than a CI gate.
-
-**Why not in Phase 2:** VTSearch's plugin-discovery pattern (sentinel
-constants like `IMPORTER`, `EXPORTER`, `SETTINGS_SOURCE`,
-`LABEL_IMPORTER`, etc.) means every plugin class looks unused to
-vulture. The whitelist will need real curation, and the value is a
-one-shot cleanup rather than ongoing enforcement.
-
-**Wire-up (when we get to it):**
-- Add `vulture` to dev deps.
-- Create `.vulture-whitelist.py` exporting all plugin classes + any
-  reflection-only symbols.
-- Run as a manual command: `vulture vtsearch .vulture-whitelist.py
-  --min-confidence 80`.
-- Don't gate CI on it — just run it before each release and act on the
-  high-confidence findings.
-
-**Success criterion:** the audit produces a short, hand-reviewable
-list of dead code; the obvious findings are deleted, the rest are
-added to the whitelist with a comment explaining why.
+- **`diff-cover` gate** in `.github/workflows/coverage.yml` — installs
+  `diff-cover` on PR runs, fetches `origin/${{ github.base_ref }}` to a
+  depth that lets diff-cover see the merge base, and runs
+  `diff-cover coverage.xml --compare-branch=origin/<base>
+  --fail-under=80`. The job uploads a markdown report into
+  `$GITHUB_STEP_SUMMARY` so reviewers see exactly which patch lines are
+  uncovered. **Patch-level only — not total-coverage gating.** Total
+  coverage moves up and down with unrelated test reshuffles and would
+  produce noisy red on PRs that didn't touch tested code; the patch
+  number measures "did this PR cover the lines it added?", which is the
+  signal we actually care about. The 80% threshold is a starting point
+  and is easy to revisit once we have a few PRs of real data — change
+  `--fail-under=80` in `coverage.yml` to retune. The gate runs only on
+  `pull_request` events; push runs to `main`/`dev` still publish the
+  total-coverage summary but don't compute a patch number (there's no
+  meaningful "base" to diff against).
 
 ## What we considered and skipped
 
@@ -342,8 +222,8 @@ added to the whitelist with a comment explaining why.
   needs a docstring" norm. Adding it would create a large backlog with
   little payoff.
 - **radon / xenon** (cyclomatic complexity) — ruff already has McCabe
-  via the `C901` rule. Enable that in the same pass as Phase 3's
-  bandit/S work if we want complexity gating.
+  via the `C901` rule, which is now enabled (see "What shipped (C901
+  complexity gate)"). No second tool needed.
 - **semgrep** — powerful pattern-based static analysis but heavy for a
   single-app repo. Revisit if we ever start shipping VTSearch as a
   library or hosting multi-tenant.
@@ -352,19 +232,23 @@ added to the whitelist with a comment explaining why.
 
 ## Open follow-ups
 
-- **Coverage-delta gate.** `coverage.yml` now publishes the baseline on
-  every PR. Next step (after a few PRs of data): wire `diff-cover`
-  against the merge base and fail the job when the patch's coverage
-  drops below a threshold. Don't gate on total coverage delta — too
-  noisy across unrelated test reshuffles — gate on **lines changed by
-  this PR**, which is what `diff-cover` measures.
-- **Vulture audit pass.** Completed — see "What shipped (Phase 3)"
-  above for the deletions, whitelist additions, and final tuned
-  invocation. The audit is meant to be re-run before each release;
-  introducing new dead code will surface there.
-- **Pyright `S`-equivalent and `C901` complexity.** ruff has McCabe
-  complexity via `C901`; consider enabling alongside future
-  security-rule tightening if we want a complexity gate.
-- Periodic: `pre-commit autoupdate` on a cadence so pinned hook
-  versions don't drift too far from CI's `pip install ruff` (which
-  always pulls latest). Worth a quarterly reminder.
+- **Re-run the vulture audit before each release.** The tuned
+  invocation lives in `.vulture-whitelist.py`'s module docstring; the
+  audit is not a CI gate, so introducing new dead code only surfaces
+  when someone runs it. A release-checklist reminder is the lightest-
+  weight way to keep it from rotting.
+- **Ratchet `max-complexity` downward over time.** Current value is
+  25, with 10 grandfathered `# noqa: C901` sites listed under "What
+  shipped (C901 complexity gate)". As those functions get split (or
+  when somebody is in the area for unrelated reasons), drop the
+  threshold a notch and remove the corresponding noqa. The end state
+  is something close to ruff's 10 default — but there is no rush.
+- **Revisit the diff-cover threshold.** Currently `--fail-under=80` in
+  `coverage.yml` — a guess. After a handful of PRs, look at what
+  patch-coverage numbers feel like noise vs. signal and retune. If
+  legitimate refactor-only PRs keep tripping the gate (because
+  refactored lines have to be re-touched and so look "new" but
+  weren't tested explicitly), consider relaxing it.
+- **Periodic `pre-commit autoupdate`.** Pinned hook versions drift over
+  time vs. CI's `pip install ruff` (which always pulls latest). Worth a
+  quarterly reminder to bump `.pre-commit-config.yaml`.

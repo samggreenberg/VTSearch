@@ -75,7 +75,7 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
-def run_converters_on_folder(
+def run_converters_on_folder(  # noqa: C901
     folder_path: Path,
     converter_names: list[str] | None = None,
     target_media_type: str = "",
