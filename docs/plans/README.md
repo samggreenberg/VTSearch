@@ -10,7 +10,6 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | Plan | Status | Summary |
 |------|--------|---------|
 | [multi-media-import.md](multi-media-import.md) | **In progress** | Importers can mix multiple source media types via `effective_source_specs()`. `server_folder`, `server_files`, `local_folder`, `local_files` migrated; `pickle`, `combine_datasets`, `synthetic`, `http_archive`, `recaller`, `demo` remain on the legacy shim. |
-| [delete-detectors.md](delete-detectors.md) | **Mostly shipped** | Steps 1–2 and most of step 3 landed: `vtsearch/models/` is gone, `weights_compat.py` is gone, `/api/autorun-detectors/*` and detector-on-disk routes are gone, `autorun_processors` is gone, the `trainable` flag is gone. Remaining: delete the `detectors_dir` setting (step 3 tail) and the docs pass (step 7). |
 | [patch-embedder.md](patch-embedder.md) | **V1 + V2 shipped; V3 design only** | Six image embedders (DINOv2 / DINOv3 / EUPE × single+patch) are live; region voting via Shift-drag is live. V3 ("one text embedder + one patch embedder per dataset") is designed but not implemented — work plan still a sketch. |
 | [RCDatasetImporter.md](RCDatasetImporter.md) | **Scaffolds in place; awaiting client code** | ReCaller / DataWrest / PullWrest / Holder plugin scaffolds exist (`hidden_from_picker = True`); the API client stubs (`_rc_fetch_results`, `_dw_get_embedding`, `_pw_fetch_media`, `_holder_*`) still need real implementations. |
 | [extract-library.md](extract-library.md) | **Proposed** | Split VTSearch into a `vtscore` Python library plus the Flask/Angular app, gated on a CI job that runs the test suite without Flask installed. Not started. |
@@ -22,6 +21,15 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 
 ## Recently completed (removed)
 
+- **delete-detectors.md** — Collapsed the two-concept "detector vs.
+  trainable model" world into a single concept. The old read-only
+  detector artifact (with serialized MLP weights), the `autorun_detectors`
+  in-memory dict, `weights_compat.py`, `autorun_processors`, the
+  registry's `trainable: bool` flag, and the on-disk export routes are
+  all gone. What was formerly "trainable model" was then renamed to
+  "detector" — so the surviving `detectors_dir` setting and
+  `data/detectors/` storage now belong to the new (origin-keyed,
+  re-importable) detector concept.
 - **pyright-type-checking.md** — Pyright (basic mode) is a hard CI gate
   over the whole `vtsearch/` and `tests/` scope. All seven stages
   shipped: Stage 1 (foundation packages), Stage 2 (`settings`, `state`,

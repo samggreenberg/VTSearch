@@ -83,13 +83,13 @@ GET /api/settings/defaults
 `autorun_detectors`, `saved_datasets_dir`, `detectors_dir`,
 and `settings_source`).
 
-### Trainable-model autorun
+### Detector autorun
 
-`autorun_detectors` is a flat list of registered model names that
+`autorun_detectors` is a flat list of registered detector names that
 should run during `/api/auto-detect` and the CLI's `--autodetect` flow.
-Toggle a model via `PUT /api/detectors/registry/{model_id}/autorun` (see
-`docs/api/models.md`) — the registry endpoint is the source of truth and
-writes through to this settings list.
+Toggle a detector via `PUT /api/detectors/registry/{detector_id}/autorun`
+(see `docs/api/detectors.md`) — the registry endpoint is the source of
+truth and writes through to this settings list.
 
 ---
 
