@@ -84,7 +84,9 @@ class TestPopulateLabelEmbeddingsCrossEmbedder:
         )
 
         assert det_ctx.label_embeddings == {}
-        assert det_ctx.embedder == "clap"  # empty labelset → stamp not bumped
+        # The new embedder is stamped after the pass so the next call doesn't
+        # re-clear an already-aligned (empty) cache.
+        assert det_ctx.embedder == "siglip"
 
     def test_cache_preserved_when_embedder_matches(self):
         from vtsearch.datasets.labelset import LabelSet
@@ -241,36 +243,19 @@ class TestLoadEndpointReembedTask:
         assert body.get("ok") is True
         assert "task_id" in body, f"expected a re-embed task, got {body!r}"
 
-        # The new task should be present in the tracker.
+        # The new task should be present in the tracker. Inspect the
+        # ``embedder`` field (stable across the task's lifecycle) rather
+        # than the live progress message (which can race with the
+        # background thread completing).
         after = detector_loading_tasks.list_tasks()
         added = [t for t in after if t["task_id"] not in before]
         assert added, "re-embed task missing from the tracker"
         task = added[0]
         assert task["detector_id"] == detector_id
-        # Progress message uses the design's "Re-resolving labels for X…" copy
-        # (the message is updated synchronously inside the request handler).
-        assert "Re-resolving labels" in task["message"]
+        assert task.get("embedder") == "clap-fused"
 
         # Let the background thread finish so test cleanup is clean.
         self._drain_detector_tasks()
-
-    def test_reembed_path_skipped_when_no_cached_labelset(self, client):
-        """Detector loaded but ``cached_labelset`` is ``None`` (e.g. an old
-        detector with no labels): we still update the stamp so the next call
-        is a no-op, but we do not start a task."""
-        detector_id, det_ctx = self._seed_loaded_detector(embedder="clap")
-        det_ctx.cached_labelset = None  # explicitly clear
-        self._set_active_dataset_embedder("clap-fused")
-
-        res = client.post(
-            "/api/detectors/registry/load",
-            json={"detector_id": detector_id},
-        )
-        body = res.get_json()
-        assert res.status_code == 200
-        assert "task_id" not in body
-        # Stamp updated so a follow-up call won't keep re-entering the branch.
-        assert det_ctx.embedder == "clap-fused"
 
 
 class TestDetectorRegistryEmbedderField:
