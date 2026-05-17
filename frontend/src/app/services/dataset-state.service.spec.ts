@@ -85,5 +85,27 @@ describe('DatasetStateService', () => {
     expect(service.detectors).toEqual([]);
     expect(service.loading).toBeFalse();
     expect(service.progressMessage).toBe('');
+    expect(service.error).toBeNull();
+  });
+
+  it('refresh should record error on registry fetch failure and clear on retry success', () => {
+    const errors: (string | null)[] = [];
+    service.error$.subscribe((e) => errors.push(e));
+
+    service.refresh();
+    httpMock.expectOne('/api/datasets/registry').error(new ProgressEvent('Network error'));
+    httpMock.expectOne('/api/detectors/registry').error(new ProgressEvent('Network error'));
+    expect(service.error).toBe("Couldn't load datasets and detectors.");
+
+    // A second refresh after the failure should still work — the
+    // pipeline survives errors via catchError().
+    service.refresh();
+    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [{ id: '1', name: 'ok' }] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+    expect(service.datasets.length).toBe(1);
+    expect(service.error).toBeNull();
+    // Sanity: we saw both error and success emissions.
+    expect(errors).toContain("Couldn't load datasets and detectors.");
+    expect(errors[errors.length - 1]).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import { Subject, combineLatest } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { PulldownControlService } from '../../services/pulldown-control.service';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.models';
 
 /**
@@ -36,6 +37,7 @@ export class IncompatiblePairExplainerComponent implements OnInit, OnDestroy {
     private router: Router,
     private activeContext: ActiveContextService,
     private datasetState: DatasetStateService,
+    private pulldownControl: PulldownControlService,
   ) {}
 
   ngOnInit(): void {
@@ -78,6 +80,28 @@ export class IncompatiblePairExplainerComponent implements OnInit, OnDestroy {
       !!this.detector &&
       this.dataset.media_type !== this.detector.media_type
     );
+  }
+
+  /** Which half the primary "Pick…" button should focus.
+   *
+   *  - `bothMissing` / `datasetMissing` → pick a dataset.
+   *  - `detectorMissing` → pick a detector.
+   *  - `mediaTypeMismatch` → default to swapping the detector (matches
+   *    the design wording "Pick a compatible detector"); the user can
+   *    click the dataset pulldown directly if they'd rather swap the
+   *    other half.
+   */
+  get pickHalf(): 'dataset' | 'detector' {
+    if (this.detectorMissing || this.mediaTypeMismatch) return 'detector';
+    return 'dataset';
+  }
+
+  get pickButtonLabel(): string {
+    return this.pickHalf === 'detector' ? 'Pick a compatible detector' : 'Pick a dataset';
+  }
+
+  openOtherPulldown(): void {
+    this.pulldownControl.requestOpen(this.pickHalf);
   }
 
   goToDashboard(): void {
