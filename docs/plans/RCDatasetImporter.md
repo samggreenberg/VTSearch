@@ -131,28 +131,16 @@ Replace stubs in:
 
 ---
 
-## Step 2: Add `requirements.txt` for each plugin
+## Step 2: Declare any new dependencies in pyproject.toml
 
-If the API clients use `requests` or `httpx`, create a `requirements.txt`
-in each plugin directory:
+If the API clients use a package that isn't already declared (e.g.
+`httpx` if you switch off `requests`), add it to `[project.dependencies]`
+in the repo's `pyproject.toml`. `requests` is already declared.
+pyproject.toml is the single source of truth — deptry verifies every
+imported package is declared there.
 
-```
-# vtsearch/datasets/importers/recaller/requirements.txt
-requests>=2.28
-```
-
-```
-# vtsearch/exporters/holder/requirements.txt
-requests>=2.28
-```
-
-```
-# vtsearch/labels/importers/holder/requirements.txt
-requests>=2.28
-```
-
-Then run `bash scripts/install-plugin-deps.sh` to regenerate
-`requirements/plugins.txt`.
+Re-run `bash scripts/install-cpu.sh` (or any editable install) to pick
+up the new dep.
 
 ---
 
@@ -336,8 +324,7 @@ This enables origin-based matching when importing into an RC-loaded dataset.
 - [ ] Implement `_holder_create_folder()` in `exporters/holder/__init__.py`
 - [ ] Implement `_holder_write_entry()` in `exporters/holder/__init__.py`
 - [ ] Implement `_holder_read_folder()` in `labels/importers/holder/__init__.py`
-- [ ] Add `requirements.txt` to each plugin directory
-- [ ] Run `bash scripts/install-plugin-deps.sh`
+- [ ] Add any new pip packages to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Write unit tests with mocked API clients
 - [ ] Test with live services (import → vote → export → re-import)
 - [ ] Set `hidden_from_picker = False` on all four plugins

@@ -1,6 +1,7 @@
 import { Component, HostListener } from '@angular/core';
 import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
+import { combineLatest } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
 import { ToastContainerComponent } from './components/toast-container/toast-container.component';
@@ -8,17 +9,46 @@ import { AchievementUnlockHostComponent } from './components/achievement-unlock-
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
 import { KeyboardHelpModalComponent } from './components/modals/keyboard-help-modal/keyboard-help-modal.component';
 import { LoginComponent } from './components/login/login.component';
+import { ContextPulldownComponent } from './components/context-pulldown/context-pulldown.component';
+import { IncompatiblePairExplainerComponent } from './components/context-pulldown/incompatible-pair-explainer.component';
+// Importer / new-detector modals are imported here AND used exclusively
+// inside `@defer` blocks in the template — Angular splits them into
+// lazy chunks (they drag in the file browser, crop modal, etc., which
+// together push the initial bundle over budget when eagerly loaded).
+import { DatasetImporterModalComponent } from './components/dashboard/dataset-importer-modal/dataset-importer-modal.component';
+import { NewDetectorModalComponent } from './components/dashboard/new-detector-modal/new-detector-modal.component';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
 import { ActiveContextService } from './services/active-context.service';
-import { TopBarStateService } from './services/top-bar-state.service';
 import { AuthService } from './services/auth.service';
 import { AchievementsService } from './services/achievements.service';
 import { ThemeService } from './services/theme.service';
 import { ToastService } from './services/toast.service';
+import { ActiveContextWatcherService } from './services/active-context-watcher.service';
+import {
+  NewThingFlowsService,
+  ImporterFlowState,
+  NewDetectorFlowState,
+} from './services/new-thing-flows.service';
+import { DemoDataset } from './models/api.models';
+import { isPairCompatible } from './utils/context-compat';
+
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterOutlet, DialogHostComponent, ToastContainerComponent, AchievementUnlockHostComponent, SettingsModalComponent, KeyboardHelpModalComponent, LoginComponent],
+  imports: [
+    CommonModule,
+    RouterOutlet,
+    DialogHostComponent,
+    ToastContainerComponent,
+    AchievementUnlockHostComponent,
+    SettingsModalComponent,
+    KeyboardHelpModalComponent,
+    LoginComponent,
+    ContextPulldownComponent,
+    IncompatiblePairExplainerComponent,
+    DatasetImporterModalComponent,
+    NewDetectorModalComponent,
+  ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
@@ -30,50 +60,72 @@ export class AppComponent {
   gearClosing = false;
   isOnLabelView = false;
   settingsViewTab = '';
-  datasetDisplayName = '';
-  modelDisplayName = '';
+  /** True when the current route consumes the active pair (label / find)
+   *  and the pair is not compatible — the explainer takes over the
+   *  router-outlet area in that state. */
+  showIncompatibleExplainer = false;
+
+  importerFlow: ImporterFlowState = {
+    open: false,
+    initialTab: '',
+    guessedMediaType: '',
+    guessedMediaEmbedder: '',
+  };
+  newDetectorFlow: NewDetectorFlowState = {
+    open: false,
+    defaultMediaType: '',
+  };
 
   constructor(
     private router: Router,
     private mediaState: MediaStateService,
     private datasetState: DatasetStateService,
     private activeContext: ActiveContextService,
-    public topBarState: TopBarStateService,
     public auth: AuthService,
     private achievements: AchievementsService,
     private themeService: ThemeService,
+    private newThingFlows: NewThingFlowsService,
     _toast: ToastService,
+    activeContextWatcher: ActiveContextWatcherService,
   ) {
     this.auth.checkStatus();
     this.achievements.refresh();
     this.themeService.loadFromSettings();
+    activeContextWatcher.start();
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
         this.isOnLabelView =
           e.urlAfterRedirects.startsWith('/label') || e.urlAfterRedirects.startsWith('/find');
-        this.updateDisplayNames();
+        this.recomputeExplainer();
       });
 
-    this.topBarState.datasetLabel$.subscribe(() => this.updateDisplayNames());
-    this.topBarState.modelLabel$.subscribe(() => this.updateDisplayNames());
-    this.activeContext.datasetId$.subscribe(() => this.updateDisplayNames());
-    this.activeContext.modelId$.subscribe(() => this.updateDisplayNames());
+    combineLatest([
+      this.activeContext.pair$,
+      this.datasetState.datasets$,
+      this.datasetState.detectors$,
+    ]).subscribe(() => this.recomputeExplainer());
+
+    this.newThingFlows.importer$.subscribe((state) => {
+      this.importerFlow = state;
+    });
+    this.newThingFlows.newDetector$.subscribe((state) => {
+      this.newDetectorFlow = state;
+    });
   }
 
-  private updateDisplayNames(): void {
-    if (this.isOnLabelView) {
-      const dsId = this.activeContext.datasetId;
-      const ds = this.datasetState.datasets.find((d) => d.id === dsId);
-      this.datasetDisplayName = ds?.name || '';
-
-      const mId = this.activeContext.modelId;
-      const m = this.datasetState.detectors.find((mod) => mod.id === mId);
-      this.modelDisplayName = m?.name || '';
-    } else {
-      this.datasetDisplayName = this.topBarState.datasetLabel;
-      this.modelDisplayName = this.topBarState.modelLabel;
+  private recomputeExplainer(): void {
+    if (!this.isOnLabelView) {
+      this.showIncompatibleExplainer = false;
+      return;
     }
+    const ds = this.activeContext.datasetId
+      ? this.datasetState.datasets.find((d) => d.id === this.activeContext.datasetId) ?? null
+      : null;
+    const det = this.activeContext.modelId
+      ? this.datasetState.detectors.find((d) => d.id === this.activeContext.modelId) ?? null
+      : null;
+    this.showIncompatibleExplainer = !isPairCompatible(ds, det);
   }
 
   toggleMenu(event: Event): void {
@@ -173,6 +225,34 @@ export class AppComponent {
 
   onGearAnimationEnd(): void {
     this.gearClosing = false;
+  }
+
+  // --- Hoisted new-thing modal handlers (delegate to NewThingFlowsService) ---
+
+  onImporterClosed(): void {
+    this.newThingFlows.closeImporter();
+  }
+
+  onImportStarted(): void {
+    // Emit BEFORE close so subscribers that watch open→close transitions
+    // see the success event first; otherwise the close-handler runs first
+    // and may clear state the success handler needs.
+    this.newThingFlows.emitImportStarted();
+    this.newThingFlows.closeImporter();
+  }
+
+  onDemoSelected(demo: DemoDataset): void {
+    this.newThingFlows.emitDemoSelected(demo);
+    this.newThingFlows.closeImporter();
+  }
+
+  onNewDetectorClosed(): void {
+    this.newThingFlows.closeNewDetector();
+  }
+
+  onDetectorCreated(id: string): void {
+    this.newThingFlows.emitDetectorCreated(id || '');
+    this.newThingFlows.closeNewDetector();
   }
 
   private inferMediaType(): string {

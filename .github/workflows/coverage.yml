@@ -1,0 +1,100 @@
+name: Coverage
+
+# Runs the fast CPU test suite with line + branch coverage and publishes
+# the HTML report as an artifact + a per-file summary to the workflow's
+# step summary. Currently publish-only — there is no coverage-delta gate
+# yet. Tests themselves still gate the job (a failed test fails the
+# workflow); the "no PR gate" decision in docs/plans/python-quality-tools.md
+# is specifically about not failing on coverage thresholds.
+#
+# This is the first workflow that runs pytest in CI; local development
+# still uses `./run-tests.sh`. The marker expression (`not gpu and not
+# slow`) matches the default fast-loop suite.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install vtsearch + deps (CPU)
+        run: |
+          set +e
+          bash scripts/install-cpu.sh 2>&1 | tee /tmp/install.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "## Install step (exit=$status)"
+            echo ""
+            echo '```'
+            tail -c 60000 /tmp/install.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      - name: Run fast tests with coverage
+        id: pytest
+        run: |
+          set +e
+          python -m pytest tests/ \
+            -q --tb=short --no-header -n auto \
+            -m 'not gpu and not slow' \
+            --cov=vtsearch \
+            --cov-report=term \
+            --cov-report=html:coverage_html \
+            --cov-report=xml:coverage.xml \
+            2>&1 | tee /tmp/pytest.log
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          # Trim the noisy middle of the log when writing to the summary.
+          {
+            echo "## Pytest (exit=$status)"
+            echo ""
+            echo '```'
+            tail -c 60000 /tmp/pytest.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # Re-render the coverage report from the .coverage data file so we
+      # get a clean per-file table in the step summary, independent of
+      # whatever pytest printed. Runs even when pytest fails so reviewers
+      # see coverage on failing PRs too — useful for spotting "this PR
+      # didn't add tests for the new code that failed".
+      - name: Publish coverage summary
+        if: always() && hashFiles('.coverage*') != ''
+        run: |
+          {
+            echo "## Coverage"
+            echo ""
+            echo '```'
+            python -m coverage report --skip-covered --sort=cover 2>&1 || \
+              python -m coverage report 2>&1
+            echo '```'
+            echo ""
+            echo "Download the **coverage-html** artifact for the per-line drill-down."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload HTML coverage report
+        if: always() && hashFiles('coverage_html/index.html') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coverage_html/
+          retention-days: 14
+
+      - name: Upload coverage XML
+        if: always() && hashFiles('coverage.xml') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 14

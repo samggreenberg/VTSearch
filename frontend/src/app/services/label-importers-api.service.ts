@@ -1,16 +1,28 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { LabelImporterInfo } from '../models/api.models';
+import { map } from 'rxjs/operators';
+
+import { ApiConfiguration } from '../generated/api-client/api-configuration';
+import type { LabelImporterEntry } from '../generated/api-client/models/label-importer-entry';
+import type { IngestMissingResponse } from '../generated/api-client/models/ingest-missing-response';
+import { apiLabelImportersGet } from '../generated/api-client/fn/label-importers/api-label-importers-get';
+import { apiLabelImportersIngestMissingPost } from '../generated/api-client/fn/label-importers/api-label-importers-ingest-missing-post';
 
 @Injectable({ providedIn: 'root' })
 export class LabelImportersApiService {
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
+  private config = inject(ApiConfiguration);
 
-  list(): Observable<LabelImporterInfo[]> {
-    return this.http.get<LabelImporterInfo[]>('/api/label-importers');
+  list(): Observable<LabelImporterEntry[]> {
+    return apiLabelImportersGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
+  /** Plugin-field route — request body shape is plugin-dependent and not
+   *  described in the OpenAPI spec, so this stays on plain HttpClient (same
+   *  pattern as ``SettingsIoApiService.runImport``). See
+   *  ``docs/plans/openapi-schema.md`` § Resolved questions / Plugin field
+   *  endpoints. */
   runImport(importerName: string, params: Record<string, unknown>, file?: File, fileFieldKey?: string): Observable<unknown> {
     if (file && fileFieldKey) {
       const formData = new FormData();
@@ -25,6 +37,7 @@ export class LabelImportersApiService {
     return this.http.post(`/api/label-importers/import/${encodeURIComponent(importerName)}`, params);
   }
 
+  /** Plugin-field route — see ``runImport`` above. */
   runModelImport(
     modelName: string,
     importerName: string,
@@ -46,7 +59,9 @@ export class LabelImportersApiService {
     return this.http.post(url, params);
   }
 
-  ingestMissing(entries: unknown[]): Observable<unknown> {
-    return this.http.post('/api/label-importers/ingest-missing', { entries });
+  ingestMissing(entries: Record<string, unknown>[]): Observable<IngestMissingResponse> {
+    return apiLabelImportersIngestMissingPost(this.http, this.config.rootUrl, {
+      body: { entries },
+    }).pipe(map((r) => r.body));
   }
 }

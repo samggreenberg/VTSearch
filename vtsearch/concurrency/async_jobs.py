@@ -52,6 +52,11 @@ class AsyncJob:
     # Username of the request that spawned this job, captured at start()
     # time so the worker thread can resolve per-user settings correctly.
     user: str | None = None
+    # (dataset_id, detector_id) the job is operating against, captured at
+    # start() time so /api/jobs/active can list which (ds, det) pairs have
+    # background work in flight without parsing per-manager signatures.
+    dataset_id: str = ""
+    detector_id: str = ""
 
     @property
     def is_cancelled(self) -> bool:
@@ -122,6 +127,9 @@ class JobManager:
         self,
         signature: Any,
         target: Callable[[AsyncJob], Any],
+        *,
+        dataset_id: str = "",
+        detector_id: str = "",
     ) -> AsyncJob:
         """Start (or coalesce into pending) a job.
 
@@ -134,6 +142,11 @@ class JobManager:
         *target* receives the :class:`AsyncJob` and should assign
         ``job.result`` before returning.  Raising propagates as
         ``status = "error"``.
+
+        ``dataset_id`` / ``detector_id`` identify the (dataset, detector)
+        pair the job is running against; the values are stashed on the
+        :class:`AsyncJob` so ``/api/jobs/active`` can enumerate busy pairs
+        for the top-bar pulldown's spinner glyph.
         """
         # Capture the user that triggered this start() so background work
         # touching per-user settings resolves to the right user.
@@ -151,6 +164,8 @@ class JobManager:
                     self._pending.signature = signature
                     self._pending_target = target
                     self._pending.user = current_user
+                    self._pending.dataset_id = dataset_id
+                    self._pending.detector_id = detector_id
                     return self._pending
                 job = AsyncJob(
                     job_id=uuid.uuid4().hex,
@@ -158,6 +173,8 @@ class JobManager:
                     status="pending",
                     started_at=time.time(),
                     user=current_user,
+                    dataset_id=dataset_id,
+                    detector_id=detector_id,
                 )
                 self._jobs[job.job_id] = job
                 self._pending = job
@@ -171,6 +188,8 @@ class JobManager:
                 status="running",
                 started_at=time.time(),
                 user=current_user,
+                dataset_id=dataset_id,
+                detector_id=detector_id,
             )
             self._jobs[job.job_id] = job
             self._current_id = job.job_id
@@ -274,6 +293,18 @@ class JobManager:
     # Test helpers
     # ------------------------------------------------------------------ #
 
+    def active_jobs(self) -> list[AsyncJob]:
+        """Return the currently running and pending jobs (zero, one, or two)."""
+        with self._lock:
+            out: list[AsyncJob] = []
+            if self._current_id is not None:
+                j = self._jobs.get(self._current_id)
+                if j is not None and j.status in ("running", "pending"):
+                    out.append(j)
+            if self._pending is not None and self._pending not in out:
+                out.append(self._pending)
+            return out
+
     def reset_for_tests(self) -> None:
         """Cancel any running job and clear all stored state."""
         with self._lock:
@@ -297,11 +328,43 @@ learned_sort_jobs = JobManager("learned-sort")
 #: Background runner for ``/api/eval/train-and-score``.
 eval_jobs = JobManager("eval-train-score")
 
+#: Logical name → :class:`JobManager` lookup used by ``/api/jobs/active`` to
+#: enumerate which (dataset_id, detector_id) pairs currently have background
+#: work in flight. The string keys are the public job-type names exposed in
+#: the response (consumed by the frontend pulldown for spinner tooltips), so
+#: keep them stable across releases.
+JOB_MANAGERS: dict[str, JobManager] = {
+    "learned-sort": learned_sort_jobs,
+    "eval": eval_jobs,
+}
+
+
+def list_active_pairs() -> list[dict[str, Any]]:
+    """Return ``[{dataset_id, detector_id, job_types}, ...]`` for every pair
+    with at least one running or pending job across every registered
+    :class:`JobManager`.
+
+    Jobs with no ``(dataset_id, detector_id)`` recorded (legacy callers that
+    skipped the kwargs, e.g. test fixtures) are dropped — there is no row
+    in the pulldown to attach a spinner to without both ids.
+    """
+    pair_jobs: dict[tuple[str, str], list[str]] = {}
+    for job_type, mgr in JOB_MANAGERS.items():
+        for job in mgr.active_jobs():
+            ds, det = job.dataset_id, job.detector_id
+            if not ds or not det:
+                continue
+            pair_jobs.setdefault((ds, det), []).append(job_type)
+    return [
+        {"dataset_id": ds, "detector_id": det, "job_types": sorted(set(job_types))}
+        for (ds, det), job_types in pair_jobs.items()
+    ]
+
 
 def reset_all_async_jobs_for_tests() -> None:
     """Reset every singleton job manager.  Called from the autouse fixture."""
-    learned_sort_jobs.reset_for_tests()
-    eval_jobs.reset_for_tests()
+    for mgr in JOB_MANAGERS.values():
+        mgr.reset_for_tests()
 
 
 def serialize_job(job: AsyncJob) -> dict[str, Any]:

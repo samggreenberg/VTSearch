@@ -1,7 +1,9 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { FileBrowserApiService, BrowseEntry } from '../../services/file-browser-api.service';
+import { FileBrowserApiService } from '../../services/file-browser-api.service';
+import type { BrowseDirectoryEntry } from '../../generated/api-client/models/browse-directory-entry';
+import type { BrowseFileEntry } from '../../generated/api-client/models/browse-file-entry';
 
 @Component({
   selector: 'vt-file-browser',
@@ -27,8 +29,8 @@ export class FileBrowserComponent implements OnInit, OnChanges {
   loading = false;
   error = '';
 
-  directories: BrowseEntry[] = [];
-  files: BrowseEntry[] = [];
+  directories: BrowseDirectoryEntry[] = [];
+  files: BrowseFileEntry[] = [];
   currentPath = '';
 
   /** The text value in the manual input field. */
@@ -84,12 +86,12 @@ export class FileBrowserComponent implements OnInit, OnChanges {
   }
 
   /** Enter a subdirectory. */
-  enterDirectory(dir: BrowseEntry): void {
+  enterDirectory(dir: BrowseDirectoryEntry): void {
     this.loadDirectory(dir.path);
   }
 
   /** Select a file and emit its relative path. */
-  selectFile(file: BrowseEntry): void {
+  selectFile(file: BrowseFileEntry): void {
     this.inputValue = file.path;
     this.pathSelected.emit(file.path);
     this.browserOpen = false;

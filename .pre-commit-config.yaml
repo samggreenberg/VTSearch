@@ -1,0 +1,55 @@
+# Pre-commit hooks for VTSearch.
+#
+# Install once after cloning:
+#   pre-commit install
+#
+# (scripts/install-cpu.sh runs this for you when a .git dir is present.)
+#
+# Run manually against every file:
+#   pre-commit run --all-files
+#
+# Bump pinned versions:
+#   pre-commit autoupdate
+#
+# CI (.github/workflows/lint.yml + pyright.yml + audit.yml) is the source
+# of truth — these hooks just shorten the feedback loop so violations
+# are caught at commit time instead of on the next push.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.8
+    hooks:
+      - id: ruff
+        name: ruff check
+      - id: ruff-format
+        name: ruff format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
+    hooks:
+      - id: codespell
+        additional_dependencies: [tomli]
+
+  # deptry needs the project's venv to resolve imports, so it runs as
+  # a local hook against `python -m deptry` (installed via
+  # requirements/base.txt's `[dev]` extra).
+  - repo: local
+    hooks:
+      - id: deptry
+        name: deptry
+        entry: python -m deptry .
+        language: system
+        pass_filenames: false
+        files: ^(vtsearch/|pyproject\.toml|requirements/)

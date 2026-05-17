@@ -21,14 +21,26 @@ to know first.
 
 ## What is VTSearch?
 
-VTSearch is a media explorer web app for browsing and voting on collections
-of audio, images, text, video, or documents. It supports two sorting
-strategies:
+VTSearch is a trainable media search tool. It searches collections of
+audio, images, text, video, and documents using a **detector** — a
+small trained ranker that scores every item in the dataset by how well
+it matches what you're looking for. There are two ways to search:
 
-- **Semantic sorting** — uses pretrained embedding models (CLAP, CLIP,
-  X-CLIP, E5) to rank items by similarity to a text query.
-- **Learned sorting** — trains a small MLP neural network on user votes to
-  predict good/bad labels.
+- **Train a new detector.** Vote a handful of items good or bad in the
+  UI; a small MLP neural network learns from those votes to rank the
+  rest of the collection. **Autopilot** drives this loop, picking which
+  item to show next and when each phase ends, so most users never need
+  to think about sort modes or selection strategies directly.
+- **Use an existing detector.** Apply a previously trained detector —
+  one you saved earlier, exported from another VTSearch instance, or
+  imported from disk — to a fresh dataset of the same media type. No
+  new labeling required.
+
+A natural-language query ("dog barking", "red car in snow") seeds
+either flow via pretrained embeddings (CLAP, CLIP/SigLIP, X-CLIP, E5),
+giving the detector a useful starting point. The text-similarity sort
+also works as a quick stand-alone search when you don't need the
+precision of a trained detector.
 
 Built with Flask + Angular + PyTorch. Single-user by default;
 pluggable authentication via `LoginProvider` ABC supports multi-user
@@ -41,7 +53,7 @@ deployments. Runs locally or in Docker.
 | Document | Purpose |
 |----------|---------|
 | [SETUP.md](SETUP.md) | Installation, prerequisites, getting started, basic Docker usage |
-| [USER_GUIDE.md](USER_GUIDE.md) | End-user walkthrough — Autopilot labeling, manual mode, sort modes, dashboard, exporting |
+| [USER_GUIDE.md](USER_GUIDE.md) | End-user walkthrough — training a detector with Autopilot, manual mode, applying existing detectors, sort modes, dashboard, exporting |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment, offline mode, network deps, env vars, data directory, troubleshooting |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Module structure, dependency graph, extractability matrix, state management |
 | [API.md](API.md) | HTTP API reference (all REST endpoints, request/response formats) |
@@ -183,9 +195,10 @@ graph, plugin directories — see
   and dataset functions generally accept state as parameters, though
   some modules import specific helpers (e.g. `update_progress`,
   `next_media_id`) for progress reporting and ID generation.
-- **Each plugin is self-contained** in its own subdirectory. Dependencies
-  are declared in per-plugin `requirements.txt` files, auto-discovered
-  by `scripts/install-plugin-deps.sh`.
+- **Each plugin is self-contained** in its own subdirectory.
+  Runtime dependencies — including each plugin's extras — live in
+  `pyproject.toml` under `[project.dependencies]`; deptry verifies every
+  import is declared.
 
 ---
 
@@ -228,15 +241,22 @@ See `CLAUDE.md` for the complete group-to-file mapping.
   (~16 seconds each)
 - `gpu`: CUDA-only tests
 
-### Linting and formatting
+### Linting, formatting, and other quality tools
 
 ```bash
-ruff check .       # lint
-ruff format .      # format
+ruff check .                          # lint (default rules + flake8-bandit S)
+ruff format .                         # format
+codespell --toml pyproject.toml       # typo check
+python -m deptry .                    # unused / missing / transitive deps
+VTSEARCH_COVERAGE=1 ./run-tests.sh    # opt-in test coverage report
+vulture vtsearch/ .vulture-whitelist.py --min-confidence 80   # dead code audit
 ```
 
-Configuration is in `pyproject.toml` (E402 ignored, line-length 120,
-target Python 3.10).
+Configuration is in `pyproject.toml`. `pre-commit install` wires up
+ruff, codespell, and deptry as git hooks; the same checks plus
+`pip-audit` run on every push via the `Lint` and `Audit dependencies`
+workflows. See `docs/plans/python-quality-tools.md` for the rationale
+behind which security rules are enabled and which are ignored.
 
 ---
 
@@ -272,12 +292,13 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for full details.
 
 ## Common workflows
 
-### Load and explore a dataset
+### Load a dataset and start a search
 
 1. Start the app
 2. Click the hamburger menu (top-left)
 3. Select a demo dataset or use an importer
-4. Browse, listen/view, and vote
+4. Listen/view items and vote good/bad to train a detector, or load an
+   existing detector and apply it directly
 
 ### Run autodetect from CLI
 

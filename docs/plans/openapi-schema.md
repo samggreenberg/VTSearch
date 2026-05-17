@@ -128,25 +128,51 @@ handle, not two.
 ### TS client generation
 
 ```
-npm run generate-api-client
+npm run generate-api-client                # regenerate TS client from frontend/openapi.json
+npm run regenerate-openapi-snapshot        # re-dump the spec from a fresh Flask import
 ```
 
-A new script under `frontend/scripts/` calls
-`openapi-typescript-codegen` (or `openapi-fetch`) against
-`/api/openapi.json` (or a checked-in snapshot for CI determinism) and
-writes typed clients + DTOs into
-`frontend/src/app/generated/api-client/`. The existing
-`SettingsApiService` and friends are rewritten to thin wrappers around
-the generated client; the hand-maintained interfaces in
-`frontend/src/app/models/api.models.ts` are deleted blueprint-by-
-blueprint as the corresponding backend route migrates.
+The generator is `ng-openapi-gen` (Angular-specific; emits HttpClient-
+based functions so the existing `activeContextInterceptor` keeps
+attaching `X-Dataset-Id` / `X-Detector-Id` headers without a separate
+fetch middleware). It reads `frontend/openapi.json` and writes typed
+clients + DTOs into `frontend/src/app/generated/api-client/`.
 
-CI guards drift two ways:
-1. A `regenerate-and-diff` job rebuilds the spec from a running Flask
-   instance and diffs against the checked-in snapshot. Mismatch fails
-   the build (you forgot to regenerate after changing a schema).
-2. `npm run build:prod` already typechecks every consumer; renaming a
-   field that the frontend reads now breaks compilation immediately.
+Hybrid checked-in policy (deviation from the original plan's "check in
+both"):
+
+- `frontend/openapi.json` IS tracked — small, semantically meaningful,
+  the git diff really does show API changes at PR time.
+- `frontend/src/app/generated/` is **gitignored** — generated TS is a
+  deterministic function of the spec + generator version, so checking
+  it in adds noisy diffs and merge conflicts for no benefit.
+- The Angular build's `prebuild` / `prebuild:prod` npm hooks run
+  `ng-openapi-gen` automatically before every `ng build`, so a fresh
+  checkout's first `npm run build:prod` populates the directory.
+
+CI guards drift three ways:
+1. The `Pyright` workflow gains a final "OpenAPI snapshot drift check"
+   step: it regenerates the spec via `python scripts/dump_openapi.py`
+   and diffs against `frontend/openapi.json`. Mismatch fails CI (you
+   changed a schema without re-running `npm run regenerate-openapi-snapshot`).
+2. `npm run build:prod` always re-runs the generator first (via the
+   `prebuild:prod` hook) and then typechecks every consumer, so
+   renaming a field that the frontend reads now breaks compilation.
+3. The `ApiConfiguration`, function modules, and model types are
+   reachable via direct paths under `generated/api-client/` only — the
+   barrel index files are intentionally disabled in
+   `ng-openapi-gen.json` (`indexFile: false`, `functionIndex: false`,
+   `modelIndex: false`) so that an unrelated import doesn't accidentally
+   drag the whole 186-model surface into the initial bundle.
+
+### Bundle-size discipline
+
+Consumers MUST `import type { Foo }` (not `import { Foo }`) for any
+generated DTO, and import functions / `ApiConfiguration` from their
+specific module paths under `generated/api-client/`. Pulling a model in
+as a runtime import (or going through a barrel) adds the entire
+`models/` graph to the initial chunk — measured at ~36 kB versus the
+~6 kB cost of importing just the functions a service actually calls.
 
 ## Migration strategy
 
@@ -197,28 +223,19 @@ When the migration completes, these files should not exist:
 
 The previous OpenAPI work (feature-brainstorm §12.9, shipped in commit
 `44e9657`) added a separate, lighter-weight implementation:
-`vtsearch.openapi.generate_openapi_spec` walks `app.url_map` and emits
-a permissive spec (every route/method/path-param/docstring, but
-`{type: object}` for every body and response). It's served at
+`vtsearch.openapi.generate_openapi_spec` walked `app.url_map` and
+emitted a permissive spec (every route/method/path-param/docstring, but
+`{type: object}` for every body and response). It was served at
 `/openapi.json` and dumpable via `python app.py --openapi-schema`.
 
-This plan's flask-smorest implementation serves a richer spec at
-`/api/openapi.json` (plus Swagger UI at `/api/docs`) with real
-request/response schemas. The two coexist today — same routes, two
-specs. Once enough blueprints have migrated that the flask-smorest
-spec covers the surface the permissive one does, **delete**:
-
-- `vtsearch/openapi/` — the url-map walker.
-- The `/openapi.json` Flask route registration in `app.py`.
-- The `--openapi-schema` CLI flag in `app.py`'s argparse setup.
-- The `--openapi-schema` references in `docs/CLI.md` and
-  `docs/API.md § Machine-readable schema`.
-
-The point of consolidation is "enough blueprints" — concretely, every
-blueprint listed in the migration order below. Until then, both
-endpoints are useful: integrators who only need the route inventory
-can read `/openapi.json` without flask-smorest's typed
-request/response gates getting in the way during their migration.
+That permissive spec has been **deleted** now that flask-smorest covers
+every blueprint and serves a richer spec at `/api/openapi.json` (plus
+Swagger UI at `/api/docs`) with real request/response schemas. The
+removals — `vtsearch/openapi.py`, the `/openapi.json` route on
+`main_bp`, the `--openapi-schema` CLI flag, the
+`tests/api/test_openapi_schema.py` tests, and the docs references in
+`docs/CLI.md` / `docs/API.md` — all landed together in the same PR that
+checks off this follow-up.
 
 ## Resolved questions
 
@@ -562,19 +579,194 @@ request/response gates getting in the way during their migration.
       ``test_missing_exporter_name_400`` test in
       ``tests/io/test_settings_io.py`` was updated to expect 422 with
       the ``errors`` envelope.
-- [ ] Frontend `SettingsApiService` rewired to generated client
-- [ ] `frontend/src/app/models/api.models.ts` settings section deleted
-- [ ] Delete the pre-existing permissive `/openapi.json` +
-      `--openapi-schema` now that flask-smorest covers every blueprint
-      (see "Relationship to the pre-existing permissive spec" above).
-      The url-map walker in ``vtsearch/openapi.py`` and the ``/openapi.json``
-      route on ``main_bp`` are still in place — flagged as deprecated in
-      their docstrings but kept until a follow-up PR removes them
-      together with the ``--openapi-schema`` CLI flag and the docs
-      references in ``docs/CLI.md`` / ``docs/API.md``.
+- [x] TS client generation pilot landed (settings only):
+      ``ng-openapi-gen`` wired up via ``frontend/ng-openapi-gen.json``;
+      ``frontend/openapi.json`` snapshot checked in;
+      ``frontend/src/app/generated/api-client/`` gitignored and
+      regenerated by the ``prebuild`` / ``prebuild:prod`` npm hooks
+      (and on demand via ``npm run generate-api-client``);
+      ``scripts/dump_openapi.py`` dumps the live flask-smorest spec for
+      both the snapshot regen (``npm run regenerate-openapi-snapshot``)
+      and the CI drift guard (new step on the ``Pyright`` workflow).
+      ``SettingsApiService`` and ``SettingsStateService`` now call the
+      generated ``apiSettingsGet`` / ``apiSettingsPut`` /
+      ``apiSettingsDefaultsGet`` / ``apiVersionGet`` functions; the
+      ``AppSettings`` interface was deleted from
+      ``frontend/src/app/models/api.models.ts`` and consumers
+      (``settings-modal``, ``view-controls``, ``settings-state``)
+      ``import type``-only it from the generated module.
+- [x] Pre-existing permissive `/openapi.json` + `--openapi-schema`
+      deleted. Removed ``vtsearch/openapi.py`` (the url-map walker),
+      the ``/openapi.json`` route on ``main_bp``, the
+      ``--openapi-schema`` CLI flag in ``app.py``, and
+      ``tests/api/test_openapi_schema.py``. The ``--format`` flag's
+      help text no longer mentions ``--openapi-schema``. Docs updated:
+      ``docs/API.md § Machine-readable schema`` and ``docs/CLI.md``
+      both point at ``GET /api/openapi.json`` (and Swagger UI at
+      ``/api/docs``) as the single source.
+- [x] ``AuthService`` and ``AchievementsService`` rewired to the
+      generated TS client. ``AuthService`` now calls
+      ``apiAuthStatusGet`` / ``apiAuthLoginPost`` / ``apiAuthLogoutPost``;
+      ``AchievementsService`` now calls ``apiAchievementsGet`` /
+      ``apiAchievementsCategoryIdAcknowledgePost`` /
+      ``apiAchievementsCheckPhrasePost``. The local
+      ``AuthStatus`` / ``AchievementInfo`` / ``AchievementsState`` /
+      ``DocInfo`` / ``PendingAnnouncement`` / ``PhraseCheckResult``
+      interfaces were deleted from the service files; consumers
+      (``achievements-tab``, ``achievement-unlock-host``)
+      ``import type``-only the generated ``AchievementEntry`` /
+      ``AchievementState`` / ``DocEntry`` / ``PendingAnnouncement`` from
+      their direct module paths under ``generated/api-client/models/``.
+      ``HttpContext``-based ``SKIP_ERROR_TOAST`` flagging on
+      ``/api/auth/status`` and ``/api/auth/login`` is preserved by
+      passing the ``HttpContext`` through the generated function's
+      4th-positional ``context`` argument.
+- [x] ``FileBrowserApiService`` rewired to the generated TS client. The
+      service now calls ``apiBrowseGet`` from
+      ``generated/api-client/fn/file-browser/api-browse-get``; the local
+      ``BrowseEntry`` / ``BrowseResponse`` interfaces in the service
+      file were deleted. The sole consumer
+      (``components/file-browser/file-browser.component.ts``) now
+      ``import type``-only the generated ``BrowseDirectoryEntry`` /
+      ``BrowseFileEntry`` from their direct module paths under
+      ``generated/api-client/models/`` (directory and file entries are
+      now distinct types in the spec, where the legacy single
+      ``BrowseEntry`` had ``size_bytes`` as an optional field). The
+      generated entry types both carry ``modified_at`` as a required
+      string (empty on stat failure), matching the backend's
+      marshmallow schema.
+- [x] ``ExportersApiService`` (labelset exporters) rewired to the
+      generated TS client. The service now calls ``apiExportersGet`` /
+      ``apiExportersExportPost`` from
+      ``generated/api-client/fn/exporters/``; the ``runExport`` method's
+      argument type tightened from a free-form
+      ``{ exporter_name: string; [key: string]: unknown }`` to the
+      generated ``RunExportRequest`` (``exporter_name`` plus optional
+      ``field_values`` / ``results``). The three consumers
+      (``export-modal``, ``label-exporter-modal``,
+      ``autodetect-results-modal``) ``import type``-only the generated
+      ``ExporterEntry`` from
+      ``generated/api-client/models/exporter-entry``; ``ExporterInfo``
+      stays in ``api.models.ts`` for now because
+      ``settings-io-api.service.ts`` still uses it (the
+      ``/api/settings-exporters`` endpoint returns a different generated
+      type, ``SettingsExporterEntry``, so a separate follow-up rewires
+      that service and deletes ``ExporterInfo``). Plugin-field shapes
+      are not described in the OpenAPI spec, so ``ExporterEntry.fields``
+      is generated as ``Array<{[key: string]: any}>``; consumers cast it
+      to the legacy ``ImporterField[]`` at the point of use via a small
+      private helper. The ``export-modal`` template now iterates a typed
+      ``activeTabExporterFields: ImporterField[]`` getter (Angular's
+      template type-checker rejects dot-syntax access on index
+      signatures). A dead-code reference to ``exp['label']`` in the
+      ``autodetect-results-modal`` template — never populated by the
+      backend, always fell through to ``exp.name`` — was fixed to
+      ``exp.display_name || exp.name`` to match the actual response
+      shape.
+- [x] ``SettingsIoApiService`` rewired to the generated TS client. The
+      service now calls ``apiSettingsImportersGet`` /
+      ``apiSettingsExportersGet`` / ``apiSettingsExportersExportPost``
+      from ``generated/api-client/fn/settings-io/``; ``runExport``'s
+      response tightens from a local ``SettingsExportResponse`` to the
+      generated ``RunSettingsExportResponse``. The plugin-field
+      ``POST /api/settings-importers/import/<importer_name>`` route
+      stays on plain ``HttpClient.post`` (same pattern as
+      ``LabelImportersApiService.runImport``) — its body shape is
+      plugin-dependent and not described in the OpenAPI spec; the local
+      ``SettingsImportResponse`` interface stays in the service file for
+      the same reason (the spec types the route's response as just
+      ``Error``, but the backend actually returns
+      ``{success, message, keys?}``). The two consumers
+      (``settings-exporter-modal``, ``settings-importer-modal``)
+      replaced their local ``SettingsExporterInfo`` /
+      ``SettingsImporterInfo`` shim interfaces with
+      ``import type``-only ``SettingsExporterEntry`` /
+      ``SettingsImporterEntry`` from
+      ``generated/api-client/models/``; both modal templates now iterate
+      typed ``selectedExporterFields`` / ``selectedImporterFields``
+      getters (same Angular template-type-checker workaround as
+      ``export-modal``). With this migration ``settings-io`` no longer
+      imports ``ExporterInfo``, so the ``ExporterInfo`` interface was
+      deleted from ``frontend/src/app/models/api.models.ts`` (no
+      remaining consumers — ``settings-exporter-modal``'s local
+      ``SettingsExporterInfo`` was a separately-named shim, not a
+      reference). ``ImporterInfo`` stays because many other services
+      (label-importers, processor-importers, dataset-importer-modal,
+      etc.) still use it.
+- [x] ``LabelImportersApiService`` rewired to the generated TS client.
+      The service now calls ``apiLabelImportersGet`` /
+      ``apiLabelImportersIngestMissingPost`` from
+      ``generated/api-client/fn/label-importers/``; ``ingestMissing``'s
+      response tightens to the generated ``IngestMissingResponse``. The
+      two plugin-field routes (``runImport`` →
+      ``POST /api/label-importers/import/<importer_name>``,
+      ``runModelImport`` →
+      ``POST /api/detectors/<name>/import-labels/<importer_name>``)
+      stay on plain ``HttpClient.post`` — their body shapes are
+      plugin-dependent and not described in the OpenAPI spec, same
+      pattern as ``SettingsIoApiService.runImport``. The two consumers
+      (``label-importer-modal``,
+      ``new-detector-modal``) replaced their local
+      ``LabelImporterInfo`` shim interfaces with ``import type``-only
+      ``LabelImporterEntry`` from
+      ``generated/api-client/models/label-importer-entry``; both modal
+      templates now iterate typed ``selectedImporterFields`` /
+      ``selectedLabelImporterFields`` getters (same Angular
+      template-type-checker workaround as ``export-modal`` /
+      ``settings-importer-modal``). The ``LabelImporterInfo`` interface
+      was deleted from ``frontend/src/app/models/api.models.ts`` — no
+      remaining consumers.
+- [x] ``MediasApiService`` rewired to the generated TS client. The
+      service now calls ``apiMediasIdsGet`` / ``apiMediasBatchPost`` /
+      ``apiMediasMediaIdTextGet`` / ``apiMediasMediaIdVotePost`` from
+      ``generated/api-client/fn/medias/``; return types tightened to the
+      generated ``MediaIdsListResponse`` / ``MediaBatchResponse`` /
+      ``MediaParagraphResponse`` / ``MediaVoteResponse`` /
+      ``MediaAddToPileResponse``, and the request body for ``vote`` now
+      uses the generated ``MediaVoteRequest``. The four binary-stream
+      routes (``getAudio`` / ``getVideo`` / ``getImage`` / ``getMedia``)
+      stay on plain ``HttpClient.get`` with ``responseType: 'blob'`` —
+      ng-openapi-gen doesn't model binary response bodies usefully (the
+      generated function declares the success body as ``Error`` because
+      the spec only carries error responses for these routes). The
+      multipart ``addToPile`` route stays on plain ``HttpClient.post``
+      because the generated function's ``$Params`` has no ``body`` field
+      — same pattern as ``server-media-files/upload``. The local
+      ``TextResponse`` and ``VoteResponse`` interfaces were deleted from
+      ``frontend/src/app/models/api.models.ts`` (no remaining consumers).
+      ``MediaItem`` stays in ``api.models.ts`` for now because it is the
+      loose union type consumed by ~20 components and the metadata
+      cache; rewiring those to the generated ``MediaIdsListResponse`` /
+      ``MediaBatchResponse`` pair is a separate follow-up. The existing
+      consumers (``MediaStateService`` storing ``MediaItem[]``,
+      ``MediaMetadataCacheService`` storing ``Map<number, MediaItem>``)
+      keep typechecking because both generated response types are
+      structural subtypes of ``MediaItem`` (every required field
+      matches; the extra required fields on ``MediaBatchResponse`` are a
+      no-op against ``MediaItem``'s all-optional shape).
 
 ## Open follow-ups
 
+- **Migrate the remaining Angular services to the generated client.**
+  Settings, auth, achievements, file-browser, exporters, settings-io,
+  label-importers, and medias have all moved over. Each follow-up PR
+  picks one blueprint area (sorting, detectors, datasets, eval,
+  labels, …), rewires the matching Angular service(s) to call the
+  generated function modules under
+  ``frontend/src/app/generated/api-client/fn/``, and deletes the
+  corresponding hand-maintained interfaces from
+  ``frontend/src/app/models/api.models.ts``. The hybrid imports
+  (``import type`` for DTOs, direct function-module paths for
+  runtime symbols, no barrel) are required to keep the initial bundle
+  under the 525 kB budget — see *Bundle-size discipline* above.
+- **Replace ``MediaItem`` with the generated ``MediaIdsListResponse`` /
+  ``MediaBatchResponse`` pair.** ``MediaItem`` is the loose union type
+  consumed by ~20 components and the metadata cache. The
+  ``MediasApiService`` migration kept it in place because rewiring every
+  consumer is a larger task than swapping the service itself.  A
+  follow-up should narrow each consumer's type (lightweight stub vs.
+  full batch-response) and delete ``MediaItem`` from
+  ``api.models.ts``.
 - **Per-plugin schemas for plugin-field routes.** The four routes
   whose request body is a plugin-field shape stay on the legacy
   plain-Flask path on their (now smorest-typed) blueprints:

@@ -1,6 +1,0 @@
-# Video media type dependencies
-# These packages are required to decode video files and extract frames.
-opencv-python-headless
-# Bundles a static ffmpeg binary so video transcoding and audio extraction
-# work out of the box without a separate system install.
-imageio-ffmpeg

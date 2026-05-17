@@ -20,19 +20,18 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# ---------- dependency layer (cached unless requirements/*.txt change) ----
+# ---------- dependency layer ----------
+# requirements/base.txt forwards to pyproject.toml via `-e .[dev]`, so the
+# package source needs to be present when this layer builds. That means
+# any Python source change busts this layer; full source copy happens here.
 COPY requirements/ requirements/
 COPY pyproject.toml ./
-COPY vtsearch/__init__.py vtsearch/__init__.py
-
-# Copy all plugin requirements.txt files so -r references resolve.
 COPY vtsearch/ vtsearch/
 
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
         --prefer-binary \
-        -r requirements/base.txt && \
-    pip install --no-cache-dir --no-deps -e .
+        -r requirements/base.txt
 
 # ---------- application layer ----------
 COPY . .

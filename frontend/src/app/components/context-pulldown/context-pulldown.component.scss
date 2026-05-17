@@ -1,0 +1,222 @@
+:host {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 200px;
+}
+
+.pulldown-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-xs) 0.5rem;
+  background: var(--header-btn-bg);
+  border: 1px solid var(--header-btn-border);
+  border-radius: var(--radius-md);
+  color: var(--header-text);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+
+  &:hover,
+  &.is-open {
+    background: var(--header-btn-hover-bg);
+    border-color: var(--header-btn-hover-border);
+  }
+
+  .trigger-label {
+    flex: 0 0 auto;
+    color: var(--header-text-dim);
+    font-weight: 600;
+  }
+
+  .trigger-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+
+    &.is-placeholder {
+      color: var(--header-text-dim);
+      font-style: italic;
+    }
+  }
+
+  .trigger-caret {
+    flex: 0 0 auto;
+    color: var(--header-text-dim);
+    font-size: 0.7rem;
+  }
+}
+
+.pulldown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-width: 480px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 12px var(--shadow-dropdown);
+  z-index: var(--z-burger-menu);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pulldown-rows {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.pulldown-empty {
+  padding: var(--space-md) var(--space-lg);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-style: italic;
+}
+
+.pulldown-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-error-subtle, var(--bg-subtle));
+  border-bottom: 1px solid var(--border);
+  color: var(--color-bad);
+  font-size: var(--font-sm);
+
+  .pulldown-error__msg {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .pulldown-error__retry {
+    flex: 0 0 auto;
+    background: transparent;
+    border: 1px solid var(--color-bad);
+    border-radius: var(--radius-sm);
+    color: var(--color-bad);
+    padding: 2px 8px;
+    font-size: var(--font-xs);
+    cursor: pointer;
+
+    &:hover,
+    &:focus {
+      background: var(--color-bad);
+      color: var(--bg-surface);
+    }
+  }
+}
+
+.pulldown-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  white-space: nowrap;
+
+  &.is-focused,
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &.is-active {
+    background: var(--accent-highlight-bg);
+    font-weight: 600;
+
+    &.is-focused,
+    &:hover {
+      background: var(--accent-highlight-bg);
+    }
+  }
+
+  &.is-incompatible {
+    opacity: 0.5;
+
+    &:hover,
+    &.is-focused {
+      background: transparent;
+    }
+  }
+
+  .row-glyph {
+    flex: 0 0 1.1rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-family: monospace;
+  }
+
+  &.is-active .row-glyph {
+    color: var(--color-good);
+  }
+
+  .row-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .row-type {
+    flex: 0 0 auto;
+    color: var(--text-dim);
+    font-size: var(--font-xs);
+  }
+
+  // Spinner glyph that appears at the right edge of a row whose pair
+  // (this row's id + the active id on the other half) has a running or
+  // pending JobManager job. The spinner is per-pair, not per-half —
+  // see docs/plans/active-context-switcher.md § Phase 3.
+  .row-spinner {
+    flex: 0 0 auto;
+    color: var(--accent);
+    font-family: monospace;
+    line-height: 1;
+    // Inline-block keeps the glyph rotating about its own centre rather
+    // than the text baseline.
+    display: inline-block;
+    animation: vt-pulldown-spin 1.4s linear infinite;
+  }
+}
+
+@keyframes vt-pulldown-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.pulldown-footer {
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.pulldown-add {
+  display: block;
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+
+  &.is-focused,
+  &:hover {
+    background: var(--bg-hover);
+  }
+}

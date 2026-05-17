@@ -27,16 +27,6 @@ export interface MediaItem {
   embedder?: string;
 }
 
-export interface TextResponse {
-  content: string;
-  word_count?: number;
-  character_count?: number;
-}
-
-export interface VoteResponse {
-  ok: boolean;
-}
-
 // --- Sorting ---
 
 export interface SortResult {
@@ -367,51 +357,6 @@ export interface AutoDetectResponse {
   [key: string]: unknown;
 }
 
-// --- Settings ---
-
-export interface AppSettings {
-  volume: number;
-  inclusion?: number;
-  theme?: string;
-  enrich_descriptions?: boolean;
-  safe_thresholds?: boolean;
-  calibrate_count?: number;
-  calibration_fraction?: number;
-  audio_playing?: boolean;
-  swipe_animation?: boolean;
-  show_metadata?: boolean;
-  view_mode_left?: Record<string, 'grid' | 'list'>;
-  view_mode_right?: Record<string, 'grid' | 'list'>;
-  grid_icon_size_left?: Record<string, string>;
-  grid_icon_size_right?: Record<string, string>;
-  focus_mode_left?: Record<string, 'click' | 'hover'>;
-  focus_mode_right?: Record<string, 'click' | 'hover'>;
-  panel_pct_left?: Record<string, number>;
-  panel_pct_right?: Record<string, number>;
-  autorun_detectors?: string[];
-  autopilot_enabled?: boolean;
-  hide_autopilot?: boolean;
-  autopilot_top_greens?: number;
-  autopilot_hard_reds?: number;
-  autopilot_resort_interval?: number;
-  autopilot_goal_diversity?: number;
-  last_embedder_per_media_type?: Record<string, string>;
-  [key: string]: unknown;
-}
-
-// --- Exporters ---
-
-export interface ExporterInfo {
-  name: string;
-  display_name?: string;
-  description?: string;
-  icon?: string;
-  fields?: ImporterField[];
-  ui_mode?: string;
-  hidden_from_picker?: boolean;
-  [key: string]: unknown;
-}
-
 // --- Detectors ---
 
 export interface Detector {
@@ -468,13 +413,6 @@ export interface CombineDetectorsResult {
   combined_from: string[];
   source_label_counts: number[];
   examples: { type: string; value: string }[];
-}
-
-// --- Label Importers ---
-
-export interface LabelImporterInfo {
-  name: string;
-  [key: string]: unknown;
 }
 
 // --- Processor Importers ---

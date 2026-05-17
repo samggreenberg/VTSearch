@@ -1,3 +1,5 @@
+import { BehaviorSubject, Observable } from 'rxjs';
+
 /**
  * Shared controller for tables whose columns can be sorted, resized, and
  * drag-reordered.  Holds all the mutable state plus the event handlers; a
@@ -8,7 +10,16 @@
  * the table always fills its container without horizontal scroll.  Dragging
  * a divider grows the column to its left and shrinks the host column by the
  * same amount; clicking (no drag) auto-fits the left column to its content.
+ *
+ * Sort state is also exposed as the `sortState$` observable so non-host
+ * components (e.g. the top-bar context pulldowns) can mirror the host
+ * table's sort without being coupled to the host component.
  */
+export interface SortState<TCol extends string = string> {
+  column: TCol;
+  asc: boolean;
+}
+
 export interface ColMeta {
   label: string;
   title: string;
@@ -51,6 +62,8 @@ export class ManagedColumns<TCol extends string = string> {
   private readonly defaults: readonly TCol[];
   private resizeInit = false;
   private resizeState: ResizeState | null = null;
+  private readonly sortStateSubject: BehaviorSubject<SortState<TCol>>;
+  readonly sortState$: Observable<SortState<TCol>>;
 
   constructor(
     defaults: readonly TCol[],
@@ -62,6 +75,11 @@ export class ManagedColumns<TCol extends string = string> {
     this.storageKey = options.storageKey ?? null;
     this.sortColumn = options.initialSort;
     this.sortAsc = options.initialSortAsc ?? true;
+    this.sortStateSubject = new BehaviorSubject<SortState<TCol>>({
+      column: this.sortColumn,
+      asc: this.sortAsc,
+    });
+    this.sortState$ = this.sortStateSubject.asObservable();
     this.columnOrder = this.loadColumnOrder();
   }
 
@@ -78,6 +96,7 @@ export class ManagedColumns<TCol extends string = string> {
       this.sortColumn = col;
       this.sortAsc = true;
     }
+    this.sortStateSubject.next({ column: this.sortColumn, asc: this.sortAsc });
   }
 
   sortIndicator(col: string): string {

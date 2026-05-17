@@ -1,18 +1,20 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
-import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
+import { map, tap } from 'rxjs/operators';
 
-export interface AuthStatus {
-  provider: string;
-  user: string;
-  authenticated: boolean;
-  login_required: boolean;
-}
+import { ApiConfiguration } from '../generated/api-client/api-configuration';
+import type { AuthStatus } from '../generated/api-client/models/auth-status';
+import { apiAuthLoginPost } from '../generated/api-client/fn/auth/api-auth-login-post';
+import { apiAuthLogoutPost } from '../generated/api-client/fn/auth/api-auth-logout-post';
+import { apiAuthStatusGet } from '../generated/api-client/fn/auth/api-auth-status-get';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+  private http = inject(HttpClient);
+  private config = inject(ApiConfiguration);
+
   private statusSubject = new BehaviorSubject<AuthStatus | null>(null);
   status$ = this.statusSubject.asObservable();
 
@@ -20,30 +22,30 @@ export class AuthService {
   private readySubject = new BehaviorSubject<boolean>(false);
   ready$ = this.readySubject.asObservable();
 
-  constructor(private http: HttpClient) {}
-
   /** Fetch auth status from the server.  Called once at app startup. */
   checkStatus(): void {
     // Skip the global error banner: auth-status failures are handled inline
     // (we fall back to "no login required") and would otherwise pop up a
     // banner every time the user opens the app while offline.
     const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
-    this.http.get<AuthStatus>('/api/auth/status', { context }).subscribe({
-      next: (status) => {
-        this.statusSubject.next(status);
-        this.readySubject.next(true);
-      },
-      error: () => {
-        // If the endpoint fails, assume no login required.
-        this.statusSubject.next({
-          provider: 'default',
-          user: 'default',
-          authenticated: true,
-          login_required: false,
-        });
-        this.readySubject.next(true);
-      },
-    });
+    apiAuthStatusGet(this.http, this.config.rootUrl, undefined, context)
+      .pipe(map((r) => r.body))
+      .subscribe({
+        next: (status) => {
+          this.statusSubject.next(status);
+          this.readySubject.next(true);
+        },
+        error: () => {
+          // If the endpoint fails, assume no login required.
+          this.statusSubject.next({
+            provider: 'default',
+            user: 'default',
+            authenticated: true,
+            login_required: false,
+          });
+          this.readySubject.next(true);
+        },
+      });
   }
 
   /** Whether the user needs to log in before using the app. */
@@ -56,14 +58,16 @@ export class AuthService {
     // Skip the global error banner: the login form renders its own
     // inline error message, and a duplicate banner would be redundant.
     const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
-    return this.http
-      .post<AuthStatus>('/api/auth/login', { username }, { context })
-      .pipe(tap((status) => this.statusSubject.next(status)));
+    return apiAuthLoginPost(this.http, this.config.rootUrl, { body: { username } }, context).pipe(
+      map((r) => r.body),
+      tap((status) => this.statusSubject.next(status)),
+    );
   }
 
   logout(): Observable<AuthStatus> {
-    return this.http
-      .post<AuthStatus>('/api/auth/logout', {})
-      .pipe(tap((status) => this.statusSubject.next(status)));
+    return apiAuthLogoutPost(this.http, this.config.rootUrl).pipe(
+      map((r) => r.body),
+      tap((status) => this.statusSubject.next(status)),
+    );
   }
 }

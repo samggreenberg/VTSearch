@@ -1,29 +1,34 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { ImporterInfo, ExporterInfo } from '../models/api.models';
+import { map } from 'rxjs/operators';
 
+import { ApiConfiguration } from '../generated/api-client/api-configuration';
+import type { SettingsImporterEntry } from '../generated/api-client/models/settings-importer-entry';
+import type { SettingsExporterEntry } from '../generated/api-client/models/settings-exporter-entry';
+import type { RunSettingsExportRequest } from '../generated/api-client/models/run-settings-export-request';
+import type { RunSettingsExportResponse } from '../generated/api-client/models/run-settings-export-response';
+import { apiSettingsImportersGet } from '../generated/api-client/fn/settings-io/api-settings-importers-get';
+import { apiSettingsExportersGet } from '../generated/api-client/fn/settings-io/api-settings-exporters-get';
+import { apiSettingsExportersExportPost } from '../generated/api-client/fn/settings-io/api-settings-exporters-export-post';
+
+/** Response shape for the plugin-field import route. The body shape is
+ *  plugin-dependent and not described in the OpenAPI spec (the spec
+ *  declares it as just an Error response), so we keep a local interface
+ *  matching what the backend actually returns. */
 export interface SettingsImportResponse {
   success: boolean;
   message: string;
   keys?: string[];
 }
 
-export interface SettingsExportResponse {
-  success: boolean;
-  message: string;
-  download?: boolean;
-  data?: Record<string, unknown>;
-  filename?: string;
-  filepath?: string;
-}
-
 @Injectable({ providedIn: 'root' })
 export class SettingsIoApiService {
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
+  private config = inject(ApiConfiguration);
 
-  listImporters(): Observable<ImporterInfo[]> {
-    return this.http.get<ImporterInfo[]>('/api/settings-importers');
+  listImporters(): Observable<SettingsImporterEntry[]> {
+    return apiSettingsImportersGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   runImport(
@@ -32,6 +37,10 @@ export class SettingsIoApiService {
     file?: File,
     fileFieldKey?: string,
   ): Observable<SettingsImportResponse> {
+    // Plugin-field route — body shape is plugin-dependent and not
+    // described in the OpenAPI spec (see plan "Open follow-ups /
+    // Per-plugin schemas"), so this stays on plain HttpClient.
+    const url = `/api/settings-importers/import/${encodeURIComponent(importerName)}`;
     if (file && fileFieldKey) {
       const formData = new FormData();
       formData.append(fileFieldKey, file, file.name);
@@ -40,28 +49,25 @@ export class SettingsIoApiService {
           formData.append(key, String(value ?? ''));
         }
       }
-      return this.http.post<SettingsImportResponse>(
-        `/api/settings-importers/import/${encodeURIComponent(importerName)}`,
-        formData,
-      );
+      return this.http.post<SettingsImportResponse>(url, formData);
     }
-    return this.http.post<SettingsImportResponse>(
-      `/api/settings-importers/import/${encodeURIComponent(importerName)}`,
-      params,
-    );
+    return this.http.post<SettingsImportResponse>(url, params);
   }
 
-  listExporters(): Observable<ExporterInfo[]> {
-    return this.http.get<ExporterInfo[]>('/api/settings-exporters');
+  listExporters(): Observable<SettingsExporterEntry[]> {
+    return apiSettingsExportersGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   runExport(
     exporterName: string,
     fieldValues: Record<string, unknown>,
-  ): Observable<SettingsExportResponse> {
-    return this.http.post<SettingsExportResponse>('/api/settings-exporters/export', {
+  ): Observable<RunSettingsExportResponse> {
+    const body: RunSettingsExportRequest = {
       exporter_name: exporterName,
-      field_values: fieldValues,
-    });
+      field_values: fieldValues as { [key: string]: unknown },
+    };
+    return apiSettingsExportersExportPost(this.http, this.config.rootUrl, { body }).pipe(
+      map((r) => r.body),
+    );
   }
 }

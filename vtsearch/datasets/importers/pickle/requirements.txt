@@ -1,3 +1,0 @@
-# Pickle importer – no additional dependencies.
-# The standard-library `pickle` module and all other packages needed
-# (numpy, etc.) are already listed in the core requirements files.

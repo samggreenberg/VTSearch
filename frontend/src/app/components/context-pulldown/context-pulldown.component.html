@@ -1,0 +1,68 @@
+<button
+  type="button"
+  class="pulldown-trigger"
+  [class.is-open]="open"
+  [title]="fieldTitle"
+  [attr.aria-expanded]="open"
+  aria-haspopup="listbox"
+  (click)="toggle()"
+  (keydown)="onKeydown($event)"
+>
+  <strong class="trigger-label">{{ fieldLabel }}:</strong>
+  <span class="trigger-value" [class.is-placeholder]="!activeRowExists">{{ activeRowExists ? activeName : placeholderLabel }}</span>
+  <span class="trigger-caret" aria-hidden="true">▾</span>
+</button>
+
+@if (open) {
+  <div
+    #menuRef
+    class="pulldown-menu"
+    role="listbox"
+    [attr.aria-label]="isDataset ? 'Datasets' : 'Detectors'"
+    (mousedown)="onMenuMouseDown($event)"
+    (keydown)="onKeydown($event)"
+  >
+    @if (registryError) {
+      <div class="pulldown-error" role="alert">
+        <span class="pulldown-error__msg">Couldn't load {{ isDataset ? 'datasets' : 'detectors' }}.</span>
+        <button type="button" class="pulldown-error__retry" (click)="retryRegistry()">Retry</button>
+      </div>
+    }
+    @if (rows.length === 0) {
+      <div class="pulldown-empty">No {{ isDataset ? 'datasets' : 'detectors' }} yet.</div>
+    } @else {
+      <div class="pulldown-rows">
+        @for (row of rows; track trackRow($index, row); let i = $index) {
+          <button
+            type="button"
+            class="pulldown-row"
+            role="option"
+            [class.is-active]="row.active"
+            [class.is-incompatible]="!row.compatibleWithOther"
+            [class.is-focused]="i === focusedIndex"
+            [attr.aria-selected]="row.active"
+            [attr.title]="row.incompatReason || null"
+            (click)="pickRow(row)"
+            (mouseenter)="focusedIndex = i"
+          >
+            <span class="row-glyph" [title]="glyphTitle(row)">{{ glyphFor(row) }}</span>
+            <span class="row-name">{{ row.name }}</span>
+            <span class="row-type">· {{ row.mediaType }}</span>
+            @if (row.busy) {
+              <span class="row-spinner" [title]="busyTitle(row)" aria-hidden="true">⟳</span>
+            }
+          </button>
+        }
+      </div>
+    }
+    <div class="pulldown-footer">
+      <button
+        type="button"
+        class="pulldown-add"
+        [class.is-focused]="focusedIndex === -1 && rows.length === 0"
+        (click)="addNew()"
+        (mouseenter)="focusedIndex = -1"
+      >{{ addNewLabel }}</button>
+    </div>
+  </div>
+}

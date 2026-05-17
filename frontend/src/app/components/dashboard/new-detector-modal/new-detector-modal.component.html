@@ -154,8 +154,8 @@
               <span class="importer-form-title">{{ selectedLabelImporter.display_name || selectedLabelImporter.name }}</span>
             </div>
 
-            @if (selectedLabelImporter.fields && selectedLabelImporter.fields.length > 0) {
-              @for (field of selectedLabelImporter.fields; track field.key) {
+            @if (selectedLabelImporterFields.length > 0) {
+              @for (field of selectedLabelImporterFields; track field.key) {
                 <div class="form-group">
                   <label class="col-label" [for]="'nmm-' + field.key"
                     [title]="field.description || field.label || field.key">

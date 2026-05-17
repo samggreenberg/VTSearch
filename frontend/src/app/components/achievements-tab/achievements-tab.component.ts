@@ -4,16 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AchievementBadgeComponent } from '../achievement-badge/achievement-badge.component';
-import {
-  AchievementInfo,
-  AchievementsService,
-  AchievementsState,
-  DocInfo,
-} from '../../services/achievements.service';
+import { AchievementsService } from '../../services/achievements.service';
+import type { AchievementEntry } from '../../generated/api-client/models/achievement-entry';
+import type { AchievementState } from '../../generated/api-client/models/achievement-state';
+import type { DocEntry } from '../../generated/api-client/models/doc-entry';
 
 const TIER_NAMES = ['Bronze', 'Silver', 'Gold', 'Platinum'];
 
-interface AchievementRow extends AchievementInfo {
+interface AchievementRow extends AchievementEntry {
   tierName: string;
   prevThreshold: number;
   progressPct: number;
@@ -29,7 +27,7 @@ interface AchievementRow extends AchievementInfo {
 })
 export class AchievementsTabComponent implements OnInit, OnDestroy {
   rows: AchievementRow[] = [];
-  docs: DocInfo[] = [];
+  docs: DocEntry[] = [];
   loading = true;
   totalScore = 0;
 
@@ -91,7 +89,7 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
     });
   }
 
-  private applyState(state: AchievementsState): void {
+  private applyState(state: AchievementState): void {
     this.rows = state.achievements.map((a) => this.toRow(a));
     this.docs = state.docs;
     this.loading = state.achievements.length === 0;
@@ -101,7 +99,7 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
     );
   }
 
-  private toRow(a: AchievementInfo): AchievementRow {
+  private toRow(a: AchievementEntry): AchievementRow {
     const tierName = a.tier_idx >= 0 ? TIER_NAMES[a.tier_idx] : 'Locked';
     const prevThreshold = a.tier_idx >= 0 ? a.tiers[a.tier_idx] : 0;
     let progressPct = 100;

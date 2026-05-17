@@ -1,6 +1,6 @@
 # Active-context switcher (top-bar dataset/detector pulldowns)
 
-*Status: Proposed (no code yet). Three phases — each ships independently.*
+*Status: Phase 1 + 2 + 3 shipped. Phase 1 covered the switcher UI, "+ Add New" footers, incompatible-pair explainer, and the five follow-ups (focus-other-pulldown button, auto-select new item, deleted-item toast, registry-error retry, Dashboard-sort mirroring). Phase 2 made the URL authoritative for the active pair — `/label/:datasetId/:detectorId` and `/find/:datasetId/:detectorId` with an `activeContextGuard` that validates, flips, and loads before the route activates. Phase 3 added a per-pair spinner glyph on pulldown rows backed by a new `/api/jobs/active` endpoint, and rehydrates learned-sort on switch-back via the JobManager signature cache. One Phase 1 follow-up (embedder progress message) remains deferred — see "Open follow-ups" below.*
 
 This plan implements [ux-brainstorm.md §6.11](ux-brainstorm.md#611-active-datasetdetector-indicator--s) ("Active-dataset/detector indicator") and largely closes [§8.2](ux-brainstorm.md#82-switching-active-datasetdetector--s) ("Switching active dataset/detector"). It supersedes both entries as the canonical design — when this plan ships those entries will be marked SHIPPED and link here.
 
@@ -253,6 +253,84 @@ These came up in design and were deliberately deferred or rejected.
 - **Compatibility predicate beyond media-type equality** — Datasets and detectors each have a single `media_type`; multi-MediaType detectors don't exist today and adding the abstraction prematurely would be speculative.
 - **Cross-session "remember my last pair" persistence** — Not part of the switcher itself. If wanted, layer on as a separate per-user setting that the Dashboard's Train/Find buttons consult for default selection. Out of scope here so Phase 2 stays focused on URL-as-identity.
 - **Notification when a backgrounded job completes** — The app has no general notification system; adding one is much bigger than this plan. Phase 3's spinner-disappears-when-done is the affordance for v1.
+
+## What shipped (Phase 1)
+
+- **`utils/context-compat.ts`** with `isPairCompatible()` — single source of truth for the media-type-equality predicate.
+- **`services/active-context.service.ts`** gained `setActivePair(datasetId, modelId)`, `pair$` (atomic-pair observable), `pairKey$` (joined-key for switchMap triggers), `nextRequestId()` / `currentRequestId` for cancel-and-replace tracking.
+- **`services/new-thing-flows.service.ts`** — singleton openers for the dataset importer + new-detector modals plus emit subjects (`importStarted$`, `demoSelected$`, `created$`) so the modals can be invoked from outside the Dashboard.
+- **`services/context-switch.service.ts`** — drives a pulldown-initiated pair change end-to-end (atomic flip, parallel dataset/detector load, request-id guard, best-effort cancellation of stale loads).
+- **`components/context-pulldown/context-pulldown.component.*`** — top-bar pulldown with closed-state button + dropdown listbox (one row per registry entry, loaded/active glyph, dimmed-when-incompatible row, ellipsis truncation, "+ Add New" footer). Keyboard: ArrowUp / ArrowDown / Home / End / Enter / Escape.
+- **`components/context-pulldown/incompatible-pair-explainer.component.*`** — sibling of `<router-outlet />` that takes over `/label` and `/find` when the active pair is incompatible (mismatch, half-set, or fully empty).
+- **`app.component.*`** — replaced the read-only `Data: foo` / `Detector: cats` spans with `<vt-context-pulldown>` instances. Hosts the hoisted importer + new-detector modals via `@defer` blocks so they lazy-load (kept initial bundle at 476 kB, well under the 525 kB budget) and the explainer overlay.
+- **`components/dashboard/dashboard.component.*`** — opens its two `+` modals through `NewThingFlowsService` (instead of owning the open-state), and subscribes to the service's `importStarted$` / `demoSelected$` / `created$` so the existing post-action flows (progress polling, train-after-create) still work. Combine modals remain Dashboard-local.
+- **`components/find-view`, `components/label-view`** — subscribe to `activeContext.pair$` and re-run their loads when the pair changes mid-route, so a pulldown click on `/label` or `/find` re-prepares against the new pair.
+- **Tests**: `./run-tests.sh` green (3615 passed, 1 skipped, 2 xpassed). Dashboard specs updated to drive `NewThingFlowsService` directly for the two affected cases.
+
+## Phase 1 follow-ups shipped
+
+A second pass picked up four of the seven open items from the initial follow-up list:
+
+- **Focus-other-pulldown affordance** — `vt-incompatible-pair-explainer` now renders a primary "Pick a compatible detector" / "Pick a dataset" button alongside `Go to Dashboard`. The button calls a new `PulldownControlService.requestOpen(kind)`, which `ContextPulldownComponent` subscribes to and uses to call `openMenu()` — auto-focusing the first compatible row and scrolling it into view. Default direction: for media-type mismatches, swap the detector (matches the design's "Pick a compatible detector" copy); for missing-half cases, focus the missing half.
+- **"Add New" footer auto-selects the new item** — the pulldown tracks an `awaitingNew` flag set when its own `addNew()` runs. Detector flow: subscribes to `NewThingFlowsService.created$` and switches on success. Dataset flow: subscribes to `importStarted$`, snapshots the current registry-id set, and switches when a new id appears via `datasets$`. Dashboard-initiated adds don't touch the pulldown's flag, so they remain a no-op for the pulldown. Modal-dismissal-without-success clears the flag so an unrelated later registry change can't false-trigger.
+- **Toast on active-item deletion** — new `ActiveContextWatcherService` (started by `AppComponent`) watches `combineLatest([pair$, datasets$, detectors$])`, remembers the last-seen name per active half, and when an active id disappears from a non-empty registry, clears that half via `setActivePair(...)` and emits a toast (`"Dataset 'Foo' was removed. Pick another from the top-bar pulldown."`). Idempotent `start()` and "only fires after the item has been seen at least once" guarantees protect against initial-load false positives.
+- **Empty-registry error retry** — `DatasetStateService` gained `error$` (BehaviorSubject<string | null>) and a `catchError` in the registry-fetch pipeline so a failed forkJoin no longer tears down the outer subscription. The pulldown renders an inline `"Couldn't load … Retry"` banner inside the dropdown when `error$` is set; the Retry button calls `refresh()`. Successful fetches clear the error.
+- **Pulldown row order mirrors Dashboard grid sort** — `ManagedColumns` gained a `sortState$` BehaviorSubject-backed observable. New `DashboardColumnsService` owns the two `ManagedColumns` instances (datasets, detectors); `DashboardComponent` now pulls them from the service instead of constructing locally. `ContextPulldownComponent` subscribes to the matching `sortState$` and applies the same comparator the Dashboard's `sortedDatasets` / `sortedDetectors` getters use, so a column-header click in the Dashboard re-orders the pulldown's dropdown the same way.
+
+Drive-by: `settings-state.service.spec.ts` mockSettings.theme widened to `string` rather than the typed union, which broke the `Expected<AppSettings>` typecheck. Fixed with `as const`.
+
+## What shipped (Phase 2)
+
+- **Routes** (`frontend/src/app/app.routes.ts`) — Canonical view paths are now `/label/:datasetId/:detectorId` and `/find/:datasetId/:detectorId`, both gated by `activeContextGuard`. Bare `/label`, `/find`, and any unmatched path redirect to `/dashboard`.
+- **`frontend/src/app/guards/active-context.guard.ts`** — Reads `datasetId` / `detectorId` from the URL, waits for the registry to be loaded (`datasetState.loaded$`), validates both ids exist (toast + redirect on miss), then calls `ContextSwitchService.applyActivePair(...)` and holds the route until the returned Observable completes. Incompatible pairs are allowed through (the explainer handles them).
+- **`services/context-switch.service.ts`** — Split into two entry points: `applyActivePair(ds, det)` is called only by the guard (returns Observable that completes when prep finishes; uses a `ReplaySubject(1)` so late subscribers still see synchronous fast-path completion); `switchTo(ds, det)` is called by the top-bar pulldowns and now navigates to the new URL when on `/label` or `/find`, otherwise flips imperatively (so `/dashboard` pulldown clicks still work).
+- **`services/dataset-state.service.ts`** — Gained `loaded$` / `loaded`. Flips to `true` the first time the registry fetch settles (success or error), so the guard never hangs on a deep-link cold start.
+- **`services/active-context.service.ts`** — `setDatasetId` and `setModelId` removed (the guard owns mutation now via `setActivePair`).
+- **`services/active-context-watcher.service.ts`** — On detecting an active id was deleted from the registry, it now navigates to `/dashboard` after clearing the half (a half-pair URL is not representable).
+- **`components/dashboard/dashboard.component.ts`** — `onLabel` / `onFind` reduced to `router.navigate(['/label', ds, det])` / `['/find', ds, det]`. Per-button `trainLoading` / `findLoading` flags flip on click and reset on the next `NavigationEnd` / `NavigationCancel` / `NavigationError` so the icon waggle still works while the guard waits.
+- **`components/find-view/find-view.component.ts`** — Reads `datasetId` / `modelId` from `ActiveContextService` and the detector name from the registry; no longer depends on `FindSessionService`.
+- **`components/modals/export-modal/export-modal.component.ts`** — Falls back to a registry lookup against `ActiveContextService.modelId` when both upstream name sources are empty.
+- **Deleted**: `frontend/src/app/services/find-session.service.ts`. The active (dataset, detector) pair is the URL; the modelName is derivable from the registry.
+- **Tests**: `./run-tests.sh` green (3615 passed, 1 skipped, 2 xpassed). New specs for the guard and the new `loaded$` flag; Dashboard's `onLabel` spec rewritten around the navigation contract (the guard owns the load it used to test inline).
+
+## What shipped (Phase 3)
+
+- **`vtsearch/concurrency/async_jobs.py`** — `AsyncJob` carries `dataset_id` / `detector_id` populated at `start()` time from the request's active contexts. A new `JOB_MANAGERS` registry keys every long-running JobManager by its public job-type name (`"learned-sort"`, `"eval"`), and `list_active_pairs()` walks the registry, deduplicates by `(dataset_id, detector_id)`, and returns the merged job-type list for each busy pair. Jobs started without a pair (legacy callers, test fixtures) are filtered out so the frontend never gets a spinner with nowhere to attach. `JobManager.active_jobs()` returns the running + pending slots (zero, one, or two).
+- **`vtsearch/routes/sorting.py` + `routes/eval.py`** — Both `start()` call sites now pass `dataset_id=ds_ctx.dataset_id`, `detector_id=det_ctx.detector_id`.
+- **New: `vtsearch/routes/jobs.py` + `schemas/jobs.py`** — `GET /api/jobs/active` returns `{busy_pairs: [{dataset_id, detector_id, job_types}]}`. Wired into `vtsearch/routes/__init__.py` and registered in `app.py`. OpenAPI snapshot regenerated.
+- **New: `frontend/src/app/services/running-jobs.service.ts`** — Polls `/api/jobs/active` every 3 s, exposes `busyPairs$: Observable<Map<string, string[]>>` keyed by `${datasetId}::${detectorId}`. Polling starts lazily on the first subscriber and stops on the last unsubscribe, so spec runs and pulldown-less pages make zero traffic. A transient fetch failure emits an empty map (clearing stale spinners) instead of tearing the pipeline down — next tick retries.
+- **`components/context-pulldown/`** — `PulldownRow` gained `busy: boolean` + `busyJobTypes: string[]`, computed against the *other* half's currently-active id (dataset-pulldown rows check `(row.id, activeDetectorId)`; detector-pulldown rows check `(activeDatasetId, row.id)`). When `busy`, the template renders an animated `⟳` glyph at the right edge of the row with a `"Learned sort, Eval indicator running on this pair"`-style tooltip. Subscribed to `runningJobs.busyPairs$` in `ngOnInit` so each poll tick rebuilds the rows.
+- **`components/label-view/label-view.component.ts`** — `reloadForNewPair()` now also kicks off `onLearnedSort(false)` after votes land, but only when the user's `sortMode === 'learned'` and the reloaded labelset has both classes. The server's signature cache short-circuits the re-fire when the pair has been trained recently, so switching back to a previously-sorted pair is a free rehydration; otherwise it starts a fresh job. The one-shot `labelsetGoodCount$` subscription is held in `rehydrateLearnedSub` and torn down at the start of the next switch.
+- **Tests**: New `tests/api/test_jobs_active.py` (5 tests) covers the empty case, single-pair listing, multi-manager merging on one pair, jobs-without-pair filtering, and pending-slot inclusion. Full `./run-tests.sh` green (3620 passed, 1 skipped, 2 xpassed).
+
+### Rehydration verification (Phase 3 sweep)
+
+| View | Job manager | Cache mechanism | Rehydrates on re-entry? | Status |
+|------|-------------|-----------------|-------------------------|--------|
+| Learned-sort (training panel) | `learned_sort_jobs` | `JobManager.cached_for(signature)` on `POST /api/learned-sort` | Yes via signature cache — `reloadForNewPair` now re-fires `onLearnedSort` on switch-back when `sortMode === 'learned'`; if the signature matches the last completed run, the route returns the cached `done` payload synchronously. Cross-pair rehydration is free; cross-vote requires a re-train. | **Wired** (Phase 3) |
+| Eval indicators (smart / stable / span) | `eval_jobs` | `JobManager.cached_for(signature)` on `POST /api/eval/train-and-score` | Yes via signature cache — the `vt-progress-modal` calls `trainAndScore(metric)` in `ngOnInit`; if the signature is unchanged the route returns the cached `done` payload immediately without polling. The modal opens on demand, so rehydration is naturally on-open rather than on switch. | **Already worked** (no wiring needed) |
+| Labeling-progress (per-step MLP chart) | None (synchronous compute) | Module-level `_cached_steps` in `vtsearch/detectors/labeling_progress.py` | Yes via in-place cache — `POST /api/labeling-progress` calls `analyze_labeling_progress()` which reuses the per-step cache when the labeling history is unchanged. The endpoint isn't async-managed so it has no spinner-glyph entry; the cache makes rehydration fast (sub-second) anyway. | **Already worked** (sync + cache) |
+
+Choice on the "running + pending" tooltip case: a pair with both a running and a pending job on the same manager appears once with the manager's job-type listed once — the pending slot is the latest-wins handoff target and `list_active_pairs` deduplicates by `(ds, det)`. The user sees one spinner for "this pair is busy", which is the truthful UX (they don't need to know about the coalescing).
+
+## Open follow-ups
+
+Carry-overs from earlier phases. Phase 2 closed the `FindSessionService` deletion item; Phase 3 closed the in-flight job affordances item.
+
+- **"Re-resolving labels for X's embedder…" progress message** (Phase 1 follow-up) — the design called for a custom progress message when the new dataset's embedder differs from the previous one. Phase 1 reuses the generic loading affordance. Implementing this is bigger than a copy change because: (a) `ContextSwitchService.flipAndLoad` only triggers a detector re-load when `!detector_loaded`, so an embedder change on a detector that's already "loaded" against the previous dataset would leave its label embeddings in the old embedder's space — there's no current re-embed path to hang a custom progress message off; (b) the labelset re-resolve in `before_request` (`ensure_votes_match_active_dataset`) only re-keys cids by origin, it doesn't re-embed.
+
+  **Latent correctness concern surfaced during the Phase 3 audit** (not yet exploited in normal use because most users keep one embedder per detector across datasets): `populate_label_embeddings` in `vtsearch/detectors/labelset_training.py:111` keys the cache by `stable_element_id` (origin/md5) only — *not* by embedder. So if a detector is loaded once against dataset A (embedder X) and then the user switches to dataset B (embedder Y), the cached `det_ctx.label_embeddings` are still X-space vectors but `_embedder_for_active_dataset(snap)` now returns Y. Any new label that's not yet cached gets embedded by Y; cached labels stay in X-space; learned-sort then trains an MLP on mixed-space inputs. `det_ctx.embedder` is recorded (sorting.py:425) but never consulted as a cache-invalidation key.
+
+  To land this properly:
+  1. Detect the embedder change on switch (compare `det_ctx.embedder` with the new active dataset's embedder via `_embedder_for_active_dataset`).
+  2. Either:
+     - Invalidate `det_ctx.label_embeddings` and force `train_from_labelset` to re-embed all elements against the new embedder, *or*
+     - Re-key the cache by `(stable_element_id, embedder_name)` so old vectors aren't reused but also aren't lost (saves re-embed when the user toggles back).
+  3. Add a "re-embed labels only" code path to `ContextSwitchService` (or fold into the existing detector-load flow) so the standard progress tracker shows the work — `ContextSwitchService.flipAndLoad` currently shortcuts on `detector_loaded`, which would skip the re-embed entirely.
+  4. Thread the new embedder's display name through to the progress tracker in `vtsearch/routes/detectors/registry.py:392`'s `"Embedding labels…"` step so the message reads `"Re-resolving labels for <embedder display name>…"` as the design called for.
+  5. Tests: `tests/detectors/` should gain a cross-embedder switch test that asserts `det_ctx.label_embeddings` is invalidated when the active dataset's embedder changes (currently no test guards this).
+
+  Worth a small design pass before implementation. Suggested entry points: `frontend/src/app/services/context-switch.service.ts:101` (`flipAndLoad`); `vtsearch/detectors/dataset_sync.py:28` (`ensure_votes_match_active_dataset`); `vtsearch/detectors/labelset_training.py:111` (`populate_label_embeddings`'s cache lookup).
 
 ## Open questions
 

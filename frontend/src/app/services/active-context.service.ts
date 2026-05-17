@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, combineLatest, Observable } from 'rxjs';
+import { distinctUntilChanged, map } from 'rxjs/operators';
 
 /**
  * Tracks which dataset and model the user is currently working with.
@@ -13,9 +14,32 @@ import { BehaviorSubject } from 'rxjs';
 export class ActiveContextService {
   private readonly datasetIdSubject = new BehaviorSubject<string>('');
   private readonly modelIdSubject = new BehaviorSubject<string>('');
+  private readonly pairSubject = new BehaviorSubject<{ datasetId: string; modelId: string }>({
+    datasetId: '',
+    modelId: '',
+  });
+  private requestCounter = 0;
 
   readonly datasetId$ = this.datasetIdSubject.asObservable();
   readonly modelId$ = this.modelIdSubject.asObservable();
+
+  /**
+   * Emits whenever either half of the pair changes. Use this when a view
+   * needs to react to a swap — subscribing to the two halves separately
+   * would fire twice for an atomic `setActivePair()` call.
+   */
+  readonly pair$: Observable<{ datasetId: string; modelId: string }> = this.pairSubject.pipe(
+    distinctUntilChanged((a, b) => a.datasetId === b.datasetId && a.modelId === b.modelId),
+  );
+
+  /**
+   * Emits whenever the (datasetId, modelId) tuple changes, as a joined key
+   * (`<datasetId>::<modelId>`). Useful as a `switchMap` trigger.
+   */
+  readonly pairKey$: Observable<string> = combineLatest([this.datasetId$, this.modelId$]).pipe(
+    map(([d, m]) => `${d}::${m}`),
+    distinctUntilChanged(),
+  );
 
   get datasetId(): string {
     return this.datasetIdSubject.value;
@@ -25,17 +49,46 @@ export class ActiveContextService {
     return this.modelIdSubject.value;
   }
 
-  setDatasetId(id: string): void {
-    this.datasetIdSubject.next(id);
-  }
-
-  setModelId(id: string): void {
-    this.modelIdSubject.next(id);
+  /**
+   * Set both halves of the active pair in a single change.
+   *
+   * Phase 2 made the URL authoritative — call this only from the
+   * `activeContextGuard` (via `ContextSwitchService.applyActivePair`)
+   * or from internal recovery paths (e.g. `ActiveContextWatcherService`
+   * clearing a deleted half). UI code that wants to change the pair
+   * should `router.navigate(['/label', ds, det])` and let the guard
+   * write through here.
+   */
+  setActivePair(datasetId: string, modelId: string): void {
+    const dsChanged = this.datasetIdSubject.value !== datasetId;
+    const mChanged = this.modelIdSubject.value !== modelId;
+    if (!dsChanged && !mChanged) return;
+    if (dsChanged) this.datasetIdSubject.next(datasetId);
+    if (mChanged) this.modelIdSubject.next(modelId);
+    this.pairSubject.next({ datasetId, modelId });
   }
 
   clear(): void {
-    this.datasetIdSubject.next('');
-    this.modelIdSubject.next('');
+    this.setActivePair('', '');
+  }
+
+  /**
+   * Allocate a fresh request id for a switcher-driven prep flow. Latest
+   * caller wins: when a prep step completes, the caller compares the id
+   * it captured at start to the current id and discards the result if
+   * they differ. Cancellation of in-flight work is best-effort; this
+   * request-id check is the correctness guarantee.
+   *
+   * See `docs/plans/active-context-switcher.md` § "Cancel-and-replace
+   * on rapid re-click".
+   */
+  nextRequestId(): number {
+    this.requestCounter += 1;
+    return this.requestCounter;
+  }
+
+  get currentRequestId(): number {
+    return this.requestCounter;
   }
 
   /**

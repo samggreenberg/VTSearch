@@ -1,50 +1,17 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, Subject, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 
-export interface AchievementInfo {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  tiers: number[];
-  counter: number;
-  tier_idx: number;
-  next_threshold: number | null;
-}
+import { ApiConfiguration } from '../generated/api-client/api-configuration';
+import type { AchievementState } from '../generated/api-client/models/achievement-state';
+import type { CheckPhraseResponse } from '../generated/api-client/models/check-phrase-response';
+import type { PendingAnnouncement } from '../generated/api-client/models/pending-announcement';
+import { apiAchievementsCategoryIdAcknowledgePost } from '../generated/api-client/fn/achievements/api-achievements-category-id-acknowledge-post';
+import { apiAchievementsCheckPhrasePost } from '../generated/api-client/fn/achievements/api-achievements-check-phrase-post';
+import { apiAchievementsGet } from '../generated/api-client/fn/achievements/api-achievements-get';
 
-export interface PendingAnnouncement {
-  id: string;
-  name: string;
-  icon: string;
-  tier_idx: number;
-  tier_name: string;
-  threshold: number;
-}
-
-export interface DocInfo {
-  id: string;
-  name: string;
-  path: string;
-  read: boolean;
-}
-
-export interface AchievementsState {
-  tier_names: string[];
-  achievements: AchievementInfo[];
-  pending_announcements: PendingAnnouncement[];
-  docs: DocInfo[];
-}
-
-export interface PhraseCheckResult {
-  matched: boolean;
-  doc_id: string | null;
-  doc_name: string | null;
-  already_read: boolean;
-}
-
-const EMPTY_STATE: AchievementsState = {
+const EMPTY_STATE: AchievementState = {
   tier_names: [],
   achievements: [],
   pending_announcements: [],
@@ -62,14 +29,15 @@ const EMPTY_STATE: AchievementsState = {
  */
 @Injectable({ providedIn: 'root' })
 export class AchievementsService {
-  private readonly state$ = new BehaviorSubject<AchievementsState>(EMPTY_STATE);
+  private http = inject(HttpClient);
+  private config = inject(ApiConfiguration);
+
+  private readonly state$ = new BehaviorSubject<AchievementState>(EMPTY_STATE);
   private readonly unlock$ = new Subject<PendingAnnouncement>();
   private inFlight = false;
 
-  constructor(private http: HttpClient) {}
-
   /** Stream of state snapshots for UI binding. */
-  get state(): Observable<AchievementsState> {
+  get state(): Observable<AchievementState> {
     return this.state$.asObservable();
   }
 
@@ -78,7 +46,7 @@ export class AchievementsService {
     return this.unlock$.asObservable();
   }
 
-  get snapshot(): AchievementsState {
+  get snapshot(): AchievementState {
     return this.state$.value;
   }
 
@@ -89,9 +57,11 @@ export class AchievementsService {
   refresh(): void {
     if (this.inFlight) return;
     this.inFlight = true;
-    this.http
-      .get<AchievementsState>('/api/achievements')
-      .pipe(catchError(() => of(EMPTY_STATE)))
+    apiAchievementsGet(this.http, this.config.rootUrl)
+      .pipe(
+        map((r) => r.body),
+        catchError(() => of(EMPTY_STATE)),
+      )
       .subscribe((next) => {
         this.inFlight = false;
         this.state$.next(next);
@@ -106,10 +76,10 @@ export class AchievementsService {
    * Refreshes state afterward to update the panel display.
    */
   acknowledge(categoryId: string, tierIdx: number): void {
-    this.http
-      .post(`/api/achievements/${encodeURIComponent(categoryId)}/acknowledge`, {
-        tier_idx: tierIdx,
-      })
+    apiAchievementsCategoryIdAcknowledgePost(this.http, this.config.rootUrl, {
+      category_id: categoryId,
+      body: { tier_idx: tierIdx },
+    })
       .pipe(catchError(() => of(null)))
       .subscribe(() => this.refresh());
   }
@@ -119,13 +89,13 @@ export class AchievementsService {
    * (matched / which doc / whether already credited) and refreshes the state
    * so the docs panel reflects the new read state on success.
    */
-  checkPhrase(phrase: string): Observable<PhraseCheckResult> {
-    return new Observable<PhraseCheckResult>((subscriber) => {
-      this.http
-        .post<PhraseCheckResult>('/api/achievements/check-phrase', { phrase })
+  checkPhrase(phrase: string): Observable<CheckPhraseResponse> {
+    return new Observable<CheckPhraseResponse>((subscriber) => {
+      apiAchievementsCheckPhrasePost(this.http, this.config.rootUrl, { body: { phrase } })
         .pipe(
+          map((r) => r.body),
           catchError(() =>
-            of<PhraseCheckResult>({
+            of<CheckPhraseResponse>({
               matched: false,
               doc_id: null,
               doc_name: null,

@@ -43,17 +43,17 @@ PUT /api/dashboard/dataset-rename
 POST /api/find/check-labels
 ```
 
-**Body:** `{"dataset_ids": ["id1", "id2"], "model_ids": ["m1"]}`
+**Body:** `{"dataset_ids": ["id1", "id2"], "detector_ids": ["m1"]}`
 
 Pre-flight check that reports how many detector labels can be resolved
-for the given models and datasets. Call this before starting a Find to warn
-the user about unresolved labels.
+for the given detectors and datasets. Call this before starting a Find to
+warn the user about unresolved labels.
 
 → ```json
 {
   "warnings": [
     {
-      "model_name": "Mammals",
+      "detector_name": "Mammals",
       "total_labels": 82,
       "resolved_labels": 60,
       "failed_labels": 22
@@ -62,8 +62,8 @@ the user about unresolved labels.
 }
 ```
 
-`warnings` only contains entries for models with at least one unresolved label.
-An empty `warnings` list means everything is fine.
+`warnings` only contains entries for detectors with at least one unresolved
+label. An empty `warnings` list means everything is fine.
 
 ### Run find
 
@@ -71,17 +71,17 @@ An empty `warnings` list means everything is fine.
 POST /api/find
 ```
 
-**Body:** `{"dataset_ids": ["id1", "id2"], "model_ids": ["m1"]}`
+**Body:** `{"dataset_ids": ["id1", "id2"], "detector_ids": ["m1"]}`
 
 → ```json
 {
   "results": [...],
   "negative_results": [...],
   "datasets": ["ESC-50", "Speech Commands"],
-  "models": ["Dog Barks"],
+  "detectors": ["Dog Barks"],
   "media_type": "audio",
   "multiple_datasets": true,
-  "multiple_models": false,
+  "multiple_detectors": false,
   "total_hits": 42
 }
 ```
@@ -104,21 +104,22 @@ Find progress streams on the `find` channel of
 ```
 
 `status` is `"idle"` or `"running"`. `step` / `total_steps` track the
-high-level Find phases (prepare models, load data, score).
+high-level Find phases (prepare detectors, load data, score).
 
-### Apply labels from model (Find Label)
+### Apply labels from detector (Find Label)
 
 ```
 POST /api/find-label
 ```
 
-**Body:** `{"model_id": "abc123"}` — optionally include `"dataset_id"` to
-override the request-scoped dataset context.
+**Body:** `{"detector_id": "abc123"}` — optionally include `"dataset_id"`
+to override the request-scoped dataset context.
 
-Resolves the model from the registry, scores every loaded media using the
-model's weights, and applies Good/Bad labels for **all** elements based on
-the threshold. If no pre-trained weights are available, trains on-the-fly
-from the detector's labelset (resolving label origins as needed).
+Resolves the detector from the registry, scores every loaded media using
+the detector's MLP, and applies Good/Bad labels for **all** elements
+based on the threshold. If no trained MLP is cached in the detector's
+context, trains on-the-fly from the detector's labelset (resolving label
+origins as needed).
 
 → ```json
 {
@@ -129,4 +130,4 @@ from the detector's labelset (resolving label origins as needed).
 }
 ```
 
-404 if model not found. 400 if `model_id` is missing.
+404 if detector not found. 400 if `detector_id` is missing.

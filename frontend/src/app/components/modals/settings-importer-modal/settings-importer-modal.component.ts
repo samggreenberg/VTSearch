@@ -6,16 +6,7 @@ import { FileBrowserComponent } from '../../file-browser/file-browser.component'
 import { IconComponent } from '../../icon/icon.component';
 import { SettingsIoApiService } from '../../../services/settings-io-api.service';
 import { ImporterField } from '../../../models/api.models';
-
-interface SettingsImporterInfo {
-  name: string;
-  display_name?: string;
-  description?: string;
-  icon?: string;
-  fields?: ImporterField[];
-  ui_mode?: string;
-  hidden_from_picker?: boolean;
-}
+import type { SettingsImporterEntry } from '../../../generated/api-client/models/settings-importer-entry';
 
 type ModalView = 'picker' | 'form';
 
@@ -31,9 +22,9 @@ export class SettingsImporterModalComponent implements OnInit {
   @Output() imported = new EventEmitter<void>();
 
   view: ModalView = 'picker';
-  importers: SettingsImporterInfo[] = [];
+  importers: SettingsImporterEntry[] = [];
   loading = true;
-  selectedImporter: SettingsImporterInfo | null = null;
+  selectedImporter: SettingsImporterEntry | null = null;
   formValues: Record<string, string> = {};
   selectedFile: File | null = null;
   selectedFileFieldKey: string | null = null;
@@ -50,9 +41,16 @@ export class SettingsImporterModalComponent implements OnInit {
     return 'Import Settings';
   }
 
+  /** Typed view of the selected importer's plugin fields for the template
+   *  (the generated SettingsImporterEntry types `fields` as an open dict
+   *  because plugin field schemas aren't part of the OpenAPI client). */
+  get selectedImporterFields(): ImporterField[] {
+    return (this.selectedImporter?.fields ?? []) as ImporterField[];
+  }
+
   ngOnInit(): void {
     this.settingsIoApi.listImporters().subscribe({
-      next: (list: SettingsImporterInfo[]) => {
+      next: (list) => {
         this.importers = list.filter((imp) => !imp.hidden_from_picker);
         this.loading = false;
       },
@@ -63,17 +61,16 @@ export class SettingsImporterModalComponent implements OnInit {
     });
   }
 
-  selectImporter(importer: SettingsImporterInfo): void {
+  selectImporter(importer: SettingsImporterEntry): void {
     this.selectedImporter = importer;
     this.formValues = {};
     this.selectedFile = null;
     this.selectedFileFieldKey = null;
     this.error = '';
     this.successMessage = '';
-    if (importer.fields) {
-      for (const field of importer.fields) {
-        if (field.default) this.formValues[field.key] = field.default;
-      }
+    const fields = (importer.fields ?? []) as ImporterField[];
+    for (const field of fields) {
+      if (field.default) this.formValues[field.key] = field.default;
     }
     this.view = 'form';
   }

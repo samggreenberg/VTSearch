@@ -8,9 +8,9 @@ import { ExportersApiService } from '../../../services/exporters-api.service';
 import {
   AutoDetectHit,
   AutoDetectResultsData,
-  ExporterInfo,
   ImporterField,
 } from '../../../models/api.models';
+import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 
 @Component({
   selector: 'vt-autodetect-results-modal',
@@ -24,7 +24,7 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   @Output() closed = new EventEmitter<void>();
 
   exportSides: 'good' | 'bad' | 'both' = 'good';
-  exporters: ExporterInfo[] = [];
+  exporters: ExporterEntry[] = [];
   selectedExporter = '';
   exporterFields: ImporterField[] = [];
   exportFieldValues: Record<string, string> = {};
@@ -112,7 +112,7 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
 
   private updateExporterFields(): void {
     const exp = this.exporters.find((e) => e.name === this.selectedExporter);
-    this.exporterFields = exp?.fields || [];
+    this.exporterFields = (exp?.fields ?? []) as ImporterField[];
     this.exportFieldValues = {};
     for (const field of this.exporterFields) {
       if (field.default) {

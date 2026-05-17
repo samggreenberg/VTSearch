@@ -79,6 +79,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private statusPolling$: Subscription | null = null;
   private scoringProgressPoll$: Subscription | null = null;
   private learnedSortPending = false;
+  /** Held subscription to the one-shot `labelsetGoodCount$` watcher that
+   *  re-fires `onLearnedSort` after a pair switch, when sortMode was
+   *  already `learned`. Cleared on each switch so back-to-back switches
+   *  don't leak handlers from earlier pairs. */
+  private rehydrateLearnedSub?: Subscription;
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
   private dragging = false;
@@ -121,6 +126,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((modelId) => this.refreshTrainableModelName(modelId));
     this.refreshTrainableModelName(this.activeContext.modelId);
+
+    // Reload data when the active pair changes via the top-bar switcher.
+    // Skip the first emission — `ngOnInit` above already triggered the
+    // initial loads.
+    let firstPair = true;
+    this.activeContext.pair$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        if (firstPair) {
+          firstPair = false;
+          return;
+        }
+        this.reloadForNewPair();
+      });
 
     this.mediaState.medias$
       .pipe(takeUntil(this.destroy$))
@@ -175,6 +194,44 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     setTimeout(() => this.centerPanel?.init());
+  }
+
+  /** Triggered by the top-bar context switcher whenever the active
+   *  (dataset, detector) pair changes. Resets the view-local ephemeral
+   *  state (sort results, votes cache) and re-runs the same loads that
+   *  ngOnInit fires on first entry.
+   *
+   *  Phase 3 rehydration: if the user's sort mode is `learned` and the
+   *  reloaded labelset has both classes, fire one `onLearnedSort` call
+   *  after votes land. The server's signature cache short-circuits the
+   *  re-fire when the pair has been trained recently (free re-entry),
+   *  and starts a fresh job otherwise — either way the user lands on
+   *  learned-sorted content without a manual mode toggle. */
+  private reloadForNewPair(): void {
+    this.rehydrateLearnedSub?.unsubscribe();
+    this.rehydrateLearnedSub = undefined;
+    this.sortState.setSortResults([], 0);
+    this.sortState.setSortStatus('');
+    this.sortState.setSortProgress(0, 0);
+    this.voteState.clear();
+    this.mediaState.loadMedias();
+    this.voteState.loadVotes();
+    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (status) => { this.datasetName = status.display_name || ''; },
+    });
+
+    if (this.sortState.sortMode === 'learned') {
+      this.rehydrateLearnedSub = this.voteState.labelsetGoodCount$
+        .pipe(
+          takeUntil(this.destroy$),
+          filter(
+            () =>
+              this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable,
+          ),
+          take(1),
+        )
+        .subscribe(() => this.onLearnedSort(false));
+    }
   }
 
   ngOnDestroy(): void {

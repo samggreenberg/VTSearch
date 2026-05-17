@@ -154,8 +154,8 @@
         </div>
       } @else if (activeTabExporter) {
         <div class="tab-pane">
-          @if (activeTabExporter.fields && activeTabExporter.fields.length > 0) {
-            @for (field of activeTabExporter.fields; track field.key) {
+          @if (activeTabExporterFields.length > 0) {
+            @for (field of activeTabExporterFields; track field.key) {
               <div class="tab-field">
                 <label class="form-label" [for]="'field-' + field.key">
                   {{ field.label || field.key }}

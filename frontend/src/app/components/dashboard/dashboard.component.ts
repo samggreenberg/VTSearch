@@ -1,6 +1,6 @@
 import { Component, HostListener, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
 import { catchError, filter, switchMap, take, takeUntil } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
@@ -8,22 +8,25 @@ import { DetectorsApiService } from '../../services/detectors-api.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
-import { FindSessionService } from '../../services/find-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { ContextSwitchService } from '../../services/context-switch.service';
 import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
+import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { AchievementsService } from '../../services/achievements.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, LoadingTask, DetectorRegistryEntry, ImporterInfo } from '../../models/api.models';
+import { AutoDetectResultsData, DatasetRegistryEntry, DemoDataset, LoadingTask, DetectorRegistryEntry, ImporterInfo } from '../../models/api.models';
 import { formatProgressFraction } from '../../utils/format-progress';
-import { ColMeta, ManagedColumns } from '../../utils/managed-columns';
+import {
+  DashboardColumnsService,
+  DatasetColumn,
+  DetectorColumn,
+} from '../../services/dashboard-columns.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { DetectorCardComponent } from './detector-card/detector-card.component';
-import { DatasetImporterModalComponent } from './dataset-importer-modal/dataset-importer-modal.component';
 import { CombineDatasetsModalComponent } from './combine-datasets-modal/combine-datasets-modal.component';
-import { NewDetectorModalComponent } from './new-detector-modal/new-detector-modal.component';
 import { CombineDetectorsModalComponent } from './combine-detectors-modal/combine-detectors-modal.component';
 import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
@@ -40,9 +43,7 @@ import { DiskUsageComponent, DiskUsageBytes } from './disk-usage/disk-usage.comp
     AutoDetectResultsModalComponent,
     DatasetCardComponent,
     DetectorCardComponent,
-    DatasetImporterModalComponent,
     CombineDatasetsModalComponent,
-    NewDetectorModalComponent,
     CombineDetectorsModalComponent,
     LabelExporterModalComponent,
     LabelImporterModalComponent,
@@ -71,12 +72,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   loadingTasks: LoadingTask[] = [];
   detectorLoadingTasks: LoadingTask[] = [];
 
-  importerModalOpen = false;
   importerClosing = false;
-  /** Picker tab id the importer modal should pre-select when it next
-   *  opens — set by the welcome-banner CTA so a fresh user lands in
-   *  the right place. Empty for the normal "+" button flow. */
-  importerInitialTab = '';
   /** Visible importers (i.e. ``hidden_from_picker !== true``), fetched
    *  once on init so the welcome banner can detect Services-tab
    *  importers without waiting for the modal to open. */
@@ -84,7 +80,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   combineModalOpen = false;
   /** Datasets passed into the Combine modal when it opens. */
   combineModalDatasets: DatasetRegistryEntry[] = [];
-  newDetectorModalOpen = false;
   newDetectorClosing = false;
   combineDetectorsModalOpen = false;
   exportModalOpen = false;
@@ -99,73 +94,41 @@ export class DashboardComponent implements OnInit, OnDestroy {
   deletingDatasetId = '';
   deletingDetectorId = '';
   addLabelsDetectorId = '';
+  trainAfterModelCreation = false;
+  /** Mirrors the user's click intent so the Train/Find button icons
+   *  can waggle while the `activeContextGuard` waits between click and
+   *  route activation. Reset when `contextSwitch.switching$` settles
+   *  back to false (either route activated or canActivate denied). */
   trainLoading = false;
   findLoading = false;
-  trainAfterModelCreation = false;
 
-  // Column order. "name" is pinned at position 0 and "actions" is pinned at
-  // the far right; these arrays hold only the user-reorderable middle columns.
-  static readonly DATASET_COLUMNS_DEFAULT = [
-    'media_type', 'num_items', 'created_at', 'created_by', 'readers', 'loaded',
-  ];
-  static readonly DETECTOR_COLUMNS_DEFAULT = [
-    'media_type', 'num_training', 'autodetect', 'last_trained_at',
-    'created_at', 'detector_loaded',
-  ];
-  private static readonly DATASET_COL_ORDER_KEY = 'vtsearch.dashboard.datasetColumnOrder';
-  private static readonly DETECTOR_COL_ORDER_KEY = 'vtsearch.dashboard.detectorColumnOrder';
+  /** Lifted out of this component into `DashboardColumnsService` so the
+   *  top-bar context pulldowns can mirror the user's sort. Assigned in
+   *  the constructor; the template binds against these names unchanged. */
+  datasetCols!: DashboardColumnsService['datasetCols'];
+  detectorCols!: DashboardColumnsService['detectorCols'];
 
-  // Per-column display metadata. Keyed by `data-col` value; used both by the
-  // header template and by card components when rendering body cells in order.
-  static readonly DATASET_COL_META: Record<string, ColMeta> = {
-    name: { label: 'Name', title: 'Dataset display name (click to sort)', sortable: true },
-    media_type: { label: 'Type', title: 'Media type: audio, image, text, video, or document (click to sort)', sortable: true },
-    num_items: { label: '# Items', title: 'Number of media items in the dataset (click to sort)', sortable: true },
-    created_at: { label: 'Created', title: 'When the dataset was first imported (click to sort)', sortable: true },
-    created_by: { label: 'Creator', title: 'User who created this dataset (click to sort)', sortable: true },
-    readers: { label: 'Readers', title: 'Users with access to this dataset (click to sort)', sortable: true },
-    loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },
-    actions: { label: 'Actions', title: 'Available operations for this dataset', sortable: false },
-  };
-  static readonly DETECTOR_COL_META: Record<string, ColMeta> = {
-    name: { label: 'Name', title: 'Detector display name (click to sort)', sortable: true },
-    media_type: { label: 'Type', title: 'Media type this detector operates on (click to sort)', sortable: true },
-    num_training: { label: '# Training', title: 'Number of labeled training examples (click to sort)', sortable: true },
-    autodetect: { label: 'Autorun?', title: 'Include this detector in CLI autorun (click to sort)', sortable: true },
-    last_trained_at: { label: 'Last Trained', title: 'When the detector was last trained (click to sort)', sortable: true },
-    created_at: { label: 'Created', title: 'When the detector was created (click to sort)', sortable: true },
-    detector_loaded: { label: 'Loaded?', title: "Whether the detector's inference data is cached in memory", sortable: false },
-    actions: { label: 'Actions', title: 'Available operations for this detector', sortable: false },
-  };
-
-  datasetCols = new ManagedColumns(
-    DashboardComponent.DATASET_COLUMNS_DEFAULT,
-    DashboardComponent.DATASET_COL_META,
-    { initialSort: 'name', storageKey: DashboardComponent.DATASET_COL_ORDER_KEY },
-  );
-  detectorCols = new ManagedColumns(
-    DashboardComponent.DETECTOR_COLUMNS_DEFAULT,
-    DashboardComponent.DETECTOR_COL_META,
-    { initialSort: 'name', storageKey: DashboardComponent.DETECTOR_COL_ORDER_KEY },
-  );
-
-  get visibleDatasetColumns(): string[] {
+  get visibleDatasetColumns(): DatasetColumn[] {
     if (this.isDefaultLogin) {
       return this.datasetCols.columnOrder.filter((c) => c !== 'created_by' && c !== 'readers');
     }
     return this.datasetCols.columnOrder;
   }
 
-  get visibleDetectorColumns(): string[] {
+  get visibleDetectorColumns(): DetectorColumn[] {
     return this.detectorCols.columnOrder;
   }
 
   onDatasetHeaderClick(col: string): void {
-    if (this.datasetCols.meta(col).sortable) this.datasetCols.sortBy(col);
+    if (this.datasetCols.meta(col).sortable) {
+      this.datasetCols.sortBy(col as DatasetColumn);
+    }
   }
 
   onDetectorHeaderClick(col: string): void {
-    if (this.detectorCols.meta(col).sortable) this.detectorCols.sortBy(col);
+    if (this.detectorCols.meta(col).sortable) {
+      this.detectorCols.sortBy(col as DetectorColumn);
+    }
   }
 
   private destroy$ = new Subject<void>();
@@ -190,14 +153,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private detectorsApi: DetectorsApiService,
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
-    private findSession: FindSessionService,
     public datasetState: DatasetStateService,
     private activeContext: ActiveContextService,
+    private contextSwitch: ContextSwitchService,
     private authService: AuthService,
     private topBarState: TopBarStateService,
+    private newThingFlows: NewThingFlowsService,
     private achievements: AchievementsService,
     private progressEvents: ProgressEventsService,
-  ) {}
+    columnsService: DashboardColumnsService,
+  ) {
+    this.datasetCols = columnsService.datasetCols;
+    this.detectorCols = columnsService.detectorCols;
+  }
 
   ngOnInit(): void {
     this.authService.status$
@@ -259,6 +227,81 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.visibleImporters = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
       },
     });
+    this.subscribeNewThingFlows();
+    // Reset the per-button waggle flags whenever a navigation
+    // initiated by onLabel/onFind settles (succeeded, cancelled by the
+    // guard, or errored). Without this, a guard redirect to /dashboard
+    // would leave the icon waggling forever.
+    this.router.events
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((e) => {
+        if (
+          e instanceof NavigationEnd ||
+          e instanceof NavigationCancel ||
+          e instanceof NavigationError
+        ) {
+          this.trainLoading = false;
+          this.findLoading = false;
+        }
+      });
+  }
+
+  /** Translate `NewThingFlowsService` events into the legacy Dashboard
+   *  behaviors: kick off background polls after an import, auto-select
+   *  newly created detectors, drive the `+` icon's close animation,
+   *  etc. The importer / new-detector modals themselves are hosted on
+   *  `AppComponent`; this component just reacts to their outcomes. */
+  private subscribeNewThingFlows(): void {
+    this.newThingFlows.importStarted$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.handleImportStarted());
+    this.newThingFlows.demoSelected$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(({ demo }) => this.handleDemoSelected(demo));
+    this.newThingFlows.created$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(({ kind, id }) => {
+        if (kind === 'detector') this.handleDetectorCreated(id);
+        else this.datasetState.refresh();
+      });
+    // Trigger the close-animation when the modal flips from open → closed.
+    let importerWasOpen = false;
+    this.newThingFlows.importer$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (importerWasOpen && !state.open) this.importerClosing = true;
+        importerWasOpen = state.open;
+      });
+    let detectorWasOpen = false;
+    this.newThingFlows.newDetector$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (detectorWasOpen && !state.open) {
+          this.newDetectorClosing = true;
+          // Reset the "navigate to Train after create" intent if the
+          // user dismissed without creating. The handler in
+          // handleDetectorCreated() also clears it on success.
+          this.trainAfterModelCreation = false;
+        }
+        detectorWasOpen = state.open;
+      });
+  }
+
+  private handleDetectorCreated(modelId: string): void {
+    this.datasetState.refresh();
+    if (this.trainAfterModelCreation && modelId) {
+      this.trainAfterModelCreation = false;
+      this.selectedDetectorIds.clear();
+      this.selectedDetectorIds.add(modelId);
+      this.knownDetectorIds.add(modelId);
+      this.datasetState.detectors$
+        .pipe(
+          filter((models) => models.some((m) => m.id === modelId)),
+          take(1),
+          takeUntil(this.destroy$),
+        )
+        .subscribe(() => this.onLabel());
+    }
   }
 
   private startDiskUsagePolling(): void {
@@ -816,23 +859,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   openImporterModal(): void {
-    this.importerInitialTab = '';
     this.importerClosing = false;
-    this.importerModalOpen = true;
+    this.newThingFlows.openImporter({
+      guessedMediaType: this.guessedMediaType,
+      guessedMediaEmbedder: this.guessedMediaEmbedder,
+    });
   }
 
   /** Welcome-banner CTA: open the importer modal with one of the picker
    *  tabs pre-selected so a fresh user lands on the relevant choices. */
   openImporterModalOnTab(tabId: string): void {
-    this.importerInitialTab = tabId;
     this.importerClosing = false;
-    this.importerModalOpen = true;
-  }
-
-  closeImporterModal(): void {
-    this.importerModalOpen = false;
-    this.importerClosing = true;
-    this.importerInitialTab = '';
+    this.newThingFlows.openImporter({
+      initialTab: tabId,
+      guessedMediaType: this.guessedMediaType,
+      guessedMediaEmbedder: this.guessedMediaEmbedder,
+    });
   }
 
   onImporterAnimationEnd(): void {
@@ -877,26 +919,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.servicesImporters.length > 0 ? 'services' : 'server';
   }
 
-  onImportComplete(): void {
-    this.importerModalOpen = false;
+  /** Open-state of the dataset importer modal (hosted on AppComponent;
+   *  this getter just proxies the singleton state). Drives the `+` icon
+   *  animation. */
+  get importerModalOpen(): boolean {
+    return this.newThingFlows.importer.open;
+  }
+
+  /** Open-state of the new-detector modal (hosted on AppComponent). */
+  get newDetectorModalOpen(): boolean {
+    return this.newThingFlows.newDetector.open;
+  }
+
+  private handleImportStarted(): void {
     this.importerClosing = true;
     this.startProgressPolling();
   }
 
-  onDemoSelected(demo: { label: string; name: string; embedder?: string; clipper?: string; dataset_name?: string }): void {
-    this.importerModalOpen = false;
+  private handleDemoSelected(demo: DemoDataset): void {
     this.importerClosing = true;
+    // The importer modal augments the DemoDataset payload with the
+    // user-chosen embedder / clipper / display name before emitting;
+    // those extras aren't part of the typed schema so we read them
+    // through a permissive cast.
+    const extras = demo as DemoDataset & {
+      embedder?: string;
+      clipper?: string;
+      dataset_name?: string;
+    };
     const params: Record<string, string> = {};
-    if (demo.embedder) {
-      params['embedder'] = demo.embedder;
-    }
-    if (demo.clipper) {
-      params['clipper'] = demo.clipper;
-    }
-    const userName = (demo.dataset_name || '').trim();
-    if (userName) {
-      params['dataset_name'] = userName;
-    }
+    if (extras.embedder) params['embedder'] = extras.embedder;
+    if (extras.clipper) params['clipper'] = extras.clipper;
+    const userName = (extras.dataset_name || '').trim();
+    if (userName) params['dataset_name'] = userName;
     this.datasetsApi.loadDemo(demo.name, params).subscribe({
       next: () => {
         this.startProgressPolling();
@@ -924,38 +979,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   openNewDetectorModal(): void {
     this.newDetectorClosing = false;
-    this.newDetectorModalOpen = true;
-  }
-
-  closeNewDetectorModal(): void {
-    this.newDetectorModalOpen = false;
-    this.newDetectorClosing = true;
-    this.trainAfterModelCreation = false;
+    this.newThingFlows.openNewDetector({ defaultMediaType: this.activeDatasetMediaType });
   }
 
   onNewDetectorAnimationEnd(): void {
     this.newDetectorClosing = false;
-  }
-
-  onDetectorCreated(modelId?: string): void {
-    this.newDetectorModalOpen = false;
-    this.newDetectorClosing = true;
-    this.datasetState.refresh();
-
-    if (this.trainAfterModelCreation && modelId) {
-      this.trainAfterModelCreation = false;
-      // Select the newly created model and proceed to training once models list is refreshed
-      this.selectedDetectorIds.clear();
-      this.selectedDetectorIds.add(modelId);
-      this.knownDetectorIds.add(modelId);
-      this.datasetState.detectors$
-        .pipe(
-          filter((models) => models.some((m) => m.id === modelId)),
-          take(1),
-          takeUntil(this.destroy$),
-        )
-        .subscribe(() => this.onLabel());
-    }
   }
 
   // --- Cancel ---
@@ -1108,7 +1136,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Button state ---
 
   get isLoading(): boolean {
-    return this.trainLoading || this.findLoading;
+    // Phase 2: the `activeContextGuard` owns the dataset/detector load
+    // path the Train/Find buttons used to drive locally. We mirror its
+    // signals (plus the per-button click-intent flags) here so
+    // dashboard controls stay disabled while the guard waits between
+    // click and route activation.
+    return (
+      this.trainLoading ||
+      this.findLoading ||
+      this.contextSwitch.switching ||
+      this.datasetState.loading
+    );
   }
 
   get labelEnabled(): boolean {
@@ -1194,45 +1232,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.openNewDetectorModal();
       return;
     }
-    const model = modelId ? this.detectors.find((m) => m.id === modelId) : null;
 
     this.storeSelectedModelTextQuery();
+    // The `activeContextGuard` on /label/:datasetId/:detectorId flips
+    // ActiveContextService and runs any needed loads via
+    // ContextSwitchService before activating the route.
     this.trainLoading = true;
-
-    // Set active context so the HTTP interceptor attaches headers
-    this.activeContext.setDatasetId(dataset.id);
-    this.activeContext.setModelId(modelId || '');
-
-    // Gate: navigate only once both dataset and model are ready.
-    let pending = 2;
-    const gate = (): void => {
-      if (--pending === 0) {
-        this.trainLoading = false;
-        this.datasetState.refresh();
-        this.router.navigate(['/label']);
-      }
-    };
-
-    // --- Model loading (parallel) ---
-    if (model && !model.detector_loaded) {
-      this.detectorsApi.loadDetector(modelId).subscribe({
-        next: () => this.startDetectorProgressPolling(() => gate()),
-        error: () => gate(),
-      });
-    } else {
-      gate();
-    }
-
-    // --- Dataset loading (parallel) ---
-    if (dataset.loaded) {
-      gate();
-    } else {
-      this.datasetsApi.loadRegistered(dataset.id).subscribe({
-        next: () => {
-          this.startProgressPolling(() => gate());
-        },
-      });
-    }
+    this.router.navigate(['/label', dataset.id, modelId]);
   }
 
   onFind(): void {
@@ -1242,46 +1248,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const model = this.detectors.find((m) => this.selectedDetectorIds.has(m.id));
     if (!model) return;
 
-    // Store model and dataset info in the find session service
-    this.findSession.modelId = model.id;
-    this.findSession.modelName = model.name;
-    this.findSession.datasetId = dataset.id;
+    // See `onLabel` — the route guard owns context + loading.
     this.findLoading = true;
-
-    // Set active context so the HTTP interceptor attaches headers
-    this.activeContext.setDatasetId(dataset.id);
-    this.activeContext.setModelId(model.id);
-
-    // Gate: navigate only once both dataset and model are ready.
-    let pending = 2;
-    const gate = (): void => {
-      if (--pending === 0) {
-        this.findLoading = false;
-        this.datasetState.refresh();
-        this.router.navigate(['/find']);
-      }
-    };
-
-    // --- Model loading (parallel) ---
-    if (!model.detector_loaded) {
-      this.detectorsApi.loadDetector(model.id).subscribe({
-        next: () => this.startDetectorProgressPolling(() => gate()),
-        error: () => gate(),
-      });
-    } else {
-      gate();
-    }
-
-    // --- Dataset loading (parallel) ---
-    if (dataset.loaded) {
-      gate();
-    } else {
-      this.datasetsApi.loadRegistered(dataset.id).subscribe({
-        next: () => {
-          this.startProgressPolling(() => gate());
-        },
-      });
-    }
+    this.router.navigate(['/find', dataset.id, model.id]);
   }
 
   /** Old Find window — runs multi-dataset multi-detector find and shows results modal. */

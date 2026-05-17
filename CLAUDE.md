@@ -1,6 +1,6 @@
 # VTSearch
 
-Media explorer web app for browsing/voting on audio, images, text, video, or documents. Semantic sorting (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) and learned sorting (neural net trained on votes). Flask + Angular + PyTorch.
+Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector** — a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a small MLP learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
 
 ## Branch Policy (CRITICAL)
 
@@ -52,12 +52,11 @@ VTSearch is a desktop web app. **Do not design, implement, or test for mobile or
 
 ## No Persisted Vectors or MLPs (CRITICAL)
 
-**Embeddings and trained MLP weights are in-memory artifacts only.** Never serialize them to disk, to `data/settings.json`, to detector / detector JSON files, or to any other persistent store. Origins are the canonical persisted form: the system rederives `origin → file → embedding → MLP` on demand.
+**Embeddings and trained MLP weights are in-memory artifacts only.** Never serialize them to disk, to `data/settings.json`, to detector JSON files, or to any other persistent store. Origins are the canonical persisted form: the system rederives `origin → file → embedding → MLP` on demand.
 
-This rule applies to all detector- and model-related code:
+This rule applies to all detector code:
 
-- Trainable-model JSON files store `LabeledElement`s with origin info, never embeddings.
-- Detector JSON files (legacy) store origins; the `weights` field on disk is treated as deprecated and must not be written by new code.
+- Detector JSON files store `LabeledElement`s with origin info, never embeddings or MLP weights.
 - In-memory caches are fine and encouraged: `DetectorContext.label_embeddings`, `DetectorContext.model`, etc. — they live for the lifetime of the process and are repopulated from origins on the next start.
 - New features that cache vectors must use a process-scoped data structure (e.g. a field on `DetectorContext`), not a file or settings key.
 - Embedder version drift is impossible by construction because every load resolves+re-embeds against the active embedder.
@@ -74,7 +73,7 @@ This applies to:
 - TypeScript errors from `tsc` / `npm run build:prod` (including in `*.spec.ts` files, even though specs do not currently run — they must still typecheck).
 - Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them — fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
-- Linter errors from `ruff check` and formatting drift from `ruff format --check`. Both run as the first step of `./run-tests.sh`, so the test loop catches them before pytest — but if you're tempted to skip the test loop, run `ruff check . && ruff format --check .` at minimum before pushing. CI (`.github/workflows/lint.yml`) is the backstop.
+- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, and dependency issues from `deptry`. All four run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest — but if you're tempted to skip the test loop, run `ruff check . && ruff format --check . && codespell --toml pyproject.toml && python -m deptry .` at minimum before pushing. CI (`.github/workflows/lint.yml`) is the backstop.
 - Any other diagnostics surfaced by tooling you invoke.
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
@@ -97,8 +96,9 @@ The `.back-btn` rule in `frontend/src/scss/_components.scss` provides the shared
 A flow can legitimately carry both: a nested view shows `← Back` at the top to step back one view, while the outer view's footer shows `Cancel` to dismiss the whole modal. What it should *not* do is use the word "Cancel" for an action that is really navigation back to a parent view.
 
 ## Commands
-- **Run tests (CPU, fast)**: `./run-tests.sh` (also runs `ruff check`, `ruff format --check`, and the frontend TypeScript build)
-- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; every invocation runs ruff first; `core` additionally runs the frontend build check)
+- **Run tests (CPU, fast)**: `./run-tests.sh` (also runs `ruff check`, `ruff format --check`, `codespell`, `deptry`, and the frontend TypeScript build)
+- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; every invocation runs ruff/codespell/deptry first; `core` additionally runs the frontend build check)
+- **Run tests with coverage**: `VTSEARCH_COVERAGE=1 ./run-tests.sh` (opt-in; adds ~10-20% overhead)
 - **Run multiple groups**: `./run-tests.sh core sorting api`
 - **Run tests with extra args**: `./run-tests.sh core -- -x --tb=long` (args after `--` go to pytest)
 - **Run tests (CPU, full)**: `bash .claude/hooks/ensure-test-deps.sh && python -m pytest tests/ -q --tb=short -m 'not gpu'`
@@ -116,6 +116,9 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Frontend audit**: `cd frontend && npm audit` (checks for known vulnerabilities in dependencies)
 - **Lint**: `ruff check .`
 - **Format**: `ruff format .`
+- **Spell check**: `codespell --toml pyproject.toml`
+- **Dependency check**: `python -m deptry .`
+- **Dead code audit** (manual, pre-release): `vulture vtsearch/ .vulture-whitelist.py --min-confidence 80`
 
 ## Architecture
 - `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing, per-request user context via `before_request` middleware, per-request dataset/model context resolution from `X-Dataset-Id`/`X-Detector-Id` headers
@@ -317,4 +320,4 @@ def slow_load():
 - **Multi-media imports**: importers can set the class attribute `multi_media = True` and iterate `self.effective_source_specs(field_values)` inside `run()` to pull in multiple source media types (e.g. images + videos-as-images + documents-as-images) with per-converter params (e.g. `n_clips`). Each `SourceSpec` is `(source_type, converter|None, params)`. Legacy importers (`multi_media = False`, the default) still work unchanged via the comma-separated `converters` field; `effective_source_specs()` also returns a useful list for them so they can migrate the body of `run()` before changing their form schema. See `docs/plans/multi-media-import.md`. Migrated: `server_folder`, `server_files`, `local_folder`, `local_files` (the lf-* importers are upload placeholders that re-enter `server_folder`). Remaining on the shim: `pickle`, `combine_datasets`, `synthetic`, `http_archive`, `recaller`, `demo`
 - `data/` dir created at runtime for embeddings, model cache, media files
 - OMP_NUM_THREADS and MKL_NUM_THREADS set to 1 for memory optimization
-- Linter/formatter: ruff (E402 ignored, line-length 120, target-version py310, see pyproject.toml)
+- Linter/formatter: ruff (default rules + flake8-bandit `S`, line-length 120, target-version py310; E402 and noisy S rules ignored — see `pyproject.toml` for the full list). codespell + deptry round out the lint stage; `pre-commit install` wires them into git pre-commit. See `docs/plans/python-quality-tools.md` for the rationale.

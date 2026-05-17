@@ -1,3 +1,0 @@
-# SigLIP embedder dependencies
-sentencepiece
-protobuf
