@@ -15,12 +15,22 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | [RCDatasetImporter.md](RCDatasetImporter.md) | **Scaffolds in place; awaiting client code** | ReCaller / DataWrest / PullWrest / Holder plugin scaffolds exist (`hidden_from_picker = True`); the API client stubs (`_rc_fetch_results`, `_dw_get_embedding`, `_pw_fetch_media`, `_holder_*`) still need real implementations. |
 | [extract-library.md](extract-library.md) | **Proposed** | Split VTSearch into a `vtscore` Python library plus the Flask/Angular app, gated on a CI job that runs the test suite without Flask installed. Not started. |
 | [openapi-schema.md](openapi-schema.md) | **Pilot shipped; rollout in progress** | flask-smorest plumbing + Swagger UI live; `settings/api.py` migrated. Remaining: frontend `SettingsApiService` rewired to the generated client, then the other blueprints (auth, achievements, main, labels, detectors, processors, media, datasets, sorting, eval, file_browser) — and finally delete the legacy permissive `/openapi.json`. |
-| [pyright-type-checking.md](pyright-type-checking.md) | **Stage 1 shipped; stages 2–6 open** | `pyrightconfig.json` gates `utils/`, `auth/`, `plugins/`, `sync/`, `concurrency/`, `exporters/`, `labels/`, `settings_io/`, `cli.py`, `config.py`. Remaining stages: 2 (`settings*`, `state/`, `security/`), 3 (`datasets/`, `detectors/`, `eval/`, `models/`), 4 (`routes/`, `converters/`), 5 (`media/`), 6 (whole `vtsearch/` — advisory job removed). |
 | [feature-brainstorm.md](feature-brainstorm.md) | **Backlog** | Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, experiments. Items graduate into their own plan doc as they mature. |
 | [ux-brainstorm.md](ux-brainstorm.md) | **Backlog** | Audit of friction across importers, labeling, sorting, settings, and progress UX. ~75 ideas across auto-fill, hints, speed-ups, clarity, streamlining, and consistency. Items graduate into their own plan doc as they mature. |
 | [smart-clipper-defaults.md](smart-clipper-defaults.md) | **Phase 1 shipped; Phase 2 deferred** | "Auto (recommended)" clipper entry for audio and video — resolves to pass-through or tiling per dataset based on median duration. Phase 2 (per-media routing via clipper options) deferred — see Open follow-ups. |
 
 ## Recently completed (removed)
+
+- **pyright-type-checking.md** — Pyright (basic mode) is a hard CI gate
+  over the whole `vtsearch/` and `tests/` scope. All seven stages
+  shipped: Stage 1 (foundation packages), Stage 2 (`settings`, `state`,
+  `security`), Stage 3 (`datasets`, `detectors`, `eval`, `embedding`,
+  `training`), Stage 4 (`routes`, `converters`), Stage 5 (`media/`),
+  Stage 6 (collapse `include` to `["vtsearch"]`; delete advisory job),
+  Stage 7 (`tests/`, including a per-line ignore for a pandas 2.3.3
+  Python-3.10 stub gap on `pd.DataFrame(columns=...)`). Reproduce
+  CI locally with `python3.10 -m venv /tmp/py310 && source
+  /tmp/py310/bin/activate && bash scripts/install-cpu.sh && pyright`.
 
 - **codebase-reorg.md** — Multi-round refactor: tests bucketed into
   group folders, shared embedder stubs in conftest, routes split by
