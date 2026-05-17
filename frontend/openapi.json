@@ -1,3 +1,4 @@
+⏳ Initializing VTSearch... (PID 13931)
 {
   "components": {
     "responses": {
@@ -1724,6 +1725,9 @@
           },
           "detector_loaded": {
             "type": "boolean"
+          },
+          "embedder": {
+            "type": "string"
           },
           "id": {
             "type": "string"

@@ -141,7 +141,19 @@ export class ContextSwitchService {
     const detector = detectorId ? detectors.find((d) => d.id === detectorId) : null;
 
     const needsDatasetLoad = !!dataset && !dataset.loaded;
-    const needsDetectorLoad = !!detector && !detector.detector_loaded;
+    // Re-embed labels when the active dataset's embedder differs from the
+    // one the detector's cached label vectors were built with. Both sides
+    // are reported by the registry endpoints; missing values (unloaded
+    // halves, legacy data) skip this trigger and fall through to the
+    // normal load / no-op path.
+    const needsLabelReembed =
+      !!dataset &&
+      !!detector &&
+      !!detector.detector_loaded &&
+      !!dataset.embedder &&
+      !!detector.embedder &&
+      dataset.embedder !== detector.embedder;
+    const needsDetectorLoad = !!detector && (!detector.detector_loaded || needsLabelReembed);
 
     if (!needsDatasetLoad && !needsDetectorLoad) {
       this.finishIfCurrent(current);

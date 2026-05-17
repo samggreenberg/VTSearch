@@ -233,6 +233,8 @@ export interface DatasetRegistryEntry {
   media_type: string;
   loaded?: boolean;
   readers?: string[];
+  /** Name of the embedder this dataset's media were vectorised with. */
+  embedder?: string;
   [key: string]: unknown;
 }
 
@@ -299,6 +301,9 @@ export interface DetectorRegistryEntry {
   detector_loaded?: boolean;
   autorun?: boolean;
   last_trained_at?: number | null;
+  /** Embedder this detector's label-vector cache is built against.
+   *  Populated only for loaded detectors; empty for unloaded entries. */
+  embedder?: string;
   [key: string]: unknown;
 }
 
