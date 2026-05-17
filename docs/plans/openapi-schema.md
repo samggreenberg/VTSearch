@@ -819,21 +819,137 @@ checks off this follow-up.
       ``StatusIndicator``, ``LabelingStatusResponse``,
       ``SortProgressResponse``, and the three chart-point types stay
       because they still have non-service consumers.
+- [x] ``DetectorsApiService`` and ``DatasetsApiService`` rewired to the
+      generated TS client in a single PR.
+
+      ``DetectorsApiService`` now calls the generated functions under
+      ``generated/api-client/fn/detectors-crud/``,
+      ``generated/api-client/fn/detectors-registry/``,
+      ``generated/api-client/fn/detectors-labels/``,
+      ``generated/api-client/fn/detector-scoring/``,
+      ``generated/api-client/fn/detector-find/``,
+      ``generated/api-client/fn/processors-crud/``, and
+      ``generated/api-client/fn/processors-scoring/``. Return types
+      tightened to the generated DTOs throughout
+      (``DetectorsListResponse``, ``DetectorCreateResponse``,
+      ``DetectorDetail``, ``DetectorDeleteResponse``,
+      ``DetectorRenameResponse``, ``DetectorExamplesResponse``,
+      ``DetectorSaveLabelsResponse``, ``DetectorLabelsDetailResponse``,
+      ``DetectorLabelVoteResponse``, ``DetectorCombineResponse``,
+      ``DetectorRegistryListResponse``,
+      ``DetectorRegistryCreateResponse``,
+      ``DetectorRegistryDeleteResponse``,
+      ``DetectorRegistryRenameResponse``,
+      ``DetectorRegistryLoadResponse``,
+      ``DetectorRegistryUnloadResponse``,
+      ``DetectorRegistryAutorunResponse``, ``DetectorCancelResponse``,
+      ``AutorunExtractorsListResponse``,
+      ``AutorunLocalizersListResponse``,
+      ``AutorunProcessorCreateResponse``,
+      ``AutorunProcessorDeleteResponse``,
+      ``AutorunProcessorRenameResponse``, ``AutoDetectResponse``,
+      ``AutoExtractResponse``, ``AutoLocalizeResponse``,
+      ``ExtractResponse``, ``LocalizeResponse``, ``FindResponse``,
+      ``FindLabelResponse``, ``FindCheckLabelsResponse``,
+      ``PregenProcessorsListResponse``, ``PregenProcessorsAddResponse``).
+      Request types tightened to ``DetectorCreateRequest``,
+      ``DetectorCombineRequest``, ``DetectorRegistryCreateRequest``,
+      ``DetectorExamplesRequest``, ``AutorunExtractorCreateRequest``,
+      ``AutorunLocalizerCreateRequest``, ``ExtractRequest``,
+      ``LocalizeRequest``, ``AutoDetectRequest``,
+      ``FindRequest``, ``FindLabelRequest``,
+      ``FindCheckLabelsRequest``. The ``FindLabelWarning`` interface
+      exported from the service is re-aliased to the generated
+      ``FindCheckLabelsWarning`` so existing callers keep working.
+
+      ``DatasetsApiService`` now calls the generated functions under
+      ``generated/api-client/fn/datasets-listings/``,
+      ``generated/api-client/fn/datasets-load/``,
+      ``generated/api-client/fn/datasets-registry/``,
+      ``generated/api-client/fn/datasets-staging/``,
+      ``generated/api-client/fn/datasets-status/``, and
+      ``generated/api-client/fn/datasets-ui/``. Return types tightened
+      to the generated DTOs (``DatasetStatusResponse``,
+      ``DemoDatasetListResponse``, ``DemoCategoriesResponse``,
+      ``BrowseMediaFilesResponse``, ``BrowseMediaFilesSelectResponse``,
+      ``DetectMediaTypeResponse``, ``DatasetAvailableFilesResponse``,
+      ``DatasetLoadStartedResponse``, ``DatasetStageFileResponse``,
+      ``DatasetStagingStartedResponse``, ``ClearStagingResponse``,
+      ``CancelDatasetLoadResponse``, ``DatasetClearResponse``,
+      ``DatasetsRegistryListResponse``, ``DatasetRegistryLoadResponse``,
+      ``DatasetRegistryOkResponse``, ``DatasetRegistryRenameResponse``,
+      ``DatasetRegistryReadersResponse``, ``DatasetRegistryStatsResponse``,
+      ``DashboardDiskUsageResponse``, ``ImporterFieldOptionsResponse``).
+      Request types tightened to ``DatasetCombineRequest``,
+      ``DatasetLoadDemoRequest``, ``DatasetLoadSourceRequest``.
+
+      The plugin ``to_dict()`` payloads (importers, clippers, embedders,
+      converters, media types) are generated as
+      ``Array<{[key: string]: any}>`` — the service casts each list at
+      the boundary to the richer ``ImporterInfo`` / ``ClipperInfo`` /
+      ``EmbedderInfo`` / ``ConverterInfo`` / ``MediaTypeInfo``
+      interfaces in ``api.models.ts``, same pattern as
+      ``ExportersApiService`` and ``LabelImportersApiService``. The
+      generated ``DatasetsRegistryListResponse.datasets`` is similarly
+      loose; the service-level cast keeps consumers reading the rich
+      local ``DatasetRegistryEntry`` shape unchanged.
+
+      Multipart routes (``importLocalFolder``, ``loadFile``,
+      ``stageFile``) and the binary-stream ``exportDataset`` stay on
+      plain ``HttpClient`` — same pattern as
+      ``MediasApiService.addToPile`` /
+      ``SortingApiService.exampleSort``. The two plugin-field routes
+      (``runImporter`` → ``POST /api/dataset/import/<importer_name>``,
+      ``stageImport`` → ``POST /api/dataset/stage-import/<importer_name>``)
+      stay on plain ``HttpClient`` because their body shapes are
+      plugin-dependent and not described in the OpenAPI spec — see
+      *Open follow-ups / Per-plugin schemas for plugin-field routes*.
+
+      Consumers updated:
+
+      * ``CombineDetectorsModalComponent`` swapped
+        ``CombineDetectorsResult`` for the generated
+        ``DetectorCombineResponse``.
+      * ``DatasetStatsModalComponent`` swapped ``DatasetStatsResponse``
+        for the generated ``DatasetRegistryStatsResponse``.
+      * ``LabelsetStateService``, ``LabelsetListComponent``, and
+        ``RightPanelComponent`` swapped ``LabelElement`` /
+        ``LabelsDetailResponse`` for the generated ``DetectorLabelView``
+        / ``DetectorLabelsDetailResponse``.
+      * ``DatasetStateService`` casts the loose generated
+        ``DatasetsRegistryListResponse.datasets`` array to the local
+        ``DatasetRegistryEntry[]`` shape at assignment.
+
+      Deleted from ``frontend/src/app/models/api.models.ts``:
+      ``DatasetStatus``, ``DatasetStatsResponse``, ``DatasetRegistryResponse``,
+      ``ImportersResponse``, ``DemoListResponse``, ``MediaTypesResponse``,
+      ``LoadingTasksResponse``, ``LabelElement``, ``LabelsDetailResponse``,
+      ``Detector``, ``DetectorsResponse``, ``DetectorsRegistryResponse``,
+      ``CombineDetectorsResult``, ``AutoDetectResponse``,
+      ``ClippersResponse``, ``ConvertersResponse``, ``EmbeddersResponse``,
+      ``ApiError``, ``OkResponse``, ``ExportResult``, and a duplicate
+      loose ``ConverterInfo`` definition (the richer named-fields
+      version stays). ``DatasetRegistryEntry`` / ``DetectorRegistryEntry``
+      stay because the generated equivalents are loose
+      ``{[key: string]: any}`` and the local versions describe the
+      actual fields consumers read.
 
 ## Open follow-ups
 
 - **Migrate the remaining Angular services to the generated client.**
   Settings, auth, achievements, file-browser, exporters, settings-io,
-  label-importers, medias, and sorting have all moved over. Each
-  follow-up PR picks one blueprint area (detectors, datasets,
-  processors, …), rewires the matching Angular service(s) to call the
-  generated function modules under
-  ``frontend/src/app/generated/api-client/fn/``, and deletes the
-  corresponding hand-maintained interfaces from
-  ``frontend/src/app/models/api.models.ts``. The hybrid imports
-  (``import type`` for DTOs, direct function-module paths for
-  runtime symbols, no barrel) are required to keep the initial bundle
-  under the 525 kB budget — see *Bundle-size discipline* above.
+  label-importers, medias, sorting, detectors, and datasets have all
+  moved over. The remaining service is ``ProcessorImportersApiService``
+  (~17 LOC) which still references ``/api/processor-importers`` — a
+  legacy route with no live backend handler; the consuming
+  ``processor-importer-modal`` is wired up but the endpoint isn't in
+  the OpenAPI spec, so this service is left untouched until the
+  backend route is rebuilt under ``vtsearch/routes/processors/``
+  (probably as a flask-smorest blueprint with a per-plugin field
+  schema). The hybrid imports (``import type`` for DTOs, direct
+  function-module paths for runtime symbols, no barrel) are required
+  to keep the initial bundle under the 525 kB budget — see
+  *Bundle-size discipline* above.
 - **Tighten ``LabelingStatusResponse`` consumers to the generated
   shape.** ``SortingApiService.getLabelingStatus`` returns the generated
   ``LabelingStatusResponse`` (``smart``/``stable``/``span`` typed as

@@ -61,7 +61,9 @@ export class DatasetStateService implements OnDestroy {
             if (!this.loadedSubject.value) this.loadedSubject.next(true);
             return;
           }
-          this.datasetsSubject.next(res.datasets.datasets || []);
+          this.datasetsSubject.next(
+            (res.datasets.datasets || []) as unknown as DatasetRegistryEntry[],
+          );
           this.detectorsSubject.next(res.detectors.detectors || []);
           if (this.errorSubject.value !== null) this.errorSubject.next(null);
           if (!this.loadedSubject.value) this.loadedSubject.next(true);

@@ -10,11 +10,11 @@ import {
   ViewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { LabelElement } from '../../../models/api.models';
+import type { DetectorLabelView } from '../../../generated/api-client/models/detector-label-view';
 import { LabelSortMode } from '../label-sort/label-sort.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 
-interface SortedElement extends LabelElement {
+interface SortedElement extends DetectorLabelView {
   confidence: number;
 }
 
@@ -27,13 +27,13 @@ interface SortedElement extends LabelElement {
 })
 export class LabelsetListComponent implements OnChanges, AfterViewChecked {
   @Input() label: 'good' | 'bad' = 'good';
-  @Input() elements: LabelElement[] = [];
+  @Input() elements: DetectorLabelView[] = [];
   @Input() modelName: string = '';
   @Input() sortMode: LabelSortMode = 'time-desc';
   @Input() viewMode: 'grid' | 'list' = 'grid';
   @Input() gridGoalWidth: number = 80;
   @Input() focusMode: 'click' | 'hover' = 'click';
-  @Output() elementSelected = new EventEmitter<LabelElement>();
+  @Output() elementSelected = new EventEmitter<DetectorLabelView>();
   @Output() elementVote = new EventEmitter<{ id: string; vote: 'good' | 'bad' }>();
 
   @ViewChild('voteListContainer') voteListContainer?: ElementRef<HTMLDivElement>;
@@ -104,7 +104,7 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
     return this.viewMode === 'grid';
   }
 
-  hasThumbnailUrl(entry: LabelElement): boolean {
+  hasThumbnailUrl(entry: DetectorLabelView): boolean {
     const url = this.thumbnailUrl(entry);
     if (url && this.thumbnailFailedUrls.has(url)) return false;
     return (
@@ -115,7 +115,7 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
     );
   }
 
-  thumbnailUrl(entry: LabelElement): string {
+  thumbnailUrl(entry: DetectorLabelView): string {
     if (!this.modelName) return '';
     return this.detectorsApi.labelThumbnailUrl(this.modelName, entry.id);
   }
@@ -124,18 +124,18 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
     if (url) this.thumbnailFailedUrls.add(url);
   }
 
-  placeholderIcon(entry: LabelElement): string | null {
+  placeholderIcon(entry: DetectorLabelView): string | null {
     if (this.hasThumbnailUrl(entry)) return null;
     if (entry.media_type === 'audio') return '♫';
     if (entry.media_type === 'text') return '¶';
     return '□';
   }
 
-  isMissing(entry: LabelElement): boolean {
+  isMissing(entry: DetectorLabelView): boolean {
     return entry.cid === null || entry.cid === undefined;
   }
 
-  onEntryClick(entry: LabelElement): void {
+  onEntryClick(entry: DetectorLabelView): void {
     if (this.focusMode === 'hover') {
       this.elementVote.emit({ id: entry.id, vote: 'bad' });
     } else {
@@ -143,20 +143,20 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
     }
   }
 
-  onEntryContextMenu(event: MouseEvent, entry: LabelElement): void {
+  onEntryContextMenu(event: MouseEvent, entry: DetectorLabelView): void {
     if (this.focusMode === 'hover') {
       event.preventDefault();
       this.elementVote.emit({ id: entry.id, vote: 'good' });
     }
   }
 
-  onEntryMouseEnter(entry: LabelElement): void {
+  onEntryMouseEnter(entry: DetectorLabelView): void {
     if (this.focusMode === 'hover') {
       this.elementSelected.emit(entry);
     }
   }
 
-  onEntryKeydown(event: KeyboardEvent, entry: LabelElement): void {
+  onEntryKeydown(event: KeyboardEvent, entry: DetectorLabelView): void {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       this.elementSelected.emit(entry);
