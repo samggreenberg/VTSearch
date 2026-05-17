@@ -20,7 +20,8 @@ import { ProgressEventsService } from '../../services/progress-events.service';
 import { DetectorRegistryEntry } from '../../models/api.models';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
-import { LabelingStatusResponse, LearnedSortJobResponse } from '../../models/api.models';
+import { LabelingStatusResponse } from '../../models/api.models';
+import type { LearnedSortResponse } from '../../generated/api-client/models/learned-sort-response';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 
 @Component({
@@ -388,7 +389,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: (status) => {
-          this.labelingStatus = status;
+          // The generated `LabelingStatusResponse` types `smart` / `stable` /
+          // `span` as `{[key: string]: any}` while the legacy field type
+          // expects `StatusIndicator` with a required `status` string.  The
+          // backend always sends `{status, ...}` for these — the cast is safe
+          // and only crosses the type-system gap until a follow-up tightens
+          // the consumer (autopilot, left-panel, autopilot-panel) to the
+          // generated shape.
+          this.labelingStatus = status as unknown as LabelingStatusResponse;
         },
       });
   }
@@ -407,7 +415,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortingApi.sort({ text }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (response) => {
         this.sortState.setSortResults(
-          response.results.map((r) => ({ id: r.id, score: r.similarity, bestRegion: r.best_region })),
+          response.results.map((r) => ({
+            id: r['id'],
+            score: r['similarity'],
+            bestRegion: r['best_region'],
+          })),
           response.threshold,
         );
         this.sortState.setSortBusy(false);
@@ -467,11 +479,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
-  private applyLearnedSortResult(response: LearnedSortJobResponse, autoSelect: boolean): void {
+  private applyLearnedSortResult(response: LearnedSortResponse, autoSelect: boolean): void {
     const results = response.results ?? [];
     const threshold = response.threshold ?? 0;
     this.sortState.setSortResults(
-      results.map((r) => ({ id: r.id, score: r.score, bestRegion: r.best_region })),
+      results.map((r) => ({ id: r['id'], score: r['score'], bestRegion: r['best_region'] })),
       threshold,
     );
     this.sortState.setSortBusy(false);

@@ -1,7 +1,6 @@
 import { Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
-import { EvalTrainAndScoreJobResponse } from '../../../models/api.models';
 import { ModalComponent } from '../../modal/modal.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
@@ -13,6 +12,7 @@ import {
   StabilityDataPoint,
   DiversityDataPoint,
 } from '../../../models/api.models';
+import type { EvalTrainAndScoreResponse } from '../../../generated/api-client/models/eval-train-and-score-response';
 
 export type ProgressMetric = 'smart' | 'stable' | 'diverse';
 
@@ -73,7 +73,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     this.sortingApi.getIndicatorScoreHistory(this.metric).subscribe({
       next: (res) => {
         this.analyzing = false;
-        this.chartData = res.history || [];
+        this.chartData = (res.history || []) as ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[];
         this.emptyHistory = this.chartData.length === 0;
         if (!this.emptyHistory) {
           setTimeout(() => this.renderChart(), 50);
@@ -143,14 +143,14 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
       });
   }
 
-  private applyEvalResult(res: EvalTrainAndScoreJobResponse): void {
+  private applyEvalResult(res: EvalTrainAndScoreResponse): void {
     this.analyzing = false;
     if (this.metric === 'smart') {
-      this.chartData = res.error_cost || [];
+      this.chartData = (res.error_cost || []) as ErrorCostDataPoint[];
     } else if (this.metric === 'stable') {
-      this.chartData = res.stability || [];
+      this.chartData = (res.stability || []) as StabilityDataPoint[];
     } else {
-      this.chartData = res.diversity || [];
+      this.chartData = (res.diversity || []) as DiversityDataPoint[];
     }
     setTimeout(() => this.renderChart(), 50);
   }

@@ -5,7 +5,8 @@ import { IconComponent } from '../../icon/icon.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
-import { ServerFileEntry, DetectorRegistryEntry, ImporterInfo } from '../../../models/api.models';
+import { DetectorRegistryEntry, ImporterInfo } from '../../../models/api.models';
+import type { ServerMediaFileEntry } from '../../../generated/api-client/models/server-media-file-entry';
 import {
   MediaCropModalComponent,
   MediaCropResult,
@@ -38,7 +39,7 @@ export class LoadSortModalComponent implements OnInit {
   @Output() modelSelected = new EventEmitter<string>();
   @Output() exampleSortStarted = new EventEmitter<unknown>();
 
-  serverMediaFiles: ServerFileEntry[] = [];
+  serverMediaFiles: ServerMediaFileEntry[] = [];
   registryModels: DetectorRegistryEntry[] = [];
   loading = true;
   status = '';
