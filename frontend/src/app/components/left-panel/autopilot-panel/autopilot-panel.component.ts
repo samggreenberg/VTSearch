@@ -1,6 +1,6 @@
 import { Component, Input, Output, EventEmitter, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { LabelingStatusResponse } from '../../../models/api.models';
+import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 import {
   AutopilotStateService,
   AutopilotPhase,
