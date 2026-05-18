@@ -144,8 +144,6 @@ def validate_plugin_args(
         verbatim — type / shape validation is the route handler's
         responsibility.
     """
-    import io  # noqa: PLC0415 — defer to avoid import cost when unused
-
     from vtsearch.plugins.schema import get_plugin_arg_schema  # noqa: PLC0415
 
     has_file_fields = any(f.field_type == "file" for f in plugin.fields)
@@ -164,9 +162,30 @@ def validate_plugin_args(
     except ValidationError as exc:
         abort(422, message="Validation error", errors={"json": exc.messages})
 
-    # Add file uploads in the chosen mode.  Required file fields are
-    # checked here (the schema skips them) so callers get a consistent
-    # 422 envelope across all field types.
+    _populate_file_fields(plugin, validated, has_file_fields=has_file_fields, file_mode=file_mode)
+
+    for key in extra_keys:
+        if key in body:
+            validated[key] = body[key]
+
+    return validated
+
+
+def _populate_file_fields(
+    plugin: PluginBase,
+    validated: dict,
+    *,
+    has_file_fields: bool,
+    file_mode: str,
+) -> None:
+    """Read file uploads off the request and merge them into *validated*.
+
+    Required file fields surface as a 422 with the standard ``errors``
+    envelope (matching schema-level rejects); optional missing fields
+    land in *validated* as ``None``.
+    """
+    import io  # noqa: PLC0415 — defer to avoid import cost when unused
+
     missing_files: list[str] = []
     for f in plugin.fields:
         if f.field_type != "file":
@@ -191,12 +210,6 @@ def validate_plugin_args(
             message="Validation error",
             errors={"json": {k: ["Missing data for required field."] for k in missing_files}},
         )
-
-    for key in extra_keys:
-        if key in body:
-            validated[key] = body[key]
-
-    return validated
 
 
 def validate_filepath_field(field_values: dict) -> tuple | None:
