@@ -99,8 +99,7 @@ def bump_recent_session(body: dict):
     filtered = [
         e
         for e in raw
-        if isinstance(e, dict)
-        and not (e.get("dataset_id") == dataset_id and e.get("detector_id") == detector_id)
+        if isinstance(e, dict) and not (e.get("dataset_id") == dataset_id and e.get("detector_id") == detector_id)
     ]
     updated: list[dict[str, Any]] = [
         {
