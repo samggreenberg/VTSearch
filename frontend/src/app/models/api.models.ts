@@ -55,33 +55,51 @@ export interface LabelingStatusResponse {
   [key: string]: unknown;
 }
 
-export interface SortProgressResponse {
+// --- Progress ---
+
+/**
+ * The unified shape every long-running operation emits over the SSE stream
+ * (`/api/events` — see `progress-events.service.ts`).
+ *
+ * Backend: every singleton `ProgressTracker` (dataset, sort, eval, find) and
+ * every per-task tracker created by `LoadingTasksTracker` carries the same
+ * base fields plus the shared optional extras `step`/`total_steps`/`error`.
+ * See `vtsearch/concurrency/progress.py:_PROGRESS_COMMON_EXTRAS`.
+ *
+ * Frontend: a single component/helper (`utils/format-progress.ts`) can render
+ * any payload regardless of which operation produced it.
+ */
+export interface ProgressEvent {
+  status?: string;
+  message?: string;
+  current?: number;
+  total?: number;
+  /** Sub-step counter for multi-phase operations (e.g. load→embed→stage). */
+  step?: number | null;
+  total_steps?: number | null;
+  /** Error message if the operation failed. */
+  error?: string | null;
+  /** Dataset-only: payload returned by combine-datasets staging. */
+  staging_result?: unknown;
   [key: string]: unknown;
 }
 
 // --- Datasets ---
 
-export interface DatasetProgress {
-  status?: string;
-  message?: string;
-  current?: number;
-  total?: number;
-  step?: number;
-  total_steps?: number;
-  error?: string;
-  [key: string]: unknown;
-}
-
-export interface LoadingTask {
-  task_id: string;
-  name: string;
+/**
+ * A per-task progress event from the `loading-tasks` /
+ * `detector-loading-tasks` SSE channels. Wraps `ProgressEvent` with the
+ * task identity/metadata fields the dashboard needs to render one row per
+ * concurrent load. The base fields are non-optional here because every task
+ * tracker writes them through `ProgressTracker.update`.
+ */
+export interface LoadingTask extends ProgressEvent {
   status: string;
   message: string;
   current: number;
   total: number;
-  step?: number;
-  total_steps?: number;
-  error?: string;
+  task_id: string;
+  name: string;
   created_at: number;
   dataset_id?: string;
   detector_id?: string;

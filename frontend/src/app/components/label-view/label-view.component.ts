@@ -17,11 +17,12 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
-import { DetectorRegistryEntry } from '../../models/api.models';
+import { DetectorRegistryEntry, ProgressEvent } from '../../models/api.models';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import { LabelingStatusResponse } from '../../models/api.models';
 import type { LearnedSortResponse } from '../../generated/api-client/models/learned-sort-response';
+import { formatProgressMessage } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 
 @Component({
@@ -528,13 +529,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.stopScoringProgressPoll();
     this.scoringProgressPoll$ = this.progressEvents.find$
       .pipe(takeUntil(this.destroy$))
-      .subscribe((prog: any) => {
+      .subscribe((prog: ProgressEvent) => {
         if (prog.status === 'running') {
-          const msg = prog.message || 'Scoring with detector…';
-          const current = prog.current || 0;
-          const total = prog.total || 0;
-          this.sortState.setSortStatus(msg);
-          this.sortState.setSortProgress(current, total);
+          this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
+          this.sortState.setSortProgress(prog.current ?? 0, prog.total ?? 0);
         }
       });
   }

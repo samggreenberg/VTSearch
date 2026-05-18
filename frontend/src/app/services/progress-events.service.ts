@@ -1,9 +1,8 @@
 import { Injectable, OnDestroy, NgZone } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import {
-  DatasetProgress,
   LoadingTask,
-  SortProgressResponse,
+  ProgressEvent,
   VotingIterationsResponse,
 } from '../models/api.models';
 
@@ -13,25 +12,27 @@ import {
  * /api/dataset/progress, etc.) with a server-push stream — see
  * `docs/plans/feature-brainstorm.md` §12.5.
  *
+ * Every channel carries the same `ProgressEvent` shape (see
+ * `models/api.models.ts`) so any consumer can render any of them with the
+ * shared `formatProgressMessage` helper in `utils/format-progress.ts`.
+ *
  * Channels carried over `/api/events`:
  *
- *  - `dataset` -> DatasetProgress (singleton tracker; staging operations)
- *  - `loading-tasks` -> LoadingTask[]
+ *  - `dataset` -> ProgressEvent (singleton tracker; staging operations)
+ *  - `loading-tasks` -> LoadingTask[] (per-task progress for dataset loads)
  *  - `detector-loading-tasks` -> LoadingTask[]
- *  - `sort` -> SortProgressResponse
- *  - `find` -> generic progress dict (used by /api/find)
- *  - `eval` -> singleton tracker dict (raw fields, not the
- *    {progress,total,done} shape the old `/api/eval/voting-iterations`
- *    endpoint returned — consumers derive `done` themselves)
+ *  - `sort` -> ProgressEvent (text-sort)
+ *  - `find` -> ProgressEvent (multi-dataset×detector /api/find)
+ *  - `eval` -> ProgressEvent (train-and-score; consumers derive `done` themselves)
  */
 @Injectable({ providedIn: 'root' })
 export class ProgressEventsService implements OnDestroy {
-  private readonly datasetSubject = new BehaviorSubject<DatasetProgress>({});
+  private readonly datasetSubject = new BehaviorSubject<ProgressEvent>({});
   private readonly loadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
   private readonly detectorLoadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
-  private readonly sortSubject = new BehaviorSubject<SortProgressResponse>({});
-  private readonly findSubject = new BehaviorSubject<Record<string, unknown>>({});
-  private readonly evalSubject = new BehaviorSubject<Record<string, unknown>>({});
+  private readonly sortSubject = new BehaviorSubject<ProgressEvent>({});
+  private readonly findSubject = new BehaviorSubject<ProgressEvent>({});
+  private readonly evalSubject = new BehaviorSubject<ProgressEvent>({});
 
   readonly dataset$ = this.datasetSubject.asObservable();
   readonly loadingTasks$ = this.loadingTasksSubject.asObservable();
@@ -65,16 +66,16 @@ export class ProgressEventsService implements OnDestroy {
     return this.detectorLoadingTasksSubject.value;
   }
 
-  get find(): Record<string, unknown> {
+  get find(): ProgressEvent {
     return this.findSubject.value;
   }
 
   /** Derive the {progress,total,done} shape the eval modal cares about. */
   get votingIterations(): VotingIterationsResponse {
     const prog = this.evalSubject.value;
-    const current = Number(prog['current'] ?? 0);
-    const total = Number(prog['total'] ?? 0);
-    const status = String(prog['status'] ?? 'idle');
+    const current = Number(prog.current ?? 0);
+    const total = Number(prog.total ?? 0);
+    const status = String(prog.status ?? 'idle');
     const done = status === 'idle' && total > 0 && current >= total;
     return { progress: current, total, done };
   }
@@ -97,7 +98,7 @@ export class ProgressEventsService implements OnDestroy {
     this.source = es;
 
     es.addEventListener('dataset', (e) =>
-      this.zone.run(() => this.datasetSubject.next(this.parse<DatasetProgress>(e, {}))),
+      this.zone.run(() => this.datasetSubject.next(this.parse<ProgressEvent>(e, {}))),
     );
     es.addEventListener('loading-tasks', (e) =>
       this.zone.run(() => this.loadingTasksSubject.next(this.parse<LoadingTask[]>(e, []))),
@@ -106,13 +107,13 @@ export class ProgressEventsService implements OnDestroy {
       this.zone.run(() => this.detectorLoadingTasksSubject.next(this.parse<LoadingTask[]>(e, []))),
     );
     es.addEventListener('sort', (e) =>
-      this.zone.run(() => this.sortSubject.next(this.parse<SortProgressResponse>(e, {}))),
+      this.zone.run(() => this.sortSubject.next(this.parse<ProgressEvent>(e, {}))),
     );
     es.addEventListener('find', (e) =>
-      this.zone.run(() => this.findSubject.next(this.parse<Record<string, unknown>>(e, {}))),
+      this.zone.run(() => this.findSubject.next(this.parse<ProgressEvent>(e, {}))),
     );
     es.addEventListener('eval', (e) =>
-      this.zone.run(() => this.evalSubject.next(this.parse<Record<string, unknown>>(e, {}))),
+      this.zone.run(() => this.evalSubject.next(this.parse<ProgressEvent>(e, {}))),
     );
 
     es.onerror = () => {

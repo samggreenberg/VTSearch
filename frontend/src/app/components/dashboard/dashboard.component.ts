@@ -15,8 +15,8 @@ import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { AchievementsService } from '../../services/achievements.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, DemoDataset, LoadingTask, DetectorRegistryEntry, ImporterInfo } from '../../models/api.models';
-import { formatProgressFraction } from '../../utils/format-progress';
+import { AutoDetectResultsData, DatasetRegistryEntry, DemoDataset, LoadingTask, DetectorRegistryEntry, ImporterInfo, ProgressEvent } from '../../models/api.models';
+import { formatProgressMessage, isProgressIndeterminate } from '../../utils/format-progress';
 import {
   DashboardColumnsService,
   DatasetColumn,
@@ -1294,31 +1294,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.progressEvents.find$
       .pipe(takeUntil(this.findPolling$), takeUntil(this.destroy$))
       .subscribe({
-        next: (progress: any) => {
+        next: (progress: ProgressEvent) => {
           if (!progress || progress.status === 'idle') return;
 
-          if (progress.current != null && progress.total != null && progress.total > 0) {
+          if (!isProgressIndeterminate(progress)) {
             this.progressIndeterminate = false;
-            this.progressValue = progress.current;
-            this.progressTotal = progress.total;
+            this.progressValue = progress.current ?? 0;
+            this.progressTotal = progress.total ?? 0;
           } else {
             this.progressIndeterminate = true;
           }
 
-          let msg = progress.message || 'Running Find...';
-          if (progress.step != null && progress.total_steps != null && progress.total_steps > 1) {
-            msg = `[Step ${progress.step}/${progress.total_steps}] ${msg}`;
-          }
-          if (progress.current != null && progress.total != null && progress.total > 0) {
-            const fraction = `(${formatProgressFraction(progress.current, progress.total)})`;
-            const stepEnd = msg.indexOf('] ');
-            if (stepEnd !== -1) {
-              msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
-            } else {
-              msg = fraction + ' ' + msg;
-            }
-          }
-          this.datasetState.setProgressMessage(msg);
+          this.datasetState.setProgressMessage(
+            formatProgressMessage(progress, 'Running Find...'),
+          );
         },
       });
   }
@@ -1408,23 +1397,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Loading task helpers ---
 
   taskProgressMessage(task: LoadingTask): string {
-    let msg = task.message || 'Loading...';
-    if (task.step != null && task.total_steps != null && task.total_steps > 1) {
-      msg = `[Step ${task.step}/${task.total_steps}] ${msg}`;
-    }
-    if (task.current != null && task.total != null && task.total > 0) {
-      const fraction = `(${formatProgressFraction(task.current, task.total)})`;
-      const stepEnd = msg.indexOf('] ');
-      if (stepEnd !== -1) {
-        msg = msg.slice(0, stepEnd + 2) + fraction + ' ' + msg.slice(stepEnd + 2);
-      } else {
-        msg = fraction + ' ' + msg;
-      }
-    }
-    return msg;
+    return formatProgressMessage(task, 'Loading...');
   }
 
   taskIsIndeterminate(task: LoadingTask): boolean {
-    return !(task.current != null && task.total != null && task.total > 0);
+    return isProgressIndeterminate(task);
   }
 }

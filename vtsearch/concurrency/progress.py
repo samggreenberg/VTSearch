@@ -174,6 +174,18 @@ def clear_thread_progress() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Shared progress extras
+# ---------------------------------------------------------------------------
+#: Extras shared by every long-running operation: an optional sub-step counter
+#: (``step``/``total_steps`` — used when a single operation has multiple phases
+#: like load→embed→stage) and an ``error`` string. Every singleton tracker —
+#: and every per-task tracker created by :class:`LoadingTasksTracker` — exposes
+#: these so the frontend can render any progress payload with the same
+#: ``ProgressEvent`` interface (see ``frontend/src/app/models/api.models.ts``).
+_PROGRESS_COMMON_EXTRAS: dict[str, Any] = {"step": None, "total_steps": None, "error": None}
+
+
+# ---------------------------------------------------------------------------
 # Loading tasks tracker — manages multiple concurrent loading operations
 # ---------------------------------------------------------------------------
 
@@ -232,7 +244,7 @@ class LoadingTasksTracker:
 
         Returns the per-task :class:`ProgressTracker` instance.
         """
-        tracker = ProgressTracker(extra_fields={"error": None, "step": None, "total_steps": None})
+        tracker = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
         tracker.subscribe(lambda _snapshot: self._notify())
         with self._lock:
             self._tasks[task_id] = {
@@ -376,23 +388,45 @@ detector_loading_tasks = LoadingTasksTracker()
 # ---------------------------------------------------------------------------
 
 #: Dataset / import progress (used by dataset loading, downloading, embedding).
+#: Adds ``staging_result`` on top of the common extras for the combine-datasets
+#: staging flow.
 dataset_progress = ProgressTracker(
-    extra_fields={"error": None, "staging_result": None, "step": None, "total_steps": None}
+    extra_fields={**_PROGRESS_COMMON_EXTRAS, "staging_result": None}
 )
 
 #: Sort-specific progress (used by text-sort operations).
-sort_progress = ProgressTracker()
+sort_progress = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
 
 #: Eval progress (used by train-and-score / voting-iterations analysis).
-eval_progress = ProgressTracker()
+eval_progress = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
 
 #: Find progress (used by the /api/find multi-dataset×model scoring operation).
-find_progress = ProgressTracker(extra_fields={"step": None, "total_steps": None, "error": None})
+find_progress = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
 
 
 # ---------------------------------------------------------------------------
 # Backward-compatible free-function API
 # ---------------------------------------------------------------------------
+
+
+def _common_extras_kwargs(
+    step: Any = _UNSET,
+    total_steps: Any = _UNSET,
+    error: Any = _UNSET,
+) -> dict[str, Any]:
+    """Build the kwargs dict for the shared ``step``/``total_steps``/``error`` extras.
+
+    Only fields explicitly supplied by the caller are forwarded so omitted
+    fields are left unchanged (true update/merge semantics).
+    """
+    kwargs: dict[str, Any] = {}
+    if step is not _UNSET:
+        kwargs["step"] = step
+    if total_steps is not _UNSET:
+        kwargs["total_steps"] = total_steps
+    if error is not _UNSET:
+        kwargs["error"] = error
+    return kwargs
 
 
 def update_progress(
@@ -414,15 +448,9 @@ def update_progress(
     Only extra fields explicitly supplied by the caller are forwarded;
     omitted fields are left unchanged (true update/merge semantics).
     """
-    kwargs: dict[str, Any] = {}
-    if error is not _UNSET:
-        kwargs["error"] = error
+    kwargs = _common_extras_kwargs(step, total_steps, error)
     if staging_result is not _UNSET:
         kwargs["staging_result"] = staging_result
-    if step is not _UNSET:
-        kwargs["step"] = step
-    if total_steps is not _UNSET:
-        kwargs["total_steps"] = total_steps
     dataset_progress.update(status, message, current, total, **kwargs)
 
 
@@ -463,9 +491,14 @@ def update_sort_progress(
     message: str = "",
     current: int = 0,
     total: int = 0,
+    step: Any = _UNSET,
+    total_steps: Any = _UNSET,
+    error: Any = _UNSET,
 ) -> None:
     """Update the sort progress tracker in a thread-safe manner."""
-    sort_progress.update(status, message, current, total)
+    sort_progress.update(
+        status, message, current, total, **_common_extras_kwargs(step, total_steps, error)
+    )
 
 
 def get_sort_progress() -> dict[str, Any]:
@@ -478,9 +511,14 @@ def update_eval_progress(
     message: str = "",
     current: int = 0,
     total: int = 0,
+    step: Any = _UNSET,
+    total_steps: Any = _UNSET,
+    error: Any = _UNSET,
 ) -> None:
     """Update the eval progress tracker in a thread-safe manner."""
-    eval_progress.update(status, message, current, total)
+    eval_progress.update(
+        status, message, current, total, **_common_extras_kwargs(step, total_steps, error)
+    )
 
 
 def get_eval_progress() -> dict[str, Any]:
@@ -498,14 +536,9 @@ def update_find_progress(
     error: Any = _UNSET,
 ) -> None:
     """Update the find progress tracker in a thread-safe manner."""
-    kwargs: dict[str, Any] = {}
-    if step is not _UNSET:
-        kwargs["step"] = step
-    if total_steps is not _UNSET:
-        kwargs["total_steps"] = total_steps
-    if error is not _UNSET:
-        kwargs["error"] = error
-    find_progress.update(status, message, current, total, **kwargs)
+    find_progress.update(
+        status, message, current, total, **_common_extras_kwargs(step, total_steps, error)
+    )
 
 
 def get_find_progress() -> dict[str, Any]:
