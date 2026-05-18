@@ -864,6 +864,285 @@ class TestImageBboxClipper:
 
 
 # ---------------------------------------------------------------------------
+# ImageObjectClipper
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_yolo(detections, class_names):
+    """Build a mock ultralytics YOLO callable.
+
+    *detections* is a list of ``(class_id, confidence, [x1, y1, x2, y2])``.
+    *class_names* maps class_id -> label string.
+    """
+    from unittest.mock import MagicMock
+
+    import torch
+
+    mock_boxes = MagicMock()
+    mock_boxes.conf = torch.tensor([d[1] for d in detections]) if detections else torch.empty(0)
+    mock_boxes.cls = torch.tensor([d[0] for d in detections]) if detections else torch.empty(0, dtype=torch.long)
+    mock_boxes.xyxy = (
+        torch.tensor([d[2] for d in detections], dtype=torch.float32) if detections else torch.empty((0, 4))
+    )
+    mock_boxes.__len__ = lambda self: len(detections)
+
+    mock_result = MagicMock()
+    mock_result.boxes = mock_boxes
+    mock_result.names = class_names
+
+    mock_model = MagicMock()
+    mock_model.return_value = [mock_result]
+    return mock_model
+
+
+class TestImageObjectClipper:
+    def test_identity(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper()
+        assert c.name == "image_object"
+        assert c.media_type == "image"
+        assert c.display_name == "Object"
+        assert isinstance(c, MediaClipper)
+
+    def test_default_params(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper()
+        assert c.threshold == 0.25
+        assert c.class_filter == ""
+        assert c.max_detections == 20
+        assert c.padding == 0.0
+        assert c.model_id == "yolo11n.pt"
+
+    def test_parameters_schema(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        params = ImageObjectClipper().parameters
+        keys = {p["key"] for p in params}
+        assert keys == {"threshold", "class_filter", "max_detections", "padding", "model_id"}
+
+    def test_creation_questions_match_parameters(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper()
+        assert c.creation_questions == c.parameters
+
+    def test_to_dict(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper(threshold=0.4, class_filter="person,car", max_detections=5, padding=0.1)
+        d = c.to_dict()
+        assert d["name"] == "image_object"
+        assert d["media_type"] == "image"
+        assert d["threshold"] == 0.4
+        assert d["class_filter"] == "person,car"
+        assert d["max_detections"] == 5
+        assert d["padding"] == 0.1
+        assert d["model_id"] == "yolo11n.pt"
+        assert "creation_questions" in d
+
+    def test_with_params_returns_new_instance(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper()
+        c2 = c.with_params({"threshold": 0.7, "class_filter": "dog", "max_detections": 3, "padding": 0.2})
+        assert isinstance(c2, ImageObjectClipper)
+        assert c2.threshold == 0.7
+        assert c2.class_filter == "dog"
+        assert c2.max_detections == 3
+        assert c2.padding == 0.2
+        # original unchanged
+        assert c.threshold == 0.25
+        assert c.class_filter == ""
+
+    def test_no_media_bytes_returns_unchanged(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper()
+        media = {"id": 1, "type": "image", "width": 100, "height": 100}
+        result = c.clip(media)
+        assert result == [media]
+
+    def test_no_detections_returns_original(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        c = ImageObjectClipper()
+        c._model = _make_mock_yolo([], {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 1
+        assert result[0] is media
+
+    def test_emits_one_clip_per_detection(self):
+        from PIL import Image
+
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.9, [10.0, 10.0, 60.0, 60.0]),
+            (0, 0.8, [100.0, 100.0, 180.0, 180.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.5)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 2
+        # Sorted by confidence desc
+        assert result[0]["clip_box"] == [10, 10, 60, 60]
+        assert result[1]["clip_box"] == [100, 100, 180, 180]
+        for clip in result:
+            assert "media_bytes" in clip and clip["media_bytes"] != img_bytes
+            img = Image.open(io.BytesIO(clip["media_bytes"]))
+            assert img.size == (clip["width"], clip["height"])
+            assert "clip_index" in clip
+            assert clip["file_size"] == len(clip["media_bytes"])
+
+    def test_sorts_by_confidence_desc(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.3, [10.0, 10.0, 40.0, 40.0]),
+            (0, 0.95, [50.0, 50.0, 120.0, 120.0]),
+            (0, 0.6, [130.0, 130.0, 190.0, 190.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.25)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 3
+        assert result[0]["clip_box"] == [50, 50, 120, 120]
+        assert result[1]["clip_box"] == [130, 130, 190, 190]
+        assert result[2]["clip_box"] == [10, 10, 40, 40]
+
+    def test_threshold_filters_low_confidence(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.9, [10.0, 10.0, 60.0, 60.0]),
+            (0, 0.2, [100.0, 100.0, 180.0, 180.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.5)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 1
+        assert result[0]["clip_box"] == [10, 10, 60, 60]
+
+    def test_class_filter_keeps_only_whitelisted(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.9, [10.0, 10.0, 60.0, 60.0]),  # person
+            (1, 0.85, [80.0, 80.0, 150.0, 150.0]),  # car
+            (2, 0.8, [120.0, 120.0, 190.0, 190.0]),  # dog
+        ]
+        c = ImageObjectClipper(threshold=0.5, class_filter="person,dog")
+        c._model = _make_mock_yolo(detections, {0: "person", 1: "car", 2: "dog"})
+        result = c.clip(media)
+        assert len(result) == 2
+        # 'car' (cls=1) excluded; remaining sorted by confidence
+        boxes = {tuple(r["clip_box"]) for r in result}
+        assert boxes == {(10, 10, 60, 60), (120, 120, 190, 190)}
+
+    def test_empty_class_filter_keeps_all(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.9, [10.0, 10.0, 60.0, 60.0]),
+            (1, 0.8, [80.0, 80.0, 150.0, 150.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.5, class_filter="")
+        c._model = _make_mock_yolo(detections, {0: "person", 1: "car"})
+        result = c.clip(media)
+        assert len(result) == 2
+
+    def test_max_detections_caps_output(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(400, 400)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 400, "height": 400}
+        # 6 detections with varying confidence; cap at 3 should keep top 3
+        detections = [
+            (0, 0.5, [0.0, 0.0, 20.0, 20.0]),
+            (0, 0.95, [30.0, 30.0, 60.0, 60.0]),
+            (0, 0.4, [70.0, 70.0, 100.0, 100.0]),
+            (0, 0.85, [120.0, 120.0, 160.0, 160.0]),
+            (0, 0.6, [180.0, 180.0, 220.0, 220.0]),
+            (0, 0.7, [240.0, 240.0, 280.0, 280.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.0, max_detections=3)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 3
+        confs_kept = {(r["clip_box"][0], r["clip_box"][1]) for r in result}
+        # Top 3 confidences are 0.95, 0.85, 0.7 → boxes starting at (30,30), (120,120), (240,240)
+        assert confs_kept == {(30, 30), (120, 120), (240, 240)}
+
+    def test_padding_expands_box(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(400, 400)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 400, "height": 400}
+        # 100x100 box at (150,150)-(250,250) with 10% padding → expand by 10px each side
+        detections = [(0, 0.9, [150.0, 150.0, 250.0, 250.0])]
+        c = ImageObjectClipper(threshold=0.0, padding=0.1)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 1
+        box = result[0]["clip_box"]
+        assert box == [140, 140, 260, 260]
+        assert result[0]["width"] == 120
+        assert result[0]["height"] == 120
+
+    def test_padding_clamps_to_image_bounds(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        # Box near the corner; aggressive padding would go negative / past edge.
+        detections = [(0, 0.9, [10.0, 10.0, 50.0, 50.0])]
+        c = ImageObjectClipper(threshold=0.0, padding=1.0)  # +40px each side
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 1
+        box = result[0]["clip_box"]
+        # x1, y1 clamped to 0; x2, y2 within bounds
+        assert box[0] == 0
+        assert box[1] == 0
+        assert box[2] <= 200
+        assert box[3] <= 200
+
+    def test_clip_index_is_set(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.9, [10.0, 10.0, 60.0, 60.0]),
+            (0, 0.8, [70.0, 70.0, 120.0, 120.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.0)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert [r["clip_index"] for r in result] == [0, 1]
+
+    def test_registered_in_clippers_list(self):
+        from vtsearch.media.image import CLIPPERS
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        assert any(isinstance(c, ImageObjectClipper) for c in CLIPPERS)
+
+
+# ---------------------------------------------------------------------------
 # TextDefaultClipper
 # ---------------------------------------------------------------------------
 
