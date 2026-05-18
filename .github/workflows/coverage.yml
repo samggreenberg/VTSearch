@@ -10,6 +10,12 @@ name: Coverage
 # This is the first workflow that runs pytest in CI; local development
 # still uses `./run-tests.sh`. The marker expression (`not gpu and not
 # slow`) matches the default fast-loop suite.
+#
+# The Angular frontend is built before pytest because several tests
+# (tests/core/test_frontend.py, tests/api/test_dashboard.py) assert that
+# `/static/main.js`, `/static/polyfills.js`, `/static/styles.css` are
+# served — those files only exist after `npm run build:prod` populates
+# the `static/` directory.
 
 on:
   push:
@@ -25,6 +31,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Angular frontend (populates static/)
+        run: |
+          set +e
+          (cd frontend && npm ci && npm run build:prod) 2>&1 | tee /tmp/frontend-build.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "## Frontend build (exit=$status)"
+            echo ""
+            echo '```'
+            tail -c 60000 /tmp/frontend-build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: Install vtsearch + deps (CPU)
         run: |
