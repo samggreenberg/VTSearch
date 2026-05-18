@@ -90,7 +90,7 @@ Today the framework allows one converter per source; consider explicit chains: `
 
 ### 3.2 Image
 - **`image_saliency`** ★★ M — crop to salient region (U²-Net or SAM auto-mask). Improves embedding signal on "find dogs" by focusing on subject.
-- **`image_object`** ★★ M — clip per detected object using a lightweight YOLO/RT-DETR. Each clip becomes its own scoreable element.
+- **`image_object`** ★★ M — clip per detected object using a lightweight YOLO/RT-DETR. Each clip becomes its own scoreable element. **✓ shipped** (`vtsearch/media/image/clipper.py` — `ImageObjectClipper`, reuses the ultralytics weight already used by `ImageClassExtractor`; params: `threshold`, `class_filter`, `max_detections`, `padding`, `model_id`). Open follow-ups: experiment with SAM2 boxes for the same UI; consider a per-class confidence threshold instead of one global value if users ask for it.
 - **`image_face`** ★ S — face-cropped clips (RetinaFace).
 - **`image_window`** ★ XS — sliding window with stride, complements existing tiling.
 - **`image_color_palette`** ★ exploratory — clip into colour-region masks.
