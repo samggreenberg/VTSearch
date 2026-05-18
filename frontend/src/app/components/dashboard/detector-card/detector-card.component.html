@@ -33,15 +33,7 @@
 @if (loadingTask && !loadingTask.error) {
   <td [attr.colspan]="columnOrder.length + 1">
     <div class="loading-task-progress">
-      <span class="progress-msg">
-        @if (loadingTask.step && loadingTask.total_steps) {
-          [Step {{ loadingTask.step }}/{{ loadingTask.total_steps }}]
-        }
-        {{ loadingTask.message }}
-        @if (loadingTask.current && loadingTask.total) {
-          ({{ formatFraction(loadingTask.current, loadingTask.total) }})
-        }
-      </span>
+      <span class="progress-msg">{{ taskProgressMessage }}</span>
       <vt-progress-bar
         [value]="loadingTask.current"
         [max]="loadingTask.total"

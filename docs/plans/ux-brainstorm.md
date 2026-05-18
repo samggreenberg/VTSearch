@@ -276,8 +276,14 @@ Settings auto-save but show no "saved" feedback. Some forms (export modal) requi
 ### 6.8 Embedder display names ★★ XS
 The dropdown shows raw IDs (`siglip`, `dinov3_patch`, `e5`). Map each to a human label (`SigLIP (general images)`, `DINOv3 patch (region-aware)`, `E5 (text)`). Keep the raw ID as a secondary `<small>` line for power users.
 
-### 6.9 SSE channel/progress schemas ★ S
-Each long-running operation emits a slightly different progress payload (`step`/`total_steps` for dataset, `current`/`total` for eval, plain status strings for sort). Standardize on a single `ProgressEvent` interface so the frontend can render any of them with the same component.
+### 6.9 SSE channel/progress schemas ★ S — SHIPPED
+Each long-running operation used to emit a slightly different progress payload (`step`/`total_steps` for dataset, `current`/`total` for eval, plain status strings for sort). ~~Standardize on a single `ProgressEvent` interface so the frontend can render any of them with the same component.~~ Shipped:
+
+- **Backend** (`vtsearch/concurrency/progress.py`): every singleton `ProgressTracker` (dataset, sort, eval, find) and every per-task tracker created by `LoadingTasksTracker` now exposes the same `_PROGRESS_COMMON_EXTRAS = {"step": None, "total_steps": None, "error": None}` on top of the four base fields. `dataset_progress` additionally carries `staging_result` (used only by combine-datasets staging). `update_sort_progress` and `update_eval_progress` accept the new extras as optional kwargs, with the merge semantics shared through a single `_common_extras_kwargs` helper.
+- **Frontend** (`frontend/src/app/models/api.models.ts`): replaced `DatasetProgress` and the untyped `SortProgressResponse` with a single `ProgressEvent` interface. `LoadingTask extends ProgressEvent` and re-narrows the base fields as required. `ProgressEventsService` now types every channel subject as `BehaviorSubject<ProgressEvent>` (or `LoadingTask[]`); the `find$` and `eval$` channels are no longer `Record<string, unknown>`.
+- **Frontend** (`frontend/src/app/utils/format-progress.ts`): added `formatProgressMessage(progress, defaultMessage)` and `isProgressIndeterminate(progress)` — the single source of truth for the `[Step S/T] (C/T) message` layout that previously lived inline in `dashboard.component.ts` (×2), `dataset-card.component.ts`, `detector-card.component.html`, `find-view.component.ts`, and `label-view.component.ts`. All six call sites were converted.
+
+Wire-format note: no breaking change for current callers — the new sort/eval `step`/`total_steps`/`error` keys default to `null` and just become available for future multi-step phases.
 
 ### 6.10 Date formatting ★ XS — SHIPPED
 "last_trained / created" columns format dates differently from the version string in the footer. ~~Use one formatter (relative for < 7d ago, absolute YYYY-MM-DD otherwise) everywhere.~~ Shipped: a single `frontend/src/app/utils/format-date.ts` is now called from all four sites (detector card, dataset card, dataset stats modal, settings-modal version footer). Always-absolute — no relative branch. Columns render `YYYY-MM-DD HH:MM` (local), version renders `YYYY-MM-DD` (UTC). Relative time was dropped deliberately: it drifts on every reload and the coarse buckets (`2w ago`) throw away precision that matters in a model-management dashboard.

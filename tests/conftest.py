@@ -242,8 +242,8 @@ def reset_state():
 
     _dataset_progress.reset_cancel()
     _find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
-    _sort_progress.update("idle", "", 0, 0)
-    _eval_progress.update("idle", "", 0, 0)
+    _sort_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
+    _eval_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
     _loading_tasks.reset_for_tests()
     _model_loading_tasks.reset_for_tests()
 
