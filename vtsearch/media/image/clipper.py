@@ -1,4 +1,4 @@
-"""Image clippers — tile or pass-through image media."""
+"""Image clippers — tile, crop, face-detect, or pass-through image media."""
 
 from __future__ import annotations
 
@@ -426,4 +426,201 @@ class ImageObjectClipper(MediaClipper):
         d["max_detections"] = self._max_detections
         d["padding"] = self._padding
         d["model_id"] = self._model_id
+        return d
+
+
+class ImageFaceClipper(MediaClipper):
+    """Detect faces in an image and emit one square-ish crop per face.
+
+    Uses MediaPipe Face Detection to locate every face above the
+    configured confidence threshold, then crops each face with optional
+    padding so the embedder receives some context around the face.
+    Detections smaller than ``min_size`` pixels (on either axis after
+    padding) are dropped — these are usually noisy background hits.
+
+    Images with **no** detected faces yield zero clips and are dropped
+    from the dataset; that is the intended semantic for a face-only
+    dataset. Pair this clipper with the ``face`` embedder for face-
+    identity search, or with SigLIP/CLIP for generic appearance queries
+    on the detected faces.
+    """
+
+    def __init__(
+        self,
+        threshold: float = 0.5,
+        model_selection: int = 1,
+        padding: float = 0.25,
+        min_size: int = 32,
+    ) -> None:
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("threshold must be in [0, 1]")
+        if model_selection not in (0, 1):
+            raise ValueError("model_selection must be 0 (short-range) or 1 (full-range)")
+        if padding < 0:
+            raise ValueError("padding must be non-negative")
+        if min_size < 1:
+            raise ValueError("min_size must be a positive integer")
+        self._threshold = float(threshold)
+        self._model_selection = int(model_selection)
+        self._padding = float(padding)
+        self._min_size = int(min_size)
+        self._detector: Optional[Any] = None
+
+    @property
+    def name(self) -> str:
+        return "image_face"
+
+    @property
+    def media_type(self) -> str:
+        return "image"
+
+    @property
+    def display_name(self) -> str:
+        return "Face crops"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Detect faces with MediaPipe and emit one crop per detected face; "
+            "images with no detected faces are skipped."
+        )
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": "threshold",
+                "label": "Min detection confidence",
+                "description": "Skip detections below this confidence (0–1).",
+                "type": "number",
+                "default": self._threshold,
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+            },
+            {
+                "key": "padding",
+                "label": "Crop padding (fraction of face size)",
+                "description": "Expand each crop by this fraction on every side so the embedder gets some context.",
+                "type": "number",
+                "default": self._padding,
+                "min": 0.0,
+                "max": 2.0,
+                "step": 0.05,
+            },
+            {
+                "key": "min_size",
+                "label": "Minimum face size (pixels)",
+                "description": "Drop detections whose padded crop is smaller than this on either axis.",
+                "type": "number",
+                "default": self._min_size,
+                "min": 1,
+                "step": 1,
+            },
+            {
+                "key": "model_selection",
+                "label": "Detector range",
+                "description": "0 = short-range (within ~2m), 1 = full-range (within ~5m).",
+                "type": "number",
+                "default": self._model_selection,
+                "min": 0,
+                "max": 1,
+                "step": 1,
+            },
+        ]
+
+    def with_params(self, params: dict[str, Any]) -> "ImageFaceClipper":
+        return ImageFaceClipper(
+            threshold=float(params.get("threshold", self._threshold)),
+            model_selection=int(params.get("model_selection", self._model_selection)),
+            padding=float(params.get("padding", self._padding)),
+            min_size=int(params.get("min_size", self._min_size)),
+        )
+
+    def _load_detector(self) -> None:
+        if self._detector is not None:
+            return
+        # MediaPipe is an opt-in dependency (declared in pyproject's DEP001
+        # ignore-list); face_localizer.py uses the same pattern.
+        import mediapipe as mp  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+        self._detector = mp.solutions.face_detection.FaceDetection(
+            min_detection_confidence=self._threshold,
+            model_selection=self._model_selection,
+        )
+
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:  # noqa: C901
+        from PIL import Image  # noqa: PLC0415
+        import numpy as np  # noqa: PLC0415
+
+        media_bytes = media.get("media_bytes")
+        if media_bytes is None:
+            return []
+        try:
+            img = Image.open(io.BytesIO(media_bytes)).convert("RGB")
+        except Exception:
+            return []
+        img_w, img_h = img.size
+        fmt = img.format or "PNG"
+
+        try:
+            self._load_detector()
+            results = self._detector.process(np.array(img))  # type: ignore[union-attr]
+        except Exception:
+            return []
+        detections = getattr(results, "detections", None) or []
+
+        boxes: list[tuple[int, int, int, int, float]] = []
+        for det in detections:
+            try:
+                conf = float(det.score[0])
+            except (AttributeError, IndexError, TypeError):
+                continue
+            if conf < self._threshold:
+                continue
+            rel = det.location_data.relative_bounding_box
+            fx1 = rel.xmin * img_w
+            fy1 = rel.ymin * img_h
+            fx2 = (rel.xmin + rel.width) * img_w
+            fy2 = (rel.ymin + rel.height) * img_h
+            pad_x = (fx2 - fx1) * self._padding
+            pad_y = (fy2 - fy1) * self._padding
+            x1 = max(0, int(round(fx1 - pad_x)))
+            y1 = max(0, int(round(fy1 - pad_y)))
+            x2 = min(img_w, int(round(fx2 + pad_x)))
+            y2 = min(img_h, int(round(fy2 + pad_y)))
+            if x2 - x1 < self._min_size or y2 - y1 < self._min_size:
+                continue
+            boxes.append((x1, y1, x2, y2, conf))
+
+        # Highest-confidence face first so clip_index=0 is the "primary" face.
+        boxes.sort(key=lambda b: b[4], reverse=True)
+
+        results_list: list[dict[str, Any]] = []
+        for idx, (x1, y1, x2, y2, _conf) in enumerate(boxes):
+            cropped = img.crop((x1, y1, x2, y2))
+            buf = io.BytesIO()
+            cropped.save(buf, format=fmt)
+            crop_bytes = buf.getvalue()
+            clip = dict(media)
+            clip["media_bytes"] = crop_bytes
+            clip["width"] = x2 - x1
+            clip["height"] = y2 - y1
+            clip["file_size"] = len(crop_bytes)
+            clip["clip_index"] = idx
+            clip["clip_box"] = [x1, y1, x2, y2]
+            # Drop parent-inherited md5 + embedding so the load pipeline's
+            # fixup recomputes them from the cropped bytes even in the
+            # single-face case (where is_real_clip is False).
+            clip.pop("embedding", None)
+            clip.pop("md5", None)
+            results_list.append(clip)
+        return results_list
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["threshold"] = self._threshold
+        d["padding"] = self._padding
+        d["min_size"] = self._min_size
+        d["model_selection"] = self._model_selection
         return d

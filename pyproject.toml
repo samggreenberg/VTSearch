@@ -150,6 +150,7 @@ DEP001 = [
     "rarfile",
     "whisper",
     "mediapipe",
+    "facenet_pytorch",
     "torchvision",
     "safetensors",
     "huggingface_hub",
