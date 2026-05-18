@@ -77,9 +77,7 @@ Camelot/Tabula extracts CSVs from PDF tables → tabular media type.
 For language-agnostic code search via natural language.
 
 ### 2.10 `video → keyframe-image` ★★ S
-Already partially covered by `video→image`, but with smarter frame selection. Two strategies worth implementing:
-- **Scene-boundary picking** — use **TransNet V2** to pick frames at detected shot boundaries. Far more content-aware than uniform sampling; heavier dependency.
-- **Uniform-with-keyframe-snap** — take *n* uniform timestamps (as `Video2ImageMediaConverter` does today) but snap each to the nearest decoded I-frame. Free quality bump: I-frames decode without GOP reference lookups (faster on long videos), have no motion-compensation artefacts (cleaner stills), and encoders often place them at natural cuts. Strict upgrade over the current uniform sampler, and far cheaper than TransNet V2.
+Already partially covered by `video→image`, but with **TransNet V2** scene boundary picking instead of uniform sampling. Far better for content-aware clipping.
 
 ### 2.11 `email → text` ★ XS
 Strip MIME, dedupe quoted replies, normalise headers.
