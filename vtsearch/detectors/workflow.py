@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from vtsearch.state.core import DetectorContext
 
 
-def apply_and_retrain(
+def apply_and_retrain(  # noqa: C901
     detector_id: str,
     det_ctx: "DetectorContext",
     new_entries: list[dict],

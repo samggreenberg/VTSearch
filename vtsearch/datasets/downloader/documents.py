@@ -9,7 +9,7 @@ from vtsearch.datasets.downloader import core as _core
 from vtsearch.datasets.downloader.core import ProgressCallback
 
 
-def download_ucsf_documents(
+def download_ucsf_documents(  # noqa: C901
     categories: list[str],
     docs_per_category: int = 25,
     on_progress: Optional[ProgressCallback] = None,

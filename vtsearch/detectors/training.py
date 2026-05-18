@@ -139,7 +139,7 @@ def _training_vec_for_vote(
     return media["embedding"]
 
 
-def train_and_score(
+def train_and_score(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     good_votes: dict[int, None],
     bad_votes: dict[int, None],

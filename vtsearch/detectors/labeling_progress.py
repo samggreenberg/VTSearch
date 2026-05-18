@@ -294,7 +294,7 @@ def _train_step(
     return model, threshold, stability
 
 
-def _ensure_cache(
+def _ensure_cache(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
     inclusion_value: int,
@@ -383,7 +383,7 @@ def _ensure_cache(
 # ---------------------------------------------------------------------------
 
 
-def _eval_cached_models(
+def _eval_cached_models(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     current_good_votes: dict[int, None],
     current_bad_votes: dict[int, None],

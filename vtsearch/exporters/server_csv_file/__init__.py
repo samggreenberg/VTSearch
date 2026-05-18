@@ -145,7 +145,7 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
             "filepath": str(filepath.resolve()),
         }
 
-    def _export_autodetect(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:
+    def _export_autodetect(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:  # noqa: C901
         """Export autodetect results (detector hits)."""
         # Scan all hits to determine which clip columns are present.
         all_hits: list[tuple[str, Any, dict]] = []

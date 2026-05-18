@@ -118,7 +118,7 @@ def download_20newsgroups(
     return texts, labels, target_names
 
 
-def download_bbc_news(
+def download_bbc_news(  # noqa: C901
     on_progress: Optional[ProgressCallback] = None,
 ) -> dict[str, list[str]]:
     """Download and prepare the BBC News full-text dataset.
@@ -492,7 +492,7 @@ def _parse_arxiv_feed(xml_bytes: bytes) -> list[str]:
     return abstracts
 
 
-def download_arxiv_abstracts(
+def download_arxiv_abstracts(  # noqa: C901
     categories: Optional[list[str]] = None,
     max_per_category: int = 2000,
     on_progress: Optional[ProgressCallback] = None,

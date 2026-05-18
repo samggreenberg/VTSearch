@@ -58,7 +58,7 @@ def _load_vectors_file(field_values: dict[str, Any]) -> dict[str, Any]:
     return dict(read_npz_filenames_and_vectors(Path(raw)))
 
 
-def _load_pdf_images(
+def _load_pdf_images(  # noqa: C901
     folder: Path,
     medias: dict[int, dict[str, Any]],
     thin: bool = False,
@@ -311,7 +311,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
             return False
         return True
 
-    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
+    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:  # noqa: C901
         folder = Path(field_values["path"])
         recursive = _coerce_recursive(field_values)
 

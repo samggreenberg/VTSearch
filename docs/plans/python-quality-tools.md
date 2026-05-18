@@ -1,11 +1,12 @@
 # Python quality tools
 
 *Status: Phases 1 + 2 + 3 shipped, plus the pyproject-consolidation
-follow-up, CI coverage publication, and the vulture audit pass. deptry,
-codespell, ruff's `S` ruleset, opt-in coverage (now also published in
-CI), and a tuned vulture invocation + whitelist are all in place
-alongside the original pre-commit + pip-audit, and `pyproject.toml` is
-now the single source of truth for runtime + dev dependencies. See
+follow-up, CI coverage publication, the vulture audit pass, and the
+McCabe (C901) complexity gate. deptry, codespell, ruff's `S` ruleset,
+opt-in coverage (now also published in CI), a tuned vulture invocation
++ whitelist, and ruff's `C901` (default max-complexity 10) are all in
+place alongside the original pre-commit + pip-audit, and `pyproject.toml`
+is the single source of truth for runtime + dev dependencies. See
 "Open follow-ups" at the bottom for the remaining maintenance items.*
 
 The ruff + pyright + pytest stack already covers the modern core of
@@ -350,6 +351,26 @@ added to the whitelist with a comment explaining why.
 - **safety** (the package) — overlaps `pip-audit` and has a more
   restrictive license. `pip-audit` is the right choice here.
 
+## What shipped (C901 complexity gate)
+
+- **Ruff `C901` (McCabe complexity)** at default `max-complexity = 10`,
+  added to `[tool.ruff.lint].select`. Three of the worst dispatcher
+  functions were refactored down under the threshold for real
+  (`load_demo_source` in audio/image/text media types, complexity
+  52/22/31 → <10; `learned_sort` in routes/sorting, 29 → 9). The
+  remaining 72 legacy hot-spots carry a per-function
+  `# noqa: C901` so the rule applies cleanly to new code without
+  forcing a multi-day refactor pass. Each noqa is a future-refactor
+  marker: simplifying the function lets you drop the comment.
+- **Per-file exemption** for `tests/**` and `scripts/**` — test
+  fixtures and one-off analysis scripts are not production code and
+  don't benefit from the gate (3 functions exempted: `init_medias`,
+  `test_concurrent_get_set_volume`, `analyse_one`).
+- **Pyright "S-equivalent" follow-up** — investigated and dropped.
+  Pyright is a type checker only; it has no security rule set
+  analogous to ruff's `S` (flake8-bandit). Security pattern detection
+  stays in ruff. The previous open follow-up was a category error.
+
 ## Open follow-ups
 
 - **Coverage-delta gate.** `coverage.yml` now publishes the baseline on
@@ -362,9 +383,15 @@ added to the whitelist with a comment explaining why.
   above for the deletions, whitelist additions, and final tuned
   invocation. The audit is meant to be re-run before each release;
   introducing new dead code will surface there.
-- **Pyright `S`-equivalent and `C901` complexity.** ruff has McCabe
-  complexity via `C901`; consider enabling alongside future
-  security-rule tightening if we want a complexity gate.
+- **Burn down the C901 noqa list.** 72 legacy functions carry
+  `# noqa: C901` markers (see `git grep "# noqa: C901"`). Each one is
+  a candidate for incremental refactoring; the markers can be deleted
+  as functions are simplified under complexity 10. Worst offenders
+  remaining: `multi_find` (41), `load_dataset_from_folder_chunked`
+  (35), `load_dataset_from_folder` (34), `_run_origin_load_in_background`
+  (31), `task` (27, inside load_pipeline), `load_dataset_from_pickle`
+  (26), `import_local_folder` (24), `_make_per_side_setting` (24).
+  No deadline — refactor opportunistically when touching the code.
 - Periodic: `pre-commit autoupdate` on a cadence so pinned hook
   versions don't drift too far from CI's `pip install ruff` (which
   always pulls latest). Worth a quarterly reminder.

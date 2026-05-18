@@ -44,7 +44,7 @@ def _media_info_for_response(media: dict) -> dict:
     return {k: v for k, v in media.items() if k not in _HEAVYWEIGHT_KEYS}
 
 
-def _resolve_or_train_detector(
+def _resolve_or_train_detector(  # noqa: C901
     detector_id: str,
     det_data: dict | None,
     media_type: str,
@@ -181,7 +181,7 @@ def _resolve_or_train_detector(
 @detector_scoring_bp.response(200, FindLabelResponseSchema)
 @detector_scoring_bp.alt_response(400, description="No medias loaded, or the detector has no labels for scoring.")
 @detector_scoring_bp.alt_response(404, description="Detector not found.")
-def find_label(body: dict):
+def find_label(body: dict):  # noqa: C901
     """Score all loaded medias with a detector and apply labels based on threshold.
 
     Resolves the detector from the registry, scores every loaded media, and
@@ -372,7 +372,7 @@ def find_label(body: dict):
     description="No medias loaded, or no autorun detectors match the active media type.",
 )
 @detector_scoring_bp.alt_response(404, description="Named detector is not flagged for autorun.")
-def auto_detect(body: dict):
+def auto_detect(body: dict):  # noqa: C901
     """Score the active dataset with every detector flagged for autorun.
 
     Iterates :func:`~vtsearch.settings.get_autorun_detectors` and trains each

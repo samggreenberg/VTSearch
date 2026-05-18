@@ -28,7 +28,7 @@ _TOP_LEVEL_KEYS = {
 _IMPORT_LABELS_KEYS = {"detector", "importer", "file"}
 
 
-def load_pipeline_file(path: str | Path) -> dict[str, Any]:
+def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
     """Read *path*, parse it as YAML, and return a normalised config dict.
 
     Raises :class:`FileNotFoundError` if the file is missing, and

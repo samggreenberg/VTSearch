@@ -112,7 +112,7 @@ def list_registered_datasets():
 @datasets_registry_bp.response(200, DatasetRegistryLoadResponseSchema)
 @datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
 @datasets_registry_bp.alt_response(404, description="Dataset not found, or saved pkl file is missing.")
-def load_registered_dataset(dataset_id: str):
+def load_registered_dataset(dataset_id: str):  # noqa: C901
     """Load a registered dataset from its saved pkl file.
 
     If the dataset is already loaded in memory, it is simply activated

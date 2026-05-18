@@ -548,7 +548,7 @@ def _valid_media_types() -> tuple[str, ...]:
     return tuple(all_type_ids())
 
 
-def _make_per_side_setting(
+def _make_per_side_setting(  # noqa: C901
     key_base: str,
     defaults: dict[str, Any],
     *,

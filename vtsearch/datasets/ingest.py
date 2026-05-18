@@ -304,7 +304,7 @@ def _ingest_via_resolver(
     return ingested
 
 
-def ingest_missing_medias(
+def ingest_missing_medias(  # noqa: C901
     missing_entries: list[dict[str, Any]],
     medias: dict[int, dict[str, Any]],
     on_progress: Optional[ProgressCallback] = None,

@@ -61,7 +61,7 @@ def _folder_has_content(folder) -> bool:
 @datasets_ui_bp.route("/api/dataset/demo-list")
 @datasets_ui_bp.arguments(DemoDatasetListQuerySchema, location="query")
 @datasets_ui_bp.response(200, DemoDatasetListResponseSchema)
-def demo_dataset_list(query: dict):
+def demo_dataset_list(query: dict):  # noqa: C901
     """List available demo datasets.
 
     Each dataset has a ``status`` field with one of three values:

@@ -39,7 +39,7 @@ labels_bp = Blueprint(
 @labels_bp.route("/api/labels/export")
 @labels_bp.arguments(LabelsExportQuerySchema, location="query")
 @labels_bp.response(200, LabelsExportResponseSchema)
-def export_labels(query: dict):
+def export_labels(query: dict):  # noqa: C901
     """Export labels as a :class:`~vtsearch.datasets.labelset.LabelSet`.
 
     Each label entry includes the element's ``origin`` and ``origin_name``
@@ -183,7 +183,7 @@ def import_labels(body: dict):
 @labels_bp.route("/api/labels/fill-from-sort", methods=["POST"])
 @labels_bp.arguments(FillFromSortRequestSchema)
 @labels_bp.response(200, FillFromSortResponseSchema)
-def fill_labels_from_sort(body: dict):
+def fill_labels_from_sort(body: dict):  # noqa: C901
     """Fill labels from the current sort results.
 
     Assigns Good/Bad labels to currently-unlabeled medias based on their

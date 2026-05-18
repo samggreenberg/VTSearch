@@ -14,7 +14,7 @@ label, or removed when the user has untoggled the vote.
 from __future__ import annotations
 
 
-def sync_labels_to_loaded_detector() -> None:
+def sync_labels_to_loaded_detector() -> None:  # noqa: C901
     """Persist the current votes into the loaded detector's labelset (if any).
 
     Called automatically after each vote so the dashboard's "# Training" and

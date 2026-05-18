@@ -170,7 +170,7 @@ def register_detector_route(body: dict):
     "/api/detectors/registry/from-labelset/<importer_name>",
     methods=["POST"],
 )
-def register_detector_from_labelset(importer_name: str):
+def register_detector_from_labelset(importer_name: str):  # noqa: C901
     """Create a detector seeded with labels from a label importer.
 
     Plugin-dependent body shape: not described in the OpenAPI spec.
@@ -403,7 +403,7 @@ def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
 @detectors_registry_bp.arguments(DetectorRegistryLoadRequestSchema)
 @detectors_registry_bp.response(200, DetectorRegistryLoadResponseSchema)
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
-def load_detector_route(body: dict):
+def load_detector_route(body: dict):  # noqa: C901
     """Load a detector into memory and make it active.
 
     Pass ``detector_id=null`` (or omit the field) to unload the active

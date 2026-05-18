@@ -105,7 +105,7 @@ class Audio2ImageMediaConverter(MediaConverter):
     def target_type(self) -> str:
         return "image"
 
-    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:  # noqa: C901
         spec_type = str(self.get_param(params, "spectrogram_type") or "mel").lower()
         if spec_type not in ("mel", "cqt"):
             spec_type = "mel"

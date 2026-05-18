@@ -126,7 +126,7 @@ class DemoDatasetImporter(DatasetImporter):
             field_values["converter"] = converter
         return field_values
 
-    def resolve_file(self, origin: dict[str, Any], origin_name: str = "", filename: str = "") -> Path | None:
+    def resolve_file(self, origin: dict[str, Any], origin_name: str = "", filename: str = "") -> Path | None:  # noqa: C901
         """Resolve a media file from a demo dataset origin.
 
         Maps the demo dataset name to its source, then resolves the file

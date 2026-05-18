@@ -418,7 +418,7 @@ def _load_importer_chunked(
     yield from importer.run_chunked_cli(field_values, chunk_size, thin=True)
 
 
-def _run_pipeline(
+def _run_pipeline(  # noqa: C901
     media_source: Iterator[dict[int, dict[str, Any]]],
     *,
     settings_path: str | None = None,

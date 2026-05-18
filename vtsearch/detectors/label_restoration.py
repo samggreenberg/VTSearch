@@ -8,7 +8,7 @@ resolving origin files for cross-dataset scenarios.
 from __future__ import annotations
 
 
-def restore_labels_from_detector(det_data: dict) -> int:
+def restore_labels_from_detector(det_data: dict) -> int:  # noqa: C901
     """Restore saved labels from a detector's labelset into votes.
 
     Matches labelset entries to loaded medias by origin+origin_name, MD5, and

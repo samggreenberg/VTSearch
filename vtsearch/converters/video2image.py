@@ -48,7 +48,7 @@ class Video2ImageMediaConverter(MediaConverter):
     def target_type(self) -> str:
         return "image"
 
-    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:  # noqa: C901
         import tempfile  # noqa: PLC0415
 
         try:

@@ -103,7 +103,7 @@ class DiversityTree:
                 on_progress(self._estimated_total_work, self._estimated_total_work)
             self._on_progress = None
 
-    def _build_node(
+    def _build_node(  # noqa: C901
         self,
         name: str,
         ids: list[int],

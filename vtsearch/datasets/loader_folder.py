@@ -199,7 +199,7 @@ def _attach_patch_regions(media_data: dict[str, Any], patch_out: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-def load_dataset_from_folder(
+def load_dataset_from_folder(  # noqa: C901
     folder_path: Path,
     media_type: str,
     medias: dict[int, dict[str, Any]],
@@ -541,7 +541,7 @@ def apply_custom_metadata_md5(media_dict: dict[int, dict[str, Any]]) -> int:
     return count
 
 
-def load_dataset_from_folder_chunked(
+def load_dataset_from_folder_chunked(  # noqa: C901
     folder_path: Path,
     media_type: str,
     chunk_size: int,

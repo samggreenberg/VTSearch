@@ -75,7 +75,7 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
-def run_converters_on_folder(
+def run_converters_on_folder(  # noqa: C901
     folder_path: Path,
     converter_names: list[str] | None = None,
     target_media_type: str = "",
@@ -330,7 +330,7 @@ def _compute_md5(output: dict[str, Any]) -> str:
     return hashlib.md5(b"").hexdigest()
 
 
-def apply_converter_to_demo(
+def apply_converter_to_demo(  # noqa: C901
     converter_name: str,
     dataset_name: str,
     medias: dict[int, dict[str, Any]],

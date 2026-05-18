@@ -42,7 +42,7 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
-def _extract_archive(
+def _extract_archive(  # noqa: C901
     archive_path: Path,
     extract_dir: Path,
     on_progress: Optional[ProgressCallback] = None,
