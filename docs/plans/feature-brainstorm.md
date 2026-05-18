@@ -48,8 +48,15 @@ Mel-spectrogram or CQT plot as PNG. Unlocks SigLIP/DINOv3 over audio data — hu
 ### 2.2 `image → text` (OCR) ★★★ S ✅ shipped
 PaddleOCR-backed converter that flattens detected text regions into a single text media. Params: `language`, `threshold`. See `vtsearch/converters/image2text.py`.
 
-### 2.3 `audio → text` (ASR) ★★ M
-Whisper-tiny/base. Converts podcasts/voice-notes into searchable transcript. Param: `language`, `model_size`. Pairs with `video→audio→text` chain.
+### 2.3 `audio → text` (ASR) ★★ M ✅ shipped
+OpenAI Whisper (MIT license, same backend as the existing `SpeechExtractor`). Converts podcasts / voice notes / video soundtracks into searchable transcript. Params: `model_size` (tiny / base / small / medium / large — default `base`), `language` (ISO code, blank = auto-detect). Pairs with `video → audio → text` by chaining the existing `video2audio` converter through the multi-media import flow. See `vtsearch/converters/audio2text.py`.
+
+**Open follow-ups:**
+- **Switch to `faster-whisper` backend** — CTranslate2-based reimplementation, ~4× faster on CPU at the same WER, supports int8 quantization (small drops from ~480 MB → ~150 MB on disk and ~1 GB → ~500 MB RAM). Would also benefit the `SpeechExtractor` processor. Add as an optional backend the converter picks if available, falling back to `openai-whisper`.
+- **`large-v3-turbo` option** — OpenAI's 809M-param distilled variant of large-v3 (~6× faster than large-v3, ~1–2% WER hit). Not exposed in the dropdown today because `openai-whisper` versions vary in which size strings they accept; bundle with the faster-whisper switch since CTranslate2 has stable turbo support.
+- **VAD pre-filter** — Whisper hallucinates on silence/music. `faster-whisper`'s built-in Silero VAD filter eliminates most of this; add a `vad_filter: bool` param once the backend supports it.
+- **Per-segment timestamps** — current converter flattens to a single transcript blob. For long podcasts, emitting one text media per segment (with `start_s` / `end_s` metadata) would let users vote on individual passages. Defer until there's a UX story for "vote on a 30-second chunk of audio".
+- **2.4 `video → text`** — once `audio2text` ships, this is just a UI-level named composition of `video2audio` + `audio2text`. The multi-media import flow already supports chaining, so 2.4 is a thin wrapper rather than a new model.
 
 ### 2.4 `video → text` (transcription) ★★ M
 Composition of `video→audio→text`, but worth exposing as a single converter so users don't have to chain two manually.

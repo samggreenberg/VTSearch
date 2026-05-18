@@ -593,7 +593,7 @@ the full design and migration checklist.
 A `MediaConverter` takes media of one type and produces one or more
 media dicts of a *different* type.  Built-in examples:
 `video2image`, `video2audio`, `document2image`, `document2text`,
-`audio2image` (spectrogram), `image2text` (OCR).
+`audio2image` (spectrogram), `audio2text` (Whisper ASR), `image2text` (OCR).
 Converters are auto-discovered from `vtsearch.converters` via the
 `CONVERTER` sentinel.
 
