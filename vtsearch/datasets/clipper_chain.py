@@ -271,14 +271,18 @@ def apply_chain_to_clips(
             )
         )
 
-    total_steps = len(steps)
-    for step_idx, step in enumerate(steps):
+    for step in steps:
         next_carriers: list[tuple[dict[str, Any], list[ChainStep], dict[str, Any] | None, str, int]] = []
         kind = step["kind"]
         n_in = len(carriers)
+        # Phase name matches the legacy single-clipper progress contract
+        # ("clipping" for clipper steps, "converting" for converter steps)
+        # so the load-pipeline progress wrapper can keep its existing
+        # phase-to-message mapping unchanged.
+        phase = "clipping" if kind == "clipper" else "converting"
         for c_idx, (media, trail, parent_origin, parent_name, parent_idx) in enumerate(carriers):
             if on_progress is not None:
-                on_progress(c_idx, n_in, f"chain-step-{step_idx + 1}-of-{total_steps}")
+                on_progress(c_idx, n_in, phase)
             if kind == "clipper":
                 outputs, trail_entries = _run_clipper_step(media, step)
             else:

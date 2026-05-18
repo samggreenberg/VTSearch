@@ -292,7 +292,48 @@ def _apply_clipper(  # noqa: C901
     # precedence; otherwise build a length-1 chain from the legacy
     # single-clipper args (if any).
     steps = normalise_chain(chain_steps)
-    if not steps and clipper_name and not clipper_name.endswith("_default"):
+    legacy_default = (
+        not steps
+        and not chain_steps
+        and clipper_name
+        and clipper_name.endswith("_default")
+    )
+    if legacy_default:
+        # Legacy fast path: a single ``*_default`` clipper is a no-op on
+        # the data but stamps ``clipper`` / ``clipper_<key>`` in every
+        # origin. We don't put it in the chain (so ``clipper_chain``
+        # isn't written for default-only loads) but we do preserve the
+        # legacy stamp so existing readers continue to see it.
+        from vtsearch.media import get_clipper  # noqa: PLC0415
+
+        try:
+            clipper = get_clipper(clipper_name)
+        except KeyError:
+            return
+        if clipper_params:
+            clipper = clipper.with_params(clipper_params)
+        resolved_dict = clipper.to_dict()
+        base_keys = {"name", "display_name", "media_type", "parameters", "description", "creation_questions"}
+        effective_params = {k: v for k, v in resolved_dict.items() if k not in base_keys}
+        for media in clips_dict.values():
+            orig = media.get("origin")
+            if isinstance(orig, dict):
+                media["origin"] = dict(orig)
+                media["origin"]["params"] = dict(orig.get("params", {}))
+                media["origin"]["params"]["clipper"] = clipper.name
+                for pk, pv in effective_params.items():
+                    media["origin"]["params"][f"clipper_{pk}"] = str(pv)
+        return
+
+    if not steps and clipper_name:
+        # Resolve the legacy single-clipper args into a length-1 chain.
+        # Catch unknown names here so we match the legacy no-op semantics.
+        from vtsearch.media import get_clipper  # noqa: PLC0415
+
+        try:
+            get_clipper(clipper_name)
+        except KeyError:
+            return
         steps = [{"kind": "clipper", "name": clipper_name, "params": dict(clipper_params or {})}]
     if not steps:
         return
@@ -763,10 +804,10 @@ def _run_origin_load_in_background(  # noqa: C901
 
                 def _clipper_progress(current: int, total: int, phase: str) -> None:
                     tracker.check_cancelled()
-                    if phase.startswith("chain-step-"):
-                        msg = f"Running chain {phase[len('chain-step-'):]}…"
-                    elif phase == "clipping":
+                    if phase == "clipping":
                         msg = "Clipping media…"
+                    elif phase == "converting":
+                        msg = "Converting media…"
                     else:
                         msg = "Embedding clips…"
                     tracker.update(
