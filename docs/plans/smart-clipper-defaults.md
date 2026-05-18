@@ -86,8 +86,8 @@ would be a no-op.
 ### Files
 
 - `frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.ts` — Added `clipperAdvancedOpen` field plus `isDefaultClipperSelected(context)`, `showClipperPicker(context)`, and `toggleClipperAdvanced()`.
-- `frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.html` — Wrapped each of the four clipper-button blocks (form, lf, sf, demo) in `.advanced-section` with the toggle button gating the picker.
-- `frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.scss` — `.advanced-toggle` link-styled button (subtle muted text, hover underline) and `.advanced-section` flex wrapper.
+- `frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.html` — Gated each of the four clipper-button blocks (form, lf, sf, demo) behind the toggle button.
+- `frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.scss` — `.advanced-toggle` link-styled button (subtle muted text, hover underline). The demo context (inline in the embedder row) uses `.advanced-toggle--inline` for a small left margin.
 
 ## Open follow-ups
 

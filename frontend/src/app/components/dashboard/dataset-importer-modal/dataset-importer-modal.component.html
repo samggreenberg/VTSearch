@@ -401,7 +401,7 @@
       }
 
       @if (availableClippers.length > 1) {
-        <div class="form-group advanced-section">
+        <div class="form-group">
           @if (isDefaultClipperSelected('form')) {
             <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
               Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
@@ -637,7 +637,7 @@
       }
 
       @if (lfClippers.length > 1) {
-        <div class="form-group form-group--section advanced-section">
+        <div class="form-group form-group--section">
           @if (isDefaultClipperSelected('lf')) {
             <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
               Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
@@ -873,7 +873,7 @@
       }
 
       @if (sfClippers.length > 1) {
-        <div class="form-group advanced-section">
+        <div class="form-group">
           @if (isDefaultClipperSelected('sf')) {
             <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
               Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
