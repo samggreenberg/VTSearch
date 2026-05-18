@@ -111,7 +111,6 @@ Today the framework allows one converter per source; consider explicit chains: `
 ### 3.4 Video
 - **`video_action`** ★ M — clip around detected action peaks (motion histogram or VideoMAE attention).
 - **`video_audio_cue`** ★ M — clip around audio-event peaks (loud noise, vocal onset).
-- **`video_uniform_with_keyframes`** ★★ S — uniform sampling biased to nearest I-frame.
 - **`video_dialogue`** ★ M — clip per speech turn (VAD on demuxed audio).
 
 ### 3.5 Document
