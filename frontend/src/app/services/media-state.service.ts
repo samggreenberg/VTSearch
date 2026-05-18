@@ -1,7 +1,8 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { MediaItem } from '../models/api.models';
+import type { Media } from '../models/api.models';
+import type { MediaIdsListResponse } from '../generated/api-client/models/media-ids-list-response';
 import { MediasApiService } from './medias-api.service';
 import { MediaMetadataCacheService } from './media-metadata-cache.service';
 
@@ -17,7 +18,7 @@ import { MediaMetadataCacheService } from './media-metadata-cache.service';
  */
 @Injectable({ providedIn: 'root' })
 export class MediaStateService implements OnDestroy {
-  private readonly mediasSubject = new BehaviorSubject<MediaItem[]>([]);
+  private readonly mediasSubject = new BehaviorSubject<MediaIdsListResponse[]>([]);
   private readonly selectedIdSubject = new BehaviorSubject<number | null>(null);
   private readonly destroy$ = new Subject<void>();
 
@@ -34,7 +35,7 @@ export class MediaStateService implements OnDestroy {
     this.destroy$.complete();
   }
 
-  get medias(): MediaItem[] {
+  get medias(): MediaIdsListResponse[] {
     return this.mediasSubject.value;
   }
 
@@ -42,9 +43,18 @@ export class MediaStateService implements OnDestroy {
     return this.selectedIdSubject.value;
   }
 
-  get selectedMedia(): MediaItem | null {
+  get selectedMedia(): Media | null {
     const id = this.selectedIdSubject.value;
     if (id === null) return null;
+    return this.getMedia(id);
+  }
+
+  /**
+   * Return the best-available representation of a media item: the cached
+   * batch entry (with ``filename`` / ``md5`` / metadata) if loaded, else
+   * the stub from the dataset listing, else ``null``.
+   */
+  getMedia(id: number): Media | null {
     const cached = this.metadataCache.get(id);
     if (cached) return cached;
     return this.mediasSubject.value.find((m) => m.id === id) ?? null;

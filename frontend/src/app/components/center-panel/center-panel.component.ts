@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { KeyValuePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
-import { MediaItem } from '../../models/api.models';
+import { Media } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
 import { KeyboardService } from '../../services/keyboard.service';
 import { VoteStateService } from '../../services/vote-state.service';
@@ -30,7 +30,7 @@ import { prefersReducedMotion } from '../../utils/reduced-motion';
   styleUrl: './center-panel.component.scss',
 })
 export class CenterPanelComponent implements OnChanges, OnDestroy {
-  @Input() media: MediaItem | null = null;
+  @Input() media: Media | null = null;
   @Input() disabled = false;
   @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
 
@@ -179,7 +179,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   }
 
   /** Human-readable label for an item used in undo toasts. */
-  private mediaDisplayName(media: MediaItem): string {
+  private mediaDisplayName(media: Media): string {
     return media.filename || media.origin_name || `#${media.id}`;
   }
 

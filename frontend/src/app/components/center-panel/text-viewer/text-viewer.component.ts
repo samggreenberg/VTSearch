@@ -1,7 +1,7 @@
 import { Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { MediasApiService } from '../../../services/medias-api.service';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 
 @Component({
   selector: 'vt-text-viewer',
@@ -10,7 +10,7 @@ import { MediaItem } from '../../../models/api.models';
   styleUrl: './text-viewer.component.scss',
 })
 export class TextViewerComponent implements OnChanges, OnDestroy {
-  @Input() media!: MediaItem;
+  @Input() media!: Media;
 
   text = 'Loading...';
   private sub: Subscription | null = null;

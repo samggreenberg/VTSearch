@@ -1,13 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DocumentViewerComponent } from './document-viewer.component';
 import { ActiveContextService } from '../../../services/active-context.service';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 
 describe('DocumentViewerComponent', () => {
   let component: DocumentViewerComponent;
   let fixture: ComponentFixture<DocumentViewerComponent>;
 
-  const mockMedia: MediaItem = {
+  const mockMedia: Media = {
     id: 5,
     type: 'document',
     filename: 'test.pdf',
