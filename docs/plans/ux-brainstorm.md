@@ -339,8 +339,10 @@ Several places accept drag-drop (file import, example media into detector) but s
 ### 7.7 Modal stacking ★★ XS
 Some flows can stack 3 modals deep (importer → demo picker → embedder picker). Stacking modals is a known anti-pattern. Either convert nested modals to in-place sub-views with a back button (§6.4), or use a single multi-step wizard.
 
-### 7.8 Shift-drag to draw region ★★ XS
+### 7.8 Shift-drag to draw region ★★ XS — shipped
 The image region-vote uses Shift+drag with no UI cue. Standard image-region tools use a dedicated mode toggle (a button that turns the cursor into a marquee). Keep Shift+drag as a power-user shortcut, but also expose a Marquee button.
+
+**What shipped:** A dashed-rectangle toggle button in the image-view-controls toolbar (next to Rotate / Zoom / Reset). Clicking it flips `ImageViewerComponent.marqueeMode` on; while on, the cursor stays a crosshair and a normal left-drag draws a region — no Shift required. The toggle is sticky (persists across media navigation, by analogy with Photoshop / CVAT tool selection) and uses the accent colour for its active state so it doesn't conflate with the green Good-vote button. Shift+drag remains a power-user shortcut and works whether the toggle is on or off. Keyboard help + USER_GUIDE updated.
 
 ### 7.9 Region rectangle interaction ★ S
 After drawing, the rectangle is editable via 8 handles — good. But the "click on the rectangle to restore" interaction is non-discoverable. A standard "✓ confirm region" / "✗ clear" button overlay on the rectangle would replace the current "press ← twice to discard" pattern.
