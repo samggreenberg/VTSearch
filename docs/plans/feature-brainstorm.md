@@ -83,7 +83,7 @@ Today the framework allows one converter per source; consider explicit chains: `
 ## 3. New MediaClippers
 
 ### 3.1 Audio
-- **`sound_silence`** ★★ S — split on silence (librosa `effects.split`). Drop intro/outro silence. Param: `top_db`.
+- **`sound_silence`** ★★ S ✅ shipped — split on silence (librosa `effects.split`). Drop intro/outro silence. Params: `top_db`, `min_clip_duration` (drops noise-spike micro-clips), `pad` (keeps attack/decay around each interval). See `vtsearch/media/audio/clipper.py` (`SoundSilenceClipper`).
 - **`sound_beat`** ★ S — split on detected beats / downbeats (madmom). For music datasets.
 - **`sound_speech_activity`** ★★ S — VAD-based segmentation (Silero VAD). Useful for podcasts.
 - **`sound_energy_envelope`** ★ S — segment around energy peaks (find drum hits, claps, gunshots).
