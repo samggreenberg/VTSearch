@@ -351,41 +351,56 @@ class SoundSilenceClipper(MediaClipper):
     def pad(self) -> float:
         return self._pad
 
-    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        media_bytes = media.get("media_bytes")
-        if media_bytes is None:
-            return [media]
+    def _detect_segments(self, media_bytes: bytes) -> list[tuple[float, float]] | None:
+        """Detect non-silent ``(start, end)`` ranges (seconds) in *media_bytes*.
 
+        Returns ``None`` if the audio cannot be decoded or librosa is
+        unavailable.  Returns an empty list if no intervals survive the
+        ``min_clip_duration`` filter.
+        """
         try:
             import librosa  # noqa: PLC0415
         except ImportError:
-            return [media]
+            return None
 
         try:
             audio_data, sr = librosa.load(io.BytesIO(media_bytes), sr=None, mono=True)
         except Exception:
-            return [media]
+            return None
 
         if audio_data.size == 0 or sr <= 0:
-            return [media]
-
-        total = len(audio_data) / sr
+            return None
 
         try:
             intervals = librosa.effects.split(audio_data, top_db=self._top_db)
         except Exception:
-            return [media]
+            return None
 
         if len(intervals) == 0:
-            return [media]
+            return []
 
+        total_samples = len(audio_data)
+        # librosa's effects.split returns a single full-coverage interval on
+        # degenerate input (e.g. pure silence — ref amplitude is zero, so the
+        # dB threshold is meaningless).  Treat that as "no segmentation".
+        if len(intervals) == 1 and int(intervals[0][0]) <= 0 and int(intervals[0][1]) >= total_samples:
+            return []
+
+        total = total_samples / sr
         segments: list[tuple[float, float]] = []
         for s0, s1 in intervals:
             t0 = max(0.0, float(s0) / sr - self._pad)
             t1 = min(total, float(s1) / sr + self._pad)
             if t1 - t0 >= self._min_clip_duration:
                 segments.append((t0, t1))
+        return segments
 
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        media_bytes = media.get("media_bytes")
+        if media_bytes is None:
+            return [media]
+
+        segments = self._detect_segments(media_bytes)
         if not segments:
             return [media]
 
