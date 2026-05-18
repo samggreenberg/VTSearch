@@ -20,13 +20,15 @@ from werkzeug.exceptions import HTTPException
 from vtsearch.config import DATA_DIR
 from vtsearch.routes._shared import format_exception_detail
 from vtsearch.schemas.media import (
+    ExampleSortByIdRequestSchema,
     ExampleSortOriginRequestSchema,
     ExampleSortResponseSchema,
     ExampleSortServerRequestSchema,
+    ServerMediaFromMediaIdRequestSchema,
     ServerMediaListResponseSchema,
     ServerMediaUploadResponseSchema,
 )
-from vtsearch.state import snapshot_medias
+from vtsearch.state import get_media, snapshot_medias
 
 media_server_bp = Blueprint(
     "media_server",
@@ -347,3 +349,156 @@ def example_sort_origin(body: dict):
         abort(500, message=f"Example sort failed: {format_exception_detail(exc)}")
     finally:
         source.cleanup()
+
+
+def _media_extension(media: dict) -> str:
+    """Return the file extension (with leading dot) for a loaded media.
+
+    Falls back to ``.wav`` for audio (the on-the-fly serving format),
+    ``.bin`` for unknown types.
+    """
+    filename = media.get("filename", "")
+    suffix = Path(filename).suffix
+    if suffix:
+        return suffix
+    media_type = media.get("type", "")
+    if media_type == "audio":
+        return ".wav"
+    if media_type == "image":
+        return ".jpg"
+    if media_type == "video":
+        return ".mp4"
+    if media_type == "text":
+        return ".txt"
+    return ".bin"
+
+
+def _resolve_media_bytes(media: dict) -> bytes | None:
+    """Return the raw bytes for a loaded media item.
+
+    Mirrors :func:`vtsearch.routes.media.list._resolve_bytes` but is also
+    aware of text media (which stores its content as ``media_string``).
+    """
+    media_bytes = media.get("media_bytes")
+    if media_bytes is not None:
+        return media_bytes
+    media_path = media.get("media_path")
+    if media_path:
+        p = Path(media_path)
+        if p.exists():
+            return p.read_bytes()
+    media_string = media.get("media_string")
+    if media_string is not None:
+        return media_string.encode("utf-8")
+    return None
+
+
+@media_server_bp.route("/api/example-sort-by-id", methods=["POST"])
+@media_server_bp.arguments(ExampleSortByIdRequestSchema)
+@media_server_bp.response(200, ExampleSortResponseSchema)
+@media_server_bp.alt_response(400, description="No medias loaded, or media_id not in the loaded snapshot.")
+@media_server_bp.alt_response(404, description="Media not found, or its bytes are unavailable when cropping is requested.")
+@media_server_bp.alt_response(500, description="Example sort failed.")
+def example_sort_by_id(body: dict):
+    """Sort medias by similarity to an already-loaded media item.
+
+    When ``crop_params`` is absent the existing ``media["embedding"]``
+    is reused — no fetch, no re-embed.  When set, the media's bytes are
+    materialised, cropped, and re-embedded before sorting.
+    """
+    media_id = body["media_id"]
+
+    if not snapshot_medias():
+        abort(400, message="No medias loaded")
+
+    media = get_media(media_id)
+    if media is None:
+        abort(400, message=f"Media id {media_id} is not loaded")
+
+    crop_params = body.get("crop_params") if isinstance(body.get("crop_params"), dict) else None
+
+    try:
+        from vtsearch.routes.sorting import (
+            _apply_crop_or_keep,
+            _cosine_sort,
+            _example_sort_from_path,
+        )
+
+        if crop_params:
+            media_bytes = _resolve_media_bytes(media)
+            if media_bytes is None:
+                abort(404, message="Media bytes unavailable for cropping")
+
+            import uuid
+
+            DATA_DIR.mkdir(exist_ok=True)
+            tmp = DATA_DIR / f"temp_example_{uuid.uuid4().hex}{_media_extension(media)}"
+            tmp.write_bytes(media_bytes)
+            try:
+                _apply_crop_or_keep(tmp, crop_params)
+                results, thresh = _example_sort_from_path(tmp)
+            finally:
+                tmp.unlink(missing_ok=True)
+        else:
+            embedding = media.get("embedding")
+            if embedding is None:
+                abort(400, message="Media has no embedding (cannot sort)")
+            results, thresh = _cosine_sort(embedding)
+        return {"results": results, "threshold": thresh}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).exception("example-sort-by-id failed")
+        abort(500, message=f"Example sort failed: {format_exception_detail(exc)}")
+
+
+@media_server_bp.route("/api/server-media-files/from-media-id", methods=["POST"])
+@media_server_bp.arguments(ServerMediaFromMediaIdRequestSchema)
+@media_server_bp.response(201, ServerMediaUploadResponseSchema)
+@media_server_bp.alt_response(400, description="media_id not loaded, or invalid crop_params.")
+@media_server_bp.alt_response(404, description="Media bytes unavailable.")
+def server_media_file_from_media_id(body: dict):
+    """Save a loaded media's bytes to the example_media/ directory.
+
+    Used by the right-click ``Use as detector seed`` flow: the loaded
+    media is materialised to disk so the new-detector form can reference
+    it as ``media_example`` (the same field the upload path returns).
+    """
+    import uuid
+
+    media_id = body["media_id"]
+    media = get_media(media_id)
+    if media is None:
+        abort(400, message=f"Media id {media_id} is not loaded")
+
+    media_bytes = _resolve_media_bytes(media)
+    if media_bytes is None:
+        abort(404, message="Media bytes unavailable")
+
+    crop_params = body.get("crop_params") if isinstance(body.get("crop_params"), dict) else None
+    if crop_params:
+        media_type = media.get("type", "")
+        try:
+            from vtsearch.media.cropping import crop_file_bytes
+
+            DATA_DIR.mkdir(exist_ok=True)
+            tmp = DATA_DIR / f"temp_seed_{uuid.uuid4().hex}{_media_extension(media)}"
+            tmp.write_bytes(media_bytes)
+            try:
+                media_bytes = crop_file_bytes(tmp, media_type, crop_params)
+            finally:
+                tmp.unlink(missing_ok=True)
+        except (ValueError, FileNotFoundError):
+            abort(400, message="Invalid crop_params for this media type")
+
+    suffix = _media_extension(media)
+    safe_name = f"{uuid.uuid4().hex}{suffix}"
+    media_dir = _get_server_media_dir()
+    media_dir.mkdir(parents=True, exist_ok=True)
+    dest = media_dir / safe_name
+    dest.write_bytes(media_bytes)
+
+    original = media.get("filename") or media.get("origin_name") or f"media_{media_id}{suffix}"
+    return {"filename": safe_name, "original_name": original}

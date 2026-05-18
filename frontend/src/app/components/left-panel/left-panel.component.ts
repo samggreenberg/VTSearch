@@ -80,6 +80,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Output() exampleSortStarted = new EventEmitter<unknown>();
   @Output() mediaSelect = new EventEmitter<number>();
   @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  @Output() mediaContextRequest = new EventEmitter<{ id: number; x: number; y: number }>();
   @Output() indicatorClick = new EventEmitter<string>();
   @Output() autopilotStart = new EventEmitter<void>();
   @Output() autopilotStop = new EventEmitter<void>();

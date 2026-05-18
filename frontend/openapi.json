@@ -2061,6 +2061,23 @@
         ],
         "type": "object"
       },
+      "ExampleSortByIdRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "crop_params": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          },
+          "media_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "media_id"
+        ],
+        "type": "object"
+      },
       "ExampleSortOriginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3360,6 +3377,23 @@
         "required": [
           "seeded",
           "skipped"
+        ],
+        "type": "object"
+      },
+      "ServerMediaFromMediaIdRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "crop_params": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          },
+          "media_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "media_id"
         ],
         "type": "object"
       },
@@ -7657,6 +7691,52 @@
         ]
       }
     },
+    "/api/example-sort-by-id": {
+      "post": {
+        "description": "When ``crop_params`` is absent the existing ``media[\"embedding\"]``\nis reused \u2014 no fetch, no re-embed.  When set, the media's bytes are\nmaterialised, cropped, and re-embedded before sorting.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExampleSortByIdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExampleSortResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No medias loaded, or media_id not in the loaded snapshot."
+          },
+          "404": {
+            "description": "Media not found, or its bytes are unavailable when cropping is requested."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "500": {
+            "description": "Example sort failed."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Sort medias by similarity to an already-loaded media item.",
+        "tags": [
+          "media_server"
+        ]
+      }
+    },
     "/api/example-sort-origin": {
       "post": {
         "description": "Accepts a JSON body with ``origin`` (an origin dict as stored on medias)\nand ``key`` (the item key / relative path within the source).  The file\nis fetched via the :class:`~vtsearch.datasets.sources.base.MediaSource`\nabstraction, embedded, and used for cosine-similarity sorting.\n\nExample request::\n\n    {\n        \"origin\": {\"importer\": \"server_folder\", \"params\": {\"path\": \"/data/sounds\"}},\n        \"key\": \"subdir/audio123.wav\"\n    }",
@@ -9081,6 +9161,49 @@
           }
         },
         "summary": "List media files saved on the server in the user's example_media/ dir.",
+        "tags": [
+          "media_server"
+        ]
+      }
+    },
+    "/api/server-media-files/from-media-id": {
+      "post": {
+        "description": "Used by the right-click ``Use as detector seed`` flow: the loaded\nmedia is materialised to disk so the new-detector form can reference\nit as ``media_example`` (the same field the upload path returns).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerMediaFromMediaIdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerMediaUploadResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "description": "media_id not loaded, or invalid crop_params."
+          },
+          "404": {
+            "description": "Media bytes unavailable."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Save a loaded media's bytes to the example_media/ directory.",
         "tags": [
           "media_server"
         ]

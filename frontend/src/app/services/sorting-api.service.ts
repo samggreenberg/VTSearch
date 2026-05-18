@@ -43,8 +43,10 @@ import { apiEvalTrainAndScorePost } from '../generated/api-client/fn/eval/api-ev
 import { apiEvalTrainAndScoreResultGet } from '../generated/api-client/fn/eval/api-eval-train-and-score-result-get';
 import { apiIndicatorScoreHistoryGet } from '../generated/api-client/fn/eval/api-indicator-score-history-get';
 import { apiLabelingStatusGet } from '../generated/api-client/fn/eval/api-labeling-status-get';
+import { apiExampleSortByIdPost } from '../generated/api-client/fn/media-server/api-example-sort-by-id-post';
 import { apiExampleSortOriginPost } from '../generated/api-client/fn/media-server/api-example-sort-origin-post';
 import { apiExampleSortServerPost } from '../generated/api-client/fn/media-server/api-example-sort-server-post';
+import { apiServerMediaFilesFromMediaIdPost } from '../generated/api-client/fn/media-server/api-server-media-files-from-media-id-post';
 import { apiServerMediaFilesGet } from '../generated/api-client/fn/media-server/api-server-media-files-get';
 
 @Injectable({ providedIn: 'root' })
@@ -148,6 +150,29 @@ export class SortingApiService {
     return apiExampleSortOriginPost(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
+  }
+
+  /** Sort the loaded snapshot by similarity to an already-loaded media.
+   *  Skips re-embedding when ``crop_params`` is absent — the in-memory
+   *  embedding is reused directly. */
+  exampleSortById(params: {
+    media_id: number;
+    crop_params?: Record<string, unknown>;
+  }): Observable<ExampleSortResponse> {
+    return apiExampleSortByIdPost(this.http, this.config.rootUrl, { body: params }).pipe(
+      map((r) => r.body),
+    );
+  }
+
+  /** Save a loaded media's bytes to example_media/ so the new-detector
+   *  flow can reference it via ``media_example``. */
+  saveServerMediaFromMediaId(params: {
+    media_id: number;
+    crop_params?: Record<string, unknown>;
+  }): Observable<ServerMediaUploadResponse> {
+    return apiServerMediaFilesFromMediaIdPost(this.http, this.config.rootUrl, {
+      body: params,
+    }).pipe(map((r) => r.body));
   }
 
   /** Multipart upload — see {@link exampleSort}. */

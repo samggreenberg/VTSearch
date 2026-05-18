@@ -45,6 +45,15 @@ export class NewDetectorModalComponent implements OnInit {
   /** Media type of the currently active dataset, if any. */
   @Input() defaultMediaType = '';
 
+  /** When set, the modal opens with this loaded-media id materialised into
+   *  example_media/ as the seed example. The picker is bypassed and the
+   *  user lands directly on the form. Cleared by callers via
+   *  ``NewThingFlowsService.closeNewDetector``. */
+  @Input() seedMediaId: number | null = null;
+
+  /** Optional crop bounds applied when materialising ``seedMediaId``. */
+  @Input() seedCropParams: Record<string, unknown> | null = null;
+
   @Output() closed = new EventEmitter<void>();
   @Output() created = new EventEmitter<string>();
 
@@ -211,6 +220,37 @@ export class NewDetectorModalComponent implements OnInit {
         },
       });
     }
+
+    if (this.seedMediaId != null) {
+      this.materializeSeedFromMediaId(this.seedMediaId, this.seedCropParams ?? undefined);
+    }
+  }
+
+  /** Materialise a loaded media into example_media/ and pre-fill the
+   *  example fields, so the user lands on the form with the seed already
+   *  selected. */
+  private materializeSeedFromMediaId(
+    mediaId: number,
+    cropParams?: Record<string, unknown>,
+  ): void {
+    this.submitting = true;
+    this.sortingApi
+      .saveServerMediaFromMediaId({ media_id: mediaId, crop_params: cropParams })
+      .subscribe({
+        next: (res) => {
+          this.exampleType = 'media';
+          this.exampleValue = res.filename;
+          this.exampleDisplay = res.original_name || res.filename;
+          this.exampleMediaType = this.mediaType;
+          this.exampleThumbFailed = false;
+          this.pendingText = '';
+          this.submitting = false;
+        },
+        error: (err) => {
+          this.submitting = false;
+          this.error = err.error?.message || 'Failed to load seed media';
+        },
+      });
   }
 
   unlockMediaType(): void {
