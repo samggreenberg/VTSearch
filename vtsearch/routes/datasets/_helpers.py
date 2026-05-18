@@ -5,7 +5,6 @@ These were inlined into ``crud.py`` before the split; they now live here so
 the modules importing from each other.
 """
 
-import io
 import json
 from pathlib import PurePosixPath
 from typing import Any
@@ -26,44 +25,6 @@ def _normalize_media_type_param(value: str) -> str:
         return get_by_folder_name(value).type_id
     except KeyError:
         return normalize_type_id(value)
-
-
-def _extract_importer_fields(importer):
-    """Build field_values for a dataset importer from the current request.
-
-    Unlike :func:`extract_plugin_fields`, this reads file contents into
-    :class:`io.BytesIO` so they remain valid after the Flask request context
-    ends (required for background-thread execution).
-
-    Returns ``(field_values, None)`` on success, or ``(None, error_tuple)``
-    when a required field is missing.
-    """
-    file_keys = {f.key for f in importer.fields if f.field_type == "file"}
-
-    field_values: dict = {}
-    if file_keys:
-        for key in file_keys:
-            if key not in request.files:
-                return None, (jsonify({"error": f"Missing file field: {key!r}"}), 400)
-            file_bytes = io.BytesIO(request.files[key].read())
-            file_bytes.name = request.files[key].filename
-            field_values[key] = file_bytes
-        for f in importer.fields:
-            if f.field_type != "file":
-                field_values[f.key] = request.form.get(f.key, f.default)
-        dataset_name = (request.form.get("dataset_name") or "").strip()
-    else:
-        body = request.get_json(force=True) or {}
-        for f in importer.fields:
-            if f.key not in body and f.required:
-                return None, (jsonify({"error": f"Missing required field: {f.key!r}"}), 400)
-            field_values[f.key] = body.get(f.key, f.default)
-        dataset_name = str(body.get("dataset_name") or "").strip()
-
-    if dataset_name:
-        field_values["dataset_name"] = dataset_name
-
-    return field_values, None
 
 
 def _extract_clipper_params(has_file_fields: bool) -> tuple[dict | None, Any]:

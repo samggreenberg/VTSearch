@@ -6,6 +6,8 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from flask import g, jsonify, request
+from flask_smorest import abort
+from marshmallow import ValidationError
 
 if TYPE_CHECKING:
     from vtsearch.plugins import PluginBase
@@ -100,49 +102,89 @@ def get_json_or_400():
 # ---------------------------------------------------------------------------
 
 
-def extract_plugin_fields(plugin: PluginBase) -> dict:
-    """Build a ``field_values`` dict from the current Flask request.
+def validate_plugin_args(plugin: PluginBase, *, file_mode: str = "filestorage") -> dict:
+    """Validate the request body against the plugin's per-field schema.
 
-    Handles both ``multipart/form-data`` (when the plugin has ``"file"``
-    fields) and JSON request bodies.  File fields are populated from
-    ``request.files``; non-file fields come from ``request.form`` or the
-    JSON body, falling back to the field's default value.
+    Builds a marshmallow schema from the plugin's :attr:`fields`
+    declaration (cached on the plugin instance) and runs the incoming
+    request body through it.  Returns the validated ``field_values``
+    dict on success, including file uploads keyed by their declared
+    field name.
+
+    Schema-level rejects (missing required field, invalid select value,
+    unparseable number) surface as ``422`` with the standard
+    ``errors`` envelope — matching the validation behaviour of routes
+    using ``@blp.arguments(...)``.  Pass-through keys that aren't
+    declared as plugin fields (``converters``, ``source_specs``,
+    ``clipper``, ``embedder``, ``dataset_name``, ``name``, etc.) are
+    preserved on the returned dict so callers can read them alongside
+    the plugin-declared values.
+
+    Parameters
+    ----------
+    plugin:
+        Any plugin instance with a :attr:`fields` declaration.
+    file_mode:
+        How to surface file uploads.  ``"filestorage"`` (default) keeps
+        :class:`werkzeug.datastructures.FileStorage` objects — used by
+        label-importer routes where the file is consumed synchronously.
+        ``"bytesio"`` reads each upload into an in-memory
+        :class:`io.BytesIO` carrying the original filename on its
+        ``.name`` attribute — used by dataset-importer routes that hand
+        the file off to a background thread (the request context, and
+        the underlying ``FileStorage``, are torn down before the thread
+        reads).
     """
+    import io  # noqa: PLC0415 — defer to avoid import cost when unused
+
+    from vtsearch.plugins.schema import get_plugin_arg_schema  # noqa: PLC0415
+
     has_file_fields = any(f.field_type == "file" for f in plugin.fields)
-    field_values: dict = {}
+    file_keys = {f.key for f in plugin.fields if f.field_type == "file"}
 
     if has_file_fields:
-        for f in plugin.fields:
-            if f.field_type == "file":
-                field_values[f.key] = request.files.get(f.key)
-            else:
-                field_values[f.key] = request.form.get(f.key, f.default if f.default is not None else "")
+        # ``request.form`` is a MultiDict; marshmallow handles plain dicts.
+        body: dict = {k: v for k, v in request.form.items()}
     else:
-        body = get_json_safe()
-        for f in plugin.fields:
-            field_values[f.key] = body.get(f.key, f.default if f.default is not None else "")
+        body = request.get_json(force=True, silent=True) or {}
+        if not isinstance(body, dict):
+            abort(400, message="Invalid request body")
 
-    return field_values
+    schema = get_plugin_arg_schema(plugin)
+    try:
+        validated: dict = schema.load(body)
+    except ValidationError as exc:
+        abort(422, message="Validation error", errors={"json": exc.messages})
 
+    # Add file uploads in the chosen mode.  Required file fields are
+    # checked here (the schema skips them) so callers get a consistent
+    # 422 envelope across all field types.
+    missing_files: list[str] = []
+    for f in plugin.fields:
+        if f.field_type != "file":
+            continue
+        storage = request.files.get(f.key) if has_file_fields else None
+        if storage is None or not getattr(storage, "filename", None):
+            if f.required:
+                missing_files.append(f.key)
+            else:
+                validated[f.key] = None
+            continue
+        if file_mode == "bytesio":
+            buf = io.BytesIO(storage.read())
+            buf.name = storage.filename  # type: ignore[attr-defined]
+            validated[f.key] = buf
+        else:
+            validated[f.key] = storage
 
-def validate_required_fields(plugin: PluginBase, field_values: dict) -> tuple | None:
-    """Check that all required non-file fields have non-empty values.
-
-    Returns a ``(response, 400)`` tuple on failure, or ``None`` if all
-    required fields are present.
-    """
-    missing = [
-        f.key
-        for f in plugin.fields
-        if f.required and f.field_type != "file" and not str(field_values.get(f.key, "")).strip()
-    ]
-    if missing:
-        return error_response(
-            f"Missing required field(s): {missing}",
-            400,
-            missing_fields=missing,
+    if missing_files:
+        abort(
+            422,
+            message="Validation error",
+            errors={"json": {k: ["Missing data for required field."] for k in missing_files}},
         )
-    return None
+
+    return validated
 
 
 def validate_filepath_field(field_values: dict) -> tuple | None:
@@ -198,13 +240,6 @@ def get_embedder_for_medias(media_dict: dict):
 
     avail = embedders_for_type(media_type)
     return avail[0] if avail else None
-
-
-def get_request_field(key: str, has_file_fields: bool) -> str:
-    """Read a single pass-through parameter from form data or JSON body."""
-    if has_file_fields:
-        return request.form.get(key, "")
-    return get_json_safe().get(key, "")
 
 
 def format_exception_detail(exc: BaseException) -> str:
