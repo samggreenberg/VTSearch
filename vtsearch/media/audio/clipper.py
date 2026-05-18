@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import io
 import math
+import os
 import wave
+from pathlib import Path
 from typing import Any
 
 from vtsearch.media.clipper import MediaClipper
@@ -567,4 +569,235 @@ class SoundClipClipper(MediaClipper):
         d = super().to_dict()
         d["start"] = self._start
         d["end"] = self._end
+        return d
+
+
+class SoundSpeechActivityClipper(MediaClipper):
+    """Split audio into one clip per detected speech turn using Silero VAD.
+
+    Loads the `snakers4/silero-vad` model via :func:`torch.hub.load` and runs
+    voice-activity detection on a 16 kHz mono downmix of the input.  Returned
+    speech intervals are sliced out of the **original** WAV bytes (preserving
+    the source sample rate / channels) and emitted as separate clips, the
+    same way :class:`SoundSilenceClipper` works — non-speech gaps and
+    intro/outro silence are dropped automatically.  Designed for podcasts,
+    interviews, voice memos, and lecture recordings where each unit of
+    interest is a contiguous speech turn.
+
+    Parameters
+    ----------
+    threshold : float
+        Silero VAD confidence threshold in ``[0, 1]``.  Higher values are
+        more conservative (only louder/clearer speech survives).
+        Defaults to 0.5.
+    min_clip_duration : float
+        Speech intervals shorter than this (in seconds, **after** padding)
+        are discarded, suppressing single-syllable false positives.
+        Defaults to 0.3.
+    pad : float
+        Padding (seconds) added on each side of every speech interval so
+        word onsets and tails aren't trimmed.  Defaults to 0.05.
+
+    If ``torch`` / Silero is unavailable, the audio cannot be decoded, or
+    no speech intervals survive the ``min_clip_duration`` filter, the media
+    is returned unchanged (single-element list).
+    """
+
+    _SILERO_SR = 16000
+
+    def __init__(
+        self,
+        threshold: float = 0.5,
+        min_clip_duration: float = 0.3,
+        pad: float = 0.05,
+    ) -> None:
+        if not 0.0 < threshold <= 1.0:
+            raise ValueError("threshold must be in (0, 1]")
+        if min_clip_duration < 0:
+            raise ValueError("min_clip_duration must be non-negative")
+        if pad < 0:
+            raise ValueError("pad must be non-negative")
+        self._threshold = float(threshold)
+        self._min_clip_duration = float(min_clip_duration)
+        self._pad = float(pad)
+        self._model: Any = None
+        self._get_speech_timestamps: Any = None
+
+    @property
+    def name(self) -> str:
+        return "sound_speech_activity"
+
+    @property
+    def media_type(self) -> str:
+        return "audio"
+
+    @property
+    def description(self) -> str:
+        return "Split each audio file into one clip per speech turn using Silero VAD. Good for podcasts."
+
+    @property
+    def threshold(self) -> float:
+        return self._threshold
+
+    @property
+    def min_clip_duration(self) -> float:
+        return self._min_clip_duration
+
+    @property
+    def pad(self) -> float:
+        return self._pad
+
+    def _load_model(self) -> bool:
+        """Lazy-load the Silero VAD model. Returns False if unavailable."""
+        if self._model is not None and self._get_speech_timestamps is not None:
+            return True
+        try:
+            import torch  # noqa: PLC0415
+            import torch.hub  # noqa: F401, PLC0415
+
+            from vtsearch.config import MODELS_CACHE_DIR  # noqa: PLC0415
+        except ImportError:
+            return False
+
+        os.environ.setdefault("TORCH_HOME", str(Path(MODELS_CACHE_DIR).expanduser()))
+        try:
+            # ``torch.hub.load`` is typed to return ``object``; cast to Any so
+            # we can unpack the (model, utils) tuple and index into utils.
+            loaded: Any = torch.hub.load(
+                "snakers4/silero-vad",
+                "silero_vad",
+                source="github",
+                trust_repo=True,  # pyright: ignore[reportArgumentType]
+            )
+            model, utils = loaded
+            get_speech_timestamps = utils[0]
+        except Exception:
+            return False
+
+        self._model = model
+        self._get_speech_timestamps = get_speech_timestamps
+        return True
+
+    def _detect_speech_intervals(self, media_bytes: bytes) -> list[tuple[float, float]] | None:
+        """Detect speech ``(start, end)`` ranges (seconds) in *media_bytes*.
+
+        Returns ``None`` if the audio cannot be decoded or Silero is
+        unavailable.  Returns an empty list if no intervals survive the
+        ``min_clip_duration`` filter.
+        """
+        try:
+            import librosa  # noqa: PLC0415
+        except ImportError:
+            return None
+
+        if not self._load_model():
+            return None
+
+        try:
+            audio_data, _ = librosa.load(io.BytesIO(media_bytes), sr=self._SILERO_SR, mono=True)
+        except Exception:
+            return None
+        if audio_data.size == 0:
+            return None
+
+        try:
+            import torch  # noqa: PLC0415
+
+            wav = torch.from_numpy(audio_data)
+            raw = self._get_speech_timestamps(
+                wav,
+                self._model,
+                sampling_rate=self._SILERO_SR,
+                threshold=self._threshold,
+                return_seconds=True,
+            )
+        except Exception:
+            return None
+
+        if not raw:
+            return []
+
+        total = audio_data.size / self._SILERO_SR
+        segments: list[tuple[float, float]] = []
+        for ts in raw:
+            t0 = max(0.0, float(ts["start"]) - self._pad)
+            t1 = min(total, float(ts["end"]) + self._pad)
+            if t1 - t0 >= self._min_clip_duration:
+                segments.append((t0, t1))
+        return segments
+
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        media_bytes = media.get("media_bytes")
+        if media_bytes is None:
+            return [media]
+
+        segments = self._detect_speech_intervals(media_bytes)
+        if not segments:
+            return [media]
+
+        try:
+            results: list[dict[str, Any]] = []
+            for idx, (t0, t1) in enumerate(segments):
+                sliced = _wav_slice(media_bytes, t0, t1)
+                clip = dict(media)
+                clip["media_bytes"] = sliced
+                clip["duration"] = round(t1 - t0, 6)
+                clip["file_size"] = len(sliced)
+                clip["clip_index"] = idx
+                clip["clip_start"] = round(t0, 6)
+                clip["clip_end"] = round(t1, 6)
+                results.append(clip)
+            return results
+        except Exception:
+            return [media]
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": "threshold",
+                "label": "VAD threshold",
+                "description": (
+                    "Silero VAD confidence threshold (0–1). Higher values are more conservative — "
+                    "only louder, clearer speech is kept."
+                ),
+                "type": "number",
+                "default": self._threshold,
+                "min": 0.05,
+                "max": 1.0,
+                "step": 0.05,
+            },
+            {
+                "key": "min_clip_duration",
+                "label": "Minimum clip length (seconds)",
+                "description": "Speech intervals shorter than this are discarded.",
+                "type": "number",
+                "default": self._min_clip_duration,
+                "min": 0,
+                "max": 60,
+                "step": 0.1,
+            },
+            {
+                "key": "pad",
+                "label": "Padding (seconds)",
+                "description": "Extra audio kept on each side of every speech interval so word onsets/tails aren't trimmed.",
+                "type": "number",
+                "default": self._pad,
+                "min": 0,
+                "max": 5,
+                "step": 0.05,
+            },
+        ]
+
+    def with_params(self, params: dict[str, Any]) -> "SoundSpeechActivityClipper":
+        threshold = float(params.get("threshold", self._threshold))
+        min_clip_duration = float(params.get("min_clip_duration", self._min_clip_duration))
+        pad = float(params.get("pad", self._pad))
+        return SoundSpeechActivityClipper(threshold=threshold, min_clip_duration=min_clip_duration, pad=pad)
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["threshold"] = self._threshold
+        d["min_clip_duration"] = self._min_clip_duration
+        d["pad"] = self._pad
         return d

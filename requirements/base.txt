@@ -10,3 +10,8 @@
 
 --extra-index-url https://download.pytorch.org/whl/cpu
 -e .[dev]
+
+# Transitive-dep security pin (not imported directly; required to keep
+# `pip-audit` clean in `run-tests.sh`). Drop the line if the version
+# pulled by requests/huggingface-hub already satisfies the constraint.
+urllib3>=2.7.0  # CVE-2026-44431, CVE-2026-44432

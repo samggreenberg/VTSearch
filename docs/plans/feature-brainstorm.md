@@ -85,7 +85,7 @@ Today the framework allows one converter per source; consider explicit chains: `
 ### 3.1 Audio
 - **`sound_silence`** ★★ S ✅ shipped — split on silence (librosa `effects.split`). Drop intro/outro silence. Params: `top_db`, `min_clip_duration` (drops noise-spike micro-clips), `pad` (keeps attack/decay around each interval). See `vtsearch/media/audio/clipper.py` (`SoundSilenceClipper`).
 - **`sound_beat`** ★ S — split on detected beats / downbeats (madmom). For music datasets.
-- **`sound_speech_activity`** ★★ S — VAD-based segmentation (Silero VAD). Useful for podcasts.
+- **`sound_speech_activity`** ★★ S ✅ shipped — VAD-based segmentation (Silero VAD). Loaded via `torch.hub.load('snakers4/silero-vad', ...)` with `TORCH_HOME` pointed at the shared model cache; resamples to 16 kHz mono for VAD then slices the original WAV bytes at the returned timestamps. Params: `threshold`, `min_clip_duration` (post-filter), `pad`. Falls through to unchanged media on missing torch / decode failures. See `vtsearch/media/audio/clipper.py` (`SoundSpeechActivityClipper`). Open follow-ups: expose advanced Silero knobs (`min_speech_duration_ms`, `min_silence_duration_ms`, `speech_pad_ms`) if users hit edge cases; reuse the loaded VAD model for `video_dialogue` (§3.4) when that ships.
 - **`sound_energy_envelope`** ★ S — segment around energy peaks (find drum hits, claps, gunshots).
 
 ### 3.2 Image
