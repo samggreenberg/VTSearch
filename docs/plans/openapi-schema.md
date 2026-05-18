@@ -1,6 +1,6 @@
 # OpenAPI schema + generated TS client
 
-Status: in progress (pilot landing alongside this doc). Tracking issue: feature-brainstorm.md §12.9.
+Status: every blueprint migrated; per-plugin runtime validation in place for the six plugin-field routes; one cosmetic follow-up (real spec types for plugin-field bodies) is deferred — see *Open follow-ups*. Tracking issue: feature-brainstorm.md §12.9.
 
 ## The problem
 
@@ -242,36 +242,56 @@ checks off this follow-up.
 - **Plugin field endpoints** (`/api/exporters/<name>`,
   `/api/importers/<name>/run`, `/api/label-importers/import/<name>`,
   `/api/dataset/stage-import/<name>`, `/api/dataset/import/<name>`,
-  `/api/detectors/registry/from-labelset/<name>`, etc.) — request
-  shapes depend on each plugin's declared `fields`. **Decision:
-  option (c) — generate a per-plugin marshmallow schema at startup
-  from each plugin's `fields` declaration**, and pass it to
-  `@blp.arguments(...)` per call site. The `FieldType` literal is
-  `{file, folder, url, text, password, email, select, server_path,
-  checkbox}`, which maps mechanically to marshmallow:
+  `/api/detectors/registry/from-labelset/<name>`,
+  `/api/settings-importers/import/<name>`, etc.) — request shapes
+  depend on each plugin's declared `fields`. **Decision: hybrid of
+  option (c) and option (b).**
+
+  Per-plugin marshmallow schemas are built lazily from each plugin's
+  `fields` declaration (`vtsearch/plugins/schema.py::make_plugin_arg_schema`)
+  and cached on the plugin instance — the runtime validation tier.
+  Each route handler looks up `plugin._arg_schema_instance` via
+  `validate_plugin_args(plugin, ...)` and feeds the request body
+  through it; schema-level rejects raise the standard `422 + errors`
+  envelope. The `FieldType` literal is `{file, folder, url, text,
+  password, email, number, select, server_path, checkbox}`, which
+  maps to marshmallow as:
   - `text` / `url` / `email` / `password` / `server_path` / `folder` →
-    `fields.String` (with `validate.Length(min=1)` when `required`).
+    `fields.String` (with the legacy "non-empty after strip" validator
+    when `required`).
   - `select` with static `options` → `fields.String` +
     `validate.OneOf(options)`. `dynamic_options=True` falls back to
     `fields.String` (frontend re-fetches via the existing
     `<name>/options` route).
-  - `checkbox` → `fields.Boolean`.
-  - `file` → not representable in JSON schema; routes that take a
-    `file` field stay on multipart with `@arguments` omitted, declare
-    error responses via `alt_response`, and declare the success body
-    via `response` — same pattern as `add-to-pile` and
-    `server-media-files/upload`. The handler still uses
-    `extract_plugin_fields` / `validate_required_fields` internally
-    for these.
+  - `number` → `fields.Integer` (when step/default/min/max are
+    integer-looking) or `fields.Float`.
+  - `checkbox` → `fields.Function(deserialize=_coerce_checkbox)` that
+    accepts both bool and `"true"` / `"false"` form-encoded strings.
+  - `file` → skipped at the schema layer; the helper reads
+    `request.files` after `schema.load()` and merges file uploads
+    into the validated dict (either as `FileStorage` or as
+    in-memory `BytesIO`, selected via `file_mode=`).
 
-  Schemas are built once at startup (after plugin discovery) and
-  cached on the plugin instance; the route helper looks up
-  `plugin._arg_schema` and `plugin._response_schema` (when defined).
-  Spec consumers see real per-field types instead of
-  `additionalProperties: true`, which is the whole point of this
-  plan. (a) leaves the largest chunk of the API permanently
-  un-typed; (b) gets the route into the spec but loses per-field
-  typing.
+  The schema uses `Meta.unknown = "exclude"` so it stays a faithful
+  description of the plugin's declared field set — pass-through keys
+  (`converters`, `source_specs`, `clipper`, `embedder`,
+  `dataset_name`, `name`) are declared explicitly per call site via
+  `extra_keys=(...)`.
+
+  Where the design *doesn't* go to option (c): each plugin-field
+  route still uses one parameterised URL (`<importer_name>`) rather
+  than one static URL per plugin variant, so its request body is
+  *not* described in the OpenAPI spec at all — the spec lists the
+  path but with an empty / loose body schema. That's the option (b)
+  half: runtime validation is per-plugin, but spec consumers don't
+  see per-plugin types. Lifting the spec to real per-field types
+  would require registering one Flask URL rule per plugin variant at
+  startup (e.g. `/api/dataset/import/server_folder`,
+  `/api/dataset/import/pickle`, …) — a bigger refactor than runtime
+  validation, and the dynamic frontend (which discovers field shapes
+  via `/api/importers` etc. and builds forms generically) doesn't
+  directly benefit from compile-time types here. Captured in *Open
+  follow-ups* if the calculus changes later.
 
 - **Pagination.** flask-smorest has a built-in helper, but no current
   list endpoint actually needs it: `/api/medias/ids` is already the
@@ -973,38 +993,63 @@ checks off this follow-up.
       ``MediaStateService.getMedia(id)`` helper that returns the cached
       batch first and falls back to the stub (same pattern as the
       ``selectedMedia`` getter).
+- [x] Per-plugin marshmallow schemas built from each plugin's ``fields``
+      declaration, cached on the plugin instance
+      (``vtsearch/plugins/schema.py``). The six plugin-field routes
+      (``stage-import``, ``import``, ``label-importers/import``,
+      ``detectors/<name>/import-labels``, ``from-labelset``,
+      ``settings-importers/import``) now run their request bodies
+      through the per-plugin schema via ``validate_plugin_args(...)``;
+      schema-level rejects raise 422 with the standard ``errors``
+      envelope. Pass-through keys (``converters``, ``source_specs``,
+      ``clipper``, ``embedder``, ``dataset_name``, ``name``) are
+      declared per call site via ``extra_keys=(...)``. Legacy helpers
+      ``extract_plugin_fields`` / ``validate_required_fields`` /
+      ``get_request_field`` / ``_extract_importer_fields`` deleted.
+      Spec-side per-plugin types are still loose — see *Open
+      follow-ups / OpenAPI spec types for plugin-field route bodies*.
+
+## What shipped
+
+- **Per-plugin runtime validation for plugin-field routes.** The six
+  plugin-field routes (``POST /api/label-importers/import/<imp>``,
+  ``POST /api/dataset/stage-import/<imp>``,
+  ``POST /api/dataset/import/<imp>``,
+  ``POST /api/detectors/<name>/import-labels/<imp>``,
+  ``POST /api/detectors/registry/from-labelset/<imp>``,
+  ``POST /api/settings-importers/import/<imp>``) now validate the
+  request body against a marshmallow schema built from the named
+  plugin's :attr:`fields` declaration (``vtsearch/plugins/schema.py``).
+  Schema-level rejects (missing required field, invalid select value,
+  unparseable number) surface as 422 with the standard ``errors``
+  envelope, matching the rest of the API. Pass-through keys
+  (``converters``, ``source_specs``, ``clipper``, ``embedder``,
+  ``dataset_name``, ``name``) are declared explicitly per call site via
+  ``validate_plugin_args(..., extra_keys=(...))`` — the schema itself
+  uses ``Meta.unknown = "exclude"`` so it stays a faithful description
+  of the plugin's declared field set. The legacy
+  ``extract_plugin_fields`` / ``validate_required_fields`` /
+  ``get_request_field`` helpers in ``vtsearch/routes/_shared.py`` and
+  ``_extract_importer_fields`` in ``vtsearch/routes/datasets/_helpers.py``
+  are deleted.
 
 ## Open follow-ups
 
-- **Migrate the remaining Angular services to the generated client.**
-  Settings, auth, achievements, file-browser, exporters, settings-io,
-  label-importers, medias, sorting, detectors, and datasets have all
-  moved over. The remaining service is ``ProcessorImportersApiService``
-  (~17 LOC) which still references ``/api/processor-importers`` — a
-  legacy route with no live backend handler; the consuming
-  ``processor-importer-modal`` is wired up but the endpoint isn't in
-  the OpenAPI spec, so this service is left untouched until the
-  backend route is rebuilt under ``vtsearch/routes/processors/``
-  (probably as a flask-smorest blueprint with a per-plugin field
-  schema). The hybrid imports (``import type`` for DTOs, direct
-  function-module paths for runtime symbols, no barrel) are required
-  to keep the initial bundle under the 525 kB budget — see
-  *Bundle-size discipline* above.
-- **Per-plugin schemas for plugin-field routes.** The four routes
-  whose request body is a plugin-field shape stay on the legacy
-  plain-Flask path on their (now smorest-typed) blueprints:
-  ``POST /api/label-importers/import/<importer_name>``,
-  ``POST /api/dataset/stage-import/<importer_name>``,
-  ``POST /api/dataset/import/<importer_name>``, and
-  ``POST /api/detectors/<name>/import-labels/<importer_name>``
-  (plus ``POST /api/detectors/registry/from-labelset/<importer_name>``).
-  The *Resolved questions / Plugin field endpoints* section above
-  describes the eventual design — generate a per-plugin marshmallow
-  schema at startup from each plugin's ``fields`` declaration and
-  attach it to the route call site. That requires either registering
-  one Flask URL rule per plugin variant at startup or invoking
-  ``plugin._arg_schema.load(...)`` manually inside the handler.
-  Neither is wired yet; the routes are documented in their module
-  docstrings as "Plugin-dependent body shape: not described in the
-  OpenAPI spec" so spec consumers see them in the URL map but without
-  a request body schema.
+- **OpenAPI spec types for plugin-field route bodies.** The six routes
+  above are validated at runtime against the per-plugin schema, but
+  their request bodies are still un-typed in ``/api/openapi.json``
+  (each handler is a plain ``@blueprint.route`` with no ``@arguments``
+  decorator). To surface real per-field types in the spec we'd need to
+  register one Flask URL rule per plugin variant at startup —
+  ``/api/dataset/import/server_folder``, ``/api/dataset/import/pickle``,
+  etc. — each decorated with its own ``@blp.arguments(plugin._arg_schema)``.
+  That's a bigger refactor than runtime validation and the dynamic
+  frontend (which discovers field shapes via ``/api/importers`` etc.
+  and builds forms generically) doesn't directly benefit from compile-
+  time types here, so the spec stays loose for now. The runtime
+  validation captures the per-plugin field types where it matters
+  (bad input → 422 → frontend's error pipeline).
+- **``ProcessorImportersApiService`` follow-up — RESOLVED.** The
+  service, modal, and DTO were deleted in commit ``6b4c0b4d`` once it
+  became clear the backend route had been removed. Initial bundle
+  dropped from 512 kB to 496 kB.
