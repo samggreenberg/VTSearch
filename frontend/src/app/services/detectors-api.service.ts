@@ -89,6 +89,7 @@ import { apiLocalizePost } from '../generated/api-client/fn/processors-scoring/a
 import { apiPregenProcessorsAddPost } from '../generated/api-client/fn/processors-crud/api-pregen-processors-add-post';
 import { apiPregenProcessorsGet } from '../generated/api-client/fn/processors-crud/api-pregen-processors-get';
 import { ActiveContextService } from './active-context.service';
+import { VtDialogService } from './dialog.service';
 
 /** Backwards-compatible alias for the generated ``FindCheckLabelsWarning`` —
  *  consumers of this service still import this name. */
@@ -261,6 +262,33 @@ export class DetectorsApiService {
         body: { old_path: oldPath, new_path: newPath },
       },
     ).pipe(map((r) => r.body));
+  }
+
+  /** Prompt the user to move an orphaned labelset file after a rename.
+   *  Generated ``PendingLabelsetMove`` arrives as ``{old_path,new_path} | {} | null``
+   *  (a marshmallow ``allow_none`` artifact); narrow it here so callers
+   *  pass the rename response through unchanged. */
+  async promptMoveOrphanedLabelsetFile(
+    dialog: VtDialogService,
+    detectorId: string,
+    pending: unknown,
+  ): Promise<void> {
+    if (
+      !pending ||
+      typeof pending !== 'object' ||
+      !('old_path' in pending) ||
+      !('new_path' in pending) ||
+      typeof (pending as { old_path: unknown }).old_path !== 'string' ||
+      typeof (pending as { new_path: unknown }).new_path !== 'string'
+    ) {
+      return;
+    }
+    const { old_path: oldPath, new_path: newPath } = pending as { old_path: string; new_path: string };
+    const ok = await dialog.confirm(
+      `Move existing labelset file "${oldPath}" to "${newPath}"?`,
+    );
+    if (!ok) return;
+    this.moveLabelsetSourceFile(detectorId, oldPath, newPath).subscribe();
   }
 
   loadDetector(detectorId: string | null): Observable<DetectorRegistryLoadResponse> {

@@ -168,23 +168,13 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
         if (this.trainMode?.model) {
           this.trainMode.model.name = newName;
         }
-        this.promptMoveOrphanedLabelsetFile(registryId, response.pending_labelset_move);
+        this.detectorsApi.promptMoveOrphanedLabelsetFile(
+          this.dialog,
+          registryId,
+          response.pending_labelset_move,
+        );
       },
     });
-  }
-
-  private async promptMoveOrphanedLabelsetFile(
-    detectorId: string,
-    pending: { old_path: string; new_path: string } | null | undefined,
-  ): Promise<void> {
-    if (!pending) return;
-    const ok = await this.dialog.confirm(
-      `Move existing labelset file "${pending.old_path}" to "${pending.new_path}"?`,
-    );
-    if (!ok) return;
-    this.detectorsApi
-      .moveLabelsetSourceFile(detectorId, pending.old_path, pending.new_path)
-      .subscribe();
   }
 
   private loadSettings(): void {
