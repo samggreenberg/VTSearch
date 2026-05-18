@@ -118,9 +118,9 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Whether the user has manually edited :prop:`lfDatasetName` (so we stop
    *  auto-overwriting it from the picked folder name). */
   private lfDatasetNameDirty = false;
-  /** Optional .npz file of pre-computed embedding vectors (Local Files only).
-   *  When set, the upload endpoint reuses these vectors instead of running
-   *  the embedding model for matching uploaded files. */
+  /** Optional .npz file of pre-computed embedding vectors (Local Folder /
+   *  Local Files).  When set, the upload endpoint reuses these vectors
+   *  instead of running the embedding model for matching uploaded files. */
   lfVectorsFile: File | null = null;
 
   // Server folder browser state
@@ -148,6 +148,11 @@ export class DatasetImporterModalComponent implements OnInit {
    *  ``(source_type, converter|null, params)`` triple — see
    *  ``docs/plans/multi-media-import.md``. */
   sfSourceSpecs: SourceSpec[] = [];
+  /** Optional server-side path to a ``.npz`` archive of pre-computed
+   *  embedding vectors.  When set, files in the picked folder whose
+   *  name matches a key in the archive reuse the supplied vector
+   *  instead of running the embedding model. */
+  sfVectorsFile = '';
 
   /** Auto-detect result for the local-folder / local-files picker.  Set
    *  after the user picks files; ``null`` when no detection has been run
@@ -1102,7 +1107,7 @@ export class DatasetImporterModalComponent implements OnInit {
       // `webkitdirectory` attribute; fall back to the file's own name.
       formData.append('files', file, rel && rel.length > 0 ? rel : file.name);
     }
-    if (this.lfPickerKind === 'files' && this.lfVectorsFile) {
+    if (this.lfVectorsFile) {
       formData.append('vectors_file', this.lfVectorsFile, this.lfVectorsFile.name);
     }
     if (this.lfSourceSpecs.length > 0) {
@@ -1135,6 +1140,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfRecursive = this.readRecursiveDefault(this.selectedImporter);
     this.sfDatasetName = '';
     this.sfDatasetNameDirty = false;
+    this.sfVectorsFile = '';
 
     // Load media type options from the folder importer's fields
     const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
@@ -1754,6 +1760,10 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.sfSourceSpecs.length > 0) {
       params['source_specs'] = this.sfSourceSpecs;
+    }
+    const sfVecPath = (this.sfVectorsFile || '').trim();
+    if (sfVecPath) {
+      params['vectors_file'] = sfVecPath;
     }
 
     this.datasetsApi.runImporter('server_folder', params).subscribe({

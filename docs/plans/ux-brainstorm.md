@@ -372,8 +372,17 @@ Compress to a "Use these labels on another dataset" button on the right panel.
 ### 8.4 Re-running auto-detect after edits ★ S
 Tweaking a label, then re-running auto-detect, is currently: edit → save → navigate to dashboard → re-pick dataset+detector → click Find → wait → reopen results modal. Add a "Re-run with current settings" button inside the existing results modal.
 
-### 8.5 Importing pre-computed embeddings ★ S
-Today only `server_files` and `local_files` accept `.npz` vectors, and the field is buried in the form. Expose `.npz` as a top-level option in *any* importer that loads files (so users with their own embeddings can use the friendlier importers too).
+### 8.5 Importing pre-computed embeddings ★ S — shipped
+`.npz` is now a top-level option in every importer that loads files:
+
+- `server_folder` and `server_files` declare a separate `vectors_file` `PluginField` (server_path, accepts `.npz`, optional). Files in the folder / listed paths whose basename or relative path matches a key in the archive reuse the supplied vector instead of running the embedder.
+- `local_folder` now exposes the same `.npz` upload widget that `local_files` already had — vectors are forwarded to `/api/dataset/import-local-folder` regardless of picker kind.
+- `local_files`'s existing widget stays put and is shared across both browser-side flows.
+
+Open follow-ups:
+
+- `http_archive`: still no `.npz` option. Matching filenames inside an extracted archive is hairy and rarely useful, so it was deliberately left out — revisit if a user asks.
+- Server-side `.npz` field for `server_folder` is a plain text input; could be upgraded to the same server-path browser used for the folder picker if the typing friction shows up in testing.
 
 ### 8.6 Configure & test a webhook exporter ★ M
 Currently: open export modal → pick webhook → fill URL → fill auth → submit → realize the URL was wrong → repeat. Add a "Send test ping" button next to the URL field that fires a single test payload.
