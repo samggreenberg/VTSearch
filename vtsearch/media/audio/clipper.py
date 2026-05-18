@@ -283,6 +283,180 @@ class SoundAutoClipper(MediaClipper):
         return d
 
 
+class SoundSilenceClipper(MediaClipper):
+    """Split audio into non-silent segments via :func:`librosa.effects.split`.
+
+    Detects silence using an amplitude threshold (*top_db* dB below the
+    reference) and returns one clip per non-silent interval — intro/outro
+    silence is dropped automatically.  Suitable for podcasts, voice
+    recordings, and sound-event datasets where each "thing" is separated
+    by quiet.
+
+    Parameters
+    ----------
+    top_db : float
+        Threshold in dB below the reference to consider as silence.
+        Lower values are more aggressive (more, shorter clips).
+        Defaults to 40.
+    min_clip_duration : float
+        Non-silent intervals shorter than this (in seconds) are discarded,
+        suppressing noise-spike micro-clips.  Defaults to 0.3.
+    pad : float
+        Padding (seconds) added on each side of every non-silent interval
+        so the attack/decay of the audible content isn't trimmed.
+        Defaults to 0.05.
+
+    If ``librosa`` is unavailable, the audio cannot be decoded, or no
+    non-silent intervals survive the *min_clip_duration* filter, the media
+    is returned unchanged (single-element list).
+    """
+
+    def __init__(
+        self,
+        top_db: float = 40.0,
+        min_clip_duration: float = 0.3,
+        pad: float = 0.05,
+    ) -> None:
+        if top_db <= 0:
+            raise ValueError("top_db must be positive")
+        if min_clip_duration < 0:
+            raise ValueError("min_clip_duration must be non-negative")
+        if pad < 0:
+            raise ValueError("pad must be non-negative")
+        self._top_db = top_db
+        self._min_clip_duration = min_clip_duration
+        self._pad = pad
+
+    @property
+    def name(self) -> str:
+        return "sound_silence"
+
+    @property
+    def media_type(self) -> str:
+        return "audio"
+
+    @property
+    def description(self) -> str:
+        return "Split each audio file into non-silent segments. Drops intro/outro silence."
+
+    @property
+    def top_db(self) -> float:
+        return self._top_db
+
+    @property
+    def min_clip_duration(self) -> float:
+        return self._min_clip_duration
+
+    @property
+    def pad(self) -> float:
+        return self._pad
+
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        media_bytes = media.get("media_bytes")
+        if media_bytes is None:
+            return [media]
+
+        try:
+            import librosa  # noqa: PLC0415
+        except ImportError:
+            return [media]
+
+        try:
+            audio_data, sr = librosa.load(io.BytesIO(media_bytes), sr=None, mono=True)
+        except Exception:
+            return [media]
+
+        if audio_data.size == 0 or sr <= 0:
+            return [media]
+
+        total = len(audio_data) / sr
+
+        try:
+            intervals = librosa.effects.split(audio_data, top_db=self._top_db)
+        except Exception:
+            return [media]
+
+        if len(intervals) == 0:
+            return [media]
+
+        segments: list[tuple[float, float]] = []
+        for s0, s1 in intervals:
+            t0 = max(0.0, float(s0) / sr - self._pad)
+            t1 = min(total, float(s1) / sr + self._pad)
+            if t1 - t0 >= self._min_clip_duration:
+                segments.append((t0, t1))
+
+        if not segments:
+            return [media]
+
+        try:
+            results: list[dict[str, Any]] = []
+            for idx, (t0, t1) in enumerate(segments):
+                sliced = _wav_slice(media_bytes, t0, t1)
+                clip = dict(media)
+                clip["media_bytes"] = sliced
+                clip["duration"] = round(t1 - t0, 6)
+                clip["file_size"] = len(sliced)
+                clip["clip_index"] = idx
+                clip["clip_start"] = round(t0, 6)
+                clip["clip_end"] = round(t1, 6)
+                results.append(clip)
+            return results
+        except Exception:
+            return [media]
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": "top_db",
+                "label": "Silence threshold (dB)",
+                "description": (
+                    "Audio quieter than this many dB below the reference is treated as silence. "
+                    "Lower values are more aggressive — more, shorter clips."
+                ),
+                "type": "number",
+                "default": self._top_db,
+                "min": 5,
+                "max": 80,
+                "step": 1,
+            },
+            {
+                "key": "min_clip_duration",
+                "label": "Minimum clip length (seconds)",
+                "description": "Non-silent intervals shorter than this are discarded.",
+                "type": "number",
+                "default": self._min_clip_duration,
+                "min": 0,
+                "max": 60,
+                "step": 0.1,
+            },
+            {
+                "key": "pad",
+                "label": "Padding (seconds)",
+                "description": "Extra audio kept on each side of every non-silent interval so attack/decay isn't trimmed.",
+                "type": "number",
+                "default": self._pad,
+                "min": 0,
+                "max": 5,
+                "step": 0.05,
+            },
+        ]
+
+    def with_params(self, params: dict[str, Any]) -> "SoundSilenceClipper":
+        top_db = float(params.get("top_db", self._top_db))
+        min_clip_duration = float(params.get("min_clip_duration", self._min_clip_duration))
+        pad = float(params.get("pad", self._pad))
+        return SoundSilenceClipper(top_db=top_db, min_clip_duration=min_clip_duration, pad=pad)
+
+    def to_dict(self) -> dict[str, Any]:
+        d = super().to_dict()
+        d["top_db"] = self._top_db
+        d["min_clip_duration"] = self._min_clip_duration
+        d["pad"] = self._pad
+        return d
+
+
 class SoundClipClipper(MediaClipper):
     """Extract a single user-specified ``[start, end)`` slice from an audio media.
 

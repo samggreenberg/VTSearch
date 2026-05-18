@@ -308,6 +308,226 @@ class TestSoundClipClipper:
 
 
 # ---------------------------------------------------------------------------
+# SoundSilenceClipper
+# ---------------------------------------------------------------------------
+
+
+def _concat_wavs(*wavs: bytes) -> bytes:
+    """Concatenate multiple WAV byte strings into a single WAV file.
+
+    All inputs must share the same sample rate, channel count, and sample
+    width.  Used to build tone/silence/tone test fixtures.
+    """
+    all_frames: list[bytes] = []
+    params = None
+    for wb in wavs:
+        with wave.open(io.BytesIO(wb), "rb") as wf:
+            if params is None:
+                params = wf.getparams()
+            all_frames.append(wf.readframes(wf.getnframes()))
+    assert params is not None
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as out:
+        out.setparams(params)
+        out.writeframes(b"".join(all_frames))
+    return buf.getvalue()
+
+
+class TestSoundSilenceClipper:
+    def test_identity(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        c = SoundSilenceClipper()
+        assert c.name == "sound_silence"
+        assert c.media_type == "audio"
+        assert c.top_db == 40.0
+        assert c.min_clip_duration == 0.3
+        assert c.pad == 0.05
+        assert isinstance(c, MediaClipper)
+
+    def test_custom_params(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        c = SoundSilenceClipper(top_db=20.0, min_clip_duration=0.5, pad=0.1)
+        assert c.top_db == 20.0
+        assert c.min_clip_duration == 0.5
+        assert c.pad == 0.1
+
+    def test_rejects_non_positive_top_db(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        with pytest.raises(ValueError):
+            SoundSilenceClipper(top_db=0)
+        with pytest.raises(ValueError):
+            SoundSilenceClipper(top_db=-1)
+
+    def test_rejects_negative_min_clip_duration(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        with pytest.raises(ValueError):
+            SoundSilenceClipper(min_clip_duration=-0.1)
+
+    def test_rejects_negative_pad(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        with pytest.raises(ValueError):
+            SoundSilenceClipper(pad=-0.1)
+
+    def test_no_media_bytes_returns_unchanged(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        media = {"id": 1, "type": "audio", "duration": 3.0}
+        result = SoundSilenceClipper().clip(media)
+        assert result == [media]
+
+    def test_invalid_bytes_returns_unchanged(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        media = {"id": 1, "type": "audio", "media_bytes": b"not a wav", "duration": 1.0}
+        result = SoundSilenceClipper().clip(media)
+        assert result == [media]
+
+    def test_splits_tone_silence_tone(self):
+        """Tone | silence | tone | silence | tone → three non-silent clips."""
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        # Build a 5 s clip: 1 s tone, 1 s silence, 1 s tone, 1 s silence, 1 s tone.
+        wav = _concat_wavs(
+            generate_wav(440, 1.0),
+            generate_wav(0, 1.0),
+            generate_wav(440, 1.0),
+            generate_wav(0, 1.0),
+            generate_wav(440, 1.0),
+        )
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 5.0}
+
+        result = SoundSilenceClipper(top_db=40, min_clip_duration=0.1, pad=0.0).clip(media)
+        assert len(result) == 3
+        for idx, clip in enumerate(result):
+            assert clip["clip_index"] == idx
+            assert clip["clip_end"] > clip["clip_start"]
+            # Each non-silent block is ~1 s
+            assert clip["duration"] == pytest.approx(1.0, abs=0.15)
+            # Output should be valid WAV
+            with wave.open(io.BytesIO(clip["media_bytes"]), "rb") as wf:
+                assert wf.getframerate() == 48000
+
+    def test_drops_intro_outro_silence(self):
+        """Leading and trailing silence should be discarded."""
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        # 0.5 s silence | 1 s tone | 0.5 s silence
+        wav = _concat_wavs(
+            generate_wav(0, 0.5),
+            generate_wav(440, 1.0),
+            generate_wav(0, 0.5),
+        )
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.0}
+
+        result = SoundSilenceClipper(top_db=40, min_clip_duration=0.1, pad=0.0).clip(media)
+        assert len(result) == 1
+        clip = result[0]
+        # Clip should start at ~0.5 s and end at ~1.5 s, NOT at 0 and 2.0
+        assert clip["clip_start"] == pytest.approx(0.5, abs=0.15)
+        assert clip["clip_end"] == pytest.approx(1.5, abs=0.15)
+        assert clip["duration"] < 2.0  # intro/outro silence was dropped
+
+    def test_padding_extends_clip_bounds(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        wav = _concat_wavs(
+            generate_wav(0, 0.5),
+            generate_wav(440, 1.0),
+            generate_wav(0, 0.5),
+        )
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.0}
+
+        # With 0.2 s pad, the single clip should extend ~0.2 s into the surrounding silence.
+        result = SoundSilenceClipper(top_db=40, min_clip_duration=0.1, pad=0.2).clip(media)
+        assert len(result) == 1
+        clip = result[0]
+        assert clip["clip_start"] < 0.5
+        assert clip["clip_end"] > 1.5
+        # But never beyond the actual audio bounds.
+        assert clip["clip_start"] >= 0.0
+        assert clip["clip_end"] <= 2.0
+
+    def test_min_clip_duration_drops_short_intervals(self):
+        """Non-silent intervals shorter than min_clip_duration are dropped."""
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        # 50 ms blip | 1 s silence | 1 s tone
+        wav = _concat_wavs(
+            generate_wav(440, 0.05),
+            generate_wav(0, 1.0),
+            generate_wav(440, 1.0),
+        )
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.05}
+
+        # min_clip_duration=0.3 should drop the blip but keep the 1 s tone.
+        result = SoundSilenceClipper(top_db=40, min_clip_duration=0.3, pad=0.0).clip(media)
+        assert len(result) == 1
+        assert result[0]["duration"] == pytest.approx(1.0, abs=0.15)
+
+    def test_all_silence_returns_unchanged(self):
+        """Audio that's silent throughout is returned unchanged (not dropped)."""
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        wav = generate_wav(0, 2.0)
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.0}
+        result = SoundSilenceClipper().clip(media)
+        assert result == [media]
+
+    def test_with_params(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        c = SoundSilenceClipper()
+        c2 = c.with_params({"top_db": 25, "min_clip_duration": 0.5, "pad": 0.2})
+        assert isinstance(c2, SoundSilenceClipper)
+        assert c2.top_db == 25.0
+        assert c2.min_clip_duration == 0.5
+        assert c2.pad == 0.2
+        # Original unchanged.
+        assert c.top_db == 40.0
+        assert c.min_clip_duration == 0.3
+        assert c.pad == 0.05
+
+    def test_to_dict(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        c = SoundSilenceClipper(top_db=30, min_clip_duration=0.4, pad=0.1)
+        d = c.to_dict()
+        assert d["name"] == "sound_silence"
+        assert d["display_name"] == "Silence"
+        assert d["media_type"] == "audio"
+        assert d["top_db"] == 30
+        assert d["min_clip_duration"] == 0.4
+        assert d["pad"] == 0.1
+        # Parameters surface as creation questions automatically.
+        assert "creation_questions" in d
+        assert {q["key"] for q in d["creation_questions"]} == {"top_db", "min_clip_duration", "pad"}
+
+    def test_librosa_unavailable_returns_unchanged(self, monkeypatch):
+        """If librosa import fails, clipper returns the media unchanged."""
+        import builtins
+
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "librosa":
+                raise ImportError("no librosa")
+            return real_import(name, *args, **kwargs)
+
+        wav = generate_wav(440, 1.0)
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 1.0}
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+        result = SoundSilenceClipper().clip(media)
+        assert result == [media]
+
+
+# ---------------------------------------------------------------------------
 # VideoDefaultClipper
 # ---------------------------------------------------------------------------
 
