@@ -5,6 +5,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
+import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
@@ -13,7 +14,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent, ClipperChooserComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent, ClipperChooserComponent, DropZoneComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
@@ -911,14 +912,17 @@ export class DatasetImporterModalComponent implements OnInit {
     this.lfResetSourceSpecs();
   }
 
-  lfOnFolderSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (!input.files) {
+  lfOnFilesDropped(files: File[]): void {
+    this.lfAcceptFiles(files);
+  }
+
+  private lfAcceptFiles(files: File[]): void {
+    if (files.length === 0) {
       this.lfFiles = [];
       this.lfDetection = null;
       return;
     }
-    this.lfFiles = Array.from(input.files);
+    this.lfFiles = files;
     this.lfError = '';
     if (!this.lfDatasetNameDirty) {
       this.lfDatasetName = this.lfDerivedDatasetName();

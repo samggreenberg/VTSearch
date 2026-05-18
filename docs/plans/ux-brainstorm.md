@@ -329,8 +329,12 @@ Panel dividers and column-resize handles are ~2px wide. Make them 8px hit target
 ### 7.5 Folder-tree breadcrumb browser ★ M
 The server-folder browser has a custom breadcrumb + table UI. It's functional but every modern OS has standardized on the same "left sidebar with starred/recent locations, breadcrumb on top, list in middle, double-click to enter, Enter key to confirm". Bring ours closer to that.
 
-### 7.6 Drag-and-drop affordances ★ S
+### 7.6 Drag-and-drop affordances ★ S — SHIPPED
 Several places accept drag-drop (file import, example media into detector) but show no drop zone until the drag is over the page. Add visible dashed drop zones with `"Drop a folder here to import"` text.
+
+**What shipped:** New reusable `vt-drop-zone` component (`frontend/src/app/components/drop-zone/`) renders a dashed-bordered, clickable target that doubles as a drag-drop receiver. It handles folder drops by walking `webkitGetAsEntry()` recursively and synthesising `webkitRelativePath` on each File so the existing upload code sees the same shape as a `<input type=file webkitdirectory>` selection. Wired into three places: (1) the dataset importer modal's Local Folder / Local Files views (`"Drop a folder here to import"` / `"Drop files here to import"`); (2) the new-detector modal's media-picker Local Folder / Local Files views (`"Drop a folder here to use as example"` / `"Drop a media file here to use as example"`); (3) the new-detector main form (tab=blank), where it replaces the inline "Upload File…" button alongside the existing "Browse Media…" button. The previous bare `<input type=file>` widgets in those locations were removed.
+
+**Open follow-ups:** The examples-editor modal (Edit Examples → + Add Good / + Add Bad) still uses small button-driven file inputs. Adding compact drop zones there is straightforward — the same `vt-drop-zone` component can drop in next to or in place of the `+ Add Good` / `+ Add Bad` buttons — but was descoped from this pass at the user's request.
 
 ### 7.7 Modal stacking ★★ XS
 Some flows can stack 3 modals deep (importer → demo picker → embedder picker). Stacking modals is a known anti-pattern. Either convert nested modals to in-place sub-views with a back button (§6.4), or use a single multi-step wizard.

@@ -119,7 +119,16 @@
   text-align: center;
 }
 
-.hidden-file-input { display: none; }
+// In the example column the drop zone sits below the "Browse Media…" button,
+// so use a more compact padding than the standalone version inside the media
+// picker — the column is short and we don't want it to dwarf the text input.
+.example-col vt-drop-zone ::ng-deep .drop-zone {
+  padding: 14px 12px;
+}
+.example-col vt-drop-zone ::ng-deep .drop-zone-icon {
+  width: 22px;
+  height: 22px;
+}
 
 // Single example display
 .example-display { margin-top: 4px; }
