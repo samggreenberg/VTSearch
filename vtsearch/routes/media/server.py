@@ -397,7 +397,9 @@ def _resolve_media_bytes(media: dict) -> bytes | None:
 @media_server_bp.arguments(ExampleSortByIdRequestSchema)
 @media_server_bp.response(200, ExampleSortResponseSchema)
 @media_server_bp.alt_response(400, description="No medias loaded, or media_id not in the loaded snapshot.")
-@media_server_bp.alt_response(404, description="Media not found, or its bytes are unavailable when cropping is requested.")
+@media_server_bp.alt_response(
+    404, description="Media not found, or its bytes are unavailable when cropping is requested."
+)
 @media_server_bp.alt_response(500, description="Example sort failed.")
 def example_sort_by_id(body: dict):
     """Sort medias by similarity to an already-loaded media item.

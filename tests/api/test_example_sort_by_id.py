@@ -81,9 +81,7 @@ class TestServerMediaFileFromMediaIdEndpoint:
         assert "media_id" in resp.get_json()["errors"]["json"]
 
     def test_unknown_media_id(self, client):
-        resp = client.post(
-            "/api/server-media-files/from-media-id", json={"media_id": 999_999}
-        )
+        resp = client.post("/api/server-media-files/from-media-id", json={"media_id": 999_999})
         assert resp.status_code == 400
         assert "not loaded" in resp.get_json()["message"].lower()
 
