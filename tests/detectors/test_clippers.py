@@ -1492,31 +1492,50 @@ class TestSoundAutoClipper:
         with pytest.raises(ValueError):
             SoundAutoClipper(tile_duration=-1)
 
-    def test_resolve_short_returns_default(self):
+    def test_resolve_for_media_short_returns_default(self):
         from vtsearch.media.audio.clipper import SoundAutoClipper, SoundDefaultClipper
 
-        resolved = SoundAutoClipper().resolve_for_durations([1.0, 5.0, 10.0, 20.0])
+        media = {"id": 1, "type": "audio", "duration": 5.0}
+        resolved = SoundAutoClipper().resolve_for_media(media)
         assert isinstance(resolved, SoundDefaultClipper)
 
-    def test_resolve_long_returns_tiling(self):
+    def test_resolve_for_media_long_returns_tiling(self):
         from vtsearch.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
 
-        resolved = SoundAutoClipper().resolve_for_durations([60.0, 120.0, 180.0])
+        media = {"id": 1, "type": "audio", "duration": 120.0}
+        resolved = SoundAutoClipper().resolve_for_media(media)
         assert isinstance(resolved, SoundTilingClipper)
         assert resolved.duration == 10.0
 
-    def test_resolve_empty_returns_default(self):
-        from vtsearch.media.audio.clipper import SoundAutoClipper, SoundDefaultClipper
+    def test_resolve_for_media_uses_own_duration_not_dataset(self):
+        """Each media gets its own routing decision — no median trick."""
+        from vtsearch.media.audio.clipper import (
+            SoundAutoClipper,
+            SoundDefaultClipper,
+            SoundTilingClipper,
+        )
 
-        resolved = SoundAutoClipper().resolve_for_durations([])
-        assert isinstance(resolved, SoundDefaultClipper)
+        c = SoundAutoClipper()
+        short = {"id": 1, "type": "audio", "duration": 5.0}
+        long_media = {"id": 2, "type": "audio", "duration": 120.0}
+        assert isinstance(c.resolve_for_media(short), SoundDefaultClipper)
+        assert isinstance(c.resolve_for_media(long_media), SoundTilingClipper)
 
-    def test_resolve_uses_median_not_mean(self):
-        from vtsearch.media.audio.clipper import SoundAutoClipper, SoundDefaultClipper
+    def test_resolve_for_media_falls_back_to_wav_when_no_duration(self):
+        from vtsearch.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
 
-        # Mean is 100, median is 5 → should pass through
-        resolved = SoundAutoClipper().resolve_for_durations([5.0, 5.0, 5.0, 500.0])
-        assert isinstance(resolved, SoundDefaultClipper)
+        long_wav = generate_wav(440, 5.0)
+        media = {"id": 1, "type": "audio", "media_bytes": long_wav}
+        resolved = SoundAutoClipper(threshold=3.0, tile_duration=1.0).resolve_for_media(media)
+        assert isinstance(resolved, SoundTilingClipper)
+
+    def test_resolve_for_durations_is_noop(self):
+        """Phase 2 routing is per-media; the per-dataset hook is a no-op."""
+        from vtsearch.media.audio.clipper import SoundAutoClipper
+
+        c = SoundAutoClipper()
+        assert c.resolve_for_durations([1.0, 1000.0]) is c
+        assert c.resolve_for_durations([]) is c
 
     def test_with_params_overrides_threshold(self):
         from vtsearch.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
@@ -1525,7 +1544,7 @@ class TestSoundAutoClipper:
         assert c.threshold == 5.0
         assert c.tile_duration == 3.0
         # 10s exceeds 5s threshold → tiling with 3s segments
-        resolved = c.resolve_for_durations([10.0])
+        resolved = c.resolve_for_media({"id": 1, "type": "audio", "duration": 10.0})
         assert isinstance(resolved, SoundTilingClipper)
         assert resolved.duration == 3.0
 
@@ -1542,16 +1561,15 @@ class TestSoundAutoClipper:
         assert "threshold" in param_keys
         assert "tile_duration" in param_keys
 
-    def test_clip_fallback_per_media(self):
+    def test_clip_routes_per_media(self):
         """Direct .clip() use (outside the load pipeline) routes per-media."""
-        from vtsearch.media.audio.audio_generator import generate_wav
         from vtsearch.media.audio.clipper import SoundAutoClipper
 
         c = SoundAutoClipper(threshold=3.0, tile_duration=1.0)
         # Short clip → pass-through
         short_wav = generate_wav(440, 2.0)
         short = {"id": 1, "type": "audio", "media_bytes": short_wav, "duration": 2.0}
-        assert SoundAutoClipper(threshold=3.0).clip(short) == [short]
+        assert c.clip(short) == [short]
         # Long clip → tiled
         long_wav = generate_wav(440, 5.0)
         long_media = {"id": 1, "type": "audio", "media_bytes": long_wav, "duration": 5.0}
@@ -1585,31 +1603,45 @@ class TestVideoAutoClipper:
         with pytest.raises(ValueError):
             VideoAutoClipper(tile_duration=0)
 
-    def test_resolve_short_returns_default(self):
+    def test_resolve_for_media_short_returns_default(self):
         from vtsearch.media.video.clipper import VideoAutoClipper, VideoDefaultClipper
 
-        resolved = VideoAutoClipper().resolve_for_durations([5.0, 10.0, 20.0])
+        resolved = VideoAutoClipper().resolve_for_media({"id": 1, "type": "video", "duration": 10.0})
         assert isinstance(resolved, VideoDefaultClipper)
 
-    def test_resolve_long_returns_tiling(self):
+    def test_resolve_for_media_long_returns_tiling(self):
         from vtsearch.media.video.clipper import VideoAutoClipper, VideoTilingClipper
 
-        resolved = VideoAutoClipper().resolve_for_durations([60.0, 120.0])
+        resolved = VideoAutoClipper().resolve_for_media({"id": 1, "type": "video", "duration": 90.0})
         assert isinstance(resolved, VideoTilingClipper)
         assert resolved.duration == 10.0
 
-    def test_resolve_empty_returns_default(self):
-        from vtsearch.media.video.clipper import VideoAutoClipper, VideoDefaultClipper
+    def test_resolve_for_media_uses_own_duration_not_dataset(self):
+        from vtsearch.media.video.clipper import (
+            VideoAutoClipper,
+            VideoDefaultClipper,
+            VideoTilingClipper,
+        )
 
-        resolved = VideoAutoClipper().resolve_for_durations([])
-        assert isinstance(resolved, VideoDefaultClipper)
+        c = VideoAutoClipper()
+        short = {"id": 1, "type": "video", "duration": 10.0}
+        long_media = {"id": 2, "type": "video", "duration": 90.0}
+        assert isinstance(c.resolve_for_media(short), VideoDefaultClipper)
+        assert isinstance(c.resolve_for_media(long_media), VideoTilingClipper)
+
+    def test_resolve_for_durations_is_noop(self):
+        from vtsearch.media.video.clipper import VideoAutoClipper
+
+        c = VideoAutoClipper()
+        assert c.resolve_for_durations([1.0, 1000.0]) is c
+        assert c.resolve_for_durations([]) is c
 
     def test_with_params_overrides(self):
         from vtsearch.media.video.clipper import VideoAutoClipper, VideoTilingClipper
 
         c = VideoAutoClipper().with_params({"threshold": 4.0, "tile_duration": 2.0})
         assert c.threshold == 4.0
-        resolved = c.resolve_for_durations([10.0])
+        resolved = c.resolve_for_media({"id": 1, "type": "video", "duration": 10.0})
         assert isinstance(resolved, VideoTilingClipper)
         assert resolved.duration == 2.0
 
@@ -1621,11 +1653,10 @@ class TestVideoAutoClipper:
 
 
 class TestApplyClipperResolvesAuto:
-    """_apply_clipper resolves auto clippers per-dataset and tags origin
-    with the resolved concrete clipper, not the auto one."""
+    """_apply_clipper resolves auto clippers per-media and tags each
+    clip's origin with the resolved concrete clipper, not the auto one."""
 
     def test_short_dataset_resolves_to_default(self):
-        from vtsearch.media.audio.audio_generator import generate_wav
         from vtsearch.datasets.load_pipeline import _apply_clipper
 
         wav = generate_wav(440, 5.0)
@@ -1645,7 +1676,6 @@ class TestApplyClipperResolvesAuto:
         assert clip["origin"]["params"]["clipper"] == "sound_default"
 
     def test_long_dataset_resolves_to_tiling(self):
-        from vtsearch.media.audio.audio_generator import generate_wav
         from vtsearch.datasets.load_pipeline import _apply_clipper
 
         wav = generate_wav(440, 60.0)
@@ -1665,8 +1695,38 @@ class TestApplyClipperResolvesAuto:
         # Origin records the resolved clipper's parameter values.
         assert first["origin"]["params"]["clipper_duration"] == "10.0"
 
+    def test_mixed_durations_resolve_per_media(self):
+        """A short and a long item in the same dataset take different
+        branches, and each clip records its own resolved concrete clipper."""
+        from vtsearch.datasets.load_pipeline import _apply_clipper
+
+        short_wav = generate_wav(440, 2.0)
+        long_wav = generate_wav(440, 8.0)
+        clips = {
+            1: {
+                "id": 1,
+                "type": "audio",
+                "media_bytes": short_wav,
+                "duration": 2.0,
+                "origin": {"importer": "test", "params": {}},
+            },
+            2: {
+                "id": 2,
+                "type": "audio",
+                "media_bytes": long_wav,
+                "duration": 8.0,
+                "origin": {"importer": "test", "params": {}},
+            },
+        }
+        # Threshold 4s: short (2s) passes through, long (8s) tiles into 2s segments.
+        _apply_clipper(clips, "sound_auto", {"threshold": 4.0, "tile_duration": 2.0})
+        # 1 (pass-through) + 4 (8s / 2s) = 5 clips.
+        assert len(clips) == 5
+        resolved_names = [c["origin"]["params"]["clipper"] for c in clips.values()]
+        assert resolved_names.count("sound_default") == 1
+        assert resolved_names.count("sound_tiling") == 4
+
     def test_user_threshold_override_propagates(self):
-        from vtsearch.media.audio.audio_generator import generate_wav
         from vtsearch.datasets.load_pipeline import _apply_clipper
 
         wav = generate_wav(440, 8.0)

@@ -265,20 +265,13 @@ def _apply_clipper(
     if clipper_params:
         clipper = clipper.with_params(clipper_params)
 
-    # Resolve auto-selecting clippers to a concrete clipper for the
-    # whole dataset based on its typical media duration.  Non-auto
-    # clippers return self, so this is a no-op for them.
+    # Per-dataset resolution hook.  Default base implementation returns
+    # self; reserved for clippers that need a dataset-level decision.
+    # Auto routing now happens per-item via resolve_for_media() below.
     durations = [float(m.get("duration", 0) or 0) for m in clips_dict.values()]
     clipper = clipper.resolve_for_durations(durations)
-    clipper_name = clipper.name
 
-    # Extract the effective clipper parameter values so they can be
-    # stored in each clip's origin.  This uses to_dict() which concrete
-    # clippers override to add their current values (duration, threshold,
-    # etc.), then strips the base keys that aren't parameter values.
-    _clipper_dict = clipper.to_dict()
     _base_keys = {"name", "display_name", "media_type", "parameters", "description", "creation_questions"}
-    effective_params = {k: v for k, v in _clipper_dict.items() if k not in _base_keys}
 
     all_clipped: list[dict] = []
     # Track which clips need MD5/embedding recomputation.  Any clip that
@@ -288,17 +281,27 @@ def _apply_clipper(
 
     media_list = list(clips_dict.values())
     total_medias = len(media_list)
+    media_type = clipper.media_type
     for media_idx, media in enumerate(media_list):
         if on_progress:
             on_progress(media_idx, total_medias, "clipping")
-        clipped = clipper.clip(media)
+        # Per-media resolution.  Non-auto clippers return self; auto
+        # clippers branch on the item's own duration so different items
+        # can take different routes.  Each clip records the resolved
+        # concrete clipper's name and parameters in its origin, so
+        # cross-dataset replay is deterministic regardless of the
+        # original auto policy.
+        resolved = clipper.resolve_for_media(media)
+        resolved_dict = resolved.to_dict()
+        effective_params = {k: v for k, v in resolved_dict.items() if k not in _base_keys}
+        clipped = resolved.clip(media)
         is_real_clip = len(clipped) > 1
         for idx, clip in enumerate(clipped):
             orig = clip.get("origin")
             if isinstance(orig, dict):
                 clip["origin"] = dict(orig)
                 clip["origin"]["params"] = dict(clip["origin"].get("params", {}))
-                clip["origin"]["params"]["clipper"] = clipper_name
+                clip["origin"]["params"]["clipper"] = resolved.name
                 # Store the clipper's effective parameter values so that
                 # cross-dataset resolution can reconstruct the exact same
                 # clipper configuration.
@@ -318,11 +321,11 @@ def _apply_clipper(
             needs_recompute.append(is_real_clip)
 
     # Recompute MD5 and re-embed every genuine sub-item.
-    _fixup_clip_md5_and_embeddings(all_clipped, needs_recompute, clipper.media_type, on_progress=on_progress)
+    _fixup_clip_md5_and_embeddings(all_clipped, needs_recompute, media_type, on_progress=on_progress)
 
     # Regenerate thumbnails so audio/video clips show their own range
     # rather than the parent's full waveform / mid-frame.
-    _regenerate_clip_thumbnails(all_clipped, needs_recompute, clipper.media_type)
+    _regenerate_clip_thumbnails(all_clipped, needs_recompute, media_type)
 
     clips_dict.clear()
     for new_id, clip in enumerate(all_clipped, 1):
