@@ -1,7 +1,7 @@
 <div
   #imageWrap
   class="image-wrap"
-  [class.region-mode]="shiftHeld"
+  [class.region-mode]="regionDrawActive"
   [style.cursor]="wrapCursor"
   (wheel)="onWheel($event)"
   (mousedown)="onMouseDown($event)"
