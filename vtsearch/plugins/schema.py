@@ -90,6 +90,10 @@ def _presence_kwargs(pf: PluginField) -> dict:
 
 
 def _build_checkbox(pf: PluginField, kwargs: dict) -> fields.Field:
+    # Checkboxes always have a sensible default (``False`` if the plugin
+    # doesn't set one) — drop ``required`` to avoid the
+    # ``required + load_default`` conflict marshmallow would raise.
+    kwargs.pop("required", None)
     kwargs["load_default"] = str(pf.default).lower() == "true"
     return fields.Function(deserialize=_coerce_checkbox, **kwargs)
 
@@ -148,10 +152,13 @@ def _build_marshmallow_field(pf: PluginField) -> fields.Field | None:
 def make_plugin_arg_schema(plugin: PluginBase) -> type[Schema]:
     """Build a marshmallow ``Schema`` class for *plugin*'s declared fields.
 
-    Unknown keys are kept (``Meta.unknown = "include"``) so callers can
-    read pass-through params (``converters``, ``source_specs``,
-    ``clipper``, ``embedder``, ``dataset_name``, ``name``) alongside the
-    plugin-declared fields without listing them as plugin fields.
+    Unknown keys are dropped (``Meta.unknown = "exclude"``) — the schema
+    is a faithful description of the plugin's declared field set, not a
+    free-form bag.  Route handlers that need to pass extra keys
+    alongside the plugin-declared fields (e.g. ``converters``,
+    ``source_specs``, ``clipper``, ``embedder``, ``dataset_name``,
+    ``name``) declare them explicitly via the ``extra_keys`` argument to
+    :func:`vtsearch.routes._shared.validate_plugin_args`.
     """
     attrs: dict = {}
     for pf in plugin.fields:
@@ -159,7 +166,7 @@ def make_plugin_arg_schema(plugin: PluginBase) -> type[Schema]:
         if mf is not None:
             attrs[pf.key] = mf
 
-    attrs["Meta"] = type("Meta", (), {"unknown": "include"})
+    attrs["Meta"] = type("Meta", (), {"unknown": "exclude"})
     cls_name = f"{type(plugin).__name__}ArgSchema"
     return type(cls_name, (Schema,), attrs)
 

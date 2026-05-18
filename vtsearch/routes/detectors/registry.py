@@ -193,12 +193,12 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values = validate_plugin_args(importer)
+    field_values = validate_plugin_args(importer, extra_keys=("name",))
 
     # ``name`` is a pass-through key (not a declared plugin field) but is
-    # required by this route.  ``validate_plugin_args`` keeps unknown keys
-    # via ``Meta.unknown = "include"``, so it's already on field_values
-    # if the caller supplied it.
+    # required by this route.  ``validate_plugin_args`` only keeps the
+    # keys we list in ``extra_keys``, so the route is in charge of
+    # enforcing presence.
     name = str(field_values.pop("name", "") or "").strip()
     if not name:
         abort(422, message="Validation error", errors={"json": {"name": ["Missing data for required field."]}})

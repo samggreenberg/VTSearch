@@ -102,7 +102,12 @@ def get_json_or_400():
 # ---------------------------------------------------------------------------
 
 
-def validate_plugin_args(plugin: PluginBase, *, file_mode: str = "filestorage") -> dict:
+def validate_plugin_args(
+    plugin: PluginBase,
+    *,
+    file_mode: str = "filestorage",
+    extra_keys: tuple[str, ...] = (),
+) -> dict:
     """Validate the request body against the plugin's per-field schema.
 
     Builds a marshmallow schema from the plugin's :attr:`fields`
@@ -114,11 +119,10 @@ def validate_plugin_args(plugin: PluginBase, *, file_mode: str = "filestorage") 
     Schema-level rejects (missing required field, invalid select value,
     unparseable number) surface as ``422`` with the standard
     ``errors`` envelope — matching the validation behaviour of routes
-    using ``@blp.arguments(...)``.  Pass-through keys that aren't
-    declared as plugin fields (``converters``, ``source_specs``,
-    ``clipper``, ``embedder``, ``dataset_name``, ``name``, etc.) are
-    preserved on the returned dict so callers can read them alongside
-    the plugin-declared values.
+    using ``@blp.arguments(...)``.  Keys the schema doesn't recognise
+    are dropped (the schema uses ``Meta.unknown = "exclude"``) — pass
+    *extra_keys* to allow specific extra body fields through to the
+    returned dict (e.g. ``"converters"``, ``"clipper"``, ``"name"``).
 
     Parameters
     ----------
@@ -134,6 +138,11 @@ def validate_plugin_args(plugin: PluginBase, *, file_mode: str = "filestorage") 
         the file off to a background thread (the request context, and
         the underlying ``FileStorage``, are torn down before the thread
         reads).
+    extra_keys:
+        Pass-through keys whose values should ride along on the
+        returned dict if present in the request body.  Each is copied
+        verbatim — type / shape validation is the route handler's
+        responsibility.
     """
     import io  # noqa: PLC0415 — defer to avoid import cost when unused
 
@@ -182,6 +191,10 @@ def validate_plugin_args(plugin: PluginBase, *, file_mode: str = "filestorage") 
             message="Validation error",
             errors={"json": {k: ["Missing data for required field."] for k in missing_files}},
         )
+
+    for key in extra_keys:
+        if key in body:
+            validated[key] = body[key]
 
     return validated
 

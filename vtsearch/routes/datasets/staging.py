@@ -164,7 +164,11 @@ def stage_import(importer_name: str):
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values = validate_plugin_args(importer, file_mode="bytesio")
+    field_values = validate_plugin_args(
+        importer,
+        file_mode="bytesio",
+        extra_keys=("converters", "source_specs", "dataset_name"),
+    )
 
     _stage_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Staging started"})
@@ -275,7 +279,11 @@ def import_dataset(importer_name: str):
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values = validate_plugin_args(importer, file_mode="bytesio")
+    field_values = validate_plugin_args(
+        importer,
+        file_mode="bytesio",
+        extra_keys=("converters", "source_specs", "clipper", "embedder", "dataset_name"),
+    )
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the
     # importer has file fields; the per-plugin schema treats it as an
