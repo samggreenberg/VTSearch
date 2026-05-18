@@ -1,13 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { VideoPlayerComponent } from './video-player.component';
 import { ActiveContextService } from '../../../services/active-context.service';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 
 describe('VideoPlayerComponent', () => {
   let component: VideoPlayerComponent;
   let fixture: ComponentFixture<VideoPlayerComponent>;
 
-  const mockMedia: MediaItem = {
+  const mockMedia: Media = {
     id: 3,
     type: 'video',
     filename: 'test.mp4',

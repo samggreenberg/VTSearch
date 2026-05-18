@@ -30,7 +30,7 @@ import { ProgressEventsService } from '../../services/progress-events.service';
 import { DetectorRegistryEntry, ProgressEvent } from '../../models/api.models';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
-import { LabelingStatusResponse } from '../../models/api.models';
+import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import type { LearnedSortResponse } from '../../generated/api-client/models/learned-sort-response';
 import { formatProgressMessage } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
@@ -438,14 +438,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: (status) => {
-          // The generated `LabelingStatusResponse` types `smart` / `stable` /
-          // `span` as `{[key: string]: any}` while the legacy field type
-          // expects `StatusIndicator` with a required `status` string.  The
-          // backend always sends `{status, ...}` for these — the cast is safe
-          // and only crosses the type-system gap until a follow-up tightens
-          // the consumer (autopilot, left-panel, autopilot-panel) to the
-          // generated shape.
-          this.labelingStatus = status as unknown as LabelingStatusResponse;
+          this.labelingStatus = status;
         },
       });
   }
@@ -782,7 +775,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private openCropOverlay(mediaId: number, action: 'sort' | 'seed'): void {
-    const media = this.mediaState.medias.find((m) => m.id === mediaId);
+    const media = this.mediaState.getMedia(mediaId);
     if (!media) return;
     const mediaType = media.type;
     const url =
@@ -853,7 +846,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private mediaDisplayName(id: number): string {
-    const m = this.mediaState.medias.find((x) => x.id === id);
+    const m = this.mediaState.getMedia(id);
     return m?.filename || m?.origin_name || `#${id}`;
   }
 

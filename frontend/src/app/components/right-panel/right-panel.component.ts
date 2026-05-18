@@ -4,7 +4,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DetectorsApiService } from '../../services/detectors-api.service';
 import type { DetectorLabelView } from '../../generated/api-client/models/detector-label-view';
-import { MediaItem } from '../../models/api.models';
+import { Media } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
@@ -40,7 +40,7 @@ export interface TrainModeContext {
   styleUrl: './right-panel.component.scss',
 })
 export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
-  @Input() medias: MediaItem[] = [];
+  @Input() medias: Media[] = [];
   @Input() trainMode: TrainModeContext | null = null;
   @Input() focusMode: 'click' | 'hover' = 'click';
   /** 'label' = Labeling mode (detector export allowed), 'find' = Finding mode (no detector export). */

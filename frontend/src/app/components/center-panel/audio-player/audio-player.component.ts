@@ -10,7 +10,7 @@ import {
   ViewChild,
   AfterViewInit,
 } from '@angular/core';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
@@ -20,7 +20,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
   styleUrl: './audio-player.component.scss',
 })
 export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit {
-  @Input() media!: MediaItem;
+  @Input() media!: Media;
   @Input() volume = 1;
   @Input() audioPlaying = true;
   @Input() swipeClass = '';

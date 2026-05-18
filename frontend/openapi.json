@@ -2819,16 +2819,13 @@
             "type": "integer"
           },
           "smart": {
-            "additionalProperties": {},
-            "type": "object"
+            "$ref": "#/components/schemas/StatusIndicator"
           },
           "span": {
-            "additionalProperties": {},
-            "type": "object"
+            "$ref": "#/components/schemas/StatusIndicator"
           },
           "stable": {
-            "additionalProperties": {},
-            "type": "object"
+            "$ref": "#/components/schemas/StatusIndicator"
           },
           "total_count": {
             "type": "integer"
@@ -3772,6 +3769,21 @@
         "required": [
           "results",
           "threshold"
+        ],
+        "type": "object"
+      },
+      "StatusIndicator": {
+        "additionalProperties": true,
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
         ],
         "type": "object"
       },

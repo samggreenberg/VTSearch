@@ -1,31 +1,33 @@
 /* TypeScript interfaces matching the Flask API response shapes. */
 
+import type { MediaIdsListResponse } from '../generated/api-client/models/media-ids-list-response';
+import type { MediaBatchResponse } from '../generated/api-client/models/media-batch-response';
+
 // --- Medias ---
 
 /**
- * One media item.
- *
- * Only ``id`` and ``type`` are guaranteed — the dataset listing
- * (``GET /api/medias/ids``) returns just those plus an optional
- * ``embedder``.  The remaining display-worthy fields are populated on
- * demand for items currently in the viewport via the metadata cache
- * (``POST /api/medias/batch``).
+ * Strip a type's catch-all index signature (``[key: string]: any``) so
+ * intersecting it with another type doesn't force every property access
+ * to go through the bracket form (TS4111 under
+ * ``noPropertyAccessFromIndexSignature``).
  */
-export interface MediaItem {
-  id: number;
-  type: string;
-  filename?: string;
-  md5?: string;
-  custom_metadata?: Record<string, unknown>;
-  origin_name?: string;
-  description?: string;
-  clip_start?: number;
-  clip_end?: number;
-  clip_index?: number;
-  clip_box?: number[];
-  /** Name of the embedder that produced this media's vector. */
-  embedder?: string;
-}
+type RemoveIndex<T> = {
+  [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K];
+};
+
+/**
+ * The renderable media shape — a stub from ``GET /api/medias/ids``
+ * (``id``, ``type``, optional ``embedder``) optionally augmented with the
+ * full per-item metadata returned by ``POST /api/medias/batch``
+ * (``filename``, ``md5``, ``custom_metadata``, clip extents, …).
+ *
+ * Derived directly from the two generated DTOs so backend schema changes
+ * propagate without a hand-maintained mirror.  Components consume this
+ * type wherever the data flow can deliver either a stub (initial listing,
+ * cache miss) or a hydrated batch entry.
+ */
+export type Media = MediaIdsListResponse &
+  Partial<Omit<RemoveIndex<MediaBatchResponse>, keyof MediaIdsListResponse>>;
 
 // --- Sorting ---
 
@@ -36,23 +38,6 @@ export interface VotesResponse {
   learned_scores: Record<string, number>;
   labelset_good_count?: number;
   labelset_bad_count?: number;
-}
-
-// --- Labeling Status ---
-
-export interface StatusIndicator {
-  status: string;
-  [key: string]: unknown;
-}
-
-export interface LabelingStatusResponse {
-  good_count?: number;
-  bad_count?: number;
-  total_count?: number;
-  smart?: StatusIndicator;
-  stable?: StatusIndicator;
-  span?: StatusIndicator;
-  [key: string]: unknown;
 }
 
 // --- Progress ---

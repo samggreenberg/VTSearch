@@ -2,13 +2,13 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ElementRef } from '@angular/core';
 import { ImageViewerComponent, RegionBox } from './image-viewer.component';
 import { ActiveContextService } from '../../../services/active-context.service';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 
 describe('ImageViewerComponent', () => {
   let component: ImageViewerComponent;
   let fixture: ComponentFixture<ImageViewerComponent>;
 
-  const mockMedia: MediaItem = {
+  const mockMedia: Media = {
     id: 2,
     type: 'image',
     filename: 'test.png',
@@ -389,7 +389,7 @@ describe('ImageViewerComponent', () => {
 
     it('persists across media changes', () => {
       component.marqueeMode = true;
-      const next: MediaItem = { ...mockMedia, id: 99, filename: 'b.png' };
+      const next: Media = { ...mockMedia, id: 99, filename: 'b.png' };
       component.media = next;
       component.ngOnChanges({
         media: { currentValue: next, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },

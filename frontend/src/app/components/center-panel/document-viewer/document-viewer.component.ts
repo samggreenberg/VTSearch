@@ -1,5 +1,5 @@
 import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
@@ -9,7 +9,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
   styleUrl: './document-viewer.component.scss',
 })
 export class DocumentViewerComponent implements OnChanges {
-  @Input() media!: MediaItem;
+  @Input() media!: Media;
 
   mediaSrc = '';
 
