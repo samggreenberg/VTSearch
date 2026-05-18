@@ -374,8 +374,16 @@ The "combine detectors" feature exists but requires multi-select + a non-obvious
 ### 8.8 Renaming + re-syncing a detector ★ XS
 Renaming a detector with a labelset source filepath template (`{detector_name}.labels.json`) leaves the old file on disk. After rename, prompt: "Move existing labelset file to new name?" with a one-click yes.
 
-### 8.9 Audio segment example → trained detector ★★ M
+### 8.9 Audio segment example → trained detector ★★ M — **SHIPPED**
 "I want a detector for this 3-second cough sound": today requires opening a centre-panel item, opening the crop modal, dragging selection, confirming, then navigating to new-detector with that example. Add a right-click "Use this as a detector seed" on any media in the left panel.
+
+**What shipped:** Right-click in the left panel (click focus-mode only) opens a context menu with four actions, working for every media type: *Sort by similarity to this*, *Crop, then sort by similarity…* (audio/image), *Use as detector seed*, *Crop, then use as detector seed…* (audio/image). Backed by two new endpoints — `POST /api/example-sort-by-id` (reuses the in-memory embedding when no crop is requested — zero re-embed cost) and `POST /api/server-media-files/from-media-id` (materialises a loaded media's bytes into `example_media/` so the new-detector form can consume it via the existing `media_example` field). The new-detector flow learned a `seedMediaId` / `seedCropParams` pre-fill via `NewThingFlowsService`, and the existing `vt-media-crop-modal` is reused for the crop variants by fetching the loaded media as a blob via `/api/medias/<id>/{audio,image}`.
+
+**Hover focus-mode is unchanged** — right-click still votes good there; users in speed-labeling mode can't seed a detector via right-click and use the Dashboard's New Detector button instead. This was the chosen tradeoff during planning.
+
+**Open follow-ups:**
+- Video / document / text crop overlays. The crop modal only supports audio + image today; the right-click menu hides the crop entries for everything else. If we want time-range cropping on video or page-range cropping on documents, the bounded clippers and `vt-media-crop-modal` overlay both need new variants.
+- Context-pulldown parity. The right-click menu only exists on left-panel items; right-panel labelset / label items still bind right-click to vote-good. Worth considering if we want detector-card-style actions there too.
 
 ### 8.10 Resuming a labelling session ★★ S
 There's no "recent sessions" surface. Add a "Recent sessions" list on the dashboard (dataset + detector pair + last activity timestamp) so the user gets back into work in one click.
