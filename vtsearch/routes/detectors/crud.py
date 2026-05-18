@@ -311,7 +311,7 @@ def set_detector_examples(body: dict, name: str):
 @detectors_crud_bp.alt_response(404, description="A source detector was not found.")
 @detectors_crud_bp.alt_response(409, description="A detector with the new name already exists.")
 @detectors_crud_bp.alt_response(422, description="Combined labelset is empty after applying the conflict policy.")
-def combine_detectors(body: dict):
+def combine_detectors(body: dict):  # noqa: C901
     """Combine the labelsets of two or more detectors into a new detector.
 
     All source detectors must share the same ``media_type``.  The new

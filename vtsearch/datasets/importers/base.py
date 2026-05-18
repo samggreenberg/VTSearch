@@ -579,7 +579,7 @@ class DatasetImporter(PluginBase):
     # Source specs (multi-media import)
     # ------------------------------------------------------------------
 
-    def effective_source_specs(self, field_values: dict[str, Any]) -> list[SourceSpec]:
+    def effective_source_specs(self, field_values: dict[str, Any]) -> list[SourceSpec]:  # noqa: C901
         """Resolve *field_values* into a flat list of :class:`SourceSpec`.
 
         For importers with :attr:`multi_media` ``= True``, the user submits

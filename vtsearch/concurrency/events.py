@@ -63,7 +63,7 @@ def initial_snapshot() -> list[str]:
     return frames
 
 
-def stream_progress_events(
+def stream_progress_events(  # noqa: C901
     *, heartbeat_seconds: float = HEARTBEAT_SECONDS, max_queue: int = 1024
 ) -> Generator[str, None, None]:
     """Yield SSE-formatted strings for every progress channel until disconnect.

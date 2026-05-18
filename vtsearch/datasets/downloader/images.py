@@ -44,7 +44,7 @@ def download_cifar10(on_progress: Optional[ProgressCallback] = None) -> Path:
     return extract_dir
 
 
-def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
+def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:  # noqa: C901
     """Download and extract the Caltech-101 image classification dataset.
 
     Downloads ``caltech-101.zip`` from the configured ``CALTECH101_URL``

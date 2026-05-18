@@ -40,7 +40,7 @@ _FIND_STEPS = 3
 @detector_find_bp.route("/api/find/check-labels", methods=["POST"])
 @detector_find_bp.arguments(FindCheckLabelsRequestSchema)
 @detector_find_bp.response(200, FindCheckLabelsResponseSchema)
-def find_check_labels(body: dict):
+def find_check_labels(body: dict):  # noqa: C901
     """Pre-flight check: report how many detector labels can be resolved.
 
     Takes the same ``detector_ids`` / ``dataset_ids`` payload as ``/api/find``
@@ -139,7 +139,7 @@ def find_check_labels(body: dict):
 )
 @detector_find_bp.alt_response(404, description="A selected dataset or detector ID is unknown / missing.")
 @detector_find_bp.alt_response(500, description="A dataset pkl file could not be loaded.")
-def multi_find(body: dict):
+def multi_find(body: dict):  # noqa: C901
     """Run selected detectors on selected datasets and return merged results.
 
     For each dataset: loads it from its saved pkl, then for each detector runs

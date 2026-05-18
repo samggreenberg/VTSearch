@@ -308,7 +308,7 @@ class LoadingTasksTracker:
             self._tasks.pop(task_id, None)
         self._notify()
 
-    def list_tasks(self) -> list[dict[str, Any]]:
+    def list_tasks(self) -> list[dict[str, Any]]:  # noqa: C901
         """Return a snapshot of all active loading tasks.
 
         Each entry includes: ``task_id``, ``name``, ``created_at``, and

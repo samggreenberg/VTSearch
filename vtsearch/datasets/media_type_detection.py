@@ -33,7 +33,7 @@ from typing import Optional
 from vtsearch.media import get_by_extension
 
 
-def detect_media_types_in_folder(
+def detect_media_types_in_folder(  # noqa: C901
     folder: Path,
     recursive: bool = True,
     limit: int = 50,

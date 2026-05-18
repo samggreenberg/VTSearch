@@ -40,7 +40,7 @@ def _stamp_demo_origin(
         media["origin"] = {"importer": "demo", "params": dict(demo_origin_params)}
 
 
-def load_demo_dataset(
+def load_demo_dataset(  # noqa: C901
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
     on_progress: Optional[ProgressCallback] = None,

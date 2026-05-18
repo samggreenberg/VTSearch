@@ -226,7 +226,7 @@ def _move_tree_contents(src: Path, dst: Path) -> None:
                     shutil.copy2(child, target)
 
 
-def _download_and_extract(
+def _download_and_extract(  # noqa: C901
     *,
     url: str,
     archive_name: str,

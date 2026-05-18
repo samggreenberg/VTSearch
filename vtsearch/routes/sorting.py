@@ -786,7 +786,7 @@ def example_sort():
     ),
 )
 @sorting_bp.alt_response(500, description="Label file sort failed (unexpected exception).")
-def label_file_sort():
+def label_file_sort():  # noqa: C901
     """Train MLP on external media files from a label file, then sort all medias."""
     if "file" not in request.files:
         abort(400, message="No file provided")

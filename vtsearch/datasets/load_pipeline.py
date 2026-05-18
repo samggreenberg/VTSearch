@@ -229,7 +229,7 @@ def _normalize_media_type(value: str) -> str:
         return value
 
 
-def _apply_clipper(
+def _apply_clipper(  # noqa: C901
     clips_dict: dict,
     clipper_name: str,
     clipper_params: dict | None = None,
@@ -330,7 +330,7 @@ def _apply_clipper(
         clips_dict[new_id] = clip
 
 
-def _regenerate_clip_thumbnails(
+def _regenerate_clip_thumbnails(  # noqa: C901
     clips: list[dict],
     needs_recompute: list[bool],
     media_type: str,
@@ -391,7 +391,7 @@ def _regenerate_clip_thumbnails(
                 clip["thumbnail_bytes"] = thumb
 
 
-def _fixup_clip_md5_and_embeddings(
+def _fixup_clip_md5_and_embeddings(  # noqa: C901
     clips: list[dict],
     needs_recompute: list[bool],
     media_type: str,
@@ -629,7 +629,7 @@ def _auto_register_dataset(
 # ---------------------------------------------------------------------------
 
 
-def _run_origin_load_in_background(
+def _run_origin_load_in_background(  # noqa: C901
     load_fn,
     origin: dict,
     *,
@@ -687,7 +687,7 @@ def _run_origin_load_in_background(
     # state (settings writes, settings_source sync) resolves correctly.
     _request_user = created_by or get_current_user()
 
-    def task():
+    def task():  # noqa: C901
         from vtsearch.auth import set_thread_user
 
         set_thread_user(_request_user)

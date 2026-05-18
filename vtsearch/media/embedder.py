@@ -212,7 +212,7 @@ def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwarg
 
 
 @contextlib.contextmanager
-def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
+def intercept_tqdm_progress(callback: ProgressCallback) -> Any:  # noqa: C901
     """Temporarily hook tqdm progress bars to forward updates to *callback*.
 
     HuggingFace ``transformers`` and ``huggingface_hub`` use :mod:`tqdm` for
@@ -282,7 +282,7 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
 
 
 @contextlib.contextmanager
-def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "Loading model weights…") -> Any:
+def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "Loading model weights…") -> Any:  # noqa: C901
     """Track tensor-level progress during model weight loading.
 
     HuggingFace ``transformers`` with ``low_cpu_mem_usage=True`` dispatches

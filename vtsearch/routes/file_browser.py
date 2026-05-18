@@ -59,7 +59,7 @@ def _get_browse_root() -> Path:
 @file_browser_bp.alt_response(400, description="Invalid path (traversal blocked).")
 @file_browser_bp.alt_response(403, description="Permission denied reading the requested directory.")
 @file_browser_bp.alt_response(404, description="Directory not found within the allowed root.")
-def browse(query: dict):
+def browse(query: dict):  # noqa: C901
     """List directories and files at a relative path.
 
     Returns a directories+files listing with names, relative paths,

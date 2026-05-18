@@ -73,7 +73,7 @@ class ServerCsvLabelImporter(LabelImporter):
         )
 
 
-def _parse_csv_bytes(raw: bytes) -> list[dict[str, Any]]:
+def _parse_csv_bytes(raw: bytes) -> list[dict[str, Any]]:  # noqa: C901
     """Decode *raw* bytes as CSV and extract ``md5``/``label`` pairs."""
     try:
         text = raw.decode("utf-8-sig")  # strip BOM if present
