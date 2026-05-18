@@ -65,6 +65,36 @@
   white-space: nowrap;
 }
 
+// Phase 3 of smart-clipper-defaults: the clipper picker hides behind a
+// subtle "Advanced ▾" link. Designed to disappear into the surrounding
+// form so users who don't need the override aren't distracted by it.
+// Sits between `.form-group` siblings, so margin is set on the wrapper
+// (`.advanced-section`) rather than the button.
+.advanced-toggle {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  padding: 2px 0;
+  font-size: .82rem;
+  color: var(--text-muted, #666);
+  cursor: pointer;
+
+  &:hover { color: var(--text, #222); text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--focus, #4a90e2); outline-offset: 2px; }
+}
+
+.advanced-toggle--inline {
+  margin-left: 4px;
+}
+
+// When the section is expanded, the picker shows up directly after the
+// toggle inside the same form-group, so tighten the gap between them.
+.advanced-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .server-folder-browser { gap: 12px; }
 .sf-browse-section { gap: 6px; }
 
