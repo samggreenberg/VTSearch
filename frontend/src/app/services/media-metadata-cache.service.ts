@@ -1,7 +1,7 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { MediaItem } from '../models/api.models';
+import type { MediaBatchResponse } from '../generated/api-client/models/media-batch-response';
 import { MediasApiService } from './medias-api.service';
 
 /**
@@ -23,12 +23,12 @@ const BATCH_SIZE = 200;
  *   1. Call `ensureLoaded(ids)` with the IDs the viewport needs.
  *   2. Subscribe to `version$` to re-render when new items arrive, or call
  *      `get(id)` to read a single cached item.
- *   3. `toMediaItems(ids)` returns MediaItem[] for already-cached IDs (skips
- *      unknown ones so the template can render immediately).
+ *   3. `toMediaItems(ids)` returns MediaBatchResponse[] for already-cached
+ *      IDs (skips unknown ones so the template can render immediately).
  */
 @Injectable({ providedIn: 'root' })
 export class MediaMetadataCacheService implements OnDestroy {
-  private readonly cache = new Map<number, MediaItem>();
+  private readonly cache = new Map<number, MediaBatchResponse>();
   private readonly pendingIds = new Set<number>();
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly destroy$ = new Subject<void>();
@@ -45,8 +45,8 @@ export class MediaMetadataCacheService implements OnDestroy {
     if (this.batchTimer) clearTimeout(this.batchTimer);
   }
 
-  /** Return a cached MediaItem or undefined if not yet fetched. */
-  get(id: number): MediaItem | undefined {
+  /** Return a cached metadata entry or undefined if not yet fetched. */
+  get(id: number): MediaBatchResponse | undefined {
     return this.cache.get(id);
   }
 
@@ -85,11 +85,11 @@ export class MediaMetadataCacheService implements OnDestroy {
   }
 
   /**
-   * Build a MediaItem[] for the given IDs using cached data.
+   * Build a MediaBatchResponse[] for the given IDs using cached data.
    * IDs that are not yet cached are omitted.
    */
-  toMediaItems(ids: number[]): MediaItem[] {
-    const result: MediaItem[] = [];
+  toMediaItems(ids: number[]): MediaBatchResponse[] {
+    const result: MediaBatchResponse[] = [];
     for (const id of ids) {
       const item = this.cache.get(id);
       if (item) result.push(item);

@@ -775,7 +775,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private openCropOverlay(mediaId: number, action: 'sort' | 'seed'): void {
-    const media = this.mediaState.medias.find((m) => m.id === mediaId);
+    const media = this.mediaState.getMedia(mediaId);
     if (!media) return;
     const mediaType = media.type;
     const url =
@@ -846,7 +846,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private mediaDisplayName(id: number): string {
-    const m = this.mediaState.medias.find((x) => x.id === id);
+    const m = this.mediaState.getMedia(id);
     return m?.filename || m?.origin_name || `#${id}`;
   }
 

@@ -933,6 +933,46 @@ checks off this follow-up.
       stay because the generated equivalents are loose
       ``{[key: string]: any}`` and the local versions describe the
       actual fields consumers read.
+- [x] ``LabelingStatusResponse`` consumers tightened to the generated
+      shape. Backend ``LabelingStatusResponseSchema`` (``vtsearch/schemas/eval.py``)
+      declares ``smart`` / ``stable`` / ``span`` as nested
+      ``StatusIndicatorSchema`` instances with a required ``status`` and an
+      optional ``reason``; ``Meta.unknown = "include"`` plus a
+      ``@post_dump(pass_original=True)`` hook preserves the metric-specific
+      keys (``cost``, ``flips``, ``avg_flip_rate``, ``diversity_level``,
+      ``max_level``, …) — ``unknown = "include"`` only affects ``load``, so
+      the post-dump re-merge is required to keep them in the response.
+      The generated TS ``StatusIndicator`` is ``{status: string; reason?:
+      string; [key: string]: any}``; ``LabelingStatusResponse`` references
+      it directly. ``AutopilotStateService``,
+      ``AutopilotStateService.spec``, ``LabelViewComponent``,
+      ``LeftPanelComponent``, ``ProgressIndicatorsComponent``, and
+      ``AutopilotPanelComponent`` all now ``import type`` the generated
+      ``LabelingStatusResponse`` from
+      ``generated/api-client/models/labeling-status-response``; the
+      ``startStatusPolling`` cast in ``LabelViewComponent`` is gone. The
+      spec file added a tiny ``makeStatus`` helper to construct fixtures
+      with the now-required ``good_count`` / ``bad_count`` /
+      ``total_count`` defaults. Removed from ``api.models.ts``:
+      ``StatusIndicator`` and ``LabelingStatusResponse``.
+- [x] ``MediaItem`` deleted from ``api.models.ts`` and replaced with a
+      generated-types-derived ``Media`` alias. ``MediaStateService`` now
+      stores ``MediaIdsListResponse[]`` (the stub list from
+      ``GET /api/medias/ids``); ``MediaMetadataCacheService`` now stores
+      ``MediaBatchResponse`` (the hydrated payload from
+      ``POST /api/medias/batch``). The renderer surface (media-item, media-
+      list, center panel + audio/video/image/text/document viewers, right
+      panel, label-list, label-view, find-view) consumes
+      ``Media = MediaIdsListResponse & Partial<Omit<RemoveIndex<MediaBatchResponse>,
+      keyof MediaIdsListResponse>>`` — a derivation that admits both stubs
+      (initial listing, cache miss) and hydrated batch entries, with the
+      ``MediaBatchResponse`` index signature stripped so direct property
+      access works under ``noPropertyAccessFromIndexSignature``. Sites
+      that read ``filename`` / ``origin_name`` for display via
+      ``mediaState.medias.find(…)`` were rerouted through a new
+      ``MediaStateService.getMedia(id)`` helper that returns the cached
+      batch first and falls back to the stub (same pattern as the
+      ``selectedMedia`` getter).
 
 ## Open follow-ups
 
@@ -950,29 +990,6 @@ checks off this follow-up.
   function-module paths for runtime symbols, no barrel) are required
   to keep the initial bundle under the 525 kB budget — see
   *Bundle-size discipline* above.
-- **Tighten ``LabelingStatusResponse`` consumers to the generated
-  shape.** ``SortingApiService.getLabelingStatus`` returns the generated
-  ``LabelingStatusResponse`` (``smart``/``stable``/``span`` typed as
-  ``{[key: string]: any}``), but ``LabelViewComponent`` keeps the legacy
-  ``LabelingStatusResponse`` (with ``StatusIndicator``-bearing fields)
-  for its ``labelingStatus`` member because the downstream chain
-  (``AutopilotStateService``, ``AutopilotPanelComponent``,
-  ``LeftPanelComponent`` and their spec files) all read
-  ``status.smart?.status`` / ``status.stable?.status`` /
-  ``status.span?.status``. A single cast at the polling subscribe
-  bridges the type gap. A follow-up PR can either retype every consumer
-  to the generated shape (and update the spec literals to include the
-  newly-required ``good_count`` / ``bad_count`` / ``total_count`` /
-  ``smart.status`` / ``stable.status`` / ``span.status`` fields) or
-  introduce a narrow ``StatusIndicator`` typed-projection layer.
-- **Replace ``MediaItem`` with the generated ``MediaIdsListResponse`` /
-  ``MediaBatchResponse`` pair.** ``MediaItem`` is the loose union type
-  consumed by ~20 components and the metadata cache. The
-  ``MediasApiService`` migration kept it in place because rewiring every
-  consumer is a larger task than swapping the service itself.  A
-  follow-up should narrow each consumer's type (lightweight stub vs.
-  full batch-response) and delete ``MediaItem`` from
-  ``api.models.ts``.
 - **Per-plugin schemas for plugin-field routes.** The four routes
   whose request body is a plugin-field shape stay on the legacy
   plain-Flask path on their (now smorest-typed) blueprints:
