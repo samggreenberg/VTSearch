@@ -26,6 +26,7 @@ import type { DetectorExamplesRequest } from '../generated/api-client/models/det
 import type { DetectorExamplesResponse } from '../generated/api-client/models/detector-examples-response';
 import type { DetectorLabelVoteResponse } from '../generated/api-client/models/detector-label-vote-response';
 import type { DetectorLabelsDetailResponse } from '../generated/api-client/models/detector-labels-detail-response';
+import type { DetectorLabelsetMoveResponse } from '../generated/api-client/models/detector-labelset-move-response';
 import type { DetectorRegistryAutorunResponse } from '../generated/api-client/models/detector-registry-autorun-response';
 import type { DetectorRegistryCreateRequest } from '../generated/api-client/models/detector-registry-create-request';
 import type { DetectorRegistryCreateResponse } from '../generated/api-client/models/detector-registry-create-response';
@@ -74,6 +75,7 @@ import { apiDetectorsNameRenamePut } from '../generated/api-client/fn/detectors-
 import { apiDetectorsPost } from '../generated/api-client/fn/detectors-crud/api-detectors-post';
 import { apiDetectorsRegistryDetectorIdAutorunPut } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-autorun-put';
 import { apiDetectorsRegistryDetectorIdDelete } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-delete';
+import { apiDetectorsRegistryDetectorIdLabelsetSourceMoveFilePost } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-labelset-source-move-file-post';
 import { apiDetectorsRegistryDetectorIdRenamePut } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-rename-put';
 import { apiDetectorsRegistryDetectorIdUnloadPost } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-unload-post';
 import { apiDetectorsRegistryGet } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-get';
@@ -244,6 +246,21 @@ export class DetectorsApiService {
       detector_id: detectorId,
       body: { name: newName },
     }).pipe(map((r) => r.body));
+  }
+
+  moveLabelsetSourceFile(
+    detectorId: string,
+    oldPath: string,
+    newPath: string,
+  ): Observable<DetectorLabelsetMoveResponse> {
+    return apiDetectorsRegistryDetectorIdLabelsetSourceMoveFilePost(
+      this.http,
+      this.config.rootUrl,
+      {
+        detector_id: detectorId,
+        body: { old_path: oldPath, new_path: newPath },
+      },
+    ).pipe(map((r) => r.body));
   }
 
   loadDetector(detectorId: string | null): Observable<DetectorRegistryLoadResponse> {

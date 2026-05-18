@@ -177,12 +177,28 @@ class DetectorRenameRequestSchema(Schema):
     new_name = fields.String(required=True, validate=validate.Length(min=1))
 
 
+class PendingLabelsetMoveSchema(Schema):
+    """Labelset file paths that were orphaned by a detector rename.
+
+    Populated on a rename response when the detector has a configured
+    labelset source whose filepath template (``{detector_name}`` /
+    ``{detector_id}``) resolves to a different on-disk location after
+    the rename, and the OLD file still exists.  The frontend uses
+    these paths to prompt the user to move the file and to invoke
+    :class:`DetectorLabelsetMoveRequestSchema` on confirmation.
+    """
+
+    old_path = fields.String(required=True)
+    new_path = fields.String(required=True)
+
+
 class DetectorRenameResponseSchema(Schema):
     """Response for ``PUT /api/detectors/<name>/rename``."""
 
     success = fields.Boolean(required=True)
     old_name = fields.String(required=True)
     new_name = fields.String(required=True)
+    pending_labelset_move = fields.Nested(PendingLabelsetMoveSchema, allow_none=True, load_default=None)
 
 
 class DetectorExamplesRequestSchema(Schema):
@@ -350,6 +366,23 @@ class DetectorRegistryRenameResponseSchema(Schema):
 
     ok = fields.Boolean(required=True)
     name = fields.String(required=True)
+    pending_labelset_move = fields.Nested(PendingLabelsetMoveSchema, allow_none=True, load_default=None)
+
+
+class DetectorLabelsetMoveRequestSchema(Schema):
+    """Body for ``POST /api/detectors/registry/<id>/labelset-source/move-file``."""
+
+    old_path = fields.String(required=True, validate=validate.Length(min=1))
+    new_path = fields.String(required=True, validate=validate.Length(min=1))
+
+
+class DetectorLabelsetMoveResponseSchema(Schema):
+    """Response for ``POST /api/detectors/registry/<id>/labelset-source/move-file``."""
+
+    ok = fields.Boolean(required=True)
+    moved = fields.Boolean(required=True)
+    old_path = fields.String(required=True)
+    new_path = fields.String(required=True)
 
 
 class DetectorRegistryAutorunRequestSchema(Schema):
@@ -612,6 +645,8 @@ __all__ = [
     "DetectorExamplesRequestSchema",
     "DetectorExamplesResponseSchema",
     "DetectorLabelsDetailResponseSchema",
+    "DetectorLabelsetMoveRequestSchema",
+    "DetectorLabelsetMoveResponseSchema",
     "DetectorLabelVoteRequestSchema",
     "DetectorLabelVoteResponseSchema",
     "DetectorRegistryAutorunRequestSchema",
@@ -636,4 +671,5 @@ __all__ = [
     "FindLabelResponseSchema",
     "FindRequestSchema",
     "FindResponseSchema",
+    "PendingLabelsetMoveSchema",
 ]

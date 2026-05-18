@@ -747,8 +747,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   renameDetector(model: DetectorRegistryEntry, newName: string): void {
     this.detectorsApi.renameInRegistry(model.id, newName).subscribe({
-      next: () => this.datasetState.refresh(),
+      next: response => {
+        this.datasetState.refresh();
+        this.promptMoveOrphanedLabelsetFile(model.id, response.pending_labelset_move);
+      },
     });
+  }
+
+  private async promptMoveOrphanedLabelsetFile(
+    detectorId: string,
+    pending: { old_path: string; new_path: string } | null | undefined,
+  ): Promise<void> {
+    if (!pending) return;
+    const ok = await this.dialog.confirm(
+      `Move existing labelset file "${pending.old_path}" to "${pending.new_path}"?`,
+    );
+    if (!ok) return;
+    this.detectorsApi
+      .moveLabelsetSourceFile(detectorId, pending.old_path, pending.new_path)
+      .subscribe();
   }
 
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
