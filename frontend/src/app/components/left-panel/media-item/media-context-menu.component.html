@@ -1,0 +1,20 @@
+<div
+  class="media-context-menu"
+  role="menu"
+  [style.left.px]="x"
+  [style.top.px]="y"
+>
+  @for (item of items; track item.id) {
+    <button
+      type="button"
+      class="menu-item"
+      role="menuitem"
+      [class.disabled]="item.disabled"
+      [disabled]="item.disabled"
+      [title]="item.title || ''"
+      (click)="onItemClick($event, item)"
+    >
+      {{ item.label }}
+    </button>
+  }
+</div>

@@ -136,6 +136,7 @@
             [showScores]="false"
             (mediaSelect)="mediaSelect.emit($event)"
             (mediaVote)="mediaVote.emit($event)"
+            (mediaContextRequest)="mediaContextRequest.emit($event)"
           />
           <vt-stripe-overview
             [sortOrder]="sortOrder"

@@ -31,6 +31,11 @@ Server media files + example-sort routes (``vtsearch/routes/media/server.py``):
                                        :class:`ExampleSortResponseSchema`
 * ``POST /api/example-sort-origin`` — :class:`ExampleSortOriginRequestSchema` →
                                        :class:`ExampleSortResponseSchema`
+* ``POST /api/example-sort-by-id`` — :class:`ExampleSortByIdRequestSchema` →
+                                      :class:`ExampleSortResponseSchema`
+* ``POST /api/server-media-files/from-media-id`` —
+        :class:`ServerMediaFromMediaIdRequestSchema` →
+        :class:`ServerMediaUploadResponseSchema`
 
 The ``POST /api/embed`` route (``vtsearch/routes/media/embed.py``) is a
 dual-mode dispatcher (multipart upload OR JSON body) and is left
@@ -248,6 +253,32 @@ class ExampleSortOriginRequestSchema(Schema):
     crop_params = fields.Dict(allow_none=True)
 
 
+class ExampleSortByIdRequestSchema(Schema):
+    """Body for ``POST /api/example-sort-by-id``.
+
+    Sorts the loaded snapshot by similarity to an already-loaded media,
+    identified by its in-memory ``media_id``.  When ``crop_params`` is
+    absent the existing ``media["embedding"]`` is reused — no fetch or
+    re-embed.  When set, the media's bytes are materialised, cropped,
+    and re-embedded before sorting.
+    """
+
+    media_id = fields.Integer(required=True)
+    crop_params = fields.Dict(allow_none=True)
+
+
+class ServerMediaFromMediaIdRequestSchema(Schema):
+    """Body for ``POST /api/server-media-files/from-media-id``.
+
+    Materialises the bytes of a loaded media to the per-user
+    ``example_media/`` directory and returns the saved filename so the
+    new-detector flow can reference it as ``media_example``.
+    """
+
+    media_id = fields.Integer(required=True)
+    crop_params = fields.Dict(allow_none=True)
+
+
 class _SortResultEntrySchema(Schema):
     """One scored media in an example-sort ``results`` list.
 
@@ -271,6 +302,7 @@ class ExampleSortResponseSchema(Schema):
 
 
 __all__ = [
+    "ExampleSortByIdRequestSchema",
     "ExampleSortOriginRequestSchema",
     "ExampleSortResponseSchema",
     "ExampleSortServerRequestSchema",
@@ -281,6 +313,7 @@ __all__ = [
     "MediaParagraphResponseSchema",
     "MediaVoteRequestSchema",
     "MediaVoteResponseSchema",
+    "ServerMediaFromMediaIdRequestSchema",
     "ServerMediaListResponseSchema",
     "ServerMediaUploadResponseSchema",
 ]

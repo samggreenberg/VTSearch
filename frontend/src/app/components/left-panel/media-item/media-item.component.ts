@@ -23,6 +23,7 @@ export class MediaItemComponent implements OnChanges {
 
   @Output() select = new EventEmitter<number>();
   @Output() vote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  @Output() contextRequest = new EventEmitter<{ id: number; x: number; y: number }>();
 
   thumbnailFailed = false;
   private lastMediaId: number | null = null;
@@ -95,9 +96,15 @@ export class MediaItemComponent implements OnChanges {
 
   onContextMenu(event: MouseEvent): void {
     if (this.focusMode === 'hover') {
+      // Hover mode keeps the existing right-click = vote-good shortcut; the
+      // context menu is intentionally not available so speed-labeling stays
+      // fast. Users can still seed a detector via the dashboard.
       event.preventDefault();
       this.vote.emit({ id: this.media.id, vote: 'good' });
+      return;
     }
+    event.preventDefault();
+    this.contextRequest.emit({ id: this.media.id, x: event.clientX, y: event.clientY });
   }
 
   onMouseEnter(): void {

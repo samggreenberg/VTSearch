@@ -49,6 +49,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
   @Output() mediaSelect = new EventEmitter<number>();
   @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  @Output() mediaContextRequest = new EventEmitter<{ id: number; x: number; y: number }>();
   @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
   @ViewChild(CdkVirtualScrollViewport) virtualViewport?: CdkVirtualScrollViewport;
 
@@ -161,6 +162,10 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
   onMediaVote(event: { id: number; vote: 'good' | 'bad' }): void {
     this.mediaVote.emit(event);
+  }
+
+  onMediaContextRequest(event: { id: number; x: number; y: number }): void {
+    this.mediaContextRequest.emit(event);
   }
 
   ngAfterViewChecked(): void {

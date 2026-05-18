@@ -121,6 +121,8 @@
   @if (newDetectorFlow.open) {
     <vt-new-detector-modal
       [defaultMediaType]="newDetectorFlow.defaultMediaType"
+      [seedMediaId]="newDetectorFlow.seedMediaId ?? null"
+      [seedCropParams]="newDetectorFlow.seedCropParams ?? null"
       (closed)="onNewDetectorClosed()"
       (created)="onDetectorCreated($event)"
     />
