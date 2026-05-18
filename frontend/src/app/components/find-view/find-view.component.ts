@@ -46,7 +46,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly LEFT_MIN = 180;
   private readonly RIGHT_MIN = 150;
   private readonly CENTER_MIN = 100;
-  private readonly DIVIDER_TOTAL = 8; // 2 × 4px dividers
+  private readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
   private destroy$ = new Subject<void>();
   private dragging = false;
   private draggingRight = false;

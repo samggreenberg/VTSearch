@@ -1,6 +1,6 @@
 .layout {
   display: grid;
-  grid-template-columns: var(--left-width, 300px) 4px 1fr 4px var(--right-width, 300px);
+  grid-template-columns: var(--left-width, 300px) 8px 1fr 8px var(--right-width, 300px);
   height: 100%;
   overflow: hidden;
 }
@@ -12,14 +12,27 @@
   min-width: 0;
 }
 
+// 8px hit target with a 4px visible line centered inside — same wider-hit-zone
+// pattern as `.col-resize-handle`, easier to grab than the visible line alone.
 .divider-left {
-  width: 4px;
+  width: 8px;
   cursor: col-resize;
-  background: var(--border);
-  transition: background 0.15s;
+  background: transparent;
+  position: relative;
 
-  &:hover,
-  &.dragging {
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 2px;
+    width: 4px;
+    background: var(--border);
+    transition: background 0.15s;
+  }
+
+  &:hover::after,
+  &.dragging::after {
     background: var(--accent);
   }
 }
@@ -36,13 +49,24 @@
 }
 
 .divider-right {
-  width: 4px;
+  width: 8px;
   cursor: col-resize;
-  background: var(--border);
-  transition: background 0.15s;
+  background: transparent;
+  position: relative;
 
-  &:hover,
-  &.dragging {
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 2px;
+    width: 4px;
+    background: var(--border);
+    transition: background 0.15s;
+  }
+
+  &:hover::after,
+  &.dragging::after {
     background: var(--accent);
   }
 }
