@@ -176,6 +176,12 @@ export class DatasetImporterModalComponent implements OnInit {
   clipperChooserContext: 'form' | 'demo' | 'sf' | 'lf' = 'form';
   clipperChooserClippers: ClipperInfo[] = [];
 
+  // Phase 3 of smart-clipper-defaults: the clipper picker is hidden
+  // behind an "Advanced" toggle by default. When the user has picked a
+  // non-default clipper, the picker is always visible regardless of
+  // this flag (so they can see and re-edit their selection).
+  clipperAdvancedOpen = false;
+
   constructor(
     private datasetsApi: DatasetsApiService,
     private settingsState: SettingsStateService,
@@ -1734,6 +1740,40 @@ export class DatasetImporterModalComponent implements OnInit {
     if (!clipper) return 'None';
     if (clipper.name.endsWith('_default')) return 'None';
     return clipper.display_name || clipper.name;
+  }
+
+  /** Whether the recommended (first-in-list) clipper is currently selected for
+   *  the given context. Used to decide whether the Advanced section can stay
+   *  collapsed — if the user has overridden the default, we keep the picker
+   *  visible so they can see and re-edit their choice. */
+  isDefaultClipperSelected(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    let clippers: ClipperInfo[];
+    let selected: string;
+    if (context === 'form') {
+      clippers = this.availableClippers;
+      selected = this.selectedClipper;
+    } else if (context === 'demo') {
+      clippers = this.demoClippers;
+      selected = this.selectedDemoClipper;
+    } else if (context === 'sf') {
+      clippers = this.sfClippers;
+      selected = this.sfSelectedClipper;
+    } else {
+      clippers = this.lfClippers;
+      selected = this.lfSelectedClipper;
+    }
+    return clippers.length > 0 && clippers[0].name === selected;
+  }
+
+  /** Whether the clipper picker should be visible in the given context.
+   *  True when the Advanced section is expanded or when a non-default
+   *  clipper is selected. */
+  showClipperPicker(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    return this.clipperAdvancedOpen || !this.isDefaultClipperSelected(context);
+  }
+
+  toggleClipperAdvanced(): void {
+    this.clipperAdvancedOpen = !this.clipperAdvancedOpen;
   }
 
   sfSubmit(): void {

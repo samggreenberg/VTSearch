@@ -1,9 +1,10 @@
 # Smart clipper defaults
 
-*Status: Phase 1 and Phase 2 shipped — picker offers an "Auto
+*Status: Phase 1, Phase 2, and Phase 3 shipped — picker offers an "Auto
 (recommended)" clipper for audio and video that routes each media
-through pass-through or tiling based on its own duration. Phase 3
-deferred — see Open follow-ups.*
+through pass-through or tiling based on its own duration, and the
+clipper picker itself is hidden behind an "Advanced ▾" toggle in the
+importer modal so users who don't need the override don't see it.*
 
 This plan implements [ux-brainstorm.md §1.10](ux-brainstorm.md#110-clipper-default-from-media-type--duration-) ("Clipper default from media type + duration").
 
@@ -66,14 +67,29 @@ was wrong for whichever subset fell on the other side of the threshold.
 Phase 2 fixes that without changing the user-facing controls or the
 origin format.
 
+## Phase 3 — Hide the clipper picker behind Advanced (shipped)
+
+The picker no longer surfaces the clipper button on first sight. Each of
+the four importer-modal contexts (generic form, local-folder/files,
+server-folder, demo) wraps the clipper button in an **Advanced ▾**
+toggle. Clicking the toggle reveals the existing "Use MediaClipper: …"
+chooser button; clicking again collapses it. A single
+`clipperAdvancedOpen` boolean drives all four contexts (only one is
+visible at a time).
+
+If the user has already picked a non-default (non-first-in-list)
+clipper, the picker stays visible regardless of the toggle so they can
+see and re-edit their selection. The Advanced toggle hides itself in
+that case — collapsing wouldn't actually hide the picker, so the toggle
+would be a no-op.
+
+### Files
+
+- `frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.ts` — Added `clipperAdvancedOpen` field plus `isDefaultClipperSelected(context)`, `showClipperPicker(context)`, and `toggleClipperAdvanced()`.
+- `frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.html` — Gated each of the four clipper-button blocks (form, lf, sf, demo) behind the toggle button.
+- `frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.scss` — `.advanced-toggle` link-styled button (subtle muted text, hover underline). The demo context (inline in the embedder row) uses `.advanced-toggle--inline` for a small left margin.
+
 ## Open follow-ups
-
-### Phase 3 — Hide the clipper picker behind Advanced (deferred)
-
-The ux-brainstorm entry also proposed hiding the clipper button entirely
-until the user opens an "Advanced" section, on the theory that the
-default is almost always right. Deferred until we have evidence on how
-often users tweak the default after Phase 2 lands.
 
 ### Per-item routing for image and text (out of scope)
 
