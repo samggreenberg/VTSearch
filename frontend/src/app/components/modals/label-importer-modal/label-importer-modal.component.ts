@@ -53,7 +53,7 @@ export class LabelImporterModalComponent implements OnInit {
     if (this.view === 'form' && this.selectedImporter) {
       return this.selectedImporter.display_name || this.selectedImporter.name;
     }
-    return this.targetModelName ? 'Add Labels to Detector' : 'Import Labels';
+    return this.targetModelName ? `Import Labels into ${this.targetModelName}` : 'Import Labels';
   }
 
   /** Typed view of the selected importer's plugin fields for the template

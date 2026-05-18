@@ -212,8 +212,15 @@ In Manual mode these are 3 unlabeled jargon buttons. Either hide them by default
 ### 5.7 The "Load" sort mode is buried ★★ S
 "Load" requires a `+` click that opens another modal where the user picks a detector. Instead expose recently-used detectors as a dropdown in the sort row, with a `Manage…` link for the modal. (Mirrors how Word/Photoshop handle recent files.)
 
-### 5.8 "Add Labels" vs "Import Labels" vs "Label importer" ★★ S
-Same action under three names. Pick one (suggest **Import labels**) and use it everywhere — Models dashboard, right-panel button, modal title.
+### 5.8 "Add Labels" vs "Import Labels" vs "Label importer" ★★ S — shipped
+Standardised on **Import Labels** (Title Case, matching the existing `Export Labels` / `Export Detector` siblings):
+
+- Models dashboard detector-card button: `Add Labels` → `Import Labels` (aria-label + tooltip).
+- New Detector → Trained tab form field: `Label Importer` → `Import Labels From`.
+- Label importer modal title: now `Import Labels` standalone, and `Import Labels into <detectorname>` when launched against a specific detector (per user preference: keep contextual variant).
+- Right-panel button was already `Import Labels`; left as-is.
+
+Internal symbols (`addLabelsModalOpen`, `onAddLabels`, `.add-labels-btn`) were intentionally left alone — out of scope for a UI-string fix and would balloon the diff.
 
 ### 5.9 Vote-pile right panel ★ S
 The right panel shows "Good" and "Bad" as two stacked stacks. There's no drag-to-reorder, no batch operations (`select all → un-vote`), and no obvious way to remove an item from a pile (must reopen the centre, find it, vote the other way). Add multi-select + a context menu (remove, re-vote, copy ID).
