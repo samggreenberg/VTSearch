@@ -47,6 +47,23 @@
           <path d="M6.7 2.2h2.6l.3 1.8a5.2 5.2 0 011.2.7l1.7-.7 1.3 2.2-1.4 1.1a5.3 5.3 0 010 1.4l1.4 1.1-1.3 2.2-1.7-.7a5.2 5.2 0 01-1.2.7l-.3 1.8H6.7l-.3-1.8a5.2 5.2 0 01-1.2-.7l-1.7.7-1.3-2.2 1.4-1.1a5.3 5.3 0 010-1.4L2.2 6.2l1.3-2.2 1.7.7a5.2 5.2 0 011.2-.7l.3-1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
           <circle cx="8" cy="8" r="1.6" fill="currentColor"/>
         </svg> Settings</div>
+      @if (recentSessions.length > 0) {
+        <div class="burger-section-header">Recent sessions</div>
+        @for (s of recentSessions; track s.dataset_id + '::' + s.detector_id) {
+          <div
+            class="burger-item burger-subitem"
+            role="menuitem"
+            tabindex="-1"
+            (click)="onRecentClicked(s)"
+            [title]="'Resume ' + s.dataset_name + ' / ' + s.detector_name"
+          >
+            <div class="recent-line">
+              <span class="recent-pair">{{ s.dataset_name }} <span class="recent-sep">/</span> {{ s.detector_name }}</span>
+              <span class="recent-time">{{ formatRecentTime(s.last_activity) }}</span>
+            </div>
+          </div>
+        }
+      }
     </div>
   </nav>
   <a href="mailto:?subject=VTSearch%20Isssue%3A" title="Email us with any comments, concerns, or suggestions!">

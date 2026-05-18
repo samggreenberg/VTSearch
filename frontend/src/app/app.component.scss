@@ -113,6 +113,46 @@ header {
   padding: var(--space-xs) var(--space-xl) var(--space-md);
 }
 
+.burger-section-header {
+  font-size: var(--font-2xs);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--space-md) var(--space-lg) var(--space-xs);
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-xs);
+}
+
+.burger-subitem {
+  padding: var(--space-sm) var(--space-lg);
+
+  .recent-line {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .recent-pair {
+    font-size: var(--font-sm);
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+  }
+
+  .recent-sep {
+    color: var(--text-dim);
+    padding: 0 2px;
+  }
+
+  .recent-time {
+    font-size: var(--font-2xs);
+    color: var(--text-dim);
+  }
+}
+
 .top-bar-btn {
   background: var(--header-btn-bg);
   border: 1px solid var(--header-btn-border);
