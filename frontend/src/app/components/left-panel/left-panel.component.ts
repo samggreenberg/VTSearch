@@ -8,7 +8,7 @@ import { MediaListComponent } from './media-list/media-list.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
-import { MediaItem, MediaTypeInfo, EmbedderInfo } from '../../models/api.models';
+import { Media, MediaTypeInfo, EmbedderInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
@@ -33,7 +33,7 @@ export type { SortMode, SelectMode, SortedItem };
   styleUrl: './left-panel.component.scss',
 })
 export class LeftPanelComponent implements OnInit, OnChanges {
-  @Input() medias: MediaItem[] = [];
+  @Input() medias: Media[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
   @Input() selectedId: number | null = null;

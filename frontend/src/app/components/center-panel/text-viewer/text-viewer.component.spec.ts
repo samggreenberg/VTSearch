@@ -2,14 +2,14 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TextViewerComponent } from './text-viewer.component';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 
 describe('TextViewerComponent', () => {
   let component: TextViewerComponent;
   let fixture: ComponentFixture<TextViewerComponent>;
   let httpMock: HttpTestingController;
 
-  const mockMedia: MediaItem = {
+  const mockMedia: Media = {
     id: 4,
     type: 'text',
     filename: 'test.txt',

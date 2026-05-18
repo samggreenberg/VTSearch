@@ -1,13 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AudioPlayerComponent } from './audio-player.component';
 import { ActiveContextService } from '../../../services/active-context.service';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 
 describe('AudioPlayerComponent', () => {
   let component: AudioPlayerComponent;
   let fixture: ComponentFixture<AudioPlayerComponent>;
 
-  const mockMedia: MediaItem = {
+  const mockMedia: Media = {
     id: 1,
     type: 'audio',
     filename: 'test.wav',

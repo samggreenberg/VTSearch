@@ -2,7 +2,7 @@ import { Component, EventEmitter, Input, OnInit, Output, OnChanges, SimpleChange
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 import { LabelSortMode } from '../label-sort/label-sort.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
@@ -25,7 +25,7 @@ export interface LabelEntry {
 export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterViewChecked {
   @Input() label: 'good' | 'bad' = 'good';
   @Input() ids: number[] = [];
-  @Input() medias: MediaItem[] = [];
+  @Input() medias: Media[] = [];
   @Input() clickTimes: Record<string, number> = {};
   @Input() learnedScores: Record<string, number> = {};
   @Input() sortMode: LabelSortMode = 'time-desc';
@@ -40,7 +40,7 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
   sortedEntries: LabelEntry[] = [];
   private pendingScrollPct: number | null = null;
   /** Pre-built Map for O(1) media stub lookups by id (rebuilt when medias input changes). */
-  private mediaMap = new Map<number, MediaItem>();
+  private mediaMap = new Map<number, Media>();
   private readonly destroy$ = new Subject<void>();
 
   constructor(
@@ -80,7 +80,7 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
     this.destroy$.complete();
   }
 
-  private lookup(id: number): MediaItem | undefined {
+  private lookup(id: number): Media | undefined {
     return this.metadataCache.get(id) ?? this.mediaMap.get(id);
   }
 

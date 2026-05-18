@@ -1,6 +1,6 @@
 import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
@@ -11,7 +11,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
   styleUrl: './media-item.component.scss',
 })
 export class MediaItemComponent implements OnChanges {
-  @Input({ required: true }) media!: MediaItem;
+  @Input({ required: true }) media!: Media;
   @Input() active = false;
   @Input() voteLabel: 'good' | 'bad' | null = null;
   @Input() score: number | null = null;
