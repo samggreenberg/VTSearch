@@ -174,7 +174,7 @@ def _run_converter_step(media: dict[str, Any], step: ChainStep) -> tuple[list[di
     return outputs, trail_entries
 
 
-def _stamp_origin(
+def _stamp_origin(  # noqa: C901
     clip: dict[str, Any],
     parent_origin: dict[str, Any] | None,
     parent_origin_name: str,
@@ -226,7 +226,7 @@ def _stamp_origin(
         params["clip_index"] = str(last_clipper["out_index"])
 
 
-def apply_chain_to_clips(
+def apply_chain_to_clips(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     steps: list[ChainStep],
     *,
@@ -390,7 +390,7 @@ _FINAL_EXT_BY_TYPE = {
 }
 
 
-def replay_chain_on_file(
+def replay_chain_on_file(  # noqa: C901
     file_path: Path,
     steps: list[ChainStep],
     embedder_name: str = "",

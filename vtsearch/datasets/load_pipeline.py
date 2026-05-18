@@ -292,12 +292,7 @@ def _apply_clipper(  # noqa: C901
     # precedence; otherwise build a length-1 chain from the legacy
     # single-clipper args (if any).
     steps = normalise_chain(chain_steps)
-    legacy_default = (
-        not steps
-        and not chain_steps
-        and clipper_name
-        and clipper_name.endswith("_default")
-    )
+    legacy_default = not steps and not chain_steps and clipper_name and clipper_name.endswith("_default")
     if legacy_default:
         # Legacy fast path: a single ``*_default`` clipper is a no-op on
         # the data but stamps ``clipper`` / ``clipper_<key>`` in every
