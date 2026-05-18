@@ -644,6 +644,22 @@
         ],
         "type": "object"
       },
+      "BumpRecentSessionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string"
+          },
+          "detector_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "detector_id"
+        ],
+        "type": "object"
+      },
       "CancelDatasetLoadResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3323,6 +3339,49 @@
         },
         "required": [
           "ok"
+        ],
+        "type": "object"
+      },
+      "RecentSession": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string"
+          },
+          "dataset_name": {
+            "type": "string"
+          },
+          "detector_id": {
+            "type": "string"
+          },
+          "detector_name": {
+            "type": "string"
+          },
+          "last_activity": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "dataset_name",
+          "detector_id",
+          "detector_name",
+          "last_activity"
+        ],
+        "type": "object"
+      },
+      "RecentSessionsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/RecentSession"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessions"
         ],
         "type": "object"
       },
@@ -9408,6 +9467,65 @@
         }
       ]
     },
+    "/api/sessions/recent": {
+      "get": {
+        "description": "Entries whose dataset or detector id is no longer registered are\nfiltered out. Most-recent first.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentSessionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the current user's recent (dataset, detector) sessions.",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "post": {
+        "description": "Upserts the pair, moves it to the front of the list, and trims\nthe list to :data:`MAX_RECENT_SESSIONS` entries. The response is\nthe same hydrated list as :func:`list_recent_sessions` so callers\ncan update local UI in one round-trip.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BumpRecentSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentSessionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Record activity on a ``(dataset_id, detector_id)`` pair.",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
     "/api/settings": {
       "get": {
         "responses": {
@@ -10140,6 +10258,10 @@
     {
       "description": "Text / example / learned sort, votes, inclusion, safe-thresholds, diversity tree.",
       "name": "sorting"
+    },
+    {
+      "description": "Recent (dataset, detector) labelling sessions per user.",
+      "name": "sessions"
     },
     {
       "description": "Manage autorun extractors / localizers and the bundled pregen-processor list.",

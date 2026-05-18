@@ -1,10 +1,11 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router, UrlTree } from '@angular/router';
 import { Observable, combineLatest, of } from 'rxjs';
-import { filter, map, switchMap, take } from 'rxjs/operators';
+import { filter, map, switchMap, take, tap } from 'rxjs/operators';
 import { ActiveContextService } from '../services/active-context.service';
 import { ContextSwitchService } from '../services/context-switch.service';
 import { DatasetStateService } from '../services/dataset-state.service';
+import { RecentSessionsService } from '../services/recent-sessions.service';
 import { ToastService } from '../services/toast.service';
 
 /**
@@ -30,6 +31,7 @@ export const activeContextGuard: CanActivateFn = (route) => {
   const activeContext = inject(ActiveContextService);
   const contextSwitch = inject(ContextSwitchService);
   const datasetState = inject(DatasetStateService);
+  const recentSessions = inject(RecentSessionsService);
   const toast = inject(ToastService);
 
   const datasetId = route.paramMap.get('datasetId') || '';
@@ -75,6 +77,7 @@ export const activeContextGuard: CanActivateFn = (route) => {
         activeContext.modelId === detectorId &&
         !contextSwitch.switching
       ) {
+        recentSessions.bump(datasetId, detectorId);
         return of(true);
       }
 
@@ -85,6 +88,7 @@ export const activeContextGuard: CanActivateFn = (route) => {
         // `applyActivePair` returns an Observable that completes (no
         // value) on success. `combineLatest`-ing with an of(true) ensures
         // the guard emits `true` once prep settles.
+        tap(() => recentSessions.bump(datasetId, detectorId)),
         switchMap(() => of(true as const)),
       );
     }),
