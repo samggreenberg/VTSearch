@@ -390,9 +390,7 @@ detector_loading_tasks = LoadingTasksTracker()
 #: Dataset / import progress (used by dataset loading, downloading, embedding).
 #: Adds ``staging_result`` on top of the common extras for the combine-datasets
 #: staging flow.
-dataset_progress = ProgressTracker(
-    extra_fields={**_PROGRESS_COMMON_EXTRAS, "staging_result": None}
-)
+dataset_progress = ProgressTracker(extra_fields={**_PROGRESS_COMMON_EXTRAS, "staging_result": None})
 
 #: Sort-specific progress (used by text-sort operations).
 sort_progress = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
@@ -496,9 +494,7 @@ def update_sort_progress(
     error: Any = _UNSET,
 ) -> None:
     """Update the sort progress tracker in a thread-safe manner."""
-    sort_progress.update(
-        status, message, current, total, **_common_extras_kwargs(step, total_steps, error)
-    )
+    sort_progress.update(status, message, current, total, **_common_extras_kwargs(step, total_steps, error))
 
 
 def get_sort_progress() -> dict[str, Any]:
@@ -516,9 +512,7 @@ def update_eval_progress(
     error: Any = _UNSET,
 ) -> None:
     """Update the eval progress tracker in a thread-safe manner."""
-    eval_progress.update(
-        status, message, current, total, **_common_extras_kwargs(step, total_steps, error)
-    )
+    eval_progress.update(status, message, current, total, **_common_extras_kwargs(step, total_steps, error))
 
 
 def get_eval_progress() -> dict[str, Any]:
@@ -536,9 +530,7 @@ def update_find_progress(
     error: Any = _UNSET,
 ) -> None:
     """Update the find progress tracker in a thread-safe manner."""
-    find_progress.update(
-        status, message, current, total, **_common_extras_kwargs(step, total_steps, error)
-    )
+    find_progress.update(status, message, current, total, **_common_extras_kwargs(step, total_steps, error))
 
 
 def get_find_progress() -> dict[str, Any]:
