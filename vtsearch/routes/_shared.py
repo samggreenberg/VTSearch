@@ -158,9 +158,12 @@ def validate_plugin_args(
 
     schema = get_plugin_arg_schema(plugin)
     try:
-        validated: dict = schema.load(body)
+        # Schema.load() returns a wide list|dict|None per the marshmallow stubs;
+        # our schema always emits a flat dict, so narrow explicitly.
+        loaded = schema.load(body)
     except ValidationError as exc:
         abort(422, message="Validation error", errors={"json": exc.messages})
+    validated: dict = loaded if isinstance(loaded, dict) else {}
 
     _populate_file_fields(plugin, validated, has_file_fields=has_file_fields, file_mode=file_mode)
 

@@ -19,11 +19,11 @@ from __future__ import annotations
 import pytest
 from marshmallow import ValidationError
 
-from vtsearch.plugins import PluginField
+from vtsearch.plugins import PluginBase, PluginField
 from vtsearch.plugins.schema import get_plugin_arg_schema, make_plugin_arg_schema
 
 
-class _FakePlugin:
+class _FakePlugin(PluginBase):
     """Bare-minimum stand-in for a real plugin instance."""
 
     def __init__(self, fields: list[PluginField]) -> None:
@@ -130,6 +130,7 @@ class TestSchemaBuilder:
         plugin = _FakePlugin([PluginField(key="name", label="Name", field_type="text", required=False)])
         schema = make_plugin_arg_schema(plugin)()
         loaded = schema.load({"name": "ok", "bogus": "junk", "chunk_size": 99})
+        assert isinstance(loaded, dict)
         assert "bogus" not in loaded
         assert "chunk_size" not in loaded
         assert loaded["name"] == "ok"

@@ -2403,3 +2403,219 @@ class TestApplyClipperResolvesAuto:
         first = next(iter(clips.values()))
         assert first["origin"]["params"]["clipper"] == "sound_tiling"
         assert first["origin"]["params"]["clipper_duration"] == "4.0"
+
+
+# ---------------------------------------------------------------------------
+# ImageFaceClipper
+# ---------------------------------------------------------------------------
+
+
+class _FakeBBox:
+    def __init__(self, xmin: float, ymin: float, width: float, height: float) -> None:
+        self.xmin = xmin
+        self.ymin = ymin
+        self.width = width
+        self.height = height
+
+
+class _FakeLocationData:
+    def __init__(self, bbox: _FakeBBox) -> None:
+        self.relative_bounding_box = bbox
+
+
+class _FakeDetection:
+    def __init__(self, confidence: float, bbox: _FakeBBox) -> None:
+        self.score = [confidence]
+        self.location_data = _FakeLocationData(bbox)
+
+
+class _FakeResults:
+    def __init__(self, detections: list[_FakeDetection]) -> None:
+        self.detections = detections
+
+
+def _stub_detector(detections: list[_FakeDetection]):
+    """Build a MediaPipe-shaped detector stub for ImageFaceClipper."""
+    from unittest.mock import MagicMock
+
+    detector = MagicMock()
+    detector.process.return_value = _FakeResults(detections)
+    return detector
+
+
+class TestImageFaceClipper:
+    def test_identity(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper()
+        assert c.name == "image_face"
+        assert c.media_type == "image"
+        assert c.display_name == "Face crops"
+        assert isinstance(c, MediaClipper)
+
+    def test_registered_in_registry(self):
+        from vtsearch.media import get_clipper
+
+        c = get_clipper("image_face")
+        assert c.name == "image_face"
+        assert c.media_type == "image"
+
+    def test_rejects_invalid_threshold(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        with pytest.raises(ValueError):
+            ImageFaceClipper(threshold=-0.1)
+        with pytest.raises(ValueError):
+            ImageFaceClipper(threshold=1.5)
+
+    def test_rejects_invalid_model_selection(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        with pytest.raises(ValueError):
+            ImageFaceClipper(model_selection=2)
+
+    def test_rejects_negative_padding(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        with pytest.raises(ValueError):
+            ImageFaceClipper(padding=-0.01)
+
+    def test_rejects_non_positive_min_size(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        with pytest.raises(ValueError):
+            ImageFaceClipper(min_size=0)
+
+    def test_returns_empty_when_no_detections(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper()
+        c._detector = _stub_detector([])
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        assert c.clip(media) == []
+
+    def test_returns_empty_when_no_media_bytes(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper()
+        c._detector = _stub_detector([_FakeDetection(0.9, _FakeBBox(0.1, 0.1, 0.2, 0.2))])
+        assert c.clip({"id": 1, "type": "image"}) == []
+
+    def test_emits_one_clip_per_face(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper(padding=0.0)
+        c._detector = _stub_detector(
+            [
+                _FakeDetection(0.95, _FakeBBox(0.1, 0.1, 0.2, 0.2)),
+                _FakeDetection(0.85, _FakeBBox(0.5, 0.4, 0.2, 0.2)),
+            ]
+        )
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        clips = c.clip(media)
+        assert len(clips) == 2
+        for clip in clips:
+            assert clip["type"] == "image"
+            assert isinstance(clip["media_bytes"], bytes)
+            assert clip["width"] > 0 and clip["height"] > 0
+            assert clip["file_size"] == len(clip["media_bytes"])
+            assert clip["clip_box"] is not None and len(clip["clip_box"]) == 4
+
+    def test_clip_index_orders_by_confidence(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper(padding=0.0)
+        c._detector = _stub_detector(
+            [
+                _FakeDetection(0.6, _FakeBBox(0.1, 0.1, 0.2, 0.2)),
+                _FakeDetection(0.95, _FakeBBox(0.5, 0.4, 0.2, 0.2)),
+            ]
+        )
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        clips = c.clip(media)
+        assert clips[0]["clip_index"] == 0
+        assert clips[1]["clip_index"] == 1
+        # Highest-confidence detection (0.95) lands at index 0; its bbox was
+        # the second one passed in, centred at (0.5, 0.4).
+        x1, y1, _x2, _y2 = clips[0]["clip_box"]
+        assert x1 >= int(640 * 0.5) - 1
+
+    def test_drops_low_confidence(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper(threshold=0.7, padding=0.0)
+        c._detector = _stub_detector(
+            [
+                _FakeDetection(0.95, _FakeBBox(0.1, 0.1, 0.2, 0.2)),
+                _FakeDetection(0.4, _FakeBBox(0.5, 0.4, 0.2, 0.2)),
+            ]
+        )
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        clips = c.clip(media)
+        assert len(clips) == 1
+
+    def test_drops_too_small(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper(min_size=100, padding=0.0)
+        # 0.05 * 640 = 32px — below the 100px floor.
+        c._detector = _stub_detector([_FakeDetection(0.95, _FakeBBox(0.1, 0.1, 0.05, 0.05))])
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        assert c.clip(media) == []
+
+    def test_padding_expands_box(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper(padding=0.5)
+        # Face at (320,240) sized 64x64 → padded by 32px on each side → 128x128.
+        # 0.5..0.5+64/640=0.6 in x; 0.5..0.5+64/480≈0.633 in y.
+        c._detector = _stub_detector([_FakeDetection(0.95, _FakeBBox(0.5, 0.5, 0.1, 0.1333))])
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        clips = c.clip(media)
+        assert len(clips) == 1
+        x1, y1, x2, y2 = clips[0]["clip_box"]
+        assert (x2 - x1) >= 96 and (y2 - y1) >= 96
+
+    def test_clip_drops_inherited_embedding_and_md5(self):
+        """Cropped faces must not keep the parent's embedding / md5 —
+        otherwise the load-pipeline fixup won't re-embed single-face crops."""
+        from vtsearch.media.image.clipper import ImageFaceClipper
+        import numpy as np
+
+        c = ImageFaceClipper(padding=0.0)
+        c._detector = _stub_detector([_FakeDetection(0.95, _FakeBBox(0.1, 0.1, 0.3, 0.3))])
+        media = {
+            "id": 1,
+            "type": "image",
+            "media_bytes": _make_image_bytes(640, 480),
+            "md5": "deadbeef",
+            "embedding": np.zeros(8, dtype=np.float32),
+        }
+        clips = c.clip(media)
+        assert len(clips) == 1
+        assert "embedding" not in clips[0]
+        assert "md5" not in clips[0]
+
+    def test_with_params_overrides(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper().with_params({"threshold": 0.8, "padding": 0.4, "min_size": 64, "model_selection": 0})
+        assert isinstance(c, ImageFaceClipper)
+        assert c._threshold == 0.8
+        assert c._padding == 0.4
+        assert c._min_size == 64
+        assert c._model_selection == 0
+
+    def test_to_dict_includes_params(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        d = ImageFaceClipper(threshold=0.7, padding=0.3, min_size=48, model_selection=0).to_dict()
+        assert d["name"] == "image_face"
+        assert d["media_type"] == "image"
+        assert d["threshold"] == 0.7
+        assert d["padding"] == 0.3
+        assert d["min_size"] == 48
+        assert d["model_selection"] == 0
+        assert "creation_questions" in d
+        keys = {q["key"] for q in d["creation_questions"]}
+        assert keys == {"threshold", "padding", "min_size", "model_selection"}

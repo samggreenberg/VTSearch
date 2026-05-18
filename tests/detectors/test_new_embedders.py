@@ -448,8 +448,8 @@ class TestAllEmbeddersRegistration:
 
         embedders = all_embedders()
         # 7 original + 8 image embedders (clip, siglip2, plus single/patch
-        # variants for dinov2, dinov3, eupe).
-        assert len(embedders) == 15
+        # variants for dinov2, dinov3, eupe) + 1 face embedder.
+        assert len(embedders) == 16
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -492,6 +492,7 @@ class TestAllEmbeddersRegistration:
             "bge",
             "xclip",
             "languagebind",
+            "face",
         }
         assert names == expected
 
@@ -515,6 +516,7 @@ class TestAllEmbeddersRegistration:
             "dinov3_patch",
             "eupe_single",
             "eupe_patch",
+            "face",
         }
 
     def test_siglip_is_still_default_image_embedder(self):
@@ -544,8 +546,8 @@ class TestAllEmbeddersRegistration:
 
         dicts = all_embedders_dict()
         # 7 original + 8 image embedders (clip, siglip2, plus single/patch
-        # variants for dinov2, dinov3, eupe).
-        assert len(dicts) == 15
+        # variants for dinov2, dinov3, eupe) + 1 face embedder.
+        assert len(dicts) == 16
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
