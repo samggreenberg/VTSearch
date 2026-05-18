@@ -336,8 +336,10 @@ Several places accept drag-drop (file import, example media into detector) but s
 
 **Open follow-ups:** The examples-editor modal (Edit Examples → + Add Good / + Add Bad) still uses small button-driven file inputs. Adding compact drop zones there is straightforward — the same `vt-drop-zone` component can drop in next to or in place of the `+ Add Good` / `+ Add Bad` buttons — but was descoped from this pass at the user's request.
 
-### 7.7 Modal stacking ★★ XS
+### 7.7 Modal stacking ★★ XS — Resolved as designed
 Some flows can stack 3 modals deep (importer → demo picker → embedder picker). Stacking modals is a known anti-pattern. Either convert nested modals to in-place sub-views with a back button (§6.4), or use a single multi-step wizard.
+
+**Resolution:** The original 3-deep worst case no longer exists. The demo picker and embedder picker inside `dataset-importer-modal` are already in-place sub-views (`<div class="demo-picker">` swapped via `@if`), not stacked modals. The only remaining nested modal is `dataset-importer-modal` → `vt-clipper-chooser` (2-deep), which is a legitimate "child task pauses parent" pattern and reads correctly with the existing `← Back` convention. The team's policy preference is to keep nested modals for 2-deep child-task flows; the real anti-pattern is 3+ deep, which is no longer present. No code change needed.
 
 ### 7.8 Shift-drag to draw region ★★ XS — shipped
 The image region-vote uses Shift+drag with no UI cue. Standard image-region tools use a dedicated mode toggle (a button that turns the cursor into a marquee). Keep Shift+drag as a power-user shortcut, but also expose a Marquee button.
