@@ -403,6 +403,7 @@ describe('DashboardComponent', () => {
     const banner = el.querySelector('.welcome-banner');
     expect(banner).toBeTruthy();
     expect(banner?.textContent || '').toContain('Welcome');
+    expect(banner?.querySelector('.welcome-banner-illustration')).toBeTruthy();
   });
 
   describe('welcome banner', () => {

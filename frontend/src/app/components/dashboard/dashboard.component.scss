@@ -259,6 +259,12 @@
   padding: 24px;
   text-align: center;
 
+  .welcome-banner-illustration {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    margin-bottom: 4px;
+  }
+
   .welcome-banner-text {
     color: var(--text-primary);
     margin: 0;
