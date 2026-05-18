@@ -78,9 +78,6 @@ export class ActiveContextService {
    * it captured at start to the current id and discards the result if
    * they differ. Cancellation of in-flight work is best-effort; this
    * request-id check is the correctness guarantee.
-   *
-   * See `docs/plans/active-context-switcher.md` § "Cancel-and-replace
-   * on rapid re-click".
    */
   nextRequestId(): number {
     this.requestCounter += 1;

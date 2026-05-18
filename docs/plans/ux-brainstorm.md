@@ -132,8 +132,12 @@ Selecting 3 datasets and clicking the bulk-load action loads them serially due t
 ### 3.6 Lazy-create per-media-type panel preferences ★ XS
 First time a user opens a new media type, the panel settings (`view_mode_*`, `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`) all write to disk. Coalesce into one save. (Minor but the first-image-open feels janky on slow disks.)
 
-### 3.7 Don't re-embed text queries on every keystroke ★★ XS
-Verify: if the Text-sort input has live-search, debounce + cache. If it requires Enter, fine. Either way, cache the last 5 query embeddings keyed by `(media_type, query)` for instant re-sort when toggling sort modes.
+### 3.7 Don't re-embed text queries on every keystroke ★★ XS — **shipped**
+Was: 400ms debounced live-search on the Text-sort input (`sort-bar.component.ts`) firing `POST /api/sort` → `embed_text_query()` on every pause, with no caching frontend or backend.
+
+Now:
+- Frontend: live-search removed. The input only triggers a search on Enter or the new "Search" button (disabled while the trimmed query is empty). See `frontend/src/app/components/left-panel/sort-bar/sort-bar.component.{ts,html,scss}`.
+- Backend: 32-entry in-memory LRU in `vtsearch/embedding/helpers.py` keyed by `(embedder_name, media_type, enrich, text)`. Repeat queries — re-submitting the same string, toggling sort modes and back, or `eval/runner.py` calls — skip the text encoder. Cache is process-scoped (no persistence, per "No Persisted Vectors") and cleared between tests via the existing `reset_state` autouse fixture.
 
 ### 3.8 Skip diversity-tree rebuild on small updates ★ M
 When a few medias are added/removed (e.g. clip fix-up), today the whole diversity tree rebuilds. For incremental changes < 1% of dataset size, do an incremental insert/delete instead. Saves seconds on every clip-aware import.
@@ -208,8 +212,15 @@ In Manual mode these are 3 unlabeled jargon buttons. Either hide them by default
 ### 5.7 The "Load" sort mode is buried ★★ S
 "Load" requires a `+` click that opens another modal where the user picks a detector. Instead expose recently-used detectors as a dropdown in the sort row, with a `Manage…` link for the modal. (Mirrors how Word/Photoshop handle recent files.)
 
-### 5.8 "Add Labels" vs "Import Labels" vs "Label importer" ★★ S
-Same action under three names. Pick one (suggest **Import labels**) and use it everywhere — Models dashboard, right-panel button, modal title.
+### 5.8 "Add Labels" vs "Import Labels" vs "Label importer" ★★ S — shipped
+Standardised on **Import Labels** (Title Case, matching the existing `Export Labels` / `Export Detector` siblings):
+
+- Models dashboard detector-card button: `Add Labels` → `Import Labels` (aria-label + tooltip).
+- New Detector → Trained tab form field: `Label Importer` → `Import Labels From`.
+- Label importer modal title: now `Import Labels` standalone, and `Import Labels into <detectorname>` when launched against a specific detector (per user preference: keep contextual variant).
+- Right-panel button was already `Import Labels`; left as-is.
+
+Internal symbols (`addLabelsModalOpen`, `onAddLabels`, `.add-labels-btn`) were intentionally left alone — out of scope for a UI-string fix and would balloon the diff.
 
 ### 5.9 Vote-pile right panel ★ S
 The right panel shows "Good" and "Bad" as two stacked stacks. There's no drag-to-reorder, no batch operations (`select all → un-vote`), and no obvious way to remove an item from a pile (must reopen the centre, find it, vote the other way). Add multi-select + a context menu (remove, re-vote, copy ID).
@@ -265,14 +276,20 @@ Settings auto-save but show no "saved" feedback. Some forms (export modal) requi
 ### 6.8 Embedder display names ★★ XS
 The dropdown shows raw IDs (`siglip`, `dinov3_patch`, `e5`). Map each to a human label (`SigLIP (general images)`, `DINOv3 patch (region-aware)`, `E5 (text)`). Keep the raw ID as a secondary `<small>` line for power users.
 
-### 6.9 SSE channel/progress schemas ★ S
-Each long-running operation emits a slightly different progress payload (`step`/`total_steps` for dataset, `current`/`total` for eval, plain status strings for sort). Standardize on a single `ProgressEvent` interface so the frontend can render any of them with the same component.
+### 6.9 SSE channel/progress schemas ★ S — SHIPPED
+Each long-running operation used to emit a slightly different progress payload (`step`/`total_steps` for dataset, `current`/`total` for eval, plain status strings for sort). ~~Standardize on a single `ProgressEvent` interface so the frontend can render any of them with the same component.~~ Shipped:
+
+- **Backend** (`vtsearch/concurrency/progress.py`): every singleton `ProgressTracker` (dataset, sort, eval, find) and every per-task tracker created by `LoadingTasksTracker` now exposes the same `_PROGRESS_COMMON_EXTRAS = {"step": None, "total_steps": None, "error": None}` on top of the four base fields. `dataset_progress` additionally carries `staging_result` (used only by combine-datasets staging). `update_sort_progress` and `update_eval_progress` accept the new extras as optional kwargs, with the merge semantics shared through a single `_common_extras_kwargs` helper.
+- **Frontend** (`frontend/src/app/models/api.models.ts`): replaced `DatasetProgress` and the untyped `SortProgressResponse` with a single `ProgressEvent` interface. `LoadingTask extends ProgressEvent` and re-narrows the base fields as required. `ProgressEventsService` now types every channel subject as `BehaviorSubject<ProgressEvent>` (or `LoadingTask[]`); the `find$` and `eval$` channels are no longer `Record<string, unknown>`.
+- **Frontend** (`frontend/src/app/utils/format-progress.ts`): added `formatProgressMessage(progress, defaultMessage)` and `isProgressIndeterminate(progress)` — the single source of truth for the `[Step S/T] (C/T) message` layout that previously lived inline in `dashboard.component.ts` (×2), `dataset-card.component.ts`, `detector-card.component.html`, `find-view.component.ts`, and `label-view.component.ts`. All six call sites were converted.
+
+Wire-format note: no breaking change for current callers — the new sort/eval `step`/`total_steps`/`error` keys default to `null` and just become available for future multi-step phases.
 
 ### 6.10 Date formatting ★ XS — SHIPPED
 "last_trained / created" columns format dates differently from the version string in the footer. ~~Use one formatter (relative for < 7d ago, absolute YYYY-MM-DD otherwise) everywhere.~~ Shipped: a single `frontend/src/app/utils/format-date.ts` is now called from all four sites (detector card, dataset card, dataset stats modal, settings-modal version footer). Always-absolute — no relative branch. Columns render `YYYY-MM-DD HH:MM` (local), version renders `YYYY-MM-DD` (UTC). Relative time was dropped deliberately: it drifts on every reload and the coarse buckets (`2w ago`) throw away precision that matters in a model-management dashboard.
 
-### 6.11 Active-dataset/detector indicator ★★ S — graduated to plan
-**Indicator half is already shipped** as read-only top-bar text (`app.component.html:62-63`, `Data: foo` / `Detector: cats`, driven by `ActiveContextService`). **Switcher half** — turning the read-only fields into click-to-switch pulldowns with compatibility handling, "Add New" footers, in-place modal launching, URL-encoded active pair, and in-flight job spinners — is now scoped as a three-phase plan: see [active-context-switcher.md](active-context-switcher.md). That plan also largely closes [§8.2](#82-switching-active-datasetdetector--s).
+### 6.11 Active-dataset/detector indicator ★★ S — shipped
+The read-only top-bar fields became click-to-switch `<vt-context-pulldown>` instances with media-type compatibility dimming, "+ Add New" footers that open the importer / new-detector modals in-place, an `vt-incompatible-pair-explainer` overlay for half-set / incompatible pairs, URL-encoded active pair (`/label/:datasetId/:detectorId` and `/find/:datasetId/:detectorId` gated by `activeContextGuard`), per-pair spinner glyphs driven by `GET /api/jobs/active`, learned-sort rehydration via the `JobManager` signature cache, and a re-embed task path that fires `"Re-resolving labels for X's embedder…"` when the active dataset's embedder differs from the loaded detector's. This entry also closed [§8.2](#82-switching-active-datasetdetector--s) below.
 
 ### 6.12 Plugin field types ★ S — shipped
 Free-text fields that should be numbers (`n_mels`, `time_window_s`, `size` for synthetic), enums that should be selects (`colormap`, `language` for OCR), and password fields disguised as text (`auth_header`). Tighten the `PluginField` type system and migrate.
@@ -312,14 +329,22 @@ Panel dividers and column-resize handles are ~2px wide. Make them 8px hit target
 ### 7.5 Folder-tree breadcrumb browser ★ M
 The server-folder browser has a custom breadcrumb + table UI. It's functional but every modern OS has standardized on the same "left sidebar with starred/recent locations, breadcrumb on top, list in middle, double-click to enter, Enter key to confirm". Bring ours closer to that.
 
-### 7.6 Drag-and-drop affordances ★ S
+### 7.6 Drag-and-drop affordances ★ S — SHIPPED
 Several places accept drag-drop (file import, example media into detector) but show no drop zone until the drag is over the page. Add visible dashed drop zones with `"Drop a folder here to import"` text.
 
-### 7.7 Modal stacking ★★ XS
+**What shipped:** New reusable `vt-drop-zone` component (`frontend/src/app/components/drop-zone/`) renders a dashed-bordered, clickable target that doubles as a drag-drop receiver. It handles folder drops by walking `webkitGetAsEntry()` recursively and synthesising `webkitRelativePath` on each File so the existing upload code sees the same shape as a `<input type=file webkitdirectory>` selection. Wired into three places: (1) the dataset importer modal's Local Folder / Local Files views (`"Drop a folder here to import"` / `"Drop files here to import"`); (2) the new-detector modal's media-picker Local Folder / Local Files views (`"Drop a folder here to use as example"` / `"Drop a media file here to use as example"`); (3) the new-detector main form (tab=blank), where it replaces the inline "Upload File…" button alongside the existing "Browse Media…" button. The previous bare `<input type=file>` widgets in those locations were removed.
+
+**Open follow-ups:** The examples-editor modal (Edit Examples → + Add Good / + Add Bad) still uses small button-driven file inputs. Adding compact drop zones there is straightforward — the same `vt-drop-zone` component can drop in next to or in place of the `+ Add Good` / `+ Add Bad` buttons — but was descoped from this pass at the user's request.
+
+### 7.7 Modal stacking ★★ XS — Resolved as designed
 Some flows can stack 3 modals deep (importer → demo picker → embedder picker). Stacking modals is a known anti-pattern. Either convert nested modals to in-place sub-views with a back button (§6.4), or use a single multi-step wizard.
 
-### 7.8 Shift-drag to draw region ★★ XS
+**Resolution:** The original 3-deep worst case no longer exists. The demo picker and embedder picker inside `dataset-importer-modal` are already in-place sub-views (`<div class="demo-picker">` swapped via `@if`), not stacked modals. The only remaining nested modal is `dataset-importer-modal` → `vt-clipper-chooser` (2-deep), which is a legitimate "child task pauses parent" pattern and reads correctly with the existing `← Back` convention. The team's policy preference is to keep nested modals for 2-deep child-task flows; the real anti-pattern is 3+ deep, which is no longer present. No code change needed.
+
+### 7.8 Shift-drag to draw region ★★ XS — shipped
 The image region-vote uses Shift+drag with no UI cue. Standard image-region tools use a dedicated mode toggle (a button that turns the cursor into a marquee). Keep Shift+drag as a power-user shortcut, but also expose a Marquee button.
+
+**What shipped:** A dashed-rectangle toggle button in the image-view-controls toolbar (next to Rotate / Zoom / Reset). Clicking it flips `ImageViewerComponent.marqueeMode` on; while on, the cursor stays a crosshair and a normal left-drag draws a region — no Shift required. The toggle is sticky (persists across media navigation, by analogy with Photoshop / CVAT tool selection) and uses the accent colour for its active state so it doesn't conflate with the green Good-vote button. Shift+drag remains a power-user shortcut and works whether the toggle is on or off. Keyboard help + USER_GUIDE updated.
 
 ### 7.9 Region rectangle interaction ★ S
 After drawing, the rectangle is editable via 8 handles — good. But the "click on the rectangle to restore" interaction is non-discoverable. A standard "✓ confirm region" / "✗ clear" button overlay on the rectangle would replace the current "press ← twice to discard" pattern.
@@ -337,8 +362,8 @@ Workflows the user *can* do today but that take too many steps and clicks.
 Today: open menu → pick importer category → pick importer → fill form → pick media type → pick embedder → submit → wait → close modal → select dataset → click "New detector" → fill form → click Train → vote 7 items → export → pick exporter → fill form → submit. That's ~15 clicks before the user has anything to show.
 **Compressed flow:** "Quick start" CTA on empty dashboard → pick a media type → upload a folder → app auto-creates a detector with the folder's name and drops the user into the labeling view. Export becomes a single header button with a recent-target fallback.
 
-### 8.2 Switching active dataset/detector ★★ S — graduated to plan
-Today: navigate back to dashboard → reselect → click Train again. Scoped together with §6.11 as the [active-context-switcher.md](active-context-switcher.md) plan: top-bar pulldowns make this a 1-click switch from any view. Sort mode is per-user-tier and survives the switch by design; view-local state (scroll, partial Find query) resets per Phase 1's "switch = re-entry" rule.
+### 8.2 Switching active dataset/detector ★★ S — shipped
+Shipped together with §6.11: the top-bar pulldowns make this a 1-click switch from any view. Sort mode is per-user-tier and survives the switch by design; view-local state (scroll, partial Find query) resets on switch (treated as a re-entry to the view). See §6.11 for the full set of affordances.
 
 ### 8.3 Cross-dataset training with a re-used labelset ★★ M
 The labelset-source machinery lets a detector pull labels from a different dataset, but using it requires:
@@ -351,8 +376,17 @@ Compress to a "Use these labels on another dataset" button on the right panel.
 ### 8.4 Re-running auto-detect after edits ★ S
 Tweaking a label, then re-running auto-detect, is currently: edit → save → navigate to dashboard → re-pick dataset+detector → click Find → wait → reopen results modal. Add a "Re-run with current settings" button inside the existing results modal.
 
-### 8.5 Importing pre-computed embeddings ★ S
-Today only `server_files` and `local_files` accept `.npz` vectors, and the field is buried in the form. Expose `.npz` as a top-level option in *any* importer that loads files (so users with their own embeddings can use the friendlier importers too).
+### 8.5 Importing pre-computed embeddings ★ S — shipped
+`.npz` is now a top-level option in every importer that loads files:
+
+- `server_folder` and `server_files` declare a separate `vectors_file` `PluginField` (server_path, accepts `.npz`, optional). Files in the folder / listed paths whose basename or relative path matches a key in the archive reuse the supplied vector instead of running the embedder.
+- `local_folder` now exposes the same `.npz` upload widget that `local_files` already had — vectors are forwarded to `/api/dataset/import-local-folder` regardless of picker kind.
+- `local_files`'s existing widget stays put and is shared across both browser-side flows.
+
+Open follow-ups:
+
+- `http_archive`: still no `.npz` option. Matching filenames inside an extracted archive is hairy and rarely useful, so it was deliberately left out — revisit if a user asks.
+- Server-side `.npz` field for `server_folder` is a plain text input; could be upgraded to the same server-path browser used for the folder picker if the typing friction shows up in testing.
 
 ### 8.6 Configure & test a webhook exporter ★ M
 Currently: open export modal → pick webhook → fill URL → fill auth → submit → realize the URL was wrong → repeat. Add a "Send test ping" button next to the URL field that fires a single test payload.
@@ -360,11 +394,21 @@ Currently: open export modal → pick webhook → fill URL → fill auth → sub
 ### 8.7 Combining detectors ★ M
 The "combine detectors" feature exists but requires multi-select + a non-obvious icon button. Surface as a clear "Merge detectors" CTA with a preview of what the merged detector would look like (count, intersection vs union choice, name).
 
-### 8.8 Renaming + re-syncing a detector ★ XS
+### 8.8 Renaming + re-syncing a detector ★ XS — shipped
 Renaming a detector with a labelset source filepath template (`{detector_name}.labels.json`) leaves the old file on disk. After rename, prompt: "Move existing labelset file to new name?" with a one-click yes.
 
-### 8.9 Audio segment example → trained detector ★★ M
+**What shipped**: the registry and CRUD rename endpoints now (a) update `DetectorContext.name` so future syncs immediately resolve `{detector_name}` to the new value (was a stale-in-memory bug — until process restart, the next vote would re-create the file at the OLD path), and (b) return `pending_labelset_move: {old_path, new_path}` in the rename response when a labelset source with a `server_json_file` template leaves an orphaned file on disk. New endpoint `POST /api/detectors/registry/<id>/labelset-source/move-file` atomically renames the file (validated against the file-access base dir). The dashboard and right-panel rename flows show a one-click `dialog.confirm` after a successful rename and call the move endpoint when accepted. Files: `vtsearch/detectors/labelset_rename.py` (new helpers), `vtsearch/labels/sources/server_json_file/__init__.py` (new `resolve_filepath_for(detector_id, detector_name)`), `vtsearch/routes/detectors/{registry,crud}.py`, `vtsearch/schemas/detectors.py`, `frontend/src/app/services/detectors-api.service.ts` (`moveLabelsetSourceFile`, `promptMoveOrphanedLabelsetFile`), `frontend/src/app/components/dashboard/dashboard.component.ts`, `frontend/src/app/components/right-panel/right-panel.component.ts`.
+
+### 8.9 Audio segment example → trained detector ★★ M — **SHIPPED**
 "I want a detector for this 3-second cough sound": today requires opening a centre-panel item, opening the crop modal, dragging selection, confirming, then navigating to new-detector with that example. Add a right-click "Use this as a detector seed" on any media in the left panel.
+
+**What shipped:** Right-click in the left panel (click focus-mode only) opens a context menu with four actions, working for every media type: *Sort by similarity to this*, *Crop, then sort by similarity…* (audio/image), *Use as detector seed*, *Crop, then use as detector seed…* (audio/image). Backed by two new endpoints — `POST /api/example-sort-by-id` (reuses the in-memory embedding when no crop is requested — zero re-embed cost) and `POST /api/server-media-files/from-media-id` (materialises a loaded media's bytes into `example_media/` so the new-detector form can consume it via the existing `media_example` field). The new-detector flow learned a `seedMediaId` / `seedCropParams` pre-fill via `NewThingFlowsService`, and the existing `vt-media-crop-modal` is reused for the crop variants by fetching the loaded media as a blob via `/api/medias/<id>/{audio,image}`.
+
+**Hover focus-mode is unchanged** — right-click still votes good there; users in speed-labeling mode can't seed a detector via right-click and use the Dashboard's New Detector button instead. This was the chosen tradeoff during planning.
+
+**Open follow-ups:**
+- Video / document / text crop overlays. The crop modal only supports audio + image today; the right-click menu hides the crop entries for everything else. If we want time-range cropping on video or page-range cropping on documents, the bounded clippers and `vt-media-crop-modal` overlay both need new variants.
+- Context-pulldown parity. The right-click menu only exists on left-panel items; right-panel labelset / label items still bind right-click to vote-good. Worth considering if we want detector-card-style actions there too.
 
 ### 8.10 Resuming a labelling session ★★ S
 There's no "recent sessions" surface. Add a "Recent sessions" list on the dashboard (dataset + detector pair + last activity timestamp) so the user gets back into work in one click.

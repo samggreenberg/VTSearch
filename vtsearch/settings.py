@@ -105,6 +105,9 @@ if TYPE_CHECKING:
     def get_last_embedder_per_media_type() -> dict[str, str]: ...
     def set_last_embedder_per_media_type(value: dict[str, str]) -> None: ...
 
+    def get_recent_sessions() -> list[dict[str, Any]]: ...
+    def set_recent_sessions(value: list[dict[str, Any]]) -> None: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -545,7 +548,7 @@ def _valid_media_types() -> tuple[str, ...]:
     return tuple(all_type_ids())
 
 
-def _make_per_side_setting(
+def _make_per_side_setting(  # noqa: C901
     key_base: str,
     defaults: dict[str, Any],
     *,

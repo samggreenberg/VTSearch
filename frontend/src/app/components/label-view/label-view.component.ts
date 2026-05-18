@@ -5,6 +5,16 @@ import { takeUntil, switchMap, filter, take } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
+import {
+  MediaContextMenuComponent,
+  MediaContextMenuItem,
+} from '../left-panel/media-item/media-context-menu.component';
+import {
+  MediaCropModalComponent,
+  MediaCropResult,
+} from '../modals/media-crop-modal/media-crop-modal.component';
+import { NewThingFlowsService } from '../../services/new-thing-flows.service';
+import { ToastService } from '../../services/toast.service';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
@@ -17,17 +27,27 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
-import { DetectorRegistryEntry } from '../../models/api.models';
+import { DetectorRegistryEntry, ProgressEvent } from '../../models/api.models';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
-import { LabelingStatusResponse } from '../../models/api.models';
+import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import type { LearnedSortResponse } from '../../generated/api-client/models/learned-sort-response';
+import { formatProgressMessage } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 
 @Component({
   selector: 'vt-label-view',
   standalone: true,
-  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent, ProgressModalComponent, ResortPromptModalComponent],
+  imports: [
+    CommonModule,
+    LeftPanelComponent,
+    CenterPanelComponent,
+    RightPanelComponent,
+    ProgressModalComponent,
+    ResortPromptModalComponent,
+    MediaContextMenuComponent,
+    MediaCropModalComponent,
+  ],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',
 })
@@ -75,7 +95,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly LEFT_MIN = 180;
   private readonly RIGHT_MIN = 150;
   private readonly CENTER_MIN = 100;
-  private readonly DIVIDER_TOTAL = 8; // 2 × 4px dividers
+  private readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
   private destroy$ = new Subject<void>();
   private statusPolling$: Subscription | null = null;
   private scoringProgressPoll$: Subscription | null = null;
@@ -108,6 +128,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private autopilotStateService: AutopilotStateService,
     private activeContext: ActiveContextService,
     private progressEvents: ProgressEventsService,
+    private newThingFlows: NewThingFlowsService,
+    private toast: ToastService,
   ) {}
 
   ngOnInit(): void {
@@ -416,14 +438,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: (status) => {
-          // The generated `LabelingStatusResponse` types `smart` / `stable` /
-          // `span` as `{[key: string]: any}` while the legacy field type
-          // expects `StatusIndicator` with a required `status` string.  The
-          // backend always sends `{status, ...}` for these — the cast is safe
-          // and only crosses the type-system gap until a follow-up tightens
-          // the consumer (autopilot, left-panel, autopilot-panel) to the
-          // generated shape.
-          this.labelingStatus = status as unknown as LabelingStatusResponse;
+          this.labelingStatus = status;
         },
       });
   }
@@ -528,13 +543,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.stopScoringProgressPoll();
     this.scoringProgressPoll$ = this.progressEvents.find$
       .pipe(takeUntil(this.destroy$))
-      .subscribe((prog: any) => {
+      .subscribe((prog: ProgressEvent) => {
         if (prog.status === 'running') {
-          const msg = prog.message || 'Scoring with detector…';
-          const current = prog.current || 0;
-          const total = prog.total || 0;
-          this.sortState.setSortStatus(msg);
-          this.sortState.setSortProgress(current, total);
+          this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
+          this.sortState.setSortProgress(prog.current ?? 0, prog.total ?? 0);
         }
       });
   }
@@ -651,6 +663,163 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mediaState.selectMedia(id);
   }
 
+  // --- Right-click media context menu ---
+
+  contextMenuOpen = false;
+  contextMenuX = 0;
+  contextMenuY = 0;
+  contextMenuMediaId: number | null = null;
+  contextMenuItems: MediaContextMenuItem[] = [];
+
+  /** Pending crop modal state. When set, the user has chosen a "Crop and …"
+   *  action and we have fetched the media bytes; the crop modal renders. */
+  cropPending: {
+    file: File;
+    mediaId: number;
+    mediaType: string;
+    /** What to do after the crop is confirmed. */
+    action: 'sort' | 'seed';
+  } | null = null;
+
+  onMediaContextRequest(event: { id: number; x: number; y: number }): void {
+    const media = this.mediaState.medias.find((m) => m.id === event.id);
+    const mediaType = media?.type ?? '';
+    const cropAble = mediaType === 'audio' || mediaType === 'image';
+
+    const items: MediaContextMenuItem[] = [
+      {
+        id: 'sort',
+        label: 'Sort by similarity to this',
+        title: 'Sort all loaded items by similarity to this item, using its existing embedding.',
+      },
+    ];
+    if (cropAble) {
+      items.push({
+        id: 'crop-sort',
+        label: 'Crop, then sort by similarity…',
+        title: 'Open the crop tool to pick a sub-region, then sort by similarity.',
+      });
+    }
+    items.push({
+      id: 'seed',
+      label: 'Use as detector seed',
+      title: 'Open the New Detector form with this item pre-selected as the example.',
+    });
+    if (cropAble) {
+      items.push({
+        id: 'crop-seed',
+        label: 'Crop, then use as detector seed…',
+        title: 'Open the crop tool to pick a sub-region, then seed a new detector.',
+      });
+    }
+
+    this.contextMenuItems = items;
+    this.contextMenuMediaId = event.id;
+    this.contextMenuX = event.x;
+    this.contextMenuY = event.y;
+    this.contextMenuOpen = true;
+  }
+
+  onContextMenuAction(action: string): void {
+    const mediaId = this.contextMenuMediaId;
+    this.dismissContextMenu();
+    if (mediaId == null) return;
+
+    if (action === 'sort') {
+      this.runExampleSortById(mediaId);
+    } else if (action === 'seed') {
+      this.openSeedNewDetector(mediaId);
+    } else if (action === 'crop-sort' || action === 'crop-seed') {
+      this.openCropOverlay(mediaId, action === 'crop-sort' ? 'sort' : 'seed');
+    }
+  }
+
+  dismissContextMenu(): void {
+    this.contextMenuOpen = false;
+    this.contextMenuMediaId = null;
+  }
+
+  private runExampleSortById(mediaId: number, cropParams?: Record<string, unknown>): void {
+    this.sortState.setSortBusy(true);
+    this.sortState.setSortStatus('Sorting by example…');
+    this.sortingApi
+      .exampleSortById({ media_id: mediaId, crop_params: cropParams })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          this.sortState.setSortMode('load');
+          this.sortState.setSortResults(
+            response.results.map((r) => ({ id: r.id, score: r.similarity, bestRegion: r.best_region })),
+            response.threshold,
+          );
+          this.sortState.setLoadSortLabel(this.mediaDisplayName(mediaId));
+          this.sortState.setSortBusy(false);
+          this.sortState.setSortStatus('');
+          this.autoSelectNext();
+        },
+        error: (err) => {
+          this.sortState.setSortBusy(false);
+          this.sortState.setSortStatus('Example sort failed');
+          this.toast.error({ message: err?.error?.message || 'Example sort failed' });
+        },
+      });
+  }
+
+  private openSeedNewDetector(mediaId: number, cropParams?: Record<string, unknown>): void {
+    const media = this.mediaState.medias.find((m) => m.id === mediaId);
+    this.newThingFlows.openNewDetector({
+      defaultMediaType: media?.type ?? '',
+      seedMediaId: mediaId,
+      seedCropParams: cropParams,
+    });
+  }
+
+  private openCropOverlay(mediaId: number, action: 'sort' | 'seed'): void {
+    const media = this.mediaState.getMedia(mediaId);
+    if (!media) return;
+    const mediaType = media.type;
+    const url =
+      mediaType === 'audio'
+        ? this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`)
+        : this.activeContext.mediaUrl(`/api/medias/${mediaId}/image`);
+
+    this.sortState.setSortBusy(true);
+    this.sortState.setSortStatus('Loading media for crop…');
+    fetch(url, { credentials: 'same-origin' })
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to fetch media (${r.status})`);
+        return r.blob();
+      })
+      .then((blob) => {
+        const name = media.filename || `media_${mediaId}`;
+        const file = new File([blob], name, { type: blob.type });
+        this.cropPending = { file, mediaId, mediaType, action };
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('');
+      })
+      .catch((err) => {
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('');
+        this.toast.error({ message: err?.message || 'Failed to load media for crop' });
+      });
+  }
+
+  onCropConfirmed(result: MediaCropResult): void {
+    const pending = this.cropPending;
+    this.cropPending = null;
+    if (!pending) return;
+    const cropParams = result.cropParams as Record<string, unknown> | undefined;
+    if (pending.action === 'sort') {
+      this.runExampleSortById(pending.mediaId, cropParams);
+    } else {
+      this.openSeedNewDetector(pending.mediaId, cropParams);
+    }
+  }
+
+  onCropCancelled(): void {
+    this.cropPending = null;
+  }
+
   private refreshTrainableModelName(modelId: string): void {
     if (!modelId) {
       this.trainableModelName = null;
@@ -677,7 +846,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private mediaDisplayName(id: number): string {
-    const m = this.mediaState.medias.find((x) => x.id === id);
+    const m = this.mediaState.getMedia(id);
     return m?.filename || m?.origin_name || `#${id}`;
   }
 

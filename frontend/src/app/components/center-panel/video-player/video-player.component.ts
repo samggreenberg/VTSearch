@@ -1,6 +1,6 @@
 import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { NgIf } from '@angular/common';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
@@ -11,7 +11,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
   styleUrl: './video-player.component.scss',
 })
 export class VideoPlayerComponent implements OnChanges, OnDestroy {
-  @Input() media!: MediaItem;
+  @Input() media!: Media;
   @Input() volume = 1;
   @Input() audioPlaying = true;
   @Output() playingChanged = new EventEmitter<boolean>();

@@ -65,7 +65,7 @@ class CombineDatasetsImporter(DatasetImporter):
         name = (field_values.get("name") or "").strip()
         return name or self.display_name
 
-    def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
+    def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:  # noqa: C901
         """Combine datasets specified by *field_values['datasets']*.
 
         ``field_values["datasets"]`` may be either:
@@ -163,7 +163,7 @@ class CombineDatasetsImporter(DatasetImporter):
     def supports_chunked(self) -> bool:
         return True
 
-    def run_chunked(
+    def run_chunked(  # noqa: C901
         self,
         field_values: dict[str, Any],
         chunk_size: int,

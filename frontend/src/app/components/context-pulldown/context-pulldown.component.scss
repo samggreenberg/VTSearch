@@ -180,8 +180,7 @@
 
   // Spinner glyph that appears at the right edge of a row whose pair
   // (this row's id + the active id on the other half) has a running or
-  // pending JobManager job. The spinner is per-pair, not per-half —
-  // see docs/plans/active-context-switcher.md § Phase 3.
+  // pending JobManager job. The spinner is per-pair, not per-half.
   .row-spinner {
     flex: 0 0 auto;
     color: var(--accent);

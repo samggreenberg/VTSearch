@@ -120,9 +120,15 @@ if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
     rm -f "$_fe_log"
 
     echo "Checking frontend dependencies for vulnerabilities..."
+    # --omit=dev: only audit production deps. Dev-only deps (e.g.
+    # @angular-devkit/build-angular → webpack-dev-server) regularly carry
+    # advisories with "no fix available" upstream because Angular hasn't
+    # cut a release yet. Those affect `ng serve` on a developer's machine,
+    # not anything that ships to users. Auditing prod deps is the actual
+    # security gate worth blocking tests on.
     _audit_log=$(mktemp)
-    if (cd frontend && npm audit 2>&1) > "$_audit_log"; then
-        echo "Frontend audit OK (0 vulnerabilities)"
+    if (cd frontend && npm audit --omit=dev 2>&1) > "$_audit_log"; then
+        echo "Frontend audit OK (0 vulnerabilities in production deps)"
     else
         echo ""
         echo "============================================================"

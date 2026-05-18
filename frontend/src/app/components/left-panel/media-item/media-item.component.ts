@@ -1,6 +1,6 @@
 import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
@@ -11,7 +11,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
   styleUrl: './media-item.component.scss',
 })
 export class MediaItemComponent implements OnChanges {
-  @Input({ required: true }) media!: MediaItem;
+  @Input({ required: true }) media!: Media;
   @Input() active = false;
   @Input() voteLabel: 'good' | 'bad' | null = null;
   @Input() score: number | null = null;
@@ -23,6 +23,7 @@ export class MediaItemComponent implements OnChanges {
 
   @Output() select = new EventEmitter<number>();
   @Output() vote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  @Output() contextRequest = new EventEmitter<{ id: number; x: number; y: number }>();
 
   thumbnailFailed = false;
   private lastMediaId: number | null = null;
@@ -95,9 +96,15 @@ export class MediaItemComponent implements OnChanges {
 
   onContextMenu(event: MouseEvent): void {
     if (this.focusMode === 'hover') {
+      // Hover mode keeps the existing right-click = vote-good shortcut; the
+      // context menu is intentionally not available so speed-labeling stays
+      // fast. Users can still seed a detector via the dashboard.
       event.preventDefault();
       this.vote.emit({ id: this.media.id, vote: 'good' });
+      return;
     }
+    event.preventDefault();
+    this.contextRequest.emit({ id: this.media.id, x: event.clientX, y: event.clientY });
   }
 
   onMouseEnter(): void {

@@ -424,7 +424,7 @@
   @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
     <div class="local-folder-uploader">
       @if (lfPickerKind === 'folder') {
-        <p class="info-text">Pick a folder on <strong>this computer</strong> (the machine your browser is running on). Its contents will be uploaded to the server and embedded into a new dataset.</p>
+        <p class="info-text">Pick a folder on <strong>this computer</strong> (the machine your browser is running on). Its contents will be uploaded to the server and embedded into a new dataset. If you have already embedded your media, you can <strong>optionally</strong> attach a <code>.npz</code> archive of pre-computed vectors below to skip re-embedding.</p>
       } @else {
         <p class="info-text">Pick one or more files on <strong>this computer</strong> (the machine your browser is running on). They will be uploaded to the server and embedded into a new dataset. If you have already embedded your media, you can <strong>optionally</strong> attach a <code>.npz</code> archive of pre-computed vectors below to skip re-embedding.</p>
       }
@@ -521,25 +521,22 @@
 
       <div class="form-group form-group--section">
         @if (lfPickerKind === 'folder') {
-          <label class="form-label" for="lf-folder-input" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder<span class="required">*</span></label>
-          <input
-            id="lf-folder-input"
-            type="file"
-            class="form-input"
-            webkitdirectory
-            directory
-            multiple
-            (change)="lfOnFolderSelected($event)"
-          />
+          <label class="form-label" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder<span class="required">*</span></label>
+          <vt-drop-zone
+            label="Drop a folder here to import"
+            sublabel="or click to browse"
+            [directory]="true"
+            [multiple]="true"
+            (filesSelected)="lfOnFilesDropped($event)"
+          ></vt-drop-zone>
         } @else {
-          <label class="form-label" for="lf-files-input" title="Choose one or more files on your local machine. Each selected file will be uploaded.">Files<span class="required">*</span></label>
-          <input
-            id="lf-files-input"
-            type="file"
-            class="form-input"
-            multiple
-            (change)="lfOnFolderSelected($event)"
-          />
+          <label class="form-label" title="Choose one or more files on your local machine. Each selected file will be uploaded.">Files<span class="required">*</span></label>
+          <vt-drop-zone
+            label="Drop files here to import"
+            sublabel="or click to browse"
+            [multiple]="true"
+            (filesSelected)="lfOnFilesDropped($event)"
+          ></vt-drop-zone>
         }
         @if (lfFiles.length > 0) {
           <p class="info-text">
@@ -549,37 +546,35 @@
         }
       </div>
 
-      @if (lfPickerKind === 'files') {
-        <div class="form-group form-group--section">
-          <label
-            class="form-label"
-            for="lf-vectors-input"
-            title="Optional .npz archive of pre-computed embedding vectors. Each entry's filename must match an uploaded file (by basename) for its vector to be reused. Skipped files are embedded normally on the server."
-          >
-            Pre-computed embeddings (<code>.npz</code>) — optional
-          </label>
-          <input
-            id="lf-vectors-input"
-            type="file"
-            class="form-input"
-            accept=".npz"
-            (change)="lfOnVectorsFileSelected($event)"
-          />
+      <div class="form-group form-group--section">
+        <label
+          class="form-label"
+          for="lf-vectors-input"
+          title="Optional .npz archive of pre-computed embedding vectors. Each entry's filename must match an uploaded file (by basename or relative path) for its vector to be reused. Skipped files are embedded normally on the server."
+        >
+          Pre-computed embeddings (<code>.npz</code>) — optional
+        </label>
+        <input
+          id="lf-vectors-input"
+          type="file"
+          class="form-input"
+          accept=".npz"
+          (change)="lfOnVectorsFileSelected($event)"
+        />
+        <p class="info-text">
+          Supply a NumPy <code>.npz</code> archive holding either
+          <code>filenames</code> + <code>vectors</code> arrays or one key per
+          filename mapping to its vector.  Filenames must match the uploaded
+          files (basenames and relative paths are matched).  Files without a
+          matching entry are embedded normally on the server.
+        </p>
+        @if (lfVectorsFile) {
           <p class="info-text">
-            Supply a NumPy <code>.npz</code> archive holding either
-            <code>filenames</code> + <code>vectors</code> arrays or one key per
-            filename mapping to its vector.  Filenames must match the uploaded
-            files (basenames are matched).  Files without a matching entry are
-            embedded normally on the server.
+            Using vectors from <code>{{ lfVectorsFile.name }}</code>
+            <button type="button" class="btn btn--secondary btn--sm" (click)="lfClearVectorsFile()">Remove</button>
           </p>
-          @if (lfVectorsFile) {
-            <p class="info-text">
-              Using vectors from <code>{{ lfVectorsFile.name }}</code>
-              <button type="button" class="btn btn--secondary btn--sm" (click)="lfClearVectorsFile()">Remove</button>
-            </p>
-          }
-        </div>
-      }
+        }
+      </div>
 
       @if (lfPickerKind === 'folder') {
         <div class="form-group">
@@ -798,6 +793,30 @@
           />
           Include subfolders
         </label>
+      </div>
+
+      <div class="form-group">
+        <label
+          class="form-label"
+          for="sf-vectors-file"
+          title="Optional server path to a .npz archive of pre-computed embedding vectors. Files in the folder whose basename or relative path matches a key reuse the supplied vector instead of running the embedder."
+        >
+          Pre-computed embeddings (<code>.npz</code>) — optional
+        </label>
+        <input
+          id="sf-vectors-file"
+          type="text"
+          class="form-input"
+          placeholder="/absolute/server/path/to/vectors.npz"
+          [(ngModel)]="sfVectorsFile"
+        />
+        <p class="info-text">
+          Absolute server path to a NumPy <code>.npz</code> archive holding
+          either <code>filenames</code> + <code>vectors</code> arrays or one
+          key per filename mapping to its vector.  Files in the folder whose
+          basename or relative path matches a key reuse the supplied vector
+          and skip the embedder.
+        </p>
       </div>
 
       @if (sfEmbedders.length > 1) {

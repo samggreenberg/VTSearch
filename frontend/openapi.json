@@ -644,6 +644,22 @@
         ],
         "type": "object"
       },
+      "BumpRecentSessionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string"
+          },
+          "detector_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "detector_id"
+        ],
+        "type": "object"
+      },
       "CancelDatasetLoadResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1615,6 +1631,48 @@
         ],
         "type": "object"
       },
+      "DetectorLabelsetMoveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "new_path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "old_path": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_path",
+          "old_path"
+        ],
+        "type": "object"
+      },
+      "DetectorLabelsetMoveResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "moved": {
+            "type": "boolean"
+          },
+          "new_path": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "old_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "moved",
+          "new_path",
+          "ok",
+          "old_path"
+        ],
+        "type": "object"
+      },
       "DetectorRegistryAutorunRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1725,6 +1783,9 @@
           "detector_loaded": {
             "type": "boolean"
           },
+          "embedder": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -1829,6 +1890,18 @@
           },
           "ok": {
             "type": "boolean"
+          },
+          "pending_labelset_move": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingLabelsetMove"
+              },
+              {
+                "nullable": true,
+                "type": "object"
+              }
+            ],
+            "default": null
           }
         },
         "required": [
@@ -1873,6 +1946,18 @@
           },
           "old_name": {
             "type": "string"
+          },
+          "pending_labelset_move": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingLabelsetMove"
+              },
+              {
+                "nullable": true,
+                "type": "object"
+              }
+            ],
+            "default": null
           },
           "success": {
             "type": "boolean"
@@ -2055,6 +2140,23 @@
         "required": [
           "job_id",
           "status"
+        ],
+        "type": "object"
+      },
+      "ExampleSortByIdRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "crop_params": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          },
+          "media_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "media_id"
         ],
         "type": "object"
       },
@@ -2717,16 +2819,13 @@
             "type": "integer"
           },
           "smart": {
-            "additionalProperties": {},
-            "type": "object"
+            "$ref": "#/components/schemas/StatusIndicator"
           },
           "span": {
-            "additionalProperties": {},
-            "type": "object"
+            "$ref": "#/components/schemas/StatusIndicator"
           },
           "stable": {
-            "additionalProperties": {},
-            "type": "object"
+            "$ref": "#/components/schemas/StatusIndicator"
           },
           "total_count": {
             "type": "integer"
@@ -3152,6 +3251,22 @@
         },
         "type": "object"
       },
+      "PendingLabelsetMove": {
+        "additionalProperties": false,
+        "properties": {
+          "new_path": {
+            "type": "string"
+          },
+          "old_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_path",
+          "old_path"
+        ],
+        "type": "object"
+      },
       "PregenProcessorsAddResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3221,6 +3336,49 @@
         },
         "required": [
           "ok"
+        ],
+        "type": "object"
+      },
+      "RecentSession": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string"
+          },
+          "dataset_name": {
+            "type": "string"
+          },
+          "detector_id": {
+            "type": "string"
+          },
+          "detector_name": {
+            "type": "string"
+          },
+          "last_activity": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "dataset_name",
+          "detector_id",
+          "detector_name",
+          "last_activity"
+        ],
+        "type": "object"
+      },
+      "RecentSessionsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/RecentSession"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessions"
         ],
         "type": "object"
       },
@@ -3357,6 +3515,23 @@
         "required": [
           "seeded",
           "skipped"
+        ],
+        "type": "object"
+      },
+      "ServerMediaFromMediaIdRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "crop_params": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          },
+          "media_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "media_id"
         ],
         "type": "object"
       },
@@ -3594,6 +3769,21 @@
         "required": [
           "results",
           "threshold"
+        ],
+        "type": "object"
+      },
+      "StatusIndicator": {
+        "additionalProperties": true,
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
         ],
         "type": "object"
       },
@@ -6825,6 +7015,63 @@
         ]
       }
     },
+    "/api/detectors/registry/{detector_id}/labelset-source/move-file": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Called by the frontend when the user confirms the *Move existing\nlabelset file?* prompt that surfaces after a rename leaves the file\nat the OLD template-resolved path on disk.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorLabelsetMoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorLabelsetMoveResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Invalid path (e.g. traversal outside allowed base)."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
+          "409": {
+            "description": "Destination already exists."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Move an orphaned labelset file after a detector rename.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
     "/api/detectors/registry/{detector_id}/rename": {
       "parameters": [
         {
@@ -7651,6 +7898,52 @@
         "summary": "Sort medias by similarity to an uploaded example media file.",
         "tags": [
           "sorting"
+        ]
+      }
+    },
+    "/api/example-sort-by-id": {
+      "post": {
+        "description": "When ``crop_params`` is absent the existing ``media[\"embedding\"]``\nis reused \u2014 no fetch, no re-embed.  When set, the media's bytes are\nmaterialised, cropped, and re-embedded before sorting.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExampleSortByIdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExampleSortResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No medias loaded, or media_id not in the loaded snapshot."
+          },
+          "404": {
+            "description": "Media not found, or its bytes are unavailable when cropping is requested."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "500": {
+            "description": "Example sort failed."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Sort medias by similarity to an already-loaded media item.",
+        "tags": [
+          "media_server"
         ]
       }
     },
@@ -9083,6 +9376,49 @@
         ]
       }
     },
+    "/api/server-media-files/from-media-id": {
+      "post": {
+        "description": "Used by the right-click ``Use as detector seed`` flow: the loaded\nmedia is materialised to disk so the new-detector form can reference\nit as ``media_example`` (the same field the upload path returns).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerMediaFromMediaIdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerMediaUploadResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "description": "media_id not loaded, or invalid crop_params."
+          },
+          "404": {
+            "description": "Media bytes unavailable."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Save a loaded media's bytes to the example_media/ directory.",
+        "tags": [
+          "media_server"
+        ]
+      }
+    },
     "/api/server-media-files/upload": {
       "post": {
         "description": "Optional form fields:\n\n* ``media_type`` \u2014 required when ``crop_params`` is present (``\"audio\"``\n  or ``\"image\"``); identifies which bounded clipper to apply.\n* ``crop_params`` \u2014 JSON object with the user-cropped bounds.  When set,\n  the file is cropped server-side before being saved, so the persisted\n  example is the cropped sub-region (and downstream code that reads\n  the saved file by name does not need any changes).",
@@ -9142,6 +9478,65 @@
           }
         }
       ]
+    },
+    "/api/sessions/recent": {
+      "get": {
+        "description": "Entries whose dataset or detector id is no longer registered are\nfiltered out. Most-recent first.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentSessionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the current user's recent (dataset, detector) sessions.",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "post": {
+        "description": "Upserts the pair, moves it to the front of the list, and trims\nthe list to :data:`MAX_RECENT_SESSIONS` entries. The response is\nthe same hydrated list as :func:`list_recent_sessions` so callers\ncan update local UI in one round-trip.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BumpRecentSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentSessionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Record activity on a ``(dataset_id, detector_id)`` pair.",
+        "tags": [
+          "sessions"
+        ]
+      }
     },
     "/api/settings": {
       "get": {
@@ -9875,6 +10270,10 @@
     {
       "description": "Text / example / learned sort, votes, inclusion, safe-thresholds, diversity tree.",
       "name": "sorting"
+    },
+    {
+      "description": "Recent (dataset, detector) labelling sessions per user.",
+      "name": "sessions"
     },
     {
       "description": "Manage autorun extractors / localizers and the bundled pregen-processor list.",

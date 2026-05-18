@@ -1,31 +1,33 @@
 /* TypeScript interfaces matching the Flask API response shapes. */
 
+import type { MediaIdsListResponse } from '../generated/api-client/models/media-ids-list-response';
+import type { MediaBatchResponse } from '../generated/api-client/models/media-batch-response';
+
 // --- Medias ---
 
 /**
- * One media item.
- *
- * Only ``id`` and ``type`` are guaranteed — the dataset listing
- * (``GET /api/medias/ids``) returns just those plus an optional
- * ``embedder``.  The remaining display-worthy fields are populated on
- * demand for items currently in the viewport via the metadata cache
- * (``POST /api/medias/batch``).
+ * Strip a type's catch-all index signature (``[key: string]: any``) so
+ * intersecting it with another type doesn't force every property access
+ * to go through the bracket form (TS4111 under
+ * ``noPropertyAccessFromIndexSignature``).
  */
-export interface MediaItem {
-  id: number;
-  type: string;
-  filename?: string;
-  md5?: string;
-  custom_metadata?: Record<string, unknown>;
-  origin_name?: string;
-  description?: string;
-  clip_start?: number;
-  clip_end?: number;
-  clip_index?: number;
-  clip_box?: number[];
-  /** Name of the embedder that produced this media's vector. */
-  embedder?: string;
-}
+type RemoveIndex<T> = {
+  [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K];
+};
+
+/**
+ * The renderable media shape — a stub from ``GET /api/medias/ids``
+ * (``id``, ``type``, optional ``embedder``) optionally augmented with the
+ * full per-item metadata returned by ``POST /api/medias/batch``
+ * (``filename``, ``md5``, ``custom_metadata``, clip extents, …).
+ *
+ * Derived directly from the two generated DTOs so backend schema changes
+ * propagate without a hand-maintained mirror.  Components consume this
+ * type wherever the data flow can deliver either a stub (initial listing,
+ * cache miss) or a hydrated batch entry.
+ */
+export type Media = MediaIdsListResponse &
+  Partial<Omit<RemoveIndex<MediaBatchResponse>, keyof MediaIdsListResponse>>;
 
 // --- Sorting ---
 
@@ -38,67 +40,56 @@ export interface VotesResponse {
   labelset_bad_count?: number;
 }
 
-// --- Labeling Status ---
+// --- Progress ---
 
-export interface StatusIndicator {
-  status: string;
-  [key: string]: unknown;
-}
-
-export interface LabelingStatusResponse {
-  good_count?: number;
-  bad_count?: number;
-  total_count?: number;
-  smart?: StatusIndicator;
-  stable?: StatusIndicator;
-  span?: StatusIndicator;
-  [key: string]: unknown;
-}
-
-export interface SortProgressResponse {
+/**
+ * The unified shape every long-running operation emits over the SSE stream
+ * (`/api/events` — see `progress-events.service.ts`).
+ *
+ * Backend: every singleton `ProgressTracker` (dataset, sort, eval, find) and
+ * every per-task tracker created by `LoadingTasksTracker` carries the same
+ * base fields plus the shared optional extras `step`/`total_steps`/`error`.
+ * See `vtsearch/concurrency/progress.py:_PROGRESS_COMMON_EXTRAS`.
+ *
+ * Frontend: a single component/helper (`utils/format-progress.ts`) can render
+ * any payload regardless of which operation produced it.
+ */
+export interface ProgressEvent {
+  status?: string;
+  message?: string;
+  current?: number;
+  total?: number;
+  /** Sub-step counter for multi-phase operations (e.g. load→embed→stage). */
+  step?: number | null;
+  total_steps?: number | null;
+  /** Error message if the operation failed. */
+  error?: string | null;
+  /** Dataset-only: payload returned by combine-datasets staging. */
+  staging_result?: unknown;
   [key: string]: unknown;
 }
 
 // --- Datasets ---
 
-export interface DatasetStatus {
-  loaded: boolean;
-  num_medias: number;
-  has_votes: boolean;
-  media_type?: string;
-  display_name?: string;
-}
-
-export interface DatasetProgress {
-  status?: string;
-  message?: string;
-  current?: number;
-  total?: number;
-  step?: number;
-  total_steps?: number;
-  error?: string;
-  [key: string]: unknown;
-}
-
-export interface LoadingTask {
-  task_id: string;
-  name: string;
+/**
+ * A per-task progress event from the `loading-tasks` /
+ * `detector-loading-tasks` SSE channels. Wraps `ProgressEvent` with the
+ * task identity/metadata fields the dashboard needs to render one row per
+ * concurrent load. The base fields are non-optional here because every task
+ * tracker writes them through `ProgressTracker.update`.
+ */
+export interface LoadingTask extends ProgressEvent {
   status: string;
   message: string;
   current: number;
   total: number;
-  step?: number;
-  total_steps?: number;
-  error?: string;
+  task_id: string;
+  name: string;
   created_at: number;
   dataset_id?: string;
   detector_id?: string;
   media_type?: string;
   embedder?: string;
-}
-
-export interface LoadingTasksResponse {
-  tasks: LoadingTask[];
 }
 
 export interface ImporterInfo {
@@ -176,14 +167,6 @@ export interface ImporterPickerTab {
   order?: number;
 }
 
-export interface ImportersResponse {
-  importers: ImporterInfo[];
-  /** Picker tab declarations.  When present, the frontend renders one tab
-   *  per entry; when absent (older backends) the frontend falls back to
-   *  inferring tabs from importer ``category`` values. */
-  tabs?: ImporterPickerTab[];
-}
-
 export interface DemoDataset {
   name: string;
   label: string;
@@ -196,10 +179,6 @@ export interface DemoDataset {
   num_categories: number;
   pkl_embedder?: string;
   pkl_clipper?: string;
-}
-
-export interface DemoListResponse {
-  datasets: DemoDataset[];
 }
 
 export interface MediaTypeInfo {
@@ -223,70 +202,18 @@ export interface MediaTypeDetectionResponse {
   truncated?: boolean;
 }
 
-export interface MediaTypesResponse {
-  media_types: MediaTypeInfo[];
-}
-
 export interface DatasetRegistryEntry {
   id: string;
   name: string;
   media_type: string;
   loaded?: boolean;
   readers?: string[];
-  [key: string]: unknown;
-}
-
-export interface DatasetStatsResponse {
-  num_items: number;
-  num_dupes: number;
-  file_type_counts: Record<string, number>;
-  ingest_started_at: number | null;
-  ingest_finished_at: number | null;
-  origin: string;
-  source: { importer?: string; params?: Record<string, string> } | Record<string, unknown>;
-  clipper: string;
-  embedder: string;
-}
-
-export interface DatasetRegistryResponse {
-  datasets: DatasetRegistryEntry[];
-}
-
-// --- Detector scoring ---
-
-export interface AutoDetectResponse {
+  /** Name of the embedder this dataset's media were vectorised with. */
+  embedder?: string;
   [key: string]: unknown;
 }
 
 // --- Detectors ---
-
-export interface Detector {
-  name: string;
-  [key: string]: unknown;
-}
-
-export interface DetectorsResponse {
-  detectors: Detector[];
-}
-
-export interface LabelElement {
-  id: string;
-  label: 'good' | 'bad';
-  media_type: string;
-  name: string;
-  filename: string;
-  origin_name: string;
-  md5: string;
-  cid: number | null;
-  time: number;
-  score: number;
-}
-
-export interface LabelsDetailResponse {
-  good: LabelElement[];
-  bad: LabelElement[];
-  media_type: string;
-}
 
 export interface DetectorRegistryEntry {
   id: string;
@@ -299,27 +226,9 @@ export interface DetectorRegistryEntry {
   detector_loaded?: boolean;
   autorun?: boolean;
   last_trained_at?: number | null;
-  [key: string]: unknown;
-}
-
-export interface DetectorsRegistryResponse {
-  detectors: DetectorRegistryEntry[];
-}
-
-export interface CombineDetectorsResult {
-  success: boolean;
-  name: string;
-  media_type: string;
-  num_labels: number;
-  combined_from: string[];
-  source_label_counts: number[];
-  examples: { type: string; value: string }[];
-}
-
-// --- Processor Importers ---
-
-export interface ProcessorImporterInfo {
-  name: string;
+  /** Embedder this detector's label-vector cache is built against.
+   *  Populated only for loaded detectors; empty for unloaded entries. */
+  embedder?: string;
   [key: string]: unknown;
 }
 
@@ -344,32 +253,6 @@ export interface ClipperInfo {
   parameters?: ClipperParameter[];
   creation_questions?: ClipperParameter[];
   [key: string]: unknown;
-}
-
-export interface ClippersResponse {
-  clippers: ClipperInfo[];
-}
-
-// --- Converters ---
-
-export interface ConverterInfo {
-  [key: string]: unknown;
-}
-
-export interface ConvertersResponse {
-  converters: ConverterInfo[];
-}
-
-// --- Error ---
-
-export interface ApiError {
-  error: string;
-}
-
-// --- OK response ---
-
-export interface OkResponse {
-  ok: boolean;
 }
 
 // --- Eval / Progress Charts ---
@@ -472,14 +355,3 @@ export interface EmbedderInfo {
   license_notice?: string | null;
 }
 
-export interface EmbeddersResponse {
-  embedders: EmbedderInfo[];
-}
-
-// --- Export Result ---
-
-export interface ExportResult {
-  success: boolean;
-  message?: string;
-  error?: string;
-}

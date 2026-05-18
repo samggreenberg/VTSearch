@@ -109,6 +109,13 @@ def populate_label_embeddings(
     )
 
     embedder_name = _embedder_for_active_dataset(snap)
+    # If the cache was built against a different embedder, drop it: mixing
+    # vectors from two embedders into one MLP produces garbage. The detector
+    # stamps ``det_ctx.embedder`` after each successful pass; an empty
+    # ``det_ctx.embedder`` means the cache is fresh (legacy or first-load)
+    # and is safe to keep.
+    if det_ctx.embedder and embedder_name and det_ctx.embedder != embedder_name:
+        det_ctx.label_embeddings.clear()
     cache: dict[str, np.ndarray] = det_ctx.label_embeddings
     total = len(labelset.elements)
     cached = 0
@@ -153,6 +160,10 @@ def populate_label_embeddings(
         if on_progress:
             on_progress(elem.origin_name or elem.filename or eid, idx + 1, total)
 
+    # Stamp the embedder the cache is now built against so the next call can
+    # detect a switch and invalidate.
+    if embedder_name:
+        det_ctx.embedder = embedder_name
     return cached
 
 

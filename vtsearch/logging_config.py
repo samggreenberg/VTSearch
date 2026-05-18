@@ -70,7 +70,7 @@ _STD_RECORD_ATTRS = frozenset(
 )
 
 
-def _resolve_context() -> dict[str, Any]:
+def _resolve_context() -> dict[str, Any]:  # noqa: C901
     """Pull the active VTSearch context from Flask ``g`` or thread-locals.
 
     Returns a dict with whatever subset of (``request_id``, ``user``,

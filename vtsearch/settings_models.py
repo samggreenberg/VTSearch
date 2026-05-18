@@ -159,3 +159,10 @@ class UserSettings(BaseModel):
     # dataset is around to supply the same hint via ``guessedMediaEmbedder``.
     # Keys are canonical media-type ids (e.g. ``"image"``, ``"audio"``).
     last_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)
+
+    # Rolling list of recent (dataset_id, detector_id, last_activity)
+    # entries, capped at MAX_RECENT_SESSIONS by the route handler. Most
+    # recent first. last_activity is epoch seconds (float). The
+    # "Recent sessions" burger-menu submenu reads this and filters out
+    # entries whose ids no longer resolve in the registries.
+    recent_sessions: list[dict[str, Any]] = Field(default_factory=list)

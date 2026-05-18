@@ -18,9 +18,6 @@ import { ToastService } from './toast.service';
  * Only fires after we've seen the active id appear in the registry at
  * least once — a transient "id set, registry still loading" state on
  * page load shouldn't trigger a phantom deletion toast.
- *
- * See `docs/plans/active-context-switcher.md` § "Edge cases" #3 and
- * "Open follow-ups (Phase 1)".
  */
 @Injectable({ providedIn: 'root' })
 export class ActiveContextWatcherService {

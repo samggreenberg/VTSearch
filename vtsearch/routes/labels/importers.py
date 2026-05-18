@@ -111,7 +111,7 @@ def get_label_importers():
 
 
 @label_importers_bp.route("/api/label-importers/import/<importer_name>", methods=["POST"])
-def run_label_import(importer_name: str):
+def run_label_import(importer_name: str):  # noqa: C901
     """Run the named label importer and apply the resulting labels.
 
     Plugin-dependent body shape: not described in the OpenAPI spec.

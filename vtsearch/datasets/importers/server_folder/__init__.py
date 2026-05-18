@@ -16,6 +16,13 @@ When the output type is ``"image"``, ``*.pdf`` files in the folder are
 also expanded as per-page images.  (PDFs participate independently of
 the explicit converter rows — they are tied to the "image" output type
 rather than to a converter.)
+
+An optional ``vectors_file`` field accepts a server path to a NumPy
+``.npz`` archive of pre-computed embedding vectors keyed by filename
+(basename or path relative to the folder).  Files in the folder whose
+name matches a key in the archive reuse the supplied vector and skip
+the embedding model — useful for importing media the user already
+embedded offline.
 """
 
 from __future__ import annotations
@@ -25,6 +32,7 @@ import io
 from pathlib import Path
 from typing import Any, Iterator, cast
 
+from vtsearch.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
 from vtsearch.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtsearch.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 from vtsearch.security.path_validation import glob_top_level, rglob_follow_symlinks
@@ -38,7 +46,19 @@ def _coerce_recursive(field_values: dict[str, Any]) -> bool:
     return str(val).lower() != "false"
 
 
-def _load_pdf_images(
+def _load_vectors_file(field_values: dict[str, Any]) -> dict[str, Any]:
+    """Read pre-computed vectors from the optional ``vectors_file`` field.
+
+    Returns an empty dict when the field is absent or empty.  Raises if
+    the path is set but the file cannot be parsed.
+    """
+    raw = (field_values.get("vectors_file") or "").strip()
+    if not raw:
+        return {}
+    return dict(read_npz_filenames_and_vectors(Path(raw)))
+
+
+def _load_pdf_images(  # noqa: C901
     folder: Path,
     medias: dict[int, dict[str, Any]],
     thin: bool = False,
@@ -216,6 +236,19 @@ class ServerFolderDatasetImporter(DatasetImporter):
             default="true",
             required=False,
         ),
+        ImporterField(
+            key="vectors_file",
+            label="Pre-computed embeddings (.npz) — optional",
+            field_type="server_path",
+            description=(
+                "Optional server path to a NumPy .npz archive holding pre-computed "
+                "embedding vectors.  Files in the folder whose basename or relative "
+                "path matches a key in the archive reuse the supplied vector instead "
+                "of being run through the embedder."
+            ),
+            accept=".npz",
+            required=False,
+        ),
     ]
 
     def __init__(self) -> None:
@@ -278,7 +311,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
             return False
         return True
 
-    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
+    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:  # noqa: C901
         folder = Path(field_values["path"])
         recursive = _coerce_recursive(field_values)
 
@@ -296,33 +329,41 @@ class ServerFolderDatasetImporter(DatasetImporter):
 
             output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
 
-        has_direct_files = False
-        for spec in specs:
-            if spec.converter is None:
-                if self._load_direct(folder, spec, field_values, medias, thin, recursive):
-                    has_direct_files = True
+        extra_vectors = _load_vectors_file(field_values)
+        saved_content_vectors = self.content_vectors
+        if extra_vectors:
+            self.content_vectors = {**(saved_content_vectors or {}), **extra_vectors}
+        try:
+            has_direct_files = False
+            for spec in specs:
+                if spec.converter is None:
+                    if self._load_direct(folder, spec, field_values, medias, thin, recursive):
+                        has_direct_files = True
 
-        if output_type == "image":
-            _load_pdf_images(
+            if output_type == "image":
+                _load_pdf_images(
+                    folder,
+                    medias,
+                    thin=thin,
+                    embedder_name=field_values.get("embedder", ""),
+                    recursive=recursive,
+                )
+
+            _run_converter_specs(
                 folder,
+                output_type,
+                [s for s in specs if s.converter is not None],
                 medias,
                 thin=thin,
-                embedder_name=field_values.get("embedder", ""),
                 recursive=recursive,
+                folder_path_for_origin=str(folder),
             )
 
-        _run_converter_specs(
-            folder,
-            output_type,
-            [s for s in specs if s.converter is not None],
-            medias,
-            thin=thin,
-            recursive=recursive,
-            folder_path_for_origin=str(folder),
-        )
-
-        if not has_direct_files and not medias:
-            raise ValueError(f"No {output_type} files found in folder")
+            if not has_direct_files and not medias:
+                raise ValueError(f"No {output_type} files found in folder")
+        finally:
+            if extra_vectors:
+                self.content_vectors = saved_content_vectors
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         folder = Path(field_values["path"])
@@ -355,50 +396,58 @@ class ServerFolderDatasetImporter(DatasetImporter):
 
             output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
 
-        # Chunked load only fires for the direct row.  Converter rows
-        # produce a separate chunk afterwards (matching legacy
-        # behaviour).
-        for spec in direct_specs:
-            from vtsearch.media import get  # noqa: PLC0415
+        extra_vectors = _load_vectors_file(field_values)
+        saved_content_vectors = self.content_vectors
+        if extra_vectors:
+            self.content_vectors = {**(saved_content_vectors or {}), **extra_vectors}
+        try:
+            # Chunked load only fires for the direct row.  Converter rows
+            # produce a separate chunk afterwards (matching legacy
+            # behaviour).
+            for spec in direct_specs:
+                from vtsearch.media import get  # noqa: PLC0415
 
-            mt = get(spec.source_type)
-            try:
-                yield from load_dataset_from_folder_chunked(
+                mt = get(spec.source_type)
+                try:
+                    yield from load_dataset_from_folder_chunked(
+                        folder,
+                        mt.folder_import_name,
+                        chunk_size,
+                        thin=thin,
+                        embedder_name=field_values.get("embedder", ""),
+                        content_vectors=self.content_vectors or None,
+                        content_md5s=self.content_md5s or None,
+                        custom_metadata_map=self.custom_metadata_map or None,
+                        skip_embedding=bool(field_values.get("skip_embedding")),
+                        recursive=recursive,
+                    )
+                except ValueError:
+                    # Empty folder for this source type — keep going; later
+                    # PDF / converter rows may still produce output.
+                    pass
+
+            if output_type == "image":
+                chunk: dict[int, dict[str, Any]] = {}
+                _load_pdf_images(folder, chunk, thin=thin, recursive=recursive)
+                if chunk:
+                    yield chunk
+
+            if converter_specs:
+                converter_chunk: dict[int, dict[str, Any]] = {}
+                _run_converter_specs(
                     folder,
-                    mt.folder_import_name,
-                    chunk_size,
+                    output_type,
+                    converter_specs,
+                    converter_chunk,
                     thin=thin,
-                    embedder_name=field_values.get("embedder", ""),
-                    content_vectors=self.content_vectors or None,
-                    content_md5s=self.content_md5s or None,
-                    custom_metadata_map=self.custom_metadata_map or None,
-                    skip_embedding=bool(field_values.get("skip_embedding")),
                     recursive=recursive,
+                    folder_path_for_origin=str(folder),
                 )
-            except ValueError:
-                # Empty folder for this source type — keep going; later
-                # PDF / converter rows may still produce output.
-                pass
-
-        if output_type == "image":
-            chunk: dict[int, dict[str, Any]] = {}
-            _load_pdf_images(folder, chunk, thin=thin, recursive=recursive)
-            if chunk:
-                yield chunk
-
-        if converter_specs:
-            converter_chunk: dict[int, dict[str, Any]] = {}
-            _run_converter_specs(
-                folder,
-                output_type,
-                converter_specs,
-                converter_chunk,
-                thin=thin,
-                recursive=recursive,
-                folder_path_for_origin=str(folder),
-            )
-            if converter_chunk:
-                yield converter_chunk
+                if converter_chunk:
+                    yield converter_chunk
+        finally:
+            if extra_vectors:
+                self.content_vectors = saved_content_vectors
 
     def run_chunked_cli(
         self,

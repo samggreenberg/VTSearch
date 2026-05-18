@@ -7,6 +7,7 @@ import { DialogHostComponent } from './components/dialog-host/dialog-host.compon
 import { ToastContainerComponent } from './components/toast-container/toast-container.component';
 import { AchievementUnlockHostComponent } from './components/achievement-unlock-host/achievement-unlock-host.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
+import { AchievementsModalComponent } from './components/modals/achievements-modal/achievements-modal.component';
 import { KeyboardHelpModalComponent } from './components/modals/keyboard-help-modal/keyboard-help-modal.component';
 import { LoginComponent } from './components/login/login.component';
 import { ContextPulldownComponent } from './components/context-pulldown/context-pulldown.component';
@@ -20,6 +21,7 @@ import { NewDetectorModalComponent } from './components/dashboard/new-detector-m
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
 import { ActiveContextService } from './services/active-context.service';
+import { RecentSessionsService } from './services/recent-sessions.service';
 import { AuthService } from './services/auth.service';
 import { AchievementsService } from './services/achievements.service';
 import { ThemeService } from './services/theme.service';
@@ -31,6 +33,7 @@ import {
   NewDetectorFlowState,
 } from './services/new-thing-flows.service';
 import { DemoDataset } from './models/api.models';
+import type { RecentSession } from './generated/api-client/models/recent-session';
 import { isPairCompatible } from './utils/context-compat';
 
 @Component({
@@ -42,6 +45,7 @@ import { isPairCompatible } from './utils/context-compat';
     ToastContainerComponent,
     AchievementUnlockHostComponent,
     SettingsModalComponent,
+    AchievementsModalComponent,
     KeyboardHelpModalComponent,
     LoginComponent,
     ContextPulldownComponent,
@@ -56,6 +60,7 @@ export class AppComponent {
   title = 'VTSearch';
   menuOpen = false;
   showSettings = false;
+  showAchievements = false;
   showKeyboardHelp = false;
   gearClosing = false;
   isOnLabelView = false;
@@ -75,12 +80,14 @@ export class AppComponent {
     open: false,
     defaultMediaType: '',
   };
+  recentSessions: RecentSession[] = [];
 
   constructor(
     private router: Router,
     private mediaState: MediaStateService,
     private datasetState: DatasetStateService,
     private activeContext: ActiveContextService,
+    private recent: RecentSessionsService,
     public auth: AuthService,
     private achievements: AchievementsService,
     private themeService: ThemeService,
@@ -92,6 +99,10 @@ export class AppComponent {
     this.achievements.refresh();
     this.themeService.loadFromSettings();
     activeContextWatcher.start();
+    this.recent.refresh().subscribe();
+    this.recent.sessions$.subscribe((sessions) => {
+      this.recentSessions = sessions;
+    });
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
@@ -131,6 +142,9 @@ export class AppComponent {
   toggleMenu(event: Event): void {
     event.stopPropagation();
     this.menuOpen = !this.menuOpen;
+    if (this.menuOpen) {
+      this.recent.refresh().subscribe();
+    }
   }
 
   @HostListener('document:click', ['$event'])
@@ -210,6 +224,21 @@ export class AppComponent {
     this.router.navigate(['/dashboard']);
   }
 
+  onRecentClicked(session: RecentSession): void {
+    this.menuOpen = false;
+    this.router.navigate(['/label', session.dataset_id, session.detector_id]);
+  }
+
+  formatRecentTime(epochSec: number): string {
+    if (!epochSec) return '';
+    const diffSec = Math.max(0, Date.now() / 1000 - epochSec);
+    if (diffSec < 60) return 'just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+    if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+    return `${Math.floor(diffSec / 604800)}w ago`;
+  }
+
 
   onSettings(): void {
     this.menuOpen = false;
@@ -221,6 +250,15 @@ export class AppComponent {
   onSettingsClosed(): void {
     this.showSettings = false;
     this.gearClosing = true;
+  }
+
+  onAchievements(): void {
+    this.menuOpen = false;
+    this.showAchievements = true;
+  }
+
+  onAchievementsClosed(): void {
+    this.showAchievements = false;
   }
 
   onGearAnimationEnd(): void {

@@ -181,10 +181,11 @@ class SoundAutoClipper(MediaClipper):
     """Pass-through for short audio, tile longer audio.
 
     Designed as the recommended default in the importer picker. The
-    decision is made once per dataset: if the median media duration
-    exceeds *threshold*, the clipper resolves to a
-    :class:`SoundTilingClipper` with the configured *tile_duration*;
-    otherwise it resolves to :class:`SoundDefaultClipper`.
+    decision is made per item: if a media's duration exceeds
+    *threshold*, that item is clipped by :class:`SoundTilingClipper`
+    with the configured *tile_duration*; otherwise it passes through
+    via :class:`SoundDefaultClipper`. Different items in the same
+    dataset can take different branches.
 
     The chosen concrete clipper is what gets recorded in each clip's
     origin, so cross-dataset replay is deterministic.
@@ -225,28 +226,25 @@ class SoundAutoClipper(MediaClipper):
     def tile_duration(self) -> float:
         return self._tile_duration
 
-    def resolve_for_durations(self, durations: list[float]) -> "MediaClipper":
-        if not durations:
-            return SoundDefaultClipper()
-        median = sorted(durations)[len(durations) // 2]
-        if median > self._threshold:
+    def resolve_for_media(self, media: dict[str, Any]) -> "MediaClipper":
+        duration = float(media.get("duration", 0) or 0)
+        if duration <= 0:
+            wav_bytes = media.get("media_bytes")
+            if wav_bytes is not None:
+                try:
+                    duration = _wav_duration(wav_bytes)
+                except Exception:
+                    duration = 0.0
+        if duration > self._threshold:
             return SoundTilingClipper(self._tile_duration)
         return SoundDefaultClipper()
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        # Fallback path for direct use (outside the load pipeline).
-        # The load pipeline resolves auto → concrete before calling clip(),
-        # so this code only runs if someone uses SoundAutoClipper directly.
-        wav_bytes = media.get("media_bytes")
-        if wav_bytes is None:
-            return [media]
-        try:
-            duration = _wav_duration(wav_bytes)
-        except Exception:
-            return [media]
-        if duration > self._threshold:
-            return SoundTilingClipper(self._tile_duration).clip(media)
-        return SoundDefaultClipper().clip(media)
+        # Direct-call path (outside the load pipeline).  The pipeline
+        # uses resolve_for_media() then calls clip() on the concrete
+        # result, so this method only runs when someone uses
+        # SoundAutoClipper().clip(media) directly.
+        return self.resolve_for_media(media).clip(media)
 
     @property
     def parameters(self) -> list[dict[str, Any]]:

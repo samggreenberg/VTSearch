@@ -12,6 +12,14 @@ export interface ImporterFlowState {
 export interface NewDetectorFlowState {
   open: boolean;
   defaultMediaType: string;
+  /** ID of a loaded media to use as the new detector's seed example.
+   *  When set, the modal materialises this media to ``example_media/``
+   *  on open and pre-fills the example field, skipping the picker. */
+  seedMediaId?: number;
+  /** Optional crop bounds applied when materialising the seed media.
+   *  Shape matches the bounded clippers (audio: ``{start, end}``;
+   *  image: ``{box: [x1, y1, x2, y2]}``). */
+  seedCropParams?: Record<string, unknown>;
 }
 
 export interface ThingCreatedEvent {
@@ -36,8 +44,6 @@ export interface DemoSelectedEvent {
  * The modal components themselves are rendered as siblings of the
  * router-outlet in `AppComponent` and bind to the state subjects on
  * this service.
- *
- * See `docs/plans/active-context-switcher.md` § "Add-new footer flow".
  */
 @Injectable({ providedIn: 'root' })
 export class NewThingFlowsService {
@@ -50,6 +56,8 @@ export class NewThingFlowsService {
   private readonly newDetectorSubject = new BehaviorSubject<NewDetectorFlowState>({
     open: false,
     defaultMediaType: '',
+    seedMediaId: undefined,
+    seedCropParams: undefined,
   });
   private readonly createdSubject = new Subject<ThingCreatedEvent>();
   private readonly demoSelectedSubject = new Subject<DemoSelectedEvent>();
@@ -98,6 +106,8 @@ export class NewThingFlowsService {
     this.newDetectorSubject.next({
       open: true,
       defaultMediaType: opts.defaultMediaType ?? '',
+      seedMediaId: opts.seedMediaId,
+      seedCropParams: opts.seedCropParams,
     });
   }
 
@@ -105,6 +115,8 @@ export class NewThingFlowsService {
     this.newDetectorSubject.next({
       open: false,
       defaultMediaType: '',
+      seedMediaId: undefined,
+      seedCropParams: undefined,
     });
   }
 

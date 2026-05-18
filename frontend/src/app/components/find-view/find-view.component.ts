@@ -15,6 +15,8 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
+import { ProgressEvent } from '../../models/api.models';
+import { formatProgressMessage } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 
 @Component({
@@ -46,7 +48,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly LEFT_MIN = 180;
   private readonly RIGHT_MIN = 150;
   private readonly CENTER_MIN = 100;
-  private readonly DIVIDER_TOTAL = 8; // 2 × 4px dividers
+  private readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
   private destroy$ = new Subject<void>();
   private dragging = false;
   private draggingRight = false;
@@ -151,13 +153,10 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.stopProgressPolling();
     this.progressPollSub = this.progressEvents.find$
       .pipe(takeUntil(this.destroy$))
-      .subscribe((prog: any) => {
+      .subscribe((prog: ProgressEvent) => {
         if (prog.status === 'running') {
-          const msg = prog.message || 'Scoring with detector…';
-          const current = prog.current || 0;
-          const total = prog.total || 0;
-          this.sortState.setSortStatus(msg);
-          this.sortState.setSortProgress(current, total);
+          this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
+          this.sortState.setSortProgress(prog.current ?? 0, prog.total ?? 0);
         }
       });
   }
@@ -373,7 +372,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
     if (this.sortState.sortBusy) return;
-    const m = this.mediaState.medias.find((x) => x.id === event.id);
+    const m = this.mediaState.getMedia(event.id);
     const name = m?.filename || m?.origin_name || `#${event.id}`;
     this.voteState.recordVote(event.id, event.vote, name);
     this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({

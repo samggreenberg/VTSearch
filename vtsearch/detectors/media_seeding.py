@@ -7,7 +7,7 @@ files, matches them to loaded dataset medias by MD5, and votes them good.
 from __future__ import annotations
 
 
-def seed_good_votes_from_examples(examples: list[dict]) -> int:
+def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
     """Seed good votes from a model's media examples.
 
     For each ``type: "media"`` example, reads the file from

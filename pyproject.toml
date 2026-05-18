@@ -66,10 +66,11 @@ line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
-# Default rules (E4, E7, E9, F) + flake8-bandit (S) security checks.
-# Stays conservative on style rules (E501 line-length etc. remain off)
-# while adding the security backstop.
-select = ["E4", "E7", "E9", "F", "S"]
+# Default rules (E4, E7, E9, F) + flake8-bandit (S) security checks +
+# McCabe (C901) cyclomatic complexity gate. Stays conservative on style
+# rules (E501 line-length etc. remain off) while keeping the security
+# and complexity backstops on.
+select = ["E4", "E7", "E9", "F", "S", "C901"]
 # E402: Module level import not at top of file.
 # S101 (assert): used for type narrowing where pyright needs help; the
 #   project never runs under `python -O`.
@@ -83,9 +84,19 @@ select = ["E4", "E7", "E9", "F", "S"]
 #   never for cryptographic purposes.
 ignore = ["E402", "S101", "S104", "S105", "S110", "S112", "S311", "S324"]
 
+# Default McCabe threshold (10). Existing legacy hot-spots carry a
+# per-function `# noqa: C901` so the rule applies cleanly to new code;
+# refactoring a flagged function removes its marker.
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
 [tool.ruff.lint.per-file-ignores]
 # Tests use /tmp paths, pickle round-trips, and xml fixtures freely.
-"tests/**" = ["S108", "S301", "S314"]
+# C901 is also exempt for tests + scripts: test fixtures and one-off
+# analysis scripts are not production code and don't benefit from
+# the complexity gate.
+"tests/**" = ["S108", "S301", "S314", "C901"]
+"scripts/**" = ["C901"]
 # safe_pickle_load is the centralized helper that calls pickle.load on
 # whitelisted bytes — flagging it would defeat the purpose of the wrapper.
 "vtsearch/security/pickle.py" = ["S301"]

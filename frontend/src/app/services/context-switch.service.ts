@@ -31,11 +31,9 @@ interface ActiveSwitch {
  * each invocation with a monotonic request id. When a prep step
  * completes, the captured id is compared with the current id and the
  * result is discarded if they differ. The previous load's HTTP request
- * is also cancelled when possible. See
- * `docs/plans/active-context-switcher.md` § "Cancel-and-replace on
- * rapid re-click".
+ * is also cancelled when possible.
  *
- * Phase 2 added two entry points:
+ * Two entry points:
  *
  *  - `switchTo(ds, det)` — called by the top-bar pulldowns. When the
  *    user is on `/label/:ds/:det` or `/find/:ds/:det`, it navigates to
@@ -141,7 +139,19 @@ export class ContextSwitchService {
     const detector = detectorId ? detectors.find((d) => d.id === detectorId) : null;
 
     const needsDatasetLoad = !!dataset && !dataset.loaded;
-    const needsDetectorLoad = !!detector && !detector.detector_loaded;
+    // Re-embed labels when the active dataset's embedder differs from the
+    // one the detector's cached label vectors were built with. Both sides
+    // are reported by the registry endpoints; missing values (unloaded
+    // halves, legacy data) skip this trigger and fall through to the
+    // normal load / no-op path.
+    const needsLabelReembed =
+      !!dataset &&
+      !!detector &&
+      !!detector.detector_loaded &&
+      !!dataset.embedder &&
+      !!detector.embedder &&
+      dataset.embedder !== detector.embedder;
+    const needsDetectorLoad = !!detector && (!detector.detector_loaded || needsLabelReembed);
 
     if (!needsDatasetLoad && !needsDetectorLoad) {
       this.finishIfCurrent(current);

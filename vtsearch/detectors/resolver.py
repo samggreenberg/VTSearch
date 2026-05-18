@@ -240,7 +240,7 @@ def resolve_file_from_origin(
         return p
 
 
-def _resolve_with_stack(
+def _resolve_with_stack(  # noqa: C901
     stack: ExitStack,
     origin: dict[str, Any] | None,
     origin_name: str = "",
@@ -433,7 +433,7 @@ def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.
     return result
 
 
-def _apply_clip_and_embed(
+def _apply_clip_and_embed(  # noqa: C901
     file_path: Path,
     media_type: str,
     origin: dict[str, Any],
@@ -540,7 +540,7 @@ def _apply_clip_and_embed(
     return embed_file(file_path, media_type, embedder_name)
 
 
-def resolve_label_embeddings(
+def resolve_label_embeddings(  # noqa: C901
     labels: list[dict[str, Any]],
     media_type: str,
     progress_callback: Any | None = None,

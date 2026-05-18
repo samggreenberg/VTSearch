@@ -71,7 +71,7 @@ LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
     ),
 )
 @datasets_load_bp.alt_response(500, description="The server_folder importer is unavailable.")
-def import_local_folder():
+def import_local_folder():  # noqa: C901
     """Import a folder uploaded from the user's *browser* machine.
 
     The browser uses ``<input type="file" webkitdirectory>`` to let the

@@ -28,14 +28,6 @@
           <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'sorting'"></vt-icon>
           Sorting
         </button>
-        <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'achievements'"
-          (click)="activeSettingsTab = 'achievements'"
-          title="See your usage milestones and current Bronze/Silver/Gold/Platinum tiers">
-          <vt-icon type="trophy" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'achievements'"></vt-icon>
-          Achievements
-        </button>
       </nav>
 
       <div class="settings-panel">
@@ -194,10 +186,6 @@
 
         }
 
-        <!-- Achievements -->
-        @if (activeSettingsTab === 'achievements') {
-          <vt-achievements-tab />
-        }
       </div>
     </div>
 

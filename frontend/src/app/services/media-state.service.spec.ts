@@ -2,13 +2,13 @@ import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { MediaStateService } from './media-state.service';
-import { MediaItem } from '../models/api.models';
+import { Media } from '../models/api.models';
 
 describe('MediaStateService', () => {
   let service: MediaStateService;
   let httpMock: HttpTestingController;
 
-  const mockMedias: MediaItem[] = [
+  const mockMedias: Media[] = [
     { id: 1, type: 'audio', filename: 'a.wav', md5: 'abc', custom_metadata: {} },
     { id: 2, type: 'image', filename: 'b.png', md5: 'def', custom_metadata: {} },
   ];
@@ -68,7 +68,7 @@ describe('MediaStateService', () => {
   });
 
   it('medias$ should emit on load', (done) => {
-    const emissions: MediaItem[][] = [];
+    const emissions: Media[][] = [];
     service.medias$.subscribe((m) => emissions.push(m));
 
     service.loadMedias();

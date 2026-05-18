@@ -1,12 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MediaListComponent } from './media-list.component';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 
 describe('MediaListComponent', () => {
   let component: MediaListComponent;
   let fixture: ComponentFixture<MediaListComponent>;
 
-  const mockMedias: MediaItem[] = [
+  const mockMedias: Media[] = [
     { id: 1, type: 'audio', filename: 'a.wav', md5: 'a1', custom_metadata: {} },
     { id: 2, type: 'audio', filename: 'b.wav', md5: 'b2', custom_metadata: {} },
     { id: 3, type: 'audio', filename: 'c.wav', md5: 'c3', custom_metadata: {} },

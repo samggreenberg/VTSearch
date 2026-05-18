@@ -81,7 +81,7 @@ def sync_to_labelset_source() -> None:
             logger.exception("Failed to sync labels to source: %s", exc)
 
 
-def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, str]] | None:
+def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, str]] | None:  # noqa: C901
     """Pull labels from the active detector's labelset source and apply them.
 
     Args:

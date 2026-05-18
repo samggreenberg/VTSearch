@@ -1,13 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LabelListComponent, LabelEntry } from './label-list.component';
 import { ActiveContextService } from '../../../services/active-context.service';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 
 describe('LabelListComponent', () => {
   let component: LabelListComponent;
   let fixture: ComponentFixture<LabelListComponent>;
 
-  const sampleMedias: MediaItem[] = [
+  const sampleMedias: Media[] = [
     { id: 1, type: 'audio', filename: 'song.wav', md5: 'aaa', custom_metadata: {} },
     { id: 2, type: 'image', filename: 'photo.jpg', md5: 'bbb', custom_metadata: {} },
     { id: 3, type: 'video', filename: 'clip.mp4', md5: 'ccc', custom_metadata: {} },

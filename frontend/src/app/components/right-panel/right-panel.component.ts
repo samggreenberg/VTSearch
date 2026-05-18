@@ -3,10 +3,12 @@ import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DetectorsApiService } from '../../services/detectors-api.service';
-import { LabelElement, MediaItem } from '../../models/api.models';
+import type { DetectorLabelView } from '../../generated/api-client/models/detector-label-view';
+import { Media } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { VtDialogService } from '../../services/dialog.service';
 
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { LabelSortComponent, LabelSortMode } from './label-sort/label-sort.component';
@@ -38,7 +40,7 @@ export interface TrainModeContext {
   styleUrl: './right-panel.component.scss',
 })
 export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
-  @Input() medias: MediaItem[] = [];
+  @Input() medias: Media[] = [];
   @Input() trainMode: TrainModeContext | null = null;
   @Input() focusMode: 'click' | 'hover' = 'click';
   /** 'label' = Labeling mode (detector export allowed), 'find' = Finding mode (no detector export). */
@@ -59,8 +61,8 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   badIds: number[] = [];
   clickTimes: Record<string, number> = {};
   learnedScores: Record<string, number> = {};
-  goodElements: LabelElement[] = [];
-  badElements: LabelElement[] = [];
+  goodElements: DetectorLabelView[] = [];
+  badElements: DetectorLabelView[] = [];
   sortMode: LabelSortMode = 'time-desc';
   viewMode: 'grid' | 'list' = 'grid';
   gridGoalWidth: number = 80;
@@ -77,6 +79,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     public voteState: VoteStateService,
     public labelsetState: LabelsetStateService,
     private settingsState: SettingsStateService,
+    private dialog: VtDialogService,
   ) {}
 
   /** True when the right pane should be sourced from the labelset (not /api/votes). */
@@ -139,7 +142,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
    *  on the left when the element resolves into the active dataset;
    *  otherwise the element exists only in the labelset (e.g. trained on a
    *  different dataset) and there's nothing to focus. */
-  onLabelsetElementSelected(elem: LabelElement): void {
+  onLabelsetElementSelected(elem: DetectorLabelView): void {
     if (elem.cid !== null && elem.cid !== undefined) {
       this.mediaSelected.emit(elem.cid);
     }
@@ -159,11 +162,17 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   onDetectorRenamed(newName: string): void {
     if (!this.trainMode?.model?.registry_id) return;
-    this.detectorsApi.renameInRegistry(this.trainMode.model.registry_id, newName).subscribe({
-      next: () => {
+    const registryId = this.trainMode.model.registry_id;
+    this.detectorsApi.renameInRegistry(registryId, newName).subscribe({
+      next: response => {
         if (this.trainMode?.model) {
           this.trainMode.model.name = newName;
         }
+        this.detectorsApi.promptMoveOrphanedLabelsetFile(
+          this.dialog,
+          registryId,
+          response.pending_labelset_move,
+        );
       },
     });
   }

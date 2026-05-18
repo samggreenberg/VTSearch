@@ -455,6 +455,79 @@ class TextMediaType(MediaType):
     # Demo dataset loading
     # ------------------------------------------------------------------
 
+    def _collect_demo_texts(
+        self,
+        source: str,
+        categories: list,
+        slice_start: int,
+        slice_end: int | None,
+        slice_frac_start: float | None,
+        slice_frac_end: float | None,
+        on_progress,
+    ) -> tuple[list[str], list[str]]:
+        """Resolve a demo text source → (selected_texts, selected_categories)."""
+
+        def _slice_by_dict(
+            categories_articles: dict[str, list[str]],
+        ) -> tuple[list[str], list[str]]:
+            texts: list[str] = []
+            cats: list[str] = []
+            for cat_name in categories:
+                articles = categories_articles.get(cat_name, [])
+                for article in demo_slice(
+                    articles,
+                    slice_start,
+                    slice_end or len(articles),
+                    slice_frac_start,
+                    slice_frac_end,
+                ):
+                    texts.append(article)
+                    cats.append(cat_name)
+            return texts, cats
+
+        if source == "20newsgroups":
+            from vtsearch.datasets.downloader import download_20newsgroups  # noqa: PLC0415
+
+            texts_in, labels, category_names = download_20newsgroups(categories, on_progress=on_progress)
+            selected_texts: list[str] = []
+            selected_categories: list[str] = []
+            for cat_name in categories:
+                if cat_name in category_names:
+                    cat_idx = category_names.index(cat_name)
+                    cat_texts = [texts_in[i] for i, lbl in enumerate(labels) if lbl == cat_idx]
+                    for text in demo_slice(
+                        cat_texts,
+                        slice_start,
+                        slice_end or len(cat_texts),
+                        slice_frac_start,
+                        slice_frac_end,
+                    ):
+                        selected_texts.append(text)
+                        selected_categories.append(cat_name)
+            return selected_texts, selected_categories
+
+        from vtsearch.datasets import downloader  # noqa: PLC0415
+
+        dict_downloaders = {
+            "ag_news": downloader.download_ag_news,
+            "bbc_news": downloader.download_bbc_news,
+            "imdb": downloader.download_imdb,
+            "dbpedia": downloader.download_dbpedia,
+            "reuters21578": downloader.download_reuters21578,
+        }
+        if source in dict_downloaders:
+            return _slice_by_dict(dict_downloaders[source](on_progress=on_progress))
+
+        if source == "arxiv":
+            return _slice_by_dict(
+                downloader.download_arxiv_abstracts(
+                    categories=categories,
+                    on_progress=on_progress,
+                )
+            )
+
+        raise ValueError(f"Unsupported text source: {source!r}")
+
     def load_demo_source(
         self,
         source,
@@ -483,135 +556,15 @@ class TextMediaType(MediaType):
                 raise ValueError(f"No embedders registered for media type {self.type_id!r}")
             embedder = avail[0]
 
-        selected_texts = []
-        selected_categories = []
-
-        if source == "20newsgroups":
-            from vtsearch.datasets.downloader import download_20newsgroups  # noqa: PLC0415
-
-            texts, labels, category_names = download_20newsgroups(categories, on_progress=on_progress)
-
-            for cat_name in categories:
-                if cat_name in category_names:
-                    cat_idx = category_names.index(cat_name)
-                    cat_texts = [texts[i] for i, lbl in enumerate(labels) if lbl == cat_idx]
-                    for text in demo_slice(
-                        cat_texts,
-                        slice_start,
-                        slice_end or len(cat_texts),
-                        slice_frac_start,
-                        slice_frac_end,
-                    ):
-                        selected_texts.append(text)
-                        selected_categories.append(cat_name)
-
-        elif source == "ag_news":
-            from vtsearch.datasets.downloader import download_ag_news  # noqa: PLC0415
-
-            categories_articles = download_ag_news(on_progress=on_progress)
-
-            for cat_name in categories:
-                articles = categories_articles.get(cat_name, [])
-                for article in demo_slice(
-                    articles,
-                    slice_start,
-                    slice_end or len(articles),
-                    slice_frac_start,
-                    slice_frac_end,
-                ):
-                    selected_texts.append(article)
-                    selected_categories.append(cat_name)
-
-        elif source == "bbc_news":
-            from vtsearch.datasets.downloader import download_bbc_news  # noqa: PLC0415
-
-            categories_articles = download_bbc_news(on_progress=on_progress)
-
-            for cat_name in categories:
-                articles = categories_articles.get(cat_name, [])
-                for article in demo_slice(
-                    articles,
-                    slice_start,
-                    slice_end or len(articles),
-                    slice_frac_start,
-                    slice_frac_end,
-                ):
-                    selected_texts.append(article)
-                    selected_categories.append(cat_name)
-
-        elif source == "imdb":
-            from vtsearch.datasets.downloader import download_imdb  # noqa: PLC0415
-
-            categories_reviews = download_imdb(on_progress=on_progress)
-
-            for cat_name in categories:
-                reviews = categories_reviews.get(cat_name, [])
-                for review in demo_slice(
-                    reviews,
-                    slice_start,
-                    slice_end or len(reviews),
-                    slice_frac_start,
-                    slice_frac_end,
-                ):
-                    selected_texts.append(review)
-                    selected_categories.append(cat_name)
-
-        elif source == "dbpedia":
-            from vtsearch.datasets.downloader import download_dbpedia  # noqa: PLC0415
-
-            categories_articles = download_dbpedia(on_progress=on_progress)
-
-            for cat_name in categories:
-                articles = categories_articles.get(cat_name, [])
-                for article in demo_slice(
-                    articles,
-                    slice_start,
-                    slice_end or len(articles),
-                    slice_frac_start,
-                    slice_frac_end,
-                ):
-                    selected_texts.append(article)
-                    selected_categories.append(cat_name)
-
-        elif source == "arxiv":
-            from vtsearch.datasets.downloader import download_arxiv_abstracts  # noqa: PLC0415
-
-            categories_papers = download_arxiv_abstracts(
-                categories=categories,
-                on_progress=on_progress,
-            )
-
-            for cat_name in categories:
-                papers = categories_papers.get(cat_name, [])
-                for paper in demo_slice(
-                    papers,
-                    slice_start,
-                    slice_end or len(papers),
-                    slice_frac_start,
-                    slice_frac_end,
-                ):
-                    selected_texts.append(paper)
-                    selected_categories.append(cat_name)
-
-        elif source == "reuters21578":
-            from vtsearch.datasets.downloader import download_reuters21578  # noqa: PLC0415
-
-            categories_articles = download_reuters21578(on_progress=on_progress)
-
-            for cat_name in categories:
-                articles = categories_articles.get(cat_name, [])
-                for article in demo_slice(
-                    articles,
-                    slice_start,
-                    slice_end or len(articles),
-                    slice_frac_start,
-                    slice_frac_end,
-                ):
-                    selected_texts.append(article)
-                    selected_categories.append(cat_name)
-
-        else:
-            raise ValueError(f"Unsupported text source: {source!r}")
+        selected_texts, selected_categories = self._collect_demo_texts(
+            source,
+            categories,
+            slice_start,
+            slice_end,
+            slice_frac_start,
+            slice_frac_end,
+            on_progress,
+        )
 
         if getattr(embedder, "_model", None) is None:
             on_progress("loading", "Loading text embedding model…", 0, 0)

@@ -461,7 +461,7 @@ def evaluate_one(
     }
 
 
-def run_label_curve_eval(
+def run_label_curve_eval(  # noqa: C901
     dataset_clips: dict[str, dict[int, dict[str, Any]]],
     trainers: Sequence[str] = ("mlp", "svm_linear"),
     label_counts: Sequence[int] = (5, 10, 20, 50, 100),

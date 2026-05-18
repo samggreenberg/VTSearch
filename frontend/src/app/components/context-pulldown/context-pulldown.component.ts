@@ -24,8 +24,7 @@ interface PulldownRow {
   compatibleWithOther: boolean;
   incompatReason: string;
   /** True if this row's id paired with the other half's *active* id has a
-   *  running or pending JobManager job. Drives the spinner glyph — see
-   *  Phase 3 of the active-context-switcher plan. */
+   *  running or pending JobManager job. Drives the spinner glyph. */
   busy: boolean;
   /** Logical job-type names contributing to ``busy`` (``"learned-sort"``,
    *  ``"eval"``, …). Used for the spinner's tooltip. */
@@ -41,8 +40,6 @@ interface PulldownRow {
  * opened, a dropdown with one row per registry entry plus a
  * "+ Add New" footer. Click outside to close. Keyboard: ArrowUp /
  * ArrowDown to navigate, Enter to pick, Escape to close.
- *
- * See `docs/plans/active-context-switcher.md` § Phase 1.
  */
 @Component({
   selector: 'vt-context-pulldown',

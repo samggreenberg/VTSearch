@@ -47,6 +47,23 @@
           <path d="M6.7 2.2h2.6l.3 1.8a5.2 5.2 0 011.2.7l1.7-.7 1.3 2.2-1.4 1.1a5.3 5.3 0 010 1.4l1.4 1.1-1.3 2.2-1.7-.7a5.2 5.2 0 01-1.2.7l-.3 1.8H6.7l-.3-1.8a5.2 5.2 0 01-1.2-.7l-1.7.7-1.3-2.2 1.4-1.1a5.3 5.3 0 010-1.4L2.2 6.2l1.3-2.2 1.7.7a5.2 5.2 0 011.2-.7l.3-1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
           <circle cx="8" cy="8" r="1.6" fill="currentColor"/>
         </svg> Settings</div>
+      @if (recentSessions.length > 0) {
+        <div class="burger-section-header">Recent sessions</div>
+        @for (s of recentSessions; track s.dataset_id + '::' + s.detector_id) {
+          <div
+            class="burger-item burger-subitem"
+            role="menuitem"
+            tabindex="-1"
+            (click)="onRecentClicked(s)"
+            [title]="'Resume ' + s.dataset_name + ' / ' + s.detector_name"
+          >
+            <div class="recent-line">
+              <span class="recent-pair">{{ s.dataset_name }} <span class="recent-sep">/</span> {{ s.detector_name }}</span>
+              <span class="recent-time">{{ formatRecentTime(s.last_activity) }}</span>
+            </div>
+          </div>
+        }
+      }
     </div>
   </nav>
   <a href="mailto:?subject=VTSearch%20Isssue%3A" title="Email us with any comments, concerns, or suggestions!">
@@ -62,6 +79,20 @@
   <vt-context-pulldown kind="dataset" />
   <vt-context-pulldown kind="detector" />
   <span class="top-bar-spacer"></span>
+  <button
+    class="achievements-btn"
+    aria-label="Achievements"
+    title="Achievements — your usage milestones and tier progress"
+    (click)="onAchievements()"
+  ><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 4h12v4a6 6 0 0 1-12 0z"/>
+      <path d="M6 6H3a2 2 0 0 0 0 4h3"/>
+      <path d="M18 6h3a2 2 0 0 1 0 4h-3"/>
+      <line x1="10" y1="14" x2="10" y2="18"/>
+      <line x1="14" y1="14" x2="14" y2="18"/>
+      <rect x="7" y="18" width="10" height="3" rx="1"/>
+    </svg></button>
   <button
     class="help-btn"
     aria-label="Keyboard shortcuts"
@@ -107,6 +138,8 @@
   @if (newDetectorFlow.open) {
     <vt-new-detector-modal
       [defaultMediaType]="newDetectorFlow.defaultMediaType"
+      [seedMediaId]="newDetectorFlow.seedMediaId ?? null"
+      [seedCropParams]="newDetectorFlow.seedCropParams ?? null"
       (closed)="onNewDetectorClosed()"
       (created)="onDetectorCreated($event)"
     />
@@ -115,6 +148,11 @@
 @defer (when showSettings) {
   @if (showSettings) {
     <vt-settings-modal [preselectedViewTab]="settingsViewTab" (closed)="onSettingsClosed()" />
+  }
+}
+@defer (when showAchievements) {
+  @if (showAchievements) {
+    <vt-achievements-modal (closed)="onAchievementsClosed()" />
   }
 }
 @defer (when showKeyboardHelp) {

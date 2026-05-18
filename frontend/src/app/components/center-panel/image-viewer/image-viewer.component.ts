@@ -10,7 +10,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import { NgStyle } from '@angular/common';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 export type RegionBox = readonly [number, number, number, number];
@@ -32,7 +32,7 @@ const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a s
   styleUrl: './image-viewer.component.scss',
 })
 export class ImageViewerComponent implements OnChanges, OnDestroy {
-  @Input() media!: MediaItem;
+  @Input() media!: Media;
   /**
    * True while the parent is in the v2 "bad-vote-with-box discard confirm" armed state.
    * The viewer uses it to (a) render the box with a sticky red pulse, and (b) route Esc /
@@ -60,6 +60,11 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   regionBox: RegionBox | null = null;
   regionBoxShake = false;
   shiftHeld = false;
+  // Sticky toggle exposed by the Marquee button in .image-view-controls. While true the
+  // viewer behaves as if Shift were held: cursor is a crosshair and a left-drag draws a
+  // new region instead of panning. Shift+drag remains a power-user shortcut even when
+  // the toggle is off; toggling the button just turns the gesture on without a modifier.
+  marqueeMode = false;
   renderedW = 0;
   renderedH = 0;
 
@@ -165,12 +170,21 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     this.applyTransform();
   }
 
+  /** True when a drag should draw a region (either Shift-held or Marquee toggle on). */
+  get regionDrawActive(): boolean {
+    return this.shiftHeld || this.marqueeMode;
+  }
+
+  toggleMarqueeMode(): void {
+    this.marqueeMode = !this.marqueeMode;
+  }
+
   onMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return;
 
-    if (this.shiftHeld && this.renderedW > 0 && this.renderedH > 0) {
-      // Shift-drag from anywhere on the canvas starts a fresh box. If an
-      // older box existed, discard it before recording the new anchor.
+    if (this.regionDrawActive && this.renderedW > 0 && this.renderedH > 0) {
+      // Drag from anywhere on the canvas (Shift-held or marquee mode) starts a fresh
+      // box. If an older box existed, discard it before recording the new anchor.
       const local = this.screenToImageNormalized(event);
       if (!local) return;
       const x = clamp01(local.x);
@@ -239,7 +253,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   }
 
   get wrapCursor(): string {
-    if (this.shiftHeld) return 'crosshair';
+    if (this.regionDrawActive) return 'crosshair';
     const max = this.getMaxPan();
     return max.x > 0 || max.y > 0 ? 'grab' : '';
   }

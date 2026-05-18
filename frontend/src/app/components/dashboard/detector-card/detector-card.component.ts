@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
-import { formatProgressFraction } from '../../../utils/format-progress';
+import { formatProgressMessage, isProgressIndeterminate } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 
 @Component({
@@ -168,10 +168,11 @@ export class DetectorCardComponent implements OnChanges {
 
   taskIsIndeterminate(): boolean {
     const t = this.loadingTask;
-    return !(t && t.current != null && t.total != null && t.total > 0);
+    if (!t) return true;
+    return isProgressIndeterminate(t);
   }
 
-  formatFraction(current: number, total: number): string {
-    return formatProgressFraction(current, total);
+  get taskProgressMessage(): string {
+    return this.loadingTask ? formatProgressMessage(this.loadingTask, 'Loading...') : '';
   }
 }

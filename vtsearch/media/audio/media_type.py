@@ -450,6 +450,91 @@ class AudioMediaType(MediaType):
     # Demo dataset loading
     # ------------------------------------------------------------------
 
+    def _collect_audio_files(
+        self,
+        source: str,
+        categories: list,
+        slice_start: int,
+        slice_end: int | None,
+        slice_frac_start: float | None,
+        slice_frac_end: float | None,
+        on_progress,
+    ):
+        """Resolve a demo source name → (audio_files, audio_dir)."""
+
+        def _sliced_by_category(by_cat: dict[str, list]) -> list:
+            out: list = []
+            for cat in categories:
+                out.extend(
+                    demo_slice(
+                        by_cat.get(cat, []),
+                        slice_start,
+                        slice_end,
+                        slice_frac_start,
+                        slice_frac_end,
+                    )
+                )
+            return out
+
+        if source == "gtzan":
+            from vtsearch.datasets.downloader import download_gtzan  # noqa: PLC0415
+            from vtsearch.datasets.loader import load_audio_metadata_from_folders  # noqa: PLC0415
+
+            audio_dir = download_gtzan(on_progress=on_progress)
+            metadata = load_audio_metadata_from_folders(audio_dir, categories)
+            by_cat = self._group_metadata_by_category(metadata, categories, filter_to_categories=False)
+            return _sliced_by_category(by_cat), audio_dir
+
+        if source == "speech_commands_v2":
+            from vtsearch.datasets.downloader import download_speech_commands_v2  # noqa: PLC0415
+            from vtsearch.datasets.loader import load_audio_metadata_from_folders  # noqa: PLC0415
+
+            audio_dir = download_speech_commands_v2(on_progress=on_progress)
+            metadata = load_audio_metadata_from_folders(audio_dir, categories)
+            by_cat = self._group_metadata_by_category(metadata, categories, filter_to_categories=False)
+            return _sliced_by_category(by_cat), audio_dir
+
+        if source == "urbansound8k":
+            from vtsearch.datasets.downloader import download_urbansound8k  # noqa: PLC0415
+            from vtsearch.datasets.loader import load_urbansound8k_metadata  # noqa: PLC0415
+
+            us8k_dir = download_urbansound8k(on_progress=on_progress)
+            metadata = load_urbansound8k_metadata(us8k_dir)
+            by_cat = self._group_metadata_by_category(metadata, categories, filter_to_categories=True)
+            return _sliced_by_category(by_cat), us8k_dir / "audio"
+
+        if not source or source == "esc50":
+            from vtsearch.datasets.downloader import download_esc50  # noqa: PLC0415
+            from vtsearch.datasets.loader import load_esc50_metadata  # noqa: PLC0415
+
+            audio_dir = download_esc50(on_progress=on_progress)
+            esc_metadata = load_esc50_metadata(audio_dir.parent)
+
+            by_cat: dict[str, list] = {}
+            for audio_path in sorted(audio_dir.glob("*.wav")):
+                if audio_path.name in esc_metadata:
+                    cat = esc_metadata[audio_path.name]["category"]
+                    if cat in categories:
+                        by_cat.setdefault(cat, []).append((audio_path, esc_metadata[audio_path.name]))
+            return _sliced_by_category(by_cat), audio_dir
+
+        raise ValueError(f"Unsupported audio source: {source!r}")
+
+    @staticmethod
+    def _group_metadata_by_category(
+        metadata: dict,
+        categories: list,
+        *,
+        filter_to_categories: bool,
+    ) -> dict[str, list]:
+        by_cat: dict[str, list] = {}
+        for _key, meta in sorted(metadata.items()):
+            cat = meta["category"]
+            if filter_to_categories and cat not in categories:
+                continue
+            by_cat.setdefault(cat, []).append((meta["path"], meta))
+        return by_cat
+
     def load_demo_source(
         self,
         source,
@@ -478,113 +563,15 @@ class AudioMediaType(MediaType):
                 raise ValueError(f"No embedders registered for media type {self.type_id!r}")
             embedder = avail[0]
 
-        if source == "gtzan":
-            from vtsearch.datasets.downloader import download_gtzan  # noqa: PLC0415
-            from vtsearch.datasets.loader import load_audio_metadata_from_folders  # noqa: PLC0415
-
-            genres_dir = download_gtzan(on_progress=on_progress)
-            metadata = load_audio_metadata_from_folders(genres_dir, categories)
-
-            by_cat: dict[str, list] = {}
-            for _key, meta in sorted(metadata.items()):
-                cat = meta["category"]
-                by_cat.setdefault(cat, []).append((meta["path"], meta))
-
-            audio_files: list = []
-            for cat in categories:
-                audio_files.extend(
-                    demo_slice(
-                        by_cat.get(cat, []),
-                        slice_start,
-                        slice_end,
-                        slice_frac_start,
-                        slice_frac_end,
-                    )
-                )
-
-            audio_dir = genres_dir
-
-        elif source == "speech_commands_v2":
-            from vtsearch.datasets.downloader import download_speech_commands_v2  # noqa: PLC0415
-            from vtsearch.datasets.loader import load_audio_metadata_from_folders  # noqa: PLC0415
-
-            sc_dir = download_speech_commands_v2(on_progress=on_progress)
-            metadata = load_audio_metadata_from_folders(sc_dir, categories)
-
-            by_cat = {}
-            for _key, meta in sorted(metadata.items()):
-                cat = meta["category"]
-                by_cat.setdefault(cat, []).append((meta["path"], meta))
-
-            audio_files = []
-            for cat in categories:
-                audio_files.extend(
-                    demo_slice(
-                        by_cat.get(cat, []),
-                        slice_start,
-                        slice_end,
-                        slice_frac_start,
-                        slice_frac_end,
-                    )
-                )
-
-            audio_dir = sc_dir
-
-        elif source == "urbansound8k":
-            from vtsearch.datasets.downloader import download_urbansound8k  # noqa: PLC0415
-            from vtsearch.datasets.loader import load_urbansound8k_metadata  # noqa: PLC0415
-
-            us8k_dir = download_urbansound8k(on_progress=on_progress)
-            metadata = load_urbansound8k_metadata(us8k_dir)
-
-            by_cat = {}
-            for _fname, meta in sorted(metadata.items()):
-                cat = meta["category"]
-                if cat in categories:
-                    by_cat.setdefault(cat, []).append((meta["path"], meta))
-
-            audio_files = []
-            for cat in categories:
-                audio_files.extend(
-                    demo_slice(
-                        by_cat.get(cat, []),
-                        slice_start,
-                        slice_end,
-                        slice_frac_start,
-                        slice_frac_end,
-                    )
-                )
-
-            audio_dir = us8k_dir / "audio"
-
-        elif not source or source == "esc50":
-            from vtsearch.datasets.downloader import download_esc50  # noqa: PLC0415
-            from vtsearch.datasets.loader import load_esc50_metadata  # noqa: PLC0415
-
-            audio_dir = download_esc50(on_progress=on_progress)
-            esc_metadata = load_esc50_metadata(audio_dir.parent)
-
-            by_cat = {}
-            for audio_path in sorted(audio_dir.glob("*.wav")):
-                if audio_path.name in esc_metadata:
-                    cat = esc_metadata[audio_path.name]["category"]
-                    if cat in categories:
-                        by_cat.setdefault(cat, []).append((audio_path, esc_metadata[audio_path.name]))
-
-            audio_files = []
-            for cat in categories:
-                audio_files.extend(
-                    demo_slice(
-                        by_cat.get(cat, []),
-                        slice_start,
-                        slice_end,
-                        slice_frac_start,
-                        slice_frac_end,
-                    )
-                )
-
-        else:
-            raise ValueError(f"Unsupported audio source: {source!r}")
+        audio_files, audio_dir = self._collect_audio_files(
+            source,
+            categories,
+            slice_start,
+            slice_end,
+            slice_frac_start,
+            slice_frac_end,
+            on_progress,
+        )
 
         # Load models
         if getattr(embedder, "_model", None) is None:

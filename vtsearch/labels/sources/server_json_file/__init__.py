@@ -90,6 +90,29 @@ class ServerFileLabelsetSource(LabelsetSource):
         os.replace(tmp, filepath)
 
 
+def resolve_filepath_for(
+    field_values: dict[str, Any],
+    *,
+    detector_id: str,
+    detector_name: str,
+) -> str:
+    """Resolve the filepath using explicit detector identity values.
+
+    Used by flows that need to resolve a path for a detector other than the
+    currently-active one — notably the rename endpoint, which needs to
+    resolve both the OLD and NEW paths to detect an orphaned labelset file.
+    """
+    from vtsearch.security.path_validation import sanitize_template_value
+
+    filepath = (field_values.get("filepath") or "").strip()
+    if not filepath:
+        raise ValueError("A file path is required.")
+
+    filepath = filepath.replace("{detector_id}", sanitize_template_value(detector_id))
+    filepath = filepath.replace("{detector_name}", sanitize_template_value(detector_name))
+    return filepath
+
+
 def _resolve_filepath(field_values: dict[str, Any]) -> str:
     """Resolve the filepath, expanding template variables.
 
@@ -102,13 +125,15 @@ def _resolve_filepath(field_values: dict[str, Any]) -> str:
         raise ValueError("A file path is required.")
 
     if "{detector_id}" in filepath or "{detector_name}" in filepath:
-        from vtsearch.security.path_validation import sanitize_template_value
         from vtsearch.state.core import get_active_detector_context
 
         ctx = get_active_detector_context()
         if ctx is not None:
-            filepath = filepath.replace("{detector_id}", sanitize_template_value(ctx.detector_id))
-            filepath = filepath.replace("{detector_name}", sanitize_template_value(ctx.name))
+            return resolve_filepath_for(
+                field_values,
+                detector_id=ctx.detector_id,
+                detector_name=ctx.name,
+            )
 
     return filepath
 

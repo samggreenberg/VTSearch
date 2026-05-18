@@ -306,18 +306,28 @@ the way of fast keyboard voting.
 
 ### Drawing a region
 
-1. **Hold `Shift`** while the focus pane is showing an image.  The
-   cursor flips to a crosshair and the normal pan-on-drag gesture
-   is suppressed.
-2. **Click-drag-release** to draw a rectangle over the region you
-   want to vote good on.  After release the rectangle shows 8
-   resize handles plus a draggable body, so you can adjust it.
-3. **Press `→`** (or click **Good**) to submit a good vote with
-   the region attached.
+There are two ways into region-draw mode:
+
+- **Marquee button** — click the dashed-rectangle toggle in the
+  image view controls (below the image, next to Rotate / Zoom).
+  While the toggle is on, the cursor stays a crosshair and a normal
+  left-drag draws a region.  The toggle persists across items, so
+  you can annotate many in a row.  Click the button again to leave
+  marquee mode and restore the default pan-on-drag behaviour.
+- **`Shift`+drag** — a power-user shortcut that works whether or
+  not marquee mode is on.  Hold `Shift` while the focus pane is
+  showing an image: the cursor flips to a crosshair and the normal
+  pan-on-drag gesture is suppressed.
+
+Either way, **click-drag-release** to draw a rectangle over the
+region you want to vote good on.  After release the rectangle shows
+8 resize handles plus a draggable body, so you can adjust it.
+Then **press `→`** (or click **Good**) to submit a good vote with
+the region attached.
 
 The rectangle is stored in *normalised image coordinates* — it
 stays anchored to the same pixels of the image even if you zoom in,
-pan, or rotate before voting.  A `Shift`-click without dragging (a
+pan, or rotate before voting.  A click without dragging (a
 zero-area "click") restores the previously drawn rectangle rather
 than discarding it.  `Esc` clears the rectangle without voting.
 

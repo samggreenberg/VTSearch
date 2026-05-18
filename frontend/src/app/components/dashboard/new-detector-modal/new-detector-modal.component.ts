@@ -20,6 +20,7 @@ import {
   MediaCropModalComponent,
   MediaCropResult,
 } from '../../modals/media-crop-modal/media-crop-modal.component';
+import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 interface BrowseEntry {
@@ -37,13 +38,22 @@ type TrainedSubView = 'picker' | 'form';
 @Component({
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent, MediaCropModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent, MediaCropModalComponent, DropZoneComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
 export class NewDetectorModalComponent implements OnInit {
   /** Media type of the currently active dataset, if any. */
   @Input() defaultMediaType = '';
+
+  /** When set, the modal opens with this loaded-media id materialised into
+   *  example_media/ as the seed example. The picker is bypassed and the
+   *  user lands directly on the form. Cleared by callers via
+   *  ``NewThingFlowsService.closeNewDetector``. */
+  @Input() seedMediaId: number | null = null;
+
+  /** Optional crop bounds applied when materialising ``seedMediaId``. */
+  @Input() seedCropParams: Record<string, unknown> | null = null;
 
   @Output() closed = new EventEmitter<void>();
   @Output() created = new EventEmitter<string>();
@@ -211,6 +221,37 @@ export class NewDetectorModalComponent implements OnInit {
         },
       });
     }
+
+    if (this.seedMediaId != null) {
+      this.materializeSeedFromMediaId(this.seedMediaId, this.seedCropParams ?? undefined);
+    }
+  }
+
+  /** Materialise a loaded media into example_media/ and pre-fill the
+   *  example fields, so the user lands on the form with the seed already
+   *  selected. */
+  private materializeSeedFromMediaId(
+    mediaId: number,
+    cropParams?: Record<string, unknown>,
+  ): void {
+    this.submitting = true;
+    this.sortingApi
+      .saveServerMediaFromMediaId({ media_id: mediaId, crop_params: cropParams })
+      .subscribe({
+        next: (res) => {
+          this.exampleType = 'media';
+          this.exampleValue = res.filename;
+          this.exampleDisplay = res.original_name || res.filename;
+          this.exampleMediaType = this.mediaType;
+          this.exampleThumbFailed = false;
+          this.pendingText = '';
+          this.submitting = false;
+        },
+        error: (err) => {
+          this.submitting = false;
+          this.error = err.error?.message || 'Failed to load seed media';
+        },
+      });
   }
 
   unlockMediaType(): void {
@@ -639,15 +680,13 @@ export class NewDetectorModalComponent implements OnInit {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  /** Local file picker handler.  Used by both the inline "Upload File…"
-   *  button on the main form and the Local Folder / Local Files cards in
-   *  the picker.  Multi-file selections (e.g. webkitdirectory) are
-   *  collapsed to the first file since only one example is needed. */
-  onLocalFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) return;
-    const file = input.files[0];
-    input.value = '';
+  /** Local file picker handler.  Used by the drop-zone affordance in both
+   *  the main form (next to "Browse Media…") and the Local Folder / Local
+   *  Files cards in the media picker.  Multi-file drops (e.g. a folder)
+   *  collapse to the first file since only one example is needed. */
+  onLocalFileDropped(files: File[]): void {
+    if (files.length === 0) return;
+    const file = files[0];
     this.pendingFile = file;
     this.pendingFileMediaType = this.mediaType || this.mediaTypeFromFile(file);
   }

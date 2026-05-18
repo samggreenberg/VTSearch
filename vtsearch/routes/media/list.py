@@ -78,7 +78,7 @@ def _parse_region_box(raw: Any) -> tuple[float, float, float, float] | None:
     return (x0, y0, x1, y1)
 
 
-def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:
+def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:  # noqa: C901
     """Transcode video bytes to browser-playable MP4.
 
     Tries ffmpeg first (preserves audio, H.264 output).  Falls back to OpenCV
@@ -407,7 +407,7 @@ def media_video(media_id: int):
 @medias_bp.route("/api/medias/<int:media_id>/image")
 @medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
 @medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
-def media_image(media_id: int):
+def media_image(media_id: int):  # noqa: C901
     """Stream the image bytes for a single image media item.
 
     Determines the MIME type from the media's filename extension, defaulting
@@ -577,7 +577,7 @@ def vote_media(body: dict, media_id: int):
         "invalid label), no dataset loaded, or no embedder available."
     ),
 )
-def add_media_to_pile():
+def add_media_to_pile():  # noqa: C901
     """Upload a media file and add it directly to the Good or Bad pile.
 
     If a media with the same MD5 already exists in the dataset, the existing

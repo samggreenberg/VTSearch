@@ -80,7 +80,7 @@ class Image2TextMediaConverter(MediaConverter):
     def target_type(self) -> str:
         return "text"
 
-    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:  # noqa: C901
         language = str(self.get_param(params, "language") or "en")
         try:
             threshold = float(self.get_param(params, "threshold") or 0.5)

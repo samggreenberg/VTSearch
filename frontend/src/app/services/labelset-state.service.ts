@@ -1,13 +1,14 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, EMPTY, Observable, Subject, timer } from 'rxjs';
 import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
-import { LabelElement, LabelsDetailResponse } from '../models/api.models';
+import type { DetectorLabelView } from '../generated/api-client/models/detector-label-view';
+import type { DetectorLabelsDetailResponse } from '../generated/api-client/models/detector-labels-detail-response';
 import { DetectorsApiService } from './detectors-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class LabelsetStateService implements OnDestroy {
-  private readonly goodSubject = new BehaviorSubject<LabelElement[]>([]);
-  private readonly badSubject = new BehaviorSubject<LabelElement[]>([]);
+  private readonly goodSubject = new BehaviorSubject<DetectorLabelView[]>([]);
+  private readonly badSubject = new BehaviorSubject<DetectorLabelView[]>([]);
   private readonly mediaTypeSubject = new BehaviorSubject<string>('');
   private readonly stopPolling$ = new Subject<void>();
   private readonly destroy$ = new Subject<void>();
@@ -26,11 +27,11 @@ export class LabelsetStateService implements OnDestroy {
     this.destroy$.complete();
   }
 
-  get good(): LabelElement[] {
+  get good(): DetectorLabelView[] {
     return this.goodSubject.value;
   }
 
-  get bad(): LabelElement[] {
+  get bad(): DetectorLabelView[] {
     return this.badSubject.value;
   }
 
@@ -89,14 +90,14 @@ export class LabelsetStateService implements OnDestroy {
       return;
     }
     // Flip
-    const flipped: LabelElement = { ...elem, label: vote };
+    const flipped: DetectorLabelView = { ...elem, label: vote };
     if (vote === 'good') nextGood.push(flipped);
     else nextBad.push(flipped);
     this.goodSubject.next(nextGood);
     this.badSubject.next(nextBad);
   }
 
-  private fetch$(): Observable<LabelsDetailResponse | never> {
+  private fetch$(): Observable<DetectorLabelsDetailResponse | never> {
     if (!this.modelName) {
       this.goodSubject.next([]);
       this.badSubject.next([]);

@@ -111,13 +111,12 @@
             <div class="example-col">
               <label class="col-label">Media Example</label>
               <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" [disabled]="hasPendingText" title="Browse demos, server folders, or upload a file to pick an example">Browse Media...</button>
-              <input
-                #fileInput
-                type="file"
-                class="hidden-file-input"
-                (change)="onLocalFileSelected($event)"
-              />
-              <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()" [disabled]="hasPendingText" title="Upload a media file from your computer">Upload File...</button>
+              <vt-drop-zone
+                label="Drop a media file here"
+                sublabel="or click to upload from this computer"
+                [disabled]="hasPendingText"
+                (filesSelected)="onLocalFileDropped($event)"
+              ></vt-drop-zone>
             </div>
           </div>
         }
@@ -126,7 +125,7 @@
       @if (tab === 'trained') {
         @if (trainedView === 'picker') {
           <div class="form-group">
-            <label class="col-label">Label Importer <span class="required">*</span></label>
+            <label class="col-label">Import Labels From <span class="required">*</span></label>
             <p class="info-text">Choose where to import labels from. The resulting detector's training data will be the imported labels.</p>
             @if (labelImportersLoading) {
               <p class="empty-state">Loading importers...</p>
@@ -524,26 +523,23 @@
             and used as the example for this detector.
           </p>
           @if (activePickerView === 'local_folder') {
-            <input
-              id="nmm-local-folder-input"
-              type="file"
-              class="form-input"
-              webkitdirectory
-              directory
-              multiple
-              (change)="onLocalFileSelected($event)"
-            />
+            <vt-drop-zone
+              label="Drop a folder here to use as example"
+              sublabel="or click to browse — the first file is used"
+              [directory]="true"
+              [multiple]="true"
+              (filesSelected)="onLocalFileDropped($event)"
+            ></vt-drop-zone>
             <p class="info-text">
               The first file in the picked folder will be used. To pick a single file directly,
               switch to the <strong>Local Files</strong> tab.
             </p>
           } @else {
-            <input
-              id="nmm-local-files-input"
-              type="file"
-              class="form-input"
-              (change)="onLocalFileSelected($event)"
-            />
+            <vt-drop-zone
+              label="Drop a media file here to use as example"
+              sublabel="or click to browse"
+              (filesSelected)="onLocalFileDropped($event)"
+            ></vt-drop-zone>
           }
         </div>
       }

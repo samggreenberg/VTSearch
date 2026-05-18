@@ -2,13 +2,13 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ElementRef } from '@angular/core';
 import { ImageViewerComponent, RegionBox } from './image-viewer.component';
 import { ActiveContextService } from '../../../services/active-context.service';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 
 describe('ImageViewerComponent', () => {
   let component: ImageViewerComponent;
   let fixture: ComponentFixture<ImageViewerComponent>;
 
-  const mockMedia: MediaItem = {
+  const mockMedia: Media = {
     id: 2,
     type: 'image',
     filename: 'test.png',
@@ -322,6 +322,79 @@ describe('ImageViewerComponent', () => {
       (component as unknown as { onWindowMouseUp: () => void }).onWindowMouseUp();
 
       expect(component.regionBox).toBeNull();
+    });
+  });
+
+  describe('marquee mode toggle', () => {
+    function setupWrap(component: ImageViewerComponent) {
+      component.renderedW = 100;
+      component.renderedH = 100;
+      component.wrapRef = {
+        nativeElement: {
+          getBoundingClientRect: () => ({
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 100,
+            right: 100,
+            bottom: 100,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          }),
+        } as unknown as HTMLDivElement,
+      } as ElementRef<HTMLDivElement>;
+    }
+
+    it('starts off and flips on toggle', () => {
+      expect(component.marqueeMode).toBeFalse();
+      component.toggleMarqueeMode();
+      expect(component.marqueeMode).toBeTrue();
+      component.toggleMarqueeMode();
+      expect(component.marqueeMode).toBeFalse();
+    });
+
+    it('reports regionDrawActive when either Shift is held or marquee is on', () => {
+      expect(component.regionDrawActive).toBeFalse();
+      component.shiftHeld = true;
+      expect(component.regionDrawActive).toBeTrue();
+      component.shiftHeld = false;
+      component.marqueeMode = true;
+      expect(component.regionDrawActive).toBeTrue();
+    });
+
+    it('shows a crosshair cursor when marquee mode is on', () => {
+      expect(component.wrapCursor).not.toBe('crosshair');
+      component.marqueeMode = true;
+      expect(component.wrapCursor).toBe('crosshair');
+    });
+
+    it('starts a draw-drag on mousedown when marquee mode is on (no Shift required)', () => {
+      setupWrap(component);
+      component.marqueeMode = true;
+
+      const ev: MouseEvent = {
+        button: 0,
+        clientX: 30,
+        clientY: 30,
+        preventDefault: () => {},
+      } as unknown as MouseEvent;
+      component.onMouseDown(ev);
+
+      // Mid-drag the box should already exist as the zero-area anchor.
+      expect(component.regionBox).not.toBeNull();
+      expect(component.regionBox![0]).toBeCloseTo(0.3, 5);
+      expect(component.regionBox![1]).toBeCloseTo(0.3, 5);
+    });
+
+    it('persists across media changes', () => {
+      component.marqueeMode = true;
+      const next: Media = { ...mockMedia, id: 99, filename: 'b.png' };
+      component.media = next;
+      component.ngOnChanges({
+        media: { currentValue: next, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
+      });
+      expect(component.marqueeMode).toBeTrue();
     });
   });
 

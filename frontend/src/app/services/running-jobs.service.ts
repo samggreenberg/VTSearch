@@ -31,7 +31,7 @@ export function pairKey(datasetId: string, detectorId: string): string {
  *
  * Consumed by the top-bar pulldown to render a spinner glyph on rows
  * whose pair has work in flight — the spinner is **per-pair**, not
- * per-half (see ``docs/plans/active-context-switcher.md`` § Phase 3).
+ * per-half.
  *
  * The service starts polling lazily on the first observer of
  * {@link busyPairs$} and stops when the last observer unsubscribes,

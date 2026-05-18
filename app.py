@@ -67,6 +67,7 @@ from vtsearch.routes import (  # noqa: E402
     main_bp,
     processors_crud_bp,
     processors_scoring_bp,
+    sessions_bp,
     settings_bp,
     settings_io_bp,
     sorting_bp,
@@ -348,6 +349,7 @@ api.register_blueprint(media_server_bp)
 api.register_blueprint(main_bp)
 api.register_blueprint(medias_bp)
 api.register_blueprint(sorting_bp)
+api.register_blueprint(sessions_bp)
 api.register_blueprint(processors_crud_bp)
 api.register_blueprint(processors_scoring_bp)
 api.register_blueprint(datasets_listings_bp)

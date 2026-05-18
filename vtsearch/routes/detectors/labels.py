@@ -175,7 +175,7 @@ def save_detector_labels(name: str):
     "/api/detectors/<name>/import-labels/<importer_name>",
     methods=["POST"],
 )
-def import_labels_into_detector(name: str, importer_name: str):
+def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
     """Run a label importer and merge results into this detector's labelset.
 
     Unlike the regular ``/api/label-importers/import/`` route, this does

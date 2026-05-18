@@ -13,6 +13,8 @@ POST   /api/detectors/registry/load                   Load a detector into memor
 POST   /api/detectors/registry/<id>/unload            Unload a detector from memory.
 DELETE /api/detectors/registry/<id>                   Remove a detector from the registry.
 PUT    /api/detectors/registry/<id>/rename            Rename a registered detector.
+POST   /api/detectors/registry/<id>/labelset-source/move-file
+                                                      Move an orphaned labelset file after a rename.
 PUT    /api/detectors/registry/<id>/autorun           Toggle the detector's autorun flag.
 POST   /api/detectors/cancel/<task_id>                Cancel a load task.
 
@@ -44,6 +46,8 @@ from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
 from vtsearch.detectors.media_seeding import seed_good_votes_from_examples as _seed_good_votes_from_examples
 from vtsearch.schemas.detectors import (
     DetectorCancelResponseSchema,
+    DetectorLabelsetMoveRequestSchema,
+    DetectorLabelsetMoveResponseSchema,
     DetectorRegistryAutorunRequestSchema,
     DetectorRegistryAutorunResponseSchema,
     DetectorRegistryCreateRequestSchema,
@@ -78,6 +82,8 @@ def list_registered_detectors():
     from vtsearch.detectors.registry import get_loaded_detector_ids, list_detectors
     from vtsearch.settings import get_autorun_detectors
 
+    from vtsearch.state.core import get_detector_context
+
     entries = list_detectors()
     loaded_ids = get_loaded_detector_ids()
     autorun_names = set(get_autorun_detectors())
@@ -87,6 +93,15 @@ def list_registered_detectors():
         entry["autorun"] = entry.get("name", "") in autorun_names
         entry.setdefault("last_trained_at", None)
         entry["detector_loaded"] = did in loaded_ids
+        # Expose the loaded detector's recorded embedder so the frontend
+        # can detect a cross-embedder switch and trigger a label re-embed
+        # via /api/detectors/registry/load. Unloaded detectors have no
+        # embedder yet (it's inferred from the dataset on load).
+        if entry["detector_loaded"]:
+            ctx = get_detector_context(did)
+            entry["embedder"] = ctx.embedder if ctx is not None else ""
+        else:
+            entry["embedder"] = ""
     return {"detectors": entries}
 
 
@@ -155,7 +170,7 @@ def register_detector_route(body: dict):
     "/api/detectors/registry/from-labelset/<importer_name>",
     methods=["POST"],
 )
-def register_detector_from_labelset(importer_name: str):
+def register_detector_from_labelset(importer_name: str):  # noqa: C901
     """Create a detector seeded with labels from a label importer.
 
     Plugin-dependent body shape: not described in the OpenAPI spec.
@@ -280,11 +295,115 @@ def register_detector_from_labelset(importer_name: str):
 # ---------------------------------------------------------------------------
 
 
+def _active_dataset_embedder_name() -> str:
+    """Return the embedder name recorded on the active dataset's medias, or ``""``."""
+    from vtsearch.state import snapshot_medias
+
+    snap = snapshot_medias()
+    if not snap:
+        return ""
+    first = next(iter(snap.values()), {})
+    return first.get("embedder", "") or ""
+
+
+def _embedder_display_name(embedder_name: str) -> str:
+    """Return a human-friendly name for *embedder_name*, falling back to the id."""
+    if not embedder_name:
+        return ""
+    from vtsearch.media import get_embedder
+
+    try:
+        return get_embedder(embedder_name).display_name or embedder_name
+    except KeyError:
+        return embedder_name
+
+
+def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
+    """Fire a re-embed task when the active dataset uses a different embedder.
+
+    Returns the task id when work was started, or ``None`` when the cache is
+    already aligned (same embedder, empty dataset, no labelset cached, etc.)
+    so the caller can return the synchronous fast-path.
+    """
+    new_embedder = _active_dataset_embedder_name()
+    if not new_embedder or not det_ctx.embedder or new_embedder == det_ctx.embedder:
+        return None
+
+    labelset = det_ctx.cached_labelset
+    if labelset is None or not labelset.elements:
+        # Nothing to re-embed; just update the stamp so we don't re-enter
+        # this branch on every subsequent switch.
+        det_ctx.embedder = new_embedder
+        return None
+
+    from vtsearch.concurrency.progress import CancelledError, detector_loading_tasks
+    from vtsearch.state import get_active_context
+    from vtsearch.state.core import set_thread_dataset_context, set_thread_detector_context
+
+    _thread_ds_ctx = get_active_context()
+    media_type = det_ctx.cached_labelset_media_type or entry.get("media_type", "") or ""
+    display = _embedder_display_name(new_embedder)
+    base_msg = f"Re-resolving labels for {display}…" if display else "Re-resolving labels…"
+
+    task_id = f"_detreembed_{det_ctx.detector_id[:8]}"
+    tracker = detector_loading_tasks.create_task(
+        task_id,
+        entry.get("name", det_ctx.detector_id),
+        detector_id=det_ctx.detector_id,
+        media_type=media_type,
+        embedder=new_embedder,
+    )
+    tracker.update("loading", base_msg, 0, 0, step=1, total_steps=1)
+
+    def reembed_task():
+        from vtsearch.detectors.labelset_training import train_from_labelset
+
+        set_thread_dataset_context(_thread_ds_ctx)
+        set_thread_detector_context(det_ctx)
+        try:
+
+            def _embed_progress(name: str, done: int, total: int) -> None:
+                tracker.check_cancelled()
+                msg = f"{base_msg} ({done}/{total})" if total else base_msg
+                tracker.update("loading", msg, done, total, step=1, total_steps=1)
+
+            # ``populate_label_embeddings`` clears the cache when it detects
+            # the embedder change, so this rebuilds against the new embedder
+            # from scratch. The stamp on ``det_ctx.embedder`` is updated
+            # inside ``populate_label_embeddings``.
+            from vtsearch.state import snapshot_medias
+
+            train_from_labelset(
+                det_ctx,
+                labelset,
+                media_type=media_type,
+                snap=snapshot_medias(),
+                on_progress=_embed_progress,
+            )
+            tracker.update("idle", "", 0, 0, step=None, total_steps=None)
+        except CancelledError:
+            tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
+        except Exception as e:
+            import traceback as _tb
+
+            _tb.print_exc()
+            error_msg = str(e) or repr(e) or "Unknown error during label re-embedding"
+            tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
+        finally:
+            detector_loading_tasks.mark_finished(task_id)
+            set_thread_dataset_context(None)
+            set_thread_detector_context(None)
+
+    thread = threading.Thread(target=reembed_task, daemon=True)
+    thread.start()
+    return task_id
+
+
 @detectors_registry_bp.route("/api/detectors/registry/load", methods=["POST"])
 @detectors_registry_bp.arguments(DetectorRegistryLoadRequestSchema)
 @detectors_registry_bp.response(200, DetectorRegistryLoadResponseSchema)
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
-def load_detector_route(body: dict):
+def load_detector_route(body: dict):  # noqa: C901
     """Load a detector into memory and make it active.
 
     Pass ``detector_id=null`` (or omit the field) to unload the active
@@ -326,6 +445,24 @@ def load_detector_route(body: dict):
         return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
     if is_detector_loaded(detector_id):
+        # Detector is already in memory, but its cached label embeddings may
+        # have been built against a different embedder than the one the
+        # currently-active dataset uses (e.g. user switched from an image
+        # dataset embedded with SigLIP to one embedded with CLIP). Re-embed
+        # the labels in that case so MLP training mixes only same-space
+        # vectors. The cache invalidation itself happens inside
+        # ``populate_label_embeddings`` — this branch just makes the work
+        # visible via a progress task instead of letting it run lazily
+        # inside the next vote or learned-sort request.
+        det_ctx_existing = get_active_detector_context()
+        if det_ctx_existing.detector_id == detector_id:
+            task_id = _maybe_start_label_reembed(det_ctx_existing, entry)
+            if task_id is not None:
+                return {
+                    "ok": True,
+                    "message": "Re-embedding labels",
+                    "task_id": task_id,
+                }
         return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
     from vtsearch.concurrency.progress import CancelledError, detector_loading_tasks
@@ -581,7 +718,9 @@ def cancel_detector_loading_task(task_id: str):
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 def rename_registered_detector(body: dict, detector_id: str):
     """Rename a registered detector and its on-disk labelset file."""
+    from vtsearch.detectors.labelset_rename import detect_pending_labelset_move
     from vtsearch.detectors.registry import get_detector, rename_detector
+    from vtsearch.state.core import get_detector_context
 
     new_name = body["name"].strip()
     if not new_name:
@@ -591,6 +730,7 @@ def rename_registered_detector(body: dict, detector_id: str):
     if entry is None:
         abort(404, message="Detector not found")
 
+    pending_move: dict[str, str] | None = None
     old_name = entry.get("name", "")
     if old_name and old_name != new_name:
         old_path = _detector_path(old_name)
@@ -613,8 +753,65 @@ def rename_registered_detector(body: dict, detector_id: str):
         except Exception:
             logger.exception("Failed to rename autorun entry for %s", detector_id)
 
+        # Update the loaded in-memory context so future syncs use the new
+        # name in {detector_name} template substitution, and detect any
+        # orphaned labelset file the rename leaves behind.
+        ctx = get_detector_context(detector_id)
+        if ctx is not None:
+            pending_move = detect_pending_labelset_move(
+                ctx.labelset_source,
+                detector_id=detector_id,
+                old_name=old_name,
+                new_name=new_name,
+            )
+            ctx.name = new_name
+
     rename_detector(detector_id, new_name)
-    return {"ok": True, "name": new_name}
+    return {"ok": True, "name": new_name, "pending_labelset_move": pending_move}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/detectors/registry/<detector_id>/labelset-source/move-file
+# ---------------------------------------------------------------------------
+
+
+@detectors_registry_bp.route(
+    "/api/detectors/registry/<detector_id>/labelset-source/move-file",
+    methods=["POST"],
+)
+@detectors_registry_bp.arguments(DetectorLabelsetMoveRequestSchema)
+@detectors_registry_bp.response(200, DetectorLabelsetMoveResponseSchema)
+@detectors_registry_bp.alt_response(400, description="Invalid path (e.g. traversal outside allowed base).")
+@detectors_registry_bp.alt_response(404, description="Detector not found.")
+@detectors_registry_bp.alt_response(409, description="Destination already exists.")
+def move_labelset_source_file(body: dict, detector_id: str):
+    """Move an orphaned labelset file after a detector rename.
+
+    Called by the frontend when the user confirms the *Move existing
+    labelset file?* prompt that surfaces after a rename leaves the file
+    at the OLD template-resolved path on disk.
+    """
+    from vtsearch.detectors.labelset_rename import move_labelset_file
+    from vtsearch.detectors.registry import get_detector
+
+    if get_detector(detector_id) is None:
+        abort(404, message="Detector not found")
+
+    old_path = body["old_path"]
+    new_path = body["new_path"]
+    try:
+        moved = move_labelset_file(old_path, new_path)
+    except FileExistsError as exc:
+        abort(409, message=str(exc))
+    except ValueError as exc:
+        abort(400, message=str(exc))
+
+    return {
+        "ok": True,
+        "moved": moved,
+        "old_path": old_path,
+        "new_path": new_path,
+    }
 
 
 # ---------------------------------------------------------------------------
