@@ -56,6 +56,11 @@ dev = [
     "codespell",
     "vulture",
     "pip-audit",
+    # `pyright` is the Python wrapper around the Node-based pyright CLI.
+    # The wrapper lazy-downloads the binary on first invocation; the
+    # exact binary version is pinned via PYRIGHT_PYTHON_FORCE_VERSION
+    # in `run-tests.sh`.
+    "pyright",
 ]
 
 [tool.setuptools.packages.find]
@@ -174,6 +179,7 @@ DEP002 = [
     "codespell",
     "vulture",
     "pip-audit",
+    "pyright",
     "gunicorn",
     "sentencepiece",
     "protobuf",

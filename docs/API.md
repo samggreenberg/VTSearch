@@ -46,7 +46,7 @@ via `flask-smorest` decorators. A browsable Swagger UI is served at
 
 - Browse / try endpoints live via Swagger UI.
 - Generate a TypeScript / Python client.
-- Diff against a snapshot in CI to catch unintended API surface changes.
+- Diff against the snapshot at `frontend/openapi.json` to catch unintended API surface changes — `./run-tests.sh` regenerates the spec and fails on drift.
 
 ---
 
