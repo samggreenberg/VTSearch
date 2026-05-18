@@ -1,7 +1,7 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
-import { LabelingStatusResponse } from '../../../models/api.models';
+import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 
 @Component({
   selector: 'vt-progress-indicators',
@@ -24,15 +24,15 @@ export class ProgressIndicatorsComponent {
   }
 
   get smartStatus(): string {
-    return (this.labelingStatus?.smart?.status as string) || '';
+    return this.labelingStatus?.smart.status || '';
   }
 
   get stableStatus(): string {
-    return (this.labelingStatus?.stable?.status as string) || '';
+    return this.labelingStatus?.stable.status || '';
   }
 
   get spanStatus(): string {
-    return (this.labelingStatus?.span?.status as string) || '';
+    return this.labelingStatus?.span.status || '';
   }
 
   get smartSubtext(): string {

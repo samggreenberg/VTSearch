@@ -1,6 +1,15 @@
 import { TestBed } from '@angular/core/testing';
 import { AutopilotStateService } from './autopilot-state.service';
-import { LabelingStatusResponse } from '../models/api.models';
+import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
+import type { StatusIndicator } from '../generated/api-client/models/status-indicator';
+
+function makeStatus(
+  smart: StatusIndicator,
+  stable: StatusIndicator,
+  span: StatusIndicator,
+): LabelingStatusResponse {
+  return { good_count: 0, bad_count: 0, total_count: 0, smart, stable, span };
+}
 
 describe('AutopilotStateService', () => {
   let service: AutopilotStateService;
@@ -56,11 +65,11 @@ describe('AutopilotStateService', () => {
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
 
-    const status: LabelingStatusResponse = {
-      smart: { status: 'green' },
-      stable: { status: 'green' },
-      span: { status: 'yellow' },
-    };
+    const status: LabelingStatusResponse = makeStatus(
+      { status: 'green' },
+      { status: 'green' },
+      { status: 'yellow' },
+    );
     service.updateFromLabelingStatus(status);
     service.checkPhaseTransition(10, 10);
     expect(service.state.phase).toBe('new');
@@ -71,18 +80,14 @@ describe('AutopilotStateService', () => {
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
 
-    service.updateFromLabelingStatus({
-      smart: { status: 'green' },
-      stable: { status: 'green' },
-      span: { status: 'yellow' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
+    );
     service.checkPhaseTransition(10, 10);
 
-    service.updateFromLabelingStatus({
-      smart: { status: 'green' },
-      stable: { status: 'green' },
-      span: { status: 'green' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green' }, { status: 'green' }),
+    );
     service.checkPhaseTransition(15, 15);
     expect(service.state.phase).toBe('done');
   });
@@ -92,20 +97,16 @@ describe('AutopilotStateService', () => {
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
 
-    service.updateFromLabelingStatus({
-      smart: { status: 'green' },
-      stable: { status: 'green' },
-      span: { status: 'yellow' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
+    );
     service.checkPhaseTransition(10, 10);
     expect(service.state.phase).toBe('new');
 
     // Smart drops to yellow (surprise destabilized the model)
-    service.updateFromLabelingStatus({
-      smart: { status: 'yellow' },
-      stable: { status: 'green' },
-      span: { status: 'yellow' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'yellow' }, { status: 'green' }, { status: 'yellow' }),
+    );
     service.checkPhaseTransition(12, 12);
     expect(service.state.phase).toBe('hard');
   });
@@ -115,20 +116,16 @@ describe('AutopilotStateService', () => {
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
 
-    service.updateFromLabelingStatus({
-      smart: { status: 'green' },
-      stable: { status: 'green' },
-      span: { status: 'yellow' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
+    );
     service.checkPhaseTransition(10, 10);
     expect(service.state.phase).toBe('new');
 
     // Stable drops to yellow (surprise caused prediction flips)
-    service.updateFromLabelingStatus({
-      smart: { status: 'green' },
-      stable: { status: 'yellow' },
-      span: { status: 'yellow' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'yellow' }, { status: 'yellow' }),
+    );
     service.checkPhaseTransition(12, 12);
     expect(service.state.phase).toBe('hard');
   });
@@ -138,29 +135,23 @@ describe('AutopilotStateService', () => {
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
 
-    service.updateFromLabelingStatus({
-      smart: { status: 'green' },
-      stable: { status: 'green' },
-      span: { status: 'yellow' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
+    );
     service.checkPhaseTransition(10, 10);
     expect(service.state.phase).toBe('new');
 
     // Bounce back to hard
-    service.updateFromLabelingStatus({
-      smart: { status: 'yellow' },
-      stable: { status: 'yellow' },
-      span: { status: 'yellow' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'yellow' }, { status: 'yellow' }, { status: 'yellow' }),
+    );
     service.checkPhaseTransition(12, 12);
     expect(service.state.phase).toBe('hard');
 
     // Indicators recover — should go back to new
-    service.updateFromLabelingStatus({
-      smart: { status: 'green' },
-      stable: { status: 'green' },
-      span: { status: 'yellow' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
+    );
     service.checkPhaseTransition(15, 15);
     expect(service.state.phase).toBe('new');
   });
@@ -170,20 +161,16 @@ describe('AutopilotStateService', () => {
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
 
-    service.updateFromLabelingStatus({
-      smart: { status: 'green' },
-      stable: { status: 'green' },
-      span: { status: 'yellow' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
+    );
     service.checkPhaseTransition(10, 10);
     expect(service.state.phase).toBe('new');
 
     // Both still green — should stay in new
-    service.updateFromLabelingStatus({
-      smart: { status: 'green' },
-      stable: { status: 'green' },
-      span: { status: 'yellow' },
-    });
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
+    );
     service.checkPhaseTransition(12, 12);
     expect(service.state.phase).toBe('new');
   });
@@ -203,11 +190,11 @@ describe('AutopilotStateService', () => {
 
   it('updateFromLabelingStatus should update status fields', () => {
     service.activate();
-    const status: LabelingStatusResponse = {
-      smart: { status: 'yellow' },
-      stable: { status: 'green' },
-      span: { status: 'red', diversity_level: 0.75 },
-    };
+    const status: LabelingStatusResponse = makeStatus(
+      { status: 'yellow' },
+      { status: 'green' },
+      { status: 'red', diversity_level: 0.75 },
+    );
     service.updateFromLabelingStatus(status);
 
     expect(service.state.smartStatus).toBe('yellow');

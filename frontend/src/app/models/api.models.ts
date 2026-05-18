@@ -38,23 +38,6 @@ export interface VotesResponse {
   labelset_bad_count?: number;
 }
 
-// --- Labeling Status ---
-
-export interface StatusIndicator {
-  status: string;
-  [key: string]: unknown;
-}
-
-export interface LabelingStatusResponse {
-  good_count?: number;
-  bad_count?: number;
-  total_count?: number;
-  smart?: StatusIndicator;
-  stable?: StatusIndicator;
-  span?: StatusIndicator;
-  [key: string]: unknown;
-}
-
 // --- Progress ---
 
 /**
