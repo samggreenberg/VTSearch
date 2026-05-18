@@ -228,11 +228,6 @@ def _learned_sort_done_payload(job) -> dict:
     }
 
 
-@sorting_bp.route("/api/learned-sort", methods=["POST"])
-@sorting_bp.arguments(LearnedSortRequestSchema)
-@sorting_bp.response(200, LearnedSortResponseSchema)
-@sorting_bp.alt_response(400, description="No good/bad votes available for training.")
-@sorting_bp.alt_response(500, description="Background learned-sort job failed (only when ``wait=true``).")
 def _resolve_active_labelset(det_ctx):
     """Resolve the labelset for the active detector → (labelset, media_type)."""
     from vtsearch.datasets.labelset import LabelSet
@@ -358,6 +353,11 @@ def _build_learned_sort_signature(
     )
 
 
+@sorting_bp.route("/api/learned-sort", methods=["POST"])
+@sorting_bp.arguments(LearnedSortRequestSchema)
+@sorting_bp.response(200, LearnedSortResponseSchema)
+@sorting_bp.alt_response(400, description="No good/bad votes available for training.")
+@sorting_bp.alt_response(500, description="Background learned-sort job failed (only when ``wait=true``).")
 def learned_sort(body: dict):
     """Kick off (or short-circuit) a learned-sort training job.
 
