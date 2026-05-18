@@ -25,7 +25,7 @@ and flows through without per-key declarations.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, fields, post_dump, validate
 
 
 _METRIC_VALIDATOR = validate.OneOf(["smart", "stable", "diverse"])
@@ -51,20 +51,42 @@ class LabelingProgressResponseSchema(Schema):
 # ---------------------------------------------------------------------------
 
 
-class LabelingStatusResponseSchema(Schema):
-    """Response for ``GET /api/labeling-status``.
+class StatusIndicatorSchema(Schema):
+    """One ``smart`` / ``stable`` / ``span`` indicator in the labeling-status
+    response.  ``status`` is the red/yellow/green flag every indicator emits;
+    ``reason`` is the human-readable explanation.  Metric-specific keys
+    (``cost``, ``flips``, ``diversity_level``, ``avg_flip_rate``, …) flow
+    through unchanged via ``unknown = "include"`` plus :meth:`_include_extras`
+    — the :mod:`vtsearch.detectors.labeling_progress` analyzer remains the
+    source of truth for that shape."""
 
-    The three sub-objects (``smart``, ``stable``, ``span``) each carry
-    ``status`` plus metric-specific keys; declared as plain dicts so
-    the analyzer remains the source of truth for their shape.
-    """
+    status = fields.String(required=True)
+    reason = fields.String()
+
+    class Meta:
+        unknown = "include"
+
+    @post_dump(pass_original=True)
+    def _include_extras(self, data: dict, original: dict, **_: object) -> dict:
+        # ``unknown = "include"`` only affects ``load``; declared schemas drop
+        # unknown keys on ``dump``.  Re-merge the original dict's metric-
+        # specific keys so callers receive the full indicator payload.
+        if isinstance(original, dict):
+            for k, v in original.items():
+                if k not in data:
+                    data[k] = v
+        return data
+
+
+class LabelingStatusResponseSchema(Schema):
+    """Response for ``GET /api/labeling-status``."""
 
     good_count = fields.Integer(required=True)
     bad_count = fields.Integer(required=True)
     total_count = fields.Integer(required=True)
-    smart = fields.Dict(required=True)
-    stable = fields.Dict(required=True)
-    span = fields.Dict(required=True)
+    smart = fields.Nested(StatusIndicatorSchema, required=True)
+    stable = fields.Nested(StatusIndicatorSchema, required=True)
+    span = fields.Nested(StatusIndicatorSchema, required=True)
 
 
 # ---------------------------------------------------------------------------
@@ -159,4 +181,5 @@ __all__ = [
     "IndicatorScoreHistoryResponseSchema",
     "LabelingProgressResponseSchema",
     "LabelingStatusResponseSchema",
+    "StatusIndicatorSchema",
 ]

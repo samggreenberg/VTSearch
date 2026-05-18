@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
-import { LabelingStatusResponse } from '../models/api.models';
+import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
 
 export type AutopilotPhase = 'idle' | 'good' | 'bad' | 'hard' | 'new' | 'done';
 
@@ -68,11 +68,11 @@ export class AutopilotStateService {
     const current = this.stateSubject.value;
     this.stateSubject.next({
       ...current,
-      smartStatus: (status.smart?.status as string) || '',
-      stableStatus: (status.stable?.status as string) || '',
-      spanStatus: (status.span?.status as string) || '',
+      smartStatus: status.smart.status || '',
+      stableStatus: status.stable.status || '',
+      spanStatus: status.span.status || '',
       fracDiversity:
-        status.span?.['diversity_level'] != null
+        status.span['diversity_level'] != null
           ? (status.span['diversity_level'] as number)
           : current.fracDiversity,
     });
