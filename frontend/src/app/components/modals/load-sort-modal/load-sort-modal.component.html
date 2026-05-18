@@ -45,7 +45,9 @@
       <!-- File browser (recursive directory navigation) -->
       @if (mediaPickerView === 'file-browser') {
         <div class="file-browser-step">
-          <button class="btn btn--secondary btn--sm back-btn" (click)="backFromFileBrowser()" title="Return to the previous step">&larr; Back</button>
+          @if (selectedSource?.name === 'demo') {
+            <button class="btn btn--secondary btn--sm back-btn" (click)="backFromFileBrowser()" title="Return to the demo list">&larr; Back to demo list</button>
+          }
           <vt-folder-browser
             [browse]="browseFn"
             [rootLabel]="browseSourceLabel"
