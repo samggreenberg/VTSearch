@@ -233,11 +233,24 @@ def rename_detector(body: dict, name: str):
         old_path.unlink(missing_ok=True)
 
     # Update the detector registry entry that references this detector
+    from vtsearch.detectors.labelset_rename import detect_pending_labelset_move
     from vtsearch.detectors.registry import find_by_name, rename_detector as _rename_in_registry
+    from vtsearch.state.core import get_detector_context
 
     reg_entry = find_by_name(name)
+    pending_move: dict[str, str] | None = None
     if reg_entry:
-        _rename_in_registry(reg_entry["id"], new_name)
+        registry_id = reg_entry["id"]
+        ctx = get_detector_context(registry_id)
+        if ctx is not None:
+            pending_move = detect_pending_labelset_move(
+                ctx.labelset_source,
+                detector_id=registry_id,
+                old_name=name,
+                new_name=new_name,
+            )
+            ctx.name = new_name
+        _rename_in_registry(registry_id, new_name)
 
     # Rename autorun flag if present.
     try:
@@ -250,7 +263,12 @@ def rename_detector(body: dict, name: str):
     except Exception:
         logger.exception("Failed to rename autorun entry for %s", name)
 
-    return {"success": True, "old_name": name, "new_name": new_name}
+    return {
+        "success": True,
+        "old_name": name,
+        "new_name": new_name,
+        "pending_labelset_move": pending_move,
+    }
 
 
 # ---------------------------------------------------------------------------

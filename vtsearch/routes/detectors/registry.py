@@ -13,6 +13,8 @@ POST   /api/detectors/registry/load                   Load a detector into memor
 POST   /api/detectors/registry/<id>/unload            Unload a detector from memory.
 DELETE /api/detectors/registry/<id>                   Remove a detector from the registry.
 PUT    /api/detectors/registry/<id>/rename            Rename a registered detector.
+POST   /api/detectors/registry/<id>/labelset-source/move-file
+                                                      Move an orphaned labelset file after a rename.
 PUT    /api/detectors/registry/<id>/autorun           Toggle the detector's autorun flag.
 POST   /api/detectors/cancel/<task_id>                Cancel a load task.
 
@@ -44,6 +46,8 @@ from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
 from vtsearch.detectors.media_seeding import seed_good_votes_from_examples as _seed_good_votes_from_examples
 from vtsearch.schemas.detectors import (
     DetectorCancelResponseSchema,
+    DetectorLabelsetMoveRequestSchema,
+    DetectorLabelsetMoveResponseSchema,
     DetectorRegistryAutorunRequestSchema,
     DetectorRegistryAutorunResponseSchema,
     DetectorRegistryCreateRequestSchema,
@@ -714,7 +718,9 @@ def cancel_detector_loading_task(task_id: str):
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 def rename_registered_detector(body: dict, detector_id: str):
     """Rename a registered detector and its on-disk labelset file."""
+    from vtsearch.detectors.labelset_rename import detect_pending_labelset_move
     from vtsearch.detectors.registry import get_detector, rename_detector
+    from vtsearch.state.core import get_detector_context
 
     new_name = body["name"].strip()
     if not new_name:
@@ -724,6 +730,7 @@ def rename_registered_detector(body: dict, detector_id: str):
     if entry is None:
         abort(404, message="Detector not found")
 
+    pending_move: dict[str, str] | None = None
     old_name = entry.get("name", "")
     if old_name and old_name != new_name:
         old_path = _detector_path(old_name)
@@ -746,8 +753,65 @@ def rename_registered_detector(body: dict, detector_id: str):
         except Exception:
             logger.exception("Failed to rename autorun entry for %s", detector_id)
 
+        # Update the loaded in-memory context so future syncs use the new
+        # name in {detector_name} template substitution, and detect any
+        # orphaned labelset file the rename leaves behind.
+        ctx = get_detector_context(detector_id)
+        if ctx is not None:
+            pending_move = detect_pending_labelset_move(
+                ctx.labelset_source,
+                detector_id=detector_id,
+                old_name=old_name,
+                new_name=new_name,
+            )
+            ctx.name = new_name
+
     rename_detector(detector_id, new_name)
-    return {"ok": True, "name": new_name}
+    return {"ok": True, "name": new_name, "pending_labelset_move": pending_move}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/detectors/registry/<detector_id>/labelset-source/move-file
+# ---------------------------------------------------------------------------
+
+
+@detectors_registry_bp.route(
+    "/api/detectors/registry/<detector_id>/labelset-source/move-file",
+    methods=["POST"],
+)
+@detectors_registry_bp.arguments(DetectorLabelsetMoveRequestSchema)
+@detectors_registry_bp.response(200, DetectorLabelsetMoveResponseSchema)
+@detectors_registry_bp.alt_response(400, description="Invalid path (e.g. traversal outside allowed base).")
+@detectors_registry_bp.alt_response(404, description="Detector not found.")
+@detectors_registry_bp.alt_response(409, description="Destination already exists.")
+def move_labelset_source_file(body: dict, detector_id: str):
+    """Move an orphaned labelset file after a detector rename.
+
+    Called by the frontend when the user confirms the *Move existing
+    labelset file?* prompt that surfaces after a rename leaves the file
+    at the OLD template-resolved path on disk.
+    """
+    from vtsearch.detectors.labelset_rename import move_labelset_file
+    from vtsearch.detectors.registry import get_detector
+
+    if get_detector(detector_id) is None:
+        abort(404, message="Detector not found")
+
+    old_path = body["old_path"]
+    new_path = body["new_path"]
+    try:
+        moved = move_labelset_file(old_path, new_path)
+    except FileExistsError as exc:
+        abort(409, message=str(exc))
+    except ValueError as exc:
+        abort(400, message=str(exc))
+
+    return {
+        "ok": True,
+        "moved": moved,
+        "old_path": old_path,
+        "new_path": new_path,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -251,6 +251,199 @@ class TestRenameDetector:
         assert res.status_code == 409
 
 
+class TestRenameLabelsetSourceCleanup:
+    """Renaming a detector with a {detector_name} labelset source should
+    surface the orphaned file path so the user can move it."""
+
+    def _create_registered_detector(self, client):
+        client.post(
+            "/api/detectors",
+            json={"name": "Old Name", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "Old Name", "media_type": "audio", "text_query": "test"},
+        )
+        assert res.status_code == 201
+        return res.get_json()["detector"]["id"]
+
+    def _attach_labelset_source(self, detector_id, template):
+        from vtsearch.state.core import DetectorContext, register_detector_context
+
+        ctx = DetectorContext(detector_id, name="Old Name", media_type="audio")
+        ctx.labelset_source = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": template},
+        }
+        register_detector_context(ctx)
+        return ctx
+
+    def test_rename_returns_pending_move_when_old_file_exists(self, client, tmp_path):
+        detector_id = self._create_registered_detector(client)
+        template = str(tmp_path / "{detector_name}.labels.json")
+        self._attach_labelset_source(detector_id, template)
+
+        # Pretend a previous sync wrote the old labelset file.
+        old_file = tmp_path / "Old Name.labels.json"
+        old_file.write_text('{"labels": []}')
+
+        res = client.put(
+            f"/api/detectors/registry/{detector_id}/rename",
+            json={"name": "New Name"},
+        )
+        assert res.status_code == 200
+        body = res.get_json()
+        assert body["ok"] is True
+        assert body["name"] == "New Name"
+        pending = body["pending_labelset_move"]
+        assert pending is not None
+        assert pending["old_path"].endswith("Old Name.labels.json")
+        assert pending["new_path"].endswith("New Name.labels.json")
+
+    def test_rename_updates_ctx_name_for_future_syncs(self, client, tmp_path):
+        from vtsearch.state.core import get_detector_context
+
+        detector_id = self._create_registered_detector(client)
+        template = str(tmp_path / "{detector_name}.labels.json")
+        self._attach_labelset_source(detector_id, template)
+
+        client.put(
+            f"/api/detectors/registry/{detector_id}/rename",
+            json={"name": "New Name"},
+        )
+
+        ctx = get_detector_context(detector_id)
+        assert ctx is not None
+        assert ctx.name == "New Name"
+
+    def test_rename_no_pending_when_old_file_missing(self, client, tmp_path):
+        detector_id = self._create_registered_detector(client)
+        template = str(tmp_path / "{detector_name}.labels.json")
+        self._attach_labelset_source(detector_id, template)
+
+        # No old file on disk.
+        res = client.put(
+            f"/api/detectors/registry/{detector_id}/rename",
+            json={"name": "New Name"},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["pending_labelset_move"] is None
+
+    def test_rename_no_pending_when_template_has_no_name_var(self, client, tmp_path):
+        detector_id = self._create_registered_detector(client)
+        # Template without {detector_name} — old and new resolve to same path.
+        template = str(tmp_path / "shared.labels.json")
+        self._attach_labelset_source(detector_id, template)
+
+        (tmp_path / "shared.labels.json").write_text('{"labels": []}')
+
+        res = client.put(
+            f"/api/detectors/registry/{detector_id}/rename",
+            json={"name": "New Name"},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["pending_labelset_move"] is None
+
+    def test_rename_no_pending_when_destination_exists(self, client, tmp_path):
+        detector_id = self._create_registered_detector(client)
+        template = str(tmp_path / "{detector_name}.labels.json")
+        self._attach_labelset_source(detector_id, template)
+
+        (tmp_path / "Old Name.labels.json").write_text('{"labels": []}')
+        (tmp_path / "New Name.labels.json").write_text('{"labels": []}')
+
+        res = client.put(
+            f"/api/detectors/registry/{detector_id}/rename",
+            json={"name": "New Name"},
+        )
+        assert res.status_code == 200
+        # We refuse to propose a move that would clobber an existing file.
+        assert res.get_json()["pending_labelset_move"] is None
+
+    def test_rename_no_pending_without_labelset_source(self, client):
+        detector_id = self._create_registered_detector(client)
+        # No source attached (no _attach_labelset_source call).
+        res = client.put(
+            f"/api/detectors/registry/{detector_id}/rename",
+            json={"name": "New Name"},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["pending_labelset_move"] is None
+
+    def test_move_endpoint_moves_file(self, client, tmp_path):
+        detector_id = self._create_registered_detector(client)
+        template = str(tmp_path / "{detector_name}.labels.json")
+        self._attach_labelset_source(detector_id, template)
+
+        old_file = tmp_path / "Old Name.labels.json"
+        old_file.write_text('{"labels": [{"md5": "abc", "label": "good"}]}')
+        new_file = tmp_path / "New Name.labels.json"
+
+        res = client.put(
+            f"/api/detectors/registry/{detector_id}/rename",
+            json={"name": "New Name"},
+        )
+        pending = res.get_json()["pending_labelset_move"]
+
+        res = client.post(
+            f"/api/detectors/registry/{detector_id}/labelset-source/move-file",
+            json={"old_path": pending["old_path"], "new_path": pending["new_path"]},
+        )
+        assert res.status_code == 200
+        body = res.get_json()
+        assert body["ok"] is True
+        assert body["moved"] is True
+
+        assert not old_file.exists()
+        assert new_file.exists()
+        # Content preserved.
+        assert "abc" in new_file.read_text()
+
+    def test_move_endpoint_idempotent_when_old_missing(self, client, tmp_path):
+        detector_id = self._create_registered_detector(client)
+        self._attach_labelset_source(detector_id, str(tmp_path / "{detector_name}.labels.json"))
+
+        res = client.post(
+            f"/api/detectors/registry/{detector_id}/labelset-source/move-file",
+            json={
+                "old_path": str(tmp_path / "nope.json"),
+                "new_path": str(tmp_path / "dest.json"),
+            },
+        )
+        assert res.status_code == 200
+        body = res.get_json()
+        assert body["ok"] is True
+        assert body["moved"] is False
+
+    def test_move_endpoint_rejects_existing_destination(self, client, tmp_path):
+        detector_id = self._create_registered_detector(client)
+        self._attach_labelset_source(detector_id, str(tmp_path / "{detector_name}.labels.json"))
+
+        old_file = tmp_path / "src.json"
+        old_file.write_text("{}")
+        new_file = tmp_path / "dst.json"
+        new_file.write_text("{}")
+
+        res = client.post(
+            f"/api/detectors/registry/{detector_id}/labelset-source/move-file",
+            json={"old_path": str(old_file), "new_path": str(new_file)},
+        )
+        assert res.status_code == 409
+        # Neither file touched.
+        assert old_file.exists()
+        assert new_file.exists()
+
+    def test_move_endpoint_404_for_unknown_detector(self, client, tmp_path):
+        res = client.post(
+            "/api/detectors/registry/nonexistent/labelset-source/move-file",
+            json={
+                "old_path": str(tmp_path / "x"),
+                "new_path": str(tmp_path / "y"),
+            },
+        )
+        assert res.status_code == 404
+
+
 class TestSaveLabels:
     def test_save_labels_empty(self, client):
         """Save labels when there are no votes — should produce empty labelset."""

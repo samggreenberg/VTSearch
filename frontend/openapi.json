@@ -1615,6 +1615,48 @@
         ],
         "type": "object"
       },
+      "DetectorLabelsetMoveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "new_path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "old_path": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_path",
+          "old_path"
+        ],
+        "type": "object"
+      },
+      "DetectorLabelsetMoveResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "moved": {
+            "type": "boolean"
+          },
+          "new_path": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "old_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "moved",
+          "new_path",
+          "ok",
+          "old_path"
+        ],
+        "type": "object"
+      },
       "DetectorRegistryAutorunRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1832,6 +1874,18 @@
           },
           "ok": {
             "type": "boolean"
+          },
+          "pending_labelset_move": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingLabelsetMove"
+              },
+              {
+                "nullable": true,
+                "type": "object"
+              }
+            ],
+            "default": null
           }
         },
         "required": [
@@ -1876,6 +1930,18 @@
           },
           "old_name": {
             "type": "string"
+          },
+          "pending_labelset_move": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingLabelsetMove"
+              },
+              {
+                "nullable": true,
+                "type": "object"
+              }
+            ],
+            "default": null
           },
           "success": {
             "type": "boolean"
@@ -3170,6 +3236,22 @@
             "type": "integer"
           }
         },
+        "type": "object"
+      },
+      "PendingLabelsetMove": {
+        "additionalProperties": false,
+        "properties": {
+          "new_path": {
+            "type": "string"
+          },
+          "old_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_path",
+          "old_path"
+        ],
         "type": "object"
       },
       "PregenProcessorsAddResponse": {
@@ -6857,6 +6939,63 @@
           }
         },
         "summary": "Toggle the autorun flag for a registered detector.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
+    "/api/detectors/registry/{detector_id}/labelset-source/move-file": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Called by the frontend when the user confirms the *Move existing\nlabelset file?* prompt that surfaces after a rename leaves the file\nat the OLD template-resolved path on disk.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorLabelsetMoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorLabelsetMoveResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Invalid path (e.g. traversal outside allowed base)."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
+          "409": {
+            "description": "Destination already exists."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Move an orphaned labelset file after a detector rename.",
         "tags": [
           "detectors_registry"
         ]

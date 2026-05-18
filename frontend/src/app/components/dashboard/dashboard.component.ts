@@ -747,7 +747,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   renameDetector(model: DetectorRegistryEntry, newName: string): void {
     this.detectorsApi.renameInRegistry(model.id, newName).subscribe({
-      next: () => this.datasetState.refresh(),
+      next: response => {
+        this.datasetState.refresh();
+        this.detectorsApi.promptMoveOrphanedLabelsetFile(
+          this.dialog,
+          model.id,
+          response.pending_labelset_move,
+        );
+      },
     });
   }
 

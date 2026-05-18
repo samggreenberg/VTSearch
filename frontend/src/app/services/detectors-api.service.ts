@@ -26,6 +26,7 @@ import type { DetectorExamplesRequest } from '../generated/api-client/models/det
 import type { DetectorExamplesResponse } from '../generated/api-client/models/detector-examples-response';
 import type { DetectorLabelVoteResponse } from '../generated/api-client/models/detector-label-vote-response';
 import type { DetectorLabelsDetailResponse } from '../generated/api-client/models/detector-labels-detail-response';
+import type { DetectorLabelsetMoveResponse } from '../generated/api-client/models/detector-labelset-move-response';
 import type { DetectorRegistryAutorunResponse } from '../generated/api-client/models/detector-registry-autorun-response';
 import type { DetectorRegistryCreateRequest } from '../generated/api-client/models/detector-registry-create-request';
 import type { DetectorRegistryCreateResponse } from '../generated/api-client/models/detector-registry-create-response';
@@ -74,6 +75,7 @@ import { apiDetectorsNameRenamePut } from '../generated/api-client/fn/detectors-
 import { apiDetectorsPost } from '../generated/api-client/fn/detectors-crud/api-detectors-post';
 import { apiDetectorsRegistryDetectorIdAutorunPut } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-autorun-put';
 import { apiDetectorsRegistryDetectorIdDelete } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-delete';
+import { apiDetectorsRegistryDetectorIdLabelsetSourceMoveFilePost } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-labelset-source-move-file-post';
 import { apiDetectorsRegistryDetectorIdRenamePut } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-rename-put';
 import { apiDetectorsRegistryDetectorIdUnloadPost } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-unload-post';
 import { apiDetectorsRegistryGet } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-get';
@@ -87,6 +89,7 @@ import { apiLocalizePost } from '../generated/api-client/fn/processors-scoring/a
 import { apiPregenProcessorsAddPost } from '../generated/api-client/fn/processors-crud/api-pregen-processors-add-post';
 import { apiPregenProcessorsGet } from '../generated/api-client/fn/processors-crud/api-pregen-processors-get';
 import { ActiveContextService } from './active-context.service';
+import { VtDialogService } from './dialog.service';
 
 /** Backwards-compatible alias for the generated ``FindCheckLabelsWarning`` —
  *  consumers of this service still import this name. */
@@ -244,6 +247,48 @@ export class DetectorsApiService {
       detector_id: detectorId,
       body: { name: newName },
     }).pipe(map((r) => r.body));
+  }
+
+  moveLabelsetSourceFile(
+    detectorId: string,
+    oldPath: string,
+    newPath: string,
+  ): Observable<DetectorLabelsetMoveResponse> {
+    return apiDetectorsRegistryDetectorIdLabelsetSourceMoveFilePost(
+      this.http,
+      this.config.rootUrl,
+      {
+        detector_id: detectorId,
+        body: { old_path: oldPath, new_path: newPath },
+      },
+    ).pipe(map((r) => r.body));
+  }
+
+  /** Prompt the user to move an orphaned labelset file after a rename.
+   *  Generated ``PendingLabelsetMove`` arrives as ``{old_path,new_path} | {} | null``
+   *  (a marshmallow ``allow_none`` artifact); narrow it here so callers
+   *  pass the rename response through unchanged. */
+  async promptMoveOrphanedLabelsetFile(
+    dialog: VtDialogService,
+    detectorId: string,
+    pending: unknown,
+  ): Promise<void> {
+    if (
+      !pending ||
+      typeof pending !== 'object' ||
+      !('old_path' in pending) ||
+      !('new_path' in pending) ||
+      typeof (pending as { old_path: unknown }).old_path !== 'string' ||
+      typeof (pending as { new_path: unknown }).new_path !== 'string'
+    ) {
+      return;
+    }
+    const { old_path: oldPath, new_path: newPath } = pending as { old_path: string; new_path: string };
+    const ok = await dialog.confirm(
+      `Move existing labelset file "${oldPath}" to "${newPath}"?`,
+    );
+    if (!ok) return;
+    this.moveLabelsetSourceFile(detectorId, oldPath, newPath).subscribe();
   }
 
   loadDetector(detectorId: string | null): Observable<DetectorRegistryLoadResponse> {
