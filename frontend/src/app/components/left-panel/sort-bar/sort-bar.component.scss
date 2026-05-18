@@ -48,9 +48,21 @@
   width: 100%;
 }
 
+.text-sort-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 .text-sort-input {
+  flex: 1;
+  min-width: 0;
   font-size: var(--font-sm);
   padding: 5px var(--space-md);
+}
+
+.text-sort-btn {
+  flex-shrink: 0;
 }
 
 .sort-hint {

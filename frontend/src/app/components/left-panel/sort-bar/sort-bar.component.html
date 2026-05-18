@@ -49,9 +49,17 @@
             placeholder="Describe what you're looking for..."
             [value]="textQuery"
             (input)="onTextInput($any($event.target).value)"
-            title="Enter a text description to rank items by semantic similarity"
+            (keyup.enter)="submitTextSort()"
+            title="Enter a text description and press Enter (or click Search) to rank items by semantic similarity"
             aria-label="Text sort query"
           />
+          <button
+            class="btn btn--primary btn--sm text-sort-btn"
+            type="button"
+            (click)="submitTextSort()"
+            [disabled]="searchDisabled"
+            title="Run text search"
+          >Search</button>
         </div>
       }
     }

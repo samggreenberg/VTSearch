@@ -1,8 +1,6 @@
-import { Component, Input, Output, EventEmitter, OnDestroy, OnInit } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { debounceTime, takeUntil } from 'rxjs/operators';
 import { SortMode } from '../left-panel.component';
 import { LoadSortModalComponent } from '../../modals/load-sort-modal/load-sort-modal.component';
 
@@ -13,7 +11,7 @@ import { LoadSortModalComponent } from '../../modals/load-sort-modal/load-sort-m
   templateUrl: './sort-bar.component.html',
   styleUrl: './sort-bar.component.scss',
 })
-export class SortBarComponent implements OnInit, OnDestroy {
+export class SortBarComponent implements OnInit {
   @Input() sortMode: SortMode = 'text';
   @Input() loadSortLabel = '';
   @Input() initialTextQuery = '';
@@ -40,28 +38,10 @@ export class SortBarComponent implements OnInit, OnDestroy {
   textQuery = '';
   showLoadSortModal = false;
 
-  private textInput$ = new Subject<string>();
-  private destroy$ = new Subject<void>();
-
-  constructor() {
-    this.textInput$
-      .pipe(debounceTime(400), takeUntil(this.destroy$))
-      .subscribe((text) => {
-        if (text.trim()) {
-          this.textSort.emit(text.trim());
-        }
-      });
-  }
-
   ngOnInit(): void {
     if (this.initialTextQuery) {
       this.textQuery = this.initialTextQuery;
     }
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   onSortModeChange(mode: SortMode): void {
@@ -75,7 +55,13 @@ export class SortBarComponent implements OnInit, OnDestroy {
 
   onTextInput(value: string): void {
     this.textQuery = value;
-    this.textInput$.next(value);
+  }
+
+  submitTextSort(): void {
+    const trimmed = this.textQuery.trim();
+    if (trimmed) {
+      this.textSort.emit(trimmed);
+    }
   }
 
   get learnedDisabled(): boolean {
@@ -84,6 +70,10 @@ export class SortBarComponent implements OnInit, OnDestroy {
 
   get textDisabled(): boolean {
     return !this.textSortAvailable;
+  }
+
+  get searchDisabled(): boolean {
+    return !this.textQuery.trim();
   }
 
   onAddLoadSort(): void {
