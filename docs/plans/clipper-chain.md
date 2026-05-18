@@ -1,10 +1,11 @@
 # Clipper chain
 
-*Status: Phase 1 shipped — the dataset-load pipeline accepts an ordered
-list of converter/clipper steps via a new `clipper_chain` field, stamps
-the resolved trail on every clip's `origin.params`, and the cross-dataset
-resolver replays the chain end-to-end. Frontend chooser, sidecar JSON,
-and detector `input_spec` migration are deferred — see Open follow-ups.*
+*Status: Phase 1 in flight (PR open against `dev`) — the dataset-load
+pipeline accepts an ordered list of converter/clipper steps via a new
+`clipper_chain` field, stamps the resolved trail on every clip's
+`origin.params`, and the cross-dataset resolver replays the chain
+end-to-end. Frontend chooser, sidecar JSON, and detector `input_spec`
+migration are deferred — see Open follow-ups.*
 
 This plan implements [feature-brainstorm.md §3.6](feature-brainstorm.md#36-cross-cutting)
 ("clipper_chain abstraction so we can run e.g. `document_section →
