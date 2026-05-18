@@ -95,6 +95,32 @@
   }
 }
 
+.ivc-btn-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  line-height: 1;
+
+  &.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--btn-filled-text);
+  }
+
+  &.active:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+}
+
+.ivc-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  display: inline-block;
+}
+
 .ivc-zoom-slider {
   width: 100px;
 }

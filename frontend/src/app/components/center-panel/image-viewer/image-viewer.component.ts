@@ -60,6 +60,11 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   regionBox: RegionBox | null = null;
   regionBoxShake = false;
   shiftHeld = false;
+  // Sticky toggle exposed by the Marquee button in .image-view-controls. While true the
+  // viewer behaves as if Shift were held: cursor is a crosshair and a left-drag draws a
+  // new region instead of panning. Shift+drag remains a power-user shortcut even when
+  // the toggle is off; toggling the button just turns the gesture on without a modifier.
+  marqueeMode = false;
   renderedW = 0;
   renderedH = 0;
 
@@ -165,12 +170,21 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     this.applyTransform();
   }
 
+  /** True when a drag should draw a region (either Shift-held or Marquee toggle on). */
+  get regionDrawActive(): boolean {
+    return this.shiftHeld || this.marqueeMode;
+  }
+
+  toggleMarqueeMode(): void {
+    this.marqueeMode = !this.marqueeMode;
+  }
+
   onMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return;
 
-    if (this.shiftHeld && this.renderedW > 0 && this.renderedH > 0) {
-      // Shift-drag from anywhere on the canvas starts a fresh box. If an
-      // older box existed, discard it before recording the new anchor.
+    if (this.regionDrawActive && this.renderedW > 0 && this.renderedH > 0) {
+      // Drag from anywhere on the canvas (Shift-held or marquee mode) starts a fresh
+      // box. If an older box existed, discard it before recording the new anchor.
       const local = this.screenToImageNormalized(event);
       if (!local) return;
       const x = clamp01(local.x);
@@ -239,7 +253,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   }
 
   get wrapCursor(): string {
-    if (this.shiftHeld) return 'crosshair';
+    if (this.regionDrawActive) return 'crosshair';
     const max = this.getMaxPan();
     return max.x > 0 || max.y > 0 ? 'grab' : '';
   }

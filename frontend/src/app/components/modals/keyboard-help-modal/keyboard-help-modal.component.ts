@@ -45,7 +45,7 @@ export class KeyboardHelpModalComponent {
         { keys: ['-'], description: 'Zoom out' },
         { keys: ['['], description: 'Rotate left' },
         { keys: [']'], description: 'Rotate right' },
-        { keys: ['Shift', 'drag'], description: 'Draw region box (patch embedder)' },
+        { keys: ['Shift', 'drag'], description: 'Draw region box (or use the Marquee button)' },
         { keys: ['Esc'], description: 'Cancel armed vote / clear region box' },
       ],
     },
