@@ -10,7 +10,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import { NgStyle } from '@angular/common';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 export type RegionBox = readonly [number, number, number, number];
@@ -32,7 +32,7 @@ const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a s
   styleUrl: './image-viewer.component.scss',
 })
 export class ImageViewerComponent implements OnChanges, OnDestroy {
-  @Input() media!: MediaItem;
+  @Input() media!: Media;
   /**
    * True while the parent is in the v2 "bad-vote-with-box discard confirm" armed state.
    * The viewer uses it to (a) render the box with a sticky red pulse, and (b) route Esc /

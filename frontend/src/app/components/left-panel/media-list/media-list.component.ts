@@ -16,7 +16,7 @@ import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrollin
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { MediaItemComponent } from '../media-item/media-item.component';
-import { MediaItem } from '../../../models/api.models';
+import { Media } from '../../../models/api.models';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { SortedItem } from '../left-panel.component';
 import { prefersReducedMotion } from '../../../utils/reduced-motion';
@@ -36,7 +36,7 @@ const PREFETCH_BUFFER = 50;
   styleUrl: './media-list.component.scss',
 })
 export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, OnDestroy {
-  @Input() medias: MediaItem[] = [];
+  @Input() medias: Media[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
   @Input() selectedId: number | null = null;
@@ -54,7 +54,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   @ViewChild(CdkVirtualScrollViewport) virtualViewport?: CdkVirtualScrollViewport;
 
   /** Cached ordered items — rebuilt only when inputs change, not on every CD cycle. */
-  cachedOrderedItems: { media: MediaItem; score: number | null; showThreshold: boolean; bestRegion: number[] | null }[] = [];
+  cachedOrderedItems: { media: Media; score: number | null; showThreshold: boolean; bestRegion: number[] | null }[] = [];
 
   readonly listItemHeight = LIST_ITEM_HEIGHT;
 
@@ -113,10 +113,10 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     // rows; fall back to the stub so the row renders immediately and gets
     // upgraded once the batch fetch lands.
     const stubMap = new Map(this.medias.map((m) => [m.id, m]));
-    const enrich = (id: number): MediaItem | undefined =>
+    const enrich = (id: number): Media | undefined =>
       this.metadataCache.get(id) ?? stubMap.get(id);
 
-    const items: { media: MediaItem; score: number | null; showThreshold: boolean; bestRegion: number[] | null }[] = [];
+    const items: { media: Media; score: number | null; showThreshold: boolean; bestRegion: number[] | null }[] = [];
 
     if (this.sortOrder && this.sortOrder.length > 0) {
       let thresholdInserted = false;
@@ -229,7 +229,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     });
   }
 
-  trackByMediaId(_index: number, item: { media: MediaItem }): number {
+  trackByMediaId(_index: number, item: { media: Media }): number {
     return item.media.id;
   }
 

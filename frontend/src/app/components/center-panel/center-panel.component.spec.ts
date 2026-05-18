@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { CenterPanelComponent } from './center-panel.component';
-import { MediaItem } from '../../models/api.models';
+import { Media } from '../../models/api.models';
 import { RegionBox } from './image-viewer/image-viewer.component';
 
 describe('CenterPanelComponent', () => {
@@ -10,7 +10,7 @@ describe('CenterPanelComponent', () => {
   let fixture: ComponentFixture<CenterPanelComponent>;
   let httpMock: HttpTestingController;
 
-  const mockMedia: MediaItem = {
+  const mockMedia: Media = {
     id: 1,
     type: 'audio',
     filename: 'test.wav',
@@ -154,7 +154,7 @@ describe('CenterPanelComponent', () => {
    * region-agnostic — see "Vote attribution → v2" in docs/plans/patch-embedder.md).
    */
   describe('vote-API contract for region_box', () => {
-    const imageMedia: MediaItem = { ...mockMedia, type: 'image', filename: 'pic.png' };
+    const imageMedia: Media = { ...mockMedia, type: 'image', filename: 'pic.png' };
     const box: RegionBox = [0.1, 0.2, 0.5, 0.6];
 
     function setup(): void {
@@ -218,7 +218,7 @@ describe('CenterPanelComponent', () => {
    * clears the armed state and keeps the box.
    */
   describe('sticky bad-vote-confirm armed state', () => {
-    const imageMedia: MediaItem = { ...mockMedia, type: 'image', filename: 'pic.png' };
+    const imageMedia: Media = { ...mockMedia, type: 'image', filename: 'pic.png' };
     const box: RegionBox = [0.1, 0.2, 0.5, 0.6];
 
     function setup(): void {
@@ -275,7 +275,7 @@ describe('CenterPanelComponent', () => {
       component.castVote('bad');
       expect(component.pendingBadConfirm).toBeTrue();
 
-      const next: MediaItem = { ...imageMedia, id: 2, filename: 'next.png' };
+      const next: Media = { ...imageMedia, id: 2, filename: 'next.png' };
       component.media = next;
       component.ngOnChanges({
         media: {
