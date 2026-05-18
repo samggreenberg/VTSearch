@@ -390,8 +390,10 @@ Currently: open export modal → pick webhook → fill URL → fill auth → sub
 ### 8.7 Combining detectors ★ M
 The "combine detectors" feature exists but requires multi-select + a non-obvious icon button. Surface as a clear "Merge detectors" CTA with a preview of what the merged detector would look like (count, intersection vs union choice, name).
 
-### 8.8 Renaming + re-syncing a detector ★ XS
+### 8.8 Renaming + re-syncing a detector ★ XS — shipped
 Renaming a detector with a labelset source filepath template (`{detector_name}.labels.json`) leaves the old file on disk. After rename, prompt: "Move existing labelset file to new name?" with a one-click yes.
+
+**What shipped**: the registry and CRUD rename endpoints now (a) update `DetectorContext.name` so future syncs immediately resolve `{detector_name}` to the new value (was a stale-in-memory bug — until process restart, the next vote would re-create the file at the OLD path), and (b) return `pending_labelset_move: {old_path, new_path}` in the rename response when a labelset source with a `server_json_file` template leaves an orphaned file on disk. New endpoint `POST /api/detectors/registry/<id>/labelset-source/move-file` atomically renames the file (validated against the file-access base dir). The dashboard and right-panel rename flows show a one-click `dialog.confirm` after a successful rename and call the move endpoint when accepted. Files: `vtsearch/detectors/labelset_rename.py` (new helpers), `vtsearch/labels/sources/server_json_file/__init__.py` (new `resolve_filepath_for(detector_id, detector_name)`), `vtsearch/routes/detectors/{registry,crud}.py`, `vtsearch/schemas/detectors.py`, `frontend/src/app/services/detectors-api.service.ts` (`moveLabelsetSourceFile`, `promptMoveOrphanedLabelsetFile`), `frontend/src/app/components/dashboard/dashboard.component.ts`, `frontend/src/app/components/right-panel/right-panel.component.ts`.
 
 ### 8.9 Audio segment example → trained detector ★★ M — **SHIPPED**
 "I want a detector for this 3-second cough sound": today requires opening a centre-panel item, opening the crop modal, dragging selection, confirming, then navigating to new-detector with that example. Add a right-click "Use this as a detector seed" on any media in the left panel.
