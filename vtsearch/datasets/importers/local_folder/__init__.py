@@ -6,6 +6,12 @@ which streams the files to a server-side temp directory and then
 delegates to the regular :mod:`server_folder` importer for scanning
 and embedding.
 
+The Local Folder card also accepts an optional ``vectors_file`` form
+input — a ``.npz`` archive of pre-computed embedding vectors keyed by
+uploaded-file name (basename or relative path).  Files whose name
+matches an NPZ key reuse the supplied vector instead of running the
+embedding model, mirroring the Local Files card.
+
 This importer exists so that the dataset-importer modal can be fully
 data-driven — the picker reads :attr:`display_name`, :attr:`description`,
 :attr:`icon`, and :attr:`picker_view` from the registry instead of
@@ -31,7 +37,11 @@ class LocalFolderDatasetImporter(DatasetImporter):
 
     name = "local_folder"
     display_name = "Folder"
-    description = "Upload a folder of media files from this computer (your browser machine) to the server"
+    description = (
+        "Upload a folder of media files from this computer (your browser machine) to the server.  "
+        "Optionally include a .npz archive of pre-computed embedding vectors to skip re-embedding "
+        "for media you have already embedded offline."
+    )
     icon = "\U0001f4c1"  # 📁 — frontend renders as a folder icon
     ui_mode = "custom"
     picker_view = "local_folder"
