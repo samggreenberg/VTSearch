@@ -25,6 +25,17 @@ REPO_DIR="$SCRIPT_DIR/../.."
 # (progressbar, wget) needed by laion_clap.
 pip install --upgrade setuptools -q
 
+# Upgrade Ubuntu 24.04's pre-installed Python packages so pip-audit
+# (run as part of ./run-tests.sh) doesn't flag stale baseline CVEs that
+# have nothing to do with VTSearch itself:
+#   - cryptography 41.0.7 / pyjwt 2.7.0 / wheel 0.42.0 / pip 24.0 ship
+#     pre-installed; we upgrade them so they aren't flagged. Several are
+#     debian-managed (no RECORD file → pip cannot uninstall them), so
+#     we use --ignore-installed to drop fresh copies alongside.
+#   - urllib3 2.6.3 is a real transitive dep (via requests); newer
+#     versions patch CVE-2026-44431/44432.
+pip install --upgrade --ignore-installed pip wheel cryptography pyjwt urllib3 -q
+
 # Work around debian-managed blinker (no RECORD file, so pip cannot
 # uninstall it).  Force-installing a fresh copy lets Flask pick it up.
 pip install --ignore-installed blinker -q

@@ -1,13 +1,19 @@
 # Python quality tools
 
 *Status: Phases 1 + 2 + 3 shipped, plus the pyproject-consolidation
-follow-up, CI coverage publication, the vulture audit pass, and the
-McCabe (C901) complexity gate. deptry, codespell, ruff's `S` ruleset,
-opt-in coverage (now also published in CI), a tuned vulture invocation
-+ whitelist, and ruff's `C901` (default max-complexity 10) are all in
-place alongside the original pre-commit + pip-audit, and `pyproject.toml`
-is the single source of truth for runtime + dev dependencies. See
-"Open follow-ups" at the bottom for the remaining maintenance items.*
+follow-up, the vulture audit pass, and the McCabe (C901) complexity
+gate. deptry, codespell, ruff's `S` ruleset, opt-in coverage, a tuned
+vulture invocation + whitelist, and ruff's `C901` (default max-complexity
+10) are all in place alongside the original pre-commit + pip-audit, and
+`pyproject.toml` is the single source of truth for runtime + dev
+dependencies. See "Open follow-ups" at the bottom for the remaining
+maintenance items.*
+
+*GitHub Actions workflows have been retired (see "What shipped (CI
+retired)"). `./run-tests.sh` now runs the full suite — ruff + codespell
++ deptry + pip-audit + pyright + the OpenAPI snapshot drift check +
+the frontend build + pytest — and is the only gate. The pre-commit
+hooks still run the fast subset (ruff/codespell/deptry) at commit time.*
 
 The ruff + pyright + pytest stack already covers the modern core of
 Python quality tooling. This plan tracks what else is worth adding,
@@ -76,19 +82,16 @@ wire it", and a success criterion so it's a one-sitting task.
   `HANDOFF.md`, `EXTENDING.md`, `EXTENDING-plugins.md`,
   `plans/RCDatasetImporter.md`).
 
-## What shipped (CI coverage publication)
+## What shipped (CI coverage publication, since retired)
 
-- **Coverage in CI** (`.github/workflows/coverage.yml`) — runs the fast
-  CPU test suite (`-m 'not gpu and not slow'`) with `pytest-cov`, then
-  publishes the per-file `coverage report --skip-covered --sort=cover`
-  table to `$GITHUB_STEP_SUMMARY` and uploads the HTML report (and the
-  raw `coverage.xml`) as artifacts with a 14-day retention. Runs on
-  every PR plus pushes to `main`/`dev`. This is the **first** workflow
-  that runs pytest in CI — prior to this, tests were only enforced via
-  local `./run-tests.sh` and pre-commit, so the new job also gates merges
-  on test pass/fail (a real failure surfaces in the same job that
-  publishes coverage). There is no coverage-delta gate yet; that
-  decision waits until we have a baseline.
+- **Coverage in CI** (`.github/workflows/coverage.yml`) — *retired
+  alongside the rest of CI; see "What shipped (CI retired)" below.*
+  Ran the fast CPU test suite (`-m 'not gpu and not slow'`) with
+  `pytest-cov`, then published the per-file
+  `coverage report --skip-covered --sort=cover` table to
+  `$GITHUB_STEP_SUMMARY` and uploaded the HTML report (and raw
+  `coverage.xml`) as artifacts with a 14-day retention. Coverage is
+  still available locally via `VTSEARCH_COVERAGE=1 ./run-tests.sh`.
 
 ## What shipped (Phase 3)
 
@@ -371,14 +374,46 @@ added to the whitelist with a comment explaining why.
   analogous to ruff's `S` (flake8-bandit). Security pattern detection
   stays in ruff. The previous open follow-up was a category error.
 
+## What shipped (CI retired)
+
+The `lint.yml`, `audit.yml`, `pyright.yml`, and `coverage.yml` workflows
+were deleted and the entire `.github/` directory removed. Motivation:
+GitHub Actions minutes ran out, and every check those workflows ran
+could just as well run on the dev's own machine (where compute is
+already paid for via the Claude Code subscription).
+
+`./run-tests.sh` was extended to run the checks that previously only
+lived in CI:
+
+- **`pip-audit`** — runs after the existing ruff/codespell/deptry block,
+  scanning the resolved venv against the PyPI advisory database. Same
+  invocation `audit.yml` used.
+- **`pyright`** — runs after `pip-audit` via the `pyright` PyPI wrapper
+  (added to `[project.optional-dependencies].dev`), with
+  `PYRIGHT_PYTHON_FORCE_VERSION=1.1.408` pinning the underlying binary
+  to the same version `pyright.yml` used.
+- **OpenAPI snapshot drift check** — runs `python scripts/dump_openapi.py`
+  and diffs against `frontend/openapi.json`. Same logic as the drift
+  guard previously in `pyright.yml`, with the same "regenerate via
+  `npm run regenerate-openapi-snapshot`" remediation message.
+
+Coverage (previously `coverage.yml`) remains opt-in locally via
+`VTSEARCH_COVERAGE=1 ./run-tests.sh`. No artifact upload — the report
+prints to stdout and the HTML lives in the local `htmlcov/` if a user
+asks for it.
+
+The pre-commit hooks (`.pre-commit-config.yaml`) still run the fast
+ruff + codespell + deptry subset at commit time, so the inner-loop
+feedback is unchanged.
+
 ## Open follow-ups
 
-- **Coverage-delta gate.** `coverage.yml` now publishes the baseline on
-  every PR. Next step (after a few PRs of data): wire `diff-cover`
-  against the merge base and fail the job when the patch's coverage
-  drops below a threshold. Don't gate on total coverage delta — too
-  noisy across unrelated test reshuffles — gate on **lines changed by
-  this PR**, which is what `diff-cover` measures.
+- **Coverage-delta gate.** Was previously scoped against the
+  `coverage.yml` workflow; that workflow is gone (see "What shipped
+  (CI retired)"). If we ever want a coverage-delta gate again it would
+  have to live in `./run-tests.sh` and run against `git merge-base
+  origin/dev HEAD`. Not a priority — the local opt-in coverage report
+  is enough for now.
 - **Vulture audit pass.** Completed — see "What shipped (Phase 3)"
   above for the deletions, whitelist additions, and final tuned
   invocation. The audit is meant to be re-run before each release;
@@ -393,5 +428,5 @@ added to the whitelist with a comment explaining why.
   (26), `import_local_folder` (24), `_make_per_side_setting` (24).
   No deadline — refactor opportunistically when touching the code.
 - Periodic: `pre-commit autoupdate` on a cadence so pinned hook
-  versions don't drift too far from CI's `pip install ruff` (which
-  always pulls latest). Worth a quarterly reminder.
+  versions don't drift too far from the latest releases. Worth a
+  quarterly reminder.

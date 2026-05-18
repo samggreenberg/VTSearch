@@ -17,7 +17,7 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | [feature-brainstorm.md](feature-brainstorm.md) | **Backlog** | Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, experiments. Items graduate into their own plan doc as they mature. |
 | [ux-brainstorm.md](ux-brainstorm.md) | **Backlog** | Audit of friction across importers, labeling, sorting, settings, and progress UX. ~75 ideas across auto-fill, hints, speed-ups, clarity, streamlining, and consistency. Items graduate into their own plan doc as they mature. |
 | [smart-clipper-defaults.md](smart-clipper-defaults.md) | **Phase 1 shipped; Phase 2 deferred** | "Auto (recommended)" clipper entry for audio and video — resolves to pass-through or tiling per dataset based on median duration. Phase 2 (per-media routing via clipper options) deferred — see Open follow-ups. |
-| [python-quality-tools.md](python-quality-tools.md) | **Phase 1 shipped; Phases 2–3 proposed** | pre-commit (ruff + safety hooks) wired up locally and `pip-audit` runs in CI. Phase 2 (deptry, codespell) and Phase 3 (coverage, ruff `S` rules / bandit, vulture) are designed and triaged into one-sitting tasks — see Open follow-ups. |
+| [python-quality-tools.md](python-quality-tools.md) | **Phases 1–3 shipped; CI retired** | pre-commit (ruff + safety hooks) wired up locally, plus deptry, codespell, ruff `S`, opt-in coverage, vulture audit, and the McCabe C901 gate. GitHub Actions workflows have been retired — `./run-tests.sh` now runs ruff + codespell + deptry + pip-audit + pyright + OpenAPI snapshot drift + the frontend build + pytest in one go. See Open follow-ups for the remaining maintenance items. |
 
 ## Recently completed (removed)
 
