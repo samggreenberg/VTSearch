@@ -25,6 +25,18 @@
   font-size: 13px;
   line-height: 1.4;
   animation: toast-slide-in 180ms ease-out;
+
+  &.toast--success {
+    border-color: var(--color-good);
+    border-left-color: var(--color-good);
+
+    .toast__icon { color: var(--color-good); }
+    .toast__title { color: var(--color-good); }
+    .toast__btn:hover {
+      background: var(--good-bg);
+      border-color: var(--color-good);
+    }
+  }
 }
 
 @keyframes toast-slide-in {

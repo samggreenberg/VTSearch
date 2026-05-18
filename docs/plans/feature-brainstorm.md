@@ -417,7 +417,7 @@ Skip the modal. Drop a folder → start importing.
 Persistent across sessions.
 
 ### 11.18 Light improvements
-- Toast notifications instead of alert dialogs ★ XS
+- Toast notifications instead of alert dialogs ★ XS — **DONE.** `ToastService.success()` (auto-dismisses after 5s) replaces the modal `dialog.alert()` for the autopilot-complete notification. The unused `VtDialogService.alert()` method is gone. Confirmation flows (`confirm` / `confirmDestructive` / `prompt`) stay as modals because they require a user decision.
 - Empty-state illustrations for "no datasets yet" ★ XS
 - Skeleton loaders (today: spinners) ★ S
 - Per-detector colour accent ★ XS
