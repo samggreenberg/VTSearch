@@ -326,8 +326,15 @@ Hover-only confirmation for destructive actions is unfamiliar and fragile. Repla
 ### 7.4 Resize-cursor on small drag handles ★ XS
 Panel dividers and column-resize handles are ~2px wide. Make them 8px hit targets with a `cursor: col-resize` on hover (standard).
 
-### 7.5 Folder-tree breadcrumb browser ★ M
+### 7.5 Folder-tree breadcrumb browser ★ M — Phase 1 SHIPPED
 The server-folder browser has a custom breadcrumb + table UI. It's functional but every modern OS has standardized on the same "left sidebar with starred/recent locations, breadcrumb on top, list in middle, double-click to enter, Enter key to confirm". Bring ours closer to that.
+
+**What shipped (Phase 1):** New `<vt-folder-browser>` component at `frontend/src/app/components/folder-browser/` replaces the four previous browser implementations: `FileBrowserComponent`'s inline panel (the `.npz` / `.json` file pickers used by export, settings-importer/exporter, label-importer modals), the `dataset-importer-modal`'s `sf-*` server-folder picker, the `new-detector-modal`'s server-folder + demo file pickers, and the `load-sort-modal`'s file-browser view. Each caller wires up a small browse function (returning `{directories, files, rootPath?, currentPath}`) so the same component sits on top of both `/api/browse` and `/api/browse-media-files` (folder + `demo:*` sources). OS-standard interaction landed: single-click highlights a row, double-click enters a directory or confirms a file, `↑/↓` move selection, `Home`/`End` jump, `Enter` activates, `Backspace` (or `Alt+↑`) goes to parent, and type-ahead jumps to the first row whose name starts with the typed prefix. Column-header sort (name / modified / size) was added with a sticky header so column meaning stays visible while scrolling; directories always group above files. The legacy `.sf-*` chrome rules in `_picker-shared.scss` and the breadcrumb / file-row rules in `load-sort-modal.scss` were deleted.
+
+**Open follow-ups (Phase 2 — deferred):**
+- **Left sidebar with Pinned / Bookmarks / Recent.** The component renders a single column today. The sidebar would add: *Pinned* anchors derived from `SERVER_ROOTS`, `saved_datasets_dir`, and `detectors_dir`; *Bookmarks* the user explicitly stars via a ⭐ button on the breadcrumb (new per-user setting key `bookmarked_browse_paths: list[str]`); *Recent* MRU of the last 8 visited folders (new per-user setting key `recent_browse_paths: list[str]`). Settings would slot into `vtsearch/settings.py`'s per-user tier using the existing `_SETTING_SPECS` factory.
+- **Address-bar mode.** Click the breadcrumb whitespace to turn it into an editable text input pre-filled with the current path; `Enter` navigates to whatever the user typed. Mirrors the macOS Finder Cmd+Shift+G / GNOME Files Ctrl+L pattern.
+- **New-folder button.** Not currently exposed by the backend (`/api/browse` is read-only). Would need a `POST /api/browse/mkdir` route guarded by the same path-validation chain.
 
 ### 7.6 Drag-and-drop affordances ★ S — SHIPPED
 Several places accept drag-drop (file import, example media into detector) but show no drop zone until the drag is over the page. Add visible dashed drop zones with `"Drop a folder here to import"` text.

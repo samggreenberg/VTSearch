@@ -765,43 +765,13 @@
 
       <div class="sf-browse-section">
         <label class="form-label">Select Folder</label>
-        <div class="sf-breadcrumbs">
-          <button class="sf-breadcrumb" [class.active]="!sfBrowsePath" (click)="sfLoadDirectory('')">Root</button>
-          @for (crumb of sfBreadcrumbs; track $index) {
-            <span class="sf-breadcrumb-sep">/</span>
-            <button class="sf-breadcrumb" [class.active]="$index === sfBreadcrumbs.length - 1" (click)="sfNavigateBreadcrumb($index)">{{ crumb }}</button>
-          }
-        </div>
-
-        <div class="sf-dir-list">
-          @if (sfBrowseLoading) {
-            <p class="empty-state">Loading...</p>
-          } @else if (sfBrowseError) {
-            <p class="error-text">{{ sfBrowseError }}</p>
-          } @else if (sfBrowseDirs.length === 0) {
-            <p class="sf-empty-dir">No subdirectories. This folder will be imported.</p>
-          }
-          @if (sfBrowsePath) {
-            <button class="sf-dir-item" (click)="sfGoUp()" title="Go to parent directory">
-              <span class="sf-dir-icon"><vt-icon type="arrow-up"></vt-icon></span>
-              <span class="sf-dir-name">..</span>
-            </button>
-          }
-          @for (dir of sfBrowseDirs; track dir.path) {
-            <button class="sf-dir-item" (click)="sfEnterDirectory(dir)" [title]="dir.path">
-              <span class="sf-dir-icon"><vt-icon type="folder"></vt-icon></span>
-              <span class="sf-dir-name">{{ dir.name }}</span>
-              @if (dir.modified_at) {
-                <span class="sf-dir-date">{{ dir.modified_at }}</span>
-              }
-            </button>
-          }
-        </div>
-
-        <div class="sf-selected-path">
-          <span class="form-label">Path:</span>
-          <code class="sf-path-display">{{ sfAbsolutePath }}</code>
-        </div>
+        <vt-folder-browser
+          [browse]="sfBrowseFn"
+          [showFiles]="false"
+          [showPathFooter]="true"
+          emptyMessage="No subdirectories. This folder will be imported."
+          (pathChange)="sfOnPathChange($event)"
+        ></vt-folder-browser>
       </div>
 
       <div class="form-group">
@@ -888,7 +858,7 @@
         </div>
       }
 
-      @if (sfBrowseError && !sfBrowseLoading) {
+      @if (sfBrowseError) {
         <p class="error-text">{{ sfBrowseError }}</p>
       }
     </div>
