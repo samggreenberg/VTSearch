@@ -135,57 +135,14 @@
   }
 }
 
-.browse-file {
+// (Breadcrumbs, file rows, and entry metadata are now rendered by
+// vt-folder-browser. The file-browser-step wrapper just stacks the
+// Back button and the folder browser.)
+
+.file-browser-step {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.entry-icon {
-  margin-right: 0.35rem;
-}
-
-.entry-date {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  margin-left: auto;
-  padding-left: 0.5rem;
-  white-space: nowrap;
-}
-
-.entry-size {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  margin-left: 0;
-  padding-left: 0.5rem;
-}
-
-.breadcrumbs {
-  margin-bottom: 0.75rem;
-  font-size: 0.8rem;
-}
-
-.breadcrumb-link {
-  background: none;
-  border: none;
-  color: var(--text-link);
-  cursor: pointer;
-  padding: 0;
-  font-size: inherit;
-
-  &:hover {
-    text-decoration: underline;
-  }
-}
-
-.breadcrumb-current {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.breadcrumb-sep {
-  margin: 0 0.25rem;
-  color: var(--text-secondary);
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .empty-state {
