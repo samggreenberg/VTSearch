@@ -16,9 +16,6 @@ import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.mo
  *
  * Visibility is governed by the parent (`AppComponent`); this component
  * just renders the explanation given the current active pair.
- *
- * See `docs/plans/active-context-switcher.md` § "Incompatible-pair
- * explainer".
  */
 @Component({
   selector: 'vt-incompatible-pair-explainer',

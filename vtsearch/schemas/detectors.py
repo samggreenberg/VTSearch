@@ -250,6 +250,9 @@ class DetectorRegistryEntrySchema(Schema):
     detector_loaded = fields.Boolean()
     autorun = fields.Boolean()
     last_trained_at = fields.Float(allow_none=True)
+    # Recorded only for loaded detectors. Empty for unloaded entries (the
+    # embedder is inferred from the active dataset at load time).
+    embedder = fields.String()
 
     class Meta:
         # Registry entries may carry extension keys (e.g. future per-row

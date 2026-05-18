@@ -24,8 +24,6 @@ import { ToastService } from '../services/toast.service';
  *   may arrive before the AppComponent-triggered refresh completes).
  * - **Pair is incompatible (different media types)** → allow; the
  *   `<vt-incompatible-pair-explainer>` overlay takes over the view.
- *
- * See `docs/plans/active-context-switcher.md` § Phase 2.
  */
 export const activeContextGuard: CanActivateFn = (route) => {
   const router = inject(Router);

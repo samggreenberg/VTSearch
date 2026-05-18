@@ -273,8 +273,8 @@ Each long-running operation emits a slightly different progress payload (`step`/
 ### 6.10 Date formatting ★ XS — SHIPPED
 "last_trained / created" columns format dates differently from the version string in the footer. ~~Use one formatter (relative for < 7d ago, absolute YYYY-MM-DD otherwise) everywhere.~~ Shipped: a single `frontend/src/app/utils/format-date.ts` is now called from all four sites (detector card, dataset card, dataset stats modal, settings-modal version footer). Always-absolute — no relative branch. Columns render `YYYY-MM-DD HH:MM` (local), version renders `YYYY-MM-DD` (UTC). Relative time was dropped deliberately: it drifts on every reload and the coarse buckets (`2w ago`) throw away precision that matters in a model-management dashboard.
 
-### 6.11 Active-dataset/detector indicator ★★ S — graduated to plan
-**Indicator half is already shipped** as read-only top-bar text (`app.component.html:62-63`, `Data: foo` / `Detector: cats`, driven by `ActiveContextService`). **Switcher half** — turning the read-only fields into click-to-switch pulldowns with compatibility handling, "Add New" footers, in-place modal launching, URL-encoded active pair, and in-flight job spinners — is now scoped as a three-phase plan: see [active-context-switcher.md](active-context-switcher.md). That plan also largely closes [§8.2](#82-switching-active-datasetdetector--s).
+### 6.11 Active-dataset/detector indicator ★★ S — shipped
+The read-only top-bar fields became click-to-switch `<vt-context-pulldown>` instances with media-type compatibility dimming, "+ Add New" footers that open the importer / new-detector modals in-place, an `vt-incompatible-pair-explainer` overlay for half-set / incompatible pairs, URL-encoded active pair (`/label/:datasetId/:detectorId` and `/find/:datasetId/:detectorId` gated by `activeContextGuard`), per-pair spinner glyphs driven by `GET /api/jobs/active`, learned-sort rehydration via the `JobManager` signature cache, and a re-embed task path that fires `"Re-resolving labels for X's embedder…"` when the active dataset's embedder differs from the loaded detector's. This entry also closed [§8.2](#82-switching-active-datasetdetector--s) below.
 
 ### 6.12 Plugin field types ★ S — shipped
 Free-text fields that should be numbers (`n_mels`, `time_window_s`, `size` for synthetic), enums that should be selects (`colormap`, `language` for OCR), and password fields disguised as text (`auth_header`). Tighten the `PluginField` type system and migrate.
@@ -339,8 +339,8 @@ Workflows the user *can* do today but that take too many steps and clicks.
 Today: open menu → pick importer category → pick importer → fill form → pick media type → pick embedder → submit → wait → close modal → select dataset → click "New detector" → fill form → click Train → vote 7 items → export → pick exporter → fill form → submit. That's ~15 clicks before the user has anything to show.
 **Compressed flow:** "Quick start" CTA on empty dashboard → pick a media type → upload a folder → app auto-creates a detector with the folder's name and drops the user into the labeling view. Export becomes a single header button with a recent-target fallback.
 
-### 8.2 Switching active dataset/detector ★★ S — graduated to plan
-Today: navigate back to dashboard → reselect → click Train again. Scoped together with §6.11 as the [active-context-switcher.md](active-context-switcher.md) plan: top-bar pulldowns make this a 1-click switch from any view. Sort mode is per-user-tier and survives the switch by design; view-local state (scroll, partial Find query) resets per Phase 1's "switch = re-entry" rule.
+### 8.2 Switching active dataset/detector ★★ S — shipped
+Shipped together with §6.11: the top-bar pulldowns make this a 1-click switch from any view. Sort mode is per-user-tier and survives the switch by design; view-local state (scroll, partial Find query) resets on switch (treated as a re-entry to the view). See §6.11 for the full set of affordances.
 
 ### 8.3 Cross-dataset training with a re-used labelset ★★ M
 The labelset-source machinery lets a detector pull labels from a different dataset, but using it requires:

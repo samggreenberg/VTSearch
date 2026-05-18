@@ -78,6 +78,8 @@ def list_registered_detectors():
     from vtsearch.detectors.registry import get_loaded_detector_ids, list_detectors
     from vtsearch.settings import get_autorun_detectors
 
+    from vtsearch.state.core import get_detector_context
+
     entries = list_detectors()
     loaded_ids = get_loaded_detector_ids()
     autorun_names = set(get_autorun_detectors())
@@ -87,6 +89,15 @@ def list_registered_detectors():
         entry["autorun"] = entry.get("name", "") in autorun_names
         entry.setdefault("last_trained_at", None)
         entry["detector_loaded"] = did in loaded_ids
+        # Expose the loaded detector's recorded embedder so the frontend
+        # can detect a cross-embedder switch and trigger a label re-embed
+        # via /api/detectors/registry/load. Unloaded detectors have no
+        # embedder yet (it's inferred from the dataset on load).
+        if entry["detector_loaded"]:
+            ctx = get_detector_context(did)
+            entry["embedder"] = ctx.embedder if ctx is not None else ""
+        else:
+            entry["embedder"] = ""
     return {"detectors": entries}
 
 
@@ -280,6 +291,110 @@ def register_detector_from_labelset(importer_name: str):
 # ---------------------------------------------------------------------------
 
 
+def _active_dataset_embedder_name() -> str:
+    """Return the embedder name recorded on the active dataset's medias, or ``""``."""
+    from vtsearch.state import snapshot_medias
+
+    snap = snapshot_medias()
+    if not snap:
+        return ""
+    first = next(iter(snap.values()), {})
+    return first.get("embedder", "") or ""
+
+
+def _embedder_display_name(embedder_name: str) -> str:
+    """Return a human-friendly name for *embedder_name*, falling back to the id."""
+    if not embedder_name:
+        return ""
+    from vtsearch.media import get_embedder
+
+    try:
+        return get_embedder(embedder_name).display_name or embedder_name
+    except KeyError:
+        return embedder_name
+
+
+def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
+    """Fire a re-embed task when the active dataset uses a different embedder.
+
+    Returns the task id when work was started, or ``None`` when the cache is
+    already aligned (same embedder, empty dataset, no labelset cached, etc.)
+    so the caller can return the synchronous fast-path.
+    """
+    new_embedder = _active_dataset_embedder_name()
+    if not new_embedder or not det_ctx.embedder or new_embedder == det_ctx.embedder:
+        return None
+
+    labelset = det_ctx.cached_labelset
+    if labelset is None or not labelset.elements:
+        # Nothing to re-embed; just update the stamp so we don't re-enter
+        # this branch on every subsequent switch.
+        det_ctx.embedder = new_embedder
+        return None
+
+    from vtsearch.concurrency.progress import CancelledError, detector_loading_tasks
+    from vtsearch.state import get_active_context
+    from vtsearch.state.core import set_thread_dataset_context, set_thread_detector_context
+
+    _thread_ds_ctx = get_active_context()
+    media_type = det_ctx.cached_labelset_media_type or entry.get("media_type", "") or ""
+    display = _embedder_display_name(new_embedder)
+    base_msg = f"Re-resolving labels for {display}…" if display else "Re-resolving labels…"
+
+    task_id = f"_detreembed_{det_ctx.detector_id[:8]}"
+    tracker = detector_loading_tasks.create_task(
+        task_id,
+        entry.get("name", det_ctx.detector_id),
+        detector_id=det_ctx.detector_id,
+        media_type=media_type,
+        embedder=new_embedder,
+    )
+    tracker.update("loading", base_msg, 0, 0, step=1, total_steps=1)
+
+    def reembed_task():
+        from vtsearch.detectors.labelset_training import train_from_labelset
+
+        set_thread_dataset_context(_thread_ds_ctx)
+        set_thread_detector_context(det_ctx)
+        try:
+
+            def _embed_progress(name: str, done: int, total: int) -> None:
+                tracker.check_cancelled()
+                msg = f"{base_msg} ({done}/{total})" if total else base_msg
+                tracker.update("loading", msg, done, total, step=1, total_steps=1)
+
+            # ``populate_label_embeddings`` clears the cache when it detects
+            # the embedder change, so this rebuilds against the new embedder
+            # from scratch. The stamp on ``det_ctx.embedder`` is updated
+            # inside ``populate_label_embeddings``.
+            from vtsearch.state import snapshot_medias
+
+            train_from_labelset(
+                det_ctx,
+                labelset,
+                media_type=media_type,
+                snap=snapshot_medias(),
+                on_progress=_embed_progress,
+            )
+            tracker.update("idle", "", 0, 0, step=None, total_steps=None)
+        except CancelledError:
+            tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
+        except Exception as e:
+            import traceback as _tb
+
+            _tb.print_exc()
+            error_msg = str(e) or repr(e) or "Unknown error during label re-embedding"
+            tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
+        finally:
+            detector_loading_tasks.mark_finished(task_id)
+            set_thread_dataset_context(None)
+            set_thread_detector_context(None)
+
+    thread = threading.Thread(target=reembed_task, daemon=True)
+    thread.start()
+    return task_id
+
+
 @detectors_registry_bp.route("/api/detectors/registry/load", methods=["POST"])
 @detectors_registry_bp.arguments(DetectorRegistryLoadRequestSchema)
 @detectors_registry_bp.response(200, DetectorRegistryLoadResponseSchema)
@@ -326,6 +441,24 @@ def load_detector_route(body: dict):
         return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
     if is_detector_loaded(detector_id):
+        # Detector is already in memory, but its cached label embeddings may
+        # have been built against a different embedder than the one the
+        # currently-active dataset uses (e.g. user switched from an image
+        # dataset embedded with SigLIP to one embedded with CLIP). Re-embed
+        # the labels in that case so MLP training mixes only same-space
+        # vectors. The cache invalidation itself happens inside
+        # ``populate_label_embeddings`` — this branch just makes the work
+        # visible via a progress task instead of letting it run lazily
+        # inside the next vote or learned-sort request.
+        det_ctx_existing = get_active_detector_context()
+        if det_ctx_existing.detector_id == detector_id:
+            task_id = _maybe_start_label_reembed(det_ctx_existing, entry)
+            if task_id is not None:
+                return {
+                    "ok": True,
+                    "message": "Re-embedding labels",
+                    "task_id": task_id,
+                }
         return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
     from vtsearch.concurrency.progress import CancelledError, detector_loading_tasks

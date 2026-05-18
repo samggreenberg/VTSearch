@@ -4,8 +4,7 @@ Currently exposes a single endpoint, ``GET /api/jobs/active``, which lists
 every ``(dataset_id, detector_id)`` pair with a running or pending job on
 any :class:`vtsearch.concurrency.async_jobs.JobManager`. The top-bar
 context-pulldown polls this endpoint and renders a spinner glyph on rows
-whose pair has work in flight — see ``docs/plans/active-context-switcher.md``
-§ Phase 3.
+whose pair has work in flight.
 """
 
 from __future__ import annotations
