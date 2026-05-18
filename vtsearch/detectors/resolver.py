@@ -450,6 +450,23 @@ def _apply_clip_and_embed(  # noqa: C901
     import tempfile
 
     params = origin.get("params", {})
+
+    # Chain replay takes precedence over the legacy single-clipper path.
+    chain_raw = params.get("clipper_chain")
+    if chain_raw:
+        from vtsearch.datasets.clipper_chain import parse_trail, replay_chain_on_file
+
+        steps = parse_trail(chain_raw)
+        if steps:
+            try:
+                embedding = replay_chain_on_file(file_path, steps, embedder_name)
+            except Exception:
+                log.debug("_apply_clip_and_embed: chain replay failed, falling back", exc_info=True)
+                embedding = None
+            if embedding is not None:
+                return embedding
+            # Fall through to legacy/full-file embed.
+
     clipper_name = params.get("clipper", "")
 
     if not clipper_name:
@@ -618,7 +635,8 @@ def resolve_label_embeddings(  # noqa: C901
             # Use clip-aware embedding when the label has clip params in its
             # origin (e.g. from a clipped dataset).  This ensures cross-dataset
             # resolution embeds the clipped content, not the whole parent file.
-            if origin is not None and origin.get("params", {}).get("clipper"):
+            origin_params = origin.get("params", {}) if origin is not None else {}
+            if origin_params.get("clipper") or origin_params.get("clipper_chain"):
                 embedding = _apply_clip_and_embed(file_path, media_type, origin)
             else:
                 embedding = embed_file(file_path, media_type)

@@ -190,16 +190,19 @@ def import_local_folder():  # noqa: C901
 
     clipper_name = field_values.pop("clipper", "") or ""
     inner_clipper_params = field_values.pop("clipper_params", None)
-    field_values["clipper"] = clipper_name
-    if clipper_name and not clipper_name.endswith("_default"):
-        field_values["skip_embedding"] = True
-
-    from vtsearch.auth import get_current_user
     from vtsearch.datasets.load_pipeline import (
         _normalize_media_type,
+        _parse_chain_field,
         auto_chunk_size,
         consume_chunks_into,
     )
+
+    inner_chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
+    field_values["clipper"] = clipper_name
+    if (clipper_name and not clipper_name.endswith("_default")) or inner_chain_steps:
+        field_values["skip_embedding"] = True
+
+    from vtsearch.auth import get_current_user
 
     use_chunked = getattr(importer, "supports_chunked", False)
     chunk_size = auto_chunk_size(media_type) if use_chunked else 0
@@ -224,6 +227,7 @@ def import_local_folder():  # noqa: C901
         name=user_dataset_name or "Local folder upload",
         clipper=clipper_name,
         clipper_params=inner_clipper_params,
+        chain_steps=inner_chain_steps,
         embedder=embedder,
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
