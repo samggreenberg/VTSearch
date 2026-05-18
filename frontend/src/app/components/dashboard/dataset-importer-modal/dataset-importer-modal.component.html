@@ -521,25 +521,22 @@
 
       <div class="form-group form-group--section">
         @if (lfPickerKind === 'folder') {
-          <label class="form-label" for="lf-folder-input" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder<span class="required">*</span></label>
-          <input
-            id="lf-folder-input"
-            type="file"
-            class="form-input"
-            webkitdirectory
-            directory
-            multiple
-            (change)="lfOnFolderSelected($event)"
-          />
+          <label class="form-label" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder<span class="required">*</span></label>
+          <vt-drop-zone
+            label="Drop a folder here to import"
+            sublabel="or click to browse"
+            [directory]="true"
+            [multiple]="true"
+            (filesSelected)="lfOnFilesDropped($event)"
+          ></vt-drop-zone>
         } @else {
-          <label class="form-label" for="lf-files-input" title="Choose one or more files on your local machine. Each selected file will be uploaded.">Files<span class="required">*</span></label>
-          <input
-            id="lf-files-input"
-            type="file"
-            class="form-input"
-            multiple
-            (change)="lfOnFolderSelected($event)"
-          />
+          <label class="form-label" title="Choose one or more files on your local machine. Each selected file will be uploaded.">Files<span class="required">*</span></label>
+          <vt-drop-zone
+            label="Drop files here to import"
+            sublabel="or click to browse"
+            [multiple]="true"
+            (filesSelected)="lfOnFilesDropped($event)"
+          ></vt-drop-zone>
         }
         @if (lfFiles.length > 0) {
           <p class="info-text">

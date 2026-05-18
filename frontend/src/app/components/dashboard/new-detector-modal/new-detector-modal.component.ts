@@ -20,6 +20,7 @@ import {
   MediaCropModalComponent,
   MediaCropResult,
 } from '../../modals/media-crop-modal/media-crop-modal.component';
+import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 interface BrowseEntry {
@@ -37,7 +38,7 @@ type TrainedSubView = 'picker' | 'form';
 @Component({
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent, MediaCropModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent, MediaCropModalComponent, DropZoneComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -639,15 +640,13 @@ export class NewDetectorModalComponent implements OnInit {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  /** Local file picker handler.  Used by both the inline "Upload File…"
-   *  button on the main form and the Local Folder / Local Files cards in
-   *  the picker.  Multi-file selections (e.g. webkitdirectory) are
-   *  collapsed to the first file since only one example is needed. */
-  onLocalFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) return;
-    const file = input.files[0];
-    input.value = '';
+  /** Local file picker handler.  Used by the drop-zone affordance in both
+   *  the main form (next to "Browse Media…") and the Local Folder / Local
+   *  Files cards in the media picker.  Multi-file drops (e.g. a folder)
+   *  collapse to the first file since only one example is needed. */
+  onLocalFileDropped(files: File[]): void {
+    if (files.length === 0) return;
+    const file = files[0];
     this.pendingFile = file;
     this.pendingFileMediaType = this.mediaType || this.mediaTypeFromFile(file);
   }
