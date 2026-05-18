@@ -147,10 +147,21 @@ class MediaClipper(ABC):
 
         Called by the load pipeline once per dataset, before any
         :meth:`clip` calls.  Most clippers ignore *durations* and return
-        ``self``.  Auto-selecting clippers (e.g. ``SoundAutoClipper``)
-        override this to pick a different concrete clipper based on the
-        dataset's typical duration — for example, pass-through for short
-        clips, tiling for longer ones.
+        ``self``.  Reserved for clippers that need a dataset-level
+        decision; auto-routing now happens per-item via
+        :meth:`resolve_for_media`.
+        """
+        return self
+
+    def resolve_for_media(self, media: dict[str, Any]) -> "MediaClipper":
+        """Return a concrete clipper for a single media item.
+
+        Called by the load pipeline once per media, after
+        :meth:`resolve_for_durations` and before :meth:`clip`.  Most
+        clippers ignore *media* and return ``self``.  Auto-selecting
+        clippers (e.g. ``SoundAutoClipper``) override this to pick a
+        different concrete clipper based on the item's own duration —
+        e.g. pass-through for short clips, tiling for longer ones.
 
         The resolved clipper's :attr:`name` and parameter values are what
         get recorded in each clip's origin, so cross-dataset replay is
