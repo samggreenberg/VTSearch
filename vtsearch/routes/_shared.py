@@ -140,7 +140,6 @@ def validate_plugin_args(plugin: PluginBase, *, file_mode: str = "filestorage") 
     from vtsearch.plugins.schema import get_plugin_arg_schema  # noqa: PLC0415
 
     has_file_fields = any(f.field_type == "file" for f in plugin.fields)
-    file_keys = {f.key for f in plugin.fields if f.field_type == "file"}
 
     if has_file_fields:
         # ``request.form`` is a MultiDict; marshmallow handles plain dicts.

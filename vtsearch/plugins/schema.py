@@ -72,54 +72,77 @@ def _coerce_checkbox(value: object) -> bool:
     raise ValidationError("Not a valid boolean.")
 
 
+def _presence_kwargs(pf: PluginField) -> dict:
+    """Return marshmallow ``required`` / ``load_default`` kwargs for *pf*.
+
+    The three states are mutually exclusive:
+    - required AND no default → ``required=True`` (marshmallow raises
+      on missing input).
+    - has default → ``load_default=<default>``.
+    - neither → ``load_default=""`` (preserves the legacy ``.get(key, "")``
+      fallback).
+    """
+    if pf.required and not pf.default:
+        return {"required": True}
+    if pf.default:
+        return {"load_default": pf.default}
+    return {"load_default": ""}
+
+
+def _build_checkbox(pf: PluginField, kwargs: dict) -> fields.Field:
+    kwargs["load_default"] = str(pf.default).lower() == "true"
+    return fields.Function(deserialize=_coerce_checkbox, **kwargs)
+
+
+def _build_number(pf: PluginField, kwargs: dict) -> fields.Field:
+    kwargs.pop("load_default", None)
+    if pf.default:
+        try:
+            kwargs["load_default"] = int(pf.default) if pf.is_integer_number() else float(pf.default)
+        except (TypeError, ValueError):
+            # Bad default — let marshmallow raise on missing input.
+            kwargs.pop("load_default", None)
+    if pf.is_integer_number():
+        return fields.Integer(**kwargs)
+    return fields.Float(**kwargs)
+
+
+def _build_select(pf: PluginField, kwargs: dict) -> fields.Field:
+    validators: list = []
+    if pf.required:
+        validators.append(_non_empty_after_strip)
+    if pf.options and not pf.dynamic_options:
+        validators.append(validate.OneOf([*pf.options, ""] if not pf.required else pf.options))
+    if validators:
+        kwargs["validate"] = validators
+    return fields.String(**kwargs)
+
+
+def _build_text(pf: PluginField, kwargs: dict) -> fields.Field:
+    # text / url / email / password / folder / server_path
+    # Use ``fields.String`` for emails (not ``fields.Email``) — empty
+    # strings are acceptable for non-required fields, and the frontend /
+    # plugin can tighten validation if it needs RFC compliance.
+    if pf.required:
+        kwargs["validate"] = _non_empty_after_strip
+    return fields.String(**kwargs)
+
+
 def _build_marshmallow_field(pf: PluginField) -> fields.Field | None:
     """Return the marshmallow field for *pf*, or ``None`` to skip it."""
     if pf.field_type == "file":
         # File fields are populated from ``request.files`` after schema load.
         return None
 
-    kwargs: dict = {}
-    if pf.required and not pf.default:
-        kwargs["required"] = True
-    elif pf.default:
-        kwargs["load_default"] = pf.default
-    else:
-        kwargs["load_default"] = ""
+    kwargs = _presence_kwargs(pf)
 
     if pf.field_type == "checkbox":
-        # ``load_default`` overrides any text-default we set above.
-        kwargs["load_default"] = str(pf.default).lower() == "true"
-        return fields.Function(deserialize=_coerce_checkbox, **kwargs)
-
+        return _build_checkbox(pf, kwargs)
     if pf.field_type == "number":
-        kwargs.pop("load_default", None)
-        if pf.default:
-            try:
-                kwargs["load_default"] = int(pf.default) if pf.is_integer_number() else float(pf.default)
-            except (TypeError, ValueError):
-                # Bad default — let marshmallow raise on missing input.
-                kwargs.pop("load_default", None)
-        if pf.is_integer_number():
-            return fields.Integer(**kwargs)
-        return fields.Float(**kwargs)
-
+        return _build_number(pf, kwargs)
     if pf.field_type == "select":
-        validators: list = []
-        if pf.required:
-            validators.append(_non_empty_after_strip)
-        if pf.options and not pf.dynamic_options:
-            validators.append(validate.OneOf([*pf.options, ""] if not pf.required else pf.options))
-        if validators:
-            kwargs["validate"] = validators
-        return fields.String(**kwargs)
-
-    # text / url / email / password / folder / server_path
-    # Use fields.String (not fields.Email) for emails — empty strings are
-    # acceptable for non-required fields and the frontend / plugin can
-    # tighten the validation if it cares about RFC compliance.
-    if pf.required:
-        kwargs["validate"] = _non_empty_after_strip
-    return fields.String(**kwargs)
+        return _build_select(pf, kwargs)
+    return _build_text(pf, kwargs)
 
 
 def make_plugin_arg_schema(plugin: PluginBase) -> type[Schema]:
