@@ -172,6 +172,11 @@ describe('AutopilotPanelComponent', () => {
     expect(newStep!.statusIcons.length).toBe(2);
     expect(newStep!.statusIcons[0].color).toBe('green');
     expect(newStep!.statusIcons[1].color).toBe('green');
+    // Tooltips explain each indicator, not just its raw colour
+    expect(newStep!.statusIcons[0].title).toContain('Smart');
+    expect(newStep!.statusIcons[0].title).toContain('detector accuracy');
+    expect(newStep!.statusIcons[1].title).toContain('Stable');
+    expect(newStep!.statusIcons[1].title).toContain('prediction stability');
   });
 
   it('should deactivate autopilot', () => {

@@ -13,6 +13,7 @@ export type { AutopilotPhase, AutopilotState };
 interface StatusIcon {
   color: 'green' | 'yellow';
   ariaLabel: string;
+  title: string;
 }
 
 export interface StepDisplay {
@@ -162,9 +163,19 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   private phaseStatusIcons(phase: AutopilotPhase): StatusIcon[] {
     if (phase !== 'hard' && phase !== 'new') return [];
     const st = this.state;
+    const smartState = st.smartStatus === 'green' ? 'green' : 'pending';
+    const stableState = st.stableStatus === 'green' ? 'green' : 'pending';
     return [
-      { color: st.smartStatus === 'green' ? 'green' : 'yellow', ariaLabel: `Smart: ${st.smartStatus === 'green' ? 'green' : 'pending'}` },
-      { color: st.stableStatus === 'green' ? 'green' : 'yellow', ariaLabel: `Stable: ${st.stableStatus === 'green' ? 'green' : 'pending'}` },
+      {
+        color: st.smartStatus === 'green' ? 'green' : 'yellow',
+        ariaLabel: `Smart: ${smartState}`,
+        title: `Smart: ${smartState}. Tracks detector accuracy over labeling steps. Green when error cost has leveled off (detector has converged). Yellow when still improving.`,
+      },
+      {
+        color: st.stableStatus === 'green' ? 'green' : 'yellow',
+        ariaLabel: `Stable: ${stableState}`,
+        title: `Stable: ${stableState}. Tracks prediction stability. Green when predictions stop changing between labeling steps (detector is confident). Yellow when predictions are still shifting.`,
+      },
     ];
   }
 
