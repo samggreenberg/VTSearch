@@ -903,9 +903,17 @@ def _run_origin_load_in_background(
 
     def task():
         from vtsearch.auth import set_thread_user  # noqa: PLC0415
+        from vtscore.state.core import set_thread_dataset_context  # noqa: PLC0415
 
         set_thread_user(request_user)
         ctx = DatasetContext(task_id)
+        # Pin the in-flight context to this thread so importers, clippers,
+        # dedup, diversity-tree, and label-sync helpers that resolve via
+        # ``get_active_context()`` see the dataset being built — not the
+        # empty fallback context.  Without this, mutations addressed at
+        # the active context (e.g. label restoration, vote replay) land
+        # on ``_empty_dataset_context`` and are silently lost.
+        set_thread_dataset_context(ctx)
         context_id = task_id
         controller = _LoadGateController(tracker)
         stepped = _make_stepped_progress(controller, tracker)
@@ -954,10 +962,16 @@ def _run_origin_load_in_background(
         finally:
             controller.release()
             clear_thread_progress()
-            loading_tasks.mark_finished(task_id)
+            # Clear thread-locals *before* marking the task finished so
+            # callers waiting on ``has_active_tasks() == False`` see fully
+            # cleaned-up worker state.  Otherwise a daemon thread that is
+            # reused (or whose locals are scraped by a test) could still
+            # appear to hold the just-loaded dataset context.
+            set_thread_dataset_context(None)
             from vtsearch.auth import set_thread_user as _clear_thread_user  # noqa: PLC0415
 
             _clear_thread_user(None)
+            loading_tasks.mark_finished(task_id)
 
     threading.Thread(target=task, daemon=True).start()
     return task_id
