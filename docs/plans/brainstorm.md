@@ -363,8 +363,8 @@ The `embedder` dropdown is populated by `/api/datasets/embedders/<media_type>` b
 ### 11.6 Detector media type from selected dataset ★★★ XS
 New-detector modal forces a `media_type` pick. If the user already has a dataset selected on the dashboard, pre-fill it (already partially done — extend to *lock* and gray-out unless they explicitly unlock).
 
-### 11.7 Output filenames with timestamps ★★ XS
-`server_csv_file` / `server_json_file` exporters default to `data/autodetect_results.csv` — running twice silently overwrites. Default to `data/autodetect_results_{YYYYMMDD-HHMMSS}.csv` with `{detector_name}` and `{username}` template support (matches the existing `LabelsetSource` placeholder pattern).
+### 11.7 Output filenames with timestamps ★★ XS — shipped
+`server_csv_file` / `server_json_file` exporters now default to `data/autodetect_results_{YYYYMMDD-HHMMSS}.{csv,json}`, so consecutive runs no longer silently overwrite. `vtsearch/exporters/_template.py` resolves `{YYYYMMDD-HHMMSS}` (UTC), `{detector_name}`, and `{username}`, with the latter two routed through `sanitize_template_value` so user-controlled values cannot escape the admin-implied directory. Covered by `tests/io/test_csv_webhook_exporters.py`.
 
 ### 11.8 Demo embedder from prior demo ★ XS
 Demo dataset picker re-asks for embedder every time. Remember the last embedder used for each media type per user (cheap: piggyback on per-user settings).
