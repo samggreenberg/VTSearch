@@ -145,6 +145,12 @@ export interface ImporterField {
   default?: string;
   required?: boolean;
   placeholder?: string;
+  /** Inline format-hint text rendered as a visible chip below the input.
+   *  Distinct from ``description`` (which feeds the placeholder): the hint
+   *  stays visible after the user starts typing, so it's the right place
+   *  for accepted file extensions, expected schemas, or a short sample of
+   *  the file layout. */
+  hint?: string;
   /** When true, ``options`` is computed at runtime by calling
    *  ``POST /api/dataset/import/<importer>/options`` with the current
    *  field values.  The frontend re-fetches whenever any field listed in
