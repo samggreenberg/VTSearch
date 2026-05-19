@@ -7,6 +7,7 @@ import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { PulldownControlService } from '../../services/pulldown-control.service';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.models';
+import { DetectorSwatchComponent } from '../detector-swatch/detector-swatch.component';
 
 /**
  * Renders in place of `/label` and `/find` content when the active
@@ -20,7 +21,7 @@ import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.mo
 @Component({
   selector: 'vt-incompatible-pair-explainer',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, DetectorSwatchComponent],
   templateUrl: './incompatible-pair-explainer.component.html',
   styleUrl: './incompatible-pair-explainer.component.scss',
 })

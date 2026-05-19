@@ -17,6 +17,7 @@ import {
   MediaCropModalComponent,
   MediaCropResult,
 } from '../media-crop-modal/media-crop-modal.component';
+import { DetectorSwatchComponent } from '../../detector-swatch/detector-swatch.component';
 
 interface BrowseItem {
   key: string;
@@ -28,7 +29,7 @@ type MediaPickerView = 'sources' | 'browse-items' | 'file-browser';
 @Component({
   selector: 'vt-load-sort-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent, IconComponent, FolderBrowserComponent, MediaCropModalComponent],
+  imports: [CommonModule, ModalComponent, IconComponent, FolderBrowserComponent, MediaCropModalComponent, DetectorSwatchComponent],
   templateUrl: './load-sort-modal.component.html',
   styleUrl: './load-sort-modal.component.scss',
 })

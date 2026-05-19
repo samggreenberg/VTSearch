@@ -7,7 +7,7 @@
       <p class="explainer-title">No dataset selected.</p>
       <p class="explainer-detail">
         Pick a dataset compatible with detector
-        <strong>{{ detector?.name }}</strong>
+        <vt-detector-swatch [name]="detector?.name || ''"></vt-detector-swatch>&nbsp;<strong>{{ detector?.name }}</strong>
         (<em>{{ detector?.media_type }}</em>) from the top-bar pulldown,
         or go to the Dashboard.
       </p>
@@ -22,7 +22,7 @@
     } @else if (mediaTypeMismatch) {
       <p class="explainer-title">
         <strong>{{ dataset?.name }}</strong> and
-        <strong>{{ detector?.name }}</strong> are incompatible: they are
+        <vt-detector-swatch [name]="detector?.name || ''"></vt-detector-swatch>&nbsp;<strong>{{ detector?.name }}</strong> are incompatible: they are
         different media types (<em>{{ dataset?.media_type }}</em> vs.
         <em>{{ detector?.media_type }}</em>).
       </p>
