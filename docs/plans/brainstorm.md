@@ -15,63 +15,45 @@ Sections:
 
 ## 1. New Media Types
 
-### 1.1 Code / source files ★★ M
-A first-class `code` media type for browsing and clustering source files. Embedder: **CodeBERT**, **UniXcoder**, **StarEncoder**, or **Voyage-Code-3**. Display with syntax highlighting (Prism/Shiki). Extensions: every common source ext. Use case: search "files that handle authentication", "places we call SSE", "TODO clusters by topic". This is a natural fit for VTSearch's "rank → vote → train" loop applied to code review or refactoring queues.
+### ~~1.1 Code / source files~~ — Not going to happen
 
-### 1.2 Tabular / spreadsheet ★ M
-`tabular` for CSV/TSV/Parquet/XLSX. Embedder: column-name + sample-row text passed to E5/BGE; or **TaPaS**/**TAPEX**. Display: rendered grid with column types. Voting use case: "which CSVs look like time-series sensor data?", "which sheets have PII?".
+### ~~1.2 Tabular / spreadsheet~~ — Not going to happen
 
-### 1.3 3D mesh / point cloud ★ L
-`mesh` for `.obj`, `.stl`, `.ply`, `.glb`. Embedder: **OpenShape**, **Uni3D**, **PointBERT**. Display: Three.js viewer. Converter: `mesh→image` (multi-angle renders) so we get free fallback through SigLIP. Use case: 3D asset libraries.
+### ~~1.3 3D mesh / point cloud~~ — Not going to happen
 
-### 1.4 Time series / signals ★ M
-Generic 1-D signal type (ECG, accelerometer, finance ticks). Embedder: **TS2Vec**, **MOMENT**, **Chronos**. Converter: `timeseries→image` (line plot, recurrence plot, GAF) → reuse SigLIP. Display: Plotly chart with brush-to-zoom.
+### ~~1.4 Time series / signals~~ — Not going to happen
 
-### 1.5 Music / MIDI ★ S–M
-Specialised `midi` type separate from `audio`. Embedder: **MERT**, **Jukebox** features. Or convert: `midi→audio` via fluidsynth → CLAP-Music. Display: piano roll.
+### ~~1.5 Music / MIDI~~ — Not going to happen
 
-### 1.6 Spectrogram-as-image ★ XS
-Not a new type per se, but an "audio in image-mode" via the existing `audio→image` converter. Lets users vote on visual structure of audio (e.g. "find recordings with car-horn pattern").
+### ~~1.6 Spectrogram-as-image~~ — Not going to happen
 
-### 1.7 Email / message ★ M
-`.eml`, `.mbox`, Slack JSON. Embedder: E5 on `subject + body` plus structured headers as metadata. Display: threaded view. Use case: triage inbox/support queues.
+### ~~1.7 Email / message~~ — Not going to happen
 
-### 1.8 Geospatial raster ★ M
-GeoTIFF/Sentinel/Landsat tiles. Embedder: **Prithvi**, **SatlasNet**, **Clay**. Use case: satellite imagery curation.
+### ~~1.8 Geospatial raster~~ — Not going to happen
 
-### 1.9 Web pages / HTML ★ S
-`.html`/`.mhtml`/URL fetch. Render to Markdown via Readability before embedding with E5. Display: rendered iframe + extracted text side-by-side. Useful for bookmark organisation, OSINT.
+### ~~1.9 Web pages / HTML~~ — Not going to happen
 
-### 1.10 Bio-signal / EEG ★ exploratory
-Niche but cool: **LaBraM**, **BENDR**. Probably blocked by data availability for demos.
+### ~~1.10 Bio-signal / EEG~~ — Not going to happen
 
 ---
 
 ## 2. New MediaConverters
 
-### 2.1 `video → text` (transcription) ★★ M
-Composition of `video→audio→text`, but worth exposing as a single converter so users don't have to chain two manually. The multi-media import flow already supports chaining, so this is a thin wrapper rather than a new model.
+### ~~2.1 `video → text` (transcription)~~ — Not going to happen
 
-### 2.2 `text → audio` (TTS preview) ★ S
-For voting on summaries: hear them played out. Param: voice (Coqui/Piper).
+### ~~2.2 `text → audio` (TTS preview)~~ — Not going to happen
 
-### 2.3 `image → text` (caption) ★★ M
-**BLIP-2**, **LLaVA-1.6**, **Florence-2** captioning. Provides a caption that can be edited and re-embedded; useful for archives without metadata.
+### ~~2.3 `image → text` (caption)~~ — Not going to happen
 
-### 2.4 `image → image` (super-resolution / denoise) ★ S
-Real-ESRGAN. Useful for surveillance/historical photo collections.
+### ~~2.4 `image → image` (super-resolution / denoise)~~ — Not going to happen
 
-### 2.5 `pdf → table` (table extraction) ★ M
-Camelot/Tabula extracts CSVs from PDF tables → tabular media type.
+### ~~2.5 `pdf → table` (table extraction)~~ — Not going to happen
 
-### 2.6 `code → text` (docstring extraction) ★ XS
-For language-agnostic code search via natural language.
+### ~~2.6 `code → text` (docstring extraction)~~ — Not going to happen
 
-### 2.7 `video → keyframe-image` ★★ S
-Already partially covered by `video→image`, but with **TransNet V2** scene boundary picking instead of uniform sampling. Far better for content-aware clipping.
+### ~~2.7 `video → keyframe-image`~~ — Not going to happen
 
-### 2.8 `email → text` ★ XS
-Strip MIME, dedupe quoted replies, normalise headers.
+### ~~2.8 `email → text`~~ — Not going to happen
 
 ### 2.9 Composability ★★ M (cross-cutting)
 Today the framework allows one converter per source; consider explicit chains: `video → audio → spectrogram → image embedder`. The plumbing already exists in `effective_source_specs`; what's missing is the UI. (See also [clipper-chain.md](clipper-chain.md), which generalises this for clippers.)
