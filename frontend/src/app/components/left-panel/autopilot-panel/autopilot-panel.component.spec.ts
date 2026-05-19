@@ -227,9 +227,28 @@ describe('AutopilotPanelComponent', () => {
   it('should show tooltip on each step label via title attribute', () => {
     const stepLabels = fixture.nativeElement.querySelectorAll('.ap-step-label');
     expect(stepLabels.length).toBe(5);
-    // Active step shows reselect hint; future steps show help text
+    // Active step (phase 1) leads with phase intent and ends with reselect hint
+    expect(stepLabels[0].title).toContain('Phase 1');
+    expect(stepLabels[0].title).toContain('Find initial goods');
     expect(stepLabels[0].title).toContain('reselect');
-    expect(stepLabels[1].title).toContain('not what you want');
+    // Future steps show phase intent only
+    expect(stepLabels[1].title).toContain('Phase 2');
+    expect(stepLabels[1].title).toContain('Find initial bads');
+    expect(stepLabels[2].title).toContain('Boundary refinement');
+    expect(stepLabels[3].title).toContain('Diversity exploration');
+  });
+
+  it('should show phase intent tooltip on each collapsed-step dot', () => {
+    fixture.componentRef.setInput('collapsed', true);
+    fixture.detectChanges();
+    const dots = fixture.nativeElement.querySelectorAll('.collapsed-step');
+    expect(dots.length).toBe(5);
+    expect(dots[0].title).toContain('Phase 1');
+    expect(dots[0].title).toContain('Find initial goods');
+    expect(dots[0].title).toContain('reselect');
+    expect(dots[2].title).toContain('Phase 3');
+    expect(dots[2].title).toContain('Boundary refinement');
+    expect(dots[2].title).toContain('uncertain items');
   });
 
   it('should emit refocus when clicking the active step', () => {

@@ -425,8 +425,10 @@ Was: dashboard loading rows showed cryptic step numbers like "[Step 3/4] Loading
 ### 12.7 Inclusion slider tick labels ★★ XS
 The slider is `[-10, +10]` with no anchors. Add tick labels: `-10 strict` / `0 default` / `+10 lenient`, plus a one-line caption "Trades off precision (left) vs recall (right)."
 
-### 12.8 Autopilot phase intent ★★ S
+### 12.8 Autopilot phase intent ★★ S — shipped
 The collapsed Autopilot bar shows four dots. Hovering should reveal phase intent: *"Phase 3: Boundary refinement — votes on uncertain items train the model fastest."* Already exists in long-form docs, but not in UI.
+
+**What shipped:** `AutopilotPanelComponent` now computes a `phaseIntent(phase, stepNumber)` string of the form *"Phase N: <short name> — <why this phase matters>"* for each of the four phases (plus a "done" variant), and binds it as the `title` tooltip on every collapsed-mode dot and every expanded-view step label. The active dot/label tooltip leads with the same intent and appends *"Click to reselect recommendation."* so the existing affordance is preserved. Spec coverage added for both the collapsed dots and the expanded labels.
 
 ### 12.9 Keyboard shortcut discoverability ★★ XS
 The keyboard help modal exists but is only reachable via a button most users never click. Show shortcuts inline as tooltips on the Good/Bad buttons (`Good (→)`, `Bad (←)`), and surface "press `?` for keyboard help" as a one-time toast after the third labeling session.
