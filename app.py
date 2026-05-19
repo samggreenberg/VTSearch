@@ -95,12 +95,14 @@ app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-
 # type) to ``vtsearch.settings``.  See ``docs/plans/extract-library.md`` for
 # the seam.
 from vtsearch.shim import (  # noqa: E402
+    register_app_config_builder,
     register_app_persistence_hooks,
     register_flask_context_resolvers,
 )
 
 register_flask_context_resolvers()
 register_app_persistence_hooks()
+register_app_config_builder()
 
 # Optional cap on request body size (uploads).  ``MAX_UPLOAD_MB == 0`` leaves
 # Flask's default of no limit in place; a positive value rejects oversized

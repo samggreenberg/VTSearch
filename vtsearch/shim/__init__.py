@@ -10,7 +10,10 @@ so the core package can stay import-clean.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+
+from vtsearch.config import DATA_DIR, CoreConfig
 
 
 def _flask_dataset_context_resolver() -> Any:
@@ -73,7 +76,55 @@ def register_app_persistence_hooks() -> None:
     register_setting_persister("safe_thresholds", settings.set_safe_thresholds)
 
 
+def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
+    """Snapshot ``vtsearch.settings`` into a :class:`CoreConfig`.
+
+    The app-side implementation of :meth:`CoreConfig.from_settings`.  Lives
+    here so the library file ``vtsearch/config.py`` never imports
+    ``vtsearch.settings`` — see Phase 8 of
+    ``docs/plans/extract-library.md``.
+
+    When *settings_path* is given, the server-tier settings file path is
+    redirected to that location before reading.  The CLI uses this to
+    point at a run-specific settings JSON.
+    """
+    from vtsearch import settings as _settings
+
+    if settings_path is not None:
+        _settings.set_settings_path(settings_path)
+
+    return CoreConfig(
+        saved_datasets_dir=_settings.get_saved_datasets_dir(),
+        detectors_dir=_settings.get_detectors_dir(),
+        max_concurrent_dataset_downloads=_settings.get_max_concurrent_dataset_downloads(),
+        max_concurrent_dataset_embeddings=_settings.get_max_concurrent_dataset_embeddings(),
+        autorun_detectors=tuple(_settings.get_autorun_detectors()),
+        safe_thresholds=_settings.get_safe_thresholds(),
+        calibrate_count=_settings.get_calibrate_count(),
+        calibration_fraction=_settings.get_calibration_fraction(),
+        enrich_descriptions=_settings.get_enrich_descriptions(),
+        autopilot_goal_diversity=_settings.get_autopilot_goal_diversity(),
+        inclusion=_settings.get_inclusion(),
+        data_dir=DATA_DIR,
+    )
+
+
+def register_app_config_builder() -> None:
+    """Install :func:`build_core_config` as the backing for
+    :meth:`CoreConfig.from_settings`.
+
+    Called once at Flask app startup so library-candidate callers can keep
+    using ``CoreConfig.from_settings()`` while the bridge to
+    ``vtsearch.settings`` lives entirely in this shim package.
+    """
+    from vtsearch.config import register_core_config_builder
+
+    register_core_config_builder(build_core_config)
+
+
 __all__ = [
+    "build_core_config",
+    "register_app_config_builder",
     "register_app_persistence_hooks",
     "register_flask_context_resolvers",
 ]
