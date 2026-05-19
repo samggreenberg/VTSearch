@@ -194,6 +194,21 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_show_metadata() is False
 
+    def test_label_hint_dismissed_default(self):
+        assert settings_mod.get_label_hint_dismissed() is False
+
+    def test_get_set_label_hint_dismissed(self, isolated_settings):
+        settings_mod.set_label_hint_dismissed(True)
+        assert settings_mod.get_label_hint_dismissed() is True
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["label_hint_dismissed"] is True
+
+    def test_label_hint_dismissed_persists_across_reset(self, isolated_settings):
+        settings_mod.set_label_hint_dismissed(True)
+        settings_mod.reset()
+        assert settings_mod.get_label_hint_dismissed() is True
+
     def test_get_view_mode_left_default(self):
         result = settings_mod.get_view_mode_left()
         assert isinstance(result, dict)

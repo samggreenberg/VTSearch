@@ -167,6 +167,19 @@ class TestSettingsAPI:
         assert res.status_code == 200
         assert res.get_json()["show_metadata"] is True
 
+    def test_update_label_hint_dismissed(self, client):
+        # Default is False — the hint shows on first session.
+        initial = client.get("/api/settings").get_json()
+        assert initial["label_hint_dismissed"] is False
+
+        res = client.put("/api/settings", json={"label_hint_dismissed": True})
+        assert res.status_code == 200
+        assert res.get_json()["label_hint_dismissed"] is True
+
+        # Persists across reads.
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["label_hint_dismissed"] is True
+
     def test_update_view_mode_left_per_type(self, client):
         res = client.put("/api/settings", json={"view_mode_left": {"audio": "grid", "image": "list"}})
         assert res.status_code == 200

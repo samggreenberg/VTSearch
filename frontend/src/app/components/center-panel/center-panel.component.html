@@ -109,6 +109,7 @@
       [isBad]="isBad"
       [disabled]="isVoting || disabled"
       [spinningVote]="spinningVote"
+      [showHint]="showFirstVoteHint"
       (voted)="castVote($event)"
     ></vt-voting-overlay>
   }

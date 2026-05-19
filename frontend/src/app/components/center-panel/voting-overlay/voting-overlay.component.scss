@@ -4,6 +4,20 @@
   flex-shrink: 0;
 }
 
+// First-vote hint: faint text shown above the Good/Bad buttons when the
+// labeling session is fresh (zero votes) and the user hasn't dismissed it.
+// Stays subtle so it never competes with the media for the user's eye.
+.vote-hint {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 2px 0 4px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: center;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
 .vote-buttons {
   display: flex;
   gap: 12px;

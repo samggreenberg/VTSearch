@@ -13,6 +13,10 @@ export class VotingOverlayComponent implements OnDestroy {
   @Input() isBad = false;
   @Input() disabled = false;
   @Input() spinningVote: 'good' | 'bad' | null = null;
+  /** When true, renders the faint first-vote hint above the buttons. The
+   *  parent decides when to show this (zero votes + not previously dismissed)
+   *  and dismisses it on first vote. */
+  @Input() showHint = false;
   @Output() voted = new EventEmitter<'good' | 'bad'>();
 
   goodFlash = false;
