@@ -11,10 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from vtsearch.settings import (
-    get_max_concurrent_dataset_downloads,
-    get_max_concurrent_dataset_embeddings,
-)
+from vtsearch.config import CoreConfig
 
 
 class ConcurrencyGate:
@@ -77,8 +74,33 @@ class ConcurrencyGate:
 # settings; defaults derive from the host's CPU/GPU counts (see
 # :func:`vtsearch.embedding.loader.default_concurrent_downloads` and
 # :func:`vtsearch.embedding.loader.default_concurrent_embeddings`).
-_download_gate = ConcurrencyGate(get_max_concurrent_dataset_downloads)
-_embed_gate = ConcurrencyGate(get_max_concurrent_dataset_embeddings)
+_download_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_downloads)
+_embed_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_embeddings)
+
+
+# ---------------------------------------------------------------------------
+# App-side persistence hook
+# ---------------------------------------------------------------------------
+# The library remembers the user's per-media-type embedder pick by calling
+# whatever the app installs here.  Default is a no-op so this module doesn't
+# need to import ``vtsearch.settings`` (Phase 2 of
+# ``docs/plans/extract-library.md``).  ``vtsearch/shim/`` registers the
+# real implementation — ``vtsearch.settings.set_last_embedder_for_media_type``
+# — at app startup.
+_last_embedder_persistence_hook: Callable[[str, str], None] | None = None
+
+
+def register_last_embedder_persistence_hook(fn: Callable[[str, str], None]) -> None:
+    """Install the callback used to persist the user's per-media-type embedder pick.
+
+    The Flask app installs ``vtsearch.settings.set_last_embedder_for_media_type``
+    as the hook at startup so library callers don't have to know about the
+    user-pref persistence layer.  Library-only callers can leave the default
+    in place (no persistence).
+    """
+    global _last_embedder_persistence_hook
+    _last_embedder_persistence_hook = fn
+
 
 from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
@@ -683,11 +705,9 @@ def _run_origin_load_in_background(  # noqa: C901
     # Remember the user's embedder pick per media type so the next dataset
     # importer modal can pre-select it even when no loaded dataset is
     # around to supply the same hint via ``guessedMediaEmbedder``.
-    if media_type and embedder:
-        from vtsearch.settings import set_last_embedder_for_media_type  # noqa: PLC0415
-
+    if media_type and embedder and _last_embedder_persistence_hook is not None:
         try:
-            set_last_embedder_for_media_type(media_type, embedder)
+            _last_embedder_persistence_hook(media_type, embedder)
         except Exception:
             pass
 

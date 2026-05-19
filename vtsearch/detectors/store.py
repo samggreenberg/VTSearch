@@ -16,10 +16,17 @@ from vtsearch.config import DATA_DIR
 
 
 def get_detectors_dir() -> Path:
-    """Return the configured detectors directory from settings."""
-    from vtsearch.settings import get_detectors_dir as _get
+    """Return the configured detectors directory.
 
-    return _get()
+    Reads from ``CoreConfig.from_settings()`` rather than ``vtsearch.settings``
+    directly so this module stays library-clean (see Phase 2 of
+    ``docs/plans/extract-library.md``).  The classmethod still consults the
+    app's settings layer today; after Phase 8 it moves to an app-side shim
+    and library callers pass a ``CoreConfig`` explicitly.
+    """
+    from vtsearch.config import CoreConfig  # noqa: PLC0415
+
+    return CoreConfig.from_settings().detectors_dir
 
 
 #: Default location used by tests that bypass settings.

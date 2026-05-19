@@ -444,12 +444,12 @@ def _run_pipeline(  # noqa: C901
     YAML loader uses this to declare detectors inline without mutating the
     settings file on disk.
     """
-    if settings_path:
-        from vtsearch.settings import set_settings_path
+    from vtsearch.config import CoreConfig
 
-        set_settings_path(settings_path)
-
-    from vtsearch.settings import get_autorun_detectors
+    # Build the runtime config once (routing the optional settings_path
+    # redirect through the same call) so this function — and the library
+    # code below it — never imports ``vtsearch.settings`` directly.
+    config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
 
     if dry_run:
         sd = source_description or {}
@@ -475,7 +475,7 @@ def _run_pipeline(  # noqa: C901
                 available = _list_exporter_names()
                 raise ValueError(f"Unknown exporter: {exporter_name}. Available: {', '.join(available)}")
             exporter.validate_cli_field_values(exporter_field_values or {})
-        autorun_detectors = get_autorun_detectors()
+        autorun_detectors = list(config.autorun_detectors)
         if cli_progress.get_format() == "json":
             cli_progress.emit(
                 "dry_run_plan",
@@ -511,7 +511,9 @@ def _run_pipeline(  # noqa: C901
         if media_type is None:
             media_type = _detect_media_type(chunk_medias)
 
-            detector_names = list(override_detectors) if override_detectors is not None else get_autorun_detectors()
+            detector_names = (
+                list(override_detectors) if override_detectors is not None else list(config.autorun_detectors)
+            )
             if detector_names:
                 # Train each detector exactly once, using the first chunk as
                 # the fast-path snap; subsequent chunks reuse the cached

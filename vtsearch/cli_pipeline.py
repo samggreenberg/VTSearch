@@ -238,10 +238,12 @@ def _dispatch(config: dict[str, Any]) -> None:
     if config["import_labels"] is not None:
         if settings_path:
             # Apply the settings path first so detector-dir lookups resolve
-            # to the same place the pipeline run will use.
-            from vtsearch.settings import set_settings_path  # noqa: PLC0415
+            # to the same place the pipeline run will use.  Routed through
+            # CoreConfig so this module stays settings-import-free
+            # (see Phase 2 of docs/plans/extract-library.md).
+            from vtsearch.config import CoreConfig  # noqa: PLC0415
 
-            set_settings_path(settings_path)
+            CoreConfig.from_settings(settings_path=settings_path)
         il = config["import_labels"]
         applied, skipped = import_labels_into_detector_from_file(il["detector"], il["importer"], il["file"])
         print(

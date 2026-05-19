@@ -52,6 +52,7 @@ export class MediaStateService implements OnDestroy {
     return this.loadingSubject.value;
   }
 
+
   get selectedMedia(): Media | null {
     const id = this.selectedIdSubject.value;
     if (id === null) return null;

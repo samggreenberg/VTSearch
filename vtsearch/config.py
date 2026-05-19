@@ -1,6 +1,9 @@
 """Configuration and constants for VTSearch."""
 
+from __future__ import annotations
+
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 # Data paths are anchored to the repository root, NOT to the current working
@@ -155,3 +158,88 @@ sets ``supports_text=False`` and :meth:`embed_text` returns ``None``.
 The masked-autoencoder objective produces unusually strong action /
 motion features compared to image-only encoders applied per frame.
 """
+
+
+# ---------------------------------------------------------------------------
+# CoreConfig — runtime config bundle the (future) ``vtscore`` library consumes
+# ---------------------------------------------------------------------------
+#
+# Today every library-candidate package reaches into ``vtsearch.settings``
+# directly for tunables like ``saved_datasets_dir``, ``detectors_dir``,
+# ``calibrate_count``, etc.  That couples the library to the app's settings
+# layer and makes it impossible to vendor the library as ``vtscore`` (see
+# ``docs/plans/extract-library.md`` — Phase 2).
+#
+# ``CoreConfig`` is the seam: a frozen value object that bundles every knob
+# library code reads.  Follow-up PRs convert each call site to accept (or
+# look up) a ``CoreConfig`` instead of importing ``vtsearch.settings``.
+# Until those land this class is unused at runtime — the scaffold just
+# defines the type so the conversions can happen one file at a time.
+#
+# The app side will build a fresh ``CoreConfig`` at each request boundary
+# via :meth:`CoreConfig.from_settings`; library callers can construct one
+# directly with whatever values they want.
+
+
+@dataclass(frozen=True)
+class CoreConfig:
+    """Runtime configuration bundle the ``vtscore`` library consumes.
+
+    Field set is intentionally narrow — only knobs that library code (loaders,
+    detectors, training, embedding) reads.  User-pref concerns like theme or
+    grid-icon size are app-tier and stay in ``vtsearch.settings``.
+    """
+
+    # Server-tier settings (shared across users, stored in data/settings.json)
+    saved_datasets_dir: Path
+    detectors_dir: Path
+    max_concurrent_dataset_downloads: int
+    max_concurrent_dataset_embeddings: int
+    autorun_detectors: tuple[str, ...]
+
+    # Per-user settings (stored under each user's data dir)
+    safe_thresholds: bool
+    calibrate_count: int
+    calibration_fraction: float
+    enrich_descriptions: bool
+    autopilot_goal_diversity: int
+    inclusion: int
+
+    # Filesystem root for caches, embeddings, model downloads.  Phase 4 will
+    # route every hardcoded ``data/`` path through this field.
+    data_dir: Path
+
+    @classmethod
+    def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:
+        """Snapshot the current user's ``vtsearch.settings`` into a CoreConfig.
+
+        Called by the Flask app at the request boundary (after auth resolves
+        the current user) and by the CLI before kicking off autodetect.  The
+        result is a frozen immutable value safe to hand to background
+        threads — settings changes during a request will not retroactively
+        rewrite a config already in flight.
+
+        When *settings_path* is given, the server-tier settings file path is
+        redirected to that location first.  The CLI uses this to point at a
+        run-specific settings JSON without each call site importing
+        :mod:`vtsearch.settings` directly.
+        """
+        from vtsearch import settings as _settings  # noqa: PLC0415
+
+        if settings_path is not None:
+            _settings.set_settings_path(settings_path)
+
+        return cls(
+            saved_datasets_dir=_settings.get_saved_datasets_dir(),
+            detectors_dir=_settings.get_detectors_dir(),
+            max_concurrent_dataset_downloads=_settings.get_max_concurrent_dataset_downloads(),
+            max_concurrent_dataset_embeddings=_settings.get_max_concurrent_dataset_embeddings(),
+            autorun_detectors=tuple(_settings.get_autorun_detectors()),
+            safe_thresholds=_settings.get_safe_thresholds(),
+            calibrate_count=_settings.get_calibrate_count(),
+            calibration_fraction=_settings.get_calibration_fraction(),
+            enrich_descriptions=_settings.get_enrich_descriptions(),
+            autopilot_goal_diversity=_settings.get_autopilot_goal_diversity(),
+            inclusion=_settings.get_inclusion(),
+            data_dir=DATA_DIR,
+        )
