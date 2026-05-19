@@ -1,6 +1,8 @@
 # Multi-media importing
 
-Status: in progress (prototype landing alongside this doc).
+Status: every in-tree importer now sets `multi_media=True`.  Shim
+removal is the next step but is **blocked on external extensions** (see
+"Open follow-ups" at the bottom).
 
 ## The problem
 
@@ -258,36 +260,68 @@ When migrating an importer to `multi_media=True`:
 - Tests covering the new code path, the shim, and the `multi_media`
   flag on all migrated importers.
 
-Still on the legacy shim (will migrate in followups):
+## What shipped (latest round)
 
-- `pickle`, `combine_datasets`, `synthetic`, `http_archive`, `recaller`,
-  `demo`. Each is mechanical — flip the flag and rewrite `run()` to
-  iterate. ReCaller specifically waits on a working API client (see
-  `plans/RCDatasetImporter.md`).
-- **Update all EXTENSIONS.** Outside-developed importers are the real
-  bottleneck here, not the in-tree six. Any third-party `DatasetImporter`
-  subclass that ships outside this repo still works today via the
-  `multi_media=False` shim, but it cannot expose the new Include-rows UI,
-  cannot accept user-tunable converter params, and pins us to keeping the
-  legacy `converters` field and `media_type`-as-scan-filter semantics
-  alive. Shim removal is gated on those extension maintainers flipping
-  their importers — we cannot just delete the legacy path on our own
-  schedule without breaking them. Concrete asks per extension:
+Flipped `multi_media = True` on the last six in-tree importers so the
+in-tree set is uniformly off the legacy shim:
+
+- `http_archive`: real migration.  `run()` / `run_chunked()` iterate
+  `effective_source_specs()`; converter rows go through a thin
+  `_run_converter_specs()` wrapper around the typed
+  `run_converters_on_folder(converter_specs=...)` entry point.
+  `build_origin()` / `build_cli_args()` serialise `source_specs` JSON
+  instead of the legacy CSV `converters` field.
+- `synthetic`, `recaller`: have a `media_type` field but only ever pull
+  one source type per import, so `run()` keeps reading
+  `field_values["media_type"]` directly.  Label updated to "Output
+  Media Type".  No spec iteration added — there are no converter rows
+  for these flows.
+- `pickle`, `combine_datasets`, `demo`: no `media_type` field, no
+  `converters` field, no spec iteration in `run()`.  The flag flip is
+  purely to take them off the legacy shim — their custom / file-upload
+  UI modes mean the multi-media editor never renders anyway, and
+  `effective_source_specs()` is never called on them.
+
+Tests: each migrated importer now asserts `multi_media=True`.  The
+legacy synthesis branch of `effective_source_specs()` is still
+exercised via a `_LegacyTestImporter` stand-in (a tiny in-test
+`DatasetImporter` subclass with `multi_media=False`) so the shim stays
+covered for external importers until removal.
+
+## Open follow-ups
+
+- **Update all EXTENSIONS.** Outside-developed importers are the only
+  remaining users of the legacy path now that every in-tree importer
+  has flipped.  Any third-party `DatasetImporter` subclass still works
+  via the `multi_media=False` shim but cannot expose the Include-rows
+  UI, cannot accept user-tunable converter params, and pins us to the
+  legacy `converters` field and `media_type`-as-scan-filter semantics.
+  Shim removal is gated on those extension maintainers flipping their
+  importers — we cannot just delete the legacy path on our own schedule
+  without breaking them.  Concrete asks per extension:
   1. Set `multi_media = True`.
-  2. Replace the `converters` field handling in `run()` with a loop over
-     `self.effective_source_specs(field_values)`.
+  2. Replace the `converters` field handling in `run()` with a loop
+     over `self.effective_source_specs(field_values)`.
   3. If the importer is service-style (fetches from an API, not a
      folder), add a `list_records_for_source(source_type, ...)` (or
      equivalent) so each spec drives its own upstream fetch.
   4. Update `build_origin()` to record `source_specs` instead of the
      legacy `media_type` / `converters` pair.
 
-  Until every known external importer has flipped, the followup below
-  (delete the shim) stays blocked. Track known extensions and their
-  migration status here as they are surveyed.
+  Track known extensions and their migration status here as they are
+  surveyed.
+- **Delete the shim.** Once every known external importer has flipped,
+  delete:
+  - the `multi_media` flag on `DatasetImporter` (always implicit
+    `True`);
+  - the legacy branch of `effective_source_specs()` that synthesises a
+    spec list from `media_type` + CSV `converters`;
+  - the legacy `converters` form-field handling and the
+    `converters` extra-key pass-through in routes (`load.py`,
+    `staging.py`);
+  - `_LegacyTestImporter` in
+    `tests/converters/test_converter_selection.py`.
 
-Followups (not in this PR):
-
-- Once everything in-tree **and every known extension** is migrated,
-  delete the shim and the legacy `converters` form field, and rename
-  `media_type` → `output_type`.
+  Optionally rename `media_type` → `output_type` (per the original
+  plan) — note this is a user-visible field rename, not just an
+  internal cleanup.
