@@ -16,6 +16,7 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | [extract-library.md](extract-library.md) | **Proposed** | Split VTSearch into a `vtscore` Python library plus the Flask/Angular app, gated on a CI job that runs the test suite without Flask installed. Not started. |
 | [openapi-schema.md](openapi-schema.md) | **Migration complete; one cosmetic follow-up** | flask-smorest plumbing + Swagger UI + per-plugin runtime validation live across every blueprint. Remaining: per-plugin OpenAPI **spec** types for the six plugin-field route bodies (deferred — runtime validation already captures the field types). |
 | [brainstorm.md](brainstorm.md) | **Backlog** | Combined feature + UX backlog (formerly `feature-brainstorm.md` + `ux-brainstorm.md`). Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, UX friction, architecture, experiments. Items graduate into their own plan doc as they mature. |
+| [logical-bug-audit.md](logical-bug-audit.md) | **Discovery only** | Multi-agent audit of the codebase for logical bugs (race conditions, context-propagation gaps, silent miscompute, partial-state failures, zip-slip variants). ~95 findings grouped Critical / High / Medium / Low + nine recurring root-cause patterns. No fixes landed. |
 
 ## Recently completed (removed)
 
