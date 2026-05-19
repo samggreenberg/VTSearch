@@ -69,8 +69,12 @@ def _resolve_filepath(field_values: dict[str, Any]) -> str:
 
     The substituted username is sanitized so that a name containing path
     separators or ``..`` cannot escape the directory implied by the
-    admin-configured template.
+    admin-configured template.  The fully-resolved path is then run
+    through :func:`validate_server_filepath` so that a template
+    containing ``../`` cannot escape either.
     """
+    from vtscore.security.path_validation import get_file_access_base_dir, validate_server_filepath
+
     filepath = (field_values.get("filepath") or "").strip()
     if not filepath:
         raise ValueError("A file path is required.")
@@ -82,7 +86,7 @@ def _resolve_filepath(field_values: dict[str, Any]) -> str:
         username = get_current_user() or "default"
         filepath = filepath.replace("{username}", sanitize_template_value(username))
 
-    return filepath
+    return str(validate_server_filepath(filepath, base_dir=get_file_access_base_dir()))
 
 
 SETTINGS_SOURCE = ServerFileSettingsSource()
