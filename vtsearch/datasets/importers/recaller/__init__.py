@@ -166,10 +166,16 @@ class ReCallerDatasetImporter(DatasetImporter):
     icon = "\U0001f50d"  # magnifying glass
     hidden_from_picker = True  # flip to False once API clients are implemented
     category = "services"
+    # ReCaller queries return a single ``media_type`` selected by the
+    # user — the import flow does not pull in additional source types
+    # via converters.  Flag set to keep the in-tree importer set
+    # uniformly off the legacy shim; the existing ``list_records``
+    # implementation reads ``field_values["media_type"]`` directly.
+    multi_media = True
     fields = [
         ImporterField(
             key="media_type",
-            label="Media Type",
+            label="Output Media Type",
             field_type="select",
             options=all_folder_names(),
             default="audio",

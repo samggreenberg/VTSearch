@@ -7,14 +7,20 @@ Requires only ``requests``, which is already a core dependency.
 
 Converter support
 -----------------
-When the ``converters`` field value is set (a comma-separated list of
-converter names), the importer also scans the extracted archive for source
-files matching each converter's input type, converts them to the target
-media type, and appends them to the dataset.
+The importer participates in the multi-media import flow.  Each
+:class:`~vtsearch.datasets.importers.base.SourceSpec` row in
+``source_specs`` is applied to the extracted archive:
+
+* a direct row (``converter is None``) embeds files of the spec's
+  source type with the target embedder, and
+* a converter row scans the extracted archive for files of the
+  converter's source type and runs the converter (with per-row params)
+  to produce media of the chosen output type.
 """
 
 from __future__ import annotations
 
+import json
 import shutil
 import tarfile
 import zipfile
@@ -24,7 +30,7 @@ from uuid import uuid4
 
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets.downloader import download_file_with_progress
-from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+from vtsearch.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtsearch.datasets.loader import load_dataset_from_folder
 from vtsearch.security.url_validation import validate_url
 
@@ -111,19 +117,17 @@ def _extract_archive(  # noqa: C901
         )
 
 
-def _run_selected_converters(
+def _run_converter_specs(
     folder: Path,
     media_type: str,
     field_values: dict,
+    converter_specs: list[SourceSpec],
     medias: dict,
     thin: bool = False,
 ) -> None:
-    """Run any user-selected converters from *field_values*."""
-    converters_str = field_values.get("converters", "")
-    if not converters_str:
-        return
-    converter_names = [c.strip() for c in converters_str.split(",") if c.strip()]
-    if not converter_names:
+    """Hand the converter rows of a multi-media spec to the runner."""
+    runnable = [s for s in converter_specs if s.converter is not None]
+    if not runnable:
         return
 
     from vtsearch.converters.runner import run_converters_on_folder  # noqa: PLC0415
@@ -137,7 +141,7 @@ def _run_selected_converters(
     }
     run_converters_on_folder(
         folder_path=folder,
-        converter_names=converter_names,
+        converter_specs=runnable,
         target_media_type=media_type,
         medias=medias,
         thin=thin,
@@ -157,9 +161,11 @@ class HttpArchiveDatasetImporter(DatasetImporter):
     Supported archive formats: ``.zip``, ``.tar``, ``.tar.gz``,
     ``.tar.bz2``, ``.tar.xz``, ``.rar`` (requires ``rarfile`` package).
 
-    When converters are selected (via the ``converters`` field value), files
-    matching each converter's source type are also scanned, converted, and
-    added to the dataset.
+    Multi-media imports work the same as in
+    :class:`~vtsearch.datasets.importers.server_folder.ServerFolderDatasetImporter`:
+    each :class:`SourceSpec` row either embeds files of its source type
+    directly or runs a converter to produce media of the chosen output
+    media type.
     """
 
     name = "http_archive"
@@ -167,6 +173,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
     description = "Download an archive (.zip, .tar, .rar) from a web URL and embed the media files inside"
     icon = "\U0001f310"
     hidden_from_picker = True
+    multi_media = True
     fields = [
         ImporterField(
             key="url",
@@ -176,7 +183,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         ),
         ImporterField(
             key="media_type",
-            label="Media Type",
+            label="Output Media Type",
             field_type="select",
             description="Type of media files contained in the archive.",
             default="audio",
@@ -210,6 +217,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         url = field_values["url"]
         validate_url(url)
         media_type = field_values.get("media_type", "audio")
+        specs = self.effective_source_specs(field_values)
 
         DATA_DIR.mkdir(exist_ok=True)
 
@@ -245,8 +253,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
                 custom_metadata_map=self.custom_metadata_map or None,
                 skip_embedding=skip_emb,
             )
-            # Run any user-selected converters on the extracted folder.
-            _run_selected_converters(extract_dir, media_type, field_values, medias, thin=thin)
+            _run_converter_specs(extract_dir, media_type, field_values, specs, medias, thin=thin)
         finally:
             shutil.rmtree(extract_dir, ignore_errors=True)
 
@@ -299,6 +306,8 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
         extract_dir = self._download_and_extract(field_values)
         media_type = field_values.get("media_type", "audio")
+        specs = self.effective_source_specs(field_values)
+        converter_specs = [s for s in specs if s.converter is not None]
         emb_name = field_values.get("embedder", "")
         skip_emb = bool(field_values.get("skip_embedding"))
         try:
@@ -313,11 +322,11 @@ class HttpArchiveDatasetImporter(DatasetImporter):
                 custom_metadata_map=self.custom_metadata_map or None,
                 skip_embedding=skip_emb,
             )
-            # Run converters on the extracted folder and yield as a chunk.
-            converters_str = field_values.get("converters", "")
-            if converters_str:
+            if converter_specs:
                 converter_chunk: dict[int, dict[str, Any]] = {}
-                _run_selected_converters(extract_dir, media_type, field_values, converter_chunk, thin=thin)
+                _run_converter_specs(
+                    extract_dir, media_type, field_values, converter_specs, converter_chunk, thin=thin,
+                )
                 if converter_chunk:
                     yield converter_chunk
         finally:
@@ -336,9 +345,11 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
     def build_cli_args(self, field_values: dict[str, Any]) -> str:
         base = super().build_cli_args(field_values)
-        converters = field_values.get("converters", "")
-        if converters:
-            base += f" --converters {converters}"
+        specs = field_values.get("source_specs")
+        if specs:
+            if not isinstance(specs, str):
+                specs = json.dumps(specs)
+            base += f" --source-specs '{specs}'"
         return base
 
     def default_display_name(self, field_values: dict[str, Any]) -> str:
@@ -356,9 +367,11 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         origin = super().build_origin(field_values)
-        converters = field_values.get("converters", "")
-        if converters:
-            origin["params"]["converters"] = converters
+        specs = field_values.get("source_specs")
+        if specs:
+            if not isinstance(specs, str):
+                specs = json.dumps(specs)
+            origin["params"]["source_specs"] = specs
         return origin
 
     def resolve_file(
