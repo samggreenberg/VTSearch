@@ -82,7 +82,7 @@ The base converter ships; the deferred improvements:
 - **`image_object` follow-ups** — experiment with SAM2 boxes for the same UI; consider a per-class confidence threshold instead of one global value if users ask for it.
 
 ### 3.3 Text
-- **`text_paragraph`** ★★ XS — split on `\n\n`. Free wins on prose.
+- ~~**`text_paragraph`** ★★ XS — split on `\n\n`. Free wins on prose.~~ **Shipped** — `TextParagraphClipper` in `vtsearch/media/text/clipper.py`.
 - **`text_token_window`** ★★ S — token-aware windows (tiktoken) with overlap.
 - **`text_semantic`** ★★ M — embedding-similarity-based chunking (sentence groups whose adjacent cosine drops below threshold).
 - **`text_heading`** ★ S — split on Markdown/HTML headings.
