@@ -42,13 +42,38 @@ elif git rev-parse --verify --quiet "refs/remotes/origin/$current_branch" >/dev/
     && [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$current_branch")" ]; then
   skip_reason="local $current_branch differs from origin/$current_branch (pushed work would be orphaned)"
 else
-  notify "ℹ session-start: fetching and rebasing $current_branch onto origin/dev..."
-  if git fetch origin --prune 2>&1 | sed 's/^/  /' >&2 \
-      && git rebase origin/dev 2>&1 | sed 's/^/  /' >&2; then
-    notify "✓ session-start: rebased $current_branch onto origin/dev."
+  notify "ℹ session-start: fetching origin..."
+  if ! git fetch origin --prune 2>&1 | sed 's/^/  /' >&2; then
+    skip_reason="fetch failed"
+  elif git merge-base --is-ancestor origin/dev HEAD 2>/dev/null; then
+    notify "✓ session-start: $current_branch already includes origin/dev; nothing to do."
   else
-    skip_reason="rebase failed (aborted, branch left as-is)"
-    git rebase --abort 2>/dev/null || true
+    # Decide rebase vs hard-reset. The harness cuts new branches off `main`,
+    # so a fresh branch typically carries merge-commit duplicates of PRs that
+    # already landed on `dev`. `git cherry origin/dev HEAD` flags each
+    # unique-to-branch commit as `+` (genuinely new) or `-` (patch-equivalent
+    # to a commit already on dev). All-`-` means a rebase would just produce
+    # phantom conflicts against the already-merged work — hard-reset is the
+    # safe and correct move. Any `+` line means there's real local work to
+    # preserve, so fall back to a normal rebase.
+    cherry_out=$(git cherry origin/dev HEAD 2>/dev/null || echo "")
+    if [ -n "$cherry_out" ] && ! echo "$cherry_out" | grep -q '^+'; then
+      dup_count=$(echo "$cherry_out" | grep -c '^-' || true)
+      notify "ℹ session-start: $current_branch has $dup_count commit(s), all patch-equivalent to commits already on origin/dev; hard-resetting to origin/dev (no real work would be lost)..."
+      if git reset --hard origin/dev 2>&1 | sed 's/^/  /' >&2; then
+        notify "✓ session-start: hard-reset $current_branch to origin/dev."
+      else
+        skip_reason="hard-reset to origin/dev failed"
+      fi
+    else
+      notify "ℹ session-start: rebasing $current_branch onto origin/dev..."
+      if git rebase origin/dev 2>&1 | sed 's/^/  /' >&2; then
+        notify "✓ session-start: rebased $current_branch onto origin/dev."
+      else
+        skip_reason="rebase failed (aborted, branch left as-is)"
+        git rebase --abort 2>/dev/null || true
+      fi
+    fi
   fi
 fi
 
