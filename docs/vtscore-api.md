@@ -931,10 +931,12 @@ class PluginBase:
 
 class PluginRegistry(Generic[T]):
     """Auto-discovering registry. Constructed with (package, sentinel, label,
-    discover_modules=..., entry_point_group=...). At first access it walks
-    `package` for `sentinel` attributes and also scans the matching
-    importlib.metadata entry_point_group; built-ins win on name clashes;
-    broken entry points warn and are skipped."""
+    discover_modules=..., entry_point_group=..., eager=True). At construction
+    (or, if `eager=False`, at first access) it walks `package` for `sentinel`
+    attributes and also scans the matching importlib.metadata
+    entry_point_group; built-ins win on name clashes; broken entry points
+    warn and are skipped. `eager=False` is for tests that need to inspect
+    the pre-discovery state."""
 
 def make_plugin_registry(
     package: ModuleType | str,
@@ -943,6 +945,7 @@ def make_plugin_registry(
     *,
     discover_modules: list[str] | None = None,
     entry_point_group: str | None = None,
+    eager: bool = True,
 ) -> tuple[Callable[[str], T], Callable[[], list[T]]]:
     """Convenience factory: returns (get, list) accessor pair, the standard shape
     every plugin-family module re-exports."""

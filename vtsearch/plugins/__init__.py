@@ -313,6 +313,12 @@ class PluginRegistry(Generic[T]):
         The entry point must resolve to an already-instantiated plugin
         object (same shape as a sentinel attribute) — typically you point
         directly at the module's ``IMPORTER`` / ``EXPORTER`` / ... sentinel.
+    eager:
+        When ``True`` (the default) discovery runs at construction time so
+        the registry is populated by the time the constructor returns.
+        Set ``False`` to defer discovery until the first :meth:`get` /
+        :meth:`list` call — useful in tests that want to inspect the
+        pre-discovery state or simulate concurrent first access.
     """
 
     def __init__(
@@ -323,6 +329,7 @@ class PluginRegistry(Generic[T]):
         *,
         discover_modules: bool = False,
         entry_point_group: str | None = None,
+        eager: bool = True,
     ) -> None:
         self._package = package
         self._sentinel = sentinel
@@ -333,6 +340,8 @@ class PluginRegistry(Generic[T]):
         self._discovered = False
         self._discovering = False
         self._lock = threading.Lock()
+        if eager:
+            self._ensure_discovered()
 
     # -- Discovery ----------------------------------------------------------
 
@@ -508,6 +517,7 @@ def make_plugin_registry(
     *,
     discover_modules: bool = False,
     entry_point_group: str | None = None,
+    eager: bool = True,
 ) -> tuple[Callable[[str], Any], Callable[[], list[Any]]]:
     """Create a :class:`PluginRegistry` and return its ``(get, list)`` accessors.
 
@@ -530,5 +540,6 @@ def make_plugin_registry(
         label=label,
         discover_modules=discover_modules,
         entry_point_group=entry_point_group,
+        eager=eager,
     )
     return registry.get, registry.list
