@@ -405,6 +405,8 @@ def apply_converter_to_demo(
     instead of the original source-type medias.  Each converted media's
     origin records the demo dataset and the converter used.
     """
+    from vtsearch.converters import get_converter  # noqa: PLC0415 — deferred to avoid circular import during eager registry discovery
+
     converter = get_converter(converter_name)
     if converter is None:
         raise ValueError(f"Unknown converter: {converter_name}")
