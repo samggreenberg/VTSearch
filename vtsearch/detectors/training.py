@@ -139,7 +139,138 @@ def _training_vec_for_vote(
     return media["embedding"]
 
 
-def train_and_score(  # noqa: C901
+def _build_vote_tensors(
+    clips_dict: dict[int, dict[str, Any]],
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    region_boxes: dict[int, tuple[float, float, float, float]],
+) -> tuple[Any, Any, list, list[float], int, int] | None:
+    """Build training tensors from filtered votes.
+
+    Returns ``(X, y, X_list, y_list, input_dim, hidden_dim)`` when the
+    filtered labels satisfy ≥2 samples AND at least one good AND one bad;
+    returns ``None`` otherwise so the caller can early-return with an
+    empty result.
+
+    ``hidden_dim`` is sized from the *full* label count so that fold
+    models use the same architecture as the final model — making cross-
+    calibration thresholds directly comparable to final-model scores.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtsearch.training.mlp import _auto_hidden_dim  # noqa: PLC0415
+
+    X_list: list = []
+    y_list: list[float] = []
+    for cid in good_votes:
+        if cid in clips_dict:
+            X_list.append(_training_vec_for_vote(clips_dict[cid], region_boxes.get(cid)))
+            y_list.append(1.0)
+    for cid in bad_votes:
+        if cid in clips_dict:
+            X_list.append(clips_dict[cid]["embedding"])
+            y_list.append(0.0)
+
+    num_good = sum(1 for v in y_list if v == 1.0)
+    num_bad = len(y_list) - num_good
+    if len(X_list) < 2 or num_good == 0 or num_bad == 0:
+        return None
+
+    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
+    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
+    input_dim = X.shape[1]
+    hidden_dim = _auto_hidden_dim(len(X_list))
+    return X, y, X_list, y_list, input_dim, hidden_dim
+
+
+def _score_all_media(
+    model: nn.Sequential,
+    clips_dict: dict[int, dict[str, Any]],
+) -> tuple[list[int], list[float], list[int]]:
+    """Score every media in *clips_dict* with the trained MLP.
+
+    Region-aware datasets (those whose media expose ``patch_regions``)
+    are scored by flattening all (media, region) vectors into one tensor,
+    running a single forward pass, then max-pooling per media — so the
+    winning region's index can be surfaced for UI overlays.  Plain
+    datasets fall back to the cached embedding matrix.
+
+    Returns ``(all_ids, scores_per_media, best_region_index_per_media)``.
+    """
+    import torch  # noqa: PLC0415
+
+    has_regions = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
+    if has_regions:
+        all_ids = sorted(clips_dict.keys())
+        flat_vecs: list[np.ndarray] = []
+        media_index_per_row: list[int] = []
+        region_index_per_row: list[int] = []
+        for mi, cid in enumerate(all_ids):
+            media = clips_dict[cid]
+            regions = media.get("patch_regions")
+            if regions:
+                for ri, r in enumerate(regions):
+                    flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
+                    media_index_per_row.append(mi)
+                    region_index_per_row.append(ri)
+            else:
+                flat_vecs.append(np.asarray(media["embedding"], dtype=np.float32))
+                media_index_per_row.append(mi)
+                region_index_per_row.append(0)
+        X_all = torch.from_numpy(np.stack(flat_vecs).astype(np.float32, copy=False))
+    else:
+        from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+
+        all_ids, all_embs = get_embedding_matrix_for_snap(clips_dict)
+        X_all = torch.from_numpy(all_embs)
+        n = len(all_ids)
+        media_index_per_row = list(range(n))
+        region_index_per_row = [0] * n
+
+    with torch.no_grad():
+        X_all = X_all.to(next(model.parameters()).device)
+        flat_scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().numpy()
+
+    scores: list[float] = [-1.0] * len(all_ids)
+    best_region: list[int] = [0] * len(all_ids)
+    for s, mi, ri in zip(flat_scores, media_index_per_row, region_index_per_row):
+        if s > scores[mi]:
+            scores[mi] = float(s)
+            best_region[mi] = ri
+
+    return all_ids, scores, best_region
+
+
+def _format_results(
+    all_ids: list[int],
+    scores: list[float],
+    best_region: list[int],
+    clips_dict: dict[int, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Sort by score (descending) and produce JSON-serialisable result dicts.
+
+    Raw float scores are used for sorting so tiny differences still
+    affect ordering; only the response ``score`` field is rounded.
+    Region-aware media gain a ``best_region`` key holding the winning
+    region's box.
+    """
+    paired = sorted(
+        zip(all_ids, scores, best_region),
+        key=lambda t: t[1],
+        reverse=True,
+    )
+    results: list[dict[str, Any]] = []
+    for cid, s, bri in paired:
+        entry: dict[str, Any] = {"id": cid, "score": round(s, 4)}
+        media = clips_dict[cid]
+        regions = media.get("patch_regions")
+        if regions and 0 <= bri < len(regions):
+            entry["best_region"] = list(regions[bri].box)
+        results.append(entry)
+    return results
+
+
+def train_and_score(
     clips_dict: dict[int, dict[str, Any]],
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
@@ -190,51 +321,23 @@ def train_and_score(  # noqa: C901
         - ``model`` is the trained ``nn.Sequential`` model (``None`` when
           training was not possible).
     """
-    import torch  # noqa: PLC0415
-
-    from vtsearch.training.mlp import _auto_hidden_dim, train_model
-    from vtsearch.training.thresholds import (
+    from vtsearch.training.mlp import train_model  # noqa: PLC0415
+    from vtsearch.training.thresholds import (  # noqa: PLC0415
         calculate_safe_threshold,
         cross_calibration_threshold_cached,
     )
 
     region_boxes = vote_region_boxes or {}
-
-    X_list = []
-    y_list = []
-    for cid in good_votes:
-        if cid in clips_dict:
-            X_list.append(_training_vec_for_vote(clips_dict[cid], region_boxes.get(cid)))
-            y_list.append(1.0)
-    for cid in bad_votes:
-        if cid in clips_dict:
-            X_list.append(clips_dict[cid]["embedding"])
-            y_list.append(0.0)
-
-    # Guard against empty or single-class training data after filtering
-    num_good = sum(1 for v in y_list if v == 1.0)
-    num_bad = len(y_list) - num_good
-    if len(X_list) < 2 or num_good == 0 or num_bad == 0:
+    built = _build_vote_tensors(clips_dict, good_votes, bad_votes, region_boxes)
+    if built is None:
         return [], 0.5, None
+    X, y, X_list, y_list, input_dim, hidden_dim = built
 
-    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
-    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-
-    input_dim = X.shape[1]
-
-    # Compute hidden_dim once from the *full* label count so that fold
-    # models use the same architecture as the final model.  This makes
-    # cross-calibration thresholds directly comparable to final-model
-    # scores (same capacity, same score distribution shape).
-    hidden_dim = _auto_hidden_dim(len(X_list))
-
-    # Calculate threshold using k-fold calibration.  Skip when the label
-    # count is below the ``calculate_safe_threshold`` ramp floor: the
-    # calibration trainings would be expensive (two 200-epoch fits) and
-    # the result is either discarded (safe_thresholds=True blends with
-    # label_weight=0 → pure GMM) or unreliable (safe_thresholds=False with
-    # so few labels).  Use 0.5 as the neutral default; it blends to pure
-    # GMM under safe_thresholds and is a sensible mid-point otherwise.
+    # Skip k-fold calibration when the label count is below the
+    # ``calculate_safe_threshold`` ramp floor: the calibration trainings
+    # would be expensive (two 200-epoch fits) and the result is either
+    # discarded (safe_thresholds=True blends with label_weight=0 → pure
+    # GMM) or unreliable.  0.5 is a sensible neutral mid-point.
     if len(X_list) < 6:
         threshold = 0.5
     else:
@@ -249,76 +352,16 @@ def train_and_score(  # noqa: C901
             det_ctx=det_ctx,
         )
 
-    # Train final model on all data.  Training is image-level in v1 — the
-    # MLP only ever sees one vector per voted media (``media["embedding"]``,
-    # which equals the patch-region full-image vector for patch datasets),
-    # mirroring the v1 vote rule of "vote on whole images".  Region-level
-    # training examples are a phase-2 concern.
+    # Training is image-level in v1 — the MLP only ever sees one vector
+    # per voted media, mirroring the "vote on whole images" rule.
     model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
 
-    # Score every media — region-aware max-pool over regions when the
-    # dataset is patch-region-aware, plain single-vector scoring when not.
-    # We build one flat tensor of (media, region) rows so the MLP runs
-    # in a single forward pass; the per-media max is computed after.
-    has_regions = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
-    if has_regions:
-        all_ids = sorted(clips_dict.keys())
-        flat_vecs: list[np.ndarray] = []
-        media_index_per_row: list[int] = []
-        region_index_per_row: list[int] = []
-        for mi, cid in enumerate(all_ids):
-            media = clips_dict[cid]
-            regions = media.get("patch_regions")
-            if regions:
-                for ri, r in enumerate(regions):
-                    flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
-                    media_index_per_row.append(mi)
-                    region_index_per_row.append(ri)
-            else:
-                flat_vecs.append(np.asarray(media["embedding"], dtype=np.float32))
-                media_index_per_row.append(mi)
-                region_index_per_row.append(0)
-        X_all = torch.from_numpy(np.stack(flat_vecs).astype(np.float32, copy=False))
-    else:
-        from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
-
-        all_ids, all_embs = get_embedding_matrix_for_snap(clips_dict)
-        X_all = torch.from_numpy(all_embs)
-        n = len(all_ids)
-        media_index_per_row = list(range(n))
-        region_index_per_row = [0] * n
-    with torch.no_grad():
-        X_all = X_all.to(next(model.parameters()).device)
-        flat_scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().numpy()
-
-    # Max-pool per media; remember the winning region index so we can
-    # surface ``best_region.box`` to the UI for patch-region media.
-    scores: list[float] = [-1.0] * len(all_ids)
-    best_region: list[int] = [0] * len(all_ids)
-    for s, mi, ri in zip(flat_scores, media_index_per_row, region_index_per_row):
-        if s > scores[mi]:
-            scores[mi] = float(s)
-            best_region[mi] = ri
+    all_ids, scores, best_region = _score_all_media(model, clips_dict)
 
     if safe_thresholds:
-        n_labels = len(X_list)
-        threshold = calculate_safe_threshold(threshold, scores, n_labels)
+        threshold = calculate_safe_threshold(threshold, scores, len(X_list))
 
-    # Sort by raw scores (full precision) so that tiny differences still
-    # affect ordering.  Round only for the JSON response values.
-    paired = sorted(
-        zip(all_ids, scores, best_region),
-        key=lambda t: t[1],
-        reverse=True,
-    )
-    results: list[dict[str, Any]] = []
-    for cid, s, bri in paired:
-        entry: dict[str, Any] = {"id": cid, "score": round(s, 4)}
-        media = clips_dict[cid]
-        regions = media.get("patch_regions")
-        if regions and 0 <= bri < len(regions):
-            entry["best_region"] = list(regions[bri].box)
-        results.append(entry)
+    results = _format_results(all_ids, scores, best_region, clips_dict)
     return results, threshold, model
 
 
