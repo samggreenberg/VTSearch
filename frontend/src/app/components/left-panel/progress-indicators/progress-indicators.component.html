@@ -9,6 +9,11 @@
         [value]="sortProgress"
         [max]="sortProgressTotal"
       />
+      <button
+        class="btn btn--cancel btn--sm"
+        (click)="onCancel()"
+        title="Cancel the running sort"
+      >Cancel</button>
     </div>
   } @else {
     <button

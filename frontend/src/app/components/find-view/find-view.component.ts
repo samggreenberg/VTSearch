@@ -389,6 +389,13 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.loadVotes();
   }
 
+  /** Cancel the find-label scoring run; the HTTP request will surface
+   *  a cancelled status via its progress channel and the finalize() in
+   *  runFindLabel() takes care of clearing sortBusy. */
+  onSortCancel(): void {
+    this.detectorsApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
+  }
+
   // --- Panel percentage helpers ---
 
   private savePanelPx(side: 'left' | 'right'): void {

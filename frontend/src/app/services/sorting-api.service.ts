@@ -5,6 +5,7 @@ import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { DiversityTreeNextResponse } from '../generated/api-client/models/diversity-tree-next-response';
+import type { EvalTrainAndScoreCancelResponse } from '../generated/api-client/models/eval-train-and-score-cancel-response';
 import type { EvalTrainAndScoreResponse } from '../generated/api-client/models/eval-train-and-score-response';
 import type { ExampleSortResponse } from '../generated/api-client/models/example-sort-response';
 import type { FillFromSortRequest } from '../generated/api-client/models/fill-from-sort-request';
@@ -16,6 +17,7 @@ import type { LabelingStatusResponse } from '../generated/api-client/models/labe
 import type { LabelsExportResponse } from '../generated/api-client/models/labels-export-response';
 import type { LabelsImportRequest } from '../generated/api-client/models/labels-import-request';
 import type { LabelsImportResponse } from '../generated/api-client/models/labels-import-response';
+import type { LearnedSortCancelResponse } from '../generated/api-client/models/learned-sort-cancel-response';
 import type { LearnedSortResponse } from '../generated/api-client/models/learned-sort-response';
 import type { OkResponse } from '../generated/api-client/models/ok-response';
 import type { SafeThresholdsResponse } from '../generated/api-client/models/safe-thresholds-response';
@@ -27,6 +29,7 @@ import type { VotesResponse } from '../generated/api-client/models/votes-respons
 import { apiDiversityTreeNextGet } from '../generated/api-client/fn/sorting/api-diversity-tree-next-get';
 import { apiInclusionGet } from '../generated/api-client/fn/sorting/api-inclusion-get';
 import { apiInclusionPost } from '../generated/api-client/fn/sorting/api-inclusion-post';
+import { apiLearnedSortCancelJobIdPost } from '../generated/api-client/fn/sorting/api-learned-sort-cancel-job-id-post';
 import { apiLearnedSortPost } from '../generated/api-client/fn/sorting/api-learned-sort-post';
 import { apiLearnedSortResultGet } from '../generated/api-client/fn/sorting/api-learned-sort-result-get';
 import { apiSafeThresholdsGet } from '../generated/api-client/fn/sorting/api-safe-thresholds-get';
@@ -39,6 +42,7 @@ import { apiVotesGet } from '../generated/api-client/fn/sorting/api-votes-get';
 import { apiLabelsExportGet } from '../generated/api-client/fn/labels/api-labels-export-get';
 import { apiLabelsFillFromSortPost } from '../generated/api-client/fn/labels/api-labels-fill-from-sort-post';
 import { apiLabelsImportPost } from '../generated/api-client/fn/labels/api-labels-import-post';
+import { apiEvalTrainAndScoreCancelJobIdPost } from '../generated/api-client/fn/eval/api-eval-train-and-score-cancel-job-id-post';
 import { apiEvalTrainAndScorePost } from '../generated/api-client/fn/eval/api-eval-train-and-score-post';
 import { apiEvalTrainAndScoreResultGet } from '../generated/api-client/fn/eval/api-eval-train-and-score-result-get';
 import { apiIndicatorScoreHistoryGet } from '../generated/api-client/fn/eval/api-indicator-score-history-get';
@@ -68,6 +72,13 @@ export class SortingApiService {
   /** Poll for a learned-sort job's completion. */
   getLearnedSortResult(jobId: string): Observable<LearnedSortResponse> {
     return apiLearnedSortResultGet(this.http, this.config.rootUrl, { job_id: jobId }).pipe(
+      map((r) => r.body),
+    );
+  }
+
+  /** Cancel an in-flight learned-sort job. */
+  cancelLearnedSort(jobId: string): Observable<LearnedSortCancelResponse> {
+    return apiLearnedSortCancelJobIdPost(this.http, this.config.rootUrl, { job_id: jobId }).pipe(
       map((r) => r.body),
     );
   }
@@ -256,5 +267,12 @@ export class SortingApiService {
     return apiEvalTrainAndScoreResultGet(this.http, this.config.rootUrl, { job_id: jobId }).pipe(
       map((r) => r.body),
     );
+  }
+
+  /** Cancel an in-flight eval train-and-score job. */
+  cancelEvalTrainAndScore(jobId: string): Observable<EvalTrainAndScoreCancelResponse> {
+    return apiEvalTrainAndScoreCancelJobIdPost(this.http, this.config.rootUrl, {
+      job_id: jobId,
+    }).pipe(map((r) => r.body));
   }
 }

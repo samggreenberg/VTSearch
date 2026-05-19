@@ -18,6 +18,11 @@ export class ProgressIndicatorsComponent {
   @Input() sortProgressTotal = 0;
 
   @Output() indicatorClick = new EventEmitter<string>();
+  @Output() cancel = new EventEmitter<void>();
+
+  onCancel(): void {
+    this.cancel.emit();
+  }
 
   get isIndeterminate(): boolean {
     return this.sortProgressTotal <= 0;

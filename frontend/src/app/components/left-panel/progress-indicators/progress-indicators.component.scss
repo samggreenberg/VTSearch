@@ -23,6 +23,24 @@
     flex: 1;
     min-width: 0;
   }
+
+  // Match the .btn--cancel.btn--sm pattern used by dataset / detector cards —
+  // small grey pill next to the running progress bar.
+  .btn--cancel {
+    flex-shrink: 0;
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 1px 8px;
+    border-radius: 4px;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+
+    &:hover {
+      color: var(--text-primary);
+      border-color: var(--text-secondary);
+    }
+  }
 }
 
 .sort-overlay-status {

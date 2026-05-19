@@ -23,6 +23,7 @@
           [sortStatus]="sortStatus"
           [sortProgress]="sortProgress"
           [sortProgressTotal]="sortProgressTotal"
+          (cancel)="sortCancel.emit()"
         />
       }
 
@@ -103,6 +104,7 @@
           [sortProgress]="sortProgress"
           [sortProgressTotal]="sortProgressTotal"
           (indicatorClick)="indicatorClick.emit($event)"
+          (cancel)="sortCancel.emit()"
         />
 
         <vt-inclusion-slider
