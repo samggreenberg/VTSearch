@@ -189,6 +189,172 @@ class TestAudioClapMusicEmbedderProperties:
         assert CLAP_MUSIC_MODEL_ID == "laion/larger_clap_music_and_speech"
 
 
+class TestAudioClapGeneralEmbedderProperties:
+    """Verify AudioClapGeneralEmbedder class properties and registration."""
+
+    def test_name(self):
+        from vtsearch.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
+
+        emb = AudioClapGeneralEmbedder()
+        assert emb.name == "clap_general"
+
+    def test_media_type_id(self):
+        from vtsearch.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
+
+        emb = AudioClapGeneralEmbedder()
+        assert emb.media_type_id == "audio"
+
+    def test_description_wrappers_non_empty(self):
+        from vtsearch.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
+
+        emb = AudioClapGeneralEmbedder()
+        wrappers = emb.description_wrappers
+        assert len(wrappers) > 0
+        assert all("{text}" in w for w in wrappers)
+
+    def test_registered_in_registry(self):
+        from vtsearch.media import get_embedder
+
+        emb = get_embedder("clap_general")
+        assert emb.name == "clap_general"
+        assert emb.media_type_id == "audio"
+
+    def test_to_dict(self):
+        from vtsearch.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
+
+        emb = AudioClapGeneralEmbedder()
+        d = emb.to_dict()
+        assert d == {
+            "name": "clap_general",
+            "display_name": "CLAP (general 2024)",
+            "media_type_id": "audio",
+            "is_default": False,
+            "supports_text": True,
+            "supports_patch_regions": False,
+            "license_notice": None,
+        }
+
+    def test_uses_correct_model_id(self):
+        from vtsearch.config import CLAP_GENERAL_MODEL_ID
+
+        assert CLAP_GENERAL_MODEL_ID == "laion/larger_clap_general"
+
+
+class TestAudioASTEmbedderProperties:
+    """Verify AudioASTEmbedder class properties and registration."""
+
+    def test_name(self):
+        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+
+        emb = AudioASTEmbedder()
+        assert emb.name == "ast"
+
+    def test_media_type_id(self):
+        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+
+        emb = AudioASTEmbedder()
+        assert emb.media_type_id == "audio"
+
+    def test_supports_text_is_false(self):
+        """AST has no text encoder."""
+        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+
+        emb = AudioASTEmbedder()
+        assert emb.supports_text is False
+
+    def test_inherits_default_embed_text(self):
+        """Without a custom override, ``embed_text`` returns ``None``."""
+        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+
+        emb = AudioASTEmbedder()
+        assert emb.embed_text("any query") is None
+
+    def test_registered_in_registry(self):
+        from vtsearch.media import get_embedder
+
+        emb = get_embedder("ast")
+        assert emb.name == "ast"
+        assert emb.media_type_id == "audio"
+
+    def test_to_dict(self):
+        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+
+        emb = AudioASTEmbedder()
+        d = emb.to_dict()
+        assert d == {
+            "name": "ast",
+            "display_name": "AST (audio spectrogram)",
+            "media_type_id": "audio",
+            "is_default": False,
+            "supports_text": False,
+            "supports_patch_regions": False,
+            "license_notice": None,
+        }
+
+    def test_uses_correct_model_id(self):
+        from vtsearch.config import AST_MODEL_ID, AST_SAMPLE_RATE
+
+        assert AST_MODEL_ID == "MIT/ast-finetuned-audioset-10-10-0.4593"
+        assert AST_SAMPLE_RATE == 16000
+
+
+class TestAudioWhisperEncoderEmbedderProperties:
+    """Verify AudioWhisperEncoderEmbedder class properties and registration."""
+
+    def test_name(self):
+        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+
+        emb = AudioWhisperEncoderEmbedder()
+        assert emb.name == "whisper_encoder"
+
+    def test_media_type_id(self):
+        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+
+        emb = AudioWhisperEncoderEmbedder()
+        assert emb.media_type_id == "audio"
+
+    def test_supports_text_is_false(self):
+        """Whisper's decoder is text-OUT, not a text encoder; no shared space."""
+        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+
+        emb = AudioWhisperEncoderEmbedder()
+        assert emb.supports_text is False
+
+    def test_inherits_default_embed_text(self):
+        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+
+        emb = AudioWhisperEncoderEmbedder()
+        assert emb.embed_text("any query") is None
+
+    def test_registered_in_registry(self):
+        from vtsearch.media import get_embedder
+
+        emb = get_embedder("whisper_encoder")
+        assert emb.name == "whisper_encoder"
+        assert emb.media_type_id == "audio"
+
+    def test_to_dict(self):
+        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+
+        emb = AudioWhisperEncoderEmbedder()
+        d = emb.to_dict()
+        assert d == {
+            "name": "whisper_encoder",
+            "display_name": "Whisper encoder (speech)",
+            "media_type_id": "audio",
+            "is_default": False,
+            "supports_text": False,
+            "supports_patch_regions": False,
+            "license_notice": None,
+        }
+
+    def test_uses_correct_model_id(self):
+        from vtsearch.config import WHISPER_MODEL_ID, WHISPER_SAMPLE_RATE
+
+        assert WHISPER_MODEL_ID == "openai/whisper-base"
+        assert WHISPER_SAMPLE_RATE == 16000
+
+
 class TestTextBGEEmbedderProperties:
     """Verify TextBGEEmbedder class properties and registration."""
 
@@ -578,9 +744,10 @@ class TestAllEmbeddersRegistration:
 
         embedders = all_embedders()
         # 7 original + 8 image embedders (clip, siglip2, plus single/patch
-        # variants for dinov2, dinov3, eupe) + 1 face embedder + 1
-        # vision-only video embedder (videomae).
-        assert len(embedders) == 17
+        # variants for dinov2, dinov3, eupe) + 1 face embedder
+        # + 1 vision-only video embedder (videomae)
+        # + 3 audio embedders (ast, clap_general, whisper_encoder).
+        assert len(embedders) == 20
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -590,9 +757,9 @@ class TestAllEmbeddersRegistration:
         dicts = all_embedders_dict()
         by_name = {d["name"]: d for d in dicts}
         # Cross-modal embedders advertise text support.
-        for name in ("siglip", "siglip2", "clip", "clap", "xclip"):
+        for name in ("siglip", "siglip2", "clip", "clap", "clap_general", "xclip"):
             assert by_name[name]["supports_text"] is True, name
-        # Vision-only / patch-based embedders do not.
+        # Vision-only / patch-based and speech-only embedders do not.
         for name in (
             "dinov2_single",
             "dinov2_patch",
@@ -601,6 +768,8 @@ class TestAllEmbeddersRegistration:
             "eupe_single",
             "eupe_patch",
             "videomae",
+            "ast",
+            "whisper_encoder",
         ):
             assert by_name[name]["supports_text"] is False, name
 
@@ -611,6 +780,9 @@ class TestAllEmbeddersRegistration:
         expected = {
             "clap",
             "clap_music",
+            "clap_general",
+            "ast",
+            "whisper_encoder",
             "siglip",
             "siglip2",
             "clip",
@@ -633,7 +805,7 @@ class TestAllEmbeddersRegistration:
         from vtsearch.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("audio")}
-        assert names == {"clap", "clap_music"}
+        assert names == {"clap", "clap_music", "clap_general", "ast", "whisper_encoder"}
 
     def test_embedders_for_image(self):
         from vtsearch.media import embedders_for_type
@@ -679,9 +851,10 @@ class TestAllEmbeddersRegistration:
 
         dicts = all_embedders_dict()
         # 7 original + 8 image embedders (clip, siglip2, plus single/patch
-        # variants for dinov2, dinov3, eupe) + 1 face embedder + 1
-        # vision-only video embedder (videomae).
-        assert len(dicts) == 17
+        # variants for dinov2, dinov3, eupe) + 1 face embedder
+        # + 1 vision-only video embedder (videomae)
+        # + 3 audio embedders (ast, clap_general, whisper_encoder).
+        assert len(dicts) == 20
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
@@ -700,8 +873,11 @@ class TestEmbedderSentinelDiscovery:
     """
 
     def test_every_builtin_embedder_module_has_sentinel(self):
+        from vtsearch.media.audio import embedder_ast
         from vtsearch.media.audio import embedder_clap
+        from vtsearch.media.audio import embedder_clap_general
         from vtsearch.media.audio import embedder_clap_music
+        from vtsearch.media.audio import embedder_whisper
         from vtsearch.media.image import embedder_siglip
         from vtsearch.media.text import embedder_bge
         from vtsearch.media.text import embedder_e5
@@ -712,8 +888,11 @@ class TestEmbedderSentinelDiscovery:
         from vtsearch.media.embedder import MediaEmbedder
 
         modules = [
+            embedder_ast,
             embedder_clap,
+            embedder_clap_general,
             embedder_clap_music,
+            embedder_whisper,
             embedder_siglip,
             embedder_bge,
             embedder_e5,
@@ -919,6 +1098,24 @@ class TestNewEmbeddersInheritance:
         from vtsearch.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         assert issubclass(VideoVideoMAEEmbedder, MediaEmbedder)
+
+    def test_clap_general_is_media_embedder(self):
+        from vtsearch.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
+
+        assert issubclass(AudioClapGeneralEmbedder, MediaEmbedder)
+
+    def test_ast_is_media_embedder(self):
+        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
+
+        assert issubclass(AudioASTEmbedder, MediaEmbedder)
+
+    def test_whisper_encoder_is_media_embedder(self):
+        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+        from vtsearch.media.embedder import MediaEmbedder
+
+        assert issubclass(AudioWhisperEncoderEmbedder, MediaEmbedder)
 
     def test_embed_text_enriched_works(self):
         """embed_text_enriched (inherited from base) should work with mocked embed_text."""
