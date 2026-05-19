@@ -118,10 +118,11 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Run tests with coverage**: `VTSEARCH_COVERAGE=1 ./run-tests.sh` (opt-in; adds ~10-20% overhead)
 - **Run multiple groups**: `./run-tests.sh core sorting api`
 - **Run tests with extra args**: `./run-tests.sh core -- -x --tb=long` (args after `--` go to pytest)
-- **Run tests (CPU, full)**: `bash .claude/hooks/ensure-test-deps.sh && python -m pytest tests/ -q --tb=short -m 'not gpu'`
+- **Run library-tier tests only (Flask-blocked)**: `./run-tests.sh vtscore-clean` (runs `tests_lib/` via a meta-path import hook that refuses `flask`, `werkzeug`, `flask_smorest`; proves the library tier is import-clean even before Phase 8's physical move to `vtscore/`)
+- **Run tests (CPU, full)**: `bash .claude/hooks/ensure-test-deps.sh && python -m pytest tests/ tests_lib/ -q --tb=short -m 'not gpu'`
 - **Run slow CLI subprocess tests only**: `python -m pytest tests/ -q --tb=short -m slow`
-- **Run GPU tests**: `python -m pytest tests/test_gpu.py -q --tb=short -m gpu` (requires CUDA GPU; downloads models on first run)
-- **Run all tests (CPU + GPU)**: `python -m pytest tests/ -q --tb=short -m ''`
+- **Run GPU tests**: `python -m pytest tests_lib/gpu/test_gpu.py -q --tb=short -m gpu` (requires CUDA GPU; downloads models on first run)
+- **Run all tests (CPU + GPU)**: `python -m pytest tests/ tests_lib/ -q --tb=short -m ''`
 - **Start app**: `bash .claude/hooks/ensure-test-deps.sh && python app.py` (or `python app.py --local` for dev)
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json>`
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
@@ -141,7 +142,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - `app.py` — Flask entry point, registers blueprints, startup logic, CLI argument parsing, per-request user context via `before_request` middleware, per-request dataset/model context resolution from `X-Dataset-Id`/`X-Detector-Id` headers
 - `vtsearch/auth/` — Authentication: `LoginProvider` ABC, `DefaultLoginProvider` (single-user, no-op), `get_current_user()`, `get_user_data_dir()`, `set_login_provider()`
 - `vtsearch/config.py` — Constants (CLAP_SAMPLE_RATE, paths, model IDs)
-- `tests/fixtures/medias.py` — Test media generation and embedding cache management (loaded by `tests/conftest.py`; not part of the runtime app)
+- `tests/fixtures/medias.py` / `tests_lib/fixtures/medias.py` — Test media generation and embedding cache management (loaded by the respective conftest; not part of the runtime app)
 - `vtsearch/cli.py` — CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
 - `vtsearch/settings.py` — Persistent settings, split across two tiers. **Server tier** (shared, stored in `data/settings.json` at `SETTINGS_PATH`): saved_datasets_dir, detectors_dir, max_concurrent_dataset_downloads, max_concurrent_dataset_embeddings, autorun_detectors. **Per-user tier** (stored in `<get_user_data_dir(user)>/user_settings.json`, isolated per user via `get_current_user()`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left/right, focus_mode_left/right, grid_icon_size_left/right, panel_pct_left/right, autopilot_enabled, hide_autopilot, autopilot_top_greens/hard_reds/resort_interval/goal_diversity, settings_source, achievement_state. Each `set_*` accessor routes to the correct tier; `_save_user()` also auto-syncs to the user's configured `settings_source` (guarded by a per-user entry in `_syncing` to prevent circular re-export). `sync_from_settings_source()` runs lazily on each user's first per-user-cache load each process lifetime (tracked in `_synced_users`). `get_user_settings()` returns only the current user's keys for export. Pre-refactor `data/settings.json` files containing per-user keys are migrated into `data/default/user_settings.json` on first load. Background threads spawned from a request handler must call `vtsearch.auth.set_thread_user()` so per-user writes resolve correctly (done automatically by `JobManager` and the dataset-load/stage thread spawn sites).
 - `vtsearch/routes/` — Flask blueprints, grouped by domain into sub-packages with flat top-level files for single-blueprint domains:
@@ -176,16 +177,19 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - `frontend/` — Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`. `ActiveContextService` tracks which dataset/model the user selected; `activeContextInterceptor` attaches `X-Dataset-Id`/`X-Detector-Id` headers to every API request
 - `static/` — Angular build output (index.html, main.js, polyfills.js, styles.css) and assets (favicons, logo.svg, logo.png)
 - `docs/` — Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md + EXTENDING-plugins.md + EXTENDING-media.md + EXTENDING-processors.md, HANDOFF.md, ML.md, SETUP.md, USER_GUIDE.md, demos.md, design/cli-detector-converter.md, plans/README.md + open plan docs under plans/ — see that index)
-- `tests/` — Test suite. Files are bucketed by group folder; the folder name **is** the pytest marker (`tests/core/test_*.py` → marker `core`). New test files inherit their group from where they live — no registry to update.
-  - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client). Also stubs all embedders so tests never download real model weights.
-  - `helpers.py` — Shared helpers (`make_wav_bytes`, `make_dataset_file`, media-builder fns) — imported as `from helpers import ...` via the `pythonpath = ["tests"]` in `pyproject.toml`.
+- `tests/` — **App-tier** test suite (uses Flask `client`, `vtsearch.routes`, `vtsearch.settings`, `vtsearch.auth`, etc.). Files are bucketed by group folder; the folder name **is** the pytest marker (`tests/core/test_*.py` → marker `core`). New test files inherit their group from where they live — no registry to update.
+  - `conftest.py` — Shared fixtures: `reset_state` (autouse, clears all mutable global state including app-tier autorun-processors and login-provider), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client). Also stubs all embedders so tests never download real model weights.
+  - `helpers.py` — Shared helpers (`make_wav_bytes`, `make_dataset_file`, media-builder fns) — imported as `from helpers import ...` via the `pythonpath = ["tests", "tests_lib"]` in `pyproject.toml`.
   - `fixtures/medias.py` — Test media generation + per-worker embedding cache, loaded by conftest.
   - `tests/__init__.py` — Test-package helpers (`load_detector_and_wait`).
-  - Test groups (folders): `core/`, `api/`, `sorting/`, `datasets/`, `io/`, `detectors/`, `downloads/`, `integration/`, `cli/`, `converters/`, `gpu/`. To find tests for an area, look in the corresponding folder; to add a new test, drop it in the folder that matches its concern.
+  - Test groups (folders): `core/`, `api/`, `sorting/`, `datasets/`, `io/`, `detectors/`, `downloads/`, `integration/`, `cli/`, `converters/`. To find tests for an area, look in the corresponding folder; to add a new test, drop it in the folder that matches its concern.
+- `tests_lib/` — **Library-tier** test suite (Phase 7 of `docs/plans/extract-library.md`). Mirrors the `tests/` layout but every file is import-clean of Flask, `vtsearch.routes`, `vtsearch.settings`, `vtsearch.auth`, `vtsearch.shim`, `vtsearch.autorun_processors`, and `vtsearch.settings_io`. Verified by `./run-tests.sh vtscore-clean`, which installs a meta-path import hook that refuses `flask` / `werkzeug` / `flask_smorest` before pytest collection. Test groups present here: `core/`, `cli/`, `datasets/`, `detectors/`, `downloads/`, `io/`, `sorting/`, `integration/`, `gpu/`. New tests should be added to `tests_lib/` if they don't touch any app-tier module; otherwise add them to `tests/`.
+  - `conftest.py` — App-free, settings-free shared fixtures: `reset_contexts` (autouse, resets dataset/detector contexts, progress trackers, async jobs, label-sync, registries), `_allow_test_tmp_paths` (autouse, widens path validation for tmp dirs), `_stub_embedding_models` (session, stubs every embedder).  Installs a library-only `CoreConfig.from_settings()` builder so library code that calls it (e.g. `vtsearch/datasets/registry.py:get_saved_datasets_dir()`) works without the app shim.
+  - `helpers.py` / `fixtures/medias.py` — duplicates of the `tests/` versions; the duplication is intentional so each tier is self-contained.
 
 ## Test Groups
 
-Tests are grouped by folder under `tests/`. Each folder is a pytest marker — `./run-tests.sh <group>` runs all tests in `tests/<group>/`. New tests inherit their group from the folder they're added to.
+Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker — `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to.
 
 | Group | Description |
 |-------|-------------|
