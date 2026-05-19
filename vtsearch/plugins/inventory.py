@@ -8,13 +8,20 @@ The inventory covers both ``PluginRegistry``-backed families (importers,
 exporters, label sources, settings I/O, converters, media sources) and
 the embedder / clipper / media-type registries that live directly on
 :mod:`vtsearch.media`.
+
+Families are registered with :func:`register_plugin_family`.  Library
+families self-register at module import; app-only families
+(``settings_io/*``) are injected by the application layer via
+:mod:`vtsearch.shim` so this module stays free of cross-boundary imports
+ahead of the ``vtscore`` library split (see
+``docs/plans/extract-library.md`` Phase 5).
 """
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
-from typing import Any, Callable
+from dataclasses import dataclass, field
+from typing import Any, Callable, Iterable
 
 
 @dataclass
@@ -46,7 +53,7 @@ def _entry_from_plugin(plugin: Any, *, extra: dict[str, Any] | None = None) -> P
     )
 
 
-def _safe_list(loader: Callable[[], list[Any]]) -> list[Any]:
+def _safe_list(loader: Callable[[], Iterable[Any]]) -> list[Any]:
     """Run *loader* and swallow ImportError-class failures.
 
     A missing optional dependency in one plugin shouldn't block inventory
@@ -59,81 +66,189 @@ def _safe_list(loader: Callable[[], list[Any]]) -> list[Any]:
         return []
 
 
+# ---------------------------------------------------------------------------
+# Family registry
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FamilyProvider:
+    """How to enumerate one plugin family for the inventory.
+
+    Attributes
+    ----------
+    key:
+        Stable snake_case identifier (e.g. ``"importers"``).  Used as the
+        dict key in :func:`gather_plugins`, the CLI ``--plugin-family``
+        argument, and the ``--list-<key>`` shortcut.
+    label:
+        Human-readable family heading used in plain-text output.
+    loader:
+        Zero-argument callable returning the raw plugins.  Wrapped in
+        :func:`_safe_list` so ``ImportError`` from optional deps degrades
+        gracefully.
+    entry_builder:
+        Maps one raw plugin to a :class:`PluginEntry`.  Defaults to
+        :func:`_entry_from_plugin` (no extras).
+    """
+
+    key: str
+    label: str
+    loader: Callable[[], Iterable[Any]]
+    entry_builder: Callable[[Any], PluginEntry] = field(default=_entry_from_plugin)
+
+
+_FAMILIES_REGISTRY: dict[str, FamilyProvider] = {}
+
+
+def register_plugin_family(provider: FamilyProvider) -> None:
+    """Register *provider* so :func:`gather_plugins` enumerates it.
+
+    Subsequent calls with the same :attr:`FamilyProvider.key` replace the
+    earlier registration (last writer wins).  Insertion order is preserved
+    so the plain-text output stays grouped as the registrar intended.
+    """
+    _FAMILIES_REGISTRY[provider.key] = provider
+
+
+def _converter_entry(plugin: Any) -> PluginEntry:
+    return _entry_from_plugin(
+        plugin,
+        extra={
+            "source_type": getattr(plugin, "source_type", ""),
+            "target_type": getattr(plugin, "target_type", ""),
+        },
+    )
+
+
+def _media_type_entry(mt: Any) -> PluginEntry:
+    return PluginEntry(
+        name=getattr(mt, "type_id", ""),
+        display_name=getattr(mt, "display_name", "") or getattr(mt, "type_id", ""),
+        description=getattr(mt, "description", "") or "",
+        extra={"folder_import_name": getattr(mt, "folder_import_name", "")},
+    )
+
+
+def _embedder_entry(emb: Any) -> PluginEntry:
+    return PluginEntry(
+        name=getattr(emb, "name", ""),
+        display_name=getattr(emb, "display_name", "") or getattr(emb, "name", ""),
+        description=getattr(emb, "description", "") or "",
+        extra={
+            "media_type": getattr(emb, "media_type_id", ""),
+            "is_default": bool(getattr(emb, "is_default", False)),
+        },
+    )
+
+
+def _clipper_entry(clip: Any) -> PluginEntry:
+    return PluginEntry(
+        name=getattr(clip, "name", ""),
+        display_name=getattr(clip, "display_name", "") or getattr(clip, "name", ""),
+        description=getattr(clip, "description", "") or "",
+        extra={"media_type": getattr(clip, "media_type", "")},
+    )
+
+
+# Lazy loaders for the library-tier families.  Each one imports its
+# package on first call so ``python app.py --list-plugins`` doesn't pay
+# the full app startup cost — Flask blueprints, model registries, etc.
+# only get imported when their family is asked for.
+
+
+def _load_importers() -> Iterable[Any]:
+    from vtsearch.datasets.importers import list_importers
+
+    return list_importers()
+
+
+def _load_exporters() -> Iterable[Any]:
+    from vtsearch.exporters import list_exporters
+
+    return list_exporters()
+
+
+def _load_label_importers() -> Iterable[Any]:
+    from vtsearch.labels.importers import list_label_importers
+
+    return list_label_importers()
+
+
+def _load_labelset_sources() -> Iterable[Any]:
+    from vtsearch.labels.sources import list_labelset_sources
+
+    return list_labelset_sources()
+
+
+def _load_converters() -> Iterable[Any]:
+    from vtsearch.converters import list_converters
+
+    return list_converters()
+
+
+def _load_media_sources() -> Iterable[Any]:
+    from vtsearch.datasets.sources import list_media_sources
+
+    return list_media_sources()
+
+
+def _load_media_types() -> Iterable[Any]:
+    from vtsearch.media import all_types
+
+    return all_types()
+
+
+def _load_embedders() -> Iterable[Any]:
+    from vtsearch.media import all_embedders
+
+    return all_embedders()
+
+
+def _load_clippers() -> Iterable[Any]:
+    from vtsearch.media import all_clippers
+
+    return all_clippers()
+
+
+# App-only families (settings importers/exporters/sources) are NOT
+# registered here; the app installs them at startup via
+# :func:`vtsearch.shim.register_app_plugin_families`.
+_LIBRARY_FAMILIES: tuple[FamilyProvider, ...] = (
+    FamilyProvider("importers", "Dataset importers", _load_importers),
+    FamilyProvider("exporters", "Results exporters", _load_exporters),
+    FamilyProvider("label_importers", "Label importers", _load_label_importers),
+    FamilyProvider("labelset_sources", "Labelset sources", _load_labelset_sources),
+    FamilyProvider("converters", "Media converters", _load_converters, _converter_entry),
+    FamilyProvider("media_sources", "Media sources", _load_media_sources),
+    FamilyProvider("media_types", "Media types", _load_media_types, _media_type_entry),
+    FamilyProvider("embedders", "Media embedders", _load_embedders, _embedder_entry),
+    FamilyProvider("clippers", "Media clippers", _load_clippers, _clipper_entry),
+)
+
+
+for _provider in _LIBRARY_FAMILIES:
+    register_plugin_family(_provider)
+del _provider
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
 def gather_plugins() -> dict[str, list[PluginEntry]]:
     """Return ``{family: [PluginEntry, ...]}`` for every registered plugin.
 
     Family keys are stable, snake-cased identifiers suitable for shell
     completion scripts; ordering matches discovery order within a family
     (alphabetical by file name for built-ins, then entry-point order).
+    The set of families is whatever :func:`register_plugin_family` has
+    populated by the time this is called.
     """
-    # Importers are looked up lazily so that ``python app.py --list-plugins``
-    # doesn't pay the full app startup cost — Flask blueprints, model
-    # registries, etc. only get imported when their family is asked for.
-    from vtsearch.converters import list_converters
-    from vtsearch.datasets.importers import list_importers
-    from vtsearch.datasets.sources import list_media_sources
-    from vtsearch.exporters import list_exporters
-    from vtsearch.labels.importers import list_label_importers
-    from vtsearch.labels.sources import list_labelset_sources
-    from vtsearch.media import all_clippers, all_embedders, all_types
-    from vtsearch.settings_io.exporters import list_settings_exporters
-    from vtsearch.settings_io.importers import list_settings_importers
-    from vtsearch.settings_io.sources import list_settings_sources
-
     inventory: dict[str, list[PluginEntry]] = {}
-
-    inventory["importers"] = [_entry_from_plugin(p) for p in _safe_list(list_importers)]
-    inventory["exporters"] = [_entry_from_plugin(p) for p in _safe_list(list_exporters)]
-    inventory["label_importers"] = [_entry_from_plugin(p) for p in _safe_list(list_label_importers)]
-    inventory["labelset_sources"] = [_entry_from_plugin(p) for p in _safe_list(list_labelset_sources)]
-    inventory["settings_importers"] = [_entry_from_plugin(p) for p in _safe_list(list_settings_importers)]
-    inventory["settings_exporters"] = [_entry_from_plugin(p) for p in _safe_list(list_settings_exporters)]
-    inventory["settings_sources"] = [_entry_from_plugin(p) for p in _safe_list(list_settings_sources)]
-    inventory["converters"] = [
-        _entry_from_plugin(
-            c,
-            extra={
-                "source_type": getattr(c, "source_type", ""),
-                "target_type": getattr(c, "target_type", ""),
-            },
-        )
-        for c in _safe_list(list_converters)
-    ]
-    inventory["media_sources"] = [_entry_from_plugin(p) for p in _safe_list(list_media_sources)]
-
-    # Media-side registries — embedders / clippers / media types don't
-    # use PluginBase, so build entries from their attribute surface.
-    inventory["media_types"] = [
-        PluginEntry(
-            name=getattr(mt, "type_id", ""),
-            display_name=getattr(mt, "display_name", "") or getattr(mt, "type_id", ""),
-            description=getattr(mt, "description", "") or "",
-            extra={"folder_import_name": getattr(mt, "folder_import_name", "")},
-        )
-        for mt in _safe_list(all_types)
-    ]
-    inventory["embedders"] = [
-        PluginEntry(
-            name=getattr(emb, "name", ""),
-            display_name=getattr(emb, "display_name", "") or getattr(emb, "name", ""),
-            description=getattr(emb, "description", "") or "",
-            extra={
-                "media_type": getattr(emb, "media_type_id", ""),
-                "is_default": bool(getattr(emb, "is_default", False)),
-            },
-        )
-        for emb in _safe_list(all_embedders)
-    ]
-    inventory["clippers"] = [
-        PluginEntry(
-            name=getattr(clip, "name", ""),
-            display_name=getattr(clip, "display_name", "") or getattr(clip, "name", ""),
-            description=getattr(clip, "description", "") or "",
-            extra={"media_type": getattr(clip, "media_type", "")},
-        )
-        for clip in _safe_list(all_clippers)
-    ]
-
+    for key, provider in _FAMILIES_REGISTRY.items():
+        inventory[key] = [provider.entry_builder(p) for p in _safe_list(provider.loader)]
     return inventory
 
 
@@ -142,27 +257,12 @@ def gather_plugins() -> dict[str, list[PluginEntry]]:
 # ---------------------------------------------------------------------------
 
 
-_FAMILY_LABELS: dict[str, str] = {
-    "importers": "Dataset importers",
-    "exporters": "Results exporters",
-    "label_importers": "Label importers",
-    "labelset_sources": "Labelset sources",
-    "settings_importers": "Settings importers",
-    "settings_exporters": "Settings exporters",
-    "settings_sources": "Settings sources",
-    "converters": "Media converters",
-    "media_sources": "Media sources",
-    "media_types": "Media types",
-    "embedders": "Media embedders",
-    "clippers": "Media clippers",
-}
-
-
 def format_plain(inventory: dict[str, list[PluginEntry]]) -> str:
     """Render *inventory* as a human-readable plain-text listing."""
     out: list[str] = []
     for family, entries in inventory.items():
-        label = _FAMILY_LABELS.get(family, family)
+        provider = _FAMILIES_REGISTRY.get(family)
+        label = provider.label if provider is not None else family
         out.append(f"{label} ({len(entries)}):")
         if not entries:
             out.append("  (none)")
@@ -205,9 +305,6 @@ def format_json(inventory: dict[str, list[PluginEntry]]) -> str:
     )
 
 
-FAMILIES: tuple[str, ...] = tuple(_FAMILY_LABELS.keys())
-
-
 # ---------------------------------------------------------------------------
 # CLI integration
 # ---------------------------------------------------------------------------
@@ -243,13 +340,14 @@ def family_flag(family: str) -> str:
 
 
 def register_family_shortcuts(parser: argparse.ArgumentParser) -> None:
-    """Add ``--list-<family>`` shortcut flags to *parser* for every known family.
+    """Add ``--list-<family>`` shortcut flags to *parser* for every registered family.
 
     Each shortcut is equivalent to ``--list-plugins --plugin-family
-    <family>`` and obeys the same ``--format`` setting.  Generated from
-    :data:`FAMILIES` so a new plugin family automatically gets a shortcut.
+    <family>`` and obeys the same ``--format`` setting.  Reads the current
+    family registry, so any family registered via
+    :func:`register_plugin_family` automatically gets a shortcut.
     """
-    for family in FAMILIES:
+    for family in _FAMILIES_REGISTRY:
         parser.add_argument(
             family_flag(family),
             action=_ListFamilyAction,
@@ -259,13 +357,28 @@ def register_family_shortcuts(parser: argparse.ArgumentParser) -> None:
         )
 
 
+def __getattr__(name: str) -> Any:
+    """Module-level dynamic attributes.
+
+    ``FAMILIES`` is exposed as a tuple snapshot of the current registry
+    keys at access time, so callers that ``from vtsearch.plugins.inventory
+    import FAMILIES`` see every family that's been registered by then —
+    including app-only ones the shim installs at startup.
+    """
+    if name == "FAMILIES":
+        return tuple(_FAMILIES_REGISTRY.keys())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
-    "FAMILIES",
+    "FAMILIES",  # noqa: F822 — exposed dynamically via module __getattr__
+    "FamilyProvider",
     "PluginEntry",
-    "gather_plugins",
-    "format_plain",
-    "format_names",
-    "format_json",
     "family_flag",
+    "format_json",
+    "format_names",
+    "format_plain",
+    "gather_plugins",
     "register_family_shortcuts",
+    "register_plugin_family",
 ]
