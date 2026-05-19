@@ -15,8 +15,11 @@ import os
 from pathlib import Path
 from typing import Any
 
+from vtsearch.config import DATA_DIR
 from vtsearch.exporters._template import resolve_export_filepath
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
+
+_DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -56,8 +59,8 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
                 "created automatically.  Supports {YYYYMMDD-HHMMSS}, "
                 "{detector_name} and {username} templates."
             ),
-            placeholder="data/autodetect_results_{YYYYMMDD-HHMMSS}.json",
-            default="data/autodetect_results_{YYYYMMDD-HHMMSS}.json",
+            placeholder=_DEFAULT_JSON_PATH,
+            default=_DEFAULT_JSON_PATH,
         ),
     ]
 

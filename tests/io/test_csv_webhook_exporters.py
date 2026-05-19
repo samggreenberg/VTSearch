@@ -98,6 +98,7 @@ class TestCsvExporterCLI:
         assert args.filepath == "/tmp/results.csv"
 
     def test_filepath_default(self):
+        from vtsearch.config import DATA_DIR
         from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
@@ -107,7 +108,7 @@ class TestCsvExporterCLI:
         args = parser.parse_args([])
         # Default includes a timestamp template so consecutive runs do not
         # silently overwrite one another.
-        assert args.filepath == "data/autodetect_results_{YYYYMMDD-HHMMSS}.csv"
+        assert args.filepath == f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
     def test_validate_passes(self):
         from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
@@ -822,20 +823,24 @@ class TestFilepathTemplateExpansion:
     """Default filepaths embed a timestamp; templates expand at export time."""
 
     def test_csv_default_contains_timestamp_template(self):
+        from vtsearch.config import DATA_DIR
         from vtsearch.exporters import get_exporter
 
         exp = get_exporter("server_csv_file")
         fp = next(f for f in exp.fields if f.key == "filepath")
-        assert fp.default == "data/autodetect_results_{YYYYMMDD-HHMMSS}.csv"
-        assert fp.placeholder == "data/autodetect_results_{YYYYMMDD-HHMMSS}.csv"
+        expected = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
+        assert fp.default == expected
+        assert fp.placeholder == expected
 
     def test_json_default_contains_timestamp_template(self):
+        from vtsearch.config import DATA_DIR
         from vtsearch.exporters import get_exporter
 
         exp = get_exporter("server_json_file")
         fp = next(f for f in exp.fields if f.key == "filepath")
-        assert fp.default == "data/autodetect_results_{YYYYMMDD-HHMMSS}.json"
-        assert fp.placeholder == "data/autodetect_results_{YYYYMMDD-HHMMSS}.json"
+        expected = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
+        assert fp.default == expected
+        assert fp.placeholder == expected
 
     def test_consecutive_csv_exports_do_not_overwrite(self, tmp_path):
         """Two exports a second apart should land in distinct files."""

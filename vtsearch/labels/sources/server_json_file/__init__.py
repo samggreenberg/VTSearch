@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from vtsearch.config import DATA_DIR
 from vtsearch.labels.sources.base import LabelsetSource, LabelsetSourceField
 
 if TYPE_CHECKING:
@@ -34,7 +35,7 @@ class ServerFileLabelsetSource(LabelsetSource):
                 "Absolute or relative path to a labels JSON file on the "
                 "server.  Supports {detector_id} and {detector_name} templates."
             ),
-            placeholder="data/labels/{detector_name}.labels.json",
+            placeholder=f"{DATA_DIR}/labels/{{detector_name}}.labels.json",
         ),
     ]
 
