@@ -142,6 +142,11 @@ aliased to via a broken ``AutoModel.from_pretrained`` path (the PE-Core
 HF repo has no ``config.json`` so ``AutoModel`` could never load it).
 """
 CLAP_MUSIC_MODEL_ID = "laion/larger_clap_music_and_speech"
+CLAP_GENERAL_MODEL_ID = "laion/larger_clap_general"
+AST_MODEL_ID = "MIT/ast-finetuned-audioset-10-10-0.4593"
+AST_SAMPLE_RATE = 16000  # AST expects 16 kHz mono
+WHISPER_MODEL_ID = "openai/whisper-base"
+WHISPER_SAMPLE_RATE = 16000  # Whisper expects 16 kHz mono
 BGE_MODEL_ID = "BAAI/bge-base-en-v1.5"
 LANGUAGEBIND_VIDEO_MODEL_ID = "LanguageBind/LanguageBind_Video_V1.5_FT"
 VIDEOMAE_MODEL_ID = "OpenGVLab/VideoMAEv2-Base"
