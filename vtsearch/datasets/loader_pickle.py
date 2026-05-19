@@ -202,13 +202,22 @@ def _convert_one_pickle_media(
         return _build_pickle_thin_media(new_id, media_info, media_type, media_path, extra_fields), False
 
     media_bytes, media_string, media_path, missing = _load_pickle_media_payload(
-        media_type, media_info, data, dir_keys,
+        media_type,
+        media_info,
+        data,
+        dir_keys,
     )
     if media_bytes is None:
         return None, missing
     return (
         _build_pickle_full_media(
-            new_id, media_info, media_type, media_bytes, media_string, media_path, extra_fields,
+            new_id,
+            media_info,
+            media_type,
+            media_bytes,
+            media_string,
+            media_path,
+            extra_fields,
         ),
         False,
     )
@@ -265,7 +274,12 @@ def load_dataset_from_pickle(
     try:
         for media_id, media_info in medias_data.items():
             media_data, missing = _convert_one_pickle_media(
-                media_id, media_info, thin, data, dir_keys, extra_fields_map,
+                media_id,
+                media_info,
+                thin,
+                data,
+                dir_keys,
+                extra_fields_map,
             )
             if media_data is None:
                 if missing:
@@ -274,9 +288,7 @@ def load_dataset_from_pickle(
             medias[media_id] = media_data
             loaded_count += 1
             if on_progress is not None and loaded_count % _progress_interval == 0:
-                on_progress(
-                    "loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count
-                )
+                on_progress("loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count)
     except MemoryError:
         medias.clear()
         del data
@@ -333,7 +345,12 @@ def load_dataset_from_pickle_chunked(
         for media_id in batch_ids:
             media_info = medias_data[media_id]
             media_data, _missing = _convert_one_pickle_media(
-                new_id, media_info, thin, data, dir_keys, extra_fields_map,
+                new_id,
+                media_info,
+                thin,
+                data,
+                dir_keys,
+                extra_fields_map,
             )
             if media_data is None:
                 continue

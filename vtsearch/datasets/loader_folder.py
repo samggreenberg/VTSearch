@@ -261,8 +261,12 @@ def _resolve_folder_load_inputs(
 
     if not skip_embedding and emb is not None:
         _eager_load_embedder_models(
-            emb, media_files, folder_path, content_vectors,
-            custom_metadata_map, on_progress,
+            emb,
+            media_files,
+            folder_path,
+            content_vectors,
+            custom_metadata_map,
+            on_progress,
         )
 
     return mt, emb, media_files, len(media_files)
@@ -393,14 +397,25 @@ def _run_bulk_embedders(
     if emb is None or skip_embedding:
         return {}, {}
     bulk_embeddings = _bulk_embed_files(
-        emb, media_files, folder_path, content_vectors,
-        custom_metadata_map, on_progress, media_type, origin=origin,
+        emb,
+        media_files,
+        folder_path,
+        content_vectors,
+        custom_metadata_map,
+        on_progress,
+        media_type,
+        origin=origin,
     )
     bulk_patch_outputs: dict[Path, Any] = {}
     if getattr(emb, "supports_patch_regions", False) is True:
         bulk_patch_outputs = _bulk_patch_forward_files(
-            emb, media_files, folder_path, on_progress, media_type,
-            origin=origin, custom_metadata_map=custom_metadata_map,
+            emb,
+            media_files,
+            folder_path,
+            on_progress,
+            media_type,
+            origin=origin,
+            custom_metadata_map=custom_metadata_map,
         )
     return bulk_embeddings, bulk_patch_outputs
 
@@ -447,8 +462,14 @@ def _build_per_file_media(
     file_cm = _lookup_file_custom_metadata(rel_path, file_path.name, custom_metadata_map)
 
     resolved = _resolve_file_embedding(
-        rel_path, file_path.name, file_cm, content_vectors,
-        skip_embedding, emb, bulk_embeddings, file_path,
+        rel_path,
+        file_path.name,
+        file_cm,
+        content_vectors,
+        skip_embedding,
+        emb,
+        bulk_embeddings,
+        file_path,
     )
     if resolved is None:
         return None
@@ -459,16 +480,30 @@ def _build_per_file_media(
     if thin:
         md5 = _resolve_file_md5(file_path, rel_path, cm_md5, content_md5s, file_bytes=None)
         media_data = _build_folder_media_data(
-            media_id, mt.type_id, embedder_id, embedding, md5,
-            rel_path, file_path, file_path.stat().st_size, origin,
+            media_id,
+            mt.type_id,
+            embedder_id,
+            embedding,
+            md5,
+            rel_path,
+            file_path,
+            file_path.stat().st_size,
+            origin,
         )
     else:
         with open(file_path, "rb") as f:
             file_bytes = f.read()
         md5 = _resolve_file_md5(file_path, rel_path, cm_md5, content_md5s, file_bytes)
         media_data = _build_folder_media_data(
-            media_id, mt.type_id, embedder_id, embedding, md5,
-            rel_path, file_path, len(file_bytes), origin,
+            media_id,
+            mt.type_id,
+            embedder_id,
+            embedding,
+            md5,
+            rel_path,
+            file_path,
+            len(file_bytes),
+            origin,
         )
         # Merge in media-specific fields without re-reading the file.
         media_data.update(mt.load_media_data(file_path, media_bytes=file_bytes))
@@ -616,8 +651,15 @@ def load_dataset_from_folder(
     # per-item progress so the UI stays responsive.
     try:
         bulk_embeddings, bulk_patch_outputs = _run_bulk_embedders(
-            emb, media_files, folder_path, content_vectors, custom_metadata_map,
-            on_progress, media_type, origin, skip_embedding,
+            emb,
+            media_files,
+            folder_path,
+            content_vectors,
+            custom_metadata_map,
+            on_progress,
+            media_type,
+            origin,
+            skip_embedding,
         )
 
         for i, file_path in enumerate(media_files):
@@ -625,8 +667,13 @@ def load_dataset_from_folder(
 
             if i % _progress_interval == 0 or i + 1 == total_files:
                 _emit_per_file_progress(
-                    on_progress, skip_embedding, media_type, rel_path,
-                    i + 1, total_files, chunk_label="",
+                    on_progress,
+                    skip_embedding,
+                    media_type,
+                    rel_path,
+                    i + 1,
+                    total_files,
+                    chunk_label="",
                 )
 
             built = _build_per_file_media(
@@ -757,8 +804,15 @@ def load_dataset_from_folder_chunked(
 
         # Scope bulk embedding to one chunk so memory stays bounded.
         chunk_bulk_embeddings, chunk_bulk_patch_outputs = _run_bulk_embedders(
-            emb, batch, folder_path, content_vectors, custom_metadata_map,
-            on_progress, media_type, origin, skip_embedding,
+            emb,
+            batch,
+            folder_path,
+            content_vectors,
+            custom_metadata_map,
+            on_progress,
+            media_type,
+            origin,
+            skip_embedding,
         )
 
         chunk_label = f" (chunk {start // chunk_size + 1})"
@@ -769,8 +823,13 @@ def load_dataset_from_folder_chunked(
 
             if global_idx % _progress_interval == 0 or global_idx + 1 == total_files:
                 _emit_per_file_progress(
-                    on_progress, skip_embedding, media_type, rel_path,
-                    global_idx + 1, total_files, chunk_label=chunk_label,
+                    on_progress,
+                    skip_embedding,
+                    media_type,
+                    rel_path,
+                    global_idx + 1,
+                    total_files,
+                    chunk_label=chunk_label,
                 )
 
             built = _build_per_file_media(
