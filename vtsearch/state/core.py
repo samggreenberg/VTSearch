@@ -23,7 +23,8 @@ return nothing, writes are silently discarded or raise where appropriate).
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 
@@ -329,19 +330,44 @@ def get_active_detector_context() -> DetectorContext:
     """Return the ``DetectorContext`` for the current execution context.
 
     Resolution order:
-    1. Request-scoped context (set by ``before_request`` from ``X-Detector-Id`` header)
-    2. Thread-local context (set by ``set_thread_detector_context``)
-    3. Empty fallback context
+    1. Forced override (``override_detector_context`` context manager)
+    2. Request-scoped context (set by ``before_request`` from ``X-Detector-Id`` header)
+    3. Thread-local context (set by ``set_thread_detector_context``)
+    4. Empty fallback context
     """
-    # 1. Per-request override (Flask shim or whatever the host app registered)
+    # 1. Forced override (set by override_detector_context context manager)
+    forced = getattr(_thread_local, "forced_detector_context", None)
+    if forced is not None:
+        return forced
+    # 2. Per-request override (Flask shim or whatever the host app registered)
     req_ctx = _detector_context_resolver()
     if req_ctx is not None:
         return req_ctx
-    # 2. Thread-local fallback
+    # 3. Thread-local fallback
     ctx = getattr(_thread_local, "detector_context", None)
     if ctx is not None:
         return ctx
     return _empty_detector_context
+
+
+@contextmanager
+def override_detector_context(ctx: DetectorContext) -> Iterator[None]:
+    """Force :func:`get_active_detector_context` to return *ctx* for the
+    duration of the ``with`` block.
+
+    Takes priority over the registered request resolver and the thread-local
+    fallback.  Use this from call sites that need to swap the active detector
+    inside their own body (typically when applying labels to a freshly-loaded
+    detector that isn't the request's currently-active one) without having
+    to know whether they're running inside a Flask request or a background
+    thread.
+    """
+    prev = getattr(_thread_local, "forced_detector_context", None)
+    _thread_local.forced_detector_context = ctx
+    try:
+        yield
+    finally:
+        _thread_local.forced_detector_context = prev
 
 
 def set_thread_detector_context(ctx: DetectorContext | None) -> None:
