@@ -16,11 +16,16 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | [extract-library.md](extract-library.md) | **Proposed** | Split VTSearch into a `vtscore` Python library plus the Flask/Angular app, gated on a CI job that runs the test suite without Flask installed. Not started. |
 | [openapi-schema.md](openapi-schema.md) | **Migration complete; one cosmetic follow-up** | flask-smorest plumbing + Swagger UI + per-plugin runtime validation live across every blueprint. Remaining: per-plugin OpenAPI **spec** types for the six plugin-field route bodies (deferred — runtime validation already captures the field types). |
 | [brainstorm.md](brainstorm.md) | **Backlog** | Combined feature + UX backlog (formerly `feature-brainstorm.md` + `ux-brainstorm.md`). Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, UX friction, architecture, experiments. Items graduate into their own plan doc as they mature. |
-| [c901-refactor-triage.md](c901-refactor-triage.md) | **All 8 refactors shipped — ready to retire** | Per-function refactor/skip decisions for the eight functions with cyclomatic complexity ≥20 identified in 2026-05. All eight in the "Refactor" list landed; five "Skip" rows stay skipped. See Open follow-ups for the next triage pass — picked up by `c901-refactor-triage-2.md`. |
-| [c901-refactor-triage-2.md](c901-refactor-triage-2.md) | **Triaged; refactors not started** | Second-wave per-function refactor/skip decisions for the four post-2026-05-sweep D-grade (≥20-CC) functions surfaced as Open follow-ups by the first triage: `effective_source_specs` (27), `sync_labels_to_loaded_detector` (23), `train_and_score` (23), `CombineDatasetsImporter.run` + `run_chunked` (21 each, one PR). Five **Skip** rows carried forward. |
 
 ## Recently completed (removed)
 
+- **c901-refactor-triage.md** and **c901-refactor-triage-2.md** —
+  Per-function refactor/skip decisions for the 2026-05 sweep of
+  functions with cyclomatic complexity ≥20. Two waves shipped, twelve
+  refactors total (eight in wave 1, four in wave 2); the five "Skip"
+  rows carried across both waves stay skipped because the complexity
+  is honest dispatch. Running history rolled into
+  [brainstorm.md §20.7.1](brainstorm.md).
 - **smart-clipper-defaults.md** — "Auto (recommended)" clipper entry for
   audio and video — resolves per-media through pass-through or tiling
   based on each item's duration, with the clipper picker itself hidden
