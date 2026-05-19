@@ -465,8 +465,16 @@ Voting calls `train_and_score()` synchronously in the request handler (`routes/s
 ### 13.3 Skip the demo-picker double round-trip ★★ XS
 Picking a demo today: open importer → pick Demo tab → pick demo card → fill embedder → submit → wait for download. Most users want the *recommended* setup. Add a one-click "Quick load" button on each demo card that uses the recommended embedder and skips the params form.
 
-### 13.4 Parallel-load multiple selected datasets ★★ S
-Selecting 3 datasets and clicking the bulk-load action loads them serially due to default concurrency of 1. The `_download_gate` already supports concurrent loads; bump the default (see §11.5) and most users immediately see 3x faster bulk loads.
+### 13.4 Parallel-load multiple selected datasets ★★ S — backend ready, frontend pending
+Original brief: *"Selecting 3 datasets and clicking the bulk-load action loads them serially due to default concurrency of 1. The `_download_gate` already supports concurrent loads; bump the default (see §11.5) and most users immediately see 3x faster bulk loads."*
+
+The "default concurrency of 1" premise is now stale: §11.5 shipped hardware-derived defaults, so `_download_gate` already lets `max(1, min(4, os.cpu_count() or 1))` loads run in parallel (typically 2–4 on user boxes) and `_embed_gate` already lets `min(2, torch.cuda.device_count())` loads embed in parallel on multi-GPU hosts. The gate also reads its limit fresh on every `acquire()` (`vtsearch/datasets/load_pipeline.py:31-32, 77-78`), so a user-bumped setting takes effect immediately for queued tasks. Test coverage at limit=1 and limit=2 lives in `tests/datasets/test_parallel_loading.py:587-918`.
+
+What's actually missing is the *bulk-load action*. The dashboard supports multi-select (`selectedDatasetIds: Set<string>` in `frontend/src/app/components/dashboard/dashboard.component.ts`) and renders side-action buttons for **Combine selected** and **Delete selected** (`dashboard.component.html:150-168`), but there is no **Load selected** counterpart — the only load path is the per-row `▶` button calling `loadDataset()` (`dashboard.component.ts:796-800` → `POST /api/datasets/registry/<id>/load`).
+
+**Open follow-ups:**
+- Add a "Load selected" side-action button next to Combine/Delete in `dashboard.component.html`, plus a `loadSelectedDatasets()` method that fires `loadRegistered(id)` for every entry of `selectedDatasetIds` in a tight loop (no need for a new bulk endpoint — the existing per-id endpoint plus `_download_gate` give the parallelism for free). Disable when `selectedDatasetIds.size === 0` or every selected dataset is already loaded.
+- No new backend tests needed; add a frontend spec asserting the new button calls `loadRegistered` once per selected id.
 
 ### 13.5 Don't block voting on labelset-source export ★★ XS
 `LabelsetSource.sync_to_labelset_source()` runs synchronously on every vote change to push to the external store. For slow targets (webhook, slow disk) this stalls the vote. Run it in a debounced background thread (200ms debounce coalesces rapid voting bursts).

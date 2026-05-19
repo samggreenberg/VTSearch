@@ -33,7 +33,7 @@
           (click)="triggerAddBad()"
           title="Upload a media file and add it to the Bad pile."
         >
-          {{ addingBad ? 'Adding...' : 'Add media to Bad' }}
+          {{ addingBad ? 'Adding to Bad pile…' : 'Add media to Bad' }}
         </button>
         <input
           #addGoodInput
@@ -47,7 +47,7 @@
           (click)="triggerAddGood()"
           title="Upload a media file and add it to the Good pile."
         >
-          {{ addingGood ? 'Adding...' : 'Add media to Good' }}
+          {{ addingGood ? 'Adding to Good pile…' : 'Add media to Good' }}
         </button>
       </div>
     </div>
@@ -165,7 +165,7 @@
         <button class="btn btn--secondary" (click)="back()">Cancel</button>
         <button class="btn btn--primary" (click)="submit()" [disabled]="submitting">
           @if (submitting) {
-            Importing...
+            Importing labels from {{ selectedImporter.display_name || selectedImporter.name }}…
           } @else {
             Import
           }

@@ -361,7 +361,8 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   }
 
   exportLabelsWith(exporter: ExporterEntry, fieldValues: Record<string, string>): void {
-    this.status = 'Exporting...';
+    const exporterLabel = exporter.display_name || exporter.name;
+    this.status = `Exporting ${this.filteredLabels.length.toLocaleString()} labels to ${exporterLabel}…`;
     this.error = '';
     this.submitting = true;
 
