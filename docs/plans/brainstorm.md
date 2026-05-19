@@ -399,8 +399,10 @@ The empty dashboard shows two empty tables and a row of disabled buttons. Add a 
 > "Welcome — load a dataset to get started. Try the **Demo** tab for a one-click example, or **Local Folder** to use your own files."
 with a "Load demo dataset" CTA that opens the importer pre-pinned to Demo. (See `dashboard.component.html`.)
 
-### 12.2 First-vote tooltip in label view ★★★ XS
-When the labeling view opens with zero votes, overlay a faint hint near the Good/Bad buttons: *"Use ← / → or click. Autopilot will guide you."* Dismiss on first vote, persist dismiss in user settings.
+### 12.2 First-vote tooltip in label view ★★★ XS — shipped
+Was: when the labeling view opens with zero votes, overlay a faint hint near the Good/Bad buttons. Dismiss on first vote, persist dismiss in user settings.
+
+**What shipped:** the voting overlay (`frontend/src/app/components/center-panel/voting-overlay/`) now renders a faint `Use ← / → or click. Autopilot will find the next question.` hint above the Good/Bad buttons whenever the parent `vt-center-panel` reports zero votes and the user hasn't previously dismissed it. The center panel subscribes to `voteState.goodVotes$` / `badVotes$`, so the hint also retires when a vote arrives via the left-panel hover-vote or grid click — not just via the center buttons. Dismiss state persists as a new per-user setting `label_hint_dismissed` (`vtsearch/settings_models.py:UserSettings`, default `False`), wired through `AppSettingsSchema` / `SettingsUpdateSchema` and the PUT `/api/settings` dispatch map.
 
 ### 12.3 Explainer below jargon settings ★★★ S
 `enrich_descriptions`, `safe_thresholds`, `calibrate_count`, `calibration_fraction`, the autopilot phase thresholds — none of these have any explainer in the settings modal. Add a one-sentence helper below each, the way Mac System Settings does. Pull from the docstrings already in `settings_models.py` / `settings.py`.
