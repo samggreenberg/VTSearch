@@ -1,11 +1,16 @@
-"""Media lookup helpers (origin+origin_name union with MD5) and duplicate collapsing."""
+"""Media lookup helpers (origin+origin_name union with MD5) and duplicate collapsing.
+
+Pure helpers operating on explicit media-dict arguments.  The only function
+that touches global state is :func:`get_dupe_count`, which falls back to the
+active :class:`DatasetContext` when the caller does not pass one in.
+"""
 
 from __future__ import annotations
 
 import json
 from typing import Any, Callable
 
-from vtsearch.state.core import _state_lock, medias
+from vtsearch.state.core import _state_lock, get_active_context
 
 
 def _origin_key(origin: dict[str, Any], origin_name: str) -> str:
@@ -199,10 +204,12 @@ def collapse_duplicates(
 def get_dupe_count(media_dict: dict[int, dict[str, Any]] | None = None) -> int:
     """Return the number of duplicate groups in the media dict.
 
-    Each media whose origin is ``"dupe_set"`` represents one group.
+    Each media whose origin is ``"dupe_set"`` represents one group.  When
+    *media_dict* is ``None`` the active :class:`DatasetContext`'s medias
+    are used.
     """
     with _state_lock:
-        source = media_dict if media_dict is not None else medias
+        source = media_dict if media_dict is not None else get_active_context().medias
         return sum(
             1
             for m in source.values()

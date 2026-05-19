@@ -8,7 +8,7 @@
   }
 
   &.selected {
-    background: var(--accent-highlight-bg);
+    background: var(--detector-accent-bg);
   }
 
   &.dimmed {
@@ -145,6 +145,91 @@ td.actions-col {
 .btn--xs {
   padding: 1px 6px;
   font-size: 0.75rem;
+}
+
+// Inline loading progress (replaces data columns while loading). Mirrors the
+// stack layout used by the dataset card's `.inline-loading-progress` so the
+// dashboard's loading rows have a consistent shape.
+.loading-task-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+
+  .progress-context {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .progress-header {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .progress-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .progress-msg {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  vt-progress-bar {
+    flex: 1;
+  }
+
+  .btn--cancel {
+    flex-shrink: 0;
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+
+    &:hover {
+      color: var(--text-primary);
+      border-color: var(--text-secondary);
+    }
+  }
+
+  &.loading-task-failed {
+    flex-direction: row;
+    align-items: center;
+
+    .error-msg {
+      flex: 1;
+      font-size: 0.85rem;
+      color: var(--error-text);
+    }
+
+    .btn--cancel {
+      background: transparent;
+      color: var(--error-text);
+      border: 1px solid var(--error-border);
+
+      &:hover {
+        background: var(--error-border);
+        color: var(--btn-filled-text);
+      }
+    }
+  }
 }
 
 .add-labels-btn {

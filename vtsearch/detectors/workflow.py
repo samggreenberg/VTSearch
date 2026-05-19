@@ -21,14 +21,13 @@ def apply_and_retrain(  # noqa: C901
 ) -> tuple[int, bool]:
     """Resolve new label entries into a loaded detector and retrain its MLP.
 
-    Temporarily overrides the request-scoped detector context so vote proxies
-    resolve to *det_ctx* for the duration of this call, then restores the
-    previous context.
+    Temporarily overrides the active detector context so vote proxies resolve
+    to *det_ctx* for the duration of this call (via
+    :func:`vtsearch.state.core.override_detector_context`), regardless of
+    whether the caller is inside a Flask request or a background thread.
 
     Returns ``(resolved_count, trained_bool)``.
     """
-    from flask import g
-
     from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
     from vtsearch.state import (
         apply_label,
@@ -36,14 +35,9 @@ def apply_and_retrain(  # noqa: C901
         resolve_media_ids,
         snapshot_medias,
     )
+    from vtsearch.state.core import override_detector_context
 
-    # Override the request-scoped detector context so vote proxies resolve to
-    # this detector's context for the duration of this call.
-    prev_det_ctx = getattr(g, "_detector_context", None)
-
-    try:
-        g._detector_context = det_ctx
-
+    with override_detector_context(det_ctx):
         snap = snapshot_medias()
         if not snap:
             return 0, False
@@ -109,6 +103,3 @@ def apply_and_retrain(  # noqa: C901
                 trained = True
 
         return resolved, trained
-
-    finally:
-        g._detector_context = prev_det_ctx

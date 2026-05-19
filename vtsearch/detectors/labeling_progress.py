@@ -659,9 +659,9 @@ def compute_labeling_status(
     # The old metric required 4 full tree levels for green, which in a k=3
     # tree is 1+3+9+27 = 40 nodes.  We preserve that scale: green at 40
     # nodes (capped at total), yellow at 10, red below 10.
-    from vtsearch.settings import get_autopilot_goal_diversity
+    from vtsearch.config import CoreConfig  # noqa: PLC0415
 
-    SPAN_GREEN = get_autopilot_goal_diversity()
+    SPAN_GREEN = CoreConfig.from_settings().autopilot_goal_diversity
     SPAN_YELLOW = 10
     if span_info is None:
         span = {

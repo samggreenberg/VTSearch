@@ -161,6 +161,44 @@
   }
 }
 
+// When the loading-task-progress carries the new header + subtitle context,
+// stack the text rows above the bar instead of laying everything on one line.
+.loading-task-progress:has(.progress-context) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+
+  .progress-context {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .progress-header {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .progress-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .progress-msg {
+    font-size: 0.75rem;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 .dashboard-progress {
   flex: 1;
 }
@@ -246,6 +284,24 @@
   text-align: center;
   padding: 24px;
   font-style: italic;
+}
+
+.dashboard-skeleton-list {
+  flex: 1 1 0;
+  min-height: 0;
+  list-style: none;
+  margin: 0;
+  padding: 4px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 4px;
 }
 
 .welcome-banner {

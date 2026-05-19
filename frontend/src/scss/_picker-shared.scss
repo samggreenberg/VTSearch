@@ -182,7 +182,7 @@
 
 .col-num { text-align: right; padding-right: 12px; }
 
-.col-desc, .col-name, .sf-dir-name, .col-status {
+.col-desc, .col-name, .col-status {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -207,91 +207,6 @@
 .badge-embedding { background: var(--badge-embedding, var(--accent)); }
 .badge-download { background: var(--border); color: var(--text-muted); }
 
-// --- Server folder browser ---
-
-.sf-breadcrumbs {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  font-size: .8rem;
-  flex-wrap: wrap;
-}
-
-.sf-breadcrumb {
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-size: .8rem;
-
-  &:hover { background: var(--bg-subtle); }
-
-  &.active {
-    color: var(--text-primary);
-    font-weight: 600;
-    cursor: default;
-    &:hover { background: none; }
-  }
-}
-
-.sf-breadcrumb-sep { color: var(--text-muted); font-size: .75rem; }
-
-.sf-dir-list {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.sf-dir-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  text-align: left;
-  color: var(--text-primary);
-  font-size: .85rem;
-  transition: background .15s;
-
-  &:last-child { border-bottom: none; }
-  &:hover:not(:disabled) { background: var(--bg-subtle); }
-  &:disabled { opacity: 0.55; cursor: wait; }
-}
-
-.sf-dir-icon { font-size: .9rem; flex-shrink: 0; }
-
-.sf-dir-date {
-  margin-left: auto;
-  color: var(--text-muted);
-  font-size: .75rem;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.sf-empty-dir {
-  color: var(--text-muted);
-  font-size: .8rem;
-  padding: 12px;
-  text-align: center;
-}
-
-.sf-selected-path { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
-
-.sf-path-display {
-  font-size: .8rem;
-  color: var(--text-secondary, var(--text-muted));
-  background: var(--bg-subtle);
-  padding: 3px 8px;
-  border-radius: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
+// (The server folder browser chrome — breadcrumbs, list, items, path
+// footer — now lives in `vt-folder-browser`. See
+// frontend/src/app/components/folder-browser/.)

@@ -21,7 +21,209 @@ from vtsearch.datasets.loader import (
 from vtsearch.security.pickle import safe_pickle_load
 
 
-def load_dataset_from_pickle(  # noqa: C901
+def _read_pickle_dataset(file_path: Path) -> dict[str, Any]:
+    """Load a dataset pickle and assert the ``"medias"`` envelope.
+
+    Translates :class:`MemoryError` into a contextual message and raises
+    :class:`ValueError` when the file does not contain a dict with a
+    ``"medias"`` key.
+    """
+    try:
+        with open(file_path, "rb") as f:
+            data = safe_pickle_load(f)
+    except MemoryError:
+        gc.collect()
+        raise MemoryError(
+            f"Out of memory while reading {file_path.name}. The pickle file is too large for available RAM."
+        )
+    if not isinstance(data, dict) or "medias" not in data:
+        raise ValueError(f"Invalid pickle format in {file_path.name}: expected a dict with a 'medias' key.")
+    return data
+
+
+def _build_pickle_dir_maps() -> tuple[dict[str, str], dict[str, list[str]]]:
+    """Build (dir_keys, extra_fields) maps keyed by media type id."""
+    from vtsearch.media import all_types  # noqa: PLC0415
+
+    dir_keys: dict[str, str] = {}
+    extra_fields: dict[str, list[str]] = {}
+    for mt in all_types():
+        dir_keys[mt.type_id] = mt.dir_key
+        extra_fields[mt.type_id] = mt.pickle_extra_fields
+    return dir_keys, extra_fields
+
+
+def _resolve_thin_media_path(
+    media_type: str,
+    media_info: dict[str, Any],
+    data: dict[str, Any],
+    dir_keys: dict[str, str],
+) -> str | None:
+    """Resolve ``media_path`` for thin-mode pickle loads.
+
+    Returns the path stored on the media (if any) or a probe of the
+    pickle's external directory entry for the media's type.
+    """
+    media_path = media_info.get("media_path")
+    if media_path:
+        return media_path
+    dir_key = dir_keys.get(media_type)
+    if not dir_key or dir_key not in data or "filename" not in media_info:
+        return None
+    candidate = Path(data[dir_key]) / media_info["filename"]
+    if candidate.exists():
+        return str(candidate.resolve())
+    return None
+
+
+def _load_pickle_media_payload(
+    media_type: str,
+    media_info: dict[str, Any],
+    data: dict[str, Any],
+    dir_keys: dict[str, str],
+) -> tuple[bytes | None, str | None, str | None, bool]:
+    """Resolve ``(media_bytes, media_string, media_path, missing)`` for full mode.
+
+    Returns ``missing=True`` when the media references an external file
+    that does not exist on disk.  ``media_bytes`` may still be ``None``
+    when neither inline nor external content was found.
+    """
+    bytes_val = media_info.get("media_bytes")
+    string_val = media_info.get("media_string")
+    if bytes_val is not None:
+        return bytes_val, None, None, False
+    if string_val is not None:
+        return string_val.encode("utf-8"), string_val, None, False
+
+    dir_key = dir_keys.get(media_type)
+    if not dir_key or dir_key not in data or "filename" not in media_info:
+        return None, None, None, False
+    ext_path = Path(data[dir_key]) / media_info["filename"]
+    if not ext_path.exists():
+        return None, None, None, True
+    if ext_path.suffix in (".txt", ".md"):
+        with open(ext_path, "r", encoding="utf-8") as f:
+            txt = f.read()
+        return txt.encode("utf-8"), txt, str(ext_path.resolve()), False
+    with open(ext_path, "rb") as f:
+        return f.read(), None, str(ext_path.resolve()), False
+
+
+def _build_pickle_thin_media(
+    new_id: int,
+    media_info: dict[str, Any],
+    media_type: str,
+    media_path: str | None,
+    extra_fields: list[str],
+) -> dict[str, Any]:
+    """Build a thin-mode media dict from a pickle entry (no bytes loaded)."""
+    fname = media_info.get("filename", f"media_{new_id}.{media_type}")
+    media_data: dict[str, Any] = {
+        "id": new_id,
+        "type": media_type,
+        "embedder": media_info.get("embedder", ""),
+        "duration": media_info.get("duration", 0),
+        "file_size": media_info.get("file_size", 0),
+        "md5": media_info.get("md5", ""),
+        "embedding": np.array(media_info["embedding"]),
+        "media_bytes": None,
+        "media_string": None,
+        "media_path": media_path,
+        "filename": fname,
+        "category": media_info.get("category", "unknown"),
+        "origin": media_info.get("origin"),
+        "origin_name": media_info.get("origin_name", fname),
+    }
+    for field in extra_fields:
+        media_data[field] = media_info.get(field)
+    cm = media_info.get("custom_metadata")
+    if cm:
+        media_data["custom_metadata"] = cm
+    return media_data
+
+
+def _build_pickle_full_media(
+    new_id: int,
+    media_info: dict[str, Any],
+    media_type: str,
+    media_bytes: bytes,
+    media_string: str | None,
+    media_path: str | None,
+    extra_fields: list[str],
+) -> dict[str, Any]:
+    """Build a full-mode media dict from a pickle entry."""
+    fname = media_info.get("filename", f"media_{new_id}.{media_type}")
+    media_data = {
+        "id": new_id,
+        "type": media_type,
+        "embedder": media_info.get("embedder", ""),
+        "duration": media_info.get("duration", 0),
+        "file_size": media_info.get("file_size", len(media_bytes)),
+        "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
+        "embedding": np.array(media_info["embedding"]),
+        "media_bytes": media_bytes,
+        "media_string": media_string,
+        "media_path": media_path or media_info.get("media_path"),
+        "filename": fname,
+        "category": media_info.get("category", "unknown"),
+        "origin": media_info.get("origin"),
+        "origin_name": media_info.get("origin_name", fname),
+    }
+    for field in extra_fields:
+        media_data[field] = media_info.get(field)
+    cm = media_info.get("custom_metadata")
+    if cm:
+        media_data["custom_metadata"] = cm
+    return media_data
+
+
+def _convert_one_pickle_media(
+    new_id: int,
+    media_info: dict[str, Any],
+    thin: bool,
+    data: dict[str, Any],
+    dir_keys: dict[str, str],
+    extra_fields_map: dict[str, list[str]],
+) -> tuple[dict[str, Any] | None, bool]:
+    """Convert one pickle media entry to the app's media format.
+
+    Returns ``(media_data, missing)``.  ``media_data`` is ``None`` when
+    the entry is unusable (thin without embedding, full without bytes);
+    ``missing`` is ``True`` only when an external file reference failed
+    to resolve (used to bump the "missing media" warning counter).
+    """
+    media_type = media_info.get("type", "audio")
+    extra_fields = extra_fields_map.get(media_type, [])
+
+    if thin:
+        if "embedding" not in media_info:
+            return None, True
+        media_path = _resolve_thin_media_path(media_type, media_info, data, dir_keys)
+        return _build_pickle_thin_media(new_id, media_info, media_type, media_path, extra_fields), False
+
+    media_bytes, media_string, media_path, missing = _load_pickle_media_payload(
+        media_type,
+        media_info,
+        data,
+        dir_keys,
+    )
+    if media_bytes is None:
+        return None, missing
+    return (
+        _build_pickle_full_media(
+            new_id,
+            media_info,
+            media_type,
+            media_bytes,
+            media_string,
+            media_path,
+            extra_fields,
+        ),
+        False,
+    )
+
+
+def load_dataset_from_pickle(
     file_path: Path,
     medias: dict[int, dict[str, Any]],
     thin: bool = False,
@@ -57,151 +259,36 @@ def load_dataset_from_pickle(  # noqa: C901
     if on_progress is not None:
         on_progress("loading", f"Reading {file_path.name}…", 0, 0)
 
-    try:
-        with open(file_path, "rb") as f:
-            data = safe_pickle_load(f)
-    except MemoryError:
-        gc.collect()
-        raise MemoryError(
-            f"Out of memory while reading {file_path.name}. The pickle file is too large for available RAM."
-        )
-
+    data = _read_pickle_dataset(file_path)
     medias.clear()
-
-    if not isinstance(data, dict) or "medias" not in data:
-        raise ValueError(f"Invalid pickle format in {file_path.name}: expected a dict with a 'medias' key.")
     medias_data = data["medias"]
+    dir_keys, extra_fields_map = _build_pickle_dir_maps()
 
-    # Build lookup tables dynamically from the media type registry.
-    from vtsearch.media import all_types
-
-    _dir_keys: dict[str, str] = {}
-    _extra_fields: dict[str, list[str]] = {}
-    for mt in all_types():
-        _dir_keys[mt.type_id] = mt.dir_key
-        _extra_fields[mt.type_id] = mt.pickle_extra_fields
-
-    # Convert to the app's media format
     missing_media = 0
     loaded_count = 0
     total_count = len(medias_data)
-    # Report progress every ~2% or at least every 50 items
     _progress_interval = max(1, min(50, total_count // 50)) if total_count > 0 else 1
     if on_progress is not None:
         on_progress("loading", f"Processing 0 of {total_count} items…", 0, total_count)
+
     try:
         for media_id, media_info in medias_data.items():
-            media_type = media_info.get("type", "audio")
-
-            if thin:
-                # ── Thin mode: skip bytes, store media_path if available ──
-                media_path: str | None = media_info.get("media_path")
-
-                # Try to resolve a media_path from the external directory
-                if not media_path:
-                    dir_key = _dir_keys.get(media_type)
-                    if dir_key and dir_key in data and "filename" in media_info:
-                        candidate = Path(data[dir_key]) / media_info["filename"]
-                        if candidate.exists():
-                            media_path = str(candidate.resolve())
-
-                # We still need the embedding to be useful
-                if "embedding" not in media_info:
+            media_data, missing = _convert_one_pickle_media(
+                media_id,
+                media_info,
+                thin,
+                data,
+                dir_keys,
+                extra_fields_map,
+            )
+            if media_data is None:
+                if missing:
                     missing_media += 1
-                    continue
-
-                fname = media_info.get("filename", f"media_{media_id}.{media_type}")
-                media_data: dict[str, Any] = {
-                    "id": media_id,
-                    "type": media_type,
-                    "embedder": media_info.get("embedder", ""),
-                    "duration": media_info.get("duration", 0),
-                    "file_size": media_info.get("file_size", 0),
-                    "md5": media_info.get("md5", ""),
-                    "embedding": np.array(media_info["embedding"]),
-                    "media_bytes": None,
-                    "media_string": None,
-                    "media_path": media_path,
-                    "filename": fname,
-                    "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin"),
-                    "origin_name": media_info.get("origin_name", fname),
-                }
-                for field in _extra_fields.get(media_type, []):
-                    media_data[field] = media_info.get(field)
-                cm = media_info.get("custom_metadata")
-                if cm:
-                    media_data["custom_metadata"] = cm
-
-                medias[media_id] = media_data
-                loaded_count += 1
-                if on_progress is not None and loaded_count % _progress_interval == 0:
-                    on_progress(
-                        "loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count
-                    )
                 continue
-
-            # ── Full mode ──
-            # Load the actual media content.
-            media_bytes = None
-            media_string = None
-            media_path = None
-
-            bytes_val = media_info.get("media_bytes")
-            string_val = media_info.get("media_string")
-
-            if bytes_val is not None:
-                media_bytes = bytes_val
-            elif string_val is not None:
-                media_string = string_val
-                media_bytes = string_val.encode("utf-8")
-            else:
-                # Try loading from the external directory via registry dir_key
-                dir_key = _dir_keys.get(media_type)
-                if dir_key and dir_key in data and "filename" in media_info:
-                    ext_path = Path(data[dir_key]) / media_info["filename"]
-                    if ext_path.exists():
-                        if media_string is None and ext_path.suffix in (".txt", ".md"):
-                            with open(ext_path, "r", encoding="utf-8") as f:
-                                media_string = f.read()
-                                media_bytes = media_string.encode("utf-8")
-                        else:
-                            with open(ext_path, "rb") as f:
-                                media_bytes = f.read()
-                        media_path = str(ext_path.resolve())
-                    else:
-                        missing_media += 1
-
-            if media_bytes is not None:
-                fname = media_info.get("filename", f"media_{media_id}.{media_type}")
-                media_data = {
-                    "id": media_id,
-                    "type": media_type,
-                    "embedder": media_info.get("embedder", ""),
-                    "duration": media_info.get("duration", 0),
-                    "file_size": media_info.get("file_size", len(media_bytes)),
-                    "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
-                    "embedding": np.array(media_info["embedding"]),
-                    "media_bytes": media_bytes,
-                    "media_string": media_string,
-                    "media_path": media_path or media_info.get("media_path"),
-                    "filename": fname,
-                    "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin"),
-                    "origin_name": media_info.get("origin_name", fname),
-                }
-                for field in _extra_fields.get(media_type, []):
-                    media_data[field] = media_info.get(field)
-                cm = media_info.get("custom_metadata")
-                if cm:
-                    media_data["custom_metadata"] = cm
-
-                medias[media_id] = media_data
-                loaded_count += 1
-                if on_progress is not None and loaded_count % _progress_interval == 0:
-                    on_progress(
-                        "loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count
-                    )
+            medias[media_id] = media_data
+            loaded_count += 1
+            if on_progress is not None and loaded_count % _progress_interval == 0:
+                on_progress("loading", f"Processing {loaded_count} of {total_count} items…", loaded_count, total_count)
     except MemoryError:
         medias.clear()
         del data
@@ -221,7 +308,7 @@ def load_dataset_from_pickle(  # noqa: C901
     return None
 
 
-def load_dataset_from_pickle_chunked(  # noqa: C901
+def load_dataset_from_pickle_chunked(
     file_path: Path,
     chunk_size: int,
     thin: bool = False,
@@ -244,21 +331,9 @@ def load_dataset_from_pickle_chunked(  # noqa: C901
     Yields:
         A dict mapping int media IDs (starting at 1) to media data dicts.
     """
-    with open(file_path, "rb") as f:
-        data = safe_pickle_load(f)
-
-    if not isinstance(data, dict) or "medias" not in data:
-        raise ValueError(f"Invalid pickle format in {file_path.name}: expected a dict with a 'medias' key.")
+    data = _read_pickle_dataset(file_path)
     medias_data = data["medias"]
-
-    # Build lookup tables dynamically from the media type registry.
-    from vtsearch.media import all_types
-
-    _dir_keys: dict[str, str] = {}
-    _extra_fields: dict[str, list[str]] = {}
-    for mt in all_types():
-        _dir_keys[mt.type_id] = mt.dir_key
-        _extra_fields[mt.type_id] = mt.pickle_extra_fields
+    dir_keys, extra_fields_map = _build_pickle_dir_maps()
 
     all_media_ids = sorted(medias_data.keys())
 
@@ -269,101 +344,18 @@ def load_dataset_from_pickle_chunked(  # noqa: C901
 
         for media_id in batch_ids:
             media_info = medias_data[media_id]
-            media_type = media_info.get("type", "audio")
-
-            if thin:
-                media_path: str | None = media_info.get("media_path")
-                if not media_path:
-                    dir_key = _dir_keys.get(media_type)
-                    if dir_key and dir_key in data and "filename" in media_info:
-                        candidate = Path(data[dir_key]) / media_info["filename"]
-                        if candidate.exists():
-                            media_path = str(candidate.resolve())
-
-                if "embedding" not in media_info:
-                    continue
-
-                fname = media_info.get("filename", f"media_{media_id}.{media_type}")
-                media_data: dict[str, Any] = {
-                    "id": new_id,
-                    "type": media_type,
-                    "embedder": media_info.get("embedder", ""),
-                    "duration": media_info.get("duration", 0),
-                    "file_size": media_info.get("file_size", 0),
-                    "md5": media_info.get("md5", ""),
-                    "embedding": np.array(media_info["embedding"]),
-                    "media_bytes": None,
-                    "media_string": None,
-                    "media_path": media_path,
-                    "filename": fname,
-                    "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin"),
-                    "origin_name": media_info.get("origin_name", fname),
-                }
-                for field in _extra_fields.get(media_type, []):
-                    media_data[field] = media_info.get(field)
-                cm = media_info.get("custom_metadata")
-                if cm:
-                    media_data["custom_metadata"] = cm
-
-                chunk_medias[new_id] = media_data
-                new_id += 1
+            media_data, _missing = _convert_one_pickle_media(
+                new_id,
+                media_info,
+                thin,
+                data,
+                dir_keys,
+                extra_fields_map,
+            )
+            if media_data is None:
                 continue
-
-            # Full mode — same logic as load_dataset_from_pickle
-            media_bytes = None
-            media_string = None
-            media_path = None
-
-            bytes_val = media_info.get("media_bytes")
-            string_val = media_info.get("media_string")
-
-            if bytes_val is not None:
-                media_bytes = bytes_val
-            elif string_val is not None:
-                media_string = string_val
-                media_bytes = string_val.encode("utf-8")
-            else:
-                # Try loading from the external directory via registry dir_key
-                dir_key = _dir_keys.get(media_type)
-                if dir_key and dir_key in data and "filename" in media_info:
-                    ext_path = Path(data[dir_key]) / media_info["filename"]
-                    if ext_path.exists():
-                        if media_string is None and ext_path.suffix in (".txt", ".md"):
-                            with open(ext_path, "r", encoding="utf-8") as f:
-                                media_string = f.read()
-                                media_bytes = media_string.encode("utf-8")
-                        else:
-                            with open(ext_path, "rb") as f:
-                                media_bytes = f.read()
-                        media_path = str(ext_path.resolve())
-
-            if media_bytes is not None:
-                fname = media_info.get("filename", f"media_{media_id}.{media_type}")
-                media_data = {
-                    "id": new_id,
-                    "type": media_type,
-                    "embedder": media_info.get("embedder", ""),
-                    "duration": media_info.get("duration", 0),
-                    "file_size": media_info.get("file_size", len(media_bytes)),
-                    "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
-                    "embedding": np.array(media_info["embedding"]),
-                    "media_bytes": media_bytes,
-                    "media_string": media_string,
-                    "media_path": media_path or media_info.get("media_path"),
-                    "filename": fname,
-                    "category": media_info.get("category", "unknown"),
-                    "origin": media_info.get("origin"),
-                    "origin_name": media_info.get("origin_name", fname),
-                }
-                for field in _extra_fields.get(media_type, []):
-                    media_data[field] = media_info.get(field)
-                cm = media_info.get("custom_metadata")
-                if cm:
-                    media_data["custom_metadata"] = cm
-
-                chunk_medias[new_id] = media_data
-                new_id += 1
+            chunk_medias[new_id] = media_data
+            new_id += 1
 
         if chunk_medias:
             yield chunk_medias

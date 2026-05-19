@@ -59,4 +59,17 @@ describe('VotingOverlayComponent', () => {
     fixture.nativeElement.querySelector('.btn-good').click();
     expect(emitted).toBeFalse();
   });
+
+  it('should hide the first-vote hint by default', () => {
+    expect(fixture.nativeElement.querySelector('.vote-hint')).toBeNull();
+  });
+
+  it('should render the first-vote hint text when showHint is true', () => {
+    component.showHint = true;
+    fixture.detectChanges();
+    const hint = fixture.nativeElement.querySelector('.vote-hint');
+    expect(hint).toBeTruthy();
+    expect(hint.textContent.trim()).toContain('Use');
+    expect(hint.textContent).toContain('Autopilot');
+  });
 });

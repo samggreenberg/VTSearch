@@ -19,7 +19,8 @@
         <input
           id="detector-name"
           class="form-input"
-          [(ngModel)]="name"
+          [ngModel]="name"
+          (ngModelChange)="onNameInput($event)"
           name="name"
           placeholder="e.g. Dog Barks"
           title="A short name to identify this detector"
@@ -100,7 +101,8 @@
               <div class="text-input-row">
                 <input
                   class="form-input"
-                  [(ngModel)]="pendingText"
+                  [ngModel]="pendingText"
+                  (ngModelChange)="onPendingTextInput($event)"
                   name="pendingText"
                   placeholder="e.g. dog barking sounds"
                   title="A text description of what this detector should find"
@@ -408,106 +410,34 @@
         </div>
       }
 
-      <!-- Demo file browser: appears after picking a demo from the table.
-           Reuses the server-folder-browser chrome so both file pickers feel
-           the same. -->
+      <!-- Demo file browser: appears after picking a demo from the table. -->
       @if (activePickerView === 'demo' && selectedImporter && demoFileBrowsing) {
         <div class="server-folder-browser">
           <button class="btn btn--secondary btn--sm back-btn" (click)="backToDemoTable()" title="Return to the demo list">&larr; Back to demo list</button>
-          <div class="sf-browse-section">
-            <div class="sf-breadcrumbs">
-              @for (seg of demoFileBrowsePath; track $index) {
-                @if ($index > 0) { <span class="sf-breadcrumb-sep">/</span> }
-                <button class="sf-breadcrumb" [class.active]="$index === demoFileBrowsePath.length - 1" (click)="navigateDemoBreadcrumb($index)">{{ seg }}</button>
-              }
-            </div>
-
-            <div class="sf-dir-list">
-              @if (demoFileLoading) {
-                <p class="empty-state">Loading...</p>
-              } @else if (demoFileBrowseEntries.length === 0) {
-                <p class="sf-empty-dir">No media files found in this directory.</p>
-              }
-              @for (entry of demoFileBrowseEntries; track entry.path) {
-                @if (entry.isDir) {
-                  <button class="sf-dir-item" (click)="enterDemoDirectory(entry)" [title]="entry.path">
-                    <span class="sf-dir-icon"><vt-icon type="folder"></vt-icon></span>
-                    <span class="sf-dir-name">{{ entry.name }}</span>
-                    @if (entry.modified_at) {
-                      <span class="sf-dir-date">{{ entry.modified_at }}</span>
-                    }
-                  </button>
-                } @else {
-                  <button class="sf-dir-item" (click)="selectDemoFile(entry)" [title]="'Use ' + entry.path + ' as the example'" [disabled]="demoFileLoading">
-                    <span class="sf-dir-icon"><vt-icon type="file-text"></vt-icon></span>
-                    <span class="sf-dir-name">{{ entry.name }}</span>
-                    @if (entry.size_bytes != null) {
-                      <span class="sf-dir-date">{{ formatSize(entry.size_bytes) }}</span>
-                    }
-                  </button>
-                }
-              }
-            </div>
-          </div>
+          <vt-folder-browser
+            [browse]="demoBrowseFn"
+            [rootLabel]="demoFileBrowseLabel"
+            [busy]="demoFileLoading"
+            emptyMessage="No media files found in this directory."
+            (confirm)="selectDemoFile($event)"
+          ></vt-folder-browser>
         </div>
       }
 
-      <!-- Server folder browser: same breadcrumb chrome as the Add Dataset
-           modal, but lists files alongside directories so the user can pick
-           one to use as an example. -->
+      <!-- Server folder browser: lists files alongside directories so the
+           user can pick one to use as an example. -->
       @if (activePickerView === 'server_folder' && selectedImporter) {
         <div class="server-folder-browser">
-          <div class="sf-browse-section">
-            <label class="form-label">Browse server folders</label>
-            <div class="sf-breadcrumbs">
-              <button class="sf-breadcrumb" [class.active]="!sfBrowsePath" (click)="sfLoadDirectory('')">Root</button>
-              @for (crumb of sfBreadcrumbs; track $index) {
-                <span class="sf-breadcrumb-sep">/</span>
-                <button class="sf-breadcrumb" [class.active]="$index === sfBreadcrumbs.length - 1" (click)="sfNavigateBreadcrumb($index)">{{ crumb }}</button>
-              }
-            </div>
+          <label class="form-label">Browse server folders</label>
+          <vt-folder-browser
+            [browse]="sfBrowseFn"
+            [showPathFooter]="true"
+            [busy]="sfFileSelecting"
+            emptyMessage="No subdirectories or media files in this folder."
+            (confirm)="sfSelectFile($event)"
+          ></vt-folder-browser>
 
-            <div class="sf-dir-list">
-              @if (sfBrowseLoading) {
-                <p class="empty-state">Loading...</p>
-              } @else if (sfBrowseError) {
-                <p class="error-text">{{ sfBrowseError }}</p>
-              } @else if (sfBrowseDirs.length === 0 && sfBrowseFiles.length === 0) {
-                <p class="sf-empty-dir">No subdirectories or media files in this folder.</p>
-              }
-              @if (sfBrowsePath) {
-                <button class="sf-dir-item" (click)="sfGoUp()" title="Go to parent directory">
-                  <span class="sf-dir-icon"><vt-icon type="arrow-up"></vt-icon></span>
-                  <span class="sf-dir-name">..</span>
-                </button>
-              }
-              @for (dir of sfBrowseDirs; track dir.path) {
-                <button class="sf-dir-item" (click)="sfEnterDirectory(dir)" [title]="dir.path">
-                  <span class="sf-dir-icon"><vt-icon type="folder"></vt-icon></span>
-                  <span class="sf-dir-name">{{ dir.name }}</span>
-                  @if (dir.modified_at) {
-                    <span class="sf-dir-date">{{ dir.modified_at }}</span>
-                  }
-                </button>
-              }
-              @for (file of sfBrowseFiles; track file.path) {
-                <button class="sf-dir-item" (click)="sfSelectFile(file)" [title]="'Use ' + file.path + ' as the example'" [disabled]="sfFileSelecting">
-                  <span class="sf-dir-icon"><vt-icon type="file-text"></vt-icon></span>
-                  <span class="sf-dir-name">{{ file.name }}</span>
-                  @if (file.size_bytes != null) {
-                    <span class="sf-dir-date">{{ formatSize(file.size_bytes) }}</span>
-                  }
-                </button>
-              }
-            </div>
-
-            <div class="sf-selected-path">
-              <span class="form-label">Path:</span>
-              <code class="sf-path-display">{{ sfAbsolutePath }}</code>
-            </div>
-          </div>
-
-          @if (sfBrowseError && !sfBrowseLoading) {
+          @if (sfBrowseError) {
             <p class="error-text">{{ sfBrowseError }}</p>
           }
         </div>

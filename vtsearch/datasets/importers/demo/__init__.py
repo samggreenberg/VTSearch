@@ -35,6 +35,11 @@ class DemoDatasetImporter(DatasetImporter):
     ui_mode = "custom"
     picker_view = "demo"
     category = "demo"
+    # Demo datasets have a fixed media type baked into the demo entry —
+    # there is no user-chosen output type and no converter rows in the
+    # picker UI.  Flag set to keep the in-tree importer set uniformly
+    # off the legacy shim.
+    multi_media = True
 
     fields = [
         ImporterField(

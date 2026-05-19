@@ -87,6 +87,7 @@
   --badge-embedding: #e0a020;
   --btn-icon-hover-bg: rgba(255, 255, 255, 0.08);
   --text-warning: #e6a700;
+  --skeleton-shimmer: rgba(255, 255, 255, 0.06);
 
   // Aliases used by component SCSS files
   --border-color: var(--border);
@@ -94,6 +95,12 @@
   --bg-primary: var(--bg-panel);
   --accent-color: var(--accent);
   --color-accent: var(--accent);
+  // Per-detector accent. Components opt in by setting `--detector-hue: <0-359>`
+  // (typically via inline style bound to `detectorHue(detector.name)`); these
+  // vars resolve the hue against theme-specific saturation/lightness. The
+  // fallback hue keeps colors readable when `--detector-hue` is unset.
+  --detector-accent: hsl(var(--detector-hue, 230), 55%, 70%);
+  --detector-accent-bg: hsla(var(--detector-hue, 230), 60%, 60%, 0.22);
   --error: var(--color-bad);
   --error-text: var(--color-bad);
   --error-border: var(--border-secondary);
@@ -159,6 +166,7 @@
   --badge-embedding: #c99000;
   --btn-icon-hover-bg: rgba(0, 0, 0, 0.07);
   --text-warning: #b87900;
+  --skeleton-shimmer: rgba(0, 0, 0, 0.05);
 
   // Aliases
   --border-color: var(--border);
@@ -166,6 +174,8 @@
   --bg-primary: var(--bg-panel);
   --accent-color: var(--accent);
   --color-accent: var(--accent);
+  --detector-accent: hsl(var(--detector-hue, 230), 50%, 42%);
+  --detector-accent-bg: hsla(var(--detector-hue, 230), 55%, 50%, 0.18);
   --error: var(--color-bad);
   --error-text: var(--color-bad);
   --error-border: #e57373;
@@ -231,6 +241,7 @@
   --badge-embedding: #ffff00;
   --btn-icon-hover-bg: rgba(255, 255, 255, 0.15);
   --text-warning: #ffff00;
+  --skeleton-shimmer: rgba(255, 255, 0, 0.2);
 
   // Aliases
   --border-color: var(--border);
@@ -238,6 +249,10 @@
   --bg-primary: var(--bg-panel);
   --accent-color: var(--accent);
   --color-accent: var(--accent);
+  // Highviz: skip per-detector hues so the yellow accessibility accent is
+  // not diluted. All detector surfaces fall back to the global accent.
+  --detector-accent: var(--accent);
+  --detector-accent-bg: var(--accent-highlight-bg);
   --error: var(--color-bad);
   --error-text: var(--color-bad);
   --error-border: #ff4444;

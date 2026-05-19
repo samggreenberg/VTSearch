@@ -20,11 +20,11 @@ from vtsearch.schemas.processors import (
     LocalizeRequestSchema,
     LocalizeResponseSchema,
 )
-from vtsearch.state import (
+from vtsearch.autorun_processors import (
     get_autorun_extractors_by_media,
     get_autorun_localizers_by_media,
-    snapshot_medias,
 )
+from vtsearch.state import snapshot_medias
 
 processors_scoring_bp = Blueprint(
     "processors_scoring",

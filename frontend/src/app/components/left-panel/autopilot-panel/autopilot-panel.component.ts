@@ -6,13 +6,14 @@ import {
   AutopilotPhase,
   AutopilotState,
 } from '../../../services/autopilot-state.service';
-import { VtDialogService } from '../../../services/dialog.service';
+import { ToastService } from '../../../services/toast.service';
 
 export type { AutopilotPhase, AutopilotState };
 
 interface StatusIcon {
   color: 'green' | 'yellow';
   ariaLabel: string;
+  title: string;
 }
 
 export interface StepDisplay {
@@ -24,6 +25,7 @@ export interface StepDisplay {
   detail: string;
   statusIcons: StatusIcon[];
   helpText: string;
+  intent: string;
 }
 
 @Component({
@@ -56,7 +58,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
 
   constructor(
     public autopilotState: AutopilotStateService,
-    private dialogService: VtDialogService,
+    private toastService: ToastService,
   ) {}
 
   get state(): AutopilotState {
@@ -86,6 +88,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         detail: stateStr === 'active' ? this.phaseDetail(phase) : '',
         statusIcons: stateStr === 'active' ? this.phaseStatusIcons(phase) : [],
         helpText: this.phaseHelpText(phase),
+        intent: this.phaseIntent(phase, i + 1),
       };
     });
   }
@@ -106,10 +109,10 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
       this.autopilotState.checkPhaseTransition(this.goodVotes.size, this.badVotes.size);
       if (prevPhase !== 'done' && this.autopilotState.state.phase === 'done' && !this.completionAlerted) {
         this.completionAlerted = true;
-        this.dialogService.alert(
-          'Autopilot is complete! All quality indicators are green. You can continue labeling or export your results.',
-          'success',
-        );
+        this.toastService.success({
+          message: 'Autopilot complete',
+          detail: 'All quality indicators are green. You can continue labeling or export your results.',
+        });
       }
     }
   }
@@ -160,9 +163,19 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   private phaseStatusIcons(phase: AutopilotPhase): StatusIcon[] {
     if (phase !== 'hard' && phase !== 'new') return [];
     const st = this.state;
+    const smartState = st.smartStatus === 'green' ? 'green' : 'pending';
+    const stableState = st.stableStatus === 'green' ? 'green' : 'pending';
     return [
-      { color: st.smartStatus === 'green' ? 'green' : 'yellow', ariaLabel: `Smart: ${st.smartStatus === 'green' ? 'green' : 'pending'}` },
-      { color: st.stableStatus === 'green' ? 'green' : 'yellow', ariaLabel: `Stable: ${st.stableStatus === 'green' ? 'green' : 'pending'}` },
+      {
+        color: st.smartStatus === 'green' ? 'green' : 'yellow',
+        ariaLabel: `Smart: ${smartState}`,
+        title: `Smart: ${smartState}. Tracks detector accuracy over labeling steps. Green when error cost has leveled off (detector has converged). Yellow when still improving.`,
+      },
+      {
+        color: st.stableStatus === 'green' ? 'green' : 'yellow',
+        ariaLabel: `Stable: ${stableState}`,
+        title: `Stable: ${stableState}. Tracks prediction stability. Green when predictions stop changing between labeling steps (detector is confident). Yellow when predictions are still shifting.`,
+      },
     ];
   }
 
@@ -174,6 +187,29 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
       case 'new': return 'Explore diverse items the system is less certain about, ensuring nothing important is missed.';
       case 'done': return 'All quality indicators are green. You can continue labeling or export your results.';
       default: return '';
+    }
+  }
+
+  /**
+   * Headline phase intent shown as a hover tooltip on the collapsed dots
+   * (where the only visible affordance is a number/letter) and as a richer
+   * tooltip on the expanded step label. Format: "Phase N: Short name —
+   * what the user is doing and why."
+   */
+  private phaseIntent(phase: AutopilotPhase, stepNumber: number): string {
+    switch (phase) {
+      case 'good':
+        return `Phase ${stepNumber}: Find initial goods — label a few positives so the detector knows what "good" looks like.`;
+      case 'bad':
+        return `Phase ${stepNumber}: Find initial bads — label a few negatives so the detector has both sides of the boundary.`;
+      case 'hard':
+        return `Phase ${stepNumber}: Boundary refinement — votes on uncertain items train the model fastest.`;
+      case 'new':
+        return `Phase ${stepNumber}: Diversity exploration — items from unseen parts of the dataset catch edge cases the boundary phase missed.`;
+      case 'done':
+        return 'Done — all quality indicators are green. Keep labeling for more accuracy, or export your results.';
+      default:
+        return '';
     }
   }
 

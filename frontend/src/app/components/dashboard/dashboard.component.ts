@@ -16,13 +16,19 @@ import { TopBarStateService } from '../../services/top-bar-state.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { AchievementsService } from '../../services/achievements.service';
 import { AutoDetectResultsData, DatasetRegistryEntry, DemoDataset, LoadingTask, DetectorRegistryEntry, ImporterInfo, ProgressEvent } from '../../models/api.models';
-import { formatProgressMessage, isProgressIndeterminate } from '../../utils/format-progress';
+import {
+  ProgressHeader,
+  formatProgressHeader,
+  formatProgressMessage,
+  isProgressIndeterminate,
+} from '../../utils/format-progress';
 import {
   DashboardColumnsService,
   DatasetColumn,
   DetectorColumn,
 } from '../../services/dashboard-columns.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
+import { SkeletonComponent } from '../skeleton/skeleton.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { DetectorCardComponent } from './detector-card/detector-card.component';
@@ -50,6 +56,7 @@ import { DiskUsageComponent, DiskUsageBytes } from './disk-usage/disk-usage.comp
     DatasetStatsModalComponent,
     IconComponent,
     DiskUsageComponent,
+    SkeletonComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -368,6 +375,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get loading(): boolean {
     return this.datasetState.loading;
   }
+
+  /** True once the registry's first fetch has resolved (success or empty). Used to
+   *  pick between skeleton rows and the welcome/empty state on initial render. */
+  get registryLoaded(): boolean {
+    return this.datasetState.loaded;
+  }
+
+  /** Iterable for *ngFor of N skeleton rows (a sized array of zeros). */
+  readonly skeletonRows = Array.from({ length: 4 });
 
   get progressMessage(): string {
     return this.datasetState.progressMessage;
@@ -1403,8 +1419,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Loading task helpers ---
 
-  taskProgressMessage(task: LoadingTask): string {
-    return formatProgressMessage(task, 'Loading...');
+  taskProgressInfo(task: LoadingTask): ProgressHeader {
+    return formatProgressHeader(task, 'dataset', task.embedder);
   }
 
   taskIsIndeterminate(task: LoadingTask): boolean {

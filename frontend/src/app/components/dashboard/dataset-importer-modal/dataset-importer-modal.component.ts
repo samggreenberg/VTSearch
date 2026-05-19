@@ -1,8 +1,13 @@
 import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { map } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
+import {
+  FolderBrowserBrowseFn,
+  FolderBrowserComponent,
+} from '../../folder-browser/folder-browser.component';
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
@@ -14,7 +19,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent, ClipperChooserComponent, DropZoneComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, FolderBrowserComponent, IconComponent, ClipperChooserComponent, DropZoneComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
@@ -123,11 +128,12 @@ export class DatasetImporterModalComponent implements OnInit {
    *  instead of running the embedding model for matching uploaded files. */
   lfVectorsFile: File | null = null;
 
-  // Server folder browser state
-  sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
+  // Server folder browser state.  The directory listing itself lives
+  // inside the embedded <vt-folder-browser>; the parent only caches the
+  // resolved path so the Import button can submit the right folder and
+  // the dataset-name / detection helpers can use it.
   sfBrowsePath = '';
   sfBrowseRootPath = '';
-  sfBrowseLoading = false;
   sfBrowseError = '';
   sfMediaType = '';
   sfMediaTypeOptions: string[] = [];
@@ -154,6 +160,19 @@ export class DatasetImporterModalComponent implements OnInit {
    *  instead of running the embedding model. */
   sfVectorsFile = '';
 
+  /** Browse function for the embedded ``<vt-folder-browser>``.  Folder
+   *  importer mode — files are hidden because the user is picking a
+   *  folder to import, not a file inside it. */
+  readonly sfBrowseFn: FolderBrowserBrowseFn = (path: string) =>
+    this.datasetsApi.browseMediaFiles('folder', path).pipe(
+      map((res) => ({
+        directories: res.directories || [],
+        files: [],
+        rootPath: res.root_path,
+        currentPath: path,
+      })),
+    );
+
   /** Auto-detect result for the local-folder / local-files picker.  Set
    *  after the user picks files; ``null`` when no detection has been run
    *  for the current selection. */
@@ -175,6 +194,12 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Which context opened the chooser: 'form' | 'demo' | 'sf' | 'lf' */
   clipperChooserContext: 'form' | 'demo' | 'sf' | 'lf' = 'form';
   clipperChooserClippers: ClipperInfo[] = [];
+
+  // Phase 3 of smart-clipper-defaults: the clipper picker is hidden
+  // behind an "Advanced" toggle by default. When the user has picked a
+  // non-default clipper, the picker is always visible regardless of
+  // this flag (so they can see and re-edit their selection).
+  clipperAdvancedOpen = false;
 
   constructor(
     private datasetsApi: DatasetsApiService,
@@ -1133,7 +1158,6 @@ export class DatasetImporterModalComponent implements OnInit {
     this.selectedImporter = importer || this.importers.find((i) => i.name === 'server_folder') || null;
     this.sfBrowsePath = '';
     this.sfBrowseRootPath = '';
-    this.sfBrowseDirs = [];
     this.sfBrowseError = '';
     this.sfDetection = null;
     this.sfSubmitting = false;
@@ -1158,28 +1182,21 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfLoadEmbedders(this.sfMediaType);
     this.sfLoadClippers(this.sfMediaType);
     this.sfResetSourceSpecs();
-    this.sfLoadDirectory('');
+    // The embedded <vt-folder-browser> loads itself on init.
   }
 
-  sfLoadDirectory(path: string): void {
-    this.sfBrowseLoading = true;
+  /** Path-change handler wired to ``<vt-folder-browser>``.  The browser
+   *  itself owns directory navigation; the parent reacts to each
+   *  successful load by refreshing the auto-detected dataset name and
+   *  re-running media-type detection. */
+  sfOnPathChange(evt: { path: string; rootPath: string }): void {
+    this.sfBrowsePath = evt.path;
+    this.sfBrowseRootPath = evt.rootPath;
     this.sfBrowseError = '';
-    this.datasetsApi.browseMediaFiles('folder', path).subscribe({
-      next: (res) => {
-        this.sfBrowseDirs = res.directories;
-        this.sfBrowsePath = path;
-        this.sfBrowseRootPath = res.root_path;
-        this.sfBrowseLoading = false;
-        if (!this.sfDatasetNameDirty) {
-          this.sfDatasetName = this.sfDerivedDatasetName();
-        }
-        this.sfRunDetection();
-      },
-      error: (err) => {
-        this.sfBrowseError = err.error?.error || 'Could not browse server folders. Is saved_datasets_dir configured?';
-        this.sfBrowseLoading = false;
-      },
-    });
+    if (!this.sfDatasetNameDirty) {
+      this.sfDatasetName = this.sfDerivedDatasetName();
+    }
+    this.sfRunDetection();
   }
 
   /** Token guarding overlapping detection responses for the sf-* picker.
@@ -1235,27 +1252,6 @@ export class DatasetImporterModalComponent implements OnInit {
   sfOnDatasetNameInput(value: string): void {
     this.sfDatasetName = value;
     this.sfDatasetNameDirty = true;
-  }
-
-  sfEnterDirectory(dir: { name: string; path: string }): void {
-    this.sfLoadDirectory(dir.path);
-  }
-
-  sfGoUp(): void {
-    if (!this.sfBrowsePath) return;
-    const parts = this.sfBrowsePath.split('/');
-    parts.pop();
-    this.sfLoadDirectory(parts.join('/'));
-  }
-
-  get sfBreadcrumbs(): string[] {
-    if (!this.sfBrowsePath) return [];
-    return this.sfBrowsePath.split('/');
-  }
-
-  sfNavigateBreadcrumb(index: number): void {
-    const parts = this.sfBrowsePath.split('/');
-    this.sfLoadDirectory(parts.slice(0, index + 1).join('/'));
   }
 
   get sfAbsolutePath(): string {
@@ -1734,6 +1730,40 @@ export class DatasetImporterModalComponent implements OnInit {
     if (!clipper) return 'None';
     if (clipper.name.endsWith('_default')) return 'None';
     return clipper.display_name || clipper.name;
+  }
+
+  /** Whether the recommended (first-in-list) clipper is currently selected for
+   *  the given context. Used to decide whether the Advanced section can stay
+   *  collapsed — if the user has overridden the default, we keep the picker
+   *  visible so they can see and re-edit their choice. */
+  isDefaultClipperSelected(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    let clippers: ClipperInfo[];
+    let selected: string;
+    if (context === 'form') {
+      clippers = this.availableClippers;
+      selected = this.selectedClipper;
+    } else if (context === 'demo') {
+      clippers = this.demoClippers;
+      selected = this.selectedDemoClipper;
+    } else if (context === 'sf') {
+      clippers = this.sfClippers;
+      selected = this.sfSelectedClipper;
+    } else {
+      clippers = this.lfClippers;
+      selected = this.lfSelectedClipper;
+    }
+    return clippers.length > 0 && clippers[0].name === selected;
+  }
+
+  /** Whether the clipper picker should be visible in the given context.
+   *  True when the Advanced section is expanded or when a non-default
+   *  clipper is selected. */
+  showClipperPicker(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    return this.clipperAdvancedOpen || !this.isDefaultClipperSelected(context);
+  }
+
+  toggleClipperAdvanced(): void {
+    this.clipperAdvancedOpen = !this.clipperAdvancedOpen;
   }
 
   sfSubmit(): void {

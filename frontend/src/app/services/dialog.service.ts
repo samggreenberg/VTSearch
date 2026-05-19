@@ -11,11 +11,9 @@ interface DialogButton {
 
 /**
  * VtDialogService — Angular replacement for dialogs.js.
- * Provides alert(), confirm(), and prompt() returning Promises.
- *
- * Uses a lightweight approach: creates temporary ModalComponent instances.
- * For Phase 2 this keeps things simple; a more elaborate approach using
- * dynamic components can be added later if needed.
+ * Provides confirm() and prompt() returning Promises. Pure
+ * informational notifications go through ToastService instead of a
+ * modal alert.
  */
 @Injectable({ providedIn: 'root' })
 export class VtDialogService {
@@ -40,15 +38,6 @@ export class VtDialogService {
 
   getIconType(): string {
     return VtDialogService.ICON_TYPES[this.dialogType] || VtDialogService.ICON_TYPES.info;
-  }
-
-  alert(message: string, type: DialogType = 'info'): Promise<boolean> {
-    return this.show({
-      message,
-      type,
-      showInput: false,
-      buttons: [{ label: 'OK', primary: true, value: true }],
-    }) as Promise<boolean>;
   }
 
   confirm(message: string, type: DialogType = 'warning'): Promise<boolean> {

@@ -252,15 +252,39 @@ td.select-col {
 // Inline loading progress (replaces data columns while loading)
 .inline-loading-progress {
   display: flex;
-  align-items: center;
-  gap: var(--space-md);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+
+  .progress-context {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .progress-header {
+    font-size: var(--font-sm);
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .progress-subtitle {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+  }
 
   .progress-msg {
-    font-size: var(--font-sm);
+    font-size: var(--font-xs);
     color: var(--text-muted);
     white-space: nowrap;
     flex-shrink: 0;
-    max-width: 300px;
+    max-width: 240px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -286,6 +310,9 @@ td.select-col {
   }
 
   &.inline-loading-failed {
+    flex-direction: row;
+    align-items: center;
+
     .error-msg {
       flex: 1;
       font-size: var(--font-sm);

@@ -78,6 +78,7 @@ VTSearch/
 │   │   ├── text/clipper.py         TextDefaultClipper, TextSentenceClipper
 │   │   ├── video/media_type.py     Video media type (MP4/WebM serving)
 │   │   ├── video/embedder_languagebind.py  VideoLanguageBindEmbedder (LanguageBind, 768-d)
+│   │   ├── video/embedder_videomae.py  VideoVideoMAEEmbedder (VideoMAE v2, 768-d, vision-only)
 │   │   ├── video/embedder_xclip.py VideoXClipEmbedder (X-CLIP, 768-d, default)
 │   │   ├── video/clipper.py        VideoDefaultClipper, VideoTilingClipper
 │   │   ├── document/media_type.py  Document handling (no embedder; convert first)
@@ -87,6 +88,7 @@ VTSearch/
 │   │   ├── base.py                 MediaConverter ABC
 │   │   ├── runner.py               Converter orchestration (run_converters_on_folder)
 │   │   ├── audio2image.py          Render audio as a mel/CQT spectrogram image
+│   │   ├── audio2text.py           Transcribe audio to text via Whisper ASR
 │   │   ├── document2image.py       Render document pages as images
 │   │   ├── document2text.py        Extract text from documents
 │   │   ├── image2text.py           Extract text from images via OCR (PaddleOCR)

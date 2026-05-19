@@ -46,6 +46,12 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   swipeClass = '';
   spinningVote: 'good' | 'bad' | null = null;
 
+  /** Persisted dismissal of the zero-votes first-vote hint. Initialised
+   *  to ``true`` so the hint never flashes before settings load resolves;
+   *  loadSettings() flips it to ``false`` only when the server confirms
+   *  the user has never dismissed it. */
+  private labelHintDismissed = true;
+
   /** Transient text shown after Cmd/Ctrl-Z; auto-cleared after a short delay. */
   undoToastText: string | null = null;
   private undoToastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -147,7 +153,20 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
         }
       }),
       this.voteState.toast$.subscribe((t) => this.showUndoToast(t.action, t.mediaName)),
+      // Any vote in any pane (center buttons, keyboard, hover-vote) retires
+      // the first-vote hint for this user. Watching the vote sets covers
+      // every channel without each call site needing to know about the hint.
+      this.voteState.goodVotes$.subscribe(() => this.maybeDismissLabelHint()),
+      this.voteState.badVotes$.subscribe(() => this.maybeDismissLabelHint()),
     );
+  }
+
+  /** Persist the first-vote hint as dismissed once the first vote lands. */
+  private maybeDismissLabelHint(): void {
+    if (this.labelHintDismissed) return;
+    if (this.voteState.goodVotes.size === 0 && this.voteState.badVotes.size === 0) return;
+    this.labelHintDismissed = true;
+    this.settingsState.update({ label_hint_dismissed: true }).subscribe();
   }
 
   private showUndoToast(action: 'undo' | 'redo', mediaName: string): void {
@@ -170,6 +189,14 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   get isBad(): boolean {
     return this.media ? this.voteState.badVotes.has(this.media.id) : false;
+  }
+
+  /** True when the labeling session is fresh (no votes yet across either
+   *  polarity) and the user has not previously dismissed the hint. The
+   *  hint dismisses on the first vote in this session and persists. */
+  get showFirstVoteHint(): boolean {
+    if (this.labelHintDismissed) return false;
+    return this.voteState.goodVotes.size === 0 && this.voteState.badVotes.size === 0;
   }
 
   get customMetadata(): Record<string, unknown> {
@@ -265,6 +292,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
         this.audioPlaying = settings.audio_playing !== false;
         this.swipeAnimation = settings.swipe_animation !== false;
         this.showMetadata = settings.show_metadata !== false;
+        this.labelHintDismissed = settings.label_hint_dismissed === true;
       }),
     );
   }

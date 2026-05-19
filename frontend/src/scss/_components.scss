@@ -204,6 +204,19 @@
   gap: var(--space-xs);
 }
 
+// Inline format-hint chip rendered below an importer form field when the
+// PluginField declares a `hint` (separate from `description`, which feeds
+// the placeholder).  Stays visible after the user starts typing — used for
+// accepted extensions, expected column schemas, JSON/CSV sample snippets.
+.form-hint {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text-muted, #666);
+  white-space: pre-wrap;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+}
+
 .required {
   color: var(--color-bad);
 }
@@ -264,6 +277,57 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
+}
+
+// --- Skeleton shimmer background ---
+//
+// Apply to an element that contains a lazy-loaded <img>: a soft shimmer
+// shows behind the image until it paints, smoothing the "pop-in" you get
+// from native loading="lazy". Pairs with the <vt-skeleton> component, which
+// uses the same animation but renders a sized block on its own.
+.skeleton-bg {
+  position: relative;
+  // isolation: isolate scopes the pseudo-elements' negative z-index to
+  // this stacking context, so the base + shimmer sit behind the element's
+  // in-flow content without leaking behind the parent.
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--bg-subtle);
+    border-radius: inherit;
+    z-index: -1;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--skeleton-shimmer) 50%,
+      transparent 100%
+    );
+    border-radius: inherit;
+    transform: translateX(-100%);
+    animation: vt-skeleton-shimmer 1.4s ease-in-out infinite;
+    z-index: -1;
+  }
+}
+
+@keyframes vt-skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bg::after {
+    animation: none;
+  }
 }
 
 // --- Accessibility ---

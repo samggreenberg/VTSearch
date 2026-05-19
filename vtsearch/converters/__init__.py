@@ -9,6 +9,7 @@ attribute, just like exporters and importers.
 """
 
 from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+from vtsearch.converters.audio2text import Audio2TextMediaConverter
 from vtsearch.converters.base import MediaConverter
 from vtsearch.converters.document2image import Document2ImageMediaConverter
 from vtsearch.converters.document2text import Document2TextMediaConverter
@@ -53,6 +54,7 @@ def list_converters_for_source(source_type: str) -> list[MediaConverter]:
 __all__ = [
     "MediaConverter",
     "Audio2ImageMediaConverter",
+    "Audio2TextMediaConverter",
     "Document2ImageMediaConverter",
     "Document2TextMediaConverter",
     "Image2TextMediaConverter",

@@ -9,6 +9,9 @@
   (keydown)="onKeydown($event)"
 >
   <strong class="trigger-label">{{ fieldLabel }}:</strong>
+  @if (!isDataset && activeRowExists) {
+    <vt-detector-swatch class="trigger-swatch" [name]="activeName"></vt-detector-swatch>
+  }
   <span class="trigger-value" [class.is-placeholder]="!activeRowExists">{{ activeRowExists ? activeName : placeholderLabel }}</span>
   <span class="trigger-caret" aria-hidden="true">▾</span>
 </button>
@@ -42,10 +45,14 @@
             [class.is-focused]="i === focusedIndex"
             [attr.aria-selected]="row.active"
             [attr.title]="row.incompatReason || null"
+            [style.--detector-hue]="hueFor(row)"
             (click)="pickRow(row)"
             (mouseenter)="focusedIndex = i"
           >
             <span class="row-glyph" [title]="glyphTitle(row)">{{ glyphFor(row) }}</span>
+            @if (!isDataset) {
+              <vt-detector-swatch [name]="row.name"></vt-detector-swatch>
+            }
             <span class="row-name">{{ row.name }}</span>
             <span class="row-type">· {{ row.mediaType }}</span>
             @if (row.busy) {

@@ -32,6 +32,9 @@ describe('ProgressIndicatorsComponent', () => {
 
   it('should reflect labeling status', () => {
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'yellow' },
       span: { status: '' },
@@ -55,20 +58,35 @@ describe('ProgressIndicatorsComponent', () => {
 
   it('should show smart subtext with cost', () => {
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'yellow', cost: 0.123 },
+      stable: { status: '' },
+      span: { status: '' },
     };
     expect(component.smartSubtext).toBe('Cost: 0.123');
   });
 
   it('should show stable subtext with flips', () => {
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: '' },
       stable: { status: 'yellow', flips: 5 },
+      span: { status: '' },
     };
     expect(component.stableSubtext).toBe('Flips: 5');
   });
 
   it('should show span subtext with diversity level', () => {
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: '' },
+      stable: { status: '' },
       span: { status: 'green', diversity_level: 2.5, max_level: 4 },
     };
     expect(component.spanSubtext).toBe('3/4');
@@ -97,8 +115,56 @@ describe('ProgressIndicatorsComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.labeling-indicator').length).toBe(3);
   });
 
+  it('should expose smart tooltip explaining the meaning', () => {
+    expect(component.smartTooltip).toContain('Smart: the model fits your votes consistently.');
+  });
+
+  it('should expose stable tooltip explaining the meaning', () => {
+    expect(component.stableTooltip).toContain('Stable: predictions stopped shifting between retrains.');
+  });
+
+  it('should expose diverse tooltip explaining the meaning', () => {
+    expect(component.spanTooltip).toContain('Diverse: your votes cover the dataset broadly.');
+  });
+
+  it('should include live subtext in smart tooltip when available', () => {
+    component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: 'yellow', cost: 0.456 },
+      stable: { status: '' },
+      span: { status: '' },
+    };
+    expect(component.smartTooltip).toContain('Cost: 0.456');
+    expect(component.smartTooltip).toContain('Smart: the model fits your votes consistently.');
+  });
+
+  it('should include live subtext in stable tooltip when available', () => {
+    component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: '' },
+      stable: { status: 'yellow', flips: 7 },
+      span: { status: '' },
+    };
+    expect(component.stableTooltip).toContain('Flips: 7');
+    expect(component.stableTooltip).toContain('Stable: predictions stopped shifting between retrains.');
+  });
+
+  it('should render tooltip text on the indicator buttons', () => {
+    const buttons = fixture.nativeElement.querySelectorAll('.labeling-indicator');
+    expect(buttons[0].getAttribute('title')).toContain('Smart: the model fits your votes consistently.');
+    expect(buttons[1].getAttribute('title')).toContain('Stable: predictions stopped shifting between retrains.');
+    expect(buttons[2].getAttribute('title')).toContain('Diverse: your votes cover the dataset broadly.');
+  });
+
   it('should set data-status attribute on indicators', () => {
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'yellow' },
       span: { status: 'red' },

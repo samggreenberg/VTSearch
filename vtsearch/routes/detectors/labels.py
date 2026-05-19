@@ -26,13 +26,16 @@ POST /api/detectors/<name>/labels/<element_id>/vote
     Toggle the label on a saved labelset element.
 
 Migrated to ``flask_smorest`` for the JSON-shaped routes (save, labels-detail,
-vote). ``import-labels`` stays on the legacy plain-Flask path — its body is
-the chosen importer's plugin fields (see *Open questions / Plugin field
-endpoints* in ``docs/plans/openapi-schema.md``). The ``preview`` and
-``thumbnail`` routes serve binary bodies (or a tiny content-only JSON for
-text media); they declare their non-default JSON error responses via
-``alt_response`` but no success schema, so OpenAPI describes the error
-shape without lying about the success body.
+vote). ``import-labels`` keeps its plain-Flask route on the same smorest
+blueprint — its body shape depends on the importer plugin and isn't
+described in the OpenAPI spec, but runtime validation goes through
+:func:`validate_plugin_args` so the per-plugin field types are enforced
+and schema-level failures surface as 422.  See *Resolved questions /
+Plugin field endpoints* in ``docs/plans/openapi-schema.md``.  The
+``preview`` and ``thumbnail`` routes serve binary bodies (or a tiny
+content-only JSON for text media); they declare their non-default JSON
+error responses via ``alt_response`` but no success schema, so OpenAPI
+describes the error shape without lying about the success body.
 """
 
 from __future__ import annotations
@@ -164,10 +167,12 @@ def save_detector_labels(name: str):
 # ---------------------------------------------------------------------------
 # POST /api/detectors/<name>/import-labels/<importer_name>
 #
-# Plugin-field route — stays on the legacy ``request.get_json`` path. The
-# request body is the importer's declared ``fields`` (file uploads,
-# free-form params) and doesn't fit a static marshmallow schema. See
-# ``docs/plans/openapi-schema.md`` (Open questions / Plugin field endpoints).
+# Plugin-field route — body shape depends on the importer plugin and isn't
+# described in the OpenAPI spec.  Runtime validation goes through
+# :func:`validate_plugin_args` (per-plugin schema built from the importer's
+# :attr:`fields`), so missing required fields / invalid select values
+# raise 422.  See ``docs/plans/openapi-schema.md`` (Resolved questions /
+# Plugin field endpoints).
 # ---------------------------------------------------------------------------
 
 
@@ -198,11 +203,10 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
 
     from vtsearch.labels.importers import get_label_importer, list_label_importers
     from vtsearch.routes._shared import (
-        extract_plugin_fields,
         get_plugin_or_404,
         run_plugin_or_error,
         validate_filepath_field,
-        validate_required_fields,
+        validate_plugin_args,
     )
 
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
@@ -210,10 +214,7 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values = extract_plugin_fields(importer)
-    err = validate_required_fields(importer, field_values)
-    if err:
-        return err
+    field_values = validate_plugin_args(importer)
     err = validate_filepath_field(field_values)
     if err:
         return err

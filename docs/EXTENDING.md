@@ -115,7 +115,7 @@ Add the extra packages to `[project.dependencies]` in `pyproject.toml`
 then re-run `bash scripts/install-cpu.sh` (or any editable install).
 Failed imports of a plugin's sub-package emit a warning rather than
 crashing, so missing dependencies degrade gracefully — but deptry will
-flag any imported package missing from pyproject the next time CI runs.
+flag any imported package missing from pyproject the next time `./run-tests.sh` runs.
 
 ---
 

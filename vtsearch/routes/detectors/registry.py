@@ -159,10 +159,12 @@ def register_detector_route(body: dict):
 # ---------------------------------------------------------------------------
 # POST /api/detectors/registry/from-labelset/<importer_name>
 #
-# Plugin-field route — stays on the legacy ``request.get_json`` path. The
-# request body is the importer's declared ``fields`` (file uploads,
-# free-form params) and doesn't fit a static marshmallow schema. See
-# ``docs/plans/openapi-schema.md`` (Open questions / Plugin field endpoints).
+# Plugin-field route — body shape depends on the importer plugin and isn't
+# described in the OpenAPI spec.  Runtime validation goes through
+# :func:`validate_plugin_args` (per-plugin schema built from the importer's
+# :attr:`fields`), so missing required fields / invalid select values
+# raise 422.  See ``docs/plans/openapi-schema.md`` (Resolved questions /
+# Plugin field endpoints).
 # ---------------------------------------------------------------------------
 
 
@@ -180,12 +182,10 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     from vtsearch.labels.importers import get_label_importer, list_label_importers
     from vtsearch.detectors.registry import register_detector, update_detector
     from vtsearch.routes._shared import (
-        extract_plugin_fields,
         get_plugin_or_404,
-        get_request_field,
         run_plugin_or_error,
         validate_filepath_field,
-        validate_required_fields,
+        validate_plugin_args,
     )
 
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
@@ -193,20 +193,20 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         return err
     assert importer is not None  # narrowed by err check
 
-    has_file_fields = any(f.field_type == "file" for f in importer.fields)
-    name = get_request_field("name", has_file_fields).strip()
+    field_values = validate_plugin_args(importer, extra_keys=("name",))
 
+    # ``name`` is a pass-through key (not a declared plugin field) but is
+    # required by this route.  ``validate_plugin_args`` only keeps the
+    # keys we list in ``extra_keys``, so the route is in charge of
+    # enforcing presence.
+    name = str(field_values.pop("name", "") or "").strip()
     if not name:
-        return jsonify({"error": "name is required"}), 400
+        abort(422, message="Validation error", errors={"json": {"name": ["Missing data for required field."]}})
 
     det_path = _detector_path(name)
     if det_path.exists():
-        return jsonify({"error": f"A detector named '{name}' already exists"}), 409
+        abort(409, message=f"A detector named '{name}' already exists")
 
-    field_values = extract_plugin_fields(importer)
-    err = validate_required_fields(importer, field_values)
-    if err:
-        return err
     err = validate_filepath_field(field_values)
     if err:
         return err

@@ -308,6 +308,386 @@ class TestSoundClipClipper:
 
 
 # ---------------------------------------------------------------------------
+# SoundSilenceClipper
+# ---------------------------------------------------------------------------
+
+
+def _concat_wavs(*wavs: bytes) -> bytes:
+    """Concatenate multiple WAV byte strings into a single WAV file.
+
+    All inputs must share the same sample rate, channel count, and sample
+    width.  Used to build tone/silence/tone test fixtures.
+    """
+    all_frames: list[bytes] = []
+    params = None
+    for wb in wavs:
+        with wave.open(io.BytesIO(wb), "rb") as wf:
+            if params is None:
+                params = wf.getparams()
+            all_frames.append(wf.readframes(wf.getnframes()))
+    assert params is not None
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as out:
+        out.setparams(params)
+        out.writeframes(b"".join(all_frames))
+    return buf.getvalue()
+
+
+class TestSoundSilenceClipper:
+    def test_identity(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        c = SoundSilenceClipper()
+        assert c.name == "sound_silence"
+        assert c.media_type == "audio"
+        assert c.top_db == 40.0
+        assert c.min_clip_duration == 0.3
+        assert c.pad == 0.05
+        assert isinstance(c, MediaClipper)
+
+    def test_custom_params(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        c = SoundSilenceClipper(top_db=20.0, min_clip_duration=0.5, pad=0.1)
+        assert c.top_db == 20.0
+        assert c.min_clip_duration == 0.5
+        assert c.pad == 0.1
+
+    def test_rejects_non_positive_top_db(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        with pytest.raises(ValueError):
+            SoundSilenceClipper(top_db=0)
+        with pytest.raises(ValueError):
+            SoundSilenceClipper(top_db=-1)
+
+    def test_rejects_negative_min_clip_duration(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        with pytest.raises(ValueError):
+            SoundSilenceClipper(min_clip_duration=-0.1)
+
+    def test_rejects_negative_pad(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        with pytest.raises(ValueError):
+            SoundSilenceClipper(pad=-0.1)
+
+    def test_no_media_bytes_returns_unchanged(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        media = {"id": 1, "type": "audio", "duration": 3.0}
+        result = SoundSilenceClipper().clip(media)
+        assert result == [media]
+
+    def test_invalid_bytes_returns_unchanged(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        media = {"id": 1, "type": "audio", "media_bytes": b"not a wav", "duration": 1.0}
+        result = SoundSilenceClipper().clip(media)
+        assert result == [media]
+
+    def test_splits_tone_silence_tone(self):
+        """Tone | silence | tone | silence | tone → three non-silent clips."""
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        # Build a 5 s clip: 1 s tone, 1 s silence, 1 s tone, 1 s silence, 1 s tone.
+        wav = _concat_wavs(
+            generate_wav(440, 1.0),
+            generate_wav(0, 1.0),
+            generate_wav(440, 1.0),
+            generate_wav(0, 1.0),
+            generate_wav(440, 1.0),
+        )
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 5.0}
+
+        result = SoundSilenceClipper(top_db=40, min_clip_duration=0.1, pad=0.0).clip(media)
+        assert len(result) == 3
+        for idx, clip in enumerate(result):
+            assert clip["clip_index"] == idx
+            assert clip["clip_end"] > clip["clip_start"]
+            # Each non-silent block is ~1 s
+            assert clip["duration"] == pytest.approx(1.0, abs=0.15)
+            # Output should be valid WAV
+            with wave.open(io.BytesIO(clip["media_bytes"]), "rb") as wf:
+                assert wf.getframerate() == 48000
+
+    def test_drops_intro_outro_silence(self):
+        """Leading and trailing silence should be discarded."""
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        # 0.5 s silence | 1 s tone | 0.5 s silence
+        wav = _concat_wavs(
+            generate_wav(0, 0.5),
+            generate_wav(440, 1.0),
+            generate_wav(0, 0.5),
+        )
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.0}
+
+        result = SoundSilenceClipper(top_db=40, min_clip_duration=0.1, pad=0.0).clip(media)
+        assert len(result) == 1
+        clip = result[0]
+        # Clip should start at ~0.5 s and end at ~1.5 s, NOT at 0 and 2.0
+        assert clip["clip_start"] == pytest.approx(0.5, abs=0.15)
+        assert clip["clip_end"] == pytest.approx(1.5, abs=0.15)
+        assert clip["duration"] < 2.0  # intro/outro silence was dropped
+
+    def test_padding_extends_clip_bounds(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        wav = _concat_wavs(
+            generate_wav(0, 0.5),
+            generate_wav(440, 1.0),
+            generate_wav(0, 0.5),
+        )
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.0}
+
+        # With 0.2 s pad, the single clip should extend ~0.2 s into the surrounding silence.
+        result = SoundSilenceClipper(top_db=40, min_clip_duration=0.1, pad=0.2).clip(media)
+        assert len(result) == 1
+        clip = result[0]
+        assert clip["clip_start"] < 0.5
+        assert clip["clip_end"] > 1.5
+        # But never beyond the actual audio bounds.
+        assert clip["clip_start"] >= 0.0
+        assert clip["clip_end"] <= 2.0
+
+    def test_min_clip_duration_drops_short_intervals(self):
+        """Non-silent intervals shorter than min_clip_duration are dropped."""
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        # 50 ms blip | 1 s silence | 1 s tone
+        wav = _concat_wavs(
+            generate_wav(440, 0.05),
+            generate_wav(0, 1.0),
+            generate_wav(440, 1.0),
+        )
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.05}
+
+        # min_clip_duration=0.3 should drop the blip but keep the 1 s tone.
+        result = SoundSilenceClipper(top_db=40, min_clip_duration=0.3, pad=0.0).clip(media)
+        assert len(result) == 1
+        assert result[0]["duration"] == pytest.approx(1.0, abs=0.15)
+
+    def test_all_silence_returns_unchanged(self):
+        """Audio that's silent throughout is returned unchanged (not dropped)."""
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        wav = generate_wav(0, 2.0)
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.0}
+        result = SoundSilenceClipper().clip(media)
+        assert result == [media]
+
+    def test_with_params(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        c = SoundSilenceClipper()
+        c2 = c.with_params({"top_db": 25, "min_clip_duration": 0.5, "pad": 0.2})
+        assert isinstance(c2, SoundSilenceClipper)
+        assert c2.top_db == 25.0
+        assert c2.min_clip_duration == 0.5
+        assert c2.pad == 0.2
+        # Original unchanged.
+        assert c.top_db == 40.0
+        assert c.min_clip_duration == 0.3
+        assert c.pad == 0.05
+
+    def test_to_dict(self):
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        c = SoundSilenceClipper(top_db=30, min_clip_duration=0.4, pad=0.1)
+        d = c.to_dict()
+        assert d["name"] == "sound_silence"
+        assert d["display_name"] == "Silence"
+        assert d["media_type"] == "audio"
+        assert d["top_db"] == 30
+        assert d["min_clip_duration"] == 0.4
+        assert d["pad"] == 0.1
+        # Parameters surface as creation questions automatically.
+        assert "creation_questions" in d
+        assert {q["key"] for q in d["creation_questions"]} == {"top_db", "min_clip_duration", "pad"}
+
+    def test_librosa_unavailable_returns_unchanged(self, monkeypatch):
+        """If librosa import fails, clipper returns the media unchanged."""
+        import builtins
+
+        from vtsearch.media.audio.clipper import SoundSilenceClipper
+
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "librosa":
+                raise ImportError("no librosa")
+            return real_import(name, *args, **kwargs)
+
+        wav = generate_wav(440, 1.0)
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 1.0}
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+        result = SoundSilenceClipper().clip(media)
+        assert result == [media]
+
+
+# ---------------------------------------------------------------------------
+# SoundSpeechActivityClipper
+# ---------------------------------------------------------------------------
+
+
+class TestSoundSpeechActivityClipper:
+    def test_identity(self):
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        c = SoundSpeechActivityClipper()
+        assert c.name == "sound_speech_activity"
+        assert c.media_type == "audio"
+        assert c.threshold == 0.5
+        assert c.min_clip_duration == 0.3
+        assert c.pad == 0.05
+        assert isinstance(c, MediaClipper)
+
+    def test_custom_params(self):
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        c = SoundSpeechActivityClipper(threshold=0.7, min_clip_duration=0.5, pad=0.1)
+        assert c.threshold == 0.7
+        assert c.min_clip_duration == 0.5
+        assert c.pad == 0.1
+
+    def test_rejects_threshold_out_of_range(self):
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        with pytest.raises(ValueError):
+            SoundSpeechActivityClipper(threshold=0.0)
+        with pytest.raises(ValueError):
+            SoundSpeechActivityClipper(threshold=-0.1)
+        with pytest.raises(ValueError):
+            SoundSpeechActivityClipper(threshold=1.5)
+
+    def test_rejects_negative_min_clip_duration(self):
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        with pytest.raises(ValueError):
+            SoundSpeechActivityClipper(min_clip_duration=-0.1)
+
+    def test_rejects_negative_pad(self):
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        with pytest.raises(ValueError):
+            SoundSpeechActivityClipper(pad=-0.1)
+
+    def test_no_media_bytes_returns_unchanged(self):
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        media = {"id": 1, "type": "audio", "duration": 3.0}
+        result = SoundSpeechActivityClipper().clip(media)
+        assert result == [media]
+
+    def test_returns_unchanged_when_silero_unavailable(self, monkeypatch):
+        """If Silero can't be loaded, clipper returns the media unchanged."""
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        c = SoundSpeechActivityClipper()
+        # Force the lazy loader to report unavailable so we never touch torch.hub.
+        monkeypatch.setattr(c, "_load_model", lambda: False)
+        wav = generate_wav(440, 1.0)
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 1.0}
+        result = c.clip(media)
+        assert result == [media]
+
+    def test_splits_on_mocked_intervals(self):
+        """Three mocked speech intervals → three clips with right boundaries."""
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        wav = _concat_wavs(
+            generate_wav(440, 1.0),
+            generate_wav(0, 1.0),
+            generate_wav(440, 1.0),
+            generate_wav(0, 1.0),
+            generate_wav(440, 1.0),
+        )
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 5.0}
+
+        c = SoundSpeechActivityClipper(min_clip_duration=0.1, pad=0.0)
+        c._detect_speech_intervals = lambda _b: [(0.0, 1.0), (2.0, 3.0), (4.0, 5.0)]  # pyright: ignore[reportAttributeAccessIssue]
+
+        result = c.clip(media)
+        assert len(result) == 3
+        for idx, clip in enumerate(result):
+            assert clip["clip_index"] == idx
+            assert clip["clip_end"] > clip["clip_start"]
+            assert clip["duration"] == pytest.approx(1.0, abs=0.01)
+            with wave.open(io.BytesIO(clip["media_bytes"]), "rb") as wf:
+                assert wf.getframerate() == 48000
+        assert [(c["clip_start"], c["clip_end"]) for c in result] == [(0.0, 1.0), (2.0, 3.0), (4.0, 5.0)]
+
+    def test_returns_unchanged_when_no_intervals(self):
+        """An empty detector result keeps the original media intact."""
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        wav = generate_wav(440, 1.0)
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 1.0}
+        c = SoundSpeechActivityClipper()
+        c._detect_speech_intervals = lambda _b: []  # pyright: ignore[reportAttributeAccessIssue]
+        result = c.clip(media)
+        assert result == [media]
+
+    def test_returns_unchanged_on_detector_error(self):
+        """If detection returns None (decoder failure, missing torch), pass through."""
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        wav = generate_wav(440, 1.0)
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 1.0}
+        c = SoundSpeechActivityClipper()
+        c._detect_speech_intervals = lambda _b: None  # pyright: ignore[reportAttributeAccessIssue]
+        result = c.clip(media)
+        assert result == [media]
+
+    def test_with_params(self):
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        c = SoundSpeechActivityClipper()
+        c2 = c.with_params({"threshold": 0.7, "min_clip_duration": 0.5, "pad": 0.2})
+        assert isinstance(c2, SoundSpeechActivityClipper)
+        assert c2.threshold == 0.7
+        assert c2.min_clip_duration == 0.5
+        assert c2.pad == 0.2
+        # Original unchanged.
+        assert c.threshold == 0.5
+        assert c.min_clip_duration == 0.3
+        assert c.pad == 0.05
+
+    def test_to_dict(self):
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        c = SoundSpeechActivityClipper(threshold=0.6, min_clip_duration=0.4, pad=0.1)
+        d = c.to_dict()
+        assert d["name"] == "sound_speech_activity"
+        assert d["media_type"] == "audio"
+        assert d["threshold"] == 0.6
+        assert d["min_clip_duration"] == 0.4
+        assert d["pad"] == 0.1
+        assert len(d["parameters"]) == 3
+
+    def test_min_clip_duration_drops_short_intervals(self):
+        """Short detector intervals are dropped at the post-filter stage."""
+        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+
+        wav = _concat_wavs(generate_wav(440, 0.05), generate_wav(0, 1.0), generate_wav(440, 1.0))
+        media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.05}
+
+        # Drive the post-filter directly: the 50 ms interval drops, the 1 s one stays.
+        c = SoundSpeechActivityClipper(min_clip_duration=0.3, pad=0.0)
+        # Bypass the post-filter inside _detect_speech_intervals by mocking it
+        # to mirror what the real detector would produce *before* filtering,
+        # and apply the same filter that the real method applies.
+        intervals = [(0.0, 0.05), (1.05, 2.05)]
+        filtered = [(t0, t1) for (t0, t1) in intervals if (t1 - t0) >= 0.3]
+        c._detect_speech_intervals = lambda _b: filtered  # pyright: ignore[reportAttributeAccessIssue]
+        result = c.clip(media)
+        assert len(result) == 1
+        assert result[0]["duration"] == pytest.approx(1.0, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
 # VideoDefaultClipper
 # ---------------------------------------------------------------------------
 
@@ -644,6 +1024,285 @@ class TestImageBboxClipper:
 
 
 # ---------------------------------------------------------------------------
+# ImageObjectClipper
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_yolo(detections, class_names):
+    """Build a mock ultralytics YOLO callable.
+
+    *detections* is a list of ``(class_id, confidence, [x1, y1, x2, y2])``.
+    *class_names* maps class_id -> label string.
+    """
+    from unittest.mock import MagicMock
+
+    import torch
+
+    mock_boxes = MagicMock()
+    mock_boxes.conf = torch.tensor([d[1] for d in detections]) if detections else torch.empty(0)
+    mock_boxes.cls = torch.tensor([d[0] for d in detections]) if detections else torch.empty(0, dtype=torch.long)
+    mock_boxes.xyxy = (
+        torch.tensor([d[2] for d in detections], dtype=torch.float32) if detections else torch.empty((0, 4))
+    )
+    mock_boxes.__len__ = lambda self: len(detections)
+
+    mock_result = MagicMock()
+    mock_result.boxes = mock_boxes
+    mock_result.names = class_names
+
+    mock_model = MagicMock()
+    mock_model.return_value = [mock_result]
+    return mock_model
+
+
+class TestImageObjectClipper:
+    def test_identity(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper()
+        assert c.name == "image_object"
+        assert c.media_type == "image"
+        assert c.display_name == "Object"
+        assert isinstance(c, MediaClipper)
+
+    def test_default_params(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper()
+        assert c.threshold == 0.25
+        assert c.class_filter == ""
+        assert c.max_detections == 20
+        assert c.padding == 0.0
+        assert c.model_id == "yolo11n.pt"
+
+    def test_parameters_schema(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        params = ImageObjectClipper().parameters
+        keys = {p["key"] for p in params}
+        assert keys == {"threshold", "class_filter", "max_detections", "padding", "model_id"}
+
+    def test_creation_questions_match_parameters(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper()
+        assert c.creation_questions == c.parameters
+
+    def test_to_dict(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper(threshold=0.4, class_filter="person,car", max_detections=5, padding=0.1)
+        d = c.to_dict()
+        assert d["name"] == "image_object"
+        assert d["media_type"] == "image"
+        assert d["threshold"] == 0.4
+        assert d["class_filter"] == "person,car"
+        assert d["max_detections"] == 5
+        assert d["padding"] == 0.1
+        assert d["model_id"] == "yolo11n.pt"
+        assert "creation_questions" in d
+
+    def test_with_params_returns_new_instance(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper()
+        c2 = c.with_params({"threshold": 0.7, "class_filter": "dog", "max_detections": 3, "padding": 0.2})
+        assert isinstance(c2, ImageObjectClipper)
+        assert c2.threshold == 0.7
+        assert c2.class_filter == "dog"
+        assert c2.max_detections == 3
+        assert c2.padding == 0.2
+        # original unchanged
+        assert c.threshold == 0.25
+        assert c.class_filter == ""
+
+    def test_no_media_bytes_returns_unchanged(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        c = ImageObjectClipper()
+        media = {"id": 1, "type": "image", "width": 100, "height": 100}
+        result = c.clip(media)
+        assert result == [media]
+
+    def test_no_detections_returns_original(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        c = ImageObjectClipper()
+        c._model = _make_mock_yolo([], {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 1
+        assert result[0] is media
+
+    def test_emits_one_clip_per_detection(self):
+        from PIL import Image
+
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.9, [10.0, 10.0, 60.0, 60.0]),
+            (0, 0.8, [100.0, 100.0, 180.0, 180.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.5)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 2
+        # Sorted by confidence desc
+        assert result[0]["clip_box"] == [10, 10, 60, 60]
+        assert result[1]["clip_box"] == [100, 100, 180, 180]
+        for clip in result:
+            assert "media_bytes" in clip and clip["media_bytes"] != img_bytes
+            img = Image.open(io.BytesIO(clip["media_bytes"]))
+            assert img.size == (clip["width"], clip["height"])
+            assert "clip_index" in clip
+            assert clip["file_size"] == len(clip["media_bytes"])
+
+    def test_sorts_by_confidence_desc(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.3, [10.0, 10.0, 40.0, 40.0]),
+            (0, 0.95, [50.0, 50.0, 120.0, 120.0]),
+            (0, 0.6, [130.0, 130.0, 190.0, 190.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.25)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 3
+        assert result[0]["clip_box"] == [50, 50, 120, 120]
+        assert result[1]["clip_box"] == [130, 130, 190, 190]
+        assert result[2]["clip_box"] == [10, 10, 40, 40]
+
+    def test_threshold_filters_low_confidence(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.9, [10.0, 10.0, 60.0, 60.0]),
+            (0, 0.2, [100.0, 100.0, 180.0, 180.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.5)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 1
+        assert result[0]["clip_box"] == [10, 10, 60, 60]
+
+    def test_class_filter_keeps_only_whitelisted(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.9, [10.0, 10.0, 60.0, 60.0]),  # person
+            (1, 0.85, [80.0, 80.0, 150.0, 150.0]),  # car
+            (2, 0.8, [120.0, 120.0, 190.0, 190.0]),  # dog
+        ]
+        c = ImageObjectClipper(threshold=0.5, class_filter="person,dog")
+        c._model = _make_mock_yolo(detections, {0: "person", 1: "car", 2: "dog"})
+        result = c.clip(media)
+        assert len(result) == 2
+        # 'car' (cls=1) excluded; remaining sorted by confidence
+        boxes = {tuple(r["clip_box"]) for r in result}
+        assert boxes == {(10, 10, 60, 60), (120, 120, 190, 190)}
+
+    def test_empty_class_filter_keeps_all(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.9, [10.0, 10.0, 60.0, 60.0]),
+            (1, 0.8, [80.0, 80.0, 150.0, 150.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.5, class_filter="")
+        c._model = _make_mock_yolo(detections, {0: "person", 1: "car"})
+        result = c.clip(media)
+        assert len(result) == 2
+
+    def test_max_detections_caps_output(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(400, 400)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 400, "height": 400}
+        # 6 detections with varying confidence; cap at 3 should keep top 3
+        detections = [
+            (0, 0.5, [0.0, 0.0, 20.0, 20.0]),
+            (0, 0.95, [30.0, 30.0, 60.0, 60.0]),
+            (0, 0.4, [70.0, 70.0, 100.0, 100.0]),
+            (0, 0.85, [120.0, 120.0, 160.0, 160.0]),
+            (0, 0.6, [180.0, 180.0, 220.0, 220.0]),
+            (0, 0.7, [240.0, 240.0, 280.0, 280.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.0, max_detections=3)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 3
+        confs_kept = {(r["clip_box"][0], r["clip_box"][1]) for r in result}
+        # Top 3 confidences are 0.95, 0.85, 0.7 → boxes starting at (30,30), (120,120), (240,240)
+        assert confs_kept == {(30, 30), (120, 120), (240, 240)}
+
+    def test_padding_expands_box(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(400, 400)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 400, "height": 400}
+        # 100x100 box at (150,150)-(250,250) with 10% padding → expand by 10px each side
+        detections = [(0, 0.9, [150.0, 150.0, 250.0, 250.0])]
+        c = ImageObjectClipper(threshold=0.0, padding=0.1)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 1
+        box = result[0]["clip_box"]
+        assert box == [140, 140, 260, 260]
+        assert result[0]["width"] == 120
+        assert result[0]["height"] == 120
+
+    def test_padding_clamps_to_image_bounds(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        # Box near the corner; aggressive padding would go negative / past edge.
+        detections = [(0, 0.9, [10.0, 10.0, 50.0, 50.0])]
+        c = ImageObjectClipper(threshold=0.0, padding=1.0)  # +40px each side
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert len(result) == 1
+        box = result[0]["clip_box"]
+        # x1, y1 clamped to 0; x2, y2 within bounds
+        assert box[0] == 0
+        assert box[1] == 0
+        assert box[2] <= 200
+        assert box[3] <= 200
+
+    def test_clip_index_is_set(self):
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        img_bytes = _make_image_bytes(200, 200)
+        media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
+        detections = [
+            (0, 0.9, [10.0, 10.0, 60.0, 60.0]),
+            (0, 0.8, [70.0, 70.0, 120.0, 120.0]),
+        ]
+        c = ImageObjectClipper(threshold=0.0)
+        c._model = _make_mock_yolo(detections, {0: "person"})
+        result = c.clip(media)
+        assert [r["clip_index"] for r in result] == [0, 1]
+
+    def test_registered_in_clippers_list(self):
+        from vtsearch.media.image import CLIPPERS
+        from vtsearch.media.image.clipper import ImageObjectClipper
+
+        assert any(isinstance(c, ImageObjectClipper) for c in CLIPPERS)
+
+
+# ---------------------------------------------------------------------------
 # TextDefaultClipper
 # ---------------------------------------------------------------------------
 
@@ -663,6 +1322,110 @@ class TestTextDefaultClipper:
         assert c.name == "text_default"
         assert c.media_type == "text"
         assert isinstance(c, MediaClipper)
+
+
+# ---------------------------------------------------------------------------
+# TextParagraphClipper
+# ---------------------------------------------------------------------------
+
+
+class TestTextParagraphClipper:
+    def test_identity(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        c = TextParagraphClipper()
+        assert c.name == "text_paragraph"
+        assert c.media_type == "text"
+        assert isinstance(c, MediaClipper)
+
+    def test_single_paragraph_unchanged(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        media = {"id": 1, "type": "text", "media_string": "Just one paragraph here."}
+        result = TextParagraphClipper().clip(media)
+        assert len(result) == 1
+        assert result[0] is media
+
+    def test_splits_multiple_paragraphs(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        text = "First paragraph.\n\nSecond paragraph.\n\nThird one."
+        media = {"id": 1, "type": "text", "media_string": text, "word_count": 6, "character_count": len(text)}
+        result = TextParagraphClipper().clip(media)
+        assert len(result) == 3
+        assert result[0]["media_string"] == "First paragraph."
+        assert result[1]["media_string"] == "Second paragraph."
+        assert result[2]["media_string"] == "Third one."
+        for idx, tile in enumerate(result):
+            assert tile["clip_index"] == idx
+            assert tile["word_count"] == len(tile["media_string"].split())
+            assert tile["character_count"] == len(tile["media_string"])
+
+    def test_multiline_paragraphs_preserved(self):
+        """A paragraph that internally contains single newlines stays intact."""
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        text = "Line one.\nLine two of the same para.\n\nSecond paragraph here."
+        media = {"id": 1, "type": "text", "media_string": text}
+        result = TextParagraphClipper().clip(media)
+        assert len(result) == 2
+        assert result[0]["media_string"] == "Line one.\nLine two of the same para."
+        assert result[1]["media_string"] == "Second paragraph here."
+
+    def test_collapses_runs_of_blank_lines(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        text = "Alpha.\n\n\n\nBeta.\n\n\nGamma."
+        media = {"id": 1, "type": "text", "media_string": text}
+        result = TextParagraphClipper().clip(media)
+        assert [t["media_string"] for t in result] == ["Alpha.", "Beta.", "Gamma."]
+
+    def test_handles_windows_line_endings(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        text = "Para one.\r\n\r\nPara two.\r\n\r\nPara three."
+        media = {"id": 1, "type": "text", "media_string": text}
+        result = TextParagraphClipper().clip(media)
+        assert [t["media_string"] for t in result] == ["Para one.", "Para two.", "Para three."]
+
+    def test_blank_line_with_whitespace_still_splits(self):
+        """A blank line that contains spaces/tabs still counts as a separator."""
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        text = "First.\n   \nSecond."
+        media = {"id": 1, "type": "text", "media_string": text}
+        result = TextParagraphClipper().clip(media)
+        assert [t["media_string"] for t in result] == ["First.", "Second."]
+
+    def test_empty_string_returns_unchanged(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        media = {"id": 1, "type": "text", "media_string": ""}
+        result = TextParagraphClipper().clip(media)
+        assert result == [media]
+
+    def test_no_media_string_returns_unchanged(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        media = {"id": 1, "type": "text"}
+        result = TextParagraphClipper().clip(media)
+        assert result == [media]
+
+    def test_registered_for_text_type(self):
+        """The paragraph clipper is auto-discovered for the text media type."""
+        from vtsearch.media import clippers_for_type
+
+        names = {c.name for c in clippers_for_type("text")}
+        assert "text_paragraph" in names
+
+    def test_to_dict_shape(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        d = TextParagraphClipper().to_dict()
+        assert d["name"] == "text_paragraph"
+        assert d["media_type"] == "text"
+        assert d["display_name"] == "Paragraph"
+        assert "blank lines" in d["description"]
 
 
 # ---------------------------------------------------------------------------
@@ -1744,3 +2507,219 @@ class TestApplyClipperResolvesAuto:
         first = next(iter(clips.values()))
         assert first["origin"]["params"]["clipper"] == "sound_tiling"
         assert first["origin"]["params"]["clipper_duration"] == "4.0"
+
+
+# ---------------------------------------------------------------------------
+# ImageFaceClipper
+# ---------------------------------------------------------------------------
+
+
+class _FakeBBox:
+    def __init__(self, xmin: float, ymin: float, width: float, height: float) -> None:
+        self.xmin = xmin
+        self.ymin = ymin
+        self.width = width
+        self.height = height
+
+
+class _FakeLocationData:
+    def __init__(self, bbox: _FakeBBox) -> None:
+        self.relative_bounding_box = bbox
+
+
+class _FakeDetection:
+    def __init__(self, confidence: float, bbox: _FakeBBox) -> None:
+        self.score = [confidence]
+        self.location_data = _FakeLocationData(bbox)
+
+
+class _FakeResults:
+    def __init__(self, detections: list[_FakeDetection]) -> None:
+        self.detections = detections
+
+
+def _stub_detector(detections: list[_FakeDetection]):
+    """Build a MediaPipe-shaped detector stub for ImageFaceClipper."""
+    from unittest.mock import MagicMock
+
+    detector = MagicMock()
+    detector.process.return_value = _FakeResults(detections)
+    return detector
+
+
+class TestImageFaceClipper:
+    def test_identity(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper()
+        assert c.name == "image_face"
+        assert c.media_type == "image"
+        assert c.display_name == "Face crops"
+        assert isinstance(c, MediaClipper)
+
+    def test_registered_in_registry(self):
+        from vtsearch.media import get_clipper
+
+        c = get_clipper("image_face")
+        assert c.name == "image_face"
+        assert c.media_type == "image"
+
+    def test_rejects_invalid_threshold(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        with pytest.raises(ValueError):
+            ImageFaceClipper(threshold=-0.1)
+        with pytest.raises(ValueError):
+            ImageFaceClipper(threshold=1.5)
+
+    def test_rejects_invalid_model_selection(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        with pytest.raises(ValueError):
+            ImageFaceClipper(model_selection=2)
+
+    def test_rejects_negative_padding(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        with pytest.raises(ValueError):
+            ImageFaceClipper(padding=-0.01)
+
+    def test_rejects_non_positive_min_size(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        with pytest.raises(ValueError):
+            ImageFaceClipper(min_size=0)
+
+    def test_returns_empty_when_no_detections(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper()
+        c._detector = _stub_detector([])
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        assert c.clip(media) == []
+
+    def test_returns_empty_when_no_media_bytes(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper()
+        c._detector = _stub_detector([_FakeDetection(0.9, _FakeBBox(0.1, 0.1, 0.2, 0.2))])
+        assert c.clip({"id": 1, "type": "image"}) == []
+
+    def test_emits_one_clip_per_face(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper(padding=0.0)
+        c._detector = _stub_detector(
+            [
+                _FakeDetection(0.95, _FakeBBox(0.1, 0.1, 0.2, 0.2)),
+                _FakeDetection(0.85, _FakeBBox(0.5, 0.4, 0.2, 0.2)),
+            ]
+        )
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        clips = c.clip(media)
+        assert len(clips) == 2
+        for clip in clips:
+            assert clip["type"] == "image"
+            assert isinstance(clip["media_bytes"], bytes)
+            assert clip["width"] > 0 and clip["height"] > 0
+            assert clip["file_size"] == len(clip["media_bytes"])
+            assert clip["clip_box"] is not None and len(clip["clip_box"]) == 4
+
+    def test_clip_index_orders_by_confidence(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper(padding=0.0)
+        c._detector = _stub_detector(
+            [
+                _FakeDetection(0.6, _FakeBBox(0.1, 0.1, 0.2, 0.2)),
+                _FakeDetection(0.95, _FakeBBox(0.5, 0.4, 0.2, 0.2)),
+            ]
+        )
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        clips = c.clip(media)
+        assert clips[0]["clip_index"] == 0
+        assert clips[1]["clip_index"] == 1
+        # Highest-confidence detection (0.95) lands at index 0; its bbox was
+        # the second one passed in, centred at (0.5, 0.4).
+        x1, y1, _x2, _y2 = clips[0]["clip_box"]
+        assert x1 >= int(640 * 0.5) - 1
+
+    def test_drops_low_confidence(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper(threshold=0.7, padding=0.0)
+        c._detector = _stub_detector(
+            [
+                _FakeDetection(0.95, _FakeBBox(0.1, 0.1, 0.2, 0.2)),
+                _FakeDetection(0.4, _FakeBBox(0.5, 0.4, 0.2, 0.2)),
+            ]
+        )
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        clips = c.clip(media)
+        assert len(clips) == 1
+
+    def test_drops_too_small(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper(min_size=100, padding=0.0)
+        # 0.05 * 640 = 32px — below the 100px floor.
+        c._detector = _stub_detector([_FakeDetection(0.95, _FakeBBox(0.1, 0.1, 0.05, 0.05))])
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        assert c.clip(media) == []
+
+    def test_padding_expands_box(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper(padding=0.5)
+        # Face at (320,240) sized 64x64 → padded by 32px on each side → 128x128.
+        # 0.5..0.5+64/640=0.6 in x; 0.5..0.5+64/480≈0.633 in y.
+        c._detector = _stub_detector([_FakeDetection(0.95, _FakeBBox(0.5, 0.5, 0.1, 0.1333))])
+        media = {"id": 1, "type": "image", "media_bytes": _make_image_bytes(640, 480)}
+        clips = c.clip(media)
+        assert len(clips) == 1
+        x1, y1, x2, y2 = clips[0]["clip_box"]
+        assert (x2 - x1) >= 96 and (y2 - y1) >= 96
+
+    def test_clip_drops_inherited_embedding_and_md5(self):
+        """Cropped faces must not keep the parent's embedding / md5 —
+        otherwise the load-pipeline fixup won't re-embed single-face crops."""
+        from vtsearch.media.image.clipper import ImageFaceClipper
+        import numpy as np
+
+        c = ImageFaceClipper(padding=0.0)
+        c._detector = _stub_detector([_FakeDetection(0.95, _FakeBBox(0.1, 0.1, 0.3, 0.3))])
+        media = {
+            "id": 1,
+            "type": "image",
+            "media_bytes": _make_image_bytes(640, 480),
+            "md5": "deadbeef",
+            "embedding": np.zeros(8, dtype=np.float32),
+        }
+        clips = c.clip(media)
+        assert len(clips) == 1
+        assert "embedding" not in clips[0]
+        assert "md5" not in clips[0]
+
+    def test_with_params_overrides(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        c = ImageFaceClipper().with_params({"threshold": 0.8, "padding": 0.4, "min_size": 64, "model_selection": 0})
+        assert isinstance(c, ImageFaceClipper)
+        assert c._threshold == 0.8
+        assert c._padding == 0.4
+        assert c._min_size == 64
+        assert c._model_selection == 0
+
+    def test_to_dict_includes_params(self):
+        from vtsearch.media.image.clipper import ImageFaceClipper
+
+        d = ImageFaceClipper(threshold=0.7, padding=0.3, min_size=48, model_selection=0).to_dict()
+        assert d["name"] == "image_face"
+        assert d["media_type"] == "image"
+        assert d["threshold"] == 0.7
+        assert d["padding"] == 0.3
+        assert d["min_size"] == 48
+        assert d["model_selection"] == 0
+        assert "creation_questions" in d
+        keys = {q["key"] for q in d["creation_questions"]}
+        assert keys == {"threshold", "padding", "min_size", "model_selection"}

@@ -40,6 +40,13 @@ class ServerJsonLabelImporter(LabelImporter):
             field_type="server_path",
             description=("Absolute or relative path to a VTSearch labels JSON file on the server filesystem."),
             placeholder="data/labels/my_labels.json",
+            hint=(
+                "Example structure:\n"
+                '  {"labels": [\n'
+                '    {"md5": "d41d8cd98f00b204e9800998ecf8427e", "label": "good"},\n'
+                '    {"md5": "e2fc714c4727ee9395f324cd2e7f331f", "label": "bad"}\n'
+                "  ]}"
+            ),
         ),
     ]
 

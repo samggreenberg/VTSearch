@@ -1,6 +1,10 @@
 """Configuration and constants for VTSearch."""
 
+from __future__ import annotations
+
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 # Data paths are anchored to the repository root, NOT to the current working
@@ -139,5 +143,121 @@ aliased to via a broken ``AutoModel.from_pretrained`` path (the PE-Core
 HF repo has no ``config.json`` so ``AutoModel`` could never load it).
 """
 CLAP_MUSIC_MODEL_ID = "laion/larger_clap_music_and_speech"
+CLAP_GENERAL_MODEL_ID = "laion/larger_clap_general"
+AST_MODEL_ID = "MIT/ast-finetuned-audioset-10-10-0.4593"
+AST_SAMPLE_RATE = 16000  # AST expects 16 kHz mono
+WHISPER_MODEL_ID = "openai/whisper-base"
+WHISPER_SAMPLE_RATE = 16000  # Whisper expects 16 kHz mono
 BGE_MODEL_ID = "BAAI/bge-base-en-v1.5"
 LANGUAGEBIND_VIDEO_MODEL_ID = "LanguageBind/LanguageBind_Video_V1.5_FT"
+VIDEOMAE_MODEL_ID = "OpenGVLab/VideoMAEv2-Base"
+"""Hugging Face repo for VideoMAE v2 Base weights.
+
+Loaded via ``AutoModel.from_pretrained(..., trust_remote_code=True)``.
+Vision-only encoder — there is no paired text tower, so the embedder
+sets ``supports_text=False`` and :meth:`embed_text` returns ``None``.
+The masked-autoencoder objective produces unusually strong action /
+motion features compared to image-only encoders applied per frame.
+"""
+
+
+# ---------------------------------------------------------------------------
+# CoreConfig — runtime config bundle the (future) ``vtscore`` library consumes
+# ---------------------------------------------------------------------------
+#
+# Today every library-candidate package reaches into ``vtsearch.settings``
+# directly for tunables like ``saved_datasets_dir``, ``detectors_dir``,
+# ``calibrate_count``, etc.  That couples the library to the app's settings
+# layer and makes it impossible to vendor the library as ``vtscore`` (see
+# ``docs/plans/extract-library.md`` — Phase 2).
+#
+# ``CoreConfig`` is the seam: a frozen value object that bundles every knob
+# library code reads.  Follow-up PRs convert each call site to accept (or
+# look up) a ``CoreConfig`` instead of importing ``vtsearch.settings``.
+# Until those land this class is unused at runtime — the scaffold just
+# defines the type so the conversions can happen one file at a time.
+#
+# The app side will build a fresh ``CoreConfig`` at each request boundary
+# via :meth:`CoreConfig.from_settings`; library callers can construct one
+# directly with whatever values they want.
+#
+# The implementation of :meth:`from_settings` is installed by the app via
+# :func:`register_core_config_builder` — see ``vtsearch/shim`` for the
+# concrete builder that snapshots ``vtsearch.settings``.  This keeps the
+# library import-clean: ``vtsearch.config`` itself never imports
+# ``vtsearch.settings`` (Phase 8 of ``docs/plans/extract-library.md``).
+# Library-only consumers without an app skip ``from_settings()`` entirely
+# and construct ``CoreConfig`` directly.
+
+
+_core_config_builder: Callable[[str | Path | None], CoreConfig] | None = None
+
+
+def register_core_config_builder(fn: Callable[[str | Path | None], CoreConfig]) -> None:
+    """Install the app-side builder that reads ``vtsearch.settings``.
+
+    The Flask app wires this at startup via
+    :func:`vtsearch.shim.register_app_config_builder`.  Once registered,
+    :meth:`CoreConfig.from_settings` delegates to *fn* — the library file
+    itself stays settings-import-free.
+    """
+    global _core_config_builder
+    _core_config_builder = fn
+
+
+@dataclass(frozen=True)
+class CoreConfig:
+    """Runtime configuration bundle the ``vtscore`` library consumes.
+
+    Field set is intentionally narrow — only knobs that library code (loaders,
+    detectors, training, embedding) reads.  User-pref concerns like theme or
+    grid-icon size are app-tier and stay in ``vtsearch.settings``.
+    """
+
+    # Server-tier settings (shared across users, stored in data/settings.json)
+    saved_datasets_dir: Path
+    detectors_dir: Path
+    max_concurrent_dataset_downloads: int
+    max_concurrent_dataset_embeddings: int
+    autorun_detectors: tuple[str, ...]
+
+    # Per-user settings (stored under each user's data dir)
+    safe_thresholds: bool
+    calibrate_count: int
+    calibration_fraction: float
+    enrich_descriptions: bool
+    autopilot_goal_diversity: int
+    inclusion: int
+
+    # Filesystem root for caches, embeddings, model downloads.  Phase 4 will
+    # route every hardcoded ``data/`` path through this field.
+    data_dir: Path
+
+    @classmethod
+    def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:
+        """Snapshot the current user's ``vtsearch.settings`` into a CoreConfig.
+
+        Called by the Flask app at the request boundary (after auth resolves
+        the current user) and by the CLI before kicking off autodetect.  The
+        result is a frozen immutable value safe to hand to background
+        threads — settings changes during a request will not retroactively
+        rewrite a config already in flight.
+
+        When *settings_path* is given, the server-tier settings file path is
+        redirected to that location first.  The CLI uses this to point at a
+        run-specific settings JSON without each call site importing
+        :mod:`vtsearch.settings` directly.
+
+        Implementation note: the body of this classmethod lives in
+        ``vtsearch/shim/`` and is installed at app startup via
+        :func:`register_core_config_builder`.  Library-only consumers
+        without the shim should construct :class:`CoreConfig` directly.
+        """
+        if _core_config_builder is None:
+            raise RuntimeError(
+                "CoreConfig.from_settings() requires the app-side builder to be "
+                "registered.  The Flask app installs it during startup via "
+                "vtsearch.shim.register_app_config_builder().  Library-only "
+                "callers should construct CoreConfig(...) directly instead."
+            )
+        return _core_config_builder(settings_path)

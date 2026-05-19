@@ -1690,15 +1690,15 @@ class TestRegisterModelFromLabelset:
         assert tm_data["media_example"] == ""
         assert tm_data["examples"] == []
 
-    def test_missing_name_returns_400(self, client, tmp_path):
+    def test_missing_name_returns_422(self, client, tmp_path):
         labels_path = tmp_path / "labels.json"
         labels_path.write_text('{"labels": []}')
         res = client.post(
             "/api/detectors/registry/from-labelset/server_json_file",
             json={"filepath": str(labels_path)},
         )
-        assert res.status_code == 400
-        assert "name" in res.get_json()["error"]
+        assert res.status_code == 422
+        assert "name" in res.get_json().get("errors", {}).get("json", {})
 
     def test_md5_only_labelset_returns_400(self, client, tmp_path):
         """Legacy md5-only labels have no origin — media type cannot be inferred."""

@@ -1,0 +1,32 @@
+.skeleton {
+  display: block;
+  background: var(--bg-subtle);
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--skeleton-shimmer) 50%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: vt-skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes vt-skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}

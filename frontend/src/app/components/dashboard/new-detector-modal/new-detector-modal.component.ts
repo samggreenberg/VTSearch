@@ -1,9 +1,15 @@
 import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { map } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
+import {
+  FolderBrowserBrowseFn,
+  FolderBrowserComponent,
+  FolderBrowserFileEntry,
+} from '../../folder-browser/folder-browser.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
@@ -23,14 +29,6 @@ import {
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
-interface BrowseEntry {
-  name: string;
-  path: string;
-  size_bytes?: number;
-  modified_at?: string;
-  isDir: boolean;
-}
-
 type ModalView = 'main' | 'media-picker';
 type ModalTab = 'blank' | 'trained';
 type TrainedSubView = 'picker' | 'form';
@@ -38,7 +36,7 @@ type TrainedSubView = 'picker' | 'form';
 @Component({
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent, MediaCropModalComponent, DropZoneComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent, FolderBrowserComponent, MediaCropModalComponent, DropZoneComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -61,6 +59,10 @@ export class NewDetectorModalComponent implements OnInit {
   view: ModalView = 'main';
   tab: ModalTab = 'blank';
   name = '';
+  /** True once the user has typed into the name field. While false, the
+   *  name auto-tracks ``pendingText`` (sanitised) so users don't have to
+   *  type the same string twice. */
+  nameTouched = false;
   mediaType = 'audio';
   pendingText = '';
   mediaTypes: string[] = [];
@@ -143,19 +145,37 @@ export class NewDetectorModalComponent implements OnInit {
   demoFileBrowsing = false;
   demoFileBrowseSource = '';
   demoFileBrowseLabel = '';
-  demoFileBrowsePath: string[] = [];
-  demoFileBrowseEntries: BrowseEntry[] = [];
   demoFileLoading = false;
 
-  // --- Server folder browser (mirrors the Add Dataset breadcrumb browser
-  //     but lists files too so the user can pick one as an example). ---
-  sfBrowsePath = '';
-  sfBrowseRootPath = '';
-  sfBrowseDirs: { name: string; path: string; modified_at?: string }[] = [];
-  sfBrowseFiles: BrowseEntry[] = [];
-  sfBrowseLoading = false;
+  // --- Server folder browser (mirrors the Add Dataset browser but
+  //     lists files too so the user can pick one as an example). ---
   sfBrowseError = '';
   sfFileSelecting = false;
+
+  /** Browse fn for the embedded ``<vt-folder-browser>`` in the demo
+   *  file picker.  Uses the demo-scoped source (``demo:<name>``). */
+  readonly demoBrowseFn: FolderBrowserBrowseFn = (path: string) =>
+    this.datasetsApi.browseMediaFiles(this.demoFileBrowseSource, path).pipe(
+      map((res) => ({
+        directories: res.directories || [],
+        files: res.files || [],
+        rootPath: res.root_path,
+        currentPath: path,
+      })),
+    );
+
+  /** Browse fn for the embedded ``<vt-folder-browser>`` in the server
+   *  folder picker.  Lists both folders and files (filtered server-side
+   *  to known media extensions). */
+  readonly sfBrowseFn: FolderBrowserBrowseFn = (path: string) =>
+    this.datasetsApi.browseMediaFiles('folder', path).pipe(
+      map((res) => ({
+        directories: res.directories || [],
+        files: res.files || [],
+        rootPath: res.root_path,
+        currentPath: path,
+      })),
+    );
 
   // Pending crop confirmation state.
   pendingFile: File | null = null;
@@ -256,6 +276,24 @@ export class NewDetectorModalComponent implements OnInit {
 
   unlockMediaType(): void {
     this.mediaTypeLocked = false;
+  }
+
+  /** Trim and collapse internal whitespace so a pasted multi-line query
+   *  becomes a single-line name. */
+  private sanitizeName(text: string): string {
+    return text.trim().replace(/\s+/g, ' ');
+  }
+
+  onPendingTextInput(value: string): void {
+    this.pendingText = value;
+    if (!this.nameTouched) {
+      this.name = this.sanitizeName(value);
+    }
+  }
+
+  onNameInput(value: string): void {
+    this.nameTouched = true;
+    this.name = value;
   }
 
   toggleMediaTypeDropdown(): void {
@@ -425,8 +463,6 @@ export class NewDetectorModalComponent implements OnInit {
     this.demoFileBrowsing = false;
     this.demoFileBrowseSource = '';
     this.demoFileBrowseLabel = '';
-    this.demoFileBrowsePath = [];
-    this.demoFileBrowseEntries = [];
     this.demoFileLoading = false;
   }
 
@@ -496,41 +532,10 @@ export class NewDetectorModalComponent implements OnInit {
     this.demoFileBrowsing = true;
     this.demoFileBrowseSource = `demo:${demo.name}`;
     this.demoFileBrowseLabel = demo.label;
-    this.demoFileBrowsePath = [demo.label];
-    this.loadDemoDirectory('');
   }
 
-  private loadDemoDirectory(relPath: string): void {
-    this.demoFileLoading = true;
-    this.demoFileBrowseEntries = [];
-    this.datasetsApi.browseMediaFiles(this.demoFileBrowseSource, relPath).subscribe({
-      next: (res) => {
-        this.demoFileBrowseEntries = this.toEntries(res.directories, res.files);
-        this.demoFileLoading = false;
-      },
-      error: () => {
-        this.demoFileLoading = false;
-      },
-    });
-  }
-
-  enterDemoDirectory(entry: BrowseEntry): void {
-    this.demoFileBrowsePath.push(entry.name);
-    this.loadDemoDirectory(entry.path);
-  }
-
-  navigateDemoBreadcrumb(index: number): void {
-    if (index === 0) {
-      this.demoFileBrowsePath = [this.demoFileBrowseLabel];
-      this.loadDemoDirectory('');
-      return;
-    }
-    this.demoFileBrowsePath = this.demoFileBrowsePath.slice(0, index + 1);
-    const relPath = this.demoFileBrowsePath.slice(1).join('/');
-    this.loadDemoDirectory(relPath);
-  }
-
-  selectDemoFile(entry: BrowseEntry): void {
+  /** Confirm handler for the demo file browser. */
+  selectDemoFile(entry: FolderBrowserFileEntry): void {
     this.demoFileLoading = true;
     this.datasetsApi.selectBrowsedFile(this.demoFileBrowseSource, entry.path).subscribe({
       next: (res) => {
@@ -555,80 +560,21 @@ export class NewDetectorModalComponent implements OnInit {
     this.demoFileBrowsing = false;
     this.demoFileBrowseSource = '';
     this.demoFileBrowseLabel = '';
-    this.demoFileBrowsePath = [];
-    this.demoFileBrowseEntries = [];
   }
 
   // --- Server folder browser (with file selection) ---
 
   private resetServerFolderState(): void {
-    this.sfBrowsePath = '';
-    this.sfBrowseRootPath = '';
-    this.sfBrowseDirs = [];
-    this.sfBrowseFiles = [];
-    this.sfBrowseLoading = false;
     this.sfBrowseError = '';
     this.sfFileSelecting = false;
   }
 
   private openServerFolderBrowser(): void {
     this.resetServerFolderState();
-    this.sfLoadDirectory('');
   }
 
-  sfLoadDirectory(path: string): void {
-    this.sfBrowseLoading = true;
-    this.sfBrowseError = '';
-    this.datasetsApi.browseMediaFiles('folder', path).subscribe({
-      next: (res) => {
-        this.sfBrowseDirs = res.directories || [];
-        this.sfBrowseFiles = (res.files || []).map((f) => ({
-          name: f.name,
-          path: f.path,
-          size_bytes: f.size_bytes,
-          modified_at: f.modified_at,
-          isDir: false,
-        }));
-        this.sfBrowsePath = path;
-        this.sfBrowseRootPath = res.root_path;
-        this.sfBrowseLoading = false;
-      },
-      error: (err) => {
-        this.sfBrowseError =
-          err.error?.error || 'Could not browse server folders. Is saved_datasets_dir configured?';
-        this.sfBrowseLoading = false;
-      },
-    });
-  }
-
-  sfEnterDirectory(dir: { name: string; path: string }): void {
-    this.sfLoadDirectory(dir.path);
-  }
-
-  sfGoUp(): void {
-    if (!this.sfBrowsePath) return;
-    const parts = this.sfBrowsePath.split('/');
-    parts.pop();
-    this.sfLoadDirectory(parts.join('/'));
-  }
-
-  get sfBreadcrumbs(): string[] {
-    if (!this.sfBrowsePath) return [];
-    return this.sfBrowsePath.split('/');
-  }
-
-  sfNavigateBreadcrumb(index: number): void {
-    const parts = this.sfBrowsePath.split('/');
-    this.sfLoadDirectory(parts.slice(0, index + 1).join('/'));
-  }
-
-  get sfAbsolutePath(): string {
-    if (!this.sfBrowseRootPath) return '';
-    if (!this.sfBrowsePath) return this.sfBrowseRootPath;
-    return this.sfBrowseRootPath + '/' + this.sfBrowsePath;
-  }
-
-  sfSelectFile(entry: BrowseEntry): void {
+  /** Confirm handler for the server folder browser. */
+  sfSelectFile(entry: FolderBrowserFileEntry): void {
     this.sfFileSelecting = true;
     this.datasetsApi.selectBrowsedFile('folder', entry.path).subscribe({
       next: (res) => {
@@ -649,29 +595,6 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   // --- Local file upload (single file for the example) ---
-
-  /** Build a unified entry list (directories first, then files). */
-  private toEntries(
-    directories: { name: string; path: string; modified_at?: string }[] | undefined,
-    files:
-      | { name: string; path: string; size_bytes: number; modified_at?: string }[]
-      | undefined,
-  ): BrowseEntry[] {
-    const entries: BrowseEntry[] = [];
-    for (const d of directories || []) {
-      entries.push({ name: d.name, path: d.path, modified_at: d.modified_at, isDir: true });
-    }
-    for (const f of files || []) {
-      entries.push({
-        name: f.name,
-        path: f.path,
-        size_bytes: f.size_bytes,
-        modified_at: f.modified_at,
-        isDir: false,
-      });
-    }
-    return entries;
-  }
 
   formatSize(bytes?: number): string {
     if (bytes == null) return '';

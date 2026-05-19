@@ -261,29 +261,39 @@ class TestFolderImporterConverterFields:
 
 
 class TestHttpArchiveImporterConverterFields:
-    def test_build_cli_args_with_converters(self):
+    def test_build_cli_args_with_source_specs(self):
+        import json
+
         from vtsearch.datasets.importers.http_archive import IMPORTER
 
+        specs = [
+            {"source_type": "image", "converter": None, "params": {}},
+            {"source_type": "video", "converter": "video2image", "params": {"n_clips": "8"}},
+        ]
         args = IMPORTER.build_cli_args(
             {
                 "url": "https://example.com/a.zip",
                 "media_type": "image",
-                "converters": "video2image",
+                "source_specs": specs,
             }
         )
-        assert "--converters video2image" in args
+        assert "--source-specs" in args
+        assert json.dumps(specs) in args
 
-    def test_build_origin_with_converters(self):
+    def test_build_origin_with_source_specs(self):
+        import json
+
         from vtsearch.datasets.importers.http_archive import IMPORTER
 
+        specs = [{"source_type": "document", "converter": "document2image", "params": {}}]
         origin = IMPORTER.build_origin(
             {
                 "url": "https://example.com/a.zip",
                 "media_type": "image",
-                "converters": "document2image",
+                "source_specs": specs,
             }
         )
-        assert origin["params"]["converters"] == "document2image"
+        assert origin["params"]["source_specs"] == json.dumps(specs)
 
 
 # ===========================================================================
@@ -809,29 +819,57 @@ class TestSourceSpecParsing:
         assert spec.converter is None
 
 
+class _LegacyTestImporter:
+    """Stand-in for an external ``multi_media=False`` importer.
+
+    Every in-tree importer now sets ``multi_media=True``, so the legacy
+    synthesis branch of :meth:`DatasetImporter.effective_source_specs`
+    is exercised only by extension code.  We instantiate one explicitly
+    here to keep that branch under test until the shim is deleted.
+    """
+
+    @staticmethod
+    def make():
+        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+
+        class _Legacy(DatasetImporter):
+            name = "_legacy_test"
+            display_name = "Legacy"
+            description = ""
+            multi_media = False
+            fields = [
+                ImporterField(key="media_type", label="Type", field_type="select", default="image"),
+            ]
+
+            def run(self, field_values, medias, thin=False):  # pragma: no cover
+                raise NotImplementedError
+
+        return _Legacy()
+
+
 class TestLegacyEffectiveSourceSpecs:
     """Legacy (multi_media=False) importers synthesise specs from
     media_type + comma-separated converters."""
 
     def test_legacy_single_media_type_only(self):
-        from vtsearch.datasets.importers.http_archive import IMPORTER
+        imp = _LegacyTestImporter.make()
 
-        specs = IMPORTER.effective_source_specs({"media_type": "image"})
+        specs = imp.effective_source_specs({"media_type": "image"})
         assert len(specs) == 1
         assert specs[0].source_type == "image"
         assert specs[0].converter is None
 
     def test_legacy_with_converters_csv(self):
-        from vtsearch.datasets.importers.http_archive import IMPORTER
+        imp = _LegacyTestImporter.make()
 
-        specs = IMPORTER.effective_source_specs({"media_type": "image", "converters": "video2image,document2image"})
+        specs = imp.effective_source_specs({"media_type": "image", "converters": "video2image,document2image"})
         assert [s.converter for s in specs] == [None, "video2image", "document2image"]
         assert [s.source_type for s in specs] == ["image", "video", "document"]
 
     def test_legacy_unknown_converter_is_skipped(self):
-        from vtsearch.datasets.importers.http_archive import IMPORTER
+        imp = _LegacyTestImporter.make()
 
-        specs = IMPORTER.effective_source_specs({"media_type": "image", "converters": "video2image,bogus"})
+        specs = imp.effective_source_specs({"media_type": "image", "converters": "video2image,bogus"})
         assert [s.converter for s in specs] == [None, "video2image"]
 
 
@@ -936,11 +974,36 @@ class TestImporterMultiMediaFlagInToDict:
         d = IMPORTER.to_dict()
         assert d.get("multi_media") is True
 
-    def test_http_archive_does_not_advertise_multi_media(self):
+    def test_http_archive_advertises_multi_media(self):
         from vtsearch.datasets.importers.http_archive import IMPORTER
 
         d = IMPORTER.to_dict()
-        assert d.get("multi_media") is False
+        assert d.get("multi_media") is True
+
+    def test_pickle_advertises_multi_media(self):
+        from vtsearch.datasets.importers.pickle import IMPORTER
+
+        assert IMPORTER.to_dict().get("multi_media") is True
+
+    def test_combine_datasets_advertises_multi_media(self):
+        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+
+        assert IMPORTER.to_dict().get("multi_media") is True
+
+    def test_synthetic_advertises_multi_media(self):
+        from vtsearch.datasets.importers.synthetic import IMPORTER
+
+        assert IMPORTER.to_dict().get("multi_media") is True
+
+    def test_recaller_advertises_multi_media(self):
+        from vtsearch.datasets.importers.recaller import IMPORTER
+
+        assert IMPORTER.to_dict().get("multi_media") is True
+
+    def test_demo_advertises_multi_media(self):
+        from vtsearch.datasets.importers.demo import IMPORTER
+
+        assert IMPORTER.to_dict().get("multi_media") is True
 
 
 class TestConverterFieldsInToDict:

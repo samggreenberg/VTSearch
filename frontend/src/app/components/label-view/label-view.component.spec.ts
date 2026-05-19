@@ -357,6 +357,9 @@ describe('LabelViewComponent', () => {
     });
 
     autopilot.updateFromLabelingStatus({
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'green' },
       span: { status: 'yellow' },
@@ -368,6 +371,9 @@ describe('LabelViewComponent', () => {
 
     // Surprise vote causes smart to drop → bounce back to hard
     autopilot.updateFromLabelingStatus({
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'yellow' },
       stable: { status: 'green' },
       span: { status: 'yellow' },

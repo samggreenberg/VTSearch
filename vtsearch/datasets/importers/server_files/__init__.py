@@ -230,6 +230,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 "Symlinks are followed; directory entries are scanned recursively "
                 "for media files."
             ),
+            hint=("Accepts .txt, .list, or .npz. One path per line, or a NumPy archive of pre-computed vectors."),
             accept=".txt,.list,.npz",
         ),
         ImporterField(
