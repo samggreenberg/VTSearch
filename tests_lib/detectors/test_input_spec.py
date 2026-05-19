@@ -7,7 +7,9 @@ exercised separately in tests/cli and tests/io.
 
 from __future__ import annotations
 
-import app as app_module  # noqa: F401 — ensure plugin registries are populated
+# Plugin registries are populated eagerly at PluginRegistry construction
+# (Phase 5 of docs/plans/extract-library.md), so no app-side import is
+# needed to ensure converters/clippers are discoverable.
 from vtsearch.detectors.input_spec import (
     apply_detector_meta,
     build_detector_meta,

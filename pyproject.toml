@@ -187,8 +187,8 @@ DEP002 = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["tests"]
+testpaths = ["tests", "tests_lib"]
+pythonpath = ["tests", "tests_lib"]
 markers = [
     "gpu: tests that require a CUDA GPU (deselected by default, run with: -m gpu)",
     "slow: CLI subprocess tests that spawn a fresh Python process (~16s each)",

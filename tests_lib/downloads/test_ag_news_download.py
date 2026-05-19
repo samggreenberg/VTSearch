@@ -120,7 +120,7 @@ class TestLoadDemoSourceAgNews:
     def test_ag_news_source_populates_clips(self):
         """load_demo_source with source='ag_news' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
-        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
+        from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
             "World": ["World article one.", "World article two."],
@@ -149,7 +149,7 @@ class TestLoadDemoSourceAgNews:
     def test_ag_news_slice_is_applied(self):
         """slice_start/slice_end limits articles per category."""
         from vtsearch.datasets import downloader as dl_module
-        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
+        from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
             "Business": [f"Business article {i}." for i in range(10)],

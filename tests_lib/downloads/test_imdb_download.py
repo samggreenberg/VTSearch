@@ -97,7 +97,7 @@ class TestLoadDemoSourceImdb:
     def test_imdb_source_populates_clips(self):
         """load_demo_source with source='imdb' fills the clips dict."""
         from vtsearch.datasets import downloader as dl_module
-        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
+        from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_reviews = {
             "pos": ["Great movie!", "Loved it!"],
@@ -126,7 +126,7 @@ class TestLoadDemoSourceImdb:
     def test_imdb_slice_is_applied(self):
         """slice_start/slice_end limits reviews per category."""
         from vtsearch.datasets import downloader as dl_module
-        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
+        from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_reviews = {
             "pos": [f"Positive review {i}." for i in range(10)],
