@@ -60,6 +60,120 @@ datasets_load_bp = Blueprint(
 LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
 
 
+def _parse_clipper_params(raw: str) -> dict | None:
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("clipper_params must be a JSON object")
+        return parsed
+    except (ValueError, TypeError) as exc:
+        abort(400, message=f"Invalid clipper_params: {exc}")
+
+
+def _save_uploaded_files_to_temp(files, upload_dir: Path) -> int:
+    """Stream each uploaded file into *upload_dir*; return saved count."""
+    saved = 0
+    for f in files:
+        rel = _safe_relative_upload_path(f.filename or "")
+        if rel is None:
+            continue
+        dest = upload_dir / Path(*rel.parts)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        f.save(dest)
+        saved += 1
+    return saved
+
+
+def _read_optional_vectors_file(upload_dir: Path) -> dict[str, Any]:
+    """Parse the optional ``vectors_file`` multipart field, if present.
+
+    Returns the {filename: vector} mapping (possibly empty).  Removes the
+    temporary .npz once it's parsed.  Aborts 400 if the file is malformed
+    (after cleaning up *upload_dir*).
+    """
+    storage = request.files.get("vectors_file")
+    if not storage or not storage.filename:
+        return {}
+
+    from vtsearch.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
+
+    npz_path = upload_dir / "__vtsearch_vectors__.npz"
+    try:
+        storage.save(npz_path)
+        return dict(read_npz_filenames_and_vectors(npz_path))
+    except Exception as exc:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        abort(400, message=f"Invalid vectors_file: {exc}")
+    finally:
+        try:
+            npz_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _build_local_folder_field_values(form, upload_dir: Path, clipper_params: dict | None) -> dict:
+    """Translate the multipart form into the importer's field_values dict."""
+    field_values: dict = {
+        "path": str(upload_dir),
+        "media_type": (form.get("media_type") or "").strip(),
+        "recursive": (form.get("recursive") or "true").strip().lower() not in ("false", "0", "no", "off"),
+    }
+    for key in ("embedder", "converters", "source_specs"):
+        val = (form.get(key) or "").strip()
+        if val:
+            field_values[key] = val
+    clipper = (form.get("clipper") or "").strip()
+    if clipper:
+        field_values["clipper"] = clipper
+        if clipper_params is not None:
+            field_values["clipper_params"] = clipper_params
+    return field_values
+
+
+def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list]:
+    """Pop clipper-related keys, set skip_embedding when applicable.
+
+    Returns ``(clipper_name, clipper_params, chain_steps)``; *field_values*
+    is mutated in place so ``clipper`` is normalised and ``skip_embedding``
+    is set when a non-default clipper or a chain is configured.
+    """
+    from vtsearch.datasets.load_pipeline import _parse_chain_field
+
+    clipper_name = field_values.pop("clipper", "") or ""
+    clipper_params = field_values.pop("clipper_params", None)
+    chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
+    field_values["clipper"] = clipper_name
+    if (clipper_name and not clipper_name.endswith("_default")) or chain_steps:
+        field_values["skip_embedding"] = True
+    return clipper_name, clipper_params, chain_steps
+
+
+def _make_local_folder_loader(importer, field_values: dict, upload_dir: Path, content_vectors: dict, media_type: str):
+    """Build the ``target_medias -> None`` task that the importer will run."""
+    from vtsearch.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
+
+    use_chunked = getattr(importer, "supports_chunked", False)
+    chunk_size = auto_chunk_size(media_type) if use_chunked else 0
+
+    def _load(target_medias):
+        previous_vectors = importer.content_vectors
+        if content_vectors:
+            importer.content_vectors = content_vectors
+        try:
+            if use_chunked:
+                consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size))
+            else:
+                importer.run(field_values, target_medias)
+        finally:
+            if content_vectors:
+                importer.content_vectors = previous_vectors
+            shutil.rmtree(upload_dir, ignore_errors=True)
+
+    return _load
+
+
 @datasets_load_bp.route("/api/dataset/import-local-folder", methods=["POST"])
 @datasets_load_bp.response(200, DatasetLoadStartedResponseSchema)
 @datasets_load_bp.alt_response(
@@ -71,7 +185,7 @@ LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
     ),
 )
 @datasets_load_bp.alt_response(500, description="The server_folder importer is unavailable.")
-def import_local_folder():  # noqa: C901
+def import_local_folder():
     """Import a folder uploaded from the user's *browser* machine.
 
     The browser uses ``<input type="file" webkitdirectory>`` to let the
@@ -101,84 +215,23 @@ def import_local_folder():  # noqa: C901
     if not media_type:
         abort(400, message="Missing required field: 'media_type'")
 
-    embedder = (request.form.get("embedder") or "").strip()
-    clipper = (request.form.get("clipper") or "").strip()
-    converters = (request.form.get("converters") or "").strip()
-    source_specs = (request.form.get("source_specs") or "").strip()
-    recursive_raw = (request.form.get("recursive") or "true").strip().lower()
-    recursive = recursive_raw not in ("false", "0", "no", "off")
-    user_dataset_name = (request.form.get("dataset_name") or "").strip()
-    clipper_params_raw = request.form.get("clipper_params") or ""
-    clipper_params: dict | None = None
-    if clipper_params_raw:
-        try:
-            clipper_params = json.loads(clipper_params_raw)
-            if not isinstance(clipper_params, dict):
-                raise ValueError("clipper_params must be a JSON object")
-        except (ValueError, TypeError) as exc:
-            abort(400, message=f"Invalid clipper_params: {exc}")
+    clipper_params = _parse_clipper_params(request.form.get("clipper_params") or "")
 
     LOCAL_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     upload_dir = Path(tempfile.mkdtemp(prefix="local_folder_", dir=LOCAL_UPLOADS_DIR))
 
-    saved = 0
     try:
-        for f in files:
-            rel = _safe_relative_upload_path(f.filename or "")
-            if rel is None:
-                continue
-            dest = upload_dir / Path(*rel.parts)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            f.save(dest)
-            saved += 1
+        saved = _save_uploaded_files_to_temp(files, upload_dir)
     except Exception:
         shutil.rmtree(upload_dir, ignore_errors=True)
         raise
-
     if saved == 0:
         shutil.rmtree(upload_dir, ignore_errors=True)
         abort(400, message="No valid files in upload")
 
-    # Optional .npz of pre-computed embedding vectors.  Saved into the
-    # upload directory and parsed before kicking off the importer; the
-    # resulting mapping is handed to the server_folder importer via its
-    # ``content_vectors`` attribute (cleared in a ``finally`` block to
-    # avoid bleeding into unrelated runs of the singleton).
-    content_vectors: dict[str, Any] = {}
-    vectors_file_storage = request.files.get("vectors_file")
-    if vectors_file_storage and vectors_file_storage.filename:
-        from vtsearch.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
+    content_vectors = _read_optional_vectors_file(upload_dir)
 
-        npz_path = upload_dir / "__vtsearch_vectors__.npz"
-        try:
-            vectors_file_storage.save(npz_path)
-            content_vectors = dict(read_npz_filenames_and_vectors(npz_path))
-        except Exception as exc:
-            shutil.rmtree(upload_dir, ignore_errors=True)
-            abort(400, message=f"Invalid vectors_file: {exc}")
-        finally:
-            # The npz is no longer needed once it's parsed; remove it so
-            # the importer doesn't see it as a media file.
-            try:
-                npz_path.unlink()
-            except FileNotFoundError:
-                pass
-
-    field_values: dict = {
-        "path": str(upload_dir),
-        "media_type": media_type,
-        "recursive": recursive,
-    }
-    if embedder:
-        field_values["embedder"] = embedder
-    if clipper:
-        field_values["clipper"] = clipper
-        if clipper_params is not None:
-            field_values["clipper_params"] = clipper_params
-    if converters:
-        field_values["converters"] = converters
-    if source_specs:
-        field_values["source_specs"] = source_specs
+    field_values = _build_local_folder_field_values(request.form, upload_dir, clipper_params)
 
     # Origin is intentionally synthetic — the on-disk path is a temp dir we
     # are about to delete, so storing it on each media would be misleading
@@ -188,47 +241,21 @@ def import_local_folder():  # noqa: C901
         "params": {"path": "<browser_upload>", "media_type": media_type},
     }
 
-    clipper_name = field_values.pop("clipper", "") or ""
-    inner_clipper_params = field_values.pop("clipper_params", None)
-    from vtsearch.datasets.load_pipeline import (
-        _normalize_media_type,
-        _parse_chain_field,
-        auto_chunk_size,
-        consume_chunks_into,
-    )
-
-    inner_chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
-    field_values["clipper"] = clipper_name
-    if (clipper_name and not clipper_name.endswith("_default")) or inner_chain_steps:
-        field_values["skip_embedding"] = True
+    clipper_name, clipper_params_out, chain_steps = _extract_clipper_config(field_values)
+    loader = _make_local_folder_loader(importer, field_values, upload_dir, content_vectors, media_type)
 
     from vtsearch.auth import get_current_user
+    from vtsearch.datasets.load_pipeline import _normalize_media_type
 
-    use_chunked = getattr(importer, "supports_chunked", False)
-    chunk_size = auto_chunk_size(media_type) if use_chunked else 0
-
-    def _load(target_medias):
-        previous_vectors = importer.content_vectors
-        if content_vectors:
-            importer.content_vectors = content_vectors
-        try:
-            if use_chunked:
-                consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size))
-            else:
-                importer.run(field_values, target_medias)
-        finally:
-            if content_vectors:
-                importer.content_vectors = previous_vectors
-            shutil.rmtree(upload_dir, ignore_errors=True)
-
+    dataset_name = (request.form.get("dataset_name") or "").strip() or "Local folder upload"
     task_id = _run_origin_load_in_background(
-        _load,
+        loader,
         origin,
-        name=user_dataset_name or "Local folder upload",
+        name=dataset_name,
         clipper=clipper_name,
-        clipper_params=inner_clipper_params,
-        chain_steps=inner_chain_steps,
-        embedder=embedder,
+        clipper_params=clipper_params_out,
+        chain_steps=chain_steps,
+        embedder=field_values.get("embedder", ""),
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
     )
