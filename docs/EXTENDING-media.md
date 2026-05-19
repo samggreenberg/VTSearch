@@ -264,6 +264,7 @@ embedder per media type should override the `is_default` property to return
 | `text/embedder_bge.py` | `TextBGEEmbedder` | text | |
 | `video/embedder_xclip.py` | `VideoXClipEmbedder` | video | ✅ |
 | `video/embedder_languagebind.py` | `VideoLanguageBindEmbedder` | video | |
+| `video/embedder_videomae.py` | `VideoVideoMAEEmbedder` | video | |
 
 ### What to implement
 
