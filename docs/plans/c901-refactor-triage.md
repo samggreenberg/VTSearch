@@ -1,6 +1,6 @@
 # C901 Refactor Triage (≥20 complexity)
 
-**Status:** Triage complete; 3 of 8 refactors shipped.
+**Status:** Triage complete; 5 of 8 refactors shipped.
 
 ## Why this file exists
 
@@ -37,8 +37,8 @@ classified as either:
 |---|---|---|---|
 | ~~`vtsearch/detectors/resolver.py:436`~~ | ~~`_apply_clip_and_embed`~~ | ~~25~~ | **Shipped** — see Done below. |
 | ~~`vtsearch/routes/labels/vote.py:42`~~ | ~~`export_labels`~~ | ~~29~~ | **Shipped** — see Done below. |
-| `vtsearch/converters/audio2image.py:108` | `convert` | 25 | Linear pipeline: param coerce → load audio → compute spec → render PNG. Extract `_coerce_params`, `_compute_spectrogram`, `_render_to_png`. |
-| `vtsearch/converters/image2text.py:83` | `convert` | 22 | Same shape as audio2image — split by stage. |
+| ~~`vtsearch/converters/audio2image.py:108`~~ | ~~`convert`~~ | ~~25~~ | **Shipped** — see Done below. |
+| ~~`vtsearch/converters/image2text.py:83`~~ | ~~`convert`~~ | ~~22~~ | **Shipped** — see Done below. |
 | ~~`vtsearch/routes/sorting.py:789`~~ | ~~`label_file_sort`~~ | ~~21~~ | **Shipped** — see Done below. |
 | `vtsearch/detectors/resolver.py:560` | `resolve_label_embeddings` | 25 | Per-entry resolution + three logging-by-failure-reason branches + final summary. Extract `_resolve_one(entry, media_type) → ResolvedEntry` (a small dataclass) so the loop becomes accumulate-and-log-summary. |
 | `vtsearch/detectors/labelset_training.py:83` | `populate_label_embeddings` | 21 | Three resolution strategies per element in one loop. Extract `_resolve_one_element_embedding(elem, cache, snap, media_type, embedder_name) → np.ndarray | None`. |
@@ -61,7 +61,7 @@ Ship in this order — earlier rows are more mechanical / lower risk:
 1. ~~`_apply_clip_and_embed`~~ — shipped
 2. ~~`label_file_sort`~~ — shipped
 3. ~~`export_labels`~~ — shipped
-4. `audio2image.convert` / `image2text.convert` (one PR)
+4. ~~`audio2image.convert` / `image2text.convert` (one PR)~~ — shipped
 5. `resolve_label_embeddings`
 6. `populate_label_embeddings`
 7. `_run_pipeline`
@@ -95,6 +95,18 @@ Ship in this order — earlier rows are more mechanical / lower risk:
   is now: pools → labelset → annotate → optional corrections-only
   filter → optional enrichment → return. `noqa: C901` deleted. Full
   suite (3842 tests) passes.
+
+- **`Audio2ImageMediaConverter.convert` + `Image2TextMediaConverter.convert`**
+  (CC 25 → 8 and 22 → 7). Each converter's long linear body now
+  delegates to module-level stage helpers. Shared: `_resolve_media_bytes`
+  (read from `media_bytes` or fall back to `media_path`). Audio adds
+  `_load_audio_array`, `_compute_spectrogram`, `_render_spectrogram_png`,
+  `_get_png_dimensions`, plus an instance `_coerce_params`. Image2Text
+  adds `_run_paddleocr` (handles the import + open + OCR chain) and
+  `_extract_text_lines`. Each helper owns one print-and-return-None
+  failure mode, so the orchestrating `convert` becomes a chain of
+  short early-returns. `noqa: C901` deleted on both. Full suite
+  (3842 tests) passes.
 
 ## Open follow-ups
 
