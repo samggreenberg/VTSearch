@@ -229,4 +229,4 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # slope formulas, medias as the global state proxy, goup as a TS method),
 # and stylistic spellings the project uses consistently (re-use,
 # pre-select, unparseable, invokable).
-ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te"
+ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,ser"
