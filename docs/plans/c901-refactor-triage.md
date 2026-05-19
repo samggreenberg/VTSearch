@@ -1,6 +1,6 @@
 # C901 Refactor Triage (≥20 complexity)
 
-**Status:** Triage complete; 6 of 8 refactors shipped.
+**Status:** Triage complete; 7 of 8 refactors shipped.
 
 ## Why this file exists
 
@@ -41,7 +41,7 @@ classified as either:
 | ~~`vtsearch/converters/image2text.py:83`~~ | ~~`convert`~~ | ~~22~~ | **Shipped** — see Done below. |
 | ~~`vtsearch/routes/sorting.py:789`~~ | ~~`label_file_sort`~~ | ~~21~~ | **Shipped** — see Done below. |
 | ~~`vtsearch/detectors/resolver.py:560`~~ | ~~`resolve_label_embeddings`~~ | ~~25~~ | **Shipped** — see Done below. |
-| `vtsearch/detectors/labelset_training.py:83` | `populate_label_embeddings` | 21 | Three resolution strategies per element in one loop. Extract `_resolve_one_element_embedding(elem, cache, snap, media_type, embedder_name) → np.ndarray | None`. |
+| ~~`vtsearch/detectors/labelset_training.py:83`~~ | ~~`populate_label_embeddings`~~ | ~~21~~ | **Shipped** — see Done below. |
 | `vtsearch/cli.py:421` | `_run_pipeline` | 31 | The dry-run branch (~50 lines of validation + emission) is essentially its own function inside an early return. Lift it to `_run_dry_run(...)` and the main path is straightforward. |
 
 ## Skip (complexity is honest)
@@ -63,7 +63,7 @@ Ship in this order — earlier rows are more mechanical / lower risk:
 3. ~~`export_labels`~~ — shipped
 4. ~~`audio2image.convert` / `image2text.convert` (one PR)~~ — shipped
 5. ~~`resolve_label_embeddings`~~ — shipped
-6. `populate_label_embeddings`
+6. ~~`populate_label_embeddings`~~ — shipped
 7. `_run_pipeline`
 
 ## Done
@@ -95,6 +95,16 @@ Ship in this order — earlier rows are more mechanical / lower risk:
   is now: pools → labelset → annotate → optional corrections-only
   filter → optional enrichment → return. `noqa: C901` deleted. Full
   suite (3842 tests) passes.
+
+- **`populate_label_embeddings`** (CC 21 → 9). Extracted
+  `_maybe_clear_cache_on_embedder_switch` (drops the cache when the
+  active dataset's embedder changed under us) and
+  `_resolve_uncached_embedding` (the in-dataset cid path with optional
+  region pool, plus the cross-dataset embed fallback). The loop now
+  reads as: cache hit → done; otherwise resolve uncached → cache →
+  progress. Original progress semantics preserved (no callback fired
+  on cache hits, fired on every resolved entry whether it produced an
+  embedding or not). Full suite (3842 tests) passes.
 
 - **`resolve_label_embeddings`** (CC 25 → 6). The per-entry resolution
   loop now goes through `_resolve_one_label(entry, media_type, index)`,
