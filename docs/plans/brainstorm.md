@@ -785,8 +785,10 @@ Today inclusion adjusts class weights. Try also adjusting the threshold post-hoc
 ### 21.2 Hard-negative mining loop ★★ M
 After first MLP pass, find unlabelled items closest to the boundary, surface them in `Hard` select mode (already exists but heuristic). Use uncertainty from MLP ensemble §5.6.
 
-### 21.3 Triplet/contrastive fine-tune of embedder ★ L
+### 21.3 ~~Triplet/contrastive fine-tune of embedder~~ ★ L — **won't do (2026-05-19)**
 LoRA-on-embedder using `(anchor=good, positive=good, negative=bad)` triplets sampled from votes. Risk: embedder drift across detectors. Mitigation: per-detector LoRA adapters loaded on demand.
+
+**Decision: won't do.** Adapting the embedder backbone clashes with VTSearch's "frozen embedder, swappable detector head" design — per-detector LoRA adapters are effectively persisted learned weights, which the project explicitly avoids (see CLAUDE.md "No Persisted Vectors or MLPs"). The expected gain over the current frozen-embedder + MLP path doesn't justify the new artefact lifecycle, the per-detector apply-on-demand plumbing, or the training cost. Pursue §21.2 (hard-negative mining) and §21.4 (pseudo-labelling) instead for label-driven quality wins.
 
 ### 21.4 Pseudo-labelling ★ M
 Auto-label high-confidence unlabeled items (above e.g. p>0.95), retrain. Classic semi-supervised win.
