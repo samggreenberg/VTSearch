@@ -477,8 +477,10 @@ First time a user opens a new media type, the panel settings (`view_mode_*`, `gr
 ### 13.7 Skip diversity-tree rebuild on small updates ★ M
 When a few medias are added/removed (e.g. clip fix-up), today the whole diversity tree rebuilds. For incremental changes < 1% of dataset size, do an incremental insert/delete instead. Saves seconds on every clip-aware import.
 
-### 13.8 Async embedder warm-up after import ★ XS
+### 13.8 Async embedder warm-up after import ★ XS — shipped
 After a dataset loads, the "warming up text encoder…" step blocks task completion. Move it to fire-and-forget so the dataset is usable for grid-browsing immediately and Text sort just waits on first use.
+
+**What shipped:** the synchronous `_warmup_embedder_stage` was replaced with a fire-and-forget `_warmup_embedder_async(media_dict)` daemon thread (`vtsearch/datasets/load_pipeline.py:800`). Both load paths — the importer-driven `_run_origin_load_in_background` and the registry-driven `load_registered_dataset` (`vtsearch/routes/datasets/registry.py`) — now kick off the warm-up after `_register_and_migrate` / `_reg_add_loaded` and return immediately, so the dashboard row goes green the moment the dataset is in memory. `load_registered_dataset`'s `_LOAD_STEPS` dropped from 3 to 2 (read pickle + build diversity index). The warmup itself still calls `emb.load_models()` then `emb.embed_text("warmup")` on a daemon thread named `warmup-embedder`; if the user clicks Text Sort before warmup finishes, the existing `_embedder_load_lock` in `vtsearch/routes/sorting.py:107` serialises the wait behind the regular "Loading embedder…" sort-progress bar — no race, no double-load (`load_models` is idempotent via `_model_load_lock`, `vtsearch/media/embedder.py:551-555`). The now-orphaned `_load_embedder_with_progress` / `_load_embedder_for_clips` helpers in `vtsearch/datasets/load_pipeline.py` were deleted (the routes/sorting variant of the same name is a separate function).
 
 ---
 

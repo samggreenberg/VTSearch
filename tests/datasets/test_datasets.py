@@ -749,32 +749,73 @@ class TestImporterMetadata:
             assert ds_field["required"] is False
 
 
-class TestLoadEmbedderForClips:
-    """_load_embedder_for_clips should warm up the text encoder at dataset load time."""
+class TestWarmupEmbedderAsync:
+    """_warmup_embedder_async should warm up the text encoder in a daemon thread."""
+
+    def _wait_for_threads(self, name_prefix: str = "warmup-embedder", timeout: float = 5.0) -> None:
+        """Join all daemon threads whose name starts with *name_prefix*."""
+        import threading
+        import time
+
+        deadline = time.monotonic() + timeout
+        for t in list(threading.enumerate()):
+            if not t.name.startswith(name_prefix):
+                continue
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            t.join(timeout=remaining)
 
     def test_warms_up_text_encoder(self):
         """embed_text('warmup') is called to prime the text encoder branch."""
         from unittest.mock import patch
 
         from vtsearch.media import embedders_for_type
-        from vtsearch.datasets.load_pipeline import _load_embedder_for_clips
+        from vtsearch.datasets.load_pipeline import _warmup_embedder_async
+        from vtsearch.state import snapshot_medias
 
         emb = embedders_for_type("audio")[0]
         with patch.object(emb, "embed_text", wraps=emb.embed_text) as mock_embed:
-            _load_embedder_for_clips()
+            _warmup_embedder_async(snapshot_medias())
+            self._wait_for_threads()
             mock_embed.assert_called_once_with("warmup")
 
     def test_text_encoder_produces_valid_embedding_after_load(self):
-        """After _load_embedder_for_clips, embed_text returns a real vector."""
+        """After _warmup_embedder_async finishes, embed_text returns a real vector."""
         from vtsearch.media import embedders_for_type
-        from vtsearch.datasets.load_pipeline import _load_embedder_for_clips
+        from vtsearch.datasets.load_pipeline import _warmup_embedder_async
+        from vtsearch.state import snapshot_medias
 
-        _load_embedder_for_clips()
+        _warmup_embedder_async(snapshot_medias())
+        self._wait_for_threads()
         emb = embedders_for_type("audio")[0]
         vec = emb.embed_text("a high-pitched beep")
         assert vec is not None
         assert len(vec.shape) == 1
         assert vec.shape[0] > 0
+
+    def test_does_not_block_caller(self):
+        """The warmup must run in a background thread, not synchronously."""
+        import threading
+        from unittest.mock import patch
+
+        from vtsearch.media import embedders_for_type
+        from vtsearch.datasets.load_pipeline import _warmup_embedder_async
+        from vtsearch.state import snapshot_medias
+
+        emb = embedders_for_type("audio")[0]
+        gate = threading.Event()
+        original_load = emb.load_models
+
+        def _blocking_load() -> None:
+            gate.wait(timeout=5.0)
+            original_load()
+
+        with patch.object(emb, "load_models", side_effect=_blocking_load):
+            _warmup_embedder_async(snapshot_medias())
+            # The call returned even though load_models hasn't completed.
+            gate.set()
+            self._wait_for_threads()
 
 
 class TestDemoCacheEmbedderMismatch:
@@ -1320,36 +1361,6 @@ class TestLoadProgressRaceCondition:
 
         assert settings_mod.get_last_embedder_per_media_type() == {}
 
-    def test_load_embedder_sets_initial_progress(self):
-        """_load_embedder_for_clips must set progress before loading starts.
-
-        The function should emit 'Loading embedding model…' so the frontend
-        knows the embedder warm-up phase has begun (rather than staying stuck
-        on the previous phase's message like 'Saving to registry…').
-        """
-        from unittest.mock import patch
-
-        from vtsearch.datasets.load_pipeline import _load_embedder_for_clips
-        from vtsearch.concurrency.progress import update_progress
-
-        # _load_embedder_for_clips inspects medias to find the embedder.
-        # The conftest-populated medias dict provides this automatically.
-        # Set a stale progress message from the previous phase.
-        update_progress("loading", "Saving to registry…", step=3, total_steps=4)
-
-        messages: list[str] = []
-
-        def _capture_update(status, message="", current=0, total=0, **kw):
-            messages.append(message)
-
-        with patch("vtsearch.datasets.load_pipeline.update_progress", side_effect=_capture_update):
-            _load_embedder_for_clips()
-
-        # Should have set "Loading embedding model…" before calling load_models
-        assert any("Loading embedding model" in m for m in messages), (
-            f"Expected 'Loading embedding model…' in progress messages, got: {messages}"
-        )
-
 
 class TestCancelIngest:
     """Tests for the POST /api/dataset/cancel endpoint."""
@@ -1440,7 +1451,7 @@ class TestCancelIngest:
             # Start a new load — should reset the flag
             from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
 
-            with patch("vtsearch.datasets.load_pipeline._load_embedder_for_clips"):
+            with patch("vtsearch.datasets.load_pipeline._warmup_embedder_async"):
                 _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},
