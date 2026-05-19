@@ -1325,6 +1325,110 @@ class TestTextDefaultClipper:
 
 
 # ---------------------------------------------------------------------------
+# TextParagraphClipper
+# ---------------------------------------------------------------------------
+
+
+class TestTextParagraphClipper:
+    def test_identity(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        c = TextParagraphClipper()
+        assert c.name == "text_paragraph"
+        assert c.media_type == "text"
+        assert isinstance(c, MediaClipper)
+
+    def test_single_paragraph_unchanged(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        media = {"id": 1, "type": "text", "media_string": "Just one paragraph here."}
+        result = TextParagraphClipper().clip(media)
+        assert len(result) == 1
+        assert result[0] is media
+
+    def test_splits_multiple_paragraphs(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        text = "First paragraph.\n\nSecond paragraph.\n\nThird one."
+        media = {"id": 1, "type": "text", "media_string": text, "word_count": 6, "character_count": len(text)}
+        result = TextParagraphClipper().clip(media)
+        assert len(result) == 3
+        assert result[0]["media_string"] == "First paragraph."
+        assert result[1]["media_string"] == "Second paragraph."
+        assert result[2]["media_string"] == "Third one."
+        for idx, tile in enumerate(result):
+            assert tile["clip_index"] == idx
+            assert tile["word_count"] == len(tile["media_string"].split())
+            assert tile["character_count"] == len(tile["media_string"])
+
+    def test_multiline_paragraphs_preserved(self):
+        """A paragraph that internally contains single newlines stays intact."""
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        text = "Line one.\nLine two of the same para.\n\nSecond paragraph here."
+        media = {"id": 1, "type": "text", "media_string": text}
+        result = TextParagraphClipper().clip(media)
+        assert len(result) == 2
+        assert result[0]["media_string"] == "Line one.\nLine two of the same para."
+        assert result[1]["media_string"] == "Second paragraph here."
+
+    def test_collapses_runs_of_blank_lines(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        text = "Alpha.\n\n\n\nBeta.\n\n\nGamma."
+        media = {"id": 1, "type": "text", "media_string": text}
+        result = TextParagraphClipper().clip(media)
+        assert [t["media_string"] for t in result] == ["Alpha.", "Beta.", "Gamma."]
+
+    def test_handles_windows_line_endings(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        text = "Para one.\r\n\r\nPara two.\r\n\r\nPara three."
+        media = {"id": 1, "type": "text", "media_string": text}
+        result = TextParagraphClipper().clip(media)
+        assert [t["media_string"] for t in result] == ["Para one.", "Para two.", "Para three."]
+
+    def test_blank_line_with_whitespace_still_splits(self):
+        """A blank line that contains spaces/tabs still counts as a separator."""
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        text = "First.\n   \nSecond."
+        media = {"id": 1, "type": "text", "media_string": text}
+        result = TextParagraphClipper().clip(media)
+        assert [t["media_string"] for t in result] == ["First.", "Second."]
+
+    def test_empty_string_returns_unchanged(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        media = {"id": 1, "type": "text", "media_string": ""}
+        result = TextParagraphClipper().clip(media)
+        assert result == [media]
+
+    def test_no_media_string_returns_unchanged(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        media = {"id": 1, "type": "text"}
+        result = TextParagraphClipper().clip(media)
+        assert result == [media]
+
+    def test_registered_for_text_type(self):
+        """The paragraph clipper is auto-discovered for the text media type."""
+        from vtsearch.media import clippers_for_type
+
+        names = {c.name for c in clippers_for_type("text")}
+        assert "text_paragraph" in names
+
+    def test_to_dict_shape(self):
+        from vtsearch.media.text.clipper import TextParagraphClipper
+
+        d = TextParagraphClipper().to_dict()
+        assert d["name"] == "text_paragraph"
+        assert d["media_type"] == "text"
+        assert d["display_name"] == "Paragraph"
+        assert "blank lines" in d["description"]
+
+
+# ---------------------------------------------------------------------------
 # TextSentenceClipper
 # ---------------------------------------------------------------------------
 
