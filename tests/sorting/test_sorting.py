@@ -392,7 +392,6 @@ class TestCalibrateCountEnvDefault:
     def test_default_calibrate_count_constant_exists(self):
         from vtscore import config
 
-
         assert isinstance(config.DEFAULT_CALIBRATE_COUNT, int)
         assert config.DEFAULT_CALIBRATE_COUNT >= 1
 

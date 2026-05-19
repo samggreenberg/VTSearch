@@ -672,7 +672,6 @@ if __name__ == "__main__":
         # nothing reads in CLI mode) to an NDJSON emitter on stdout.
         from vtscore import cli_progress
 
-
         cli_progress.set_format(args.progress_format)
         if args.progress_format == "json":
             set_progress_callback(cli_progress.progress_callback)

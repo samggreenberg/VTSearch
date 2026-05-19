@@ -232,7 +232,6 @@ def reset_contexts(tmp_path, monkeypatch):
 
     from vtscore import cli_progress
 
-
     cli_progress.set_format("text")
 
     # Redirect registry storage to tmp_path so tests can't pollute repo data/.

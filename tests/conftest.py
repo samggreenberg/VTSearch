@@ -263,7 +263,6 @@ def reset_state():
     # leak the choice into the next test.
     from vtscore import cli_progress
 
-
     cli_progress.set_format("text")
 
     _set_login_provider(_DefaultLoginProvider())

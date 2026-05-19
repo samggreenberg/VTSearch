@@ -148,15 +148,15 @@ class TestEntryPointDiscovery:
 @pytest.mark.parametrize(
     "module_path,registry_var,expected_group",
     [
-        ("vtscore.datasets.importers", "list_importers", "vtsearch.importers"),
+        ("vtscore.datasets.importers", "list_importers", "vtscore.importers"),
         ("vtscore.exporters", "list_exporters", "vtscore.exporters"),
-        ("vtscore.labels.importers", "list_label_importers", "vtsearch.label_importers"),
-        ("vtscore.labels.sources", "list_labelset_sources", "vtsearch.labelset_sources"),
+        ("vtscore.labels.importers", "list_label_importers", "vtscore.label_importers"),
+        ("vtscore.labels.sources", "list_labelset_sources", "vtscore.labelset_sources"),
         ("vtsearch.settings_io.importers", "list_settings_importers", "vtsearch.settings_importers"),
         ("vtsearch.settings_io.exporters", "list_settings_exporters", "vtsearch.settings_exporters"),
         ("vtsearch.settings_io.sources", "list_settings_sources", "vtsearch.settings_sources"),
         ("vtscore.converters", "list_converters", "vtscore.converters"),
-        ("vtscore.datasets.sources", "list_media_sources", "vtsearch.media_sources"),
+        ("vtscore.datasets.sources", "list_media_sources", "vtscore.media_sources"),
     ],
 )
 def test_built_in_registries_declare_entry_point_groups(module_path, registry_var, expected_group):
