@@ -119,7 +119,7 @@ class TestDownloadReuters21578:
 class TestLoadDemoSourceReuters:
     def test_reuters_source_populates_clips(self):
         from vtsearch.datasets import downloader as dl_module
-        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
+        from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
             "earn": ["Earn story one.", "Earn story two."],
@@ -146,7 +146,7 @@ class TestLoadDemoSourceReuters:
 
     def test_reuters_slice_is_applied(self):
         from vtsearch.datasets import downloader as dl_module
-        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
+        from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {"grain": [f"Grain story {i}." for i in range(10)]}
 

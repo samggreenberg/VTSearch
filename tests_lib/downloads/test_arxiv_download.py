@@ -144,7 +144,7 @@ class TestDownloadArxivAbstracts:
 class TestLoadDemoSourceArxiv:
     def test_arxiv_source_populates_clips(self):
         from vtsearch.datasets import downloader as dl_module
-        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
+        from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_papers = {
             "cs.AI": ["AI paper one.", "AI paper two."],
@@ -171,7 +171,7 @@ class TestLoadDemoSourceArxiv:
 
     def test_arxiv_slice_is_applied(self):
         from vtsearch.datasets import downloader as dl_module
-        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
+        from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_papers = {"cs.LG": [f"LG paper {i}." for i in range(10)]}
 

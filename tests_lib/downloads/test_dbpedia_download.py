@@ -128,7 +128,7 @@ class TestDownloadDbpedia:
 class TestLoadDemoSourceDbpedia:
     def test_dbpedia_source_populates_clips(self):
         from vtsearch.datasets import downloader as dl_module
-        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
+        from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
             "Company": ["Apple article.", "Google article."],
@@ -155,7 +155,7 @@ class TestLoadDemoSourceDbpedia:
 
     def test_dbpedia_slice_is_applied(self):
         from vtsearch.datasets import downloader as dl_module
-        from tests.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
+        from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {"Plant": [f"Plant abstract {i}." for i in range(10)]}
 
