@@ -230,6 +230,63 @@ def smart_preload_in_background() -> None:
     threading.Thread(target=_run, name="smart-preload", daemon=True).start()
 
 
+def predict_embedder_for_dataset(dataset_id: str) -> str:
+    """Predict the embedder name needed by *dataset_id*.
+
+    Mirrors the per-dataset half of :func:`predict_embedders_to_preload`
+    for a single registry entry: returns ``entry["embedder"]`` if set and
+    valid, otherwise the default embedder for ``entry["media_type"]``.
+    Returns ``""`` when the dataset is unknown or has no resolvable
+    embedder.
+    """
+    from vtsearch.datasets.registry import get_dataset
+    from vtsearch.media import all_embedders, embedders_for_type
+
+    entry = get_dataset(dataset_id)
+    if entry is None:
+        return ""
+
+    valid = {e.name for e in all_embedders()}
+    emb = (entry.get("embedder") or "").strip()
+    if emb and emb in valid:
+        return emb
+    media_type = entry.get("media_type", "") or ""
+    if not media_type:
+        return ""
+    opts = embedders_for_type(media_type)
+    return opts[0].name if opts else ""
+
+
+def preload_embedder_for_dataset(dataset_id: str) -> str:
+    """Warm the embedder needed by *dataset_id* in a background daemon thread.
+
+    Used by the dashboard when the user selects a dataset row so the
+    embedder is ready by the time they click Train. Idempotent: if the
+    embedder is already loaded, the worker exits immediately. Returns
+    the embedder name being warmed, or ``""`` when no embedder can be
+    resolved for the given dataset.
+    """
+    import threading
+
+    emb_name = predict_embedder_for_dataset(dataset_id)
+    if not emb_name:
+        return ""
+
+    def _run() -> None:
+        from vtsearch.media import get_embedder
+
+        try:
+            emb = get_embedder(emb_name)
+            if getattr(emb, "_model", None) is not None:
+                return
+            emb.load_models()
+        except Exception:
+            pass
+
+    threading.Thread(target=_run, name=f"preload-ds-{dataset_id[:8]}", daemon=True).start()
+    return emb_name
+
+
 # ---------------------------------------------------------------------------
 # Backward-compatible getter functions
 #

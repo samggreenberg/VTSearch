@@ -148,6 +148,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private completedModelTaskIds = new Set<string>();
   private datasetPollingActive = false;
   private detectorPollingActive = false;
+  /** Dataset IDs we've already asked the backend to preload an embedder
+   *  for this session. The backend dedupes against already-loaded
+   *  embedders, but tracking here avoids hammering the network as the
+   *  user reshuffles selections. */
+  private preloadedDatasetIds = new Set<string>();
 
   currentUser = '';
   isDefaultLogin = true;
@@ -203,6 +208,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
         this.knownDatasetIds = currentIds;
         this.pushTopBarLabels();
+        this.preloadSelectedEmbedders();
       });
     this.datasetState.detectors$
       .pipe(takeUntil(this.destroy$))
@@ -445,6 +451,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       }
     }
     this.pushTopBarLabels();
+    this.preloadSelectedEmbedders();
   }
 
   isDatasetSelected(id: string): boolean {
@@ -458,6 +465,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.selectedDatasetIds.add(id);
     }
     this.pushTopBarLabels();
+    this.preloadSelectedEmbedders();
+  }
+
+  /** Ask the backend to warm the embedder for each currently-selected
+   *  dataset (skipping ones already requested this session) so a
+   *  subsequent Train click is instant. Fire-and-forget; errors are
+   *  swallowed because this is a best-effort optimisation. */
+  private preloadSelectedEmbedders(): void {
+    for (const id of this.selectedDatasetIds) {
+      if (this.preloadedDatasetIds.has(id)) continue;
+      this.preloadedDatasetIds.add(id);
+      this.datasetsApi
+        .preloadEmbedder(id)
+        .pipe(catchError(() => EMPTY))
+        .subscribe();
+    }
   }
 
   get datasetSelectionState(): 'none' | 'some' | 'all' {
@@ -476,6 +499,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       }
     }
     this.pushTopBarLabels();
+    this.preloadSelectedEmbedders();
   }
 
   /**

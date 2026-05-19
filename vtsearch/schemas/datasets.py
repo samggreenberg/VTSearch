@@ -487,6 +487,18 @@ class DatasetRegistryOkResponseSchema(Schema):
     ok = fields.Boolean(required=True)
 
 
+class DatasetRegistryPreloadEmbedderResponseSchema(Schema):
+    """Response for ``POST /api/datasets/registry/<id>/preload-embedder``.
+
+    ``embedder`` is the name of the embedder being warmed in the
+    background, or ``""`` when no embedder could be resolved (e.g. the
+    dataset's media type has no registered embedder).
+    """
+
+    ok = fields.Boolean(required=True)
+    embedder = fields.String(required=True)
+
+
 class DatasetRegistryRenameRequestSchema(Schema):
     """Body for ``PUT /api/datasets/registry/<id>/rename``."""
 
@@ -582,6 +594,7 @@ __all__ = [
     "EmbeddersListQuerySchema",
     "EmbeddersListResponseSchema",
     "DatasetRegistryOkResponseSchema",
+    "DatasetRegistryPreloadEmbedderResponseSchema",
     "ImporterFieldOptionsRequestSchema",
     "ImporterFieldOptionsResponseSchema",
     "MediaTypesListResponseSchema",

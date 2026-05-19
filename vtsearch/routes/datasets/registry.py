@@ -51,6 +51,7 @@ from vtsearch.datasets.registry import (
 )
 from vtsearch.schemas.datasets import (
     DatasetRegistryLoadResponseSchema,
+    DatasetRegistryPreloadEmbedderResponseSchema,
     DatasetRegistryReadersRequestSchema,
     DatasetRegistryReadersResponseSchema,
     DatasetRegistryRenameRequestSchema,
@@ -274,6 +275,32 @@ def unload_registered_dataset(dataset_id: str):
     unregister_context(dataset_id)
     _reg_remove_loaded(dataset_id)
     return {"ok": True}
+
+
+@datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/preload-embedder", methods=["POST"])
+@datasets_registry_bp.response(200, DatasetRegistryPreloadEmbedderResponseSchema)
+@datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
+def preload_dataset_embedder(dataset_id: str):
+    """Warm this dataset's embedder in a background daemon thread.
+
+    Called by the dashboard when the user selects a dataset row so that
+    the embedder is ready by the time they click Train. Idempotent: the
+    background worker exits immediately if the embedder is already in
+    memory. Returns ``embedder`` set to the resolved embedder name (or
+    ``""`` if no embedder could be resolved for this dataset's media
+    type).
+    """
+    from vtsearch.auth import get_current_user
+    from vtsearch.embedding.loader import preload_embedder_for_dataset
+
+    if _reg_get(dataset_id) is None:
+        abort(404, message="Dataset not found")
+    if not _reg_can_access(dataset_id, get_current_user()):
+        abort(403, message="Access denied")
+
+    emb_name = preload_embedder_for_dataset(dataset_id)
+    return {"ok": True, "embedder": emb_name}
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>", methods=["DELETE"])
