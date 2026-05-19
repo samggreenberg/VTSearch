@@ -58,10 +58,71 @@ def _folder_has_content(folder) -> bool:
     return folder is not None and folder.exists() and any(folder.iterdir())
 
 
+def _initial_demo_status(has_pkl: bool, required_folder, has_source: bool) -> str:
+    """Three-state status before embedder/clipper compatibility checks."""
+    if has_pkl:
+        # Stale pkl iff the source folder is declared and currently empty.
+        if required_folder is not None and not has_source:
+            return "needs_download"
+        return "ready"
+    if required_folder is not None and has_source:
+        return "needs_embedding"
+    return "needs_download"
+
+
+def _downgrade_for_mismatch(
+    status: str, pkl_file: Path, requested_embedder: str, requested_clipper: str
+) -> tuple[str, str | None, str | None]:
+    """Downgrade ``ready`` to ``needs_embedding`` if pkl differs from requested embedder/clipper."""
+    pkl_embedder: str | None = None
+    pkl_clipper: str | None = None
+    if status != "ready":
+        return status, pkl_embedder, pkl_clipper
+    if requested_embedder:
+        pkl_embedder = read_pkl_embedder(pkl_file)
+        if pkl_embedder is not None and pkl_embedder != requested_embedder:
+            status = "needs_embedding"
+    if status == "ready" and requested_clipper:
+        pkl_clipper = read_pkl_clipper(pkl_file)
+        if pkl_clipper is not None and pkl_clipper != requested_clipper:
+            status = "needs_embedding"
+    return status, pkl_embedder, pkl_clipper
+
+
+def _calculate_demo_num_files(dataset_info: dict) -> int:
+    """Compute the file count for a demo dataset from its slice configuration."""
+    num_categories = len(dataset_info["categories"])
+    items_per_category = dataset_info.get("items_per_category") or 0
+    slice_frac_start = dataset_info.get("slice_frac_start")
+
+    if slice_frac_start is not None:
+        frac_end = dataset_info.get("slice_frac_end") or 1.0
+        base_per_cat = items_per_category if items_per_category > 0 else 40
+        per_cat = int(base_per_cat * (frac_end - slice_frac_start))
+    else:
+        slice_start = dataset_info.get("slice_start", 0)
+        slice_end = dataset_info.get("slice_end")
+        if slice_end is not None:
+            per_cat = slice_end - slice_start
+        elif items_per_category > 0:
+            per_cat = items_per_category - slice_start
+        else:
+            per_cat = 40
+    return num_categories * per_cat
+
+
+def _calculate_demo_download_size_mb(status: str, pkl_file: Path, dataset_info: dict) -> float:
+    if status == "ready":
+        return pkl_file.stat().st_size / (1024 * 1024)
+    if status == "needs_embedding":
+        return 0
+    return dataset_info.get("download_size_mb", 0)
+
+
 @datasets_ui_bp.route("/api/dataset/demo-list")
 @datasets_ui_bp.arguments(DemoDatasetListQuerySchema, location="query")
 @datasets_ui_bp.response(200, DemoDatasetListResponseSchema)
-def demo_dataset_list(query: dict):  # noqa: C901
+def demo_dataset_list(query: dict):
     """List available demo datasets.
 
     Each dataset has a ``status`` field with one of three values:
@@ -70,21 +131,15 @@ def demo_dataset_list(query: dict):  # noqa: C901
     * ``"needs_embedding"`` – source data is downloaded but not yet embedded.
     * ``"needs_download"`` – source data must be downloaded (and then embedded).
     """
-    # Only include demo datasets whose media type is currently registered.
     from vtsearch.converters import list_converters_for_source
     from vtsearch.media import get as media_get
 
-    # Optional embedder/clipper filters: when the caller specifies an embedder
-    # or clipper, a cached pkl is only considered "ready" if it was produced by
-    # those same values.
     requested_embedder = query.get("embedder", "").strip()
     requested_clipper = query.get("clipper", "").strip()
 
     demos = []
     for name, dataset_info in DEMO_DATASETS.items():
         media_type = dataset_info.get("media_type", "audio")
-
-        # Skip datasets whose media type is not loaded into VTSearch.
         try:
             media_get(media_type)
         except KeyError:
@@ -92,80 +147,16 @@ def demo_dataset_list(query: dict):  # noqa: C901
 
         pkl_file = EMBEDDINGS_DIR / f"{name}.pkl"
         has_pkl = pkl_file.exists()
-
         required_folder = dataset_info.get("required_folder")
-        has_source = _folder_has_content(required_folder)
 
-        # Determine three-state status
-        if has_pkl:
-            if required_folder is not None and not has_source:
-                # Stale pkl – source data was removed since last embed
-                status = "needs_download"
-            else:
-                status = "ready"
-        else:
-            if required_folder is not None and has_source:
-                status = "needs_embedding"
-            else:
-                status = "needs_download"
+        status = _initial_demo_status(has_pkl, required_folder, _folder_has_content(required_folder))
+        status, pkl_embedder, pkl_clipper = _downgrade_for_mismatch(
+            status, pkl_file, requested_embedder, requested_clipper
+        )
 
-        # If the pkl exists but was embedded with a different embedder than
-        # the one the user selected, downgrade from "ready" to "needs_embedding".
-        pkl_embedder: str | None = None
-        if status == "ready" and requested_embedder:
+        if has_pkl and pkl_embedder is None:
             pkl_embedder = read_pkl_embedder(pkl_file)
-            if pkl_embedder is not None and pkl_embedder != requested_embedder:
-                status = "needs_embedding"
-
-        # Same check for clipper: if the pkl was created with a different
-        # clipper, it needs re-clipping (and re-embedding of the clips).
-        pkl_clipper: str | None = None
-        if status == "ready" and requested_clipper:
-            pkl_clipper = read_pkl_clipper(pkl_file)
-            if pkl_clipper is not None and pkl_clipper != requested_clipper:
-                status = "needs_embedding"
-
-        # Calculate number of files from slice parameters
-        num_categories = len(dataset_info["categories"])
-        items_per_category = dataset_info.get("items_per_category") or 0
-        slice_frac_start = dataset_info.get("slice_frac_start")
-        slice_frac_end = dataset_info.get("slice_frac_end")
-        if slice_frac_start is not None:
-            frac_start = slice_frac_start
-            frac_end = slice_frac_end if slice_frac_end is not None else 1.0
-            # Fall back to 40 only when the dataset didn't declare its size.
-            base_per_cat = items_per_category if items_per_category > 0 else 40
-            per_cat = int(base_per_cat * (frac_end - frac_start))
-            num_files = num_categories * per_cat
-        else:
-            slice_start = dataset_info.get("slice_start", 0)
-            slice_end = dataset_info.get("slice_end")
-            if slice_end is not None:
-                per_cat = slice_end - slice_start
-            elif items_per_category > 0:
-                per_cat = items_per_category - slice_start
-            else:
-                per_cat = 40  # generic fallback
-            num_files = num_categories * per_cat
-
-        # Calculate download size from the DemoDataset metadata
-        if status == "ready":
-            download_size_mb = pkl_file.stat().st_size / (1024 * 1024)
-        elif status == "needs_embedding":
-            download_size_mb = 0
-        else:
-            # Use the download_size_mb from DemoDataset metadata
-            download_size_mb = dataset_info.get("download_size_mb", 0)
-
-        # Converters that consume this demo's media type (M→N converters).
-        available_converters = [c.to_dict() for c in list_converters_for_source(media_type)]
-
-        # Resolve pkl_embedder if not already read above.
-        if pkl_embedder is None and has_pkl:
-            pkl_embedder = read_pkl_embedder(pkl_file)
-
-        # Resolve pkl_clipper if not already read above.
-        if pkl_clipper is None and has_pkl:
+        if has_pkl and pkl_clipper is None:
             pkl_clipper = read_pkl_clipper(pkl_file)
 
         demos.append(
@@ -174,12 +165,12 @@ def demo_dataset_list(query: dict):  # noqa: C901
                 "label": dataset_info.get("label", name),
                 "status": status,
                 "ready": status == "ready",
-                "num_files": num_files,
-                "download_size_mb": round(download_size_mb, 1),
+                "num_files": _calculate_demo_num_files(dataset_info),
+                "download_size_mb": round(_calculate_demo_download_size_mb(status, pkl_file, dataset_info), 1),
                 "description": dataset_info.get("description", ""),
                 "media_type": media_type,
-                "num_categories": num_categories,
-                "available_converters": available_converters,
+                "num_categories": len(dataset_info["categories"]),
+                "available_converters": [c.to_dict() for c in list_converters_for_source(media_type)],
                 "pkl_embedder": pkl_embedder or "",
                 "pkl_clipper": pkl_clipper or "",
             }
