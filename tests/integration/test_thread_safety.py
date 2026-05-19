@@ -414,9 +414,7 @@ class TestPluginRegistryLock:
     def test_registry_has_lock(self):
         from vtsearch.plugins import PluginRegistry
 
-        reg = PluginRegistry(
-            package="vtsearch.exporters", sentinel="EXPORTER", label="exporter", eager=False
-        )
+        reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter", eager=False)
         assert isinstance(reg._lock, type(threading.Lock()))
 
     def test_concurrent_first_access_discovers_once(self):
@@ -429,9 +427,7 @@ class TestPluginRegistryLock:
         from unittest.mock import patch
         from vtsearch.plugins import PluginRegistry
 
-        reg = PluginRegistry(
-            package="vtsearch.exporters", sentinel="EXPORTER", label="exporter", eager=False
-        )
+        reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter", eager=False)
         call_count = 0
         original_discover = reg._discover
 

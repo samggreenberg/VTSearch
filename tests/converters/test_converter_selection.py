@@ -399,7 +399,7 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
+            patch("vtsearch.converters.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=fake_embedding),
             patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
@@ -465,7 +465,7 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
+            patch("vtsearch.converters.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=np.ones(768)),
             patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
@@ -501,7 +501,7 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
+            patch("vtsearch.converters.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=np.ones(768)),
             patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
@@ -527,7 +527,7 @@ class TestRunConvertersOnFolder:
         # Pre-populate with some existing medias
         medias: dict = {1: {"id": 1}, 5: {"id": 5}, 10: {"id": 10}}
         with (
-            patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
+            patch("vtsearch.converters.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=np.ones(768)),
             patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
@@ -552,7 +552,7 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
+            patch("vtsearch.converters.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=None),
             patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
@@ -584,7 +584,7 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.runner.get_converter", return_value=mock_converter),
+            patch("vtsearch.converters.get_converter", return_value=mock_converter),
             patch("vtsearch.converters.runner._embed_converted_output", return_value=fake_embedding),
             patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):

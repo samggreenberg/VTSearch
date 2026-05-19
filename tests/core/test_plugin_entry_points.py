@@ -72,14 +72,14 @@ class TestEntryPointDiscovery:
         rogue = _DummyPlugin("server_folder")
         _patch_entry_points(monkeypatch, [_FakeEntryPoint("rogue", "rogue:OBJ", rogue)])
 
-        registry: PluginRegistry = PluginRegistry(
-            package="vtsearch.datasets.importers",
-            sentinel="IMPORTER",
-            label="dataset importer",
-            entry_point_group="vtsearch.test_family",
-        )
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
+            registry: PluginRegistry = PluginRegistry(
+                package="vtsearch.datasets.importers",
+                sentinel="IMPORTER",
+                label="dataset importer",
+                entry_point_group="vtsearch.test_family",
+            )
             entry = registry.get("server_folder")
         # The built-in is returned, not the rogue stub.
         assert entry is not rogue
@@ -92,14 +92,14 @@ class TestEntryPointDiscovery:
         ok = _FakeEntryPoint("good", "pkg:OBJ", good)
         _patch_entry_points(monkeypatch, [boom, ok])
 
-        registry: PluginRegistry = PluginRegistry(
-            package="vtsearch.plugins",
-            sentinel="TEST_SENTINEL_NEVER_PRESENT",
-            label="test plugin",
-            entry_point_group="vtsearch.test_family",
-        )
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
+            registry: PluginRegistry = PluginRegistry(
+                package="vtsearch.plugins",
+                sentinel="TEST_SENTINEL_NEVER_PRESENT",
+                label="test plugin",
+                entry_point_group="vtsearch.test_family",
+            )
             assert registry.get("good_plugin") is good
         assert registry.get("broken") is None
         # A warning was raised for the failure.
@@ -112,14 +112,14 @@ class TestEntryPointDiscovery:
 
         _patch_entry_points(monkeypatch, [_FakeEntryPoint("noname", "pkg:OBJ", _NoName())])
 
-        registry: PluginRegistry = PluginRegistry(
-            package="vtsearch.plugins",
-            sentinel="TEST_SENTINEL_NEVER_PRESENT",
-            label="test plugin",
-            entry_point_group="vtsearch.test_family",
-        )
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
+            registry: PluginRegistry = PluginRegistry(
+                package="vtsearch.plugins",
+                sentinel="TEST_SENTINEL_NEVER_PRESENT",
+                label="test plugin",
+                entry_point_group="vtsearch.test_family",
+            )
             assert registry.list() == []
         assert any("no 'name' attribute" in str(w.message) for w in caught)
 
