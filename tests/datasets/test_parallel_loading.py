@@ -1015,7 +1015,9 @@ class TestBackgroundLoadThreadContext:
             get_thread_dataset_context,
         )
 
-        observed: dict[str, object] = {}
+        from vtscore.state.core import DatasetContext
+
+        observed: dict[str, DatasetContext | None] = {}
         ran = threading.Event()
 
         def capture_load(target_medias):
@@ -1045,13 +1047,11 @@ class TestBackgroundLoadThreadContext:
                 "Background task did not set a thread-local dataset context; "
                 "importer-level get_active_context() would land on the empty fallback."
             )
+            assert active_ctx is not None
             assert active_ctx is not _empty_dataset_context, (
-                "get_active_context() resolved to _empty_dataset_context inside the "
-                "background load — C3 regression."
+                "get_active_context() resolved to _empty_dataset_context inside the background load — C3 regression."
             )
-            assert thread_ctx is active_ctx, (
-                "Thread-local context and active context disagreed inside the load."
-            )
+            assert thread_ctx is active_ctx, "Thread-local context and active context disagreed inside the load."
             # Mutation through the active context proxy must have hit the
             # in-flight context, not the empty fallback.
             assert 1 in active_ctx.medias
