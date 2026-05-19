@@ -345,8 +345,14 @@ Some settings (calibrate_count, inclusion default, autopilot config) are arguabl
 
 The biggest UX cost in VTSearch right now is the volume of decisions the user makes *before* they see any value. Many of these decisions have a clearly best default and could be auto-filled.
 
-### 11.1 Dataset name from path/folder ★★★ XS
+### 11.1 Dataset name from path/folder ★★★ XS — shipped
 Almost every dataset importer requires a `name`, but the user almost always wants the folder/file basename. The local-folder importer already derives this in the frontend (`lfDatasetName` in `dataset-importer-modal.component.ts`), but **server_folder**, **server_files**, **http_archive**, and **pickle** importers all leave it blank. Auto-derive name from `os.path.basename(path)`, the URL's last path segment, or the pickle's stem. The field stays editable.
+
+**What shipped:** the `Dataset Name` input is now pre-filled live in every importer view, with a per-importer dirty flag that freezes the value once the user types.
+
+- *server_folder* — its dedicated picker view uses `sfDatasetName` + `sfDerivedDatasetName()` to extract the last segment of the browsed path whenever the user navigates folders.
+- *server_files / http_archive / pickle* (generic-form importers) — `formDerivedDatasetName()` in `dataset-importer-modal.component.ts` runs on every source-field change and matches by `field_type`: `url` → last URL path segment with `.zip` / `.tar.gz` / `.tar.bz2` / `.tar.xz` / `.tar` / `.rar` stripped; `server_path` and `file` → basename with extension stripped; a field literally keyed `path` → final non-empty path segment. The pickle file-picker calls `maybeApplyDerivedDatasetName()` directly from `onFileSelected()` so picking a `.pkl` pre-fills the name.
+- *Backend fallback* — each importer overrides `default_display_name()` (`server_folder/__init__.py:476`, `server_files/__init__.py:508`, `http_archive/__init__.py:344`, `pickle/__init__.py:91`) so CLI imports and any path that skips the modal still get a sensible default; tests in `tests/io/test_importers.py` cover all four.
 
 ### 11.2 Media type from file extensions ★★★ S
 Today the user manually picks `media_type` for every folder/file/server import. We already own `vtsearch/media/` extension maps. After the user picks a path or URL, sample the first ~50 entries and auto-select the dominant media type. Show a "Detected: image (47 of 50 files)" hint with a dropdown to override.
