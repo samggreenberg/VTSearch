@@ -1361,6 +1361,7 @@ class TestLoadProgressRaceCondition:
 
         assert settings_mod.get_last_embedder_per_media_type() == {}
 
+
 class TestCancelIngest:
     """Tests for the POST /api/dataset/cancel endpoint."""
 
