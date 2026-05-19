@@ -53,4 +53,21 @@ def register_flask_context_resolvers() -> None:
     register_detector_context_resolver(_flask_detector_context_resolver)
 
 
-__all__ = ["register_flask_context_resolvers"]
+def register_app_persistence_hooks() -> None:
+    """Wire library-side persistence hooks to the app's ``vtsearch.settings``.
+
+    The library exposes a few "let the app persist this" hook points so it
+    doesn't import settings directly (see Phase 2 of
+    ``docs/plans/extract-library.md``).  This function installs the Flask
+    app's settings as the backing store for each hook.
+    """
+    from vtsearch.datasets.load_pipeline import register_last_embedder_persistence_hook
+    from vtsearch.settings import set_last_embedder_for_media_type
+
+    register_last_embedder_persistence_hook(set_last_embedder_for_media_type)
+
+
+__all__ = [
+    "register_app_persistence_hooks",
+    "register_flask_context_resolvers",
+]
