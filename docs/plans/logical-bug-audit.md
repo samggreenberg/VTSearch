@@ -1,7 +1,8 @@
 # Logical-Bug Audit — 2026-05
 
-**Status:** Proposed — findings only, no fixes applied. Branch
-`claude/audit-logical-errors-tcszV` is clean against `origin/dev`.
+**Status:** In progress — most findings still open; resolved items
+are listed under [Open follow-ups → Resolved](#resolved) at the
+bottom and marked inline.
 
 **Scope:** Multi-agent audit (10 per-subsystem + 5 cross-section
 interaction passes) of the entire VTSearch codebase, focused on
@@ -53,17 +54,36 @@ Cross-section interaction agents:
 
 ## Critical — data corruption / loss / hangs / silent miscompute
 
-### C1. Download gate is never released if importer skips the `"embedding"` status
+### C1. Download gate is never released if importer skips the `"embedding"` status — **shipped** (verified not a bug)
 
-- **File:** `vtsearch/datasets/load_pipeline.py` ~L648–705
-- **Bug:** `_LoadGateController` only swaps from `download_gate` →
-  `embed_gate` when the importer's progress callback fires
-  `status="embedding"`. A minimalist importer that completes without
-  that status keeps the download gate held forever, blocking every
-  subsequent dataset load.
-- **Fix sketch:** Release whichever gate is held at task exit in a
-  `finally` block, or add a guaranteed swap when the importer signals
-  completion regardless of progress status.
+- **File:** `vtscore/datasets/load_pipeline.py` (was
+  `vtsearch/datasets/load_pipeline.py` before the
+  extract-library rename) — controller class at L619–661,
+  task body at L897–945.
+- **Original claim:** `_LoadGateController` only swaps from
+  `download_gate` → `embed_gate` when the importer's progress
+  callback fires `status="embedding"`. A minimalist importer that
+  completes without that status keeps the download gate held forever,
+  blocking every subsequent dataset load.
+- **What's actually there:**
+  `_run_origin_load_in_background.task()` already covers minimalist
+  importers two ways: (1) `controller.swap_to_embed()` is called
+  **unconditionally** at L918 after `_run_importer` returns, which
+  releases the download gate even if the importer never emitted an
+  `"embedding"` status; and (2) `controller.release()` lives in a
+  `try/finally` at L939–940, releasing whichever gate is held on
+  every exit path including exceptions. The audit's "fix sketch"
+  (release in `finally` or guaranteed swap) describes the existing
+  protection. The original audit pass appears to have analyzed
+  `_LoadGateController` in isolation and missed both safety nets in
+  the caller.
+- **Fix:** Inline comment at the unconditional swap site expanded to
+  call out the minimalist-importer invariant so a future refactor
+  can't accidentally drop it. Regression test
+  `tests/datasets/test_parallel_loading.py::TestLoadingGates::test_minimalist_importer_releases_both_gates`
+  drives a load whose importer never fires `"embedding"` and asserts
+  both `_download_gate.active == 0` and `_embed_gate.active == 0`
+  after the task completes.
 
 ### C2. JobManager never sets dataset/detector thread-local context — **shipped**
 
@@ -632,7 +652,8 @@ one PR is far more effective than one-off fixes.
 
 1. **C1, C2, C3** — gate hand-off + thread-local context
    propagation. One small helper (pattern #1) unblocks 3+ bug
-   classes.
+   classes. (C1 verified safe and C2 shipped on 2026-05-19; C3
+   still open.)
 2. **C4** + pattern #4 — embedding-matrix cache invalidation via a
    `media_revision` counter.
 3. **C7** — clamp `xcal_threshold` to a finite sentinel and assert
@@ -655,6 +676,21 @@ corresponding finding above is annotated **— shipped** with a short fix
 summary, and is also recorded here.
 
 ### Shipped
+
+- **C1 — Download gate safety net verified** (2026-05-19, branch
+  `claude/fix-logical-bug-audit-c1-DV5Lc`). After closer inspection
+  the bug as described is not real: the audit looked at
+  `_LoadGateController` in isolation and missed two safety nets in
+  the caller (`_run_origin_load_in_background.task()`) — an
+  unconditional `controller.swap_to_embed()` after the importer
+  returns, plus a `try/finally` that calls `controller.release()` on
+  every exit path. Together they cover minimalist importers exactly
+  as the audit's "fix sketch" recommended. Inline comment at the
+  unconditional swap site expanded to call out the invariant, and a
+  regression test
+  (`tests/datasets/test_parallel_loading.py::TestLoadingGates::test_minimalist_importer_releases_both_gates`)
+  was added so a future refactor can't silently remove either safety
+  net.
 
 - **C2 — JobManager thread-local context propagation** (2026-05-19).
   `JobManager._run` in `vtscore/concurrency/async_jobs.py` now sets
@@ -684,9 +720,9 @@ summary, and is also recorded here.
 
 ### Still open
 
-Every other finding (C1, C3, C5, C7, C8, C10, C12 and the High /
-Medium / Low tiers) remains as written. When the next fix lands, edit
-the finding above with **— shipped** and add a line here. When every
+Every other finding (C3, C5, C7, C8, C10, C12 and the High / Medium /
+Low tiers) remains as written. When the next fix lands, edit the
+finding above with **— shipped** and add a line here. When every
 critical and high is addressed, this doc can be retired into the
 relevant subsystem docs (or deleted, per the `docs/plans/` lifecycle).
 
