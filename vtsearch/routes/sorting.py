@@ -38,6 +38,7 @@ from vtsearch.schemas.sorting import (
     InclusionRequestSchema,
     InclusionResponseSchema,
     LabelFileSortResponseSchema,
+    LearnedSortCancelResponseSchema,
     LearnedSortRequestSchema,
     LearnedSortResponseSchema,
     LearnedSortResultQuerySchema,
@@ -531,6 +532,27 @@ def learned_sort_result(query: dict):
     if job.status == "cancelled":
         return {"job_id": job.job_id, "status": "cancelled"}
     return _learned_sort_done_payload(job)
+
+
+@sorting_bp.route("/api/learned-sort/cancel/<job_id>", methods=["POST"])
+@sorting_bp.response(200, LearnedSortCancelResponseSchema)
+@sorting_bp.alt_response(404, description="Job not found.")
+def cancel_learned_sort(job_id: str):
+    """Cancel an in-flight learned-sort job.
+
+    Sets the cancel flag on the :class:`AsyncJob`; the training loop
+    polls it cooperatively. Returns 200 even when the job has already
+    finished — the caller's contract is "make sure it's no longer
+    running", which also holds for done / errored / already-cancelled
+    jobs.
+    """
+    from vtsearch.concurrency.async_jobs import learned_sort_jobs
+
+    job = learned_sort_jobs.get(job_id)
+    if job is None:
+        abort(404, message="Job not found")
+    job.cancel()
+    return {"ok": True}
 
 
 @sorting_bp.route("/api/votes", methods=["GET"])

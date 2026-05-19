@@ -1,3 +1,4 @@
+⏳ Initializing VTSearch... (PID 26798)
 {
   "components": {
     "responses": {
@@ -2084,6 +2085,18 @@
         },
         "type": "object"
       },
+      "EvalTrainAndScoreCancelResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "type": "object"
+      },
       "EvalTrainAndScoreRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2384,6 +2397,18 @@
             "type": "object"
           }
         },
+        "type": "object"
+      },
+      "FindCancelResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
         "type": "object"
       },
       "FindCheckLabelsRequest": {
@@ -2910,6 +2935,18 @@
         "required": [
           "applied",
           "skipped"
+        ],
+        "type": "object"
+      },
+      "LearnedSortCancelResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
         ],
         "type": "object"
       },
@@ -7892,6 +7929,44 @@
         ]
       }
     },
+    "/api/eval/train-and-score/cancel/{job_id}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "job_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Sets the cancel flag on the :class:`AsyncJob`; the per-step retrain\nloop polls it cooperatively. Returns 200 even when the job has\nalready finished \u2014 see ``cancel_learned_sort`` for the rationale.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalTrainAndScoreCancelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Job not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Cancel an in-flight eval train-and-score job.",
+        "tags": [
+          "eval"
+        ]
+      }
+    },
     "/api/eval/train-and-score/result": {
       "get": {
         "parameters": [
@@ -8298,6 +8373,30 @@
         "summary": "Score all loaded medias with a detector and apply labels based on threshold.",
         "tags": [
           "detector_scoring"
+        ]
+      }
+    },
+    "/api/find/cancel": {
+      "post": {
+        "description": "Sets the cancel flag on the shared ``find_progress`` tracker, which\nevery scoring path (``/api/find``, ``/api/find-label``, and\n``/api/auto-detect``) reports progress through. Long-running loops\npoll the flag between iterations and bail out by raising\n:class:`CancelledError`. Always returns 200 \u2014 calling cancel when\nnothing is running is a no-op.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindCancelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Cancel any in-flight find-style scoring.",
+        "tags": [
+          "detector_find"
         ]
       }
     },
@@ -8840,6 +8939,44 @@
           }
         },
         "summary": "Kick off (or short-circuit) a learned-sort training job.",
+        "tags": [
+          "sorting"
+        ]
+      }
+    },
+    "/api/learned-sort/cancel/{job_id}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "job_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Sets the cancel flag on the :class:`AsyncJob`; the training loop\npolls it cooperatively. Returns 200 even when the job has already\nfinished \u2014 the caller's contract is \"make sure it's no longer\nrunning\", which also holds for done / errored / already-cancelled\njobs.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearnedSortCancelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Job not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Cancel an in-flight learned-sort job.",
         "tags": [
           "sorting"
         ]

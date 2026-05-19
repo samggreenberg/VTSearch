@@ -17,7 +17,7 @@ from typing import Any
 from flask_smorest import Blueprint, abort
 
 from vtsearch.concurrency.memory_budget import cap_workers_by_memory
-from vtsearch.concurrency.progress import update_find_progress
+from vtsearch.concurrency.progress import find_progress, update_find_progress
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
@@ -212,6 +212,10 @@ def find_label(body: dict):  # noqa: C901
         ctx = get_context(dataset_id)
         if ctx is not None:
             g._dataset_context = ctx
+
+    # Clear a leftover cancel flag from a previously-cancelled run so
+    # the new operation doesn't trip on it immediately.
+    find_progress.reset_cancel()
 
     update_find_progress(
         "running",
@@ -480,6 +484,9 @@ def auto_detect(body: dict):
         abort(400, message="No medias loaded")
 
     media_type = next(iter(snap.values())).get("type", "audio")
+
+    # Clear a leftover cancel flag from a previously-cancelled run.
+    find_progress.reset_cancel()
 
     autorun_names = _resolve_autorun_names(body, media_type)
     detectors_to_run = _collect_detectors_for_media_type(autorun_names, media_type)
