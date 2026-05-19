@@ -3,7 +3,11 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
-import { formatProgressMessage, isProgressIndeterminate } from '../../../utils/format-progress';
+import {
+  ProgressHeader,
+  formatProgressHeader,
+  isProgressIndeterminate,
+} from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 
 @Component({
@@ -145,10 +149,10 @@ export class DatasetCardComponent implements OnChanges {
     return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
-  get taskProgressMessage(): string {
+  get taskProgressInfo(): ProgressHeader {
     const task = this.loadingTask;
-    if (!task) return '';
-    return formatProgressMessage(task, 'Loading...');
+    if (!task) return { header: '', subtitle: '', detail: '' };
+    return formatProgressHeader(task, 'dataset', task.embedder);
   }
 
   get taskIsIndeterminate(): boolean {

@@ -65,3 +65,142 @@ export function isProgressIndeterminate(
   const prog = progress ?? {};
   return !(prog.current != null && prog.total != null && prog.total > 0);
 }
+
+/**
+ * A three-tier breakdown of a progress event for header-style UIs. The bare
+ * ``[Step 3/4] Loading embedding model…`` is uninformative to users who have
+ * no mental model of the load steps. ``formatProgressHeader`` instead returns:
+ *
+ *   - ``header``: ``"<what> · <phase>"``, e.g. ``"Loading dataset · embedding model"``.
+ *   - ``subtitle``: a plain-English one-liner explaining what the phase actually does.
+ *   - ``detail``: the original message + ``(current/total)`` counts, with the
+ *     redundant ``[Step S/T]`` prefix stripped (the header conveys the phase).
+ */
+export interface ProgressHeader {
+  header: string;
+  subtitle: string;
+  detail: string;
+}
+
+/** Which load flow this progress event belongs to. */
+export type ProgressKind = 'dataset' | 'detector';
+
+const EMBEDDER_PRETTY: Record<string, string> = {
+  siglip: 'SigLIP',
+  siglip2: 'SigLIP 2',
+  clip: 'CLIP',
+  dinov2: 'DINOv2',
+  dinov2_patch: 'DINOv2',
+  dinov3: 'DINOv3',
+  dinov3_patch: 'DINOv3',
+  dinov3_single: 'DINOv3',
+  clap: 'LAION-CLAP',
+  clap_general: 'LAION-CLAP (general)',
+  clap_music: 'LAION-CLAP (music)',
+  xclip: 'X-CLIP',
+  'x-clip': 'X-CLIP',
+  whisper: 'Whisper',
+  ast: 'AST',
+  e5: 'E5',
+  bge: 'BGE',
+  languagebind: 'LanguageBind',
+};
+
+function prettifyEmbedder(name: string | undefined): string {
+  if (!name) return '';
+  const key = name.toLowerCase().replace(/-/g, '_');
+  return EMBEDDER_PRETTY[key] ?? name;
+}
+
+function stripStepPrefix(msg: string): string {
+  return msg.replace(/^\[Step \d+\/\d+\]\s*/, '');
+}
+
+/**
+ * Resolve a ``ProgressEvent`` to a header / subtitle / detail triple for UIs
+ * that want richer loading-state context than a single line of text. See the
+ * ``ProgressHeader`` interface for the meaning of each field. ``kind`` selects
+ * between the dataset-load and detector-load phase vocabularies; ``embedder``
+ * is woven into the subtitle when the phase mentions one ("Loading SigLIP
+ * weights. First-time only — cached on disk afterwards.").
+ */
+export function formatProgressHeader(
+  progress: ProgressEvent | null | undefined,
+  kind: ProgressKind,
+  embedder?: string,
+): ProgressHeader {
+  const prog = progress ?? {};
+  const status = (prog.status ?? '').toLowerCase();
+  const message = prog.message ?? '';
+  const what = kind === 'detector' ? 'Loading detector' : 'Loading dataset';
+
+  let phase = '';
+  let subtitle = '';
+
+  if (status === 'downloading') {
+    if (/extract/i.test(message)) {
+      phase = 'unpacking archive';
+      subtitle = 'Extracting the downloaded archive into the dataset cache.';
+    } else {
+      phase = 'downloading source';
+      subtitle = 'Fetching the dataset archive. Cached on disk for next time.';
+    }
+  } else if (status === 'embedding') {
+    phase = 'embedding files';
+    const pretty = prettifyEmbedder(embedder);
+    subtitle = pretty
+      ? `Computing one ${pretty} vector per file. Time depends on dataset size and hardware.`
+      : 'Computing one vector per file. Time depends on dataset size and hardware.';
+  } else if (status === 'loading' && /embedding model/i.test(message)) {
+    phase = 'embedding model';
+    const pretty = prettifyEmbedder(embedder);
+    subtitle = pretty
+      ? `Loading ${pretty} weights. First-time only — cached on disk afterwards.`
+      : 'Loading model weights. First-time only — cached on disk afterwards.';
+  } else if (status === 'loading' && /text encoder|warming/i.test(message)) {
+    phase = 'warming text encoder';
+    subtitle = 'One-time warm-up so the first text search returns instantly.';
+  } else if (/duplicates/i.test(message)) {
+    phase = 'removing duplicates';
+    subtitle = 'Collapsing media that share the same content fingerprint.';
+  } else if (/diversity/i.test(message)) {
+    phase = 'building diversity index';
+    subtitle = 'Indexing for fast diverse browsing and autopilot guidance.';
+  } else if (/saving to registry/i.test(message)) {
+    phase = 'saving to registry';
+    subtitle = 'Persisting the dataset so it survives a restart.';
+  } else if (/clipping/i.test(message)) {
+    phase = 'slicing clips';
+    subtitle = 'Cutting media into clips for finer-grained search.';
+  } else if (/embedding clips/i.test(message)) {
+    phase = 'embedding clips';
+    subtitle = 'Computing a vector for each clip.';
+  } else if (/converting/i.test(message)) {
+    phase = 'converting media';
+    subtitle = 'Running the converter on each input file.';
+  } else if (kind === 'detector' && /restoring labels/i.test(message)) {
+    phase = 'restoring labels';
+    subtitle = 'Reading the saved labelset for this detector.';
+  } else if (kind === 'detector' && /seeding examples/i.test(message)) {
+    phase = 'seeding examples';
+    subtitle = 'Pulling label examples back into the active dataset.';
+  } else if (
+    kind === 'detector' &&
+    /embedding labels|re-?resolving labels|re-?embedding/i.test(message)
+  ) {
+    phase = 'embedding labels';
+    const pretty = prettifyEmbedder(embedder);
+    subtitle = pretty
+      ? `Re-resolving label media into ${pretty} space so MLP training mixes only same-space vectors.`
+      : 'Re-resolving label media so MLP training mixes only same-space vectors.';
+  } else if (status === 'loading' && /preparing|scanning|importing/i.test(message)) {
+    phase = 'preparing';
+    subtitle = /scanning/i.test(message)
+      ? 'Walking the source folder to enumerate media files.'
+      : 'Setting up the load pipeline.';
+  }
+
+  const header = phase ? `${what} · ${phase}` : what;
+  const detail = stripStepPrefix(formatProgressMessage(progress));
+  return { header, subtitle, detail };
+}

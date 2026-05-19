@@ -4,7 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import { DetectorSwatchComponent } from '../../detector-swatch/detector-swatch.component';
-import { formatProgressMessage, isProgressIndeterminate } from '../../../utils/format-progress';
+import {
+  ProgressHeader,
+  formatProgressHeader,
+  isProgressIndeterminate,
+} from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { detectorHue } from '../../../utils/detector-color';
 
@@ -179,7 +183,9 @@ export class DetectorCardComponent implements OnChanges {
     return isProgressIndeterminate(t);
   }
 
-  get taskProgressMessage(): string {
-    return this.loadingTask ? formatProgressMessage(this.loadingTask, 'Loading...') : '';
+  get taskProgressInfo(): ProgressHeader {
+    const task = this.loadingTask;
+    if (!task) return { header: '', subtitle: '', detail: '' };
+    return formatProgressHeader(task, 'detector', task.embedder);
   }
 }
