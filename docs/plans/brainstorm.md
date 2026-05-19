@@ -494,8 +494,13 @@ The dataset-load progress reports step 1-4 ("downloading", "embedding", "dedupin
 ### 14.2 Bytes/sec for first-run model downloads ★★★ M
 First-run model downloads (CLAP ~1.1 GB, X-CLIP ~600 MB) currently show "Loading embedding model…" with no bar. HuggingFace's `tqdm`-style progress is available — pipe it through `update_progress()` to show `Downloading SigLIP (412 / 860 MB, 18 MB/s, ~25s left)`.
 
-### 14.3 ETA estimates on long bars ★★ S
-Every progress bar should show an ETA once we've seen >5s and have a current/total. ETA = `(elapsed / current) * (total - current)`, smoothed. Eliminates the "is this hung?" fear.
+### 14.3 ETA estimates on long bars ★★ S — shipped
+
+Every progress bar now shows a remaining-time estimate once it has been running long enough for the rate to mean something.
+
+**What shipped:** `ProgressTracker._compute_eta` in `vtsearch/concurrency/progress.py` records a per-phase start time, computes `raw = (elapsed / completed) * (total - current)` once `elapsed > 5s` with `current > 0` and a known `total`, and smooths it with an EMA (α = 0.3) against the previous sample. The phase clock resets whenever `status` or `total` changes, or when `current` decreases (a new bar starting), so phase transitions don't pollute the estimate with stale rate from the previous phase. The result lives in a new `eta_seconds` field added to `_PROGRESS_COMMON_EXTRAS`, so every singleton tracker (dataset / sort / eval / find) and every per-task tracker created by `LoadingTasksTracker` carries it for free.
+
+On the frontend, `ProgressEvent.eta_seconds` lands on `frontend/src/app/models/api.models.ts`, and `formatEta()` + a tail in `formatProgressMessage()` in `frontend/src/app/utils/format-progress.ts` render it as `· ~Hh Mm left` / `· ~Mm Ss left` / `· ~Ss left` appended to the existing `(current/total) message` detail line. Because the dashboard cards, find view, label view, and detector card all flow through `formatProgressMessage` / `formatProgressHeader.detail`, no per-component change is needed — the ETA chip appears automatically on every long-running bar that has a `current` and `total`. Short bars (≤5s) keep showing only `(C/T)` so they don't flash a meaningless estimate.
 
 ### 14.4 Per-detector progress during auto-detect ★★ S
 `/api/auto-detect` runs N detectors in parallel and reports a single aggregated bar. Switch to a list of mini-bars in `AutodetectResultsModalComponent` ("Detector A: ✓ done · Detector B: 47% · Detector C: queued"). The frontend already gets per-detector results; just expose progress per-id over SSE.

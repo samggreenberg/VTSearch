@@ -64,6 +64,12 @@ export interface ProgressEvent {
   total_steps?: number | null;
   /** Error message if the operation failed. */
   error?: string | null;
+  /**
+   * Smoothed remaining-seconds estimate filled in by
+   * ``ProgressTracker._compute_eta`` once the bar has been running long
+   * enough (>5s) with a known total. ``null`` means "no estimate yet".
+   */
+  eta_seconds?: number | null;
   /** Dataset-only: payload returned by combine-datasets staging. */
   staging_result?: unknown;
   [key: string]: unknown;

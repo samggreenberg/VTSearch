@@ -21,13 +21,35 @@ export function formatProgressFraction(current: number, total: number): string {
 }
 
 /**
+ * Format a remaining-seconds estimate into a compact ``~Hh Mm`` / ``~Mm Ss``
+ * / ``~Ss`` chip. Returns an empty string for ``null``, non-positive, or
+ * non-finite values so the caller can drop it from concatenation unconditionally.
+ */
+export function formatEta(seconds: number | null | undefined): string {
+  if (seconds == null || !isFinite(seconds) || seconds <= 0) return '';
+  const total = Math.round(seconds);
+  if (total < 60) return `~${total}s left`;
+  if (total < 3600) {
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return s > 0 ? `~${m}m ${s}s left` : `~${m}m left`;
+  }
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  return m > 0 ? `~${h}h ${m}m left` : `~${h}h left`;
+}
+
+/**
  * Format a `ProgressEvent` into the canonical
- * ``[Step S/T] (C/T) message`` string used by every progress consumer.
+ * ``[Step S/T] (C/T) message · ~ETA left`` string used by every progress consumer.
  *
  * Each piece is optional:
  *   - The ``[Step S/T]`` prefix appears only when ``total_steps > 1``.
  *   - The ``(C/T)`` fraction appears only when ``total > 0``.
- *   - When neither is present, returns the bare ``message`` (or
+ *   - The ``· ~Xs left`` tail appears only when ``eta_seconds > 0`` — the
+ *     backend gates this on at least 5s of elapsed work, so it stays hidden
+ *     for short bars.
+ *   - When none are present, returns the bare ``message`` (or
  *     ``defaultMessage`` if ``message`` is empty).
  */
 export function formatProgressMessage(
@@ -51,6 +73,10 @@ export function formatProgressMessage(
     } else {
       msg = msg ? `${fraction} ${msg}` : fraction;
     }
+  }
+  const eta = formatEta(prog.eta_seconds);
+  if (eta) {
+    msg = msg ? `${msg} · ${eta}` : eta;
   }
   return msg;
 }
