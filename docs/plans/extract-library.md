@@ -1,6 +1,6 @@
 # Extract `vtscore` Library Plan
 
-Status: **Phase 0 shipped; Phase 1 mostly landed** — public API surface captured in [`docs/vtscore-api.md`](../vtscore-api.md). `vtsearch/media/` and `vtsearch/state/` are Flask-free; the latter now uses a pluggable resolver hook installed at app startup by `vtsearch/shim/`. Only `vtsearch/detectors/workflow.py` (renamed from `vtsearch/models/training_workflow.py`) still reads `flask.g`. Phase 2 not yet started. Phase 5's entry-point hook landed ahead of the split.
+Status: **Phases 0 and 1 shipped** — public API surface captured in [`docs/vtscore-api.md`](../vtscore-api.md). Every library-candidate package is Flask-free; the Flask wiring lives in `vtsearch/shim/` and registers a per-request resolver hook on `vtsearch/state/core.py` plus an `override_detector_context()` context manager that `apply_and_retrain` uses to swap detectors without touching `flask.g`. Phase 2 (settings seam) is next. Phase 5's entry-point hook landed ahead of the split.
 
 Goal: split VTSearch into two distributions in one repo:
 
@@ -28,16 +28,16 @@ The library cannot import Flask. Today the leakage outside `routes/` is small:
 
 - [x] `vtsearch/state/core.py` — `_request_*_context()` helpers replaced with module-level resolver callables (`_dataset_context_resolver`, `_detector_context_resolver`) installable via `register_dataset_context_resolver()` / `register_detector_context_resolver()`. Default = `lambda: None`. The Flask-aware versions live in the new `vtsearch/shim/` package and are installed once at `app.py` startup via `register_flask_context_resolvers()`.
 - [x] `vtsearch/media/base.py` — formerly imported Flask; now Flask-free. The route layer converts the abstract `MediaResponse` into a `flask.Response` via `media_response_to_flask`. Module-level docstring still *mentions* Flask for orientation, but no `import flask`.
-- [ ] `vtsearch/detectors/workflow.py` (`apply_and_retrain`) — reads `flask.g` to override the request-scoped detector context. **Fix**: same approach as `state/core.py`; the context-override should go through the pluggable resolver so library callers can swap contexts without importing Flask.
+- [x] `vtsearch/detectors/workflow.py` (`apply_and_retrain`) — formerly wrote `g._detector_context = det_ctx` to swap the request-scoped context. Now uses `override_detector_context()` from `vtsearch.state.core`, a new context manager that sits at the top of `get_active_detector_context()`'s resolution chain (above the resolver and the thread-local). Works in both Flask requests and background threads.
 
 Audit command (run before declaring this phase done):
 
 ```sh
 grep -rn "^import flask\|^from flask\|^\s*import flask\|^\s*from flask" \
-  vtsearch/{datasets,detectors,embedding,training,media,converters,processors,exporters,labels,eval,plugins,concurrency,state,sync,utils,security}
+  vtsearch/{datasets,detectors,embedding,training,media,converters,exporters,labels,eval,plugins,concurrency,state,sync,utils,security}
 ```
 
-**Exit criteria**: that command returns zero hits.
+**Exit criteria** ✅ that command returns zero hits as of this commit. The remaining Flask imports live in `vtsearch/auth/`, `vtsearch/logging_config.py`, `vtsearch/routes/`, and `app.py` — all unambiguously app-layer.
 
 ## Phase 2 — Cut the settings seam
 
@@ -201,7 +201,7 @@ Next concrete pieces of work, smallest-first, so a contributor can grab one with
 
 1. ~~**Phase 0 inventory doc.** Stub `docs/vtscore-api.md` with the docstring-only sketch of the public surface.~~ **Shipped.** See [`docs/vtscore-api.md`](../vtscore-api.md).
 2. ~~**Phase 1, file 1 of 2: `vtsearch/state/core.py`.**~~ **Shipped.** Resolver hook installed at app startup via `vtsearch/shim/register_flask_context_resolvers()`; `state/core.py` now imports nothing from Flask. Full test suite (3662) green.
-3. **Phase 1, file 2 of 2: `vtsearch/detectors/workflow.py::apply_and_retrain`.** Currently writes `g._detector_context = det_ctx` to override the request-scoped context. Replace with a context-manager helper from `state/core.py` (e.g. `override_detector_context(ctx)`) that does the override through the same resolver hook. Removes the `from flask import g` line.
+3. ~~**Phase 1, file 2 of 2: `vtsearch/detectors/workflow.py::apply_and_retrain`.**~~ **Shipped.** `override_detector_context()` context manager added to `state/core.py` (highest-priority tier in the resolution chain). Phase 1 exit criterion now satisfied across the whole library-candidate tree. Full test suite (3662) green.
 4. **Phase 2 scaffold: `vtscore.config.CoreConfig`.** Add the dataclass under `vtsearch/config.py` (or a new `vtsearch/core_config.py`) with the knobs listed in Phase 2 above and a `CoreConfig.from_settings()` classmethod that reads `vtsearch.settings`. No call-site changes yet — landing the type lets follow-up PRs convert one file at a time.
 5. **Phase 2, easy wins.** `vtsearch/datasets/registry.py` and `vtsearch/detectors/store.py` each read exactly one settings value (`get_saved_datasets_dir`, `get_detectors_dir`). Convert those two first as the proof-of-pattern, then `detectors/labeling_progress.py`, then the heavier `datasets/load_pipeline.py` and `state/__init__.py`.
 

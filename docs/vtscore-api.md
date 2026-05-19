@@ -82,7 +82,7 @@ Loading, importing, and labelling media collections.
 
 ### Workflow
 
-- `vtsearch.detectors.workflow.apply_and_retrain(detector_id, det_ctx, new_entries, detector_name)` — Resolve new label entries against the loaded dataset, apply them, retrain. ⚠️ **seam — currently reads `flask.g` to override the request-scoped detector context. Phase 1 will route this through a context-resolver hook.**
+- `vtsearch.detectors.workflow.apply_and_retrain(detector_id, det_ctx, new_entries, detector_name)` — Resolve new label entries against the loaded dataset, apply them, retrain. Swaps the active detector via `vtsearch.state.core.override_detector_context()`.
 
 ### Registry, store, resolver
 
@@ -217,8 +217,8 @@ The two structs the library hands back to callers. The module-level `medias` / `
 - `vtsearch.state.core.{register_context, unregister_context, list_loaded_dataset_ids, clear_all_contexts}` — Dataset registry surface.
 - `vtsearch.state.core.{register_detector_context, unregister_detector_context, list_loaded_detector_ids, clear_all_detector_contexts}` — Detector registry surface.
 - `vtsearch.state.core.{set_thread_dataset_context, get_thread_dataset_context, set_thread_detector_context, get_thread_detector_context}` — Thread-local context overrides (used by background jobs and tests).
-
-⚠️ **seam — `_request_dataset_context()` / `_request_detector_context()` read `flask.g`. Phase 1 replaces them with a pluggable resolver.**
+- `vtsearch.state.core.{register_dataset_context_resolver, register_detector_context_resolver}` — Install per-request resolvers. The Flask shim (`vtsearch.shim.register_flask_context_resolvers`) calls these at app startup so `g._dataset_context` / `g._detector_context` feed the proxies.
+- `vtsearch.state.core.override_detector_context(ctx)` — Context manager taking the top tier of `get_active_detector_context()`'s resolution chain. Used by `apply_and_retrain` to swap detectors regardless of whether the caller is inside a Flask request.
 
 ---
 
@@ -260,19 +260,19 @@ The two structs the library hands back to callers. The module-level `medias` / `
 
 Cross-referenced with the [extract-library plan](plans/extract-library.md):
 
-| Module / name                                       | Coupling                       | Phase |
-|-----------------------------------------------------|--------------------------------|-------|
-| `state.core._request_*_context()`                   | `flask.g`                      | 1     |
-| `detectors.workflow.apply_and_retrain`              | `flask.g`                      | 1     |
-| `cli.main` / `cli.autodetect`                       | `vtsearch.settings`            | 2     |
-| `cli_pipeline`                                      | `vtsearch.settings`            | 2     |
-| `datasets.load_pipeline`                            | `vtsearch.settings`            | 2     |
-| `datasets.registry.get_saved_datasets_dir` callers  | `vtsearch.settings`            | 2     |
-| `detectors.store.get_detectors_dir`                 | `vtsearch.settings`            | 2     |
-| `detectors.labeling_progress`                       | `vtsearch.settings`            | 2     |
-| `state/__init__` (inclusion, calibrate_*, etc.)     | `vtsearch.settings`            | 2     |
-| Module-level proxies (`medias`, `good_votes`, …)    | global state                   | 3     |
-| `autorun_extractors` / `autorun_localizers`         | module globals in `state/core` | 3     |
-| Hardcoded `data/` paths (if any)                    | filesystem                     | 4     |
+| Module / name                                       | Coupling                       | Phase | Status |
+|-----------------------------------------------------|--------------------------------|-------|--------|
+| `state.core._request_*_context()`                   | `flask.g`                      | 1     | ✅ shipped — pluggable resolver hook |
+| `detectors.workflow.apply_and_retrain`              | `flask.g`                      | 1     | ✅ shipped — `override_detector_context()` |
+| `cli.main` / `cli.autodetect`                       | `vtsearch.settings`            | 2     | open   |
+| `cli_pipeline`                                      | `vtsearch.settings`            | 2     | open   |
+| `datasets.load_pipeline`                            | `vtsearch.settings`            | 2     | open   |
+| `datasets.registry.get_saved_datasets_dir` callers  | `vtsearch.settings`            | 2     | open   |
+| `detectors.store.get_detectors_dir`                 | `vtsearch.settings`            | 2     | open   |
+| `detectors.labeling_progress`                       | `vtsearch.settings`            | 2     | open   |
+| `state/__init__` (inclusion, calibrate_*, etc.)     | `vtsearch.settings`            | 2     | open   |
+| Module-level proxies (`medias`, `good_votes`, …)    | global state                   | 3     | open   |
+| `autorun_extractors` / `autorun_localizers`         | module globals in `state/core` | 3     | open   |
+| Hardcoded `data/` paths (if any)                    | filesystem                     | 4     | open   |
 
 The contract for the refactor: every name listed above keeps the same call signature and semantics. Phases 1–4 introduce the seams (parameters, resolvers, config objects) without breaking the surface.
