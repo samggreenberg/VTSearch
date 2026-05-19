@@ -65,14 +65,23 @@ Cross-section interaction agents:
   `finally` block, or add a guaranteed swap when the importer signals
   completion regardless of progress status.
 
-### C2. JobManager never sets dataset/detector thread-local context
+### C2. JobManager never sets dataset/detector thread-local context — **shipped**
 
-- **File:** `vtsearch/concurrency/async_jobs.py` ~L209–217
-- **Bug:** `_run()` sets `set_thread_user(job.user)` but never calls
+- **File:** `vtscore/concurrency/async_jobs.py` (`JobManager._run`)
+- **Bug:** `_run()` set `set_thread_user(job.user)` but never called
   `set_thread_dataset_context(get_context(job.dataset_id))` or the
   detector equivalent. Every learned-sort / eval / training job target
-  that calls `get_active_context()` resolves to the empty fallback
+  that called `get_active_context()` could resolve to the empty fallback
   context — empty votes, missing media, silent miscompute.
+- **Fix:** `JobManager._run` now resolves `job.dataset_id` /
+  `job.detector_id` through `get_context()` / `get_detector_context()`
+  and sets the thread-local contexts before invoking the target, with a
+  `finally` that clears all three thread-locals (user + dataset +
+  detector). Route closures in `vtsearch/routes/sorting.py` and
+  `vtsearch/routes/eval.py` continue to set the contexts via captured
+  refs; those calls are now redundant but kept as a no-op safety net in
+  case the registry is mutated between `start()` and `_run()` (the
+  closure holds a direct reference to the live context).
 - **Severity note:** Highest-impact context-propagation bug; flagged by
   two independent agents.
 
@@ -578,9 +587,23 @@ one PR is far more effective than one-off fixes.
 
 ## Open follow-ups
 
-This plan is **discovery-only** — no fixes have landed. When
-individual fixes are pulled out of this list, mark them here as
-shipped (date + commit / PR link) and edit the corresponding finding
-above. When every critical and high is addressed, this doc can be
-retired into the relevant subsystem docs (or deleted, per the
-`docs/plans/` lifecycle).
+This plan started as discovery-only. As individual fixes land, the
+corresponding finding above is annotated **— shipped** with a short fix
+summary, and is also recorded here.
+
+### Shipped
+
+- **C2 — JobManager thread-local context propagation** (2026-05-19).
+  `JobManager._run` in `vtscore/concurrency/async_jobs.py` now sets
+  `set_thread_dataset_context` / `set_thread_detector_context` from
+  `job.dataset_id` / `job.detector_id` before invoking the target, and
+  clears all three thread-locals (user + dataset + detector) in a
+  `finally`. Covered by `tests_lib/integration/test_async_jobs.py::TestThreadContextPropagation`.
+
+### Still open
+
+Every other finding (C1, C3–C12 and the High / Medium / Low tiers)
+remains as written. When the next fix lands, edit the finding above
+with **— shipped** and add a line here. When every critical and high is
+addressed, this doc can be retired into the relevant subsystem docs (or
+deleted, per the `docs/plans/` lifecycle).
