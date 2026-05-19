@@ -1,6 +1,6 @@
 # C901 Refactor Triage (≥20 complexity)
 
-**Status:** Triage complete; refactor of `_apply_clip_and_embed` in flight.
+**Status:** Triage complete; 1 of 8 refactors shipped.
 
 ## Why this file exists
 
@@ -35,7 +35,7 @@ classified as either:
 
 | File:line | Func | CC | Plan |
 |---|---|---|---|
-| `vtsearch/detectors/resolver.py:436` | `_apply_clip_and_embed` | 25 | Three near-identical try/clip/tempfile/embed/cleanup branches for audio/image/text. Extract `_clip_audio_to_bytes`, `_clip_image_to_bytes`, `_clip_text_to_bytes` (each returns `(bytes, suffix)`), plus one `_embed_via_tempfile(data, suffix, …)` helper. Collapses ~110 lines into ~40. |
+| ~~`vtsearch/detectors/resolver.py:436`~~ | ~~`_apply_clip_and_embed`~~ | ~~25~~ | **Shipped** — see Done below. |
 | `vtsearch/routes/labels/vote.py:42` | `export_labels` | 29 | Three concerns interleaved: labelset selection, corrections annotation, enrichment. Each is a clean subroutine — extract `_select_labelset(query)`, `_annotate_corrections(result, find_initial, all_medias)`, `_enrich_with_metadata(result, all_medias)`. |
 | `vtsearch/converters/audio2image.py:108` | `convert` | 25 | Linear pipeline: param coerce → load audio → compute spec → render PNG. Extract `_coerce_params`, `_compute_spectrogram`, `_render_to_png`. |
 | `vtsearch/converters/image2text.py:83` | `convert` | 22 | Same shape as audio2image — split by stage. |
@@ -58,7 +58,7 @@ classified as either:
 
 Ship in this order — earlier rows are more mechanical / lower risk:
 
-1. `_apply_clip_and_embed` *(in flight)*
+1. ~~`_apply_clip_and_embed`~~ — shipped
 2. `label_file_sort`
 3. `export_labels`
 4. `audio2image.convert` / `image2text.convert` (one PR)
@@ -68,7 +68,14 @@ Ship in this order — earlier rows are more mechanical / lower risk:
 
 ## Done
 
-*(none yet)*
+- **`_apply_clip_and_embed`** (CC 25 → 6). Split into `_clip_audio_to_bytes`,
+  `_clip_image_to_bytes`, `_clip_text_to_bytes` (each returns
+  `(bytes, suffix)`), a `_clip_to_bytes` dispatcher, a `_replay_chain`
+  helper for the chain-replay early path, and one `_embed_via_tempfile`
+  shared embedder. The main function is now a chain-replay attempt + a
+  three-line dispatch through the clipper helpers, with a single
+  fallback to `embed_file`. `noqa: C901` deleted. All 49
+  `tests/detectors/test_clipper_workflow.py` tests pass.
 
 ## Open follow-ups
 

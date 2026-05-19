@@ -433,7 +433,92 @@ def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.
     return result
 
 
-def _apply_clip_and_embed(  # noqa: C901
+def _clip_audio_to_bytes(file_path: Path, clip_start: float, clip_end: float) -> tuple[bytes, str]:
+    """Slice a WAV file to ``[clip_start, clip_end]`` seconds.  Returns ``(bytes, suffix)``."""
+    from vtsearch.media.audio.clipper import _wav_slice
+
+    wav_bytes = file_path.read_bytes()
+    return _wav_slice(wav_bytes, clip_start, clip_end), ".wav"
+
+
+def _clip_image_to_bytes(file_path: Path, clip_box: str) -> tuple[bytes, str]:
+    """Crop an image to the comma-separated ``clip_box``.  Returns ``(bytes, suffix)``."""
+    import io as _io
+
+    from PIL import Image
+
+    parts = [int(float(v)) for v in clip_box.split(",")]
+    if len(parts) != 4:
+        raise ValueError(f"clip_box must have 4 values, got {len(parts)}")
+    box: tuple[int, int, int, int] = (parts[0], parts[1], parts[2], parts[3])
+    with Image.open(file_path) as img:
+        cropped = img.crop(box)
+        buf = _io.BytesIO()
+        cropped.save(buf, format=img.format or "PNG")
+    return buf.getvalue(), ".png"
+
+
+def _clip_text_to_bytes(file_path: Path, clip_index: int) -> tuple[bytes, str] | None:
+    """Extract the ``clip_index``-th sentence.  Returns None when the index is out of range."""
+    import re
+
+    text = file_path.read_text(encoding="utf-8")
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    if 0 <= clip_index < len(sentences):
+        return sentences[clip_index].encode("utf-8"), ".txt"
+    return None
+
+
+def _embed_via_tempfile(data: bytes, suffix: str, media_type: str, embedder_name: str) -> np.ndarray | None:
+    """Write *data* to a tempfile with *suffix* and embed it; clean up the tempfile."""
+    import os
+    import tempfile
+
+    fd, tmp = tempfile.mkstemp(suffix=suffix)
+    try:
+        os.write(fd, data)
+        os.close(fd)
+        return embed_file(Path(tmp), media_type, embedder_name)
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+def _clip_to_bytes(file_path: Path, media_type: str, params: dict[str, Any]) -> tuple[bytes, str] | None:
+    """Dispatch to the per-media-type clipper.  Returns None when no clip applies."""
+    if media_type == "audio":
+        clip_start = params.get("clip_start")
+        clip_end = params.get("clip_end")
+        if clip_start is not None and clip_end is not None:
+            return _clip_audio_to_bytes(file_path, float(clip_start), float(clip_end))
+    elif media_type == "image":
+        clip_box = params.get("clip_box")
+        if clip_box is not None:
+            return _clip_image_to_bytes(file_path, clip_box)
+    elif media_type == "text":
+        clip_index = params.get("clip_index")
+        if clip_index is not None:
+            return _clip_text_to_bytes(file_path, int(clip_index))
+    return None
+
+
+def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> np.ndarray | None:
+    """Replay a clipper chain on *file_path*.  Returns None when nothing applies or the replay fails."""
+    from vtsearch.datasets.clipper_chain import parse_trail, replay_chain_on_file
+
+    steps = parse_trail(chain_raw)
+    if not steps:
+        return None
+    try:
+        return replay_chain_on_file(file_path, steps, embedder_name)
+    except Exception:
+        log.debug("_apply_clip_and_embed: chain replay failed, falling back", exc_info=True)
+        return None
+
+
+def _apply_clip_and_embed(
     file_path: Path,
     media_type: str,
     origin: dict[str, Any],
@@ -444,117 +529,32 @@ def _apply_clip_and_embed(  # noqa: C901
     If the origin contains clip parameters (``clip_start``/``clip_end`` for
     audio, ``clip_box`` for images, or a text sentence clipper), the file is
     clipped first and the clipped content is embedded.  Falls back to
-    :func:`embed_file` when no clip params are present.
+    :func:`embed_file` when no clip params apply (e.g. video, or an
+    unrecognised clipper) or when the clip step raises.
     """
-    import os
-    import tempfile
-
     params = origin.get("params", {})
 
-    # Chain replay takes precedence over the legacy single-clipper path.
     chain_raw = params.get("clipper_chain")
     if chain_raw:
-        from vtsearch.datasets.clipper_chain import parse_trail, replay_chain_on_file
+        embedding = _replay_chain(file_path, chain_raw, embedder_name)
+        if embedding is not None:
+            return embedding
+        # Fall through to legacy/full-file embed.
 
-        steps = parse_trail(chain_raw)
-        if steps:
-            try:
-                embedding = replay_chain_on_file(file_path, steps, embedder_name)
-            except Exception:
-                log.debug("_apply_clip_and_embed: chain replay failed, falling back", exc_info=True)
-                embedding = None
-            if embedding is not None:
-                return embedding
-            # Fall through to legacy/full-file embed.
-
-    clipper_name = params.get("clipper", "")
-
-    if not clipper_name:
+    if not params.get("clipper"):
         return embed_file(file_path, media_type, embedder_name)
 
-    clip_start = params.get("clip_start")
-    clip_end = params.get("clip_end")
-    clip_box = params.get("clip_box")
+    try:
+        clipped = _clip_to_bytes(file_path, media_type, params)
+    except Exception:
+        log.debug("_apply_clip_and_embed: %s clip failed, falling back", media_type, exc_info=True)
+        return embed_file(file_path, media_type, embedder_name)
 
-    # --- Audio clips: slice WAV bytes ---
-    if clip_start is not None and clip_end is not None and media_type == "audio":
-        try:
-            from vtsearch.media.audio.clipper import _wav_slice
+    if clipped is None:
+        return embed_file(file_path, media_type, embedder_name)
 
-            wav_bytes = file_path.read_bytes()
-            sliced = _wav_slice(wav_bytes, float(clip_start), float(clip_end))
-            fd, tmp = tempfile.mkstemp(suffix=".wav")
-            try:
-                os.write(fd, sliced)
-                os.close(fd)
-                return embed_file(Path(tmp), media_type, embedder_name)
-            finally:
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-        except Exception:
-            log.debug("_apply_clip_and_embed: audio clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type, embedder_name)
-
-    # --- Image clips: crop to clip_box ---
-    if clip_box is not None and media_type == "image":
-        try:
-            import io as _io
-
-            from PIL import Image
-
-            parts = [int(float(v)) for v in clip_box.split(",")]
-            if len(parts) != 4:
-                raise ValueError(f"clip_box must have 4 values, got {len(parts)}")
-            box_values: tuple[int, int, int, int] = (parts[0], parts[1], parts[2], parts[3])
-            with Image.open(file_path) as img:
-                cropped = img.crop(box_values)
-                buf = _io.BytesIO()
-                cropped.save(buf, format=img.format or "PNG")
-            crop_bytes = buf.getvalue()
-            fd, tmp = tempfile.mkstemp(suffix=".png")
-            try:
-                os.write(fd, crop_bytes)
-                os.close(fd)
-                return embed_file(Path(tmp), media_type, embedder_name)
-            finally:
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-        except Exception:
-            log.debug("_apply_clip_and_embed: image clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type, embedder_name)
-
-    # --- Text clips: extract the sentence by clip_index ---
-    if media_type == "text":
-        try:
-            clip_index = params.get("clip_index")
-            if clip_index is not None:
-                import re
-
-                text = file_path.read_text(encoding="utf-8")
-                sentence_re = re.compile(r"(?<=[.!?])\s+")
-                sentences = [s.strip() for s in sentence_re.split(text) if s.strip()]
-                idx = int(clip_index)
-                if 0 <= idx < len(sentences):
-                    fd, tmp = tempfile.mkstemp(suffix=".txt")
-                    try:
-                        os.write(fd, sentences[idx].encode("utf-8"))
-                        os.close(fd)
-                        return embed_file(Path(tmp), media_type, embedder_name)
-                    finally:
-                        try:
-                            os.unlink(tmp)
-                        except OSError:
-                            pass
-        except Exception:
-            log.debug("_apply_clip_and_embed: text clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type, embedder_name)
-
-    # Video clips and unrecognised clippers: embed the full file.
-    return embed_file(file_path, media_type, embedder_name)
+    data, suffix = clipped
+    return _embed_via_tempfile(data, suffix, media_type, embedder_name)
 
 
 def resolve_label_embeddings(  # noqa: C901
