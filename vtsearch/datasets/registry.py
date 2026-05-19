@@ -26,10 +26,15 @@ REGISTRY_PATH = DATA_DIR / "dataset_registry.json"
 
 
 def get_saved_datasets_dir() -> Path:
-    """Return the saved-datasets directory from settings."""
-    from vtsearch.settings import get_saved_datasets_dir as _get
+    """Return the saved-datasets directory.
 
-    return _get()
+    Routed through ``CoreConfig.from_settings()`` rather than reading
+    ``vtsearch.settings`` directly so this module stays library-clean
+    (see Phase 2 of ``docs/plans/extract-library.md``).
+    """
+    from vtsearch.config import CoreConfig  # noqa: PLC0415
+
+    return CoreConfig.from_settings().saved_datasets_dir
 
 
 # Backward-compat alias — prefer :func:`get_saved_datasets_dir` for live value.
