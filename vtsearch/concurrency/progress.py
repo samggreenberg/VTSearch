@@ -34,6 +34,15 @@ class ProgressTracker:
             and are returned by :meth:`get`.
     """
 
+    #: Minimum elapsed time (seconds) before an ETA is computed. Below this we
+    #: don't have enough samples to extrapolate reliably and the number jitters
+    #: wildly, so the snapshot's ``eta_seconds`` stays ``None``.
+    _ETA_MIN_ELAPSED = 5.0
+
+    #: Smoothing factor for the EMA over the raw ETA. ``0.3`` weights the new
+    #: sample lightly enough to dampen noise while still tracking real slowdowns.
+    _ETA_SMOOTHING_ALPHA = 0.3
+
     def __init__(self, extra_fields: Optional[dict[str, Any]] = None) -> None:
         self._lock = threading.Lock()
         self._extra_defaults = dict(extra_fields) if extra_fields else {}
@@ -47,6 +56,47 @@ class ProgressTracker:
         }
         self._subscribers: list[Callable[[dict[str, Any]], None]] = []
         self._subscribers_lock = threading.Lock()
+        self._phase_key: tuple[str, int] | None = None
+        self._phase_start: float | None = None
+        self._phase_current_start: int = 0
+        self._smoothed_eta: float | None = None
+
+    def _compute_eta(self, status: str, current: int, total: int) -> Optional[float]:
+        """Compute the smoothed ETA in seconds for the current bar.
+
+        Resets the phase clock when ``status`` changes, ``total`` changes, or
+        ``current`` resets backwards (a new bar is starting). Returns ``None``
+        until at least :data:`_ETA_MIN_ELAPSED` seconds of work have elapsed
+        with a known total and ``current > 0``.
+        """
+        now = time.monotonic()
+        phase_key = (status, total)
+        if (
+            self._phase_key != phase_key
+            or self._phase_start is None
+            or current < self._phase_current_start
+        ):
+            self._phase_key = phase_key
+            self._phase_start = now
+            self._phase_current_start = current
+            self._smoothed_eta = None
+            return None
+
+        if total <= 0 or current <= 0 or current >= total:
+            return None
+        elapsed = now - self._phase_start
+        if elapsed < self._ETA_MIN_ELAPSED:
+            return None
+        completed = current - self._phase_current_start
+        if completed <= 0:
+            return None
+        raw_eta = (elapsed / completed) * (total - current)
+        if self._smoothed_eta is None:
+            self._smoothed_eta = raw_eta
+        else:
+            alpha = self._ETA_SMOOTHING_ALPHA
+            self._smoothed_eta = alpha * raw_eta + (1.0 - alpha) * self._smoothed_eta
+        return self._smoothed_eta
 
     def update(
         self,
@@ -74,6 +124,8 @@ class ProgressTracker:
             for key in self._extra_defaults:
                 if key in kwargs:
                     self._data[key] = kwargs[key]
+            if "eta_seconds" in self._extra_defaults:
+                self._data["eta_seconds"] = self._compute_eta(status, current, total)
             snapshot = dict(self._data)
         self._notify(snapshot)
 
@@ -178,11 +230,18 @@ def clear_thread_progress() -> None:
 # ---------------------------------------------------------------------------
 #: Extras shared by every long-running operation: an optional sub-step counter
 #: (``step``/``total_steps`` — used when a single operation has multiple phases
-#: like load→embed→stage) and an ``error`` string. Every singleton tracker —
-#: and every per-task tracker created by :class:`LoadingTasksTracker` — exposes
-#: these so the frontend can render any progress payload with the same
-#: ``ProgressEvent`` interface (see ``frontend/src/app/models/api.models.ts``).
-_PROGRESS_COMMON_EXTRAS: dict[str, Any] = {"step": None, "total_steps": None, "error": None}
+#: like load→embed→stage), an ``error`` string, and a smoothed ``eta_seconds``
+#: filled in automatically by :meth:`ProgressTracker._compute_eta`. Every
+#: singleton tracker — and every per-task tracker created by
+#: :class:`LoadingTasksTracker` — exposes these so the frontend can render any
+#: progress payload with the same ``ProgressEvent`` interface (see
+#: ``frontend/src/app/models/api.models.ts``).
+_PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
+    "step": None,
+    "total_steps": None,
+    "error": None,
+    "eta_seconds": None,
+}
 
 
 # ---------------------------------------------------------------------------
