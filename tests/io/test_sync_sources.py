@@ -19,6 +19,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import threading
 
 import pytest
 
@@ -620,7 +621,7 @@ class TestLabelsetSync:
         assert sync_from_labelset_source() is None
 
     def test_sync_to_source_writes_labels(self, tmp_path):
-        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
         from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
@@ -648,6 +649,7 @@ class TestLabelsetSync:
             good_votes[mid] = None
 
             sync_to_labelset_source()
+            flush_pending_label_syncs()
 
             # Check the file was written
             filepath = tmp_path / "labels.json"
@@ -708,7 +710,7 @@ class TestLabelsetSync:
     def test_sync_to_source_emits_detector_meta(self, tmp_path):
         """sync_to_labelset_source writes the detector's input_spec / threshold."""
         from vtsearch.detectors.store import _detector_path, _write_detector
-        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
         from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
@@ -749,6 +751,7 @@ class TestLabelsetSync:
             medias[mid] = {"id": mid, "md5": "fake_md5", "type": "audio"}
             good_votes[mid] = None
             sync_to_labelset_source()
+            flush_pending_label_syncs()
 
             data = json.loads((tmp_path / "labels.json").read_text())
             meta = data.get("detector_meta")
@@ -771,7 +774,7 @@ class TestLabelsetSync:
     def test_sync_to_source_skips_threshold_without_model(self, tmp_path):
         """A detector that hasn't been trained yet has no live threshold to emit."""
         from vtsearch.detectors.store import _detector_path, _write_detector
-        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
         from vtsearch.state.core import (
             DetectorContext,
             register_detector_context,
@@ -803,6 +806,7 @@ class TestLabelsetSync:
             medias[mid] = {"id": mid, "md5": "fake_md5_2", "type": "audio"}
             good_votes[mid] = None
             sync_to_labelset_source()
+            flush_pending_label_syncs()
 
             data = json.loads((tmp_path / "labels.json").read_text())
             meta = data.get("detector_meta")
@@ -1050,3 +1054,226 @@ class TestLabelsetSourcesAPI:
             assert resp.status_code == 404
         finally:
             unregister_detector_context("api_test")
+
+
+# ---------------------------------------------------------------------------
+# Labelset sync_to debounce: rapid calls coalesce, slow targets don't stall
+# ---------------------------------------------------------------------------
+
+
+class TestLabelsetSyncDebounce:
+    def _make_ctx(self, name, filepath):
+        from vtsearch.state.core import DetectorContext, register_detector_context
+
+        ctx = DetectorContext(name, name=name)
+        ctx.labelset_source = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(filepath)},
+        }
+        register_detector_context(ctx)
+        return ctx
+
+    def test_sync_does_not_block_caller(self, tmp_path, monkeypatch):
+        """sync_to_labelset_source returns before the (potentially slow) push runs."""
+        import time
+
+        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtsearch.state.core import set_thread_detector_context, unregister_detector_context
+        from vtsearch.state import medias, good_votes
+
+        ctx = self._make_ctx("dbnc_block", tmp_path / "labels.json")
+        set_thread_detector_context(ctx)
+
+        # Slow the underlying save to expose any synchronous blocking.
+        from vtsearch.labels.sources import get_labelset_source
+
+        src = get_labelset_source("server_json_file")
+        original_save = src.save
+        save_started = threading.Event()
+        release_save = threading.Event()
+
+        def slow_save(labelset, fv):
+            save_started.set()
+            assert release_save.wait(timeout=5)
+            return original_save(labelset, fv)
+
+        monkeypatch.setattr(src, "save", slow_save)
+
+        saved_medias = dict(medias)
+        mid = max(medias.keys(), default=0) + 30000
+        try:
+            medias[mid] = {"id": mid, "md5": "dbnc_block_md5", "type": "audio"}
+            good_votes[mid] = None
+
+            t0 = time.monotonic()
+            sync_to_labelset_source()
+            elapsed = time.monotonic() - t0
+            # Scheduling must be effectively free — well under the 200ms
+            # debounce window, let alone the timer + slow save.
+            assert elapsed < 0.1
+
+            # The slow save shouldn't have started yet: the debounce timer
+            # hasn't fired (200ms), and even if it had, the save would be
+            # blocked on release_save.
+            assert not save_started.is_set()
+
+            # Allow the eventual write to finish so flush() returns.
+            release_save.set()
+            flush_pending_label_syncs()
+            assert (tmp_path / "labels.json").exists()
+        finally:
+            good_votes.pop(mid, None)
+            medias.pop(mid, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context("dbnc_block")
+
+    def test_rapid_calls_coalesce_to_one_write(self, tmp_path):
+        """Many rapid sync_to calls within the debounce window produce one save."""
+        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtsearch.state.core import set_thread_detector_context, unregister_detector_context
+        from vtsearch.state import medias, good_votes
+
+        ctx = self._make_ctx("dbnc_coalesce", tmp_path / "labels.json")
+        set_thread_detector_context(ctx)
+
+        from vtsearch.labels.sources import get_labelset_source
+
+        src = get_labelset_source("server_json_file")
+        original_save = src.save
+        save_count = 0
+
+        def counting_save(labelset, fv):
+            nonlocal save_count
+            save_count += 1
+            return original_save(labelset, fv)
+
+        from unittest.mock import patch
+
+        saved_medias = dict(medias)
+        mid = max(medias.keys(), default=0) + 30100
+        try:
+            medias[mid] = {"id": mid, "md5": "dbnc_coalesce_md5", "type": "audio"}
+            good_votes[mid] = None
+
+            with patch.object(src, "save", side_effect=counting_save):
+                for _ in range(20):
+                    sync_to_labelset_source()
+                flush_pending_label_syncs()
+
+            # 20 scheduling calls collapse into a single push.
+            assert save_count == 1
+            assert (tmp_path / "labels.json").exists()
+        finally:
+            good_votes.pop(mid, None)
+            medias.pop(mid, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context("dbnc_coalesce")
+
+    def test_two_detectors_keep_separate_debounce_slots(self, tmp_path):
+        """Per-detector keying: voting on A doesn't cancel B's pending push."""
+        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtsearch.state.core import set_thread_detector_context, unregister_detector_context
+        from vtsearch.state import medias, good_votes
+
+        ctx_a = self._make_ctx("dbnc_a", tmp_path / "a.json")
+        ctx_b = self._make_ctx("dbnc_b", tmp_path / "b.json")
+
+        saved_medias = dict(medias)
+        mid_a = max(medias.keys(), default=0) + 30200
+        mid_b = mid_a + 1
+        try:
+            medias[mid_a] = {"id": mid_a, "md5": "dbnc_a_md5", "type": "audio"}
+            medias[mid_b] = {"id": mid_b, "md5": "dbnc_b_md5", "type": "audio"}
+
+            set_thread_detector_context(ctx_a)
+            good_votes[mid_a] = None
+            sync_to_labelset_source()
+
+            set_thread_detector_context(ctx_b)
+            good_votes[mid_b] = None
+            sync_to_labelset_source()
+
+            flush_pending_label_syncs()
+
+            assert (tmp_path / "a.json").exists()
+            assert (tmp_path / "b.json").exists()
+            a_data = json.loads((tmp_path / "a.json").read_text())
+            b_data = json.loads((tmp_path / "b.json").read_text())
+            assert any(e["md5"] == "dbnc_a_md5" for e in a_data["labels"])
+            assert any(e["md5"] == "dbnc_b_md5" for e in b_data["labels"])
+        finally:
+            good_votes.pop(mid_a, None)
+            good_votes.pop(mid_b, None)
+            medias.pop(mid_a, None)
+            medias.pop(mid_b, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context("dbnc_a")
+            unregister_detector_context("dbnc_b")
+
+    def test_latest_state_wins_on_coalesced_burst(self, tmp_path):
+        """The push uses the state at flush time, not at first-schedule time."""
+        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtsearch.state.core import set_thread_detector_context, unregister_detector_context
+        from vtsearch.state import medias, good_votes
+
+        ctx = self._make_ctx("dbnc_latest", tmp_path / "labels.json")
+        set_thread_detector_context(ctx)
+
+        saved_medias = dict(medias)
+        mid = max(medias.keys(), default=0) + 30300
+        try:
+            medias[mid] = {"id": mid, "md5": "dbnc_latest_md5", "type": "audio"}
+            good_votes[mid] = None
+            sync_to_labelset_source()
+
+            # Within the debounce window, undo the vote.  flush() should
+            # serialize the latest (empty-good) state, not the original one.
+            good_votes.pop(mid, None)
+            sync_to_labelset_source()
+            flush_pending_label_syncs()
+
+            data = json.loads((tmp_path / "labels.json").read_text())
+            assert not any(e["md5"] == "dbnc_latest_md5" for e in data["labels"])
+        finally:
+            good_votes.pop(mid, None)
+            medias.pop(mid, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context("dbnc_latest")
+
+    def test_reset_drops_pending_without_writing(self, tmp_path):
+        """reset_label_sync_for_tests cancels the timer instead of running it."""
+        from vtsearch.labels.sync import (
+            reset_label_sync_for_tests,
+            sync_to_labelset_source,
+        )
+        from vtsearch.state.core import set_thread_detector_context, unregister_detector_context
+        from vtsearch.state import medias, good_votes
+
+        ctx = self._make_ctx("dbnc_reset", tmp_path / "labels.json")
+        set_thread_detector_context(ctx)
+
+        saved_medias = dict(medias)
+        mid = max(medias.keys(), default=0) + 30400
+        try:
+            medias[mid] = {"id": mid, "md5": "dbnc_reset_md5", "type": "audio"}
+            good_votes[mid] = None
+            sync_to_labelset_source()
+
+            reset_label_sync_for_tests()
+
+            # Give any (cancelled) timer a chance to fire.
+            import time
+
+            time.sleep(0.3)
+
+            assert not (tmp_path / "labels.json").exists()
+        finally:
+            good_votes.pop(mid, None)
+            medias.pop(mid, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context("dbnc_reset")
