@@ -1,12 +1,15 @@
 """Global state management for medias and votes.
 
-This module is a re-export facade.  The actual state variables live in
-``state_core``, and the functions are split across ``state_votes``,
-``state_clicks``, ``state_diversity``, and ``state_media_lookup``.
-Remaining functions (clear_medias, clear_all, settings wrappers) live here.
+This module is a re-export facade.  The actual context classes and
+resolvers live in :mod:`vtsearch.state.core`, helper functions are split
+across the other ``state.*`` submodules, and the app-tier proxy
+instances (``medias``, ``good_votes``, …) live in
+:mod:`vtsearch.shim.state_proxies` — they are re-exported here so
+``from vtsearch.state import medias`` continues to work for the app
+layer.  See Phase 3 of ``docs/plans/extract-library.md``.
 
-All public names are importable from ``vtsearch.state`` exactly
-as before, so no call-sites need to change.
+All public names are importable from ``vtsearch.state`` exactly as
+before, so no call-sites need to change.
 """
 
 from __future__ import annotations
@@ -15,9 +18,10 @@ import gc
 from collections.abc import Callable
 from typing import Any
 
-# Re-export all state variables from state_core --------------------------
-from vtsearch.state.core import (  # noqa: F401
-    _state_lock,
+# Re-export the lock + per-context proxy instances.  The lock is library
+# code; the proxies are app-tier glue that lives in ``vtsearch.shim``.
+from vtsearch.state.core import _state_lock  # noqa: F401
+from vtsearch.shim.state_proxies import (  # noqa: F401
     bad_votes,
     good_votes,
     label_history,
@@ -112,7 +116,7 @@ from vtsearch.state.media_lookup import (  # noqa: F401
 
 
 def snapshot_medias() -> dict[int, dict[str, Any]]:
-    """Return a shallow copy of the medias dict, safe for iteration.
+    """Return a shallow copy of the active dataset's medias dict.
 
     Use this instead of accessing ``medias`` directly when you need to
     iterate over medias or access multiple entries.  The snapshot is
@@ -121,38 +125,38 @@ def snapshot_medias() -> dict[int, dict[str, Any]]:
     and ``medias[cid]``).
     """
     with _state_lock:
-        return dict(medias)
+        return dict(_core.get_active_context().medias)
 
 
 def get_media(media_id: int) -> dict[str, Any] | None:
-    """Return a single media entry by ID, or ``None`` if not loaded.
+    """Return a single media entry by ID from the active dataset, or ``None``.
 
     Thread-safe: holds ``_state_lock`` for the duration of the lookup.
     """
     with _state_lock:
-        return medias.get(media_id)
+        return _core.get_active_context().medias.get(media_id)
 
 
 def clear_medias() -> None:
-    """Clear all loaded medias from memory.
+    """Clear all loaded medias from the active dataset's context.
 
-    Removes all entries from the ``medias`` dict in place. Does not affect
-    votes or label history. Also clears the progress model cache since
-    cached models reference media embeddings.  Also clears the diversity tree
-    and the dataset display name override.
+    Removes all entries from the active dataset's medias dict in place.
+    Does not affect votes or label history. Also clears the progress model
+    cache since cached models reference media embeddings.  Also clears the
+    diversity tree and the dataset display name override.
     """
     from vtsearch.detectors.labeling_progress import clear_progress_cache
 
     with _state_lock:
-        medias.clear()
+        ctx = _core.get_active_context()
+        ctx.medias.clear()
         # Drop the cached embedding matrix so its RAM is released along with
         # the medias dict.  Lazy rebuild on next access would also handle it,
         # but releasing now is the friendly thing to do.
-        ctx = _core.get_active_context()
         ctx._emb_matrix_ids = None
         ctx._emb_matrix = None
-        _core._set_diversity_tree(None)
-        _core._set_dataset_display_name(None)
+        ctx.diversity_tree = None
+        ctx.dataset_display_name = None
         clear_progress_cache()
     gc.collect()
 

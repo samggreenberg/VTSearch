@@ -7,6 +7,7 @@ dataset/model a request operates on, without mutating global "active" state.
 
 import numpy as np
 
+from vtsearch.state import bad_votes, good_votes, medias
 from vtsearch.state.core import (
     DatasetContext,
     DetectorContext,
@@ -19,9 +20,6 @@ from vtsearch.state.core import (
     register_detector_context,
     set_thread_dataset_context,
     set_thread_detector_context,
-    medias,
-    good_votes,
-    bad_votes,
 )
 
 

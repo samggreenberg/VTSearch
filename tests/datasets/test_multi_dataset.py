@@ -7,10 +7,10 @@ import numpy as np
 
 from tests import load_detector_and_wait as _load_detector_and_wait
 
+from vtsearch.shim.state_proxies import _ProxyDict
 from vtsearch.state.core import (
     DatasetContext,
     DetectorContext,
-    _ProxyDict,
     get_context,
     get_thread_dataset_context,
     list_loaded_dataset_ids,
@@ -110,7 +110,7 @@ class TestProxyDict:
     """_ProxyDict delegates to the active context."""
 
     def test_proxy_dict_reflects_active_context(self):
-        from vtsearch.state.core import medias
+        from vtsearch.state import medias
 
         # The reset_state fixture creates _test_default with test medias.
         # Create a second context and switch.
@@ -129,7 +129,7 @@ class TestProxyDict:
         assert len(medias) > 0  # test medias
 
     def test_proxy_dict_clear(self):
-        from vtsearch.state.core import good_votes
+        from vtsearch.state import good_votes
 
         good_votes[1] = None
         assert 1 in good_votes
@@ -137,21 +137,21 @@ class TestProxyDict:
         assert len(good_votes) == 0
 
     def test_proxy_dict_pop(self):
-        from vtsearch.state.core import bad_votes
+        from vtsearch.state import bad_votes
 
         bad_votes[5] = None
         assert bad_votes.pop(5, "missing") is None
         assert bad_votes.pop(5, "missing") == "missing"
 
     def test_proxy_dict_update(self):
-        from vtsearch.state.core import last_learned_scores
+        from vtsearch.state import last_learned_scores
 
         last_learned_scores.update({1: 0.5, 2: 0.8})
         assert last_learned_scores[1] == 0.5
         assert last_learned_scores[2] == 0.8
 
     def test_proxy_dict_copy(self):
-        from vtsearch.state.core import good_votes
+        from vtsearch.state import good_votes
 
         good_votes[10] = None
         c = good_votes.copy()
@@ -160,7 +160,7 @@ class TestProxyDict:
         assert 10 in c
 
     def test_proxy_dict_items_values_keys(self):
-        from vtsearch.state.core import good_votes
+        from vtsearch.state import good_votes
 
         good_votes[1] = None
         good_votes[2] = None
@@ -169,12 +169,12 @@ class TestProxyDict:
         assert set(dict(good_votes.items()).keys()) == {1, 2}
 
     def test_proxy_dict_is_dict_instance(self):
-        from vtsearch.state.core import medias
+        from vtsearch.state import medias
 
         assert isinstance(medias, dict)
 
     def test_proxy_dict_bool(self):
-        from vtsearch.state.core import last_learned_scores
+        from vtsearch.state import last_learned_scores
 
         last_learned_scores.clear()
         assert not last_learned_scores
@@ -186,7 +186,7 @@ class TestProxyList:
     """_ProxyList delegates to the active context."""
 
     def test_proxy_list_append_and_iter(self):
-        from vtsearch.state.core import textsort_suggestions
+        from vtsearch.state import textsort_suggestions
 
         textsort_suggestions.clear()
         textsort_suggestions.append("hello")
@@ -194,7 +194,7 @@ class TestProxyList:
         assert list(textsort_suggestions) == ["hello", "world"]
 
     def test_proxy_list_clear(self):
-        from vtsearch.state.core import label_history
+        from vtsearch.state import label_history
 
         label_history.append((1, "good", 0.0))
         assert len(label_history) > 0
@@ -202,12 +202,12 @@ class TestProxyList:
         assert len(label_history) == 0
 
     def test_proxy_list_is_list_instance(self):
-        from vtsearch.state.core import label_history
+        from vtsearch.state import label_history
 
         assert isinstance(label_history, list)
 
     def test_proxy_list_remove(self):
-        from vtsearch.state.core import textsort_suggestions
+        from vtsearch.state import textsort_suggestions
 
         textsort_suggestions.clear()
         textsort_suggestions.append("a")
@@ -566,14 +566,14 @@ class TestEmptyContextFallback:
     """When no context is active, proxies behave as empty containers."""
 
     def test_empty_medias_when_no_dataset(self):
-        from vtsearch.state.core import medias
+        from vtsearch.state import medias
 
         set_thread_dataset_context(None)
         assert len(medias) == 0
         assert list(medias.keys()) == []
 
     def test_empty_votes_when_no_detector(self):
-        from vtsearch.state.core import good_votes, bad_votes
+        from vtsearch.state import good_votes, bad_votes
 
         set_thread_detector_context(None)
         assert len(good_votes) == 0

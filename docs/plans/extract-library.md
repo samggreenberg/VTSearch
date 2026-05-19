@@ -1,6 +1,6 @@
 # Extract `vtscore` Library Plan
 
-Status: **Phases 0–2 functionally shipped** — public API surface captured in [`docs/vtscore-api.md`](../vtscore-api.md). Every library-candidate package is Flask-free *and* settings-free, including `vtsearch/config.py` itself: Phase 8's bridge relocation moved the body of `CoreConfig.from_settings()` into `vtsearch/shim/` (`build_core_config()`), wired via a new `register_core_config_builder()` hook. The classmethod is preserved as the public entry point for library-candidate callers. Phase 3 (global-state seam) is next. Phase 5's entry-point hook landed ahead of the split.
+Status: **Phases 0–3 functionally shipped** — public API surface captured in [`docs/vtscore-api.md`](../vtscore-api.md). Every library-candidate package is Flask-free, settings-free, *and* proxy-free: the module-level proxy view (`medias`, `good_votes`, etc.) now lives in `vtsearch/shim/state_proxies.py` and is re-exported by `vtsearch.state.__init__` for app callers. Library code resolves the active `DatasetContext` / `DetectorContext` explicitly via `get_active_*_context()`. Phase 8's bridge relocation moved the body of `CoreConfig.from_settings()` into `vtsearch/shim/` (`build_core_config()`), wired via `register_core_config_builder()`. Phase 4 (filesystem seam) is next. Phase 5's entry-point hook landed ahead of the split.
 
 Goal: split VTSearch into two distributions in one repo:
 
@@ -71,11 +71,11 @@ Approach:
 
 Currently `medias`, `good_votes`, `label_history`, etc. are module-level proxies. Library consumers should be able to pass `DatasetContext`/`DetectorContext` explicitly.
 
-- [ ] Audit every public library function and ensure it accepts a context object as a parameter (most already do via the proxy delegation; some implicitly read globals — make those explicit).
-- [ ] Keep the proxy module in the *app* layer, not the library. The library exports the context classes; the app exports the proxies that delegate to them via Flask `g` / thread-local.
+- [x] Audit every public library function and ensure it accepts a context object as a parameter. The state submodules (`vtsearch/state/votes.py`, `clicks.py`, `media_lookup.py`, `diversity.py`) and `vtsearch/labels/sync.py` now resolve the active context internally via `get_active_*_context()` and operate on `ctx.attr` instead of importing the module-level proxy names — the dependency on "the active context" is explicit in each function body.
+- [x] Keep the proxy module in the *app* layer, not the library. The proxy classes (`_ProxyDict`, `_ProxyList`) and module-level instances (`medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `last_learned_scores`, `textsort_suggestions`) now live in `vtsearch/shim/state_proxies.py`. `vtsearch/state/__init__.py` re-exports them so `from vtsearch.state import medias` still works for routes/tests; the library subpackage submodules never import them.
 - [x] Move `autorun_extractors`, `autorun_localizers` off the library-candidate `vtsearch/state/` package onto an app-side singleton (`vtsearch/autorun_processors.py`). The dicts + CRUD now live in a single file outside `state/`; `state/processors.py` is gone, and `state/__init__.py` no longer re-exports any autorun names. Route + test imports were updated to point at the new module. `autorun_detectors` is already an app-side server-tier setting in `vtsearch/settings.py`, so the relocation is complete.
 
-**Exit criteria**: `grep -n "^medias\|^good_votes" vtscore-candidate-paths/` returns zero hits — those names exist only in the app shim.
+**Exit criteria** ✅ — `grep -rn "^medias\|^good_votes\|^_ProxyDict\|^_ProxyList" vtsearch/{datasets,detectors,embedding,training,media,converters,exporters,labels,eval,plugins,concurrency,state,sync,utils,security}` returns zero hits as of this commit. The only file that defines or instantiates the proxy names is `vtsearch/shim/state_proxies.py` (app-side).
 
 ## Phase 4 — Cut the filesystem seam
 
@@ -117,7 +117,7 @@ Once Phases 1–7 are green and behaviour-identical:
 
 1. Create `vtscore/` directory at repo root.
 2. `git mv` library subpackages into it: `datasets/`, `embedding/`, `detectors/`, `training/`, `media/`, `converters/`, `exporters/`, `labels/`, `eval/`, `plugins/`, `concurrency/`, `state/`, `sync/`, `security/`, plus `cli.py`, `cli_pipeline.py`, `cli_progress.py`, `config.py`, and the relevant `utils/` modules. (`processors/` does not exist as a top-level package today — processor *plugins* are reached via `vtsearch.media.processors` and per-route handlers; verify the move target before Phase 8.)
-3. Search-and-replace `vtsearch.datasets` → `vtscore.datasets` etc., across the codebase.
+3. Search-and-replace `vtsearch.datasets` → `vtscore.datasets` etc., across the codebase. Note: the existing `vtsearch/state/__init__.py` is **app-tier** (it re-exports the proxy view from `vtsearch.shim.state_proxies` and hosts the settings-persistence hooks). When `state/` moves to `vtscore/state/`, leave the library submodules (`core.py`, `votes.py`, `clicks.py`, `media_lookup.py`, `diversity.py`, `diversity_tree.py`) under `vtscore/state/` and keep a thin `vtsearch/state/__init__.py` shim that re-exports the library names alongside the proxies — that file becomes pure app-tier glue.
 4. Add `vtscore/pyproject.toml` and `pyproject.toml` workspace config so both distributions build.
 5. App imports become `from vtscore.X import ...`.
 6. Run full suite. Fix straggler imports.
@@ -199,12 +199,12 @@ Phases 1 → 4 are independent and can land in parallel PRs. Phase 5 depends on 
 
 ## Open follow-ups (what's left)
 
-Phase 2 is functionally done. Picking up from here, ordered smallest-first:
+Phase 3 is functionally done. Picking up from here, ordered smallest-first:
 
 1. ~~Phase 0 inventory doc, Phase 1 (Flask seam), Phase 2 (settings seam).~~ **All shipped.** See the per-phase status blocks above.
 2. ~~**Phase 3, easy bit: relocate `autorun_extractors` / `autorun_localizers`.**~~ **Shipped.** Moved to the new app-side singleton `vtsearch/autorun_processors.py` (dicts + CRUD); `state/processors.py` deleted; `state/core.py` and `state/__init__.py` no longer reference the autorun names. Route + test imports updated.
-3. **Phase 3, audit: explicit context parameters.** Walk every public library function. The ones that read `medias` / `good_votes` / etc. via the proxies need to accept `DatasetContext` / `DetectorContext` as a parameter (or pull it from a passed-in context). Most already do via the proxy delegation; the goal is to make the dependency *explicit* so the library doesn't depend on the magic module-level names.
-4. **Phase 3, finish: move the proxies to the app layer.** Once #2 and #3 are done, the proxies (`medias`, `good_votes`, the dict/list facades) move out of `vtsearch.state.core` into a new app-side module (e.g. `vtsearch/state_proxies.py` or part of `vtsearch/shim/`) and re-export under the existing `vtsearch.state` names. The library exports the `*Context` classes; the app stitches them into the proxy view route code expects.
+3. ~~**Phase 3, audit: explicit context parameters.**~~ **Shipped.** The state submodules (`vtsearch/state/votes.py`, `clicks.py`, `media_lookup.py`, `diversity.py`) and `vtsearch/labels/sync.py` now resolve the active context internally via `get_active_*_context()` and operate on `ctx.attr` directly — no library-candidate code imports the module-level proxy names anymore.
+4. ~~**Phase 3, finish: move the proxies to the app layer.**~~ **Shipped.** Proxy classes (`_ProxyDict`, `_ProxyList`) and instances (`medias`, `good_votes`, …) moved out of `vtsearch/state/core.py` into `vtsearch/shim/state_proxies.py`. `vtsearch/state/__init__.py` re-exports them so app-tier imports (`from vtsearch.state import medias`) keep working. Test imports that reached into `state.core` for proxies were updated to use `vtsearch.state` or `vtsearch.shim.state_proxies`.
 5. **Phase 4, filesystem seam.** All `data/` references move through `CoreConfig.data_dir`. Most are already there via `vtsearch.config.DATA_DIR`; the audit is small (`grep -rn '"data/' vtsearch/`).
 6. ~~**Phase 8 bridge relocation.**~~ **Shipped.** The body of `CoreConfig.from_settings()` moved out of `vtsearch/config.py` into `vtsearch/shim/__init__.py:build_core_config()`. The classmethod is now a thin wrapper that delegates to whatever the app installed via `vtsearch.config.register_core_config_builder()`; `vtsearch/shim/register_app_config_builder()` is the app-side wiring (called from `app.py` startup alongside the other shim hooks). Library-only consumers without an app skip `from_settings()` entirely and construct `CoreConfig` directly — they get a clear `RuntimeError` if they try otherwise. `vtsearch/config.py` no longer imports `vtsearch.settings`.
 
