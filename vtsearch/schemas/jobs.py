@@ -2,7 +2,7 @@
 
 The frontend top-bar pulldown calls :func:`vtsearch.routes.jobs.active_jobs`
 to learn which ``(dataset_id, detector_id)`` pairs currently have work in
-flight on a :class:`vtsearch.concurrency.async_jobs.JobManager`. Each busy
+flight on a :class:`vtscore.concurrency.async_jobs.JobManager`. Each busy
 pair gets a small spinner glyph on the row that completes the pair.
 """
 

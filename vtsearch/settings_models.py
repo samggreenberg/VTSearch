@@ -26,7 +26,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
-from vtsearch.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
+from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
 
 __all__ = [
     "FocusMode",
@@ -87,17 +87,17 @@ def _upper(v: Any) -> Any:
 def _default_concurrent_downloads() -> int:
     """Lazily resolve the hardware-derived default for parallel downloads.
 
-    Imported lazily to avoid pulling :mod:`vtsearch.embedding.loader` (and
+    Imported lazily to avoid pulling :mod:`vtscore.embedding.loader` (and
     transitively torch) at settings-model import time.
     """
-    from vtsearch.embedding.loader import default_concurrent_downloads
+    from vtscore.embedding.loader import default_concurrent_downloads
 
     return default_concurrent_downloads()
 
 
 def _default_concurrent_embeddings() -> int:
     """Lazily resolve the hardware-derived default for parallel embeddings."""
-    from vtsearch.embedding.loader import default_concurrent_embeddings
+    from vtscore.embedding.loader import default_concurrent_embeddings
 
     return default_concurrent_embeddings()
 

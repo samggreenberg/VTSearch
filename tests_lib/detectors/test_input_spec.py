@@ -10,7 +10,7 @@ from __future__ import annotations
 # Plugin registries are populated eagerly at PluginRegistry construction
 # (Phase 5 of docs/plans/extract-library.md), so no app-side import is
 # needed to ensure converters/clippers are discoverable.
-from vtsearch.detectors.input_spec import (
+from vtscore.detectors.input_spec import (
     apply_detector_meta,
     build_detector_meta,
     clipper_matches,

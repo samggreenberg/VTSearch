@@ -77,7 +77,7 @@ option_string  # noqa: F821
 secret_key  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# Public-API forwarders in ``vtsearch.concurrency.progress`` that mirror
+# Public-API forwarders in ``vtscore.concurrency.progress`` that mirror
 # their ``update_<tracker>_progress`` partners. The corresponding
 # trackers (``sort_progress``, ``find_progress``, ``dataset_progress``)
 # are imported and read directly in tests / routes; the helper wrappers
@@ -91,8 +91,8 @@ get_find_progress  # noqa: F821
 # Public module constants — referenced by callers via ``module.NAME`` or
 # settings lookup, which vulture treats as the only assignment.
 # ---------------------------------------------------------------------------
-SAVED_DATASETS_DIR  # noqa: F821 — vtsearch.datasets.registry default dir
-DETECTORS_DIR  # noqa: F821 — vtsearch.detectors.store default dir
+SAVED_DATASETS_DIR  # noqa: F821 — vtscore.datasets.registry default dir
+DETECTORS_DIR  # noqa: F821 — vtscore.detectors.store default dir
 SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB  # noqa: F821 — downloader size budget constant
 
 # ---------------------------------------------------------------------------
@@ -109,11 +109,11 @@ default_concurrent_embeddings  # noqa: F821
 # extension authors). Documented in CLAUDE.md but not currently called
 # from within vtsearch/ or tests/.
 # ---------------------------------------------------------------------------
-find_by_pkl_path  # noqa: F821 — vtsearch.datasets.registry
-recreate_model_at_time  # noqa: F821 — vtsearch.detectors.labeling_progress
-update_cache_for_cid  # noqa: F821 — vtsearch.detectors.labelset_training
-collect_media_origins  # noqa: F821 — vtsearch.detectors.training
-train_detector_from_origins  # noqa: F821 — vtsearch.detectors.training
+find_by_pkl_path  # noqa: F821 — vtscore.datasets.registry
+recreate_model_at_time  # noqa: F821 — vtscore.detectors.labeling_progress
+update_cache_for_cid  # noqa: F821 — vtscore.detectors.labelset_training
+collect_media_origins  # noqa: F821 — vtscore.detectors.training
+train_detector_from_origins  # noqa: F821 — vtscore.detectors.training
 
 # ---------------------------------------------------------------------------
 # Public context managers exported from ``vtsearch.state`` for callers

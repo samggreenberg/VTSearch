@@ -32,9 +32,9 @@ import numpy as np
 from flask import jsonify, request
 from flask_smorest import Blueprint
 
-from vtsearch.config import DATA_DIR
-from vtsearch.media import all_embedders, get_by_extension, get_embedder
-from vtsearch.media.embedder import media_from_path
+from vtscore.config import DATA_DIR
+from vtscore.media import all_embedders, get_by_extension, get_embedder
+from vtscore.media.embedder import media_from_path
 from vtsearch.routes._shared import get_json_or_400
 
 embed_bp = Blueprint(

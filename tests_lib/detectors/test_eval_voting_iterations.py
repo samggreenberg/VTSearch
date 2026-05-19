@@ -7,7 +7,7 @@ embeddings so no real model downloads are needed.
 import numpy as np
 import pandas as pd
 
-from vtsearch.eval.voting_iterations import (
+from vtscore.eval.voting_iterations import (
     _inclusion_weights,
     _make_vote_sequence,
     _split_media_ids,

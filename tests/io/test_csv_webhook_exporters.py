@@ -8,7 +8,7 @@ from unittest import mock
 import pytest
 
 import app as app_module  # noqa: F401
-from vtsearch.cli import _run_exporter
+from vtscore.cli import _run_exporter
 
 
 # ---------------------------------------------------------------------------
@@ -45,32 +45,32 @@ class TestCsvExporterMetadata:
     """CSV exporter metadata and registration."""
 
     def test_csv_exporter_registered(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_csv_file")
         assert exp is not None
 
     def test_csv_exporter_display_name(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_csv_file")
         assert exp.display_name == "Server CSV File"
 
     def test_csv_exporter_icon(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_csv_file")
         assert exp.icon == "\U0001f5a5"
 
     def test_csv_exporter_has_filepath_field(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_csv_file")
         keys = [f.key for f in exp.fields]
         assert "filepath" in keys
 
     def test_csv_exporter_to_dict(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_csv_file")
         d = exp.to_dict()
@@ -88,7 +88,7 @@ class TestCsvExporterCLI:
     """CLI argument parsing for the CSV exporter."""
 
     def test_adds_filepath_arg(self):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         parser = argparse.ArgumentParser()
@@ -98,8 +98,8 @@ class TestCsvExporterCLI:
         assert args.filepath == "/tmp/results.csv"
 
     def test_filepath_default(self):
-        from vtsearch.config import DATA_DIR
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.config import DATA_DIR
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         parser = argparse.ArgumentParser()
@@ -111,13 +111,13 @@ class TestCsvExporterCLI:
         assert args.filepath == f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
     def test_validate_passes(self):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         exp.validate_cli_field_values({"filepath": "/tmp/out.csv"})
 
     def test_validate_missing_filepath(self):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         with pytest.raises(ValueError, match="Missing required argument: --filepath"):
@@ -133,7 +133,7 @@ class TestCsvExporterExport:
     """Tests for the CSV export() method."""
 
     def test_creates_csv_file(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
@@ -145,7 +145,7 @@ class TestCsvExporterExport:
         assert "Saved" in result["message"]
 
     def test_csv_has_correct_header(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
@@ -158,7 +158,7 @@ class TestCsvExporterExport:
         assert header == ["detector", "threshold", "filename", "category", "score", "origin", "origin_name"]
 
     def test_csv_has_correct_row_count(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
@@ -172,7 +172,7 @@ class TestCsvExporterExport:
         assert len(rows) == 4
 
     def test_csv_row_values(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
@@ -189,7 +189,7 @@ class TestCsvExporterExport:
         assert first_row[4] == "0.95"
 
     def test_csv_empty_results(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = {"media_type": "audio", "detectors_run": 0, "results": {}}
@@ -200,7 +200,7 @@ class TestCsvExporterExport:
         assert "0 hit(s)" in result["message"]
 
     def test_csv_creates_parent_dirs(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
@@ -210,14 +210,14 @@ class TestCsvExporterExport:
         assert filepath.exists()
 
     def test_csv_empty_filepath_raises(self):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         with pytest.raises(ValueError, match="file path is required"):
             exp.export({}, {"filepath": ""})
 
     def test_csv_multiple_detectors(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = {
@@ -290,7 +290,7 @@ class TestCsvExporterLabelsFormat:
     """Tests for CSV export of labels with selected columns."""
 
     def test_labels_format_uses_selected_columns(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = {
@@ -307,7 +307,7 @@ class TestCsvExporterLabelsFormat:
         assert header == ["label", "filename", "category", "origin"]
 
     def test_labels_format_correct_row_count(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = {
@@ -322,7 +322,7 @@ class TestCsvExporterLabelsFormat:
         assert len(rows) == 4  # 1 header + 3 labels
 
     def test_labels_format_row_values(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = {
@@ -340,7 +340,7 @@ class TestCsvExporterLabelsFormat:
         assert first_row == ["good", "clip1.wav", "birds", ""]
 
     def test_labels_format_includes_metadata_columns(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = {
@@ -359,7 +359,7 @@ class TestCsvExporterLabelsFormat:
 
     def test_labels_format_missing_metadata_gives_empty(self, tmp_path):
         """When a metadata column is missing from an entry, output empty string."""
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = {
@@ -376,7 +376,7 @@ class TestCsvExporterLabelsFormat:
 
     def test_labels_format_changed_columns_reflected(self, tmp_path):
         """Changing selected_columns between exports produces different output."""
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
 
@@ -407,7 +407,7 @@ class TestCsvExporterLabelsFormat:
 
     def test_labels_format_no_selected_columns_uses_defaults(self, tmp_path):
         """When selected_columns is absent, fall back to base columns."""
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = {"labels": SAMPLE_LABELS}
@@ -419,7 +419,7 @@ class TestCsvExporterLabelsFormat:
         assert header == ["label", "md5", "origin_name", "filename", "category", "origin"]
 
     def test_labels_format_message(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = {
@@ -432,7 +432,7 @@ class TestCsvExporterLabelsFormat:
         assert "3 label(s)" in result["message"]
 
     def test_labels_format_empty_labels(self, tmp_path):
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = {"labels": [], "selected_columns": ["label", "filename"]}
@@ -446,7 +446,7 @@ class TestCsvExporterLabelsFormat:
 
     def test_labels_format_origin_dict_serialised_as_json(self, tmp_path):
         """Origin dicts are JSON-serialised in CSV so they survive round-trip."""
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         origin = {"importer": "demo", "params": {"name": "flowers102"}}
@@ -466,7 +466,7 @@ class TestCsvExporterLabelsFormat:
         exp.export(results, {"filepath": str(filepath)})
 
         # Read back and verify origin column is valid JSON
-        from vtsearch.labels.importers.server_csv_file import _parse_csv_bytes
+        from vtscore.labels.importers.server_csv_file import _parse_csv_bytes
 
         parsed = _parse_csv_bytes(filepath.read_bytes())
         assert len(parsed) == 1
@@ -482,7 +482,7 @@ class TestJsonExporterLabelsFormat:
     """Tests for JSON export of labels with selected columns."""
 
     def test_labels_format_filters_to_selected_columns(self, tmp_path):
-        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
 
         exp = ServerJsonLabelsetExporter()
         results = {
@@ -498,7 +498,7 @@ class TestJsonExporterLabelsFormat:
             assert set(entry.keys()) == {"label", "filename"}
 
     def test_labels_format_includes_metadata(self, tmp_path):
-        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
 
         exp = ServerJsonLabelsetExporter()
         results = {
@@ -512,7 +512,7 @@ class TestJsonExporterLabelsFormat:
         assert written["labels"][0] == {"filename": "clip1.wav", "source": "field"}
 
     def test_labels_format_no_selected_columns_keeps_all(self, tmp_path):
-        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
 
         exp = ServerJsonLabelsetExporter()
         results = {"labels": SAMPLE_LABELS}
@@ -524,7 +524,7 @@ class TestJsonExporterLabelsFormat:
 
     def test_labels_format_changed_columns(self, tmp_path):
         """Changing selected_columns between exports produces different JSON."""
-        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
 
         exp = ServerJsonLabelsetExporter()
 
@@ -543,7 +543,7 @@ class TestJsonExporterLabelsFormat:
         assert set(written2["labels"][0].keys()) == {"source"}
 
     def test_labels_format_message(self, tmp_path):
-        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
 
         exp = ServerJsonLabelsetExporter()
         results = {"labels": SAMPLE_LABELS, "selected_columns": ["label"]}
@@ -577,53 +577,53 @@ class TestWebhookExporterMetadata:
     """Webhook exporter metadata and registration."""
 
     def test_webhook_exporter_registered(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("webhook")
         assert exp is not None
 
     def test_webhook_exporter_display_name(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("webhook")
         assert exp.display_name == "Webhook (HTTP POST)"
 
     def test_webhook_exporter_icon(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("webhook")
         assert exp.icon == "\U0001f310"
 
     def test_webhook_exporter_has_url_field(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("webhook")
         keys = [f.key for f in exp.fields]
         assert "url" in keys
 
     def test_webhook_url_field_is_url_type(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("webhook")
         url_field = next(f for f in exp.fields if f.key == "url")
         assert url_field.field_type == "url"
 
     def test_webhook_exporter_has_auth_header_field(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("webhook")
         keys = [f.key for f in exp.fields]
         assert "auth_header" in keys
 
     def test_webhook_auth_header_not_required(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("webhook")
         auth_field = next(f for f in exp.fields if f.key == "auth_header")
         assert auth_field.required is False
 
     def test_webhook_exporter_to_dict(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("webhook")
         d = exp.to_dict()
@@ -640,7 +640,7 @@ class TestWebhookExporterCLI:
     """CLI argument parsing for the Webhook exporter."""
 
     def test_adds_url_arg(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         parser = argparse.ArgumentParser()
@@ -650,21 +650,21 @@ class TestWebhookExporterCLI:
         assert args.url == "https://example.com/hook"
 
     def test_validate_passes_with_url(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         # auth_header is optional, so only url is needed
         exp.validate_cli_field_values({"url": "https://example.com/hook"})
 
     def test_validate_missing_url(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         with pytest.raises(ValueError, match="Missing required argument: --url"):
             exp.validate_cli_field_values({})
 
     def test_validate_passes_without_auth_header(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         # Should not raise
@@ -679,10 +679,10 @@ class TestWebhookExporterCLI:
 class TestWebhookExporterExport:
     """Tests for the Webhook export() method using mocked HTTP."""
 
-    _PATCH_VALIDATE = mock.patch("vtsearch.exporters.webhook.validate_url")
+    _PATCH_VALIDATE = mock.patch("vtscore.exporters.webhook.validate_url")
 
     def test_posts_json_to_url(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         results = _make_sample_results()
@@ -693,7 +693,7 @@ class TestWebhookExporterExport:
 
         with (
             self._PATCH_VALIDATE,
-            mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
         ):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
@@ -704,7 +704,7 @@ class TestWebhookExporterExport:
         assert "200" in result["message"]
 
     def test_sends_auth_header_when_provided(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         results = _make_sample_results()
@@ -715,7 +715,7 @@ class TestWebhookExporterExport:
 
         with (
             self._PATCH_VALIDATE,
-            mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
         ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": "Bearer my-token"})
 
@@ -723,7 +723,7 @@ class TestWebhookExporterExport:
         assert call_kwargs.kwargs["headers"]["Authorization"] == "Bearer my-token"
 
     def test_no_auth_header_when_empty(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         results = _make_sample_results()
@@ -734,7 +734,7 @@ class TestWebhookExporterExport:
 
         with (
             self._PATCH_VALIDATE,
-            mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
         ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": ""})
 
@@ -742,14 +742,14 @@ class TestWebhookExporterExport:
         assert "Authorization" not in call_kwargs.kwargs["headers"]
 
     def test_empty_url_raises(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         with pytest.raises(ValueError, match="webhook URL is required"):
             exp.export({}, {"url": ""})
 
     def test_http_error_propagates(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         results = _make_sample_results()
@@ -757,12 +757,12 @@ class TestWebhookExporterExport:
         mock_resp = mock.MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("500 Server Error")
 
-        with self._PATCH_VALIDATE, mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
+        with self._PATCH_VALIDATE, mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
             with pytest.raises(Exception, match="500 Server Error"):
                 exp.export(results, {"url": "https://example.com/hook"})
 
     def test_message_contains_hit_count(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         results = _make_sample_results()
@@ -771,14 +771,14 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
+        with self._PATCH_VALIDATE, mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert "3 hit(s)" in result["message"]
         assert "1 detector(s)" in result["message"]
 
     def test_result_includes_status_code_and_url(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         results = _make_sample_results()
@@ -787,7 +787,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 201
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
+        with self._PATCH_VALIDATE, mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert result["status_code"] == 201
@@ -804,8 +804,8 @@ class TestWebhookExporterIntegration:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            mock.patch("vtsearch.exporters.webhook.validate_url"),
-            mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp),
+            mock.patch("vtscore.exporters.webhook.validate_url"),
+            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp),
         ):
             _run_exporter("webhook", {"url": "https://example.com/hook"}, results)
 
@@ -823,8 +823,8 @@ class TestFilepathTemplateExpansion:
     """Default filepaths embed a timestamp; templates expand at export time."""
 
     def test_csv_default_contains_timestamp_template(self):
-        from vtsearch.config import DATA_DIR
-        from vtsearch.exporters import get_exporter
+        from vtscore.config import DATA_DIR
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_csv_file")
         fp = next(f for f in exp.fields if f.key == "filepath")
@@ -833,8 +833,8 @@ class TestFilepathTemplateExpansion:
         assert fp.placeholder == expected
 
     def test_json_default_contains_timestamp_template(self):
-        from vtsearch.config import DATA_DIR
-        from vtsearch.exporters import get_exporter
+        from vtscore.config import DATA_DIR
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_json_file")
         fp = next(f for f in exp.fields if f.key == "filepath")
@@ -844,13 +844,13 @@ class TestFilepathTemplateExpansion:
 
     def test_consecutive_csv_exports_do_not_overwrite(self, tmp_path):
         """Two exports a second apart should land in distinct files."""
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
         template = str(tmp_path / "out_{YYYYMMDD-HHMMSS}.csv")
 
-        with mock.patch("vtsearch.exporters._template.datetime") as mock_dt:
+        with mock.patch("vtscore.exporters._template.datetime") as mock_dt:
             from datetime import datetime as real_dt
             from datetime import timezone
 
@@ -869,12 +869,12 @@ class TestFilepathTemplateExpansion:
         from datetime import datetime as real_dt
         from datetime import timezone
 
-        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
 
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "j_{YYYYMMDD-HHMMSS}.json")
 
-        with mock.patch("vtsearch.exporters._template.datetime") as mock_dt:
+        with mock.patch("vtscore.exporters._template.datetime") as mock_dt:
             mock_dt.now.return_value = real_dt(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
             result = exp.export(_make_sample_results(), {"filepath": template})
 
@@ -884,7 +884,7 @@ class TestFilepathTemplateExpansion:
 
     def test_username_template_expands(self, tmp_path):
         """The {username} template substitutes get_current_user(), sanitised."""
-        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
 
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "{username}.json")
@@ -896,7 +896,7 @@ class TestFilepathTemplateExpansion:
 
     def test_username_template_sanitises_path_separators(self, tmp_path):
         """A malicious username with ``/`` cannot escape the parent directory."""
-        from vtsearch.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
 
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "{username}.json")
@@ -909,8 +909,8 @@ class TestFilepathTemplateExpansion:
 
     def test_detector_name_template_expands(self, tmp_path):
         """The {detector_name} template pulls from the active detector context."""
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
-        from vtsearch.state.core import DetectorContext, set_thread_detector_context
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.state.core import DetectorContext, set_thread_detector_context
 
         exp = ServerCsvLabelsetExporter()
         template = str(tmp_path / "{detector_name}.csv")
@@ -926,7 +926,7 @@ class TestFilepathTemplateExpansion:
 
     def test_detector_name_template_with_no_active_context_uses_placeholder(self, tmp_path):
         """An empty detector context (fallback) sanitises to ``_``."""
-        from vtsearch.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
         template = str(tmp_path / "{detector_name}.csv")

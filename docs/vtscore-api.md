@@ -16,23 +16,23 @@ current import path → future library path is one-to-one:
 
 | Today                        | After Phase 8                |
 |------------------------------|------------------------------|
-| `vtsearch.datasets.X`        | `vtscore.datasets.X`         |
-| `vtsearch.media.X`           | `vtscore.media.X`            |
-| `vtsearch.converters.X`      | `vtscore.converters.X`       |
-| `vtsearch.labels.X`          | `vtscore.labels.X`           |
-| `vtsearch.embedding.X`       | `vtscore.embedding.X`        |
-| `vtsearch.training.X`        | `vtscore.training.X`         |
-| `vtsearch.detectors.X`       | `vtscore.detectors.X`        |
-| `vtsearch.eval.X`            | `vtscore.eval.X`             |
+| `vtscore.datasets.X`        | `vtscore.datasets.X`         |
+| `vtscore.media.X`           | `vtscore.media.X`            |
+| `vtscore.converters.X`      | `vtscore.converters.X`       |
+| `vtscore.labels.X`          | `vtscore.labels.X`           |
+| `vtscore.embedding.X`       | `vtscore.embedding.X`        |
+| `vtscore.training.X`        | `vtscore.training.X`         |
+| `vtscore.detectors.X`       | `vtscore.detectors.X`        |
+| `vtscore.eval.X`            | `vtscore.eval.X`             |
 | `vtsearch.state.X`           | `vtscore.state.X` (contexts only — proxies stay app-side) |
-| `vtsearch.plugins.X`         | `vtscore.plugins.X`          |
-| `vtsearch.sync.X`            | `vtscore.sync.X`             |
-| `vtsearch.concurrency.X`     | `vtscore.concurrency.X`      |
-| `vtsearch.security.X`        | `vtscore.security.X`         |
-| `vtsearch.utils.X`           | `vtscore.utils.X`            |
-| `vtsearch.exporters.X`       | `vtscore.exporters.X`        |
-| `vtsearch.cli` etc.          | `vtscore.cli` etc.           |
-| `vtsearch.config`            | `vtscore.config`             |
+| `vtscore.plugins.X`         | `vtscore.plugins.X`          |
+| `vtscore.sync.X`            | `vtscore.sync.X`             |
+| `vtscore.concurrency.X`     | `vtscore.concurrency.X`      |
+| `vtscore.security.X`        | `vtscore.security.X`         |
+| `vtscore.utils.X`           | `vtscore.utils.X`            |
+| `vtscore.exporters.X`       | `vtscore.exporters.X`        |
+| `vtscore.cli` etc.          | `vtscore.cli` etc.           |
+| `vtscore.config`            | `vtscore.config`             |
 
 The plan's "final shape" in extract-library.md was written before the codebase split
 `models/` into `detectors/`/`embedding/`/`training/`, and before `concurrency/` and
@@ -110,7 +110,7 @@ LANGUAGEBIND_VIDEO_MODEL_ID: str
 ## `vtscore.datasets`
 
 Dataset domain objects, on-disk loaders, importer registry, and the metadata helpers
-each demo dataset needs. The current `vtsearch.datasets.__init__` already re-exports
+each demo dataset needs. The current `vtscore.datasets.__init__` already re-exports
 the full surface; this is faithful to that contract.
 
 ### Domain objects
@@ -378,7 +378,7 @@ def list_converters_for_source(source_type: str) -> list[MediaConverter]: ...
 ```
 
 Sentinel: each concrete converter module exports `CONVERTER: MediaConverter` for
-auto-discovery (entry-point group `vtsearch.converters`, which becomes
+auto-discovery (entry-point group `vtscore.converters`, which becomes
 `vtscore.converters` after the rename).
 
 ---

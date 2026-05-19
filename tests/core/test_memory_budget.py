@@ -1,4 +1,4 @@
-"""Tests for ``vtsearch.concurrency.memory_budget.cap_workers_by_memory``.
+"""Tests for ``vtscore.concurrency.memory_budget.cap_workers_by_memory``.
 
 The function caps a requested worker count so that ``n_items * embed_dim *
 bytes_per_element`` per worker fits inside ``budget_fraction`` of currently-
@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from vtsearch.concurrency import memory_budget
-from vtsearch.concurrency.memory_budget import cap_workers_by_memory
+from vtscore.concurrency import memory_budget
+from vtscore.concurrency.memory_budget import cap_workers_by_memory
 
 
 @pytest.fixture

@@ -7,8 +7,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from vtsearch.converters.base import MediaConverter
-from vtsearch.media.document.media_type import DocumentMediaType
+from vtscore.converters.base import MediaConverter
+from vtscore.media.document.media_type import DocumentMediaType
 
 
 # ---------------------------------------------------------------------------
@@ -144,34 +144,34 @@ class TestDocumentMediaType:
 
 class TestDocumentRegistration:
     def test_document_in_registry(self):
-        from vtsearch.media import get
+        from vtscore.media import get
 
         mt = get("document")
         assert mt.type_id == "document"
 
     def test_get_by_extension_pdf(self):
-        from vtsearch.media import get_by_extension
+        from vtscore.media import get_by_extension
 
         mt = get_by_extension(".pdf")
         assert mt is not None
         assert mt.type_id == "document"
 
     def test_get_by_extension_doc(self):
-        from vtsearch.media import get_by_extension
+        from vtscore.media import get_by_extension
 
         mt = get_by_extension(".doc")
         assert mt is not None
         assert mt.type_id == "document"
 
     def test_get_by_extension_ppt(self):
-        from vtsearch.media import get_by_extension
+        from vtscore.media import get_by_extension
 
         mt = get_by_extension(".ppt")
         assert mt is not None
         assert mt.type_id == "document"
 
     def test_get_by_folder_name(self):
-        from vtsearch.media import get_by_folder_name
+        from vtscore.media import get_by_folder_name
 
         mt = get_by_folder_name("document")
         assert mt.type_id == "document"
@@ -215,14 +215,14 @@ class TestMediaConverterAbstract:
 
 class TestDocument2ImageMediaConverter:
     def test_source_and_target_types(self):
-        from vtsearch.converters.document2image import Document2ImageMediaConverter
+        from vtscore.converters.document2image import Document2ImageMediaConverter
 
         c = Document2ImageMediaConverter()
         assert c.source_type == "document"
         assert c.target_type == "image"
 
     def test_convert_single_page_pdf(self):
-        from vtsearch.converters.document2image import Document2ImageMediaConverter
+        from vtscore.converters.document2image import Document2ImageMediaConverter
 
         pdf_bytes = _make_minimal_pdf("Test page")
         media = {"filename": "test.pdf", "media_bytes": pdf_bytes}
@@ -240,7 +240,7 @@ class TestDocument2ImageMediaConverter:
         assert r["media_bytes"][:4] == b"\x89PNG"
 
     def test_convert_two_page_pdf(self):
-        from vtsearch.converters.document2image import Document2ImageMediaConverter
+        from vtscore.converters.document2image import Document2ImageMediaConverter
 
         pdf_bytes = _make_two_page_pdf()
         media = {"filename": "multi.pdf", "media_bytes": pdf_bytes}
@@ -251,7 +251,7 @@ class TestDocument2ImageMediaConverter:
         assert results[1]["filename"] == "multi_page_2.png"
 
     def test_convert_from_path(self, tmp_path):
-        from vtsearch.converters.document2image import Document2ImageMediaConverter
+        from vtscore.converters.document2image import Document2ImageMediaConverter
 
         pdf_bytes = _make_minimal_pdf("Path test")
         pdf_path = tmp_path / "from_path.pdf"
@@ -262,7 +262,7 @@ class TestDocument2ImageMediaConverter:
         assert len(results) == 1
 
     def test_convert_empty_bytes(self):
-        from vtsearch.converters.document2image import Document2ImageMediaConverter
+        from vtscore.converters.document2image import Document2ImageMediaConverter
 
         media = {"filename": "empty.pdf", "media_bytes": b""}
         c = Document2ImageMediaConverter()
@@ -270,7 +270,7 @@ class TestDocument2ImageMediaConverter:
         assert results == []
 
     def test_convert_no_data(self):
-        from vtsearch.converters.document2image import Document2ImageMediaConverter
+        from vtscore.converters.document2image import Document2ImageMediaConverter
 
         media = {"filename": "none.pdf"}
         c = Document2ImageMediaConverter()
@@ -285,14 +285,14 @@ class TestDocument2ImageMediaConverter:
 
 class TestDocument2TextMediaConverter:
     def test_source_and_target_types(self):
-        from vtsearch.converters.document2text import Document2TextMediaConverter
+        from vtscore.converters.document2text import Document2TextMediaConverter
 
         c = Document2TextMediaConverter()
         assert c.source_type == "document"
         assert c.target_type == "text"
 
     def test_extract_text_from_pdf(self):
-        from vtsearch.converters.document2text import Document2TextMediaConverter
+        from vtscore.converters.document2text import Document2TextMediaConverter
 
         pdf_bytes = _make_minimal_pdf("Hello Extracted Text")
         media = {"filename": "test.pdf", "media_bytes": pdf_bytes}
@@ -307,7 +307,7 @@ class TestDocument2TextMediaConverter:
         assert r["character_count"] > 0
 
     def test_extract_text_two_pages(self):
-        from vtsearch.converters.document2text import Document2TextMediaConverter
+        from vtscore.converters.document2text import Document2TextMediaConverter
 
         pdf_bytes = _make_two_page_pdf()
         media = {"filename": "multi.pdf", "media_bytes": pdf_bytes}
@@ -319,7 +319,7 @@ class TestDocument2TextMediaConverter:
         assert "Page two content" in text
 
     def test_extract_text_from_path(self, tmp_path):
-        from vtsearch.converters.document2text import Document2TextMediaConverter
+        from vtscore.converters.document2text import Document2TextMediaConverter
 
         pdf_bytes = _make_minimal_pdf("Path text test")
         pdf_path = tmp_path / "pathtest.pdf"
@@ -331,7 +331,7 @@ class TestDocument2TextMediaConverter:
         assert "Path text test" in results[0]["media_string"]
 
     def test_empty_bytes(self):
-        from vtsearch.converters.document2text import Document2TextMediaConverter
+        from vtscore.converters.document2text import Document2TextMediaConverter
 
         media = {"filename": "empty.pdf", "media_bytes": b""}
         c = Document2TextMediaConverter()
@@ -345,7 +345,7 @@ class TestDocument2TextMediaConverter:
 
 class TestVideo2ImageMediaConverter:
     def test_source_and_target_types(self):
-        from vtsearch.converters.video2image import Video2ImageMediaConverter
+        from vtscore.converters.video2image import Video2ImageMediaConverter
 
         c = Video2ImageMediaConverter()
         assert c.source_type == "video"
@@ -355,7 +355,7 @@ class TestVideo2ImageMediaConverter:
         """n_clips is a PluginField, not a constructor arg.  Its declared
         default flows in through get_param() when the caller passes no
         params."""
-        from vtsearch.converters.video2image import Video2ImageMediaConverter
+        from vtscore.converters.video2image import Video2ImageMediaConverter
 
         c = Video2ImageMediaConverter()
         n_clips_field = next(f for f in c.fields if f.key == "n_clips")
@@ -363,13 +363,13 @@ class TestVideo2ImageMediaConverter:
         assert c.get_param({}, "n_clips") == "10"
 
     def test_custom_n_clips_via_params(self):
-        from vtsearch.converters.video2image import Video2ImageMediaConverter
+        from vtscore.converters.video2image import Video2ImageMediaConverter
 
         c = Video2ImageMediaConverter()
         assert c.get_param({"n_clips": "3"}, "n_clips") == "3"
 
     def test_convert_video_to_images(self):
-        from vtsearch.converters.video2image import Video2ImageMediaConverter
+        from vtscore.converters.video2image import Video2ImageMediaConverter
 
         video_bytes = _make_minimal_video(frames=30)
         media = {"filename": "test.mp4", "media_bytes": video_bytes}
@@ -385,7 +385,7 @@ class TestVideo2ImageMediaConverter:
             assert r["height"] == 64
 
     def test_convert_fewer_frames_than_clips(self):
-        from vtsearch.converters.video2image import Video2ImageMediaConverter
+        from vtscore.converters.video2image import Video2ImageMediaConverter
 
         video_bytes = _make_minimal_video(frames=3)
         media = {"filename": "short.mp4", "media_bytes": video_bytes}
@@ -395,7 +395,7 @@ class TestVideo2ImageMediaConverter:
         assert len(results) <= 3
 
     def test_convert_from_path(self, tmp_path):
-        from vtsearch.converters.video2image import Video2ImageMediaConverter
+        from vtscore.converters.video2image import Video2ImageMediaConverter
 
         video_bytes = _make_minimal_video(frames=20)
         video_path = tmp_path / "from_path.mp4"
@@ -406,7 +406,7 @@ class TestVideo2ImageMediaConverter:
         assert len(results) == 2
 
     def test_convert_no_data(self):
-        from vtsearch.converters.video2image import Video2ImageMediaConverter
+        from vtscore.converters.video2image import Video2ImageMediaConverter
 
         media = {"filename": "none.mp4"}
         c = Video2ImageMediaConverter()
@@ -420,21 +420,21 @@ class TestVideo2ImageMediaConverter:
 
 class TestVideo2AudioMediaConverter:
     def test_source_and_target_types(self):
-        from vtsearch.converters.video2audio import Video2AudioMediaConverter
+        from vtscore.converters.video2audio import Video2AudioMediaConverter
 
         c = Video2AudioMediaConverter()
         assert c.source_type == "video"
         assert c.target_type == "audio"
 
     def test_convert_no_data(self):
-        from vtsearch.converters.video2audio import Video2AudioMediaConverter
+        from vtscore.converters.video2audio import Video2AudioMediaConverter
 
         media = {"filename": "none.mp4"}
         c = Video2AudioMediaConverter()
         assert c.convert(media) == []
 
     def test_convert_empty_bytes(self):
-        from vtsearch.converters.video2audio import Video2AudioMediaConverter
+        from vtscore.converters.video2audio import Video2AudioMediaConverter
 
         media = {"filename": "empty.mp4", "media_bytes": b""}
         c = Video2AudioMediaConverter()
@@ -442,7 +442,7 @@ class TestVideo2AudioMediaConverter:
 
     def test_convert_no_ffmpeg(self):
         """When ffmpeg is not found, should return empty list."""
-        from vtsearch.converters.video2audio import Video2AudioMediaConverter
+        from vtscore.converters.video2audio import Video2AudioMediaConverter
 
         video_bytes = _make_minimal_video(frames=10)
         media = {"filename": "test.mp4", "media_bytes": video_bytes}
@@ -459,7 +459,7 @@ class TestVideo2AudioMediaConverter:
 
 class TestConvertersPackage:
     def test_all_converters_importable(self):
-        from vtsearch.converters import (
+        from vtscore.converters import (
             Document2ImageMediaConverter,
             Document2TextMediaConverter,
             MediaConverter,
@@ -474,7 +474,7 @@ class TestConvertersPackage:
         assert Video2ImageMediaConverter is not None
 
     def test_converter_inheritance(self):
-        from vtsearch.converters import (
+        from vtscore.converters import (
             Document2ImageMediaConverter,
             Document2TextMediaConverter,
             MediaConverter,
@@ -495,7 +495,7 @@ class TestConvertersPackage:
 
 class TestFolderImporterDocumentsOption:
     def test_documents_in_media_type_options(self):
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         importer = ServerFolderDatasetImporter()
         media_type_field = next(f for f in importer.fields if f.key == "media_type")
@@ -509,7 +509,7 @@ class TestFolderImporterDocumentsOption:
 
 class TestConverterRegistrySourceFilter:
     def test_list_converters_for_source_video(self):
-        from vtsearch.converters import list_converters_for_source
+        from vtscore.converters import list_converters_for_source
 
         results = list_converters_for_source("video")
         names = [c.name for c in results]
@@ -518,7 +518,7 @@ class TestConverterRegistrySourceFilter:
         assert "document2image" not in names
 
     def test_list_converters_for_source_document(self):
-        from vtsearch.converters import list_converters_for_source
+        from vtscore.converters import list_converters_for_source
 
         results = list_converters_for_source("document")
         names = [c.name for c in results]
@@ -527,7 +527,7 @@ class TestConverterRegistrySourceFilter:
         assert "video2image" not in names
 
     def test_list_converters_for_source_nonexistent(self):
-        from vtsearch.converters import list_converters_for_source
+        from vtscore.converters import list_converters_for_source
 
         results = list_converters_for_source("nonexistent_type")
         assert results == []
@@ -621,7 +621,7 @@ class TestDemoListConverters:
 
 class TestImporterConverterMetadata:
     def test_folder_importer_to_dict_has_converters(self):
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         importer = ServerFolderDatasetImporter()
         d = importer.to_dict()
@@ -635,7 +635,7 @@ class TestImporterConverterMetadata:
             assert "video2image" in names
 
     def test_http_archive_importer_to_dict_has_converters(self):
-        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         importer = HttpArchiveDatasetImporter()
         d = importer.to_dict()
@@ -674,7 +674,7 @@ class TestLoadDemoWithConverter:
 
     def test_apply_converter_to_demo_unknown_converter(self):
         """_apply_converter_to_demo should raise for unknown converters."""
-        from vtsearch.datasets.loader import _apply_converter_to_demo
+        from vtscore.datasets.loader import _apply_converter_to_demo
 
         with pytest.raises(ValueError, match="Unknown converter"):
             _apply_converter_to_demo(
@@ -685,7 +685,7 @@ class TestLoadDemoWithConverter:
 
     def test_apply_converter_to_demo_empty_medias(self):
         """_apply_converter_to_demo with empty medias should produce empty output."""
-        from vtsearch.datasets.loader import _apply_converter_to_demo
+        from vtscore.datasets.loader import _apply_converter_to_demo
 
         medias: dict = {}
         _apply_converter_to_demo(
@@ -697,7 +697,7 @@ class TestLoadDemoWithConverter:
 
     def test_apply_converter_to_demo_converts_documents(self):
         """_apply_converter_to_demo should convert document medias to images."""
-        from vtsearch.datasets.loader import _apply_converter_to_demo
+        from vtscore.datasets.loader import _apply_converter_to_demo
 
         pdf_bytes = _make_minimal_pdf("Convert me")
         medias = {

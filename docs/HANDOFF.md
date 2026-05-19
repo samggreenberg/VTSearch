@@ -327,7 +327,7 @@ server-side JSON files.
 ### Evaluate sorting quality
 
 ```bash
-python -m vtsearch.eval --plot-dir eval_output
+python -m vtscore.eval --plot-dir eval_output
 ```
 
 See [EVAL.md](EVAL.md) for the full evaluation framework guide.

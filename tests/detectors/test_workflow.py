@@ -1,4 +1,4 @@
-"""Tests for ``vtsearch.detectors.workflow.apply_and_retrain``.
+"""Tests for ``vtscore.detectors.workflow.apply_and_retrain``.
 
 This is the Flask-aware retraining helper called from the
 ``/api/detectors/<name>/import-labels/<importer>`` endpoint after label
@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import pytest
 
-from vtsearch.detectors.workflow import apply_and_retrain
+from vtscore.detectors.workflow import apply_and_retrain
 from vtsearch.state import medias
-from vtsearch.state.core import DetectorContext
+from vtscore.state.core import DetectorContext
 
 
 @pytest.fixture

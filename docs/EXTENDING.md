@@ -267,7 +267,7 @@ See [EXTENDING-media.md § Adding a Media Converter](EXTENDING-media.md#adding-a
 
 See [EXTENDING-processors.md](EXTENDING-processors.md).
 
-- [ ] Subclass `Localizer` or `Extractor` from `vtsearch.media.base`
+- [ ] Subclass `Localizer` or `Extractor` from `vtscore.media.base`
 - [ ] Implement `name`, `media_type`, and the type-specific method
       (`localize` or `extract`)
 - [ ] Optionally override `load_model()` for one-time resource loading

@@ -17,8 +17,8 @@ from typing import NoReturn
 import numpy as np
 from flask_smorest import Blueprint, abort
 
-from vtsearch.concurrency.progress import find_progress, update_find_progress
-from vtsearch.detectors.training import train_and_threshold
+from vtscore.concurrency.progress import find_progress, update_find_progress
+from vtscore.detectors.training import train_and_threshold
 from vtsearch.schemas.detectors import (
     FindCancelResponseSchema,
     FindCheckLabelsRequestSchema,
@@ -46,7 +46,7 @@ def _load_pkl_for_check(pkl_path: str) -> dict | None:
     any read / parse error (the check-labels endpoint silently skips
     unreadable datasets).
     """
-    from vtsearch.datasets.loader import safe_pickle_load  # noqa: PLC0415
+    from vtscore.datasets.loader import safe_pickle_load  # noqa: PLC0415
 
     try:
         with open(pkl_path, "rb") as f:
@@ -74,7 +74,7 @@ def _any_label_resolves_in_pkl(pkl_path: str, labels: list[dict]) -> bool:
 
 def _detector_has_direct_match(labels: list[dict], dataset_ids: list[str]) -> bool:
     """True if any selected dataset can resolve at least one label."""
-    from vtsearch.datasets.registry import get_dataset as reg_get_ds  # noqa: PLC0415
+    from vtscore.datasets.registry import get_dataset as reg_get_ds  # noqa: PLC0415
 
     for ds_id in dataset_ids:
         ds = reg_get_ds(ds_id)
@@ -95,8 +95,8 @@ def _check_detector_warning(d: dict, dataset_ids: list[str]) -> dict | None:
     on-disk labelset, has no labels, or already resolves directly via one
     of the selected datasets.
     """
-    from vtsearch.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
-    from vtsearch.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+    from vtscore.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
 
     name = d.get("name", "")
     if not name:
@@ -132,7 +132,7 @@ def find_check_labels(body: dict):
     and returns per-detector resolution statistics so the frontend can warn
     the user before starting the (potentially expensive) Find operation.
     """
-    from vtsearch.detectors.registry import get_detector as reg_get_detector  # noqa: PLC0415
+    from vtscore.detectors.registry import get_detector as reg_get_detector  # noqa: PLC0415
 
     dataset_ids = body["dataset_ids"]
     detector_ids = body["detector_ids"]
@@ -160,7 +160,7 @@ def _abort_find(code: int, message: str) -> NoReturn:
 
 def _resolve_find_datasets(dataset_ids: list[str]) -> list[dict]:
     """Resolve dataset IDs to registry entries, asserting each pkl file exists."""
-    from vtsearch.datasets.registry import get_dataset as reg_get_ds  # noqa: PLC0415
+    from vtscore.datasets.registry import get_dataset as reg_get_ds  # noqa: PLC0415
 
     datasets: list[dict] = []
     for ds_id in dataset_ids:
@@ -176,7 +176,7 @@ def _resolve_find_datasets(dataset_ids: list[str]) -> list[dict]:
 
 def _resolve_find_detectors(detector_ids: list[str]) -> list[dict]:
     """Resolve detector IDs to registry entries."""
-    from vtsearch.detectors.registry import get_detector as reg_get_detector  # noqa: PLC0415
+    from vtscore.detectors.registry import get_detector as reg_get_detector  # noqa: PLC0415
 
     detectors: list[dict] = []
     for d_id in detector_ids:
@@ -192,8 +192,8 @@ def _build_detector_config(d: dict) -> dict:
 
     Aborts with 400 when the detector has no usable labels in either form.
     """
-    from vtsearch.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
-    from vtsearch.state.core import get_detector_context  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+    from vtscore.state.core import get_detector_context  # noqa: PLC0415
 
     det_ctx = get_detector_context(d["id"])
     if det_ctx is not None and det_ctx.model is not None:
@@ -237,7 +237,7 @@ def _load_find_dataset_medias(ds: dict) -> dict[int, dict]:
     Aborts with 500 on any load error.  The snapshot is owned by the
     caller and freed after scoring completes.
     """
-    from vtsearch.datasets.loader import safe_pickle_load  # noqa: PLC0415
+    from vtscore.datasets.loader import safe_pickle_load  # noqa: PLC0415
 
     try:
         with open(ds["pkl_path"], "rb") as f:
@@ -350,7 +350,7 @@ def _collect_cold_training_data(
         bad_embs = [temp_medias[i]["embedding"] for i in bad_ids if i in temp_medias]
         return good_embs + bad_embs, [1.0] * len(good_embs) + [0.0] * len(bad_embs)
 
-    from vtsearch.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
+    from vtscore.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
 
     resolved = resolve_label_embeddings(labels, det_data.get("media_type", "audio"))
     if resolved.has_good_and_bad:
@@ -420,7 +420,7 @@ def _score_dataset(
 
     detected_media_type = next(iter(temp_medias.values()), {}).get("type", "")
 
-    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
     all_ids, all_embs = get_embedding_matrix_for_snap(temp_medias)
     X_all = torch.from_numpy(all_embs)

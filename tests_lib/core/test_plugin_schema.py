@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`vtsearch.plugins.schema`.
+"""Unit tests for :mod:`vtscore.plugins.schema`.
 
 Covers the per-field-type mapping (``PluginField`` →
 :class:`marshmallow.fields.Field`) plus the high-level ``load()``
@@ -19,8 +19,8 @@ from __future__ import annotations
 import pytest
 from marshmallow import ValidationError
 
-from vtsearch.plugins import PluginBase, PluginField
-from vtsearch.plugins.schema import get_plugin_arg_schema, make_plugin_arg_schema
+from vtscore.plugins import PluginBase, PluginField
+from vtscore.plugins.schema import get_plugin_arg_schema, make_plugin_arg_schema
 
 
 class _FakePlugin(PluginBase):

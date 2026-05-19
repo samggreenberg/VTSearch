@@ -1,8 +1,8 @@
 import io
 import wave
 
-from vtsearch.media.audio.audio_generator import GENERATOR_SAMPLE_RATE, generate_wav
-from vtsearch.media.audio.media_type import generate_waveform_thumbnail
+from vtscore.media.audio.audio_generator import GENERATOR_SAMPLE_RATE, generate_wav
+from vtscore.media.audio.media_type import generate_waveform_thumbnail
 
 
 class TestGenerateWaveformThumbnail:

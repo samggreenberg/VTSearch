@@ -40,7 +40,7 @@ class TestDatasetEndpoints:
 
     def test_demo_categories_returns_categories(self, client):
         """GET /api/dataset/demo-categories/<name> returns categories for a valid demo."""
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.datasets import DEMO_DATASETS
 
         if not DEMO_DATASETS:
             pytest.skip("No demo datasets registered")
@@ -75,7 +75,7 @@ class TestDatasetEndpoints:
 
     def test_browse_media_files_path_traversal_blocked(self, client):
         """GET /api/browse-media-files rejects path traversal."""
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.datasets import DEMO_DATASETS
 
         if not DEMO_DATASETS:
             pytest.skip("No demo datasets registered")
@@ -95,7 +95,7 @@ class TestDatasetEndpoints:
         """GET /api/browse-media-files lists files and directories for a demo source."""
         from unittest.mock import patch
 
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.datasets import DEMO_DATASETS
 
         if not DEMO_DATASETS:
             pytest.skip("No demo datasets registered")
@@ -132,7 +132,7 @@ class TestDatasetEndpoints:
         """POST /api/browse-media-files/select copies the file to example_media."""
         from unittest.mock import patch
 
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.datasets import DEMO_DATASETS
 
         if not DEMO_DATASETS:
             pytest.skip("No demo datasets registered")
@@ -154,7 +154,7 @@ class TestDatasetEndpoints:
             assert "filename" in data
             assert data["original_name"] == "pick_me.wav"
             # The file should have been copied to data/example_media/
-            from vtsearch.config import DATA_DIR
+            from vtscore.config import DATA_DIR
 
             dest = DATA_DIR / "example_media" / data["filename"]
             assert dest.exists()
@@ -236,7 +236,7 @@ class TestDatasetEndpoints:
         """The helper stops walking after ``max_dirs`` directories, even when
         the sample is far from full.  This guards against pathological
         folder shapes that would otherwise blow up the wall-clock budget."""
-        from vtsearch.datasets.media_type_detection import detect_media_types_in_folder
+        from vtscore.datasets.media_type_detection import detect_media_types_in_folder
 
         root = tmp_path / "media"
         root.mkdir()
@@ -253,7 +253,7 @@ class TestDatasetEndpoints:
     def test_detect_media_type_does_not_follow_symlinks(self, tmp_path):
         """The recursive walk does not follow symlinked directories: the
         sample stays inside *folder* even when a symlink points elsewhere."""
-        from vtsearch.datasets.media_type_detection import detect_media_types_in_folder
+        from vtscore.datasets.media_type_detection import detect_media_types_in_folder
 
         root = tmp_path / "root"
         root.mkdir()
@@ -272,7 +272,7 @@ class TestDatasetEndpoints:
         """POST /api/browse-media-files/select rejects traversal paths."""
         from unittest.mock import patch
 
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.datasets import DEMO_DATASETS
 
         if not DEMO_DATASETS:
             pytest.skip("No demo datasets registered")
@@ -344,7 +344,7 @@ class TestDemoDatasetReadiness:
         """Audio pkl exists but ESC-50 audio dir is absent → needs_download (stale pkl)."""
         import pickle
 
-        from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
+        from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
 
         esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
         if esc50_dir.exists():
@@ -371,7 +371,7 @@ class TestDemoDatasetReadiness:
         """Audio pkl exists and ESC-50 audio dir exists but is empty → needs_download."""
         import pickle
 
-        from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
+        from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
 
         esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
         if esc50_dir.exists() and any(esc50_dir.iterdir()):
@@ -404,8 +404,8 @@ class TestDemoDatasetReadiness:
         """Video pkl exists but UCF-101 dir is absent → needs_download (stale pkl)."""
         import pickle
 
-        from vtsearch.config import EMBEDDINGS_DIR
-        from vtsearch.datasets.downloader import VIDEO_DIR
+        from vtscore.config import EMBEDDINGS_DIR
+        from vtscore.datasets.downloader import VIDEO_DIR
 
         ucf101_dir = VIDEO_DIR / "ucf101"
         if ucf101_dir.exists():
@@ -433,7 +433,7 @@ class TestDemoDatasetReadiness:
         import struct
         import wave
 
-        from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
+        from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
 
         esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
         # Ensure no pkl exists for esc50_s
@@ -472,7 +472,7 @@ class TestDemoDatasetReadiness:
 
     def test_no_pkl_no_source_shows_needs_download(self, client):
         """No pkl and no required_folder → needs_download."""
-        from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
+        from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
 
         esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
         pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
@@ -504,8 +504,8 @@ class TestDemoDatasetEmbedderStatus:
         """pkl with sidecar matching requested embedder → ready."""
         import pickle
 
-        from vtsearch.config import EMBEDDINGS_DIR
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.config import EMBEDDINGS_DIR
+        from vtscore.datasets import DEMO_DATASETS
 
         # Pick a demo that has no required_folder (e.g. a text or image demo).
         demo_name = None
@@ -541,8 +541,8 @@ class TestDemoDatasetEmbedderStatus:
         """pkl with sidecar NOT matching requested embedder → needs_embedding."""
         import pickle
 
-        from vtsearch.config import EMBEDDINGS_DIR
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.config import EMBEDDINGS_DIR
+        from vtscore.datasets import DEMO_DATASETS
 
         demo_name = None
         for name, info in DEMO_DATASETS.items():
@@ -577,8 +577,8 @@ class TestDemoDatasetEmbedderStatus:
         """Without embedder query param, pkl existence alone means ready."""
         import pickle
 
-        from vtsearch.config import EMBEDDINGS_DIR
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.config import EMBEDDINGS_DIR
+        from vtscore.datasets import DEMO_DATASETS
 
         demo_name = None
         for name, info in DEMO_DATASETS.items():
@@ -619,8 +619,8 @@ class TestDemoDatasetEmbedderStatus:
         """When no sidecar file exists, pkl_embedder is empty string."""
         import pickle
 
-        from vtsearch.config import EMBEDDINGS_DIR
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.config import EMBEDDINGS_DIR
+        from vtscore.datasets import DEMO_DATASETS
 
         demo_name = None
         for name, info in DEMO_DATASETS.items():
@@ -770,8 +770,8 @@ class TestWarmupEmbedderAsync:
         """embed_text('warmup') is called to prime the text encoder branch."""
         from unittest.mock import patch
 
-        from vtsearch.media import embedders_for_type
-        from vtsearch.datasets.load_pipeline import _warmup_embedder_async
+        from vtscore.media import embedders_for_type
+        from vtscore.datasets.load_pipeline import _warmup_embedder_async
         from vtsearch.state import snapshot_medias
 
         emb = embedders_for_type("audio")[0]
@@ -782,8 +782,8 @@ class TestWarmupEmbedderAsync:
 
     def test_text_encoder_produces_valid_embedding_after_load(self):
         """After _warmup_embedder_async finishes, embed_text returns a real vector."""
-        from vtsearch.media import embedders_for_type
-        from vtsearch.datasets.load_pipeline import _warmup_embedder_async
+        from vtscore.media import embedders_for_type
+        from vtscore.datasets.load_pipeline import _warmup_embedder_async
         from vtsearch.state import snapshot_medias
 
         _warmup_embedder_async(snapshot_medias())
@@ -799,8 +799,8 @@ class TestWarmupEmbedderAsync:
         import threading
         from unittest.mock import patch
 
-        from vtsearch.media import embedders_for_type
-        from vtsearch.datasets.load_pipeline import _warmup_embedder_async
+        from vtscore.media import embedders_for_type
+        from vtscore.datasets.load_pipeline import _warmup_embedder_async
         from vtsearch.state import snapshot_medias
 
         emb = embedders_for_type("audio")[0]
@@ -828,8 +828,8 @@ class TestDemoCacheEmbedderMismatch:
         import pickle
         from unittest.mock import MagicMock, patch
 
-        from vtsearch.datasets import DEMO_DATASETS
-        from vtsearch.datasets.loader import _write_embedder_sidecar, load_demo_dataset
+        from vtscore.datasets import DEMO_DATASETS
+        from vtscore.datasets.loader import _write_embedder_sidecar, load_demo_dataset
 
         # Pick any demo dataset name
         demo_name = next(iter(DEMO_DATASETS))
@@ -853,9 +853,9 @@ class TestDemoCacheEmbedderMismatch:
         mock_mt.load_demo_source.return_value = "/fake/dir"
 
         with (
-            patch("vtsearch.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
-            patch("vtsearch.media.get_embedder", return_value=fake_embedder) as mock_get,
-            patch("vtsearch.media.get", return_value=mock_mt),
+            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtscore.media.get_embedder", return_value=fake_embedder) as mock_get,
+            patch("vtscore.media.get", return_value=mock_mt),
         ):
             load_demo_dataset(demo_name, medias, embedder_name="siglip")
 
@@ -871,8 +871,8 @@ class TestDemoCacheEmbedderMismatch:
 
         import numpy as np
 
-        from vtsearch.datasets import DEMO_DATASETS
-        from vtsearch.datasets.loader import _write_embedder_sidecar, load_demo_dataset
+        from vtscore.datasets import DEMO_DATASETS
+        from vtscore.datasets.loader import _write_embedder_sidecar, load_demo_dataset
 
         demo_name = next(iter(DEMO_DATASETS))
 
@@ -897,8 +897,8 @@ class TestDemoCacheEmbedderMismatch:
             m[1] = {"embedding": np.array([0.1, 0.2]), "file": "/fake/file.png"}
 
         with (
-            patch("vtsearch.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
-            patch("vtsearch.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
+            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtscore.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
         ):
             load_demo_dataset(demo_name, medias, embedder_name="clip")
 
@@ -913,8 +913,8 @@ class TestDemoCacheEmbedderMismatch:
 
         import numpy as np
 
-        from vtsearch.datasets import DEMO_DATASETS
-        from vtsearch.datasets.loader import load_demo_dataset
+        from vtscore.datasets import DEMO_DATASETS
+        from vtscore.datasets.loader import load_demo_dataset
 
         demo_name = next(iter(DEMO_DATASETS))
 
@@ -938,8 +938,8 @@ class TestDemoCacheEmbedderMismatch:
             m[1] = {"embedding": np.array([0.1]), "file": "/fake/file.png"}
 
         with (
-            patch("vtsearch.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
-            patch("vtsearch.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
+            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtscore.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
         ):
             load_demo_dataset(demo_name, medias, embedder_name="siglip")
 
@@ -980,7 +980,7 @@ class TestCaltech101Download:
         import shutil
         from unittest.mock import patch
 
-        from vtsearch.datasets.downloader import download_caltech101
+        from vtscore.datasets.downloader import download_caltech101
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -988,10 +988,10 @@ class TestCaltech101Download:
         self._make_caltech101_zip(zip_path)
 
         with (
-            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
+            patch("vtscore.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtscore.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
             patch(
-                "vtsearch.datasets.downloader.core.download_file_with_progress",
+                "vtscore.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
             ),
         ):
@@ -1008,7 +1008,7 @@ class TestCaltech101Download:
         import shutil
         from unittest.mock import patch
 
-        from vtsearch.datasets.downloader import download_caltech101
+        from vtscore.datasets.downloader import download_caltech101
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -1016,10 +1016,10 @@ class TestCaltech101Download:
         self._make_caltech101_zip(zip_path)
 
         with (
-            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
+            patch("vtscore.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtscore.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
             patch(
-                "vtsearch.datasets.downloader.core.download_file_with_progress",
+                "vtscore.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
             ),
         ):
@@ -1033,7 +1033,7 @@ class TestCaltech101Download:
         import shutil
         from unittest.mock import patch
 
-        from vtsearch.datasets.downloader import download_caltech101
+        from vtscore.datasets.downloader import download_caltech101
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -1041,10 +1041,10 @@ class TestCaltech101Download:
         self._make_caltech101_zip(zip_path)
 
         with (
-            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
+            patch("vtscore.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtscore.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
             patch(
-                "vtsearch.datasets.downloader.core.download_file_with_progress",
+                "vtscore.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
             ),
         ):
@@ -1058,7 +1058,7 @@ class TestCaltech101Download:
         """If 101_ObjectCategories already exists, skip download and extraction."""
         from unittest.mock import patch
 
-        from vtsearch.datasets.downloader import download_caltech101
+        from vtscore.datasets.downloader import download_caltech101
 
         data_dir = tmp_path / "data"
         categories_dir = data_dir / "caltech-101" / "101_ObjectCategories" / "butterfly"
@@ -1066,8 +1066,8 @@ class TestCaltech101Download:
         (categories_dir / "image_0001.jpg").write_bytes(b"\xff\xd8\xff\xd9")
 
         with (
-            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
+            patch("vtscore.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtscore.datasets.downloader.core.IMAGE_DIR", data_dir / "images"),
         ):
             result = download_caltech101(on_progress=lambda *a: None)
 
@@ -1105,7 +1105,7 @@ class TestUCF101SubsetDownload:
         import shutil
         from unittest.mock import patch
 
-        from vtsearch.datasets.downloader import download_ucf101_subset
+        from vtscore.datasets.downloader import download_ucf101_subset
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -1114,10 +1114,10 @@ class TestUCF101SubsetDownload:
         self._make_ucf101_subset_tar(tar_path)
 
         with (
-            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.core.VIDEO_DIR", video_dir),
+            patch("vtscore.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtscore.datasets.downloader.core.VIDEO_DIR", video_dir),
             patch(
-                "vtsearch.datasets.downloader.core.download_file_with_progress",
+                "vtscore.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
             ),
         ):
@@ -1136,7 +1136,7 @@ class TestUCF101SubsetDownload:
         import shutil
         from unittest.mock import patch
 
-        from vtsearch.datasets.downloader import download_ucf101_subset
+        from vtscore.datasets.downloader import download_ucf101_subset
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -1145,10 +1145,10 @@ class TestUCF101SubsetDownload:
         self._make_ucf101_subset_tar(tar_path)
 
         with (
-            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.core.VIDEO_DIR", video_dir),
+            patch("vtscore.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtscore.datasets.downloader.core.VIDEO_DIR", video_dir),
             patch(
-                "vtsearch.datasets.downloader.core.download_file_with_progress",
+                "vtscore.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
             ),
         ):
@@ -1163,7 +1163,7 @@ class TestUCF101SubsetDownload:
         import shutil
         from unittest.mock import patch
 
-        from vtsearch.datasets.downloader import download_ucf101_subset
+        from vtscore.datasets.downloader import download_ucf101_subset
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -1172,10 +1172,10 @@ class TestUCF101SubsetDownload:
         self._make_ucf101_subset_tar(tar_path)
 
         with (
-            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.core.VIDEO_DIR", video_dir),
+            patch("vtscore.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtscore.datasets.downloader.core.VIDEO_DIR", video_dir),
             patch(
-                "vtsearch.datasets.downloader.core.download_file_with_progress",
+                "vtscore.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(tar_path), str(dest)),
             ),
         ):
@@ -1188,7 +1188,7 @@ class TestUCF101SubsetDownload:
         """If ucf101/ already has videos, skip download entirely."""
         from unittest.mock import patch
 
-        from vtsearch.datasets.downloader import download_ucf101_subset
+        from vtscore.datasets.downloader import download_ucf101_subset
 
         data_dir = tmp_path / "data"
         video_dir = data_dir / "video"
@@ -1197,8 +1197,8 @@ class TestUCF101SubsetDownload:
         (ucf_dir / "v_Archery_g01_c01.avi").write_bytes(b"RIFF" + b"\x00" * 20 + b"AVI ")
 
         with (
-            patch("vtsearch.datasets.downloader.core.DATA_DIR", data_dir),
-            patch("vtsearch.datasets.downloader.core.VIDEO_DIR", video_dir),
+            patch("vtscore.datasets.downloader.core.DATA_DIR", data_dir),
+            patch("vtscore.datasets.downloader.core.VIDEO_DIR", video_dir),
         ):
             result = download_ucf101_subset(on_progress=lambda *a: None)
 
@@ -1217,7 +1217,7 @@ class TestUCF101SubsetDownload:
 
     def test_video_demo_categories_match_source(self, client):
         """Video demo datasets should only use categories defined for their source."""
-        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtscore.datasets.config import DEMO_DATASETS
 
         for name, info in DEMO_DATASETS.items():
             if info.get("media_type") == "video":
@@ -1237,13 +1237,13 @@ class TestLoadProgressRaceCondition:
         """After POST to load a registered dataset, progress must not be 'idle'."""
         import time
 
-        from vtsearch.concurrency.progress import get_progress
+        from vtscore.concurrency.progress import get_progress
 
         # Register the current medias as a dataset entry so we can load it
         saved = dict(app_module.medias)
         try:
             # First, export current medias to a pkl for registration
-            from vtsearch.datasets.loader import export_dataset_to_file
+            from vtscore.datasets.loader import export_dataset_to_file
             from vtsearch.settings import get_saved_datasets_dir
 
             ds_dir = get_saved_datasets_dir()
@@ -1254,7 +1254,7 @@ class TestLoadProgressRaceCondition:
             Path(pkl_path).write_bytes(export_dataset_to_file(app_module.medias))
 
             # Register in the dataset registry
-            from vtsearch.datasets.registry import register_dataset
+            from vtscore.datasets.registry import register_dataset
 
             entry = register_dataset(
                 name="test_race",
@@ -1265,7 +1265,7 @@ class TestLoadProgressRaceCondition:
             dataset_id = entry["id"]
 
             # Set progress to idle (simulating a previous completed load)
-            from vtsearch.concurrency.progress import update_progress
+            from vtscore.concurrency.progress import update_progress
 
             update_progress("idle", "Ready")
 
@@ -1290,7 +1290,7 @@ class TestLoadProgressRaceCondition:
             app_module.medias.update(saved)
             # Clean up
             Path(pkl_path).unlink(missing_ok=True)
-            from vtsearch.datasets.registry import unregister_dataset
+            from vtscore.datasets.registry import unregister_dataset
 
             unregister_dataset(dataset_id)
 
@@ -1298,16 +1298,16 @@ class TestLoadProgressRaceCondition:
         """_run_origin_load_in_background must clear old error on new load."""
         from unittest.mock import patch
 
-        from vtsearch.concurrency.progress import get_progress, update_progress
+        from vtscore.concurrency.progress import get_progress, update_progress
 
         # Simulate a previous load that left a stale error
         update_progress("idle", "", error="Previous load failed", step=None, total_steps=None)
         assert get_progress()["error"] == "Previous load failed"
 
         # Start a new load (mock the thread so it doesn't actually run)
-        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
-        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
+        with patch("vtscore.datasets.load_pipeline.threading.Thread"):
             _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -1324,11 +1324,11 @@ class TestLoadProgressRaceCondition:
         from unittest.mock import patch
 
         from vtsearch import settings as settings_mod
-        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
         assert settings_mod.get_last_embedder_for_media_type("image") == ""
 
-        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
+        with patch("vtscore.datasets.load_pipeline.threading.Thread"):
             _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -1343,9 +1343,9 @@ class TestLoadProgressRaceCondition:
         from unittest.mock import patch
 
         from vtsearch import settings as settings_mod
-        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
-        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
+        with patch("vtscore.datasets.load_pipeline.threading.Thread"):
             _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -1374,7 +1374,7 @@ class TestCancelIngest:
 
     def test_cancel_sets_event(self, client):
         """POST /api/dataset/cancel should set the cancellation event."""
-        from vtsearch.concurrency.progress import dataset_progress
+        from vtscore.concurrency.progress import dataset_progress
 
         dataset_progress.reset_cancel()
         assert not dataset_progress.is_cancelled
@@ -1390,7 +1390,7 @@ class TestCancelIngest:
         import threading
         import time
 
-        from vtsearch.concurrency.progress import dataset_progress, get_progress
+        from vtscore.concurrency.progress import dataset_progress, get_progress
 
         saved = dict(app_module.medias)
         try:
@@ -1407,7 +1407,7 @@ class TestCancelIngest:
                     dataset_progress.check_cancelled()
                     time.sleep(0.05)
 
-            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+            from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
             _run_origin_load_in_background(
                 slow_load,
@@ -1440,7 +1440,7 @@ class TestCancelIngest:
         """Starting a new load should clear any previous cancellation."""
         from unittest.mock import patch
 
-        from vtsearch.concurrency.progress import dataset_progress
+        from vtscore.concurrency.progress import dataset_progress
 
         # Set cancel from a previous operation
         dataset_progress.cancel()
@@ -1449,9 +1449,9 @@ class TestCancelIngest:
         saved = dict(app_module.medias)
         try:
             # Start a new load — should reset the flag
-            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+            from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
-            with patch("vtsearch.datasets.load_pipeline._warmup_embedder_async"):
+            with patch("vtscore.datasets.load_pipeline._warmup_embedder_async"):
                 _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},

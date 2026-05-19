@@ -1,13 +1,13 @@
-"""Tests for vtsearch.datasets.sources — MediaSource abstraction."""
+"""Tests for vtscore.datasets.sources — MediaSource abstraction."""
 
 import zipfile
 from unittest.mock import patch
 
 import pytest
 
-from vtsearch.datasets.sources import get_source_for_origin
-from vtsearch.datasets.sources.base import MediaItem
-from vtsearch.datasets.sources.local_folder import LocalFolderSource
+from vtscore.datasets.sources import get_source_for_origin
+from vtscore.datasets.sources.base import MediaItem
+from vtscore.datasets.sources.local_folder import LocalFolderSource
 
 
 # ── MediaItem ─────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ class TestLocalFolderSource:
 class TestHttpArchiveSource:
     def test_lazy_extraction(self, tmp_path):
         """HttpArchiveSource downloads and extracts only on first access."""
-        from vtsearch.datasets.sources.http_archive import HttpArchiveSource
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource
 
         source = HttpArchiveSource("https://example.com/test.zip")
         # Before any access, _inner should be None
@@ -155,8 +155,8 @@ class TestHttpArchiveSource:
 
     def test_uses_cached_dir(self, tmp_path):
         """When a cached extraction directory exists, it's reused."""
-        from vtsearch.config import DATA_DIR
-        from vtsearch.datasets.sources.http_archive import HttpArchiveSource
+        from vtscore.config import DATA_DIR
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource
 
         # Create a fake cached extraction dir
         cached = DATA_DIR / "http_archive_resolve_test.zip"
@@ -175,7 +175,7 @@ class TestHttpArchiveSource:
 
     def test_delegates_to_local_folder(self, tmp_path):
         """After extraction, fetch_item delegates to LocalFolderSource."""
-        from vtsearch.datasets.sources.http_archive import HttpArchiveSource
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource
 
         # Create a zip archive in tmp_path
         zip_path = tmp_path / "archive.zip"
@@ -191,7 +191,7 @@ class TestHttpArchiveSource:
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(extract_dir)
 
-        from vtsearch.datasets.sources.local_folder import LocalFolderSource
+        from vtscore.datasets.sources.local_folder import LocalFolderSource
 
         source._extract_dir = extract_dir
         source._inner = LocalFolderSource(extract_dir)
@@ -206,14 +206,14 @@ class TestHttpArchiveSource:
 
     def test_cleanup_removes_source_dir(self, tmp_path):
         """cleanup() removes directories named http_archive_source_*."""
-        from vtsearch.datasets.sources.http_archive import HttpArchiveSource
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource
 
         source = HttpArchiveSource("https://example.com/test.zip")
         source_dir = tmp_path / "http_archive_source_abc123"
         source_dir.mkdir()
         (source_dir / "file.wav").write_bytes(b"data")
 
-        from vtsearch.datasets.sources.local_folder import LocalFolderSource
+        from vtscore.datasets.sources.local_folder import LocalFolderSource
 
         source._extract_dir = source_dir
         source._inner = LocalFolderSource(source_dir)
@@ -224,14 +224,14 @@ class TestHttpArchiveSource:
 
     def test_cleanup_preserves_cached_dir(self, tmp_path):
         """cleanup() does NOT remove http_archive_resolve_* (cached) dirs."""
-        from vtsearch.datasets.sources.http_archive import HttpArchiveSource
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource
 
         source = HttpArchiveSource("https://example.com/test.zip")
         cached_dir = tmp_path / "http_archive_resolve_test.zip"
         cached_dir.mkdir()
         (cached_dir / "file.wav").write_bytes(b"data")
 
-        from vtsearch.datasets.sources.local_folder import LocalFolderSource
+        from vtscore.datasets.sources.local_folder import LocalFolderSource
 
         source._extract_dir = cached_dir
         source._inner = LocalFolderSource(cached_dir)
@@ -255,7 +255,7 @@ class TestGetSourceForOrigin:
         assert source.folder_path == folder
 
     def test_http_archive_origin(self):
-        from vtsearch.datasets.sources.http_archive import HttpArchiveSource
+        from vtscore.datasets.sources.http_archive import HttpArchiveSource
 
         origin = {"importer": "http_archive", "params": {"url": "https://example.com/data.zip"}}
         source = get_source_for_origin(origin)
@@ -292,7 +292,7 @@ class TestFolderImporterDelegatesToSource:
         folder.mkdir()
         (folder / "clip.wav").write_bytes(b"audio")
 
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = IMPORTER.resolve_file(origin, origin_name="clip.wav")
@@ -304,7 +304,7 @@ class TestFolderImporterDelegatesToSource:
         sub.mkdir(parents=True)
         (sub / "item.wav").write_bytes(b"data")
 
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = IMPORTER.resolve_file(origin, origin_name="cat/item.wav")
@@ -321,7 +321,7 @@ class TestResolverUsesSource:
         folder.mkdir()
         (folder / "clip.wav").write_bytes(b"audio")
 
-        from vtsearch.detectors.resolver import resolve_file_from_origin
+        from vtscore.detectors.resolver import resolve_file_from_origin
 
         origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         result = resolve_file_from_origin(origin, origin_name="clip.wav")
@@ -344,7 +344,7 @@ class TestIngestViaSource:
         for i in range(100):
             (folder / f"extra_{i}.wav").write_bytes(b"extra")
 
-        from vtsearch.datasets.ingest import _ingest_via_source
+        from vtscore.datasets.ingest import _ingest_via_source
 
         origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": "audio"}}
         entries = [
@@ -359,7 +359,7 @@ class TestIngestViaSource:
             progress_calls.append((status, msg, current, total))
 
         fake_emb = np.zeros(512, dtype=np.float32)
-        with patch("vtsearch.detectors.resolver.embed_file", return_value=fake_emb):
+        with patch("vtscore.detectors.resolver.embed_file", return_value=fake_emb):
             result = _ingest_via_source(origin, entries, medias, track_progress)
 
         assert result == 2
@@ -377,7 +377,7 @@ class TestIngestViaSource:
         folder.mkdir()
         (folder / "clip.wav").write_bytes(b"audio")
 
-        from vtsearch.datasets.ingest import _ingest_via_source
+        from vtscore.datasets.ingest import _ingest_via_source
 
         origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": "audio"}}
         entries = [
@@ -385,7 +385,7 @@ class TestIngestViaSource:
         ]
 
         medias: dict = {}
-        with patch("vtsearch.detectors.resolver.embed_file", return_value=None):
+        with patch("vtscore.detectors.resolver.embed_file", return_value=None):
             result = _ingest_via_source(origin, entries, medias, lambda *a: None)
 
         assert result == -1
@@ -393,7 +393,7 @@ class TestIngestViaSource:
 
     def test_ingest_returns_negative_one_for_pickle(self):
         """Non-file-based origins return -1 (fallback to full importer)."""
-        from vtsearch.datasets.ingest import _ingest_via_source
+        from vtscore.datasets.ingest import _ingest_via_source
 
         origin = {"importer": "pickle", "params": {"file": "data.pkl"}}
         entries = [{"origin": origin, "origin_name": "x.wav"}]

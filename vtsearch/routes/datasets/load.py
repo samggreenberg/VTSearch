@@ -31,15 +31,15 @@ from typing import Any
 from flask import request, send_file
 from flask_smorest import Blueprint, abort
 
-import vtsearch.security.path_validation as _paths
-from vtsearch.config import DATA_DIR
-from vtsearch.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer
-from vtsearch.datasets.load_pipeline import (
+import vtscore.security.path_validation as _paths
+from vtscore.config import DATA_DIR
+from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer
+from vtscore.datasets.load_pipeline import (
     _run_importer_in_background,
     _run_origin_load_in_background,
     clear_dataset,
 )
-from vtsearch.datasets.registry import remove_loaded_id as _reg_remove_loaded
+from vtscore.datasets.registry import remove_loaded_id as _reg_remove_loaded
 from vtsearch.routes._shared import format_exception_detail
 from vtsearch.routes.datasets._helpers import _safe_relative_upload_path
 from vtsearch.schemas.datasets import (
@@ -97,7 +97,7 @@ def _read_optional_vectors_file(upload_dir: Path) -> dict[str, Any]:
     if not storage or not storage.filename:
         return {}
 
-    from vtsearch.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
+    from vtscore.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
 
     npz_path = upload_dir / "__vtsearch_vectors__.npz"
     try:
@@ -139,7 +139,7 @@ def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list[
     is mutated in place so ``clipper`` is normalised and ``skip_embedding``
     is set when a non-default clipper or a chain is configured.
     """
-    from vtsearch.datasets.load_pipeline import _parse_chain_field
+    from vtscore.datasets.load_pipeline import _parse_chain_field
 
     clipper_name = field_values.pop("clipper", "") or ""
     clipper_params = field_values.pop("clipper_params", None)
@@ -152,7 +152,7 @@ def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list[
 
 def _make_local_folder_loader(importer, field_values: dict, upload_dir: Path, content_vectors: dict, media_type: str):
     """Build the ``target_medias -> None`` task that the importer will run."""
-    from vtsearch.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
+    from vtscore.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
 
     use_chunked = getattr(importer, "supports_chunked", False)
     chunk_size = auto_chunk_size(media_type) if use_chunked else 0
@@ -245,7 +245,7 @@ def import_local_folder():
     loader = _make_local_folder_loader(importer, field_values, upload_dir, content_vectors, media_type)
 
     from vtsearch.auth import get_current_user
-    from vtsearch.datasets.load_pipeline import _normalize_media_type
+    from vtscore.datasets.load_pipeline import _normalize_media_type
 
     dataset_name = (request.form.get("dataset_name") or "").strip() or "Local folder upload"
     task_id = _run_origin_load_in_background(
@@ -297,7 +297,7 @@ def load_demo_dataset_route(body: dict):
     if converter_name:
         # When a converter is used, the resulting dataset has the converter's
         # target type, not the demo's original type.
-        from vtsearch.converters import get_converter  # noqa: PLC0415
+        from vtscore.converters import get_converter  # noqa: PLC0415
 
         conv = get_converter(converter_name)
         if conv is not None:

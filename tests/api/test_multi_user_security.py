@@ -153,7 +153,7 @@ class TestProviderManagement:
 
     def test_get_user_data_dir_default(self):
         """get_user_data_dir returns DATA_DIR for the default provider."""
-        from vtsearch.config import DATA_DIR
+        from vtscore.config import DATA_DIR
 
         data_dir = get_user_data_dir("default")
         assert data_dir == DATA_DIR
@@ -193,7 +193,7 @@ class TestOwnershipMetadata:
     """Test that created_by is recorded on datasets and models."""
 
     def test_dataset_registry_has_created_by(self):
-        from vtsearch.datasets.registry import register_dataset
+        from vtscore.datasets.registry import register_dataset
 
         entry = register_dataset(
             name="test_ds",
@@ -205,7 +205,7 @@ class TestOwnershipMetadata:
         assert entry["created_by"] == "bob"
 
     def test_dataset_registry_default_created_by(self):
-        from vtsearch.datasets.registry import register_dataset
+        from vtscore.datasets.registry import register_dataset
 
         entry = register_dataset(
             name="test_ds2",
@@ -216,7 +216,7 @@ class TestOwnershipMetadata:
         assert entry["created_by"] == "default"
 
     def test_model_registry_has_created_by(self):
-        from vtsearch.detectors.registry import register_detector
+        from vtscore.detectors.registry import register_detector
 
         entry = register_detector(
             name="test_model",
@@ -226,7 +226,7 @@ class TestOwnershipMetadata:
         assert entry["created_by"] == "carol"
 
     def test_model_registry_default_created_by(self):
-        from vtsearch.detectors.registry import register_detector
+        from vtscore.detectors.registry import register_detector
 
         entry = register_detector(
             name="test_model2",
@@ -272,7 +272,7 @@ class TestUserDataDirIsolation:
 
     def test_get_user_data_dir_uses_active_provider(self):
         """get_user_data_dir() delegates to the active provider."""
-        from vtsearch.config import DATA_DIR
+        from vtscore.config import DATA_DIR
 
         # Default provider should return DATA_DIR unchanged
         result = get_user_data_dir("anything")

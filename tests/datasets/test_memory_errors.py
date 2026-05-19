@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 
 import app as app_module
-from vtsearch.datasets.config import DEMO_DATASETS
+from vtscore.datasets.config import DEMO_DATASETS
 from vtsearch.state import medias
-from vtsearch.concurrency.progress import (
+from vtscore.concurrency.progress import (
     get_progress,
     update_progress,
 )
@@ -37,13 +37,13 @@ class TestPickleMemoryError:
 
     def test_pickle_load_oom_raises_with_message(self, tmp_path):
         """If pickle.load itself OOMs, a clear MemoryError is raised."""
-        from vtsearch.datasets.loader import load_dataset_from_pickle
+        from vtscore.datasets.loader import load_dataset_from_pickle
 
         pkl = tmp_path / "big.pkl"
         pkl.write_bytes(pickle.dumps({"medias": {}}))
 
         target: dict = {}
-        with mock.patch("vtsearch.datasets.loader_pickle.safe_pickle_load", side_effect=MemoryError):
+        with mock.patch("vtscore.datasets.loader_pickle.safe_pickle_load", side_effect=MemoryError):
             with pytest.raises(MemoryError, match="too large for available RAM"):
                 load_dataset_from_pickle(pkl, target)
 
@@ -51,7 +51,7 @@ class TestPickleMemoryError:
 
     def test_pickle_clip_loop_oom_clears_clips(self, tmp_path):
         """If MemoryError occurs during media processing, medias are cleared."""
-        from vtsearch.datasets.loader import load_dataset_from_pickle
+        from vtscore.datasets.loader import load_dataset_from_pickle
 
         # Create a pickle with several medias
         medias_data = {}
@@ -79,7 +79,7 @@ class TestPickleMemoryError:
                 raise MemoryError("simulated OOM")
             return original_np_array(*args, **kwargs)
 
-        with mock.patch("vtsearch.datasets.loader_pickle.np.array", side_effect=oom_on_third_call):
+        with mock.patch("vtscore.datasets.loader_pickle.np.array", side_effect=oom_on_third_call):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_pickle(pkl, target)
 
@@ -88,7 +88,7 @@ class TestPickleMemoryError:
 
     def test_pickle_data_freed_after_successful_load(self, tmp_path):
         """After a successful pickle load, the raw data is released via gc."""
-        from vtsearch.datasets.loader import load_dataset_from_pickle
+        from vtscore.datasets.loader import load_dataset_from_pickle
 
         medias_data = {
             1: {
@@ -103,7 +103,7 @@ class TestPickleMemoryError:
         pkl.write_bytes(pickle.dumps({"medias": medias_data}))
 
         target: dict = {}
-        with mock.patch("vtsearch.datasets.loader_pickle.gc.collect") as mock_gc:
+        with mock.patch("vtscore.datasets.loader_pickle.gc.collect") as mock_gc:
             load_dataset_from_pickle(pkl, target)
             # gc.collect() should be called after building medias
             assert mock_gc.call_count >= 1
@@ -115,7 +115,7 @@ class TestFolderMemoryError:
     """load_dataset_from_folder should handle MemoryError gracefully."""
 
     def test_folder_oom_clears_clips_and_raises(self, tmp_path):
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         # Create some dummy files
         for i in range(3):
@@ -152,8 +152,8 @@ class TestFolderMemoryError:
         mock_mt.load_media_data.return_value = {"media_bytes": b"\x00", "duration": 1}
 
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mock_mt),
-            mock.patch("vtsearch.media.embedders_for_type", return_value=[mock_emb]),
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mock_mt),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[mock_emb]),
         ):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_folder(
@@ -170,7 +170,7 @@ class TestCombineMemoryError:
     """CombineDatasetsImporter.run should handle MemoryError gracefully."""
 
     def test_combine_oom_clears_and_raises(self, tmp_path):
-        from vtsearch.datasets.importers.combine_datasets import CombineDatasetsImporter
+        from vtscore.datasets.importers.combine_datasets import CombineDatasetsImporter
 
         # Create two small pickles
         for name in ("a.pkl", "b.pkl"):
@@ -196,14 +196,14 @@ class TestCombineMemoryError:
             call_count += 1
             if call_count >= 2:
                 raise MemoryError("simulated OOM")
-            from vtsearch.datasets.loader import load_dataset_from_pickle
+            from vtscore.datasets.loader import load_dataset_from_pickle
 
             temp: dict = {}
             load_dataset_from_pickle(path, temp, thin=thin)
             return temp
 
         with mock.patch(
-            "vtsearch.datasets.importers.combine_datasets._load_clips_from_pickle",
+            "vtscore.datasets.importers.combine_datasets._load_clips_from_pickle",
             side_effect=oom_second_load,
         ):
             with pytest.raises(MemoryError, match="Out of memory while combining"):
@@ -220,7 +220,7 @@ class TestBackgroundImportMemoryError:
 
     def test_importer_background_oom_reports_error(self, client):
         """When an importer OOMs, the progress endpoint shows a user-friendly error."""
-        from vtsearch.datasets.load_pipeline import _run_importer_in_background
+        from vtscore.datasets.load_pipeline import _run_importer_in_background
 
         mock_importer = mock.MagicMock()
         mock_importer.supports_chunked = False
@@ -230,7 +230,7 @@ class TestBackgroundImportMemoryError:
         update_progress("idle", "")
 
         # Patch threading.Thread to run synchronously so we don't race
-        with mock.patch("vtsearch.datasets.load_pipeline.threading") as mock_threading:
+        with mock.patch("vtscore.datasets.load_pipeline.threading") as mock_threading:
             captured_target = {}
 
             def fake_thread(target, daemon=True):
@@ -261,11 +261,11 @@ class TestBackgroundImportMemoryError:
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.demo.load_demo_dataset",
+                "vtscore.datasets.importers.demo.load_demo_dataset",
                 side_effect=MemoryError("simulated"),
             ),
             mock.patch(
-                "vtsearch.datasets.load_pipeline.threading.Thread",
+                "vtscore.datasets.load_pipeline.threading.Thread",
                 side_effect=sync_thread,
             ),
         ):

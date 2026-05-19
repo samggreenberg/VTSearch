@@ -17,8 +17,8 @@ from unittest.mock import MagicMock, patch
 import torch
 import torch.nn as nn
 
-from vtsearch.media.embedder import intercept_weight_loading_progress, load_pretrained_local_first, timed_progress
-from vtsearch.embedding.loader import _make_console_progress, predict_embedders_to_preload, preload_predicted_embedders
+from vtscore.media.embedder import intercept_weight_loading_progress, load_pretrained_local_first, timed_progress
+from vtscore.embedding.loader import _make_console_progress, predict_embedders_to_preload, preload_predicted_embedders
 
 
 class TestMakeConsoleProgress:
@@ -114,8 +114,8 @@ class TestMakeConsoleProgress:
 class TestPreloadConsoleOutput:
     """Integration-style tests for console output during preload_predicted_embedders."""
 
-    @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
-    @patch("vtsearch.media.get_embedder")
+    @patch("vtscore.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
+    @patch("vtscore.media.get_embedder")
     def test_prints_preloading_banner_and_progress(self, mock_get_embedder, _mock_predict, capsys):
         """preload_predicted_embedders should print the banner and forward progress to console."""
         mock_emb = MagicMock()
@@ -143,8 +143,8 @@ class TestPreloadConsoleOutput:
         assert "model.safetensors" in captured.out
         assert "Warming up audio pipeline: importing libraries..." in captured.out
 
-    @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
-    @patch("vtsearch.media.get_embedder")
+    @patch("vtscore.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
+    @patch("vtscore.media.get_embedder")
     def test_restores_original_callback_after_load(self, mock_get_embedder, _mock_predict):
         """The original _on_progress callback should be restored after load_models."""
         original_cb = MagicMock()
@@ -158,8 +158,8 @@ class TestPreloadConsoleOutput:
 
         assert mock_emb._on_progress is original_cb
 
-    @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
-    @patch("vtsearch.media.get_embedder")
+    @patch("vtscore.embedding.loader.predict_embedders_to_preload", return_value=["clap"])
+    @patch("vtscore.media.get_embedder")
     def test_restores_callback_on_exception(self, mock_get_embedder, _mock_predict, capsys):
         """The original callback should be restored even when load_models raises."""
         original_cb = MagicMock()
@@ -176,7 +176,7 @@ class TestPreloadConsoleOutput:
         captured = capsys.readouterr()
         assert "Warning" in captured.out
 
-    @patch("vtsearch.embedding.loader.predict_embedders_to_preload", return_value=[])
+    @patch("vtscore.embedding.loader.predict_embedders_to_preload", return_value=[])
     def test_no_predicted_embedders_produces_no_output(self, _mock_predict, capsys):
         """When there are no predicted embedders, nothing should be printed."""
         result = preload_predicted_embedders()
@@ -191,17 +191,17 @@ class TestPredictEmbeddersToPreload:
 
     def test_empty_registries_predict_nothing(self):
         with (
-            patch("vtsearch.datasets.registry.list_datasets", return_value=[]),
-            patch("vtsearch.detectors.registry.list_detectors", return_value=[]),
+            patch("vtscore.datasets.registry.list_datasets", return_value=[]),
+            patch("vtscore.detectors.registry.list_detectors", return_value=[]),
         ):
             assert predict_embedders_to_preload() == []
 
     def test_dataset_with_explicit_embedder_is_preloaded(self):
         with (
             patch(
-                "vtsearch.datasets.registry.list_datasets", return_value=[{"media_type": "audio", "embedder": "clap"}]
+                "vtscore.datasets.registry.list_datasets", return_value=[{"media_type": "audio", "embedder": "clap"}]
             ),
-            patch("vtsearch.detectors.registry.list_detectors", return_value=[]),
+            patch("vtscore.detectors.registry.list_detectors", return_value=[]),
         ):
             assert predict_embedders_to_preload() == ["clap"]
 
@@ -209,23 +209,23 @@ class TestPredictEmbeddersToPreload:
         fake_default = MagicMock()
         fake_default.name = "siglip"
         with (
-            patch("vtsearch.datasets.registry.list_datasets", return_value=[{"media_type": "image", "embedder": ""}]),
-            patch("vtsearch.detectors.registry.list_detectors", return_value=[]),
-            patch("vtsearch.media.embedders_for_type", return_value=[fake_default]),
+            patch("vtscore.datasets.registry.list_datasets", return_value=[{"media_type": "image", "embedder": ""}]),
+            patch("vtscore.detectors.registry.list_detectors", return_value=[]),
+            patch("vtscore.media.embedders_for_type", return_value=[fake_default]),
         ):
             assert predict_embedders_to_preload() == ["siglip"]
 
     def test_unique_embedders_only_no_duplicates(self):
         with (
             patch(
-                "vtsearch.datasets.registry.list_datasets",
+                "vtscore.datasets.registry.list_datasets",
                 return_value=[
                     {"media_type": "audio", "embedder": "clap"},
                     {"media_type": "audio", "embedder": "clap"},
                     {"media_type": "image", "embedder": "siglip"},
                 ],
             ),
-            patch("vtsearch.detectors.registry.list_detectors", return_value=[]),
+            patch("vtscore.detectors.registry.list_detectors", return_value=[]),
         ):
             assert predict_embedders_to_preload() == ["clap", "siglip"]
 
@@ -233,9 +233,9 @@ class TestPredictEmbeddersToPreload:
         fake_default = MagicMock()
         fake_default.name = "e5"
         with (
-            patch("vtsearch.datasets.registry.list_datasets", return_value=[]),
-            patch("vtsearch.detectors.registry.list_detectors", return_value=[{"media_type": "text"}]),
-            patch("vtsearch.media.embedders_for_type", return_value=[fake_default]),
+            patch("vtscore.datasets.registry.list_datasets", return_value=[]),
+            patch("vtscore.detectors.registry.list_detectors", return_value=[{"media_type": "text"}]),
+            patch("vtscore.media.embedders_for_type", return_value=[fake_default]),
         ):
             assert predict_embedders_to_preload() == ["e5"]
 
@@ -243,9 +243,9 @@ class TestPredictEmbeddersToPreload:
         # entry["embedder"] = "ghost" is not in the embedder registry → dropped.
         with (
             patch(
-                "vtsearch.datasets.registry.list_datasets", return_value=[{"media_type": "audio", "embedder": "ghost"}]
+                "vtscore.datasets.registry.list_datasets", return_value=[{"media_type": "audio", "embedder": "ghost"}]
             ),
-            patch("vtsearch.detectors.registry.list_detectors", return_value=[]),
+            patch("vtscore.detectors.registry.list_detectors", return_value=[]),
         ):
             assert predict_embedders_to_preload() == []
 
@@ -549,7 +549,7 @@ class TestLoadPretrainedLocalFirst:
         except ConnectionError:
             pass
 
-    @patch("vtsearch.media.embedder.time.sleep")
+    @patch("vtscore.media.embedder.time.sleep")
     def test_retries_on_transient_hf_hub_error(self, mock_sleep):
         """Transient HfHubHTTPError (5xx) should be retried with backoff."""
         network_calls = [0]
@@ -576,7 +576,7 @@ class TestLoadPretrainedLocalFirst:
         assert mock_sleep.call_args_list[0][0][0] == 2
         assert mock_sleep.call_args_list[1][0][0] == 4
 
-    @patch("vtsearch.media.embedder.time.sleep")
+    @patch("vtscore.media.embedder.time.sleep")
     def test_retries_exhausted_raises_last_error(self, mock_sleep):
         """When all retries are exhausted, the last transient error is raised."""
         errors = []
@@ -599,7 +599,7 @@ class TestLoadPretrainedLocalFirst:
             assert exc is errors[-1]
             assert "attempt 3" in str(exc)
 
-    @patch("vtsearch.media.embedder.time.sleep")
+    @patch("vtscore.media.embedder.time.sleep")
     def test_non_transient_error_not_retried(self, mock_sleep):
         """Non-transient errors (e.g. 404) should not be retried."""
 
@@ -618,7 +618,7 @@ class TestLoadPretrainedLocalFirst:
             pass
         mock_sleep.assert_not_called()
 
-    @patch("vtsearch.media.embedder.time.sleep")
+    @patch("vtscore.media.embedder.time.sleep")
     def test_retries_on_connection_error(self, mock_sleep):
         """ConnectionError should be retried as transient."""
         network_calls = [0]
@@ -636,7 +636,7 @@ class TestLoadPretrainedLocalFirst:
         assert result is sentinel
         assert mock_sleep.call_count == 2
 
-    @patch("vtsearch.media.embedder.time.sleep")
+    @patch("vtscore.media.embedder.time.sleep")
     def test_retries_on_timeout_error(self, mock_sleep):
         """TimeoutError should be retried as transient."""
         network_calls = [0]

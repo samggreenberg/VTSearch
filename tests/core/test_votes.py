@@ -1,5 +1,5 @@
 import app as app_module
-from vtsearch.detectors.labeling_progress import (
+from vtscore.detectors.labeling_progress import (
     _cache_good_ids,
     _cache_bad_ids,
     _cached_steps,
@@ -538,7 +538,7 @@ class TestStabilitySkipsUnchangedModel:
 
     def test_unchanged_training_data_skips_stability(self, client):
         """When good/bad IDs don't change between steps, stability should be None."""
-        from vtsearch.detectors.labeling_progress import clear_progress_cache
+        from vtscore.detectors.labeling_progress import clear_progress_cache
 
         clear_progress_cache()
 
@@ -569,7 +569,7 @@ class TestStabilitySkipsUnchangedModel:
 
     def test_changed_training_data_records_stability(self, client):
         """When good/bad IDs DO change, stability should be computed (once a prior model exists)."""
-        from vtsearch.detectors.labeling_progress import clear_progress_cache
+        from vtscore.detectors.labeling_progress import clear_progress_cache
 
         clear_progress_cache()
 
@@ -611,8 +611,8 @@ class TestLiveModelReuse:
         import numpy as np
         import torch
 
-        from vtsearch.detectors.labeling_progress import clear_progress_cache
-        from vtsearch.training.mlp import train_model
+        from vtscore.detectors.labeling_progress import clear_progress_cache
+        from vtscore.training.mlp import train_model
 
         clear_progress_cache()
 
@@ -652,8 +652,8 @@ class TestLiveModelReuse:
         import numpy as np
         import torch
 
-        from vtsearch.detectors.labeling_progress import clear_progress_cache
-        from vtsearch.training.mlp import train_model
+        from vtscore.detectors.labeling_progress import clear_progress_cache
+        from vtscore.training.mlp import train_model
 
         clear_progress_cache()
 
@@ -689,8 +689,8 @@ class TestLiveModelReuse:
         import numpy as np
         import torch
 
-        from vtsearch.detectors.labeling_progress import clear_progress_cache
-        from vtsearch.training.mlp import train_model
+        from vtscore.detectors.labeling_progress import clear_progress_cache
+        from vtscore.training.mlp import train_model
 
         rng = np.random.RandomState(44)
         X = torch.tensor(rng.randn(2, 8).astype(np.float32))
@@ -705,7 +705,7 @@ class TestLiveModelReuse:
 
     def test_learned_sort_injects_model(self, client):
         """The /api/learned-sort endpoint should inject the trained model."""
-        from vtsearch.detectors.labeling_progress import clear_progress_cache
+        from vtscore.detectors.labeling_progress import clear_progress_cache
 
         clear_progress_cache()
 
@@ -727,8 +727,8 @@ class TestLiveModelReuse:
         import numpy as np
         import torch
 
-        from vtsearch.detectors.labeling_progress import clear_progress_cache
-        from vtsearch.training.mlp import train_model
+        from vtscore.detectors.labeling_progress import clear_progress_cache
+        from vtscore.training.mlp import train_model
 
         clear_progress_cache()
 

@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from vtsearch.datasets.loader import (
+from vtscore.datasets.loader import (
     load_dataset_from_folder,
     load_dataset_from_folder_chunked,
     load_dataset_from_pickle_chunked,
@@ -413,7 +413,7 @@ class TestBaseImporterChunkedDefault:
     delegates to run/run_cli and yields one chunk."""
 
     def test_default_run_chunked_yields_one_chunk(self, tmp_path):
-        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
         class DummyImporter(DatasetImporter):
             name = "dummy"
@@ -441,14 +441,14 @@ class TestBaseImporterChunkedDefault:
 
 class TestFolderImporterChunked:
     def test_supports_chunked(self):
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         assert ServerFolderDatasetImporter().supports_chunked is True
 
     def test_run_chunked(self, tmp_path):
         for i in range(4):
             _make_wav_file(tmp_path, f"s_{i}.wav", frequency=440.0 + i * 10)
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         imp = ServerFolderDatasetImporter()
         chunks = list(imp.run_chunked({"path": str(tmp_path), "media_type": "audio"}, chunk_size=2, thin=True))
@@ -458,7 +458,7 @@ class TestFolderImporterChunked:
 
     def test_run_chunked_cli(self, tmp_path):
         _make_wav_file(tmp_path, "test.wav")
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         imp = ServerFolderDatasetImporter()
         chunks = list(imp.run_chunked_cli({"path": str(tmp_path), "media_type": "audio"}, chunk_size=10, thin=True))
@@ -466,7 +466,7 @@ class TestFolderImporterChunked:
         assert len(chunks[0]) == 1
 
     def test_run_chunked_cli_missing_folder(self, tmp_path):
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         imp = ServerFolderDatasetImporter()
         try:
@@ -483,13 +483,13 @@ class TestFolderImporterChunked:
 
 class TestPickleImporterChunked:
     def test_supports_chunked(self):
-        from vtsearch.datasets.importers.pickle import PickleDatasetImporter
+        from vtscore.datasets.importers.pickle import PickleDatasetImporter
 
         assert PickleDatasetImporter().supports_chunked is True
 
     def test_run_chunked_cli(self, tmp_path):
         pkl_path = _make_pickle(tmp_path, 4)
-        from vtsearch.datasets.importers.pickle import PickleDatasetImporter
+        from vtscore.datasets.importers.pickle import PickleDatasetImporter
 
         imp = PickleDatasetImporter()
         chunks = list(imp.run_chunked_cli({"file": str(pkl_path)}, chunk_size=2, thin=True))
@@ -498,7 +498,7 @@ class TestPickleImporterChunked:
         assert total == 4
 
     def test_run_chunked_cli_missing_file(self, tmp_path):
-        from vtsearch.datasets.importers.pickle import PickleDatasetImporter
+        from vtscore.datasets.importers.pickle import PickleDatasetImporter
 
         imp = PickleDatasetImporter()
         try:
@@ -515,7 +515,7 @@ class TestPickleImporterChunked:
 
 class TestCombineDatasetsImporterChunked:
     def test_supports_chunked(self):
-        from vtsearch.datasets.importers.combine_datasets import CombineDatasetsImporter
+        from vtscore.datasets.importers.combine_datasets import CombineDatasetsImporter
 
         assert CombineDatasetsImporter().supports_chunked is True
 
@@ -527,7 +527,7 @@ class TestCombineDatasetsImporterChunked:
         pkl1 = _make_pickle_with_base_freq(tmp_path / "d1", 3, base_freq=440.0)
         pkl2 = _make_pickle_with_base_freq(tmp_path / "d2", 2, base_freq=880.0)
 
-        from vtsearch.datasets.importers.combine_datasets import CombineDatasetsImporter
+        from vtscore.datasets.importers.combine_datasets import CombineDatasetsImporter
 
         imp = CombineDatasetsImporter()
         chunks = list(imp.run_chunked({"datasets": f"{pkl1},{pkl2}"}, chunk_size=100))
@@ -543,7 +543,7 @@ class TestCombineDatasetsImporterChunked:
 
 class TestMergeDetectorResults:
     def test_merge_new_detector(self):
-        from vtsearch.cli import _merge_detector_results
+        from vtscore.cli import _merge_detector_results
 
         acc: dict[str, dict[str, Any]] = {}
         new = {
@@ -562,7 +562,7 @@ class TestMergeDetectorResults:
         assert len(acc["det_a"]["hits"]) == 2
 
     def test_merge_extends_existing(self):
-        from vtsearch.cli import _merge_detector_results
+        from vtscore.cli import _merge_detector_results
 
         acc = {
             "det_a": {
@@ -587,7 +587,7 @@ class TestMergeDetectorResults:
         assert acc["det_a"]["hits"][0]["score"] >= acc["det_a"]["hits"][1]["score"]
 
     def test_merge_sorts_descending(self):
-        from vtsearch.cli import _merge_detector_results
+        from vtscore.cli import _merge_detector_results
 
         acc = {
             "det_a": {
@@ -610,7 +610,7 @@ class TestMergeDetectorResults:
         assert acc["det_a"]["hits"][1]["filename"] == "low.wav"
 
     def test_merge_multiple_detectors(self):
-        from vtsearch.cli import _merge_detector_results
+        from vtscore.cli import _merge_detector_results
 
         acc: dict[str, dict[str, Any]] = {}
         new = {

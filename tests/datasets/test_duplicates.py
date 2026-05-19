@@ -13,7 +13,7 @@ import copy
 import numpy as np
 
 import app as app_module
-from vtsearch.datasets.labelset import LabelSet
+from vtscore.datasets.labelset import LabelSet
 from vtsearch.state import collapse_duplicates, get_dupe_count
 
 

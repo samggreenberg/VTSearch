@@ -78,21 +78,21 @@ class TestSettingsSourceBase:
 
 class TestLabelsetSourceBase:
     def test_load_raises_not_implemented(self):
-        from vtsearch.labels.sources.base import LabelsetSource
+        from vtscore.labels.sources.base import LabelsetSource
 
         src = LabelsetSource()
         with pytest.raises(NotImplementedError):
             src.load({})
 
     def test_save_raises_not_implemented(self):
-        from vtsearch.labels.sources.base import LabelsetSource
+        from vtscore.labels.sources.base import LabelsetSource
 
         src = LabelsetSource()
         with pytest.raises(NotImplementedError):
             src.save(None, {})  # pyright: ignore[reportArgumentType]
 
     def test_to_dict_contains_standard_keys(self):
-        from vtsearch.labels.sources.base import LabelsetSource
+        from vtscore.labels.sources.base import LabelsetSource
 
         class Minimal(LabelsetSource):
             name = "minimal"
@@ -140,21 +140,21 @@ class TestSettingsSourceRegistry:
 
 class TestLabelsetSourceRegistry:
     def test_list_labelset_sources(self):
-        from vtsearch.labels.sources import list_labelset_sources
+        from vtscore.labels.sources import list_labelset_sources
 
         sources = list_labelset_sources()
         names = [s.name for s in sources]
         assert "server_json_file" in names
 
     def test_get_labelset_source(self):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         src = get_labelset_source("server_json_file")
         assert src is not None
         assert src.name == "server_json_file"
 
     def test_get_nonexistent_returns_none(self):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         assert get_labelset_source("nonexistent") is None
 
@@ -250,14 +250,14 @@ class TestServerFileSettingsSource:
 
 class TestServerFileLabelsetSource:
     def test_load_nonexistent_returns_empty(self, tmp_path):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         src = get_labelset_source("server_json_file")
         result = src.load({"filepath": str(tmp_path / "missing.json")})
         assert result == []
 
     def test_load_valid_file(self, tmp_path):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         filepath = tmp_path / "labels.json"
         labels = {"labels": [{"md5": "abc123", "label": "good"}, {"md5": "def456", "label": "bad"}]}
@@ -270,8 +270,8 @@ class TestServerFileLabelsetSource:
         assert result[0]["label"] == "good"
 
     def test_save_creates_file(self, tmp_path):
-        from vtsearch.datasets.labelset import LabelSet, LabeledElement
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.datasets.labelset import LabelSet, LabeledElement
+        from vtscore.labels.sources import get_labelset_source
 
         filepath = tmp_path / "labels.json"
         src = get_labelset_source("server_json_file")
@@ -290,8 +290,8 @@ class TestServerFileLabelsetSource:
         assert len(data["labels"]) == 2
 
     def test_load_save_round_trip(self, tmp_path):
-        from vtsearch.datasets.labelset import LabelSet, LabeledElement
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.datasets.labelset import LabelSet, LabeledElement
+        from vtscore.labels.sources import get_labelset_source
 
         filepath = tmp_path / "labels.json"
         src = get_labelset_source("server_json_file")
@@ -309,7 +309,7 @@ class TestServerFileLabelsetSource:
         assert loaded[0]["md5"] == "abc"
 
     def test_load_invalid_json_raises(self, tmp_path):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         filepath = tmp_path / "bad.json"
         filepath.write_text("not valid json")
@@ -319,7 +319,7 @@ class TestServerFileLabelsetSource:
             src.load({"filepath": str(filepath)})
 
     def test_load_no_labels_key_raises(self, tmp_path):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         filepath = tmp_path / "no_labels.json"
         filepath.write_text(json.dumps({"data": []}))
@@ -587,13 +587,13 @@ class TestStartupAutoImport:
 
 class TestDetectorContextLabelsetSource:
     def test_default_is_none(self):
-        from vtsearch.state.core import DetectorContext
+        from vtscore.state.core import DetectorContext
 
         ctx = DetectorContext("test")
         assert ctx.labelset_source is None
 
     def test_can_set_and_read(self):
-        from vtsearch.state.core import DetectorContext
+        from vtscore.state.core import DetectorContext
 
         ctx = DetectorContext("test")
         ctx.labelset_source = {
@@ -611,18 +611,18 @@ class TestDetectorContextLabelsetSource:
 class TestLabelsetSync:
     def test_sync_to_source_no_source_no_error(self):
         """sync_to_labelset_source should not raise when no source is configured."""
-        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtscore.labels.sync import sync_to_labelset_source
 
         sync_to_labelset_source()  # Should silently do nothing
 
     def test_sync_from_source_no_source_returns_none(self):
-        from vtsearch.labels.sync import sync_from_labelset_source
+        from vtscore.labels.sync import sync_from_labelset_source
 
         assert sync_from_labelset_source() is None
 
     def test_sync_to_source_writes_labels(self, tmp_path):
-        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -666,8 +666,8 @@ class TestLabelsetSync:
             unregister_detector_context("test_sync")
 
     def test_sync_from_source_applies_labels(self, tmp_path):
-        from vtsearch.labels.sync import sync_from_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.labels.sync import sync_from_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -709,9 +709,9 @@ class TestLabelsetSync:
 
     def test_sync_to_source_emits_detector_meta(self, tmp_path):
         """sync_to_labelset_source writes the detector's input_spec / threshold."""
-        from vtsearch.detectors.store import _detector_path, _write_detector
-        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.detectors.store import _detector_path, _write_detector
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -773,9 +773,9 @@ class TestLabelsetSync:
 
     def test_sync_to_source_skips_threshold_without_model(self, tmp_path):
         """A detector that hasn't been trained yet has no live threshold to emit."""
-        from vtsearch.detectors.store import _detector_path, _write_detector
-        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.detectors.store import _detector_path, _write_detector
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -824,9 +824,9 @@ class TestLabelsetSync:
 
     def test_sync_from_source_writes_input_spec_to_detector(self, tmp_path):
         """An inbound detector_meta updates the receiving detector JSON's input_spec."""
-        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
-        from vtsearch.labels.sync import sync_from_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+        from vtscore.labels.sync import sync_from_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -884,9 +884,9 @@ class TestLabelsetSync:
 
     def test_sync_from_source_without_detector_meta_leaves_detector_alone(self, tmp_path):
         """Legacy labelsets (no detector_meta) don't mutate the receiving detector."""
-        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
-        from vtsearch.labels.sync import sync_from_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+        from vtscore.labels.sync import sync_from_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -1037,7 +1037,7 @@ class TestLabelsetSourcesAPI:
         assert resp.status_code == 404
 
     def test_set_unknown_labelset_source_returns_404(self, client):
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             unregister_detector_context,
@@ -1063,7 +1063,7 @@ class TestLabelsetSourcesAPI:
 
 class TestLabelsetSyncDebounce:
     def _make_ctx(self, name, filepath):
-        from vtsearch.state.core import DetectorContext, register_detector_context
+        from vtscore.state.core import DetectorContext, register_detector_context
 
         ctx = DetectorContext(name, name=name)
         ctx.labelset_source = {
@@ -1077,15 +1077,15 @@ class TestLabelsetSyncDebounce:
         """sync_to_labelset_source returns before the (potentially slow) push runs."""
         import time
 
-        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
-        from vtsearch.state.core import set_thread_detector_context, unregister_detector_context
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import set_thread_detector_context, unregister_detector_context
         from vtsearch.state import medias, good_votes
 
         ctx = self._make_ctx("dbnc_block", tmp_path / "labels.json")
         set_thread_detector_context(ctx)
 
         # Slow the underlying save to expose any synchronous blocking.
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         src = get_labelset_source("server_json_file")
         original_save = src.save
@@ -1130,14 +1130,14 @@ class TestLabelsetSyncDebounce:
 
     def test_rapid_calls_coalesce_to_one_write(self, tmp_path):
         """Many rapid sync_to calls within the debounce window produce one save."""
-        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
-        from vtsearch.state.core import set_thread_detector_context, unregister_detector_context
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import set_thread_detector_context, unregister_detector_context
         from vtsearch.state import medias, good_votes
 
         ctx = self._make_ctx("dbnc_coalesce", tmp_path / "labels.json")
         set_thread_detector_context(ctx)
 
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         src = get_labelset_source("server_json_file")
         original_save = src.save
@@ -1173,8 +1173,8 @@ class TestLabelsetSyncDebounce:
 
     def test_two_detectors_keep_separate_debounce_slots(self, tmp_path):
         """Per-detector keying: voting on A doesn't cancel B's pending push."""
-        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
-        from vtsearch.state.core import set_thread_detector_context, unregister_detector_context
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import set_thread_detector_context, unregister_detector_context
         from vtsearch.state import medias, good_votes
 
         ctx_a = self._make_ctx("dbnc_a", tmp_path / "a.json")
@@ -1215,8 +1215,8 @@ class TestLabelsetSyncDebounce:
 
     def test_latest_state_wins_on_coalesced_burst(self, tmp_path):
         """The push uses the state at flush time, not at first-schedule time."""
-        from vtsearch.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
-        from vtsearch.state.core import set_thread_detector_context, unregister_detector_context
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import set_thread_detector_context, unregister_detector_context
         from vtsearch.state import medias, good_votes
 
         ctx = self._make_ctx("dbnc_latest", tmp_path / "labels.json")
@@ -1246,11 +1246,11 @@ class TestLabelsetSyncDebounce:
 
     def test_reset_drops_pending_without_writing(self, tmp_path):
         """reset_label_sync_for_tests cancels the timer instead of running it."""
-        from vtsearch.labels.sync import (
+        from vtscore.labels.sync import (
             reset_label_sync_for_tests,
             sync_to_labelset_source,
         )
-        from vtsearch.state.core import set_thread_detector_context, unregister_detector_context
+        from vtscore.state.core import set_thread_detector_context, unregister_detector_context
         from vtsearch.state import medias, good_votes
 
         ctx = self._make_ctx("dbnc_reset", tmp_path / "labels.json")

@@ -19,7 +19,7 @@ import numpy as np
 import os
 import pytest
 
-import vtsearch.config as config
+import vtscore.config as config
 
 
 _NON_GROUP_DIRS = {"tests_lib", "fixtures", "__pycache__"}
@@ -44,7 +44,7 @@ config.TRAIN_EPOCHS = 30
 # builder installed or it raises RuntimeError.  Outside the Flask app we
 # install a stable default that points at the repo's ``data/`` tree and
 # uses sensible literals for every knob.  Tests that need a different
-# value can monkey-patch ``vtsearch.config._core_config_builder`` or call
+# value can monkey-patch ``vtscore.config._core_config_builder`` or call
 # :func:`register_core_config_builder` themselves.
 # ---------------------------------------------------------------------------
 
@@ -102,7 +102,7 @@ def _fake_embed_text(text):
 _patch_embed_audio = patch("tests_lib.fixtures.medias.embed_audio_file", side_effect=_fake_embed_audio)
 _patch_embed_audio.start()
 
-import vtsearch.state.core as _state_core
+import vtscore.state.core as _state_core
 
 _startup_ctx = _state_core.DatasetContext("_startup")
 _state_core.register_context(_startup_ctx)
@@ -111,10 +111,10 @@ _startup_det = _state_core.DetectorContext("_startup_det")
 _state_core.register_detector_context(_startup_det)
 _state_core.set_thread_detector_context(_startup_det)
 
-from vtsearch.media.audio.audio_generator import GENERATOR_SAMPLE_RATE  # noqa: F401, E402
-from vtsearch.media.audio.audio_generator import generate_wav  # noqa: F401, E402
-from vtsearch.embedding import initialize_models  # noqa: E402
-from vtsearch.detectors.labeling_progress import clear_progress_cache  # noqa: E402
+from vtscore.media.audio.audio_generator import GENERATOR_SAMPLE_RATE  # noqa: F401, E402
+from vtscore.media.audio.audio_generator import generate_wav  # noqa: F401, E402
+from vtscore.embedding import initialize_models  # noqa: E402
+from vtscore.detectors.labeling_progress import clear_progress_cache  # noqa: E402
 from vtsearch.state import medias  # noqa: E402
 
 from tests_lib.fixtures.medias import NUM_MEDIAS, init_medias  # noqa: F401, E402
@@ -127,7 +127,7 @@ _test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
 
 _patch_embed_audio.stop()
 
-from vtsearch.media import (  # noqa: E402
+from vtscore.media import (  # noqa: E402
     all_embedders as _all_embedders,
     all_types as _all_types,
 )
@@ -141,7 +141,7 @@ def _allow_test_tmp_paths(monkeypatch):
     """Widen ``validate_server_filepath`` to also accept the system temp tree."""
     import tempfile
 
-    import vtsearch.security.path_validation as paths_mod
+    import vtscore.security.path_validation as paths_mod
 
     _original = paths_mod.validate_server_filepath
 
@@ -174,8 +174,8 @@ def _stub_embedding_models():
     stack.close()
 
 
-import vtsearch.state.core as _core  # noqa: E402
-from vtsearch.concurrency.progress import (  # noqa: E402
+import vtscore.state.core as _core  # noqa: E402
+from vtscore.concurrency.progress import (  # noqa: E402
     dataset_progress as _dataset_progress,
     eval_progress as _eval_progress,
     find_progress as _find_progress,
@@ -183,8 +183,8 @@ from vtsearch.concurrency.progress import (  # noqa: E402
     detector_loading_tasks as _model_loading_tasks,
     sort_progress as _sort_progress,
 )
-from vtsearch.datasets.registry import reset_for_tests as _reset_ds_reg  # noqa: E402
-from vtsearch.detectors.registry import reset_for_tests as _reset_model_reg  # noqa: E402
+from vtscore.datasets.registry import reset_for_tests as _reset_ds_reg  # noqa: E402
+from vtscore.detectors.registry import reset_for_tests as _reset_model_reg  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -211,7 +211,7 @@ def reset_contexts(tmp_path, monkeypatch):
 
     clear_progress_cache()
 
-    from vtsearch.embedding.helpers import clear_text_query_cache as _clear_query_cache
+    from vtscore.embedding.helpers import clear_text_query_cache as _clear_query_cache
 
     _clear_query_cache()
 
@@ -222,21 +222,22 @@ def reset_contexts(tmp_path, monkeypatch):
     _loading_tasks.reset_for_tests()
     _model_loading_tasks.reset_for_tests()
 
-    from vtsearch.concurrency.async_jobs import reset_all_async_jobs_for_tests
+    from vtscore.concurrency.async_jobs import reset_all_async_jobs_for_tests
 
     reset_all_async_jobs_for_tests()
 
-    from vtsearch.labels.sync import reset_label_sync_for_tests
+    from vtscore.labels.sync import reset_label_sync_for_tests
 
     reset_label_sync_for_tests()
 
-    from vtsearch import cli_progress
+    from vtscore import cli_progress
+
 
     cli_progress.set_format("text")
 
     # Redirect registry storage to tmp_path so tests can't pollute repo data/.
-    from vtsearch.datasets import registry as ds_reg_mod
-    from vtsearch.detectors import registry as det_reg_mod
+    from vtscore.datasets import registry as ds_reg_mod
+    from vtscore.detectors import registry as det_reg_mod
 
     monkeypatch.setattr(ds_reg_mod, "REGISTRY_PATH", tmp_path / "dataset_registry.json")
     monkeypatch.setattr(det_reg_mod, "REGISTRY_PATH", tmp_path / "detector_registry.json")
@@ -244,7 +245,7 @@ def reset_contexts(tmp_path, monkeypatch):
     _reset_ds_reg()
     _reset_model_reg()
 
-    # ``test_torch_config.py`` reloads ``vtsearch.config`` to test env-var
+    # ``test_torch_config.py`` reloads ``vtscore.config`` to test env-var
     # behaviour, which wipes the module-level builder installed at import
     # time.  Re-register defensively so any later test that calls
     # ``CoreConfig.from_settings()`` still has a backing implementation.

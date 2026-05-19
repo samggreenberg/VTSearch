@@ -46,7 +46,7 @@ def _fake_solr_response(doc_ids: list[str]) -> dict:
 class TestDownloadUcsfDocuments:
     def test_returns_extract_directory(self, tmp_path):
         """download_ucsf_documents returns the ucsf_documents/ directory."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         solr_resp = _fake_solr_response(["abcd0001", "abcd0002"])
         mock_response = MagicMock()
@@ -77,7 +77,7 @@ class TestDownloadUcsfDocuments:
 
     def test_constructs_correct_download_url(self, tmp_path):
         """PDF download URLs follow the UCSF split-character scheme."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         solr_resp = _fake_solr_response(["xyzw1234"])
         mock_response = MagicMock()
@@ -106,7 +106,7 @@ class TestDownloadUcsfDocuments:
 
     def test_cached_pdfs_skip_download(self, tmp_path):
         """If category directories already contain PDFs, no download occurs."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         _make_ucsf_fixture(tmp_path, ["Tobacco", "Food"], docs_per_cat=3)
 
@@ -130,7 +130,7 @@ class TestDownloadUcsfDocuments:
 
     def test_quotes_multi_word_industry(self, tmp_path):
         """Multi-word industry names are quoted in the Solr query."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         solr_resp = _fake_solr_response(["ffff0001"])
         mock_response = MagicMock()
@@ -163,7 +163,7 @@ class TestDownloadUcsfDocuments:
 
     def test_skips_short_document_ids(self, tmp_path):
         """Document IDs shorter than 4 characters are skipped."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         solr_resp = _fake_solr_response(["ab", "abcd0001"])
         mock_response = MagicMock()
@@ -193,7 +193,7 @@ class TestDownloadUcsfDocuments:
 
     def test_handles_api_failure_gracefully(self, tmp_path):
         """If the Solr API request fails, the category is skipped."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         def fail_get(*a, **kw):
             raise ConnectionError("network down")
@@ -221,7 +221,7 @@ class TestLoadDemoSourceUcsfDocuments:
     """ImageMediaType.load_demo_source with source='ucsf_documents'."""
 
     def _make_image_media_type(self):
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.media.image.media_type import ImageMediaType
 
         # _model / _processor are runtime-only attrs set by load_models on the
         # subclass; not declared on the ABC, so cast to Any to assign them.
@@ -255,8 +255,8 @@ class TestLoadDemoSourceUcsfDocuments:
 
     def test_ucsf_documents_populates_clips(self, tmp_path):
         """load_demo_source with source='ucsf_documents' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import pdf as pdf_module
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import pdf as pdf_module
 
         docs_dir = _make_ucsf_fixture(tmp_path, ["Tobacco", "Food"], docs_per_cat=2)
 
@@ -284,8 +284,8 @@ class TestLoadDemoSourceUcsfDocuments:
 
     def test_clips_have_expected_fields(self, tmp_path):
         """Each clip dict contains all required image media fields."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import pdf as pdf_module
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import pdf as pdf_module
 
         docs_dir = _make_ucsf_fixture(tmp_path, ["Drug"], docs_per_cat=1)
 
@@ -319,8 +319,8 @@ class TestLoadDemoSourceUcsfDocuments:
 
     def test_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits pages per category."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import pdf as pdf_module
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import pdf as pdf_module
 
         docs_dir = _make_ucsf_fixture(tmp_path, ["Tobacco"], docs_per_cat=10)
 
@@ -347,8 +347,8 @@ class TestLoadDemoSourceUcsfDocuments:
 
     def test_uses_first_page_only(self, tmp_path):
         """Only the first page of multi-page PDFs is used."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import pdf as pdf_module
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import pdf as pdf_module
 
         docs_dir = _make_ucsf_fixture(tmp_path, ["Chemical"], docs_per_cat=2)
 
@@ -376,8 +376,8 @@ class TestLoadDemoSourceUcsfDocuments:
 
     def test_skips_failed_pdf_renders(self, tmp_path):
         """PDFs that fail to render are silently skipped."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import pdf as pdf_module
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import pdf as pdf_module
 
         docs_dir = _make_ucsf_fixture(tmp_path, ["Opioids"], docs_per_cat=3)
 

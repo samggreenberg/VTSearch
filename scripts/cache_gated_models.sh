@@ -114,7 +114,7 @@ if not skip_dinov3:
     token = os.environ.get("HF_TOKEN") or True
     from transformers import AutoImageProcessor, AutoModel
 
-    from vtsearch.config import DINOV3_MODEL_ID
+    from vtscore.config import DINOV3_MODEL_ID
 
     AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache_dir, token=token)
     AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache_dir, token=token)
@@ -132,7 +132,7 @@ os.environ["TORCH_HOME"] = cache_dir
 
 import torch  # noqa: E402
 
-from vtsearch.config import EUPE_MODEL_ID  # noqa: E402
+from vtscore.config import EUPE_MODEL_ID  # noqa: E402
 
 torch.hub.load(
     "facebookresearch/EUPE",

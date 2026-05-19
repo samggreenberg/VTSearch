@@ -8,7 +8,7 @@ import numpy as np
 from tests import load_detector_and_wait as _load_detector_and_wait
 
 from vtsearch.shim.state_proxies import _ProxyDict
-from vtsearch.state.core import (
+from vtscore.state.core import (
     DatasetContext,
     DetectorContext,
     get_context,
@@ -399,7 +399,7 @@ class TestMultiDatasetAPI:
 
     def test_registry_shows_loaded(self, client):
         """Verify the registry endpoint shows loaded flag."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id
+        from vtscore.datasets.registry import register_dataset, add_loaded_id
 
         # Register two datasets in the registry.
         e1 = register_dataset(name="DS1", media_type="audio", num_items=5, pkl_path="/tmp/fake1.pkl")
@@ -418,7 +418,7 @@ class TestMultiDatasetAPI:
 
     def test_unload_removes_from_loaded(self, client):
         """POST /api/datasets/registry/<id>/unload removes the context."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id, is_loaded
+        from vtscore.datasets.registry import register_dataset, add_loaded_id, is_loaded
 
         e = register_dataset(name="Unload", media_type="audio", num_items=2, pkl_path="/tmp/fake_unload.pkl")
         ctx = DatasetContext(e["id"])
@@ -434,7 +434,7 @@ class TestMultiDatasetAPI:
 
     def test_unload_not_loaded_returns_400(self, client):
         """Cannot unload a dataset that's not loaded."""
-        from vtsearch.datasets.registry import register_dataset
+        from vtscore.datasets.registry import register_dataset
 
         e = register_dataset(name="X", media_type="audio", num_items=1, pkl_path="/tmp/fake_x.pkl")
         resp = client.post(f"/api/datasets/registry/{e['id']}/unload")
@@ -443,7 +443,7 @@ class TestMultiDatasetAPI:
     def test_preload_embedder_returns_resolved_name(self, client):
         """POST /api/datasets/registry/<id>/preload-embedder reports the
         embedder it warmed in the background."""
-        from vtsearch.datasets.registry import register_dataset
+        from vtscore.datasets.registry import register_dataset
 
         e = register_dataset(name="Pre", media_type="audio", num_items=1, pkl_path="/tmp/fake_pre.pkl")
         resp = client.post(f"/api/datasets/registry/{e['id']}/preload-embedder")
@@ -461,7 +461,7 @@ class TestMultiDatasetAPI:
     def test_preload_embedder_respects_entry_embedder_field(self, client):
         """When a dataset entry pins an embedder, that name is preferred
         over the media-type default."""
-        from vtsearch.datasets.registry import register_dataset
+        from vtscore.datasets.registry import register_dataset
 
         e = register_dataset(
             name="Pinned",
@@ -476,7 +476,7 @@ class TestMultiDatasetAPI:
 
     def test_load_already_loaded_returns_instantly(self, client):
         """Loading an already-loaded dataset returns immediately."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id
+        from vtscore.datasets.registry import register_dataset, add_loaded_id
 
         e = register_dataset(name="Already", media_type="audio", num_items=2, pkl_path="/tmp/fake_already.pkl")
         ctx = DatasetContext(e["id"])
@@ -501,7 +501,7 @@ class TestMultiDatasetAPI:
 
     def test_clear_only_clears_active(self, client):
         """POST /api/dataset/clear removes only the active dataset."""
-        from vtsearch.datasets.registry import register_dataset, add_loaded_id, is_loaded
+        from vtscore.datasets.registry import register_dataset, add_loaded_id, is_loaded
 
         e1 = register_dataset(name="Keep", media_type="audio", num_items=2, pkl_path="/tmp/fake_keep.pkl")
         e2 = register_dataset(name="Clear", media_type="audio", num_items=2, pkl_path="/tmp/fake_clear.pkl")
@@ -538,7 +538,7 @@ class TestScalarContextState:
 
     def test_click_counter_per_detector(self):
         """click_counter is per-detector (vote state)."""
-        from vtsearch.state.core import _get_click_counter, _set_click_counter
+        from vtscore.state.core import _get_click_counter, _set_click_counter
 
         det_a = DetectorContext("cc_det_a")
         register_detector_context(det_a)
@@ -557,7 +557,7 @@ class TestScalarContextState:
 
     def test_inclusion_per_detector(self):
         """inclusion is per-detector (training parameter)."""
-        from vtsearch.state.core import _get_inclusion, _set_inclusion
+        from vtscore.state.core import _get_inclusion, _set_inclusion
 
         det_a = DetectorContext("inc_det_a")
         register_detector_context(det_a)
@@ -574,7 +574,7 @@ class TestScalarContextState:
         assert _get_inclusion() == 5
 
     def test_display_name_per_dataset(self):
-        from vtsearch.state.core import _get_dataset_display_name, _set_dataset_display_name
+        from vtscore.state.core import _get_dataset_display_name, _set_dataset_display_name
 
         ctx_a = DatasetContext("dn_a")
         register_context(ctx_a)
@@ -627,9 +627,9 @@ class TestSyncLabelsAcrossDatasets:
         """load_model_route must skip sync when the active context has no
         votes, preventing destruction of the model's saved labelset from a
         prior training session on a different dataset."""
-        from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.detectors.registry import add_loaded_detector_id, register_detector, reset_for_tests
-        from vtsearch.detectors.store import _read_detector, _write_detector
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.registry import add_loaded_detector_id, register_detector, reset_for_tests
+        from vtscore.detectors.store import _read_detector, _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.state import (
             bad_votes,
@@ -637,7 +637,7 @@ class TestSyncLabelsAcrossDatasets:
             set_thread_detector_context,
             snapshot_medias,
         )
-        from vtsearch.state.core import DetectorContext, register_detector_context
+        from vtscore.state.core import DetectorContext, register_detector_context
 
         reset_for_tests()
 
@@ -699,9 +699,9 @@ class TestSyncLabelsAcrossDatasets:
 
         The model's saved labelset from Dataset A must survive the load
         even though Dataset B has no votes."""
-        from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.detectors.registry import add_loaded_detector_id, register_detector, reset_for_tests
-        from vtsearch.detectors.store import _read_detector, _write_detector
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.registry import add_loaded_detector_id, register_detector, reset_for_tests
+        from vtscore.detectors.store import _read_detector, _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.state import (
             bad_votes,
@@ -709,7 +709,7 @@ class TestSyncLabelsAcrossDatasets:
             set_thread_detector_context,
             snapshot_medias,
         )
-        from vtsearch.state.core import DetectorContext, register_detector_context
+        from vtscore.state.core import DetectorContext, register_detector_context
 
         reset_for_tests()
 

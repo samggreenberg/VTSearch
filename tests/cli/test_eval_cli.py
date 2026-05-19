@@ -1,7 +1,7 @@
 """Tests for the eval CLI entry points.
 
-* ``python -m vtsearch.eval`` — :mod:`vtsearch.eval.__main__`
-* ``python -m vtsearch.eval.label_curve_main``
+* ``python -m vtscore.eval`` — :mod:`vtscore.eval.__main__`
+* ``python -m vtscore.eval.label_curve_main``
 
 The full ``run_eval`` / ``run_label_curve_eval`` calls download demo
 datasets and run real embedders, so we test argument parsing, ``--list``
@@ -17,13 +17,13 @@ import sys
 
 import pytest
 
-from vtsearch.eval import label_curve_main as lc_main
-from vtsearch.eval import __main__ as eval_main
-from vtsearch.eval.metrics import DatasetResult, LearnedSortMetrics, QueryMetrics
+from vtscore.eval import label_curve_main as lc_main
+from vtscore.eval import __main__ as eval_main
+from vtscore.eval.metrics import DatasetResult, LearnedSortMetrics, QueryMetrics
 
 
 # ---------------------------------------------------------------------------
-# vtsearch.eval.__main__
+# vtscore.eval.__main__
 # ---------------------------------------------------------------------------
 
 
@@ -102,7 +102,7 @@ class TestEvalMainRun:
         assert data[0]["dataset_id"] == "esc50_s"
 
     def test_plot_dir_invokes_plotter(self, monkeypatch, capsys, tmp_path, stub_run_eval):
-        from vtsearch.eval import visualize
+        from vtscore.eval import visualize
 
         calls = {}
 
@@ -119,7 +119,7 @@ class TestEvalMainRun:
         assert "Plots written" in out
 
     def test_no_plot_flag_skips_plotter(self, monkeypatch, tmp_path, stub_run_eval):
-        from vtsearch.eval import visualize
+        from vtscore.eval import visualize
 
         called = {"yes": False}
 
@@ -138,7 +138,7 @@ class TestEvalMainRun:
 
 
 # ---------------------------------------------------------------------------
-# vtsearch.eval.label_curve_main
+# vtscore.eval.label_curve_main
 # ---------------------------------------------------------------------------
 
 

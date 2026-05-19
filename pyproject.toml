@@ -64,7 +64,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["vtsearch*"]
+include = ["vtsearch*", "vtscore*"]
 
 [tool.ruff]
 line-length = 120
@@ -105,15 +105,15 @@ max-complexity = 10
 "scripts/**" = ["C901"]
 # safe_pickle_load is the centralized helper that calls pickle.load on
 # whitelisted bytes — flagging it would defeat the purpose of the wrapper.
-"vtsearch/security/pickle.py" = ["S301"]
+"vtscore/security/pickle.py" = ["S301"]
 # Intentional `git` / `unrar` / `ffmpeg` invocations: arguments are
 # project-controlled paths, no shell expansion.
 "vtsearch/__init__.py" = ["S603", "S607"]
-"vtsearch/converters/video2audio.py" = ["S603"]
-"vtsearch/datasets/downloader/video.py" = ["S603", "S607"]
+"vtscore/converters/video2audio.py" = ["S603"]
+"vtscore/datasets/downloader/video.py" = ["S603", "S607"]
 "vtsearch/routes/media/list.py" = ["S603"]
 # Atom feed parsing for the arXiv text-dataset downloader.
-"vtsearch/datasets/downloader/text.py" = ["S314"]
+"vtscore/datasets/downloader/text.py" = ["S314"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -207,7 +207,7 @@ markers = [
 addopts = "-m 'not gpu and not slow'"
 
 [tool.coverage.run]
-source = ["vtsearch"]
+source = ["vtsearch", "vtscore"]
 branch = true
 omit = [
     "vtsearch/_version.txt",

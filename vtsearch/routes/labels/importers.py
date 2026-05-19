@@ -33,7 +33,7 @@ from __future__ import annotations
 from flask import jsonify
 from flask_smorest import Blueprint
 
-from vtsearch.labels.importers import get_label_importer, list_label_importers
+from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.routes._shared import (
     get_plugin_or_404,
     run_plugin_or_error,
@@ -155,7 +155,7 @@ def run_label_import(importer_name: str):  # noqa: C901
     resolved_applied = 0
     unresolved: list[dict] = []
     if missing:
-        from vtsearch.datasets.ingest import ingest_missing_medias
+        from vtscore.datasets.ingest import ingest_missing_medias
 
         ingested = ingest_missing_medias(missing, medias)
 
@@ -175,16 +175,16 @@ def run_label_import(importer_name: str):  # noqa: C901
     # Sync updated votes into the loaded model so the dashboard reflects
     # the new label count (num_training) immediately.
     if applied > 0:
-        from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+        from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
         sync_labels_to_loaded_detector()
 
-        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtscore.labels.sync import sync_to_labelset_source
 
         sync_to_labelset_source()
 
         from vtsearch.achievements import record_detector_import
-        from vtsearch.state.core import get_active_detector_context
+        from vtscore.state.core import get_active_detector_context
 
         record_detector_import(get_active_detector_context().detector_id)
 
@@ -218,7 +218,7 @@ def ingest_missing(body: dict):
     """Re-ingest missing medias from their origins, then apply their labels."""
     entries = body["entries"]
 
-    from vtsearch.datasets.ingest import ingest_missing_medias
+    from vtscore.datasets.ingest import ingest_missing_medias
 
     ingested = ingest_missing_medias(entries, medias)
 
@@ -229,11 +229,11 @@ def ingest_missing(body: dict):
     # Sync updated votes into the loaded model so the dashboard reflects
     # the new label count immediately.
     if applied > 0:
-        from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+        from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
         sync_labels_to_loaded_detector()
 
-        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtscore.labels.sync import sync_to_labelset_source
 
         sync_to_labelset_source()
 

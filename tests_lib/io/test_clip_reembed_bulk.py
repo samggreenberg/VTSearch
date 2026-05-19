@@ -18,7 +18,7 @@ import unittest.mock as mock
 import numpy as np
 import pytest
 
-from vtsearch.media.audio.audio_generator import generate_wav
+from vtscore.media.audio.audio_generator import generate_wav
 
 
 def _make_audio_media(media_id: int, duration: float = 5.1) -> dict:
@@ -105,12 +105,12 @@ class TestBulkClipReembed:
     def test_single_bulk_call_per_clipper_invocation(
         self, media_type, make_media, clipper_name, clipper_params, content_field
     ):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         emb = _fake_bulk_embedder()
 
         clips_dict = {1: make_media(1)}
-        with mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]):
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             _apply_clipper(clips_dict, clipper_name, clipper_params)
 
         assert emb.embed_media_bulk.call_count == 1, (
@@ -128,12 +128,12 @@ class TestBulkClipReembed:
     def test_scatters_returned_vectors_back_into_clips(
         self, media_type, make_media, clipper_name, clipper_params, content_field
     ):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         emb = _fake_bulk_embedder()
 
         clips_dict = {1: make_media(1)}
-        with mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]):
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             _apply_clipper(clips_dict, clipper_name, clipper_params)
 
         # Each clip should hold the vector the bulk hook returned for its
@@ -151,7 +151,7 @@ class TestBulkClipReembedFailureFallback:
     contract in the pre-refactor ``_reembed_clip`` helper."""
 
     def test_none_entries_leave_parent_embedding_intact(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
         parent_vec = parent["embedding"].copy()
@@ -161,7 +161,7 @@ class TestBulkClipReembedFailureFallback:
         emb.embed_media_bulk.side_effect = lambda medias: [None] * len(medias)
 
         clips_dict = {1: parent}
-        with mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]):
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
         assert emb.embed_media_bulk.call_count == 1
@@ -169,7 +169,7 @@ class TestBulkClipReembedFailureFallback:
             np.testing.assert_array_equal(clip["embedding"], parent_vec)
 
     def test_bulk_exception_leaves_parent_embedding_intact(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
         parent_vec = parent["embedding"].copy()
@@ -179,20 +179,20 @@ class TestBulkClipReembedFailureFallback:
         emb.embed_media_bulk.side_effect = RuntimeError("boom")
 
         clips_dict = {1: parent}
-        with mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]):
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
         for clip in clips_dict.values():
             np.testing.assert_array_equal(clip["embedding"], parent_vec)
 
     def test_no_embedders_registered_skips_bulk_and_keeps_parent(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
         parent_vec = parent["embedding"].copy()
 
         clips_dict = {1: parent}
-        with mock.patch("vtsearch.media.embedders_for_type", return_value=[]):
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[]):
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
         for clip in clips_dict.values():
@@ -205,13 +205,13 @@ class TestBulkClipReembedMD5UnchangedByRefactor:
     actual clip bytes, not the parent."""
 
     def test_audio_md5s_match_clip_bytes(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         emb = _fake_bulk_embedder()
         clips_dict = {1: _make_audio_media(1, duration=5.1)}
         parent_md5 = clips_dict[1]["md5"]
 
-        with mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]):
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
         for clip in clips_dict.values():
@@ -221,19 +221,19 @@ class TestBulkClipReembedMD5UnchangedByRefactor:
 
 class TestBulkClipReembedNoTempfile:
     """The pre-refactor path wrote each clip to ``tempfile.mkstemp`` and
-    called ``embed_file`` from ``vtsearch.detectors.resolver`` one clip
+    called ``embed_file`` from ``vtscore.detectors.resolver`` one clip
     at a time.  The refactor deletes that detour entirely — verify
     neither code path is invoked from clip re-embed."""
 
     def test_no_tempfile_mkstemp_calls(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
         import tempfile
 
         emb = _fake_bulk_embedder()
         clips_dict = {1: _make_audio_media(1, duration=5.1)}
 
         with (
-            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
             mock.patch.object(tempfile, "mkstemp", side_effect=AssertionError("clip re-embed must not hit tempfile")),
         ):
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
@@ -241,15 +241,15 @@ class TestBulkClipReembedNoTempfile:
     def test_does_not_import_embed_file(self):
         """``embed_file`` was the single-item embedder dispatch used by
         the old per-clip loop.  The refactor resolves embedders inline
-        and never reaches into ``vtsearch.detectors.resolver``."""
-        from vtsearch.datasets.load_pipeline import _apply_clipper
-        from vtsearch.detectors import resolver
+        and never reaches into ``vtscore.detectors.resolver``."""
+        from vtscore.datasets.load_pipeline import _apply_clipper
+        from vtscore.detectors import resolver
 
         emb = _fake_bulk_embedder()
         clips_dict = {1: _make_audio_media(1, duration=5.1)}
 
         with (
-            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
             mock.patch.object(resolver, "embed_file", side_effect=AssertionError("must not be called")) as guard,
         ):
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})

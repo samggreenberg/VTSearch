@@ -26,7 +26,7 @@ from vtsearch.autorun_processors import (
     autorun_extractors,
     autorun_localizers,
 )
-from vtsearch.media.processors import Extractor, Localizer
+from vtscore.media.processors import Extractor, Localizer
 from vtsearch.routes.processors import scoring as scoring_mod
 
 

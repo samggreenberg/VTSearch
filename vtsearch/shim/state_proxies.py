@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from vtsearch.state.core import get_active_context, get_active_detector_context
+from vtscore.state.core import get_active_context, get_active_detector_context
 
 
 class _ProxyDict(dict):

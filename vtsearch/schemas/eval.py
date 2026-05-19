@@ -14,7 +14,7 @@ Covers four routes in ``vtsearch/routes/eval.py``:
 The per-step ``error_cost`` / ``stability`` / ``diversity`` lists are
 declared as ``fields.List(fields.Dict())`` rather than fully nested
 schemas — the inner shapes are computed by
-``vtsearch.detectors.labeling_progress`` and round-trip cleanly as
+``vtscore.detectors.labeling_progress`` and round-trip cleanly as
 plain dicts.
 
 The two train-and-score endpoints share a single response schema with
@@ -57,7 +57,7 @@ class StatusIndicatorSchema(Schema):
     ``reason`` is the human-readable explanation.  Metric-specific keys
     (``cost``, ``flips``, ``diversity_level``, ``avg_flip_rate``, …) flow
     through unchanged via ``unknown = "include"`` plus :meth:`_include_extras`
-    — the :mod:`vtsearch.detectors.labeling_progress` analyzer remains the
+    — the :mod:`vtscore.detectors.labeling_progress` analyzer remains the
     source of truth for that shape."""
 
     status = fields.String(required=True)

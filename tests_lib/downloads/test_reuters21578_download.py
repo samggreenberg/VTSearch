@@ -35,7 +35,7 @@ def _make_sgm(path: Path, entries: list[tuple[list[str], str, str]]) -> None:
 
 class TestDownloadReuters21578:
     def test_returns_articles_by_topic(self, tmp_path):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "reuters21578"
         extract_dir.mkdir()
@@ -60,7 +60,7 @@ class TestDownloadReuters21578:
         assert not any(s.endswith("Reuter") for s in result["earn"])
 
     def test_cached_extraction_skips_download(self, tmp_path):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "reuters21578"
         extract_dir.mkdir()
@@ -85,7 +85,7 @@ class TestDownloadReuters21578:
         assert "earn" in result
 
     def test_skips_blocks_without_topics_or_body(self, tmp_path):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "reuters21578"
         extract_dir.mkdir()
@@ -118,7 +118,7 @@ class TestDownloadReuters21578:
 
 class TestLoadDemoSourceReuters:
     def test_reuters_source_populates_clips(self):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
         from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
@@ -145,7 +145,7 @@ class TestLoadDemoSourceReuters:
         assert {c["category"] for c in clips.values()} == {"earn", "acq"}
 
     def test_reuters_slice_is_applied(self):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
         from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {"grain": [f"Grain story {i}." for i in range(10)]}

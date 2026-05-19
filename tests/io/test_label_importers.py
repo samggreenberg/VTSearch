@@ -23,7 +23,7 @@ import app as app_module
 
 class TestLabelImporterField:
     def test_to_dict_contains_required_keys(self):
-        from vtsearch.labels.importers.base import LabelImporterField
+        from vtscore.labels.importers.base import LabelImporterField
 
         f = LabelImporterField(key="file", label="My File", field_type="file")
         d = f.to_dict()
@@ -38,7 +38,7 @@ class TestLabelImporterField:
         assert "placeholder" in d
 
     def test_defaults(self):
-        from vtsearch.labels.importers.base import LabelImporterField
+        from vtscore.labels.importers.base import LabelImporterField
 
         f = LabelImporterField(key="x", label="X", field_type="text")
         assert f.required is True
@@ -49,7 +49,7 @@ class TestLabelImporterField:
         assert f.accept == ""
 
     def test_custom_values(self):
-        from vtsearch.labels.importers.base import LabelImporterField
+        from vtscore.labels.importers.base import LabelImporterField
 
         f = LabelImporterField(
             key="mode",
@@ -74,7 +74,7 @@ class TestLabelImporterField:
 
 class TestLabelImporterBase:
     def _make_minimal(self):
-        from vtsearch.labels.importers.base import LabelImporter
+        from vtscore.labels.importers.base import LabelImporter
 
         class Minimal(LabelImporter):
             name = "minimal"
@@ -88,7 +88,7 @@ class TestLabelImporterBase:
         return Minimal()
 
     def test_run_raises_not_implemented_when_not_overridden(self):
-        from vtsearch.labels.importers.base import LabelImporter
+        from vtscore.labels.importers.base import LabelImporter
 
         imp = LabelImporter()
         with pytest.raises(NotImplementedError):
@@ -104,12 +104,12 @@ class TestLabelImporterBase:
         assert "fields" in d
 
     def test_default_icon(self):
-        from vtsearch.labels.importers.base import LabelImporter
+        from vtscore.labels.importers.base import LabelImporter
 
         assert LabelImporter.icon == "🏷️"
 
     def test_custom_icon_in_to_dict(self):
-        from vtsearch.labels.importers.base import LabelImporter
+        from vtscore.labels.importers.base import LabelImporter
 
         class Custom(LabelImporter):
             name = "c"
@@ -124,7 +124,7 @@ class TestLabelImporterBase:
         assert Custom().to_dict()["icon"] == "🔖"
 
     def test_validate_cli_field_values_raises_on_missing_required(self):
-        from vtsearch.labels.importers.base import LabelImporter, LabelImporterField
+        from vtscore.labels.importers.base import LabelImporter, LabelImporterField
 
         class Imp(LabelImporter):
             name = "t"
@@ -140,7 +140,7 @@ class TestLabelImporterBase:
             imp.validate_cli_field_values({})
 
     def test_validate_cli_field_values_passes_when_provided(self):
-        from vtsearch.labels.importers.base import LabelImporter, LabelImporterField
+        from vtscore.labels.importers.base import LabelImporter, LabelImporterField
 
         class Imp(LabelImporter):
             name = "t"
@@ -155,7 +155,7 @@ class TestLabelImporterBase:
         imp.validate_cli_field_values({"filepath": "/some/path"})  # no raise
 
     def test_run_cli_delegates_to_run(self):
-        from vtsearch.labels.importers.base import LabelImporter
+        from vtscore.labels.importers.base import LabelImporter
 
         class Imp(LabelImporter):
             name = "t"
@@ -173,7 +173,7 @@ class TestLabelImporterBase:
     def test_add_cli_arguments_adds_text_field(self):
         import argparse
 
-        from vtsearch.labels.importers.base import LabelImporter, LabelImporterField
+        from vtscore.labels.importers.base import LabelImporter, LabelImporterField
 
         class Imp(LabelImporter):
             name = "t"
@@ -192,7 +192,7 @@ class TestLabelImporterBase:
     def test_add_cli_arguments_select_adds_choices(self):
         import argparse
 
-        from vtsearch.labels.importers.base import LabelImporter, LabelImporterField
+        from vtscore.labels.importers.base import LabelImporter, LabelImporterField
 
         class Imp(LabelImporter):
             name = "t"
@@ -218,14 +218,14 @@ class TestLabelImporterBase:
 
 class TestLabelImporterRegistry:
     def test_list_label_importers_returns_builtins(self):
-        from vtsearch.labels.importers import list_label_importers
+        from vtscore.labels.importers import list_label_importers
 
         names = {imp.name for imp in list_label_importers()}
         assert "server_json_file" in names
         assert "server_csv_file" in names
 
     def test_get_label_importer_known(self):
-        from vtsearch.labels.importers import get_label_importer
+        from vtscore.labels.importers import get_label_importer
 
         for name in ("server_json_file", "server_csv_file"):
             imp = get_label_importer(name)
@@ -233,12 +233,12 @@ class TestLabelImporterRegistry:
             assert imp.name == name
 
     def test_get_label_importer_unknown_returns_none(self):
-        from vtsearch.labels.importers import get_label_importer
+        from vtscore.labels.importers import get_label_importer
 
         assert get_label_importer("no_such_importer") is None
 
     def test_each_importer_has_display_name_and_icon(self):
-        from vtsearch.labels.importers import list_label_importers
+        from vtscore.labels.importers import list_label_importers
 
         for imp in list_label_importers():
             assert imp.display_name, f"{imp.name} missing display_name"
@@ -246,7 +246,7 @@ class TestLabelImporterRegistry:
             assert imp.description, f"{imp.name} missing description"
 
     def test_each_importer_fields_are_valid(self):
-        from vtsearch.labels.importers import list_label_importers
+        from vtscore.labels.importers import list_label_importers
 
         valid_types = ("file", "text", "password", "number", "select", "server_path", "url", "email")
         for imp in list_label_importers():
@@ -294,7 +294,7 @@ class TestGetLabelImportersEndpoint:
 
 class TestServerJsonLabelImporter:
     def _get_importer(self):
-        from vtsearch.labels.importers.server_json_file import LABEL_IMPORTER
+        from vtscore.labels.importers.server_json_file import LABEL_IMPORTER
 
         return LABEL_IMPORTER
 
@@ -370,7 +370,7 @@ class TestServerJsonLabelImporter:
 
 class TestServerCsvLabelImporter:
     def _get_importer(self):
-        from vtsearch.labels.importers.server_csv_file import LABEL_IMPORTER
+        from vtscore.labels.importers.server_csv_file import LABEL_IMPORTER
 
         return LABEL_IMPORTER
 
@@ -432,7 +432,7 @@ class TestServerCsvLabelImporter:
 
     def test_csv_importer_preserves_origin_name(self, tmp_path):
         """CSV importer reads origin_name/filename/category columns."""
-        from vtsearch.labels.importers.server_csv_file import _parse_csv_bytes
+        from vtscore.labels.importers.server_csv_file import _parse_csv_bytes
 
         csv_text = "label,md5,origin_name,filename,category\ngood,abc123,clip.wav,clip.wav,music\n"
         result = _parse_csv_bytes(csv_text.encode())
@@ -445,7 +445,7 @@ class TestServerCsvLabelImporter:
         """CSV importer parses a JSON-serialised origin dict column."""
         import json
 
-        from vtsearch.labels.importers.server_csv_file import _parse_csv_bytes
+        from vtscore.labels.importers.server_csv_file import _parse_csv_bytes
 
         origin = {"importer": "demo", "params": {"name": "flowers102"}}
         origin_json = json.dumps(origin, sort_keys=True)
@@ -458,7 +458,7 @@ class TestServerCsvLabelImporter:
 
     def test_csv_importer_ignores_invalid_origin_json(self, tmp_path):
         """Non-JSON origin column values are silently ignored."""
-        from vtsearch.labels.importers.server_csv_file import _parse_csv_bytes
+        from vtscore.labels.importers.server_csv_file import _parse_csv_bytes
 
         csv_text = "label,md5,origin_name,origin\ngood,abc123,rose.jpg,not-json\n"
         result = _parse_csv_bytes(csv_text.encode())

@@ -10,9 +10,9 @@ from flask_smorest import abort
 from marshmallow import ValidationError
 
 if TYPE_CHECKING:
-    from vtsearch.plugins import PluginBase
+    from vtscore.plugins import PluginBase
 
-import vtsearch.security.path_validation as _paths
+import vtscore.security.path_validation as _paths
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ def validate_plugin_args(
         verbatim — type / shape validation is the route handler's
         responsibility.
     """
-    from vtsearch.plugins.schema import get_plugin_arg_schema  # noqa: PLC0415
+    from vtscore.plugins.schema import get_plugin_arg_schema  # noqa: PLC0415
 
     has_file_fields = any(f.field_type == "file" for f in plugin.fields)
 
@@ -258,7 +258,7 @@ def get_embedder_for_medias(media_dict: dict):
     embedder_name = first.get("embedder", "")
     media_type = first.get("type", "audio")
 
-    from vtsearch.media import embedders_for_type, get_embedder  # noqa: PLC0415
+    from vtscore.media import embedders_for_type, get_embedder  # noqa: PLC0415
 
     if embedder_name:
         try:

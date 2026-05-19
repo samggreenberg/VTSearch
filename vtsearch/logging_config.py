@@ -5,7 +5,7 @@ and ``request_id`` active when the record was created. Inside a Flask
 request handler the values come from ``flask.g`` (populated by the
 ``before_request`` middleware in :mod:`app`); inside a background thread
 they come from the thread-locals already maintained by
-:mod:`vtsearch.auth` and :mod:`vtsearch.state.core`
+:mod:`vtsearch.auth` and :mod:`vtscore.state.core`
 (``set_thread_user``, ``set_thread_dataset_context``,
 ``set_thread_detector_context``).
 
@@ -125,7 +125,7 @@ def _resolve_context() -> dict[str, Any]:  # noqa: C901
 
     if ds_ctx is None or det_ctx is None:
         try:
-            from vtsearch.state.core import (
+            from vtscore.state.core import (
                 get_thread_dataset_context,
                 get_thread_detector_context,
             )

@@ -4,13 +4,13 @@ import json
 import threading
 import time
 
-from vtsearch.concurrency.events import (
+from vtscore.concurrency.events import (
     _TASK_CHANNELS,
     _TRACKER_CHANNELS,
     initial_snapshot,
     stream_progress_events,
 )
-from vtsearch.concurrency.progress import (
+from vtscore.concurrency.progress import (
     LoadingTasksTracker,
     ProgressTracker,
     dataset_progress,
@@ -87,7 +87,7 @@ class TestProgressTrackerEta:
 
     def test_eta_is_none_until_min_elapsed(self, monkeypatch):
         now = [1000.0]
-        monkeypatch.setattr("vtsearch.concurrency.progress.time.monotonic", lambda: now[0])
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
         tracker = self._make_tracker()
 
         tracker.update("loading", "", 0, 100)
@@ -99,7 +99,7 @@ class TestProgressTrackerEta:
 
     def test_eta_appears_after_min_elapsed(self, monkeypatch):
         now = [1000.0]
-        monkeypatch.setattr("vtsearch.concurrency.progress.time.monotonic", lambda: now[0])
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
         tracker = self._make_tracker()
 
         tracker.update("loading", "", 0, 100)
@@ -112,7 +112,7 @@ class TestProgressTrackerEta:
 
     def test_eta_smoothed_via_ema(self, monkeypatch):
         now = [1000.0]
-        monkeypatch.setattr("vtsearch.concurrency.progress.time.monotonic", lambda: now[0])
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
         tracker = self._make_tracker()
 
         tracker.update("loading", "", 0, 100)
@@ -132,7 +132,7 @@ class TestProgressTrackerEta:
 
     def test_eta_resets_when_status_changes(self, monkeypatch):
         now = [1000.0]
-        monkeypatch.setattr("vtsearch.concurrency.progress.time.monotonic", lambda: now[0])
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
         tracker = self._make_tracker()
 
         tracker.update("downloading", "", 0, 100)
@@ -149,7 +149,7 @@ class TestProgressTrackerEta:
 
     def test_eta_resets_when_total_changes(self, monkeypatch):
         now = [1000.0]
-        monkeypatch.setattr("vtsearch.concurrency.progress.time.monotonic", lambda: now[0])
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
         tracker = self._make_tracker()
 
         tracker.update("loading", "", 0, 100)
@@ -163,7 +163,7 @@ class TestProgressTrackerEta:
 
     def test_eta_none_for_indeterminate_bars(self, monkeypatch):
         now = [1000.0]
-        monkeypatch.setattr("vtsearch.concurrency.progress.time.monotonic", lambda: now[0])
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
         tracker = self._make_tracker()
 
         tracker.update("loading", "", 0, 0)

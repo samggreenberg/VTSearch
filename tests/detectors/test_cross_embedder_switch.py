@@ -52,7 +52,7 @@ def _make_snap(embedder: str) -> dict[int, dict]:
 def _seed_det_ctx_with_cache(embedder: str):
     """Return a fresh ``DetectorContext`` with a label-embedding cache stamped
     against *embedder*."""
-    from vtsearch.state.core import DetectorContext
+    from vtscore.state.core import DetectorContext
 
     det_ctx = DetectorContext("d1", name="d1", media_type="audio", embedder=embedder)
     rng = np.random.default_rng(1)
@@ -67,8 +67,8 @@ class TestPopulateLabelEmbeddingsCrossEmbedder:
     """Unit-level: the cache is dropped when the embedder changes."""
 
     def test_cache_cleared_on_embedder_change(self):
-        from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.detectors.labelset_training import populate_label_embeddings
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_training import populate_label_embeddings
 
         det_ctx = _seed_det_ctx_with_cache("clap")
         # Empty labelset → no resolve+embed work, but the invalidation pass
@@ -89,8 +89,8 @@ class TestPopulateLabelEmbeddingsCrossEmbedder:
         assert det_ctx.embedder == "siglip"
 
     def test_cache_preserved_when_embedder_matches(self):
-        from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.detectors.labelset_training import populate_label_embeddings
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_training import populate_label_embeddings
 
         det_ctx = _seed_det_ctx_with_cache("clap")
         before = dict(det_ctx.label_embeddings)
@@ -108,8 +108,8 @@ class TestPopulateLabelEmbeddingsCrossEmbedder:
     def test_cache_preserved_when_active_embedder_unknown(self):
         """No active dataset → ``embedder_name`` resolves to ``""``; we keep the
         cache rather than wiping it on insufficient information."""
-        from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.detectors.labelset_training import populate_label_embeddings
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_training import populate_label_embeddings
 
         det_ctx = _seed_det_ctx_with_cache("clap")
         before = dict(det_ctx.label_embeddings)
@@ -132,14 +132,14 @@ class TestLoadEndpointReembedTask:
     def _seed_loaded_detector(self, embedder: str = "clap"):
         """Create + register a detector with a small cached labelset and mark
         it loaded. Returns the detector id."""
-        from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.detectors.registry import (
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.registry import (
             add_loaded_detector_id,
             register_detector,
             reset_for_tests,
         )
-        from vtsearch.detectors.store import _detector_path, _write_detector
-        from vtsearch.state.core import (
+        from vtscore.detectors.store import _detector_path, _write_detector
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -199,7 +199,7 @@ class TestLoadEndpointReembedTask:
 
     def _drain_detector_tasks(self, timeout: float = 5.0) -> list[dict]:
         """Block until every detector-load task settles, then return them."""
-        from vtsearch.concurrency.progress import detector_loading_tasks
+        from vtscore.concurrency.progress import detector_loading_tasks
 
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -226,7 +226,7 @@ class TestLoadEndpointReembedTask:
         assert body.get("ok") is True
 
     def test_different_embedder_starts_reembed_task(self, client):
-        from vtsearch.concurrency.progress import detector_loading_tasks
+        from vtscore.concurrency.progress import detector_loading_tasks
 
         detector_id, det_ctx = self._seed_loaded_detector(embedder="clap")
         self._set_active_dataset_embedder("clap-fused")
@@ -262,12 +262,12 @@ class TestDetectorRegistryEmbedderField:
     """``GET /api/detectors/registry`` exposes the loaded detector's embedder."""
 
     def test_loaded_entry_exposes_embedder(self, client):
-        from vtsearch.detectors.registry import (
+        from vtscore.detectors.registry import (
             add_loaded_detector_id,
             register_detector,
             reset_for_tests,
         )
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
         )
@@ -285,7 +285,7 @@ class TestDetectorRegistryEmbedderField:
         assert rows[detector_id]["embedder"] == "clap"
 
     def test_unloaded_entry_has_empty_embedder(self, client):
-        from vtsearch.detectors.registry import register_detector, reset_for_tests
+        from vtscore.detectors.registry import register_detector, reset_for_tests
 
         reset_for_tests()
         entry = register_detector(name="emb-unloaded", media_type="audio")

@@ -7,8 +7,8 @@ from io import BytesIO
 import numpy as np
 import pytest
 
-from vtsearch.media import _embedder_registry
-from vtsearch.media.embedder import MediaEmbedder
+from vtscore.media import _embedder_registry
+from vtscore.media.embedder import MediaEmbedder
 
 
 class _FakeImageEmbedder(MediaEmbedder):

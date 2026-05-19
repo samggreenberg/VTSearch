@@ -1,0 +1,5 @@
+from vtscore.media.document.clipper import DocumentDefaultClipper
+from vtscore.media.document.media_type import DocumentMediaType
+
+MEDIA_TYPE = DocumentMediaType()
+CLIPPERS = [DocumentDefaultClipper()]

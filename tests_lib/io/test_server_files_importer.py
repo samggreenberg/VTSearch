@@ -14,8 +14,8 @@ from pathlib import Path
 
 import numpy as np
 
-from vtsearch.datasets.importers import get_importer
-from vtsearch.datasets.importers.server_files import (
+from vtscore.datasets.importers import get_importer
+from vtscore.datasets.importers.server_files import (
     ServerFilesDatasetImporter,
     _expand_paths,
     _read_paths_file,

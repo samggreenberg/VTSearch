@@ -33,9 +33,9 @@ from marshmallow import Schema, fields, validate
 
 
 class LabeledElementSchema(Schema):
-    """A single entry in an exported :class:`~vtsearch.datasets.labelset.LabelSet`.
+    """A single entry in an exported :class:`~vtscore.datasets.labelset.LabelSet`.
 
-    Mirrors :meth:`vtsearch.datasets.labelset.LabeledElement.to_dict`. Only
+    Mirrors :meth:`vtscore.datasets.labelset.LabeledElement.to_dict`. Only
     ``md5`` and ``label`` are guaranteed; the other keys appear when the
     underlying element has them set. ``is_correction`` and
     ``custom_metadata`` are added by the export route (under
@@ -173,8 +173,8 @@ class FillFromSortResponseSchema(Schema):
 class _PluginEntrySchema(Schema):
     """Shared shape for plugin-listing endpoints.
 
-    Mirrors :meth:`vtsearch.plugins.PluginBase.to_dict`; the ``fields``
-    array's inner shape mirrors :meth:`vtsearch.plugins.PluginField.to_dict`
+    Mirrors :meth:`vtscore.plugins.PluginBase.to_dict`; the ``fields``
+    array's inner shape mirrors :meth:`vtscore.plugins.PluginField.to_dict`
     but is declared as ``fields.Dict()`` to avoid duplicating the source
     of truth across schema and dataclass.
     """

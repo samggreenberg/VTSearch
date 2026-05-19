@@ -19,7 +19,7 @@ def make_wav_bytes(frequency: float = 440.0, duration: float = 0.1) -> bytes:
     Supports variable ``frequency`` and ``duration`` — useful when tests
     need multiple distinct WAV files (e.g. different frequencies per media).
     """
-    from vtsearch.media.audio.audio_generator import generate_wav  # noqa: PLC0415
+    from vtscore.media.audio.audio_generator import generate_wav  # noqa: PLC0415
 
     return generate_wav(frequency, duration)
 
@@ -28,7 +28,7 @@ def make_raw_wav_bytes() -> bytes:
     """Create a minimal valid WAV file (100 zero-samples) in memory.
 
     Lighter weight than :func:`make_wav_bytes` — does not depend on the
-    ``vtsearch.media.audio.audio_generator`` module.
+    ``vtscore.media.audio.audio_generator`` module.
     """
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -54,7 +54,7 @@ def make_wav_file(tmp_dir: Path, name: str, frequency: float = 440.0) -> Path:
 
 def make_dataset_file(tmp_path, clips_dict, name: str = "dataset.pkl") -> Path:
     """Export a medias dict to a pickle file and return the path."""
-    from vtsearch.datasets.loader import export_dataset_to_file  # noqa: PLC0415
+    from vtscore.datasets.loader import export_dataset_to_file  # noqa: PLC0415
 
     pkl_bytes = export_dataset_to_file(clips_dict)
     dataset_path = tmp_path / name
@@ -181,9 +181,9 @@ def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type=
     from *good_ids* and *bad_ids* using *snap* as the medias source, and
     registers the model so ``/api/detectors/registry`` lists it.
     """
-    from vtsearch.datasets.labelset import LabelSet  # noqa: PLC0415
-    from vtsearch.detectors.registry import register_detector  # noqa: PLC0415
-    from vtsearch.detectors.store import _detector_path, _write_detector  # noqa: PLC0415
+    from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
+    from vtscore.detectors.registry import register_detector  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _write_detector  # noqa: PLC0415
 
     good_votes_dict = {k: None for k in good_ids}
     bad_votes_dict = {k: None for k in bad_ids}

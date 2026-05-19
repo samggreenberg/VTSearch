@@ -37,7 +37,7 @@ def _make_imdb_tar(tmp_path: Path) -> Path:
 class TestDownloadImdb:
     def test_returns_reviews_by_category(self, tmp_path):
         """download_imdb returns a dict of sentiment -> list[str] from a tar.gz."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = _make_imdb_tar(tmp_path)
 
@@ -62,7 +62,7 @@ class TestDownloadImdb:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If the extract directory already exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         # Pre-create the extract directory with one sentiment category.
         extract_dir = tmp_path / "aclImdb"
@@ -96,7 +96,7 @@ class TestLoadDemoSourceImdb:
 
     def test_imdb_source_populates_clips(self):
         """load_demo_source with source='imdb' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
         from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_reviews = {
@@ -125,7 +125,7 @@ class TestLoadDemoSourceImdb:
 
     def test_imdb_slice_is_applied(self):
         """slice_start/slice_end limits reviews per category."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
         from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_reviews = {

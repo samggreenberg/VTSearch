@@ -156,7 +156,7 @@ from unittest.mock import patch
 import numpy as np
 
 def test_rc_importer_builds_media_dicts():
-    from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+    from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
     rc_results = [{
         "contentID": "C1", "mediaID": "M1",
@@ -166,9 +166,9 @@ def test_rc_importer_builds_media_dicts():
 
     imp = ReCallerDatasetImporter()
     medias = {}
-    with patch("vtsearch.datasets.importers.recaller._rc_fetch_results", return_value=rc_results), \
-         patch("vtsearch.datasets.importers.recaller._dw_get_embedding", return_value=dw_result), \
-         patch("vtsearch.datasets.importers.recaller._pw_fetch_media", return_value=b"\x00"):
+    with patch("vtscore.datasets.importers.recaller._rc_fetch_results", return_value=rc_results), \
+         patch("vtscore.datasets.importers.recaller._dw_get_embedding", return_value=dw_result), \
+         patch("vtscore.datasets.importers.recaller._pw_fetch_media", return_value=b"\x00"):
         imp.run({"query_id": "Q1", "media_type": "audio"}, medias)
 
     assert len(medias) == 1

@@ -11,8 +11,8 @@ from collections import Counter
 
 from flask_smorest import Blueprint
 
-from vtsearch.datasets import list_importers
-from vtsearch.datasets.registry import list_datasets as _reg_list_all
+from vtscore.datasets import list_importers
+from vtscore.datasets.registry import list_datasets as _reg_list_all
 from vtsearch.routes.datasets._helpers import _normalize_media_type_param
 from vtsearch.schemas.datasets import (
     ClippersListQuerySchema,
@@ -37,7 +37,7 @@ datasets_listings_bp = Blueprint(
 @datasets_listings_bp.response(200, MediaTypesListResponseSchema)
 def media_types_list():
     """Return all registered media types with their metadata."""
-    from vtsearch.media import all_types_dict
+    from vtscore.media import all_types_dict
 
     return {"media_types": all_types_dict()}
 
@@ -53,7 +53,7 @@ def embedders_list(query: dict):
             (e.g. ``"images"``).  When provided, only embedders whose
             ``media_type_id`` matches are returned.
     """
-    from vtsearch.media import all_embedders_dict, embedders_for_type
+    from vtscore.media import all_embedders_dict, embedders_for_type
 
     media_type = _normalize_media_type_param(query.get("media_type", ""))
     if media_type:
@@ -75,7 +75,7 @@ def clippers_list(query: dict):
             (e.g. ``"images"``).  When provided, only clippers whose
             ``media_type`` matches are returned.
     """
-    from vtsearch.media import all_clippers_dict, clippers_for_type
+    from vtscore.media import all_clippers_dict, clippers_for_type
 
     media_type = _normalize_media_type_param(query.get("media_type", ""))
     if media_type:
@@ -100,7 +100,7 @@ def converters_list(query: dict):
             (e.g. ``"videos"``).  When provided, only converters whose
             ``source_type`` matches are returned.
     """
-    from vtsearch.converters import list_converters, list_converters_for_source, list_converters_for_target
+    from vtscore.converters import list_converters, list_converters_for_source, list_converters_for_target
 
     target = _normalize_media_type_param(query.get("target", ""))
     source = _normalize_media_type_param(query.get("source", ""))
@@ -127,7 +127,7 @@ def dataset_importers():
 @datasets_listings_bp.response(200, DatasetAllImportersListResponseSchema)
 def dataset_all_importers():
     """List all registered importers (including built-in ones)."""
-    from vtsearch.datasets.importers.tabs import list_picker_tabs
+    from vtscore.datasets.importers.tabs import list_picker_tabs
 
     all_importers = [imp.to_dict() for imp in list_importers()]
 

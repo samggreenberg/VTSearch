@@ -16,7 +16,7 @@ from vtsearch.auth import (
     set_login_provider,
     TrivialLoginProvider,
 )
-from vtsearch.datasets.registry import (
+from vtscore.datasets.registry import (
     can_user_access,
     is_owner,
     list_datasets_for_user,

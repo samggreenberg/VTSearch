@@ -52,7 +52,7 @@ def _make_zip(tmp_path: Path, arcname: str = "inner") -> Path:
 class TestDownloadAndExtract:
     def test_tar_gz_extraction(self, tmp_path):
         """Extracts a .tar.gz archive and removes it afterward."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = _make_tar_gz(tmp_path, arcname="data_dir")
         extract_to = tmp_path / "extracted"
@@ -83,7 +83,7 @@ class TestDownloadAndExtract:
 
     def test_tar_extraction(self, tmp_path):
         """Extracts a .tar archive and removes it afterward."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = _make_tar(tmp_path, arcname="data_dir")
         extract_to = tmp_path / "extracted"
@@ -113,7 +113,7 @@ class TestDownloadAndExtract:
 
     def test_zip_extraction(self, tmp_path):
         """Extracts a .zip archive and removes it afterward."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         zip_path = _make_zip(tmp_path, arcname="data_dir")
         extract_to = tmp_path / "extracted"
@@ -143,7 +143,7 @@ class TestDownloadAndExtract:
 
     def test_tgz_extension(self, tmp_path):
         """Recognises .tgz as gzip tar."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = _make_tar_gz(tmp_path, arcname="data_dir")
         extract_to = tmp_path / "extracted"
@@ -172,7 +172,7 @@ class TestDownloadAndExtract:
 
     def test_skips_when_check_path_exists(self, tmp_path):
         """No download or extraction when check_path already exists."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         check_path = tmp_path / "already_here"
         check_path.mkdir()
@@ -201,7 +201,7 @@ class TestDownloadAndExtract:
 
     def test_unsupported_format_raises(self, tmp_path):
         """Raises ValueError for unsupported archive extensions."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         # Create a dummy file so the download step succeeds.
         dummy = tmp_path / "test.rar"
@@ -228,7 +228,7 @@ class TestDownloadAndExtract:
 
     def test_progress_messages(self, tmp_path):
         """Reports download and extraction progress."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         # Place the archive in a subdirectory so it doesn't collide with
         # DATA_DIR / archive_name (which would cause the download to be skipped).
@@ -266,7 +266,7 @@ class TestDownloadAndExtract:
 
     def test_extraction_progress_has_total(self, tmp_path):
         """Extraction progress reports current/total counts (not indeterminate 0/0)."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         staging = tmp_path / "staging_area"
         staging.mkdir()
@@ -308,7 +308,7 @@ class TestCorruptArchiveValidation:
 
     def test_corrupt_tar_gz_deleted_and_raises(self, tmp_path):
         """An HTML page saved as .tar.gz is detected, deleted, and raises."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         def fake_download(url, dest, size, cb):
             dest.write_text("<html>404 Not Found</html>")
@@ -333,7 +333,7 @@ class TestCorruptArchiveValidation:
 
     def test_corrupt_zip_deleted_and_raises(self, tmp_path):
         """Non-zip content saved as .zip is detected and cleaned up."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         def fake_download(url, dest, size, cb):
             dest.write_bytes(b"this is not a zip file")
@@ -357,7 +357,7 @@ class TestCorruptArchiveValidation:
 
     def test_valid_tar_gz_passes_validation(self, tmp_path):
         """A valid .tar.gz file passes validation and extracts normally."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = _make_tar_gz(tmp_path, arcname="data_dir")
         extract_to = tmp_path / "extracted"
@@ -386,7 +386,7 @@ class TestCorruptArchiveValidation:
 
     def test_corrupt_download_cleaned_up(self, tmp_path):
         """A corrupt download is detected and its temp file is cleaned up."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         def fake_download(url, dest, size, cb):
             dest.write_bytes(b"this is not a valid archive at all")
@@ -412,7 +412,7 @@ class TestCorruptArchiveValidation:
 
     def test_error_message_is_user_friendly(self, tmp_path):
         """The error message mentions the dataset name and suggests retrying."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         def fake_download(url, dest, size, cb):
             dest.write_text("<html>Service Unavailable</html>")
@@ -441,7 +441,7 @@ class TestCdnDecompressedTarGz:
 
     def test_raw_tar_with_tar_gz_name_passes_validation(self, tmp_path):
         """A raw tar served for a .tar.gz URL passes validation."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         # Create an uncompressed tar but name it .tar.gz (mimics CDN behaviour).
         tar_path = _make_tar(tmp_path, arcname="data_dir")
@@ -453,7 +453,7 @@ class TestCdnDecompressedTarGz:
 
     def test_raw_tar_with_tar_gz_name_extracts(self, tmp_path):
         """A raw tar named .tar.gz extracts correctly via _download_and_extract."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = _make_tar(tmp_path, arcname="data_dir")
         misnamed = tmp_path / "staging" / "test.tar.gz"
@@ -490,7 +490,7 @@ class TestCaltech101ExtractionProgress:
     """Caltech-101 inner tar extraction reports determinate progress."""
 
     def test_inner_tar_reports_progress(self, tmp_path):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         # Build a fake caltech-101.zip containing a nested tar.gz
         inner_staging = tmp_path / "inner_staging" / "101_ObjectCategories"
@@ -543,7 +543,7 @@ class TestBbcNewsExtractionProgress:
     """BBC News zip extraction reports determinate progress."""
 
     def test_zip_reports_progress(self, tmp_path):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         # Build a fake BBC News zip
         zip_path = tmp_path / "bbc-news.zip"
@@ -591,7 +591,7 @@ class TestConcurrentDownloads:
         """Two threads downloading the same archive both complete without error."""
         import shutil
 
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         # Create a valid zip archive to serve as the download source.
         source_zip = tmp_path / "source.zip"
@@ -648,7 +648,7 @@ class TestConcurrentDownloads:
         the second cleans up without errors."""
         import shutil
 
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         source_zip = tmp_path / "source.zip"
         with zipfile.ZipFile(source_zip, "w") as zf:

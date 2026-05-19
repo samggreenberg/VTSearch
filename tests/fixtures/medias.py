@@ -5,12 +5,12 @@ import os
 
 import numpy as np
 
-from vtsearch.media.audio.audio_generator import generate_wav
-from vtsearch.config import DATA_DIR
-from vtsearch.media.audio.media_type import generate_waveform_thumbnail
+from vtscore.media.audio.audio_generator import generate_wav
+from vtscore.config import DATA_DIR
+from vtscore.media.audio.media_type import generate_waveform_thumbnail
 
 NUM_MEDIAS = 20
-from vtsearch.embedding import embed_audio_file
+from vtscore.embedding import embed_audio_file
 from vtsearch.state import medias
 
 

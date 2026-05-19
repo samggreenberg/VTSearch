@@ -1,6 +1,6 @@
 """Bulk embedding support tests.
 
-The :class:`~vtsearch.media.embedder.MediaEmbedder` ABC exposes a single
+The :class:`~vtscore.media.embedder.MediaEmbedder` ABC exposes a single
 bulk entrypoint (:meth:`embed_media_bulk`) that the dataset loader
 always routes through.  The default implementation loops per item and
 emits progress via ``_on_progress`` so long embeds stay responsive;
@@ -61,7 +61,7 @@ class TestEmbedderDefaults:
 
     def test_default_bulk_impl_loops_over_single(self, tmp_path):
         """The default _embed_media_bulk_impl dispatches to embed_media per item."""
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):
             @property
@@ -96,7 +96,7 @@ class TestEmbedderDefaults:
     def test_default_bulk_impl_emits_per_item_progress(self, tmp_path):
         """The default bulk loop must call _on_progress on each iteration
         so the progress bar keeps moving for slow local embedders."""
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):
             @property
@@ -136,7 +136,7 @@ class TestEmbedderDefaults:
 
     def test_empty_bulk_returns_empty(self):
         """Passing an empty list must not invoke the hook."""
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):
             @property
@@ -166,7 +166,7 @@ class TestLoaderRoutesToBulk:
     """The loader hands pending files to embed_media_bulk in a single call."""
 
     def test_single_bulk_call_for_folder(self, tmp_path):
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         for name in ("a.wav", "b.wav", "c.wav"):
             _write_wav(tmp_path / name)
@@ -176,8 +176,8 @@ class TestLoaderRoutesToBulk:
 
         medias: dict = {}
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
         ):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
@@ -191,7 +191,7 @@ class TestLoaderRoutesToBulk:
         """The loader sets emb._on_progress to its own on_progress for the
         duration of the bulk call, so progress emitted by the embedder (or
         its default per-item loop) reaches the UI."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         for name in ("a.wav", "b.wav"):
             _write_wav(tmp_path / name)
@@ -217,8 +217,8 @@ class TestLoaderRoutesToBulk:
 
         medias: dict = {}
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
         ):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=loader_progress)
 
@@ -229,7 +229,7 @@ class TestLoaderRoutesToBulk:
 
     def test_overrides_skip_bulk_call(self, tmp_path):
         """Files with content_vectors or custom_metadata embedding aren't sent to bulk."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         for name in ("keep.wav", "pre1.wav", "pre2.wav"):
             _write_wav(tmp_path / name)
@@ -242,8 +242,8 @@ class TestLoaderRoutesToBulk:
 
         medias: dict = {}
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
         ):
             load_dataset_from_folder(
                 tmp_path,
@@ -265,7 +265,7 @@ class TestLoaderRoutesToBulk:
 
     def test_skip_embedding_does_not_trigger_bulk(self, tmp_path):
         """skip_embedding=True must bypass the bulk API entirely."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         _write_wav(tmp_path / "a.wav")
 
@@ -274,8 +274,8 @@ class TestLoaderRoutesToBulk:
 
         medias: dict = {}
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
         ):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None, skip_embedding=True)
 
@@ -284,7 +284,7 @@ class TestLoaderRoutesToBulk:
 
     def test_bulk_returning_none_skips_file(self, tmp_path):
         """A None entry in the bulk response should skip that file."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         _write_wav(tmp_path / "good.wav")
         _write_wav(tmp_path / "bad.wav")
@@ -303,8 +303,8 @@ class TestLoaderRoutesToBulk:
 
         medias: dict = {}
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
         ):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
@@ -322,7 +322,7 @@ class TestChunkedLoaderBulkPerChunk:
     memory story where only one chunk's worth of embeddings is in RAM at a time."""
 
     def test_bulk_call_scoped_to_chunk(self, tmp_path):
-        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+        from vtscore.datasets.loader import load_dataset_from_folder_chunked
 
         for i in range(4):
             _write_wav(tmp_path / f"f{i}.wav")
@@ -331,8 +331,8 @@ class TestChunkedLoaderBulkPerChunk:
         emb = _make_bulk_embedder()
 
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]),
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
         ):
             chunks = list(
                 load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=2, on_progress=lambda *a: None)
@@ -358,7 +358,7 @@ class TestEmbedMediasDictWrapper:
     back to the original IDs."""
 
     def test_returns_dict_keyed_by_input_ids(self):
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):
             @property
@@ -389,7 +389,7 @@ class TestEmbedMediasDictWrapper:
 
     def test_handles_sparse_keys(self):
         """Non-contiguous keys (e.g. post-collapse_duplicates) round-trip."""
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):
             @property
@@ -418,7 +418,7 @@ class TestEmbedMediasDictWrapper:
     def test_propagates_none_for_failed_embeddings(self):
         """A None vector from the underlying bulk call surfaces as None
         at the matching key — no silent dropping like the loader does."""
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):
             @property
@@ -446,7 +446,7 @@ class TestEmbedMediasDictWrapper:
         assert out[3] is not None
 
     def test_empty_dict_returns_empty_dict(self):
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):
             @property
@@ -468,7 +468,7 @@ class TestEmbedMediasDictWrapper:
 
     def test_delegates_to_embed_media_bulk(self):
         """The wrapper calls embed_media_bulk once with values in key order."""
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         captured: list[list[dict]] = []
 

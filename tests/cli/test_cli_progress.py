@@ -2,9 +2,9 @@
 
 Covers two layers:
 
-1. The :mod:`vtsearch.cli_progress` module itself — format toggle, text /
+1. The :mod:`vtscore.cli_progress` module itself — format toggle, text /
    JSON output shape, error routing.
-2. End-to-end behaviour via :func:`vtsearch.cli.autodetect_main` — the
+2. End-to-end behaviour via :func:`vtscore.cli.autodetect_main` — the
    pipeline emits the documented events when invoked with the JSON format
    selected, and is byte-identical to the pre-flag behaviour in text mode.
 """
@@ -20,8 +20,9 @@ import pytest
 
 import app as app_module
 from helpers import make_dataset_file as _make_dataset_file
-from vtsearch import cli_progress
-from vtsearch.media.audio.audio_generator import generate_wav
+from vtscore import cli_progress
+
+from vtscore.media.audio.audio_generator import generate_wav
 from vtsearch.settings import get_detectors_dir
 
 
@@ -175,7 +176,7 @@ def _clean_tm_dir():
 
 
 def _write_detector(name: str, labelset: dict) -> Path:
-    from vtsearch.detectors.store import _detector_path, _write_detector as _w
+    from vtscore.detectors.store import _detector_path, _write_detector as _w
 
     path = _detector_path(name)
     _w(
@@ -194,7 +195,7 @@ def _write_detector(name: str, labelset: dict) -> Path:
 def _stub_resolve(monkeypatch, file_map: dict[str, Path]) -> None:
     from contextlib import contextmanager
 
-    import vtsearch.detectors.resolver as resolver_mod
+    import vtscore.detectors.resolver as resolver_mod
 
     @contextmanager
     def _fake_ctx(origin, origin_name="", filename=""):
@@ -260,7 +261,7 @@ class TestAutodetectJsonOutput:
 
         cli_progress.set_format("json")
 
-        from vtsearch.cli import autodetect_main
+        from vtscore.cli import autodetect_main
 
         autodetect_main(
             str(dataset_path),
@@ -293,7 +294,7 @@ class TestAutodetectJsonOutput:
         # text is the default but make it explicit so the test documents intent.
         cli_progress.set_format("text")
 
-        from vtsearch.cli import autodetect_main
+        from vtscore.cli import autodetect_main
 
         autodetect_main(
             str(dataset_path),

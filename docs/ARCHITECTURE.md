@@ -191,7 +191,7 @@ VTSearch/
 │   │   └── sync.py                 sync_to/from_labelset_source utilities
 │   │
 │   ├── eval/                       Evaluation framework
-│   │   ├── __main__.py             CLI entry point (python -m vtsearch.eval)
+│   │   ├── __main__.py             CLI entry point (python -m vtscore.eval)
 │   │   ├── config.py               Eval dataset catalogue
 │   │   ├── runner.py               run_eval() orchestrator
 │   │   ├── metrics.py              mAP, P@k, R@k, F1 calculations
@@ -391,8 +391,8 @@ trade-off via an `inclusion` parameter.  A separate
 thresholds.
 
 ```python
-from vtsearch.training.mlp import train_model
-from vtsearch.training.thresholds import find_optimal_threshold
+from vtscore.training.mlp import train_model
+from vtscore.training.thresholds import find_optimal_threshold
 
 model = train_model(X_train, y_train, input_dim=512, inclusion_value=0)
 threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
@@ -411,8 +411,8 @@ Instantiate it, call `load_models()`, then use `embed_media()` /
 dataset loader builds); for ad-hoc files, use the `media_from_path` helper:
 
 ```python
-from vtsearch.media.audio.embedder_clap import AudioClapEmbedder
-from vtsearch.media.embedder import media_from_path
+from vtscore.media.audio.embedder_clap import AudioClapEmbedder
+from vtscore.media.embedder import media_from_path
 
 embedder = AudioClapEmbedder()
 embedder.load_models()                                            # loads CLAP (cached)
@@ -452,7 +452,7 @@ embedder.load_models()
 To use an exporter standalone:
 
 ```python
-from vtsearch.exporters.server_json_file import EXPORTER
+from vtscore.exporters.server_json_file import EXPORTER
 
 result = EXPORTER.export(
     results={"media_type": "audio", "results": {...}},
@@ -463,7 +463,7 @@ result = EXPORTER.export(
 ### Dataset loading (without Flask)
 
 ```python
-from vtsearch.datasets.loader import load_dataset_from_folder
+from vtscore.datasets.loader import load_dataset_from_folder
 
 medias = {}
 load_dataset_from_folder(
@@ -714,7 +714,7 @@ Each clip dict includes two provenance fields:
 ### Origin class (`vtsearch/datasets/origin.py`)
 
 ```python
-from vtsearch.datasets.origin import Origin
+from vtscore.datasets.origin import Origin
 
 o = Origin("server_folder", {"path": "/data/audio", "media_type": "audio"})
 o.display()   # "server_folder(/data/audio)"
@@ -737,7 +737,7 @@ its name within that origin, its label (`"good"` / `"bad"`), and optional
 `contentID`, `mediaID`, etc.).
 
 ```python
-from vtsearch.datasets.labelset import LabelSet
+from vtscore.datasets.labelset import LabelSet
 
 # Build from current state
 ls = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes)

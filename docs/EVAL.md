@@ -7,7 +7,7 @@ VTSearch includes a built-in evaluation framework that measures how well its sor
 Run the full evaluation across all demo datasets:
 
 ```bash
-python -m vtsearch.eval --plot-dir eval_output
+python -m vtscore.eval --plot-dir eval_output
 ```
 
 This will:
@@ -30,7 +30,7 @@ Matplotlib and pandas are required for plot generation and are included in the d
 ## CLI reference
 
 ```
-python -m vtsearch.eval [OPTIONS]
+python -m vtscore.eval [OPTIONS]
 ```
 
 | Flag | Description | Default |
@@ -53,16 +53,16 @@ python -m vtsearch.eval [OPTIONS]
 
 ```bash
 # Text sort only, on image datasets, save JSON
-python -m vtsearch.eval --mode text --datasets caltech101_s caltech256_l --output results.json --plot-dir eval_output
+python -m vtscore.eval --mode text --datasets caltech101_s caltech256_l --output results.json --plot-dir eval_output
 
 # Learned sort with a different train/test split
-python -m vtsearch.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
+python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
 
 # Learned sort with safe thresholds and calibration tuning
-python -m vtsearch.eval --mode learned --safe-thresholds --calibrate-count 4 --plot-dir eval_output
+python -m vtscore.eval --mode learned --safe-thresholds --calibrate-count 4 --plot-dir eval_output
 
 # List available eval datasets
-python -m vtsearch.eval --list
+python -m vtscore.eval --list
 ```
 
 ## Available eval datasets
@@ -143,11 +143,11 @@ This script evaluates learned-sort quality at different train/test split ratios:
 #!/usr/bin/env python
 """Sweep train_fraction and plot learned-sort F1."""
 
-from vtsearch.embedding import initialize_models
+from vtscore.embedding import initialize_models
 initialize_models()
 
-from vtsearch.eval.runner import run_eval
-from vtsearch.eval.visualize import plot_eval_results
+from vtscore.eval.runner import run_eval
+from vtscore.eval.visualize import plot_eval_results
 
 train_fractions = [0.3, 0.5, 0.7, 0.9]
 datasets = ["caltech101_s"]
@@ -182,11 +182,11 @@ Evaluate multiple random seeds to measure variance:
 #!/usr/bin/env python
 """Run evaluation across multiple seeds to measure stability."""
 
-from vtsearch.embedding import initialize_models
+from vtscore.embedding import initialize_models
 initialize_models()
 
-from vtsearch.eval.runner import run_eval
-from vtsearch.eval.visualize import plot_eval_results
+from vtscore.eval.runner import run_eval
+from vtscore.eval.visualize import plot_eval_results
 
 seeds = [1, 2, 3, 42, 100]
 datasets = ["caltech101_s", "esc50_s"]
@@ -222,12 +222,12 @@ The voting-iterations evaluation measures how classification quality improves as
 
 from pathlib import Path
 
-from vtsearch.embedding import initialize_models
+from vtscore.embedding import initialize_models
 initialize_models()
 
-from vtsearch.datasets.loader import load_demo_dataset
-from vtsearch.eval.visualize import plot_voting_iterations
-from vtsearch.eval.voting_iterations import run_voting_iterations_eval
+from vtscore.datasets.loader import load_demo_dataset
+from vtscore.eval.visualize import plot_voting_iterations
+from vtscore.eval.voting_iterations import run_voting_iterations_eval
 
 # Load datasets
 datasets_to_eval = ["esc50_s", "caltech101_s"]
@@ -267,11 +267,11 @@ If you have pre-exported dataset pickle files, load them directly:
 #!/usr/bin/env python
 """Run voting iterations eval from pre-exported pickle files."""
 
-from vtsearch.embedding import initialize_models
+from vtscore.embedding import initialize_models
 initialize_models()
 
-from vtsearch.eval.visualize import plot_voting_iterations
-from vtsearch.eval.voting_iterations import run_voting_iterations_eval_from_pickles
+from vtscore.eval.visualize import plot_voting_iterations
+from vtscore.eval.voting_iterations import run_voting_iterations_eval_from_pickles
 
 df = run_voting_iterations_eval_from_pickles(
     dataset_paths={
@@ -289,7 +289,7 @@ plot_voting_iterations(df, output_dir="eval_output")
 The `plot_eval_results` and `plot_voting_iterations` functions can be called from any Python code:
 
 ```python
-from vtsearch.eval.visualize import plot_eval_results, plot_voting_iterations
+from vtscore.eval.visualize import plot_eval_results, plot_voting_iterations
 
 # Standard eval results -> list of PNG paths
 paths = plot_eval_results(results, output_dir="my_plots")

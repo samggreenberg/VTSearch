@@ -9,7 +9,7 @@ import numpy as np
 
 import app as app_module
 import vtsearch.state as _state
-import vtsearch.state.core as _core
+import vtscore.state.core as _core
 from vtsearch.state import (
     medias,
     vote_click_times,
@@ -175,7 +175,7 @@ class TestLabelFileSortModelSelection:
 
         fake_emb = np.random.default_rng(42).standard_normal(embedding_dim).astype(np.float32)
 
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         emb = embedders_for_type(media_type)[0]
 

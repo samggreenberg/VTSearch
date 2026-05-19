@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from vtsearch.datasets.split import split_dataset
+from vtscore.datasets.split import split_dataset
 
 
 def _make_clips(categories: dict[str, int]) -> dict[int, dict]:

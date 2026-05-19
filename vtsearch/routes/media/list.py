@@ -24,8 +24,8 @@ from typing import Any
 from flask import Response, jsonify, make_response, request, send_file
 from flask_smorest import Blueprint, abort
 
-from vtsearch.media.audio.ffmpeg import get_ffmpeg_exe
-from vtsearch.media.base import MediaResponse
+from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
+from vtscore.media.base import MediaResponse
 from vtsearch.schemas.media import (
     MediaAddToPileResponseSchema,
     MediaBatchRequestSchema,
@@ -290,7 +290,7 @@ def batch_medias(body: dict):
     Returns a JSON array of media metadata dicts; unknown IDs are silently
     omitted.
     """
-    from vtsearch.media import get as get_media_type  # noqa: PLC0415
+    from vtscore.media import get as get_media_type  # noqa: PLC0415
 
     ids = body["ids"]
 
@@ -423,7 +423,7 @@ def media_image(media_id: int):  # noqa: C901
 
     # For non-image types, delegate to the media type's image_response if available
     if media_type and media_type != "image":
-        from vtsearch.media import get as get_media_type  # noqa: PLC0415
+        from vtscore.media import get as get_media_type  # noqa: PLC0415
 
         try:
             mt = get_media_type(media_type)
@@ -495,8 +495,8 @@ def media_generic(media_id: int):
     """Serve the media content for any type via a single generic endpoint.
 
     Determines the media type from the media item's ``"type"`` field and
-    delegates to the registered :class:`~vtsearch.media.base.MediaType`'s
-    :meth:`~vtsearch.media.base.MediaType.media_response` method. This
+    delegates to the registered :class:`~vtscore.media.base.MediaType`'s
+    :meth:`~vtscore.media.base.MediaType.media_response` method. This
     endpoint works for all current and future media types without
     modification. Response body is either binary (image/audio/video bytes
     with the appropriate mimetype) or JSON (text content); the spec leaves
@@ -506,7 +506,7 @@ def media_generic(media_id: int):
     if not c:
         abort(404, message="not found")
 
-    from vtsearch.media import get as media_get
+    from vtscore.media import get as media_get
 
     try:
         mt = media_get(c.get("type", ""))
@@ -552,11 +552,11 @@ def vote_media(body: dict, media_id: int):
 
     toggle_vote(media_id, vote, region_box=region_box)
 
-    from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
     sync_labels_to_loaded_detector()
 
-    from vtsearch.labels.sync import sync_to_labelset_source
+    from vtscore.labels.sync import sync_to_labelset_source
 
     sync_to_labelset_source()
 
@@ -622,7 +622,7 @@ def add_media_to_pile():  # noqa: C901
     dataset_media_type = first_media.get("type", "audio")
     dataset_embedder_name = first_media.get("embedder", "")
 
-    from vtsearch.media import embedders_for_type, get_embedder
+    from vtscore.media import embedders_for_type, get_embedder
 
     embedder = None
     if dataset_embedder_name:
@@ -645,7 +645,7 @@ def add_media_to_pile():  # noqa: C901
         tmp.write(file_bytes)
         tmp_path = Path(tmp.name)
 
-    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
     try:
         embedding = embedder.embed_media(media_from_path(tmp_path))
@@ -658,11 +658,11 @@ def add_media_to_pile():  # noqa: C901
     # Generate thumbnail for non-image media
     thumb = None
     if dataset_media_type == "audio":
-        from vtsearch.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
+        from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
 
         thumb = generate_waveform_thumbnail(file_bytes)
     elif dataset_media_type == "video":
-        from vtsearch.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
+        from vtscore.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
 
         thumb = generate_video_thumbnail(file_bytes)
 

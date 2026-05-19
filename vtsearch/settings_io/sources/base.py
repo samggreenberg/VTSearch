@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtsearch.plugins import PluginField
-from vtsearch.sync import SyncSource
+from vtscore.plugins import PluginField
+from vtscore.sync import SyncSource
 
 SettingsSourceField = PluginField
 

@@ -67,7 +67,7 @@ vtsearch/media/<your_type>/
 
 ### What to implement
 
-Subclass `MediaType` from `vtsearch.media.base` and implement all abstract
+Subclass `MediaType` from `vtscore.media.base` and implement all abstract
 properties and methods.
 
 ```python
@@ -78,7 +78,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from vtsearch.media.base import DemoDataset, MediaResponse, MediaType
+from vtscore.media.base import DemoDataset, MediaResponse, MediaType
 
 
 class CodeMediaType(MediaType):
@@ -155,7 +155,7 @@ Expose the sentinels in your sub-package's `__init__.py`:
 ```python
 # vtsearch/media/code/__init__.py
 
-from vtsearch.media.code.media_type import CodeMediaType
+from vtscore.media.code.media_type import CodeMediaType
 
 MEDIA_TYPE = CodeMediaType()
 CLIPPERS = []  # No clippers yet — add when needed
@@ -268,7 +268,7 @@ embedder per media type should override the `is_default` property to return
 
 ### What to implement
 
-Subclass `MediaEmbedder` from `vtsearch.media.embedder`.
+Subclass `MediaEmbedder` from `vtscore.media.embedder`.
 
 ```python
 # vtsearch/media/code/embedder_codebert.py
@@ -280,7 +280,7 @@ from typing import Optional
 
 import numpy as np
 
-from vtsearch.media.embedder import MediaEmbedder
+from vtscore.media.embedder import MediaEmbedder
 
 
 class CodeBertEmbedder(MediaEmbedder):
@@ -522,12 +522,12 @@ clippers return **new media dicts** that can replace the original.
 
 ### What to implement
 
-Subclass `MediaClipper` from `vtsearch.media.base`.
+Subclass `MediaClipper` from `vtscore.media.base`.
 
 ```python
 # vtsearch/media/audio/clipper.py  (or a new file)
 
-from vtsearch.media.clipper import MediaClipper
+from vtscore.media.clipper import MediaClipper
 from typing import Any
 
 
@@ -576,7 +576,7 @@ Add the clipper to the `CLIPPERS` sentinel list in your media type's
 ```python
 # vtsearch/media/audio/__init__.py
 
-from vtsearch.media.audio.clipper import SoundOverlapClipper
+from vtscore.media.audio.clipper import SoundOverlapClipper
 # ...
 CLIPPERS = [SoundDefaultClipper(), SoundTilingClipper(2.0), SoundOverlapClipper(2.0)]
 ```
@@ -646,12 +646,12 @@ vtsearch/converters/<source>2<target>.py   # Your converter class
 
 ### What to implement
 
-Subclass `MediaConverter` from `vtsearch.converters.base`.
+Subclass `MediaConverter` from `vtscore.converters.base`.
 
 ```python
 # vtsearch/converters/audio2text.py
 
-from vtsearch.converters.base import MediaConverter
+from vtscore.converters.base import MediaConverter
 from typing import Any
 
 
@@ -772,7 +772,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Iterator
 
-from vtsearch.datasets.sources.base import MediaItem, MediaSource
+from vtscore.datasets.sources.base import MediaItem, MediaSource
 
 
 class S3MediaSource(MediaSource):

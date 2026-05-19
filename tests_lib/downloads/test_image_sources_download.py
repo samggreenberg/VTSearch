@@ -128,7 +128,7 @@ def _make_stanford_dogs_tar(tmp_path: Path) -> Path:
 class TestDownloadOxfordFlowers:
     def test_returns_extract_directory(self, tmp_path):
         """download_oxford_flowers returns the oxford_flowers/ directory."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tgz_path, mat_path = _make_oxford_flowers_fixture(tmp_path)
 
@@ -155,7 +155,7 @@ class TestDownloadOxfordFlowers:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If the extract directory already exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "oxford_flowers"
         jpg_dir = extract_dir / "jpg"
@@ -190,7 +190,7 @@ class TestDownloadFood101:
         """download_food101 returns the food-101/images/ directory."""
         import shutil
 
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = _make_food101_tar(tmp_path)
 
@@ -212,7 +212,7 @@ class TestDownloadFood101:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If the images directory already exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         images_dir = tmp_path / "food-101" / "images" / "apple_pie"
         images_dir.mkdir(parents=True)
@@ -245,7 +245,7 @@ class TestDownloadEurosat:
         """download_eurosat returns the EuroSAT_RGB/ directory."""
         import shutil
 
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         zip_path = _make_eurosat_zip(tmp_path)
 
@@ -266,7 +266,7 @@ class TestDownloadEurosat:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If the extract directory already exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "EuroSAT_RGB"
         (extract_dir / "Forest").mkdir(parents=True)
@@ -298,7 +298,7 @@ class TestDownloadStanfordDogs:
         """download_stanford_dogs returns the stanford_dogs/Images/ directory."""
         import shutil
 
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = _make_stanford_dogs_tar(tmp_path)
 
@@ -319,7 +319,7 @@ class TestDownloadStanfordDogs:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If the Images directory already exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         images_dir = tmp_path / "stanford_dogs" / "Images" / "n02085620-Chihuahua"
         images_dir.mkdir(parents=True)
@@ -352,7 +352,7 @@ class TestLoadOxfordFlowersMetadata:
         """Reads imagelabels.mat and maps numeric labels to category names."""
         import scipy.io
 
-        from vtsearch.datasets.loader import load_oxford_flowers_metadata
+        from vtscore.datasets.loader import load_oxford_flowers_metadata
 
         jpg_dir = tmp_path / "jpg"
         jpg_dir.mkdir()
@@ -390,9 +390,9 @@ class TestLoadDemoSourceOxfordFlowers:
 
     def test_oxford_flowers_populates_clips(self, tmp_path):
         """load_demo_source with source='oxford_flowers_102' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.image.media_type import ImageMediaType
 
         # Create stub image files.
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -427,9 +427,9 @@ class TestLoadDemoSourceOxfordFlowers:
 
     def test_oxford_flowers_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits images per category."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.image.media_type import ImageMediaType
 
         fake_metadata = {}
         for i in range(10):
@@ -471,9 +471,9 @@ class TestLoadDemoSourceFood101:
 
     def test_food101_populates_clips(self, tmp_path):
         """load_demo_source with source='food101' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.image.media_type import ImageMediaType
 
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
         (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -519,9 +519,9 @@ class TestLoadDemoSourceEurosat:
 
     def test_eurosat_populates_clips(self, tmp_path):
         """load_demo_source with source='eurosat' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.image.media_type import ImageMediaType
 
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
         (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -567,8 +567,8 @@ class TestLoadDemoSourceStanfordDogs:
 
     def test_stanford_dogs_populates_clips(self, tmp_path):
         """load_demo_source with source='stanford_dogs' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.media.image.media_type import ImageMediaType
 
         # Create folder structure: Images/n02085620-Chihuahua/img.jpg
         images_dir = tmp_path / "Images"
@@ -598,8 +598,8 @@ class TestLoadDemoSourceStanfordDogs:
 
     def test_stanford_dogs_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits images per breed."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.media.image.media_type import ImageMediaType
 
         images_dir = tmp_path / "Images"
         breed_dir = images_dir / "n02085620-Chihuahua"
@@ -626,7 +626,7 @@ class TestLoadDemoSourceStanfordDogs:
 
     def test_unsupported_source_still_raises(self):
         """Non-existent sources still raise ValueError."""
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.media.image.media_type import ImageMediaType
 
         mt = ImageMediaType()
         with pytest.raises(ValueError, match="Unsupported image source"):
@@ -648,7 +648,7 @@ class TestLoadDemoSourceStanfordDogs:
 class TestDownloadPlaces365:
     def test_returns_extract_directory(self, tmp_path):
         """download_places365 returns the places365/ directory with val_256/ and labels."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         val_tar_path = _make_places365_tar(tmp_path)
         labels_bytes = b"Places365_val_00000001.jpg 0\nPlaces365_val_00000002.jpg 1\n"
@@ -674,7 +674,7 @@ class TestDownloadPlaces365:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If val_256/ and the labels file already exist, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "places365"
         val_dir = extract_dir / "val_256"
@@ -707,7 +707,7 @@ class TestDownloadPlaces365:
 class TestLoadPlaces365Metadata:
     def test_maps_indices_to_categories(self, tmp_path):
         """Reads places365_val.txt and maps numeric indices to category names."""
-        from vtsearch.datasets.loader import load_places365_metadata
+        from vtscore.datasets.loader import load_places365_metadata
 
         val_dir = tmp_path / "val_256"
         val_dir.mkdir()
@@ -728,7 +728,7 @@ class TestLoadPlaces365Metadata:
 
     def test_out_of_range_indices_are_skipped(self, tmp_path):
         """Label indices outside the categories list are silently ignored."""
-        from vtsearch.datasets.loader import load_places365_metadata
+        from vtscore.datasets.loader import load_places365_metadata
 
         (tmp_path / "val_256").mkdir()
         (tmp_path / "places365_val.txt").write_text(
@@ -761,9 +761,9 @@ class TestLoadDemoSourcePlaces365:
 
     def test_places365_populates_clips(self, tmp_path):
         """load_demo_source with source='places365' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.image.media_type import ImageMediaType
 
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
         (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -797,9 +797,9 @@ class TestLoadDemoSourcePlaces365:
 
     def test_places365_filters_by_requested_categories(self, tmp_path):
         """Metadata entries whose category is not requested are dropped."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.image.media_type import ImageMediaType
 
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
         (tmp_path / "img2.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -832,9 +832,9 @@ class TestLoadDemoSourcePlaces365:
 
     def test_places365_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits images per category."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.image.media_type import ImageMediaType
 
         fake_metadata = {}
         for i in range(10):
@@ -867,7 +867,7 @@ class TestPlaces365CategoriesList:
     """The hardcoded ``PLACES365_CATEGORIES`` matches the upstream label space."""
 
     def test_has_365_unique_entries(self):
-        from vtsearch.media.image._demo_categories import PLACES365_CATEGORIES
+        from vtscore.media.image._demo_categories import PLACES365_CATEGORIES
 
         cats = PLACES365_CATEGORIES
         assert len(cats) == 365

@@ -605,7 +605,7 @@ class DetectorSaveLabelsResponseSchema(Schema):
 class _DetectorLabelViewSchema(Schema):
     """One element in a detector's labels-detail response.
 
-    Mirrors :func:`vtsearch.detectors.labelset_elements.build_element_view`.
+    Mirrors :func:`vtscore.detectors.labelset_elements.build_element_view`.
     """
 
     id = fields.String(required=True)

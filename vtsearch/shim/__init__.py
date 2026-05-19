@@ -13,14 +13,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from vtsearch.config import DATA_DIR, CoreConfig
+from vtscore.config import DATA_DIR, CoreConfig
 
 
 def _flask_dataset_context_resolver() -> Any:
     """Read the request-scoped dataset context off ``flask.g``.
 
     Returns ``None`` outside a request context (background threads, CLI,
-    library callers) so :func:`vtsearch.state.core.get_active_context`
+    library callers) so :func:`vtscore.state.core.get_active_context`
     can fall through to its thread-local / empty-context fallback.
     """
     from flask import g, has_request_context
@@ -40,14 +40,14 @@ def _flask_detector_context_resolver() -> Any:
 
 
 def register_flask_context_resolvers() -> None:
-    """Install Flask-aware request-context resolvers on ``vtsearch.state.core``.
+    """Install Flask-aware request-context resolvers on ``vtscore.state.core``.
 
     Called once during Flask app startup.  After this, the ``medias`` /
     ``good_votes`` proxies and the ``get_active_*_context()`` helpers
     pick up whatever the ``before_request`` hook stashes on ``g`` for
     the duration of each request.
     """
-    from vtsearch.state.core import (
+    from vtscore.state.core import (
         register_dataset_context_resolver,
         register_detector_context_resolver,
     )
@@ -65,7 +65,7 @@ def register_app_persistence_hooks() -> None:
     app's settings as the backing store for each hook.
     """
     from vtsearch import settings
-    from vtsearch.datasets.load_pipeline import register_last_embedder_persistence_hook
+    from vtscore.datasets.load_pipeline import register_last_embedder_persistence_hook
     from vtsearch.state import register_setting_persister
 
     register_last_embedder_persistence_hook(settings.set_last_embedder_for_media_type)
@@ -117,24 +117,24 @@ def register_app_config_builder() -> None:
     using ``CoreConfig.from_settings()`` while the bridge to
     ``vtsearch.settings`` lives entirely in this shim package.
     """
-    from vtsearch.config import register_core_config_builder
+    from vtscore.config import register_core_config_builder
 
     register_core_config_builder(build_core_config)
 
 
 def register_app_plugin_families() -> None:
-    """Register app-only plugin families with :mod:`vtsearch.plugins.inventory`.
+    """Register app-only plugin families with :mod:`vtscore.plugins.inventory`.
 
     The settings importers / exporters / sources live in
     :mod:`vtsearch.settings_io`, which is app-tier (it round-trips
     ``vtsearch.settings`` to disk).  Registering them here keeps
-    ``vtsearch.plugins.inventory`` free of any ``vtsearch.settings_io``
+    ``vtscore.plugins.inventory`` free of any ``vtsearch.settings_io``
     import — see ``docs/plans/extract-library.md`` Phase 5.
 
     Called once at Flask app startup, before the argparse parser is built
     so ``--list-settings-importers`` and friends get their shortcut flags.
     """
-    from vtsearch.plugins.inventory import FamilyProvider, register_plugin_family
+    from vtscore.plugins.inventory import FamilyProvider, register_plugin_family
 
     def _settings_importers():
         from vtsearch.settings_io.importers import list_settings_importers

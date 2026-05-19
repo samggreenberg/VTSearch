@@ -39,7 +39,7 @@ Each processor operates on exactly one media type.
 A Detector answers "is this media Good?" with a boolean.
 
 ```python
-from vtsearch.media.processors import Detector
+from vtscore.media.processors import Detector
 from typing import Any
 
 
@@ -67,7 +67,7 @@ class LoudnessDetector(Detector):
 A Localizer returns bounding boxes with confidence scores.
 
 ```python
-from vtsearch.media.processors import Localizer
+from vtscore.media.processors import Localizer
 from typing import Any
 
 
@@ -100,7 +100,7 @@ class FaceLocalizer(Localizer):
 An Extractor returns structured details for each occurrence found.
 
 ```python
-from vtsearch.media.processors import Extractor
+from vtscore.media.processors import Extractor
 from typing import Any
 
 

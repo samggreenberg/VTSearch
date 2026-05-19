@@ -22,10 +22,10 @@ from uuid import uuid4
 from flask import jsonify, request
 from flask_smorest import Blueprint, abort
 
-import vtsearch.security.path_validation as _paths
-from vtsearch.config import EMBEDDINGS_DIR
-from vtsearch.datasets import DEMO_DATASETS, get_importer, list_importers
-from vtsearch.datasets.load_pipeline import (
+import vtscore.security.path_validation as _paths
+from vtscore.config import EMBEDDINGS_DIR
+from vtscore.datasets import DEMO_DATASETS, get_importer, list_importers
+from vtscore.datasets.load_pipeline import (
     STAGING_DIR,
     _run_importer_in_background,
     _stage_importer_in_background,
@@ -43,7 +43,7 @@ from vtsearch.schemas.datasets import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
 )
-from vtsearch.security.pickle import peek_pickle_dataset_summary
+from vtscore.security.pickle import peek_pickle_dataset_summary
 
 datasets_staging_bp = Blueprint(
     "datasets_staging",

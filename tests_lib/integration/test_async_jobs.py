@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import threading
 
-from vtsearch.concurrency.async_jobs import AsyncJob, JobManager
+from vtscore.concurrency.async_jobs import AsyncJob, JobManager
 
 
 def _make_target(release: threading.Event, started: threading.Event, marker: list):

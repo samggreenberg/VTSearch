@@ -51,15 +51,15 @@ def _ensure_extractor_factories():
     """Populate the factory registry on first use (lazy to avoid import cycles)."""
     if _EXTRACTOR_FACTORIES:
         return
-    from vtsearch.media.image.extractor import ImageClassExtractor
+    from vtscore.media.image.extractor import ImageClassExtractor
 
     _EXTRACTOR_FACTORIES["image_class"] = ImageClassExtractor.from_config
 
-    from vtsearch.media.image.ocr_extractor import OCRExtractor
+    from vtscore.media.image.ocr_extractor import OCRExtractor
 
     _EXTRACTOR_FACTORIES["ocr"] = OCRExtractor.from_config
 
-    from vtsearch.media.audio.speech_extractor import SpeechExtractor
+    from vtscore.media.audio.speech_extractor import SpeechExtractor
 
     _EXTRACTOR_FACTORIES["speech"] = SpeechExtractor.from_config
 
@@ -135,7 +135,7 @@ def _ensure_localizer_factories():
     """Populate the localizer factory registry on first use."""
     if _LOCALIZER_FACTORIES:
         return
-    from vtsearch.media.image.face_localizer import FaceLocalizer
+    from vtscore.media.image.face_localizer import FaceLocalizer
 
     _LOCALIZER_FACTORIES["face"] = FaceLocalizer.from_config
 

@@ -22,8 +22,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from vtsearch.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
-from vtsearch.datasets.importers.server_files import (
+from vtscore.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
+from vtscore.datasets.importers.server_files import (
     ServerFilesDatasetImporter,
     _read_npz_paths_file,
     _read_paths_and_vectors,
@@ -255,7 +255,7 @@ class TestLocalUploadVectorsFile:
         server_folder importer's ``content_vectors`` at the moment the
         load function would call into the importer.  Works for both the
         chunked and non-chunked dispatch paths."""
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         def _fake_run(load_fn, origin, **kwargs):
             importer = get_importer("server_folder")
@@ -276,7 +276,7 @@ class TestLocalUploadVectorsFile:
         return _fake_run
 
     def test_upload_with_vectors_file_populates_importer_content_vectors(self, client, tmp_path, monkeypatch):
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         monkeypatch.setattr(
             "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
@@ -376,7 +376,7 @@ class TestServerFolderVectorsFileField:
     """
 
     def test_field_is_optional_and_advertises_npz(self):
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         imp = ServerFolderDatasetImporter()
         field = next((f for f in imp.fields if f.key == "vectors_file"), None)
@@ -391,7 +391,7 @@ class TestServerFolderVectorsFileField:
         importer skips re-embedding and uses the supplied vectors."""
         from helpers import make_raw_wav_bytes
 
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         folder = tmp_path / "data"
         folder.mkdir()
@@ -425,7 +425,7 @@ class TestServerFolderVectorsFileField:
         it — the importer runs the embedder as usual."""
         from helpers import make_raw_wav_bytes
 
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         folder = tmp_path / "data"
         folder.mkdir()

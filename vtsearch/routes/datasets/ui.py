@@ -14,10 +14,10 @@ from pathlib import Path
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
-from vtsearch.datasets import DEMO_DATASETS
-from vtsearch.datasets.loader import read_pkl_clipper, read_pkl_embedder
-from vtsearch.datasets.load_pipeline import _origin_to_str
+from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
+from vtscore.datasets import DEMO_DATASETS
+from vtscore.datasets.loader import read_pkl_clipper, read_pkl_embedder
+from vtscore.datasets.load_pipeline import _origin_to_str
 from vtsearch.routes._shared import format_mtime
 from vtsearch.schemas.datasets import (
     BrowseMediaFilesQuerySchema,
@@ -131,8 +131,8 @@ def demo_dataset_list(query: dict):
     * ``"needs_embedding"`` – source data is downloaded but not yet embedded.
     * ``"needs_download"`` – source data must be downloaded (and then embedded).
     """
-    from vtsearch.converters import list_converters_for_source
-    from vtsearch.media import get as media_get
+    from vtscore.converters import list_converters_for_source
+    from vtscore.media import get as media_get
 
     requested_embedder = query.get("embedder", "").strip()
     requested_clipper = query.get("clipper", "").strip()
@@ -206,7 +206,7 @@ def _media_extensions() -> set[str]:
     """Lazily build the set of known media-file extensions (lowercase, with dot)."""
     global _MEDIA_EXTENSIONS
     if _MEDIA_EXTENSIONS is None:
-        from vtsearch.media import all_types
+        from vtscore.media import all_types
 
         exts: set[str] = set()
         for mt in all_types():
@@ -329,7 +329,7 @@ def detect_media_type(query: dict):
     intercepted by the app-level ``NotFound`` errorhandler and keeps the
     legacy ``{"error": "Not Found", "request_id": ...}`` envelope.
     """
-    from vtsearch.datasets.media_type_detection import detect_media_types_in_folder
+    from vtscore.datasets.media_type_detection import detect_media_types_in_folder
 
     source = query["source"].strip() or "folder"
     subpath = query["path"].strip()
@@ -371,7 +371,7 @@ def select_browsed_file(body: dict):
     import shutil
     import uuid
 
-    from vtsearch.config import DATA_DIR
+    from vtscore.config import DATA_DIR
 
     source = body["source"].strip()
     file_path = body["path"].strip()
