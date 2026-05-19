@@ -332,7 +332,7 @@ class TestAutorunExtractors:
 
     def test_stored_extractor_has_correct_fields(self, client):
         self._post_extractor(client, "field-check")
-        from vtsearch.state import autorun_extractors
+        from vtsearch.autorun_processors import autorun_extractors
 
         assert "field-check" in autorun_extractors
         stored = autorun_extractors["field-check"]
@@ -406,7 +406,7 @@ class TestAutoExtract:
 
     def test_no_matching_media_type_returns_400(self, client):
         # Clips are audio; add an image extractor
-        from vtsearch.state import autorun_extractors
+        from vtsearch.autorun_processors import autorun_extractors
 
         autorun_extractors["img-ext"] = {
             "name": "img-ext",

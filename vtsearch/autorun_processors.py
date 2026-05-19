@@ -1,14 +1,33 @@
-"""Autorun extractor / localizer CRUD operations."""
+"""App-side singleton for autorun extractor / localizer policy.
+
+Which processors should automatically run on every newly-loaded media item
+is a user-facing policy concern, not a library concern.  The library
+(``vtscore``, see ``docs/plans/extract-library.md``) keeps the
+``Processor`` / ``Extractor`` / ``Localizer`` ABCs and the code that
+applies them; the app owns the registry of "which ones are active".
+
+This module replaces the module-level dicts that previously lived in
+``vtsearch/state/core.py`` and the CRUD that lived in
+``vtsearch/state/processors.py``.  Behaviour is unchanged — the storage
+is still process-global and thread-safe.
+"""
 
 from __future__ import annotations
 
+import threading
+import time
 from typing import Any
 
-from vtsearch.state.core import (
-    _state_lock,
-    autorun_extractors,
-    autorun_localizers,
-)
+
+# Independent lock so this module has no import-time coupling to
+# ``vtsearch.state.core``.  Reentrant so callers that already hold it
+# can call back in safely.
+_lock = threading.RLock()
+
+# Module-level singletons — same shape and semantics as the old
+# ``vtsearch.state.core.autorun_extractors`` / ``autorun_localizers`` dicts.
+autorun_extractors: dict[str, dict[str, Any]] = {}
+autorun_localizers: dict[str, dict[str, Any]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -25,9 +44,7 @@ def add_autorun_extractor(name: str, extractor_type: str, media_type: str, confi
         media_type: The media type the extractor operates on (``"image"``, etc.).
         config: Extractor-specific configuration dict (class name, threshold, etc.).
     """
-    import time
-
-    with _state_lock:
+    with _lock:
         autorun_extractors[name] = {
             "name": name,
             "extractor_type": extractor_type,
@@ -43,7 +60,7 @@ def remove_autorun_extractor(name: str) -> bool:
     Returns:
         ``True`` if the extractor was found and removed; ``False`` otherwise.
     """
-    with _state_lock:
+    with _lock:
         if name in autorun_extractors:
             del autorun_extractors[name]
             return True
@@ -56,7 +73,7 @@ def rename_autorun_extractor(old_name: str, new_name: str) -> bool:
     Returns:
         ``True`` if the rename succeeded; ``False`` otherwise.
     """
-    with _state_lock:
+    with _lock:
         if old_name in autorun_extractors and new_name not in autorun_extractors:
             autorun_extractors[new_name] = autorun_extractors[old_name].copy()
             autorun_extractors[new_name]["name"] = new_name
@@ -67,13 +84,13 @@ def rename_autorun_extractor(old_name: str, new_name: str) -> bool:
 
 def get_autorun_extractors() -> dict[str, dict[str, Any]]:
     """Return a shallow copy of all autorun extractors."""
-    with _state_lock:
+    with _lock:
         return autorun_extractors.copy()
 
 
 def get_autorun_extractors_by_media(media_type: str) -> dict[str, dict[str, Any]]:
     """Return all autorun extractors matching a given media type."""
-    with _state_lock:
+    with _lock:
         return {name: ext for name, ext in autorun_extractors.items() if ext["media_type"] == media_type}
 
 
@@ -84,9 +101,7 @@ def get_autorun_extractors_by_media(media_type: str) -> dict[str, dict[str, Any]
 
 def add_autorun_localizer(name: str, localizer_type: str, media_type: str, config: dict[str, Any]) -> None:
     """Add or overwrite a named autorun localizer in the global store."""
-    import time
-
-    with _state_lock:
+    with _lock:
         autorun_localizers[name] = {
             "name": name,
             "localizer_type": localizer_type,
@@ -98,7 +113,7 @@ def add_autorun_localizer(name: str, localizer_type: str, media_type: str, confi
 
 def remove_autorun_localizer(name: str) -> bool:
     """Remove a named autorun localizer. Returns True if found."""
-    with _state_lock:
+    with _lock:
         if name in autorun_localizers:
             del autorun_localizers[name]
             return True
@@ -107,7 +122,7 @@ def remove_autorun_localizer(name: str) -> bool:
 
 def rename_autorun_localizer(old_name: str, new_name: str) -> bool:
     """Rename a autorun localizer. Returns True if succeeded."""
-    with _state_lock:
+    with _lock:
         if old_name in autorun_localizers and new_name not in autorun_localizers:
             autorun_localizers[new_name] = autorun_localizers[old_name].copy()
             autorun_localizers[new_name]["name"] = new_name
@@ -118,11 +133,18 @@ def rename_autorun_localizer(old_name: str, new_name: str) -> bool:
 
 def get_autorun_localizers() -> dict[str, dict[str, Any]]:
     """Return a shallow copy of all autorun localizers."""
-    with _state_lock:
+    with _lock:
         return autorun_localizers.copy()
 
 
 def get_autorun_localizers_by_media(media_type: str) -> dict[str, dict[str, Any]]:
     """Return all autorun localizers matching a given media type."""
-    with _state_lock:
+    with _lock:
         return {name: loc for name, loc in autorun_localizers.items() if loc["media_type"] == media_type}
+
+
+def clear_all_autorun() -> None:
+    """Drop every registered autorun extractor and localizer. For tests."""
+    with _lock:
+        autorun_extractors.clear()
+        autorun_localizers.clear()

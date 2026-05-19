@@ -20,7 +20,7 @@ from vtsearch.schemas.processors import (
     PregenProcessorsAddResponseSchema,
     PregenProcessorsListResponseSchema,
 )
-from vtsearch.state import (
+from vtsearch.autorun_processors import (
     add_autorun_extractor,
     add_autorun_localizer,
     get_autorun_extractors,
