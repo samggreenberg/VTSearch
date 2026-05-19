@@ -59,6 +59,10 @@ export class NewDetectorModalComponent implements OnInit {
   view: ModalView = 'main';
   tab: ModalTab = 'blank';
   name = '';
+  /** True once the user has typed into the name field. While false, the
+   *  name auto-tracks ``pendingText`` (sanitised) so users don't have to
+   *  type the same string twice. */
+  nameTouched = false;
   mediaType = 'audio';
   pendingText = '';
   mediaTypes: string[] = [];
@@ -272,6 +276,24 @@ export class NewDetectorModalComponent implements OnInit {
 
   unlockMediaType(): void {
     this.mediaTypeLocked = false;
+  }
+
+  /** Trim and collapse internal whitespace so a pasted multi-line query
+   *  becomes a single-line name. */
+  private sanitizeName(text: string): string {
+    return text.trim().replace(/\s+/g, ' ');
+  }
+
+  onPendingTextInput(value: string): void {
+    this.pendingText = value;
+    if (!this.nameTouched) {
+      this.name = this.sanitizeName(value);
+    }
+  }
+
+  onNameInput(value: string): void {
+    this.nameTouched = true;
+    this.name = value;
   }
 
   toggleMediaTypeDropdown(): void {

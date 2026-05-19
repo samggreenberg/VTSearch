@@ -19,7 +19,8 @@
         <input
           id="detector-name"
           class="form-input"
-          [(ngModel)]="name"
+          [ngModel]="name"
+          (ngModelChange)="onNameInput($event)"
           name="name"
           placeholder="e.g. Dog Barks"
           title="A short name to identify this detector"
@@ -100,7 +101,8 @@
               <div class="text-input-row">
                 <input
                   class="form-input"
-                  [(ngModel)]="pendingText"
+                  [ngModel]="pendingText"
+                  (ngModelChange)="onPendingTextInput($event)"
                   name="pendingText"
                   placeholder="e.g. dog barking sounds"
                   title="A text description of what this detector should find"
