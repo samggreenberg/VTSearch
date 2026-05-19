@@ -15,8 +15,8 @@ The expensive work is **introducing seams in the current monolith**. Once `vtsea
 
 ## Phase 0 — Preparation (non-blocking, do anytime)
 
-- [ ] Inventory the actual public surface that external consumers would call. Capture as a docstring-only API sketch in `docs/vtscore-api.md`. This is the contract the refactor must preserve.
-- [ ] Add a CI job that runs the full test suite with `flask` *uninstalled* against a candidate library subset, to prove import-cleanliness as the seams land. Initially this job will fail; it becomes the green light for Phase 5.
+- [x] Inventory the actual public surface that external consumers would call. Capture as a docstring-only API sketch in `docs/vtscore-api.md`. This is the contract the refactor must preserve. *(Landed: `docs/vtscore-api.md`. Also flagged that the codebase has moved on from `models/` → `detectors/`/`embedding/`/`training/` and that `concurrency/` and `security/` have graduated; the "final shape" section below should be updated during Phase 1 to match.)*
+- [ ] Add a CI job that runs the full test suite with `flask` *uninstalled* against a candidate library subset, to prove import-cleanliness as the seams land. Initially this job will fail; it becomes the green light for Phase 5. *(Caveat: VTSearch has no GitHub Actions workflows today — `./run-tests.sh` is the source of truth per CLAUDE.md. The equivalent gate here is a new `./run-tests.sh vtscore-clean` mode that runs library-candidate tests in a venv with Flask absent; revisit when Phase 5 is ready.)*
 
 ## Phase 1 — Cut the Flask seam
 
