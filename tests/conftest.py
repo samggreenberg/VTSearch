@@ -252,6 +252,13 @@ def reset_state():
 
     reset_all_async_jobs_for_tests()
 
+    # Cancel any debounced labelset-source push left over from the
+    # previous test so its captured contexts don't fire after this
+    # test's reset_state has dropped them.
+    from vtsearch.labels.sync import reset_label_sync_for_tests
+
+    reset_label_sync_for_tests()
+
     # Reset CLI progress format so a test that flips it to "json" can't
     # leak the choice into the next test.
     from vtsearch import cli_progress

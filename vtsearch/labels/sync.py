@@ -4,15 +4,33 @@ Provides :func:`sync_to_labelset_source` which exports the current
 detector's labels to its linked labelset source (if any), and
 :func:`sync_from_labelset_source` which imports labels from the source.
 
+``sync_to_labelset_source`` is **debounced and asynchronous**: each call
+schedules a background push that fires after ``_DEBOUNCE_DELAY`` seconds
+of quiet (currently 200ms).  Rapid voting bursts collapse into a single
+sync run that uses the latest state, so a slow target (webhook, slow
+disk) never stalls the voting request handler.  Use
+:func:`flush_pending_label_syncs` to drain the queue synchronously when
+deterministic behaviour is needed (tests, graceful shutdown).  An
+``atexit`` hook calls ``flush_pending_label_syncs`` so the most recent
+vote's push survives normal interpreter exit (Ctrl-C, gunicorn SIGQUIT,
+``sys.exit``).  Hard kills (SIGKILL, ``os._exit``) bypass atexit and
+still drop the last 200ms of work — accept that as the cost of debounce.
+
 A module-level (NOT thread-local) flag, coordinated by ``_sync_lock``,
 prevents re-exporting during an import pass — including from concurrent
-``sync_to`` calls running on other threads.
+``_push_to_labelset_source`` calls running on other threads.
 """
 
 from __future__ import annotations
 
+import atexit
 import logging
 import threading
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from vtsearch.state.core import DatasetContext, DetectorContext
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +41,165 @@ _sync_lock = threading.RLock()
 _syncing: bool = False
 
 
-def sync_to_labelset_source() -> None:
-    """Push current detector labels to the linked labelset source (if any).
+# Debounce window for ``sync_to_labelset_source``.  200ms coalesces a
+# rapid voting burst into a single background push while staying short
+# enough that the on-disk labels match the UI within a tick.
+_DEBOUNCE_DELAY = 0.2
 
-    Call this after vote operations when the active detector may have
-    a labelset source attached.  Skips silently if no source is configured
-    or if we are already inside a sync-from-source import.
+
+@dataclass
+class _PendingSync:
+    """One scheduled debounce + the contexts to run it under."""
+
+    timer: threading.Timer
+    user: str | None
+    dataset_ctx: "DatasetContext"
+    detector_ctx: "DetectorContext"
+
+
+# Per-detector debounce slot.  Keyed by ``detector_id`` so concurrent
+# voting on two detectors doesn't coalesce one detector's push into the
+# other's window.
+_pending_lock = threading.Lock()
+_pending_syncs: dict[str, _PendingSync] = {}
+
+# Held by ``_run_pending_sync`` while a worker is in flight and acquired
+# by :func:`flush_pending_label_syncs` so flush() doesn't return while a
+# debounced timer is still mid-write.  Separate from ``_sync_lock`` so a
+# concurrent ``sync_from_labelset_source`` still serializes correctly.
+_workers_lock = threading.Lock()
+
+
+def sync_to_labelset_source() -> None:
+    """Schedule a debounced background push to the active detector's labelset source.
+
+    Returns immediately.  The actual push runs on a background timer
+    thread ~200ms after the most recent call for this detector; further
+    calls within the window restart the timer and overwrite the captured
+    contexts (latest wins), so a burst of votes turns into one sync run.
+
+    Silently skips if no labelset source is configured for the active
+    detector, if no detector is active, or if a ``sync_from`` import is
+    currently in progress (re-checked at execution time, not here).
+    """
+    from vtsearch.auth import get_current_user
+    from vtsearch.state.core import get_active_context, get_active_detector_context
+
+    detector_ctx = get_active_detector_context()
+    if detector_ctx is None or not detector_ctx.labelset_source:
+        return
+
+    detector_id = detector_ctx.detector_id
+    if not detector_id:
+        return
+
+    user = get_current_user()
+    dataset_ctx = get_active_context()
+
+    with _pending_lock:
+        existing = _pending_syncs.get(detector_id)
+        if existing is not None:
+            existing.timer.cancel()
+        timer = threading.Timer(_DEBOUNCE_DELAY, _run_pending_sync, args=(detector_id,))
+        timer.daemon = True
+        _pending_syncs[detector_id] = _PendingSync(
+            timer=timer,
+            user=user,
+            dataset_ctx=dataset_ctx,
+            detector_ctx=detector_ctx,
+        )
+        timer.start()
+
+
+def _run_pending_sync(detector_id: str) -> None:
+    """Timer callback: pop the pending entry and run the actual push.
+
+    Holds ``_workers_lock`` while running so :func:`flush_pending_label_syncs`
+    can wait for an in-flight write to finish before returning.
+    """
+    with _workers_lock:
+        with _pending_lock:
+            entry = _pending_syncs.pop(detector_id, None)
+        if entry is None:
+            return
+        _push_with_thread_context(entry)
+
+
+def _push_with_thread_context(entry: _PendingSync) -> None:
+    """Set thread-local user / dataset / detector context, run the push, restore."""
+    from vtsearch.auth import get_thread_user, set_thread_user
+    from vtsearch.state.core import (
+        get_thread_dataset_context,
+        get_thread_detector_context,
+        set_thread_dataset_context,
+        set_thread_detector_context,
+    )
+
+    prev_user = get_thread_user()
+    prev_dataset = get_thread_dataset_context()
+    prev_detector = get_thread_detector_context()
+    set_thread_user(entry.user)
+    set_thread_dataset_context(entry.dataset_ctx)
+    set_thread_detector_context(entry.detector_ctx)
+    try:
+        _push_to_labelset_source()
+    finally:
+        set_thread_user(prev_user)
+        set_thread_dataset_context(prev_dataset)
+        set_thread_detector_context(prev_detector)
+
+
+def flush_pending_label_syncs() -> None:
+    """Run every pending debounced sync now and wait for in-flight workers.
+
+    Used by tests (so they can assert the file was written) and by any
+    graceful-shutdown path.  Cancels every pending timer, then runs the
+    sync inline on the calling thread.  Acquires ``_workers_lock`` so any
+    timer that has already fired and is mid-write is waited out before
+    this returns.
+    """
+    with _workers_lock:
+        with _pending_lock:
+            entries = list(_pending_syncs.values())
+            for entry in entries:
+                entry.timer.cancel()
+            _pending_syncs.clear()
+        for entry in entries:
+            _push_with_thread_context(entry)
+
+
+def reset_label_sync_for_tests() -> None:
+    """Cancel every pending sync and drop captured contexts (for conftest).
+
+    Unlike :func:`flush_pending_label_syncs`, this does **not** run the
+    pending pushes — it discards them, which is what the autouse
+    ``reset_state`` fixture wants between tests so a sync scheduled by
+    one test's contexts can't fire after those contexts are gone.
+    """
+    global _syncing
+
+    with _workers_lock:
+        with _pending_lock:
+            for entry in _pending_syncs.values():
+                entry.timer.cancel()
+            _pending_syncs.clear()
+        with _sync_lock:
+            _syncing = False
+
+
+# Drain any pending debounced push at interpreter exit so the most recent
+# vote isn't dropped on Ctrl-C / SIGQUIT / sys.exit.  Fires once per
+# process; no-op when the queue is empty.  SIGKILL / os._exit bypass
+# atexit and still lose the last 200ms — unavoidable for any debounce.
+atexit.register(flush_pending_label_syncs)
+
+
+def _push_to_labelset_source() -> None:
+    """Synchronously push current detector labels to the linked source.
+
+    Reads the active detector and dataset contexts via the standard
+    resolution chain — callers running on a background thread must arrange
+    thread-local context propagation before invoking this.
     """
     from vtsearch.state.core import get_active_detector_context
 
