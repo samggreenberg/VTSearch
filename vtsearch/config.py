@@ -181,6 +181,7 @@ class CoreConfig:
     detectors_dir: Path
     max_concurrent_dataset_downloads: int
     max_concurrent_dataset_embeddings: int
+    autorun_detectors: tuple[str, ...]
 
     # Per-user settings (stored under each user's data dir)
     safe_thresholds: bool
@@ -195,7 +196,7 @@ class CoreConfig:
     data_dir: Path
 
     @classmethod
-    def from_settings(cls) -> CoreConfig:
+    def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:
         """Snapshot the current user's ``vtsearch.settings`` into a CoreConfig.
 
         Called by the Flask app at the request boundary (after auth resolves
@@ -203,14 +204,23 @@ class CoreConfig:
         result is a frozen immutable value safe to hand to background
         threads — settings changes during a request will not retroactively
         rewrite a config already in flight.
+
+        When *settings_path* is given, the server-tier settings file path is
+        redirected to that location first.  The CLI uses this to point at a
+        run-specific settings JSON without each call site importing
+        :mod:`vtsearch.settings` directly.
         """
         from vtsearch import settings as _settings  # noqa: PLC0415
+
+        if settings_path is not None:
+            _settings.set_settings_path(settings_path)
 
         return cls(
             saved_datasets_dir=_settings.get_saved_datasets_dir(),
             detectors_dir=_settings.get_detectors_dir(),
             max_concurrent_dataset_downloads=_settings.get_max_concurrent_dataset_downloads(),
             max_concurrent_dataset_embeddings=_settings.get_max_concurrent_dataset_embeddings(),
+            autorun_detectors=tuple(_settings.get_autorun_detectors()),
             safe_thresholds=_settings.get_safe_thresholds(),
             calibrate_count=_settings.get_calibrate_count(),
             calibration_fraction=_settings.get_calibration_fraction(),
