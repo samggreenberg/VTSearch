@@ -151,78 +151,85 @@ def _clipper_entry(clip: Any) -> PluginEntry:
     )
 
 
-def _register_library_families() -> None:
-    """Register every plugin family that belongs to the future ``vtscore`` library.
-
-    The loaders are imported lazily inside each lambda so ``--list-plugins``
-    doesn't pay the full app startup cost — Flask blueprints, model
-    registries, etc. only get imported when their family is asked for.
-
-    App-only families (settings importers/exporters/sources) are NOT
-    registered here; the app installs them at startup via
-    :func:`vtsearch.shim.register_app_plugin_families`.
-    """
-
-    def _importers():
-        from vtsearch.datasets.importers import list_importers
-
-        return list_importers()
-
-    def _exporters():
-        from vtsearch.exporters import list_exporters
-
-        return list_exporters()
-
-    def _label_importers():
-        from vtsearch.labels.importers import list_label_importers
-
-        return list_label_importers()
-
-    def _labelset_sources():
-        from vtsearch.labels.sources import list_labelset_sources
-
-        return list_labelset_sources()
-
-    def _converters():
-        from vtsearch.converters import list_converters
-
-        return list_converters()
-
-    def _media_sources():
-        from vtsearch.datasets.sources import list_media_sources
-
-        return list_media_sources()
-
-    def _media_types():
-        from vtsearch.media import all_types
-
-        return all_types()
-
-    def _embedders():
-        from vtsearch.media import all_embedders
-
-        return all_embedders()
-
-    def _clippers():
-        from vtsearch.media import all_clippers
-
-        return all_clippers()
-
-    for provider in (
-        FamilyProvider("importers", "Dataset importers", _importers),
-        FamilyProvider("exporters", "Results exporters", _exporters),
-        FamilyProvider("label_importers", "Label importers", _label_importers),
-        FamilyProvider("labelset_sources", "Labelset sources", _labelset_sources),
-        FamilyProvider("converters", "Media converters", _converters, _converter_entry),
-        FamilyProvider("media_sources", "Media sources", _media_sources),
-        FamilyProvider("media_types", "Media types", _media_types, _media_type_entry),
-        FamilyProvider("embedders", "Media embedders", _embedders, _embedder_entry),
-        FamilyProvider("clippers", "Media clippers", _clippers, _clipper_entry),
-    ):
-        register_plugin_family(provider)
+# Lazy loaders for the library-tier families.  Each one imports its
+# package on first call so ``python app.py --list-plugins`` doesn't pay
+# the full app startup cost — Flask blueprints, model registries, etc.
+# only get imported when their family is asked for.
 
 
-_register_library_families()
+def _load_importers() -> Iterable[Any]:
+    from vtsearch.datasets.importers import list_importers
+
+    return list_importers()
+
+
+def _load_exporters() -> Iterable[Any]:
+    from vtsearch.exporters import list_exporters
+
+    return list_exporters()
+
+
+def _load_label_importers() -> Iterable[Any]:
+    from vtsearch.labels.importers import list_label_importers
+
+    return list_label_importers()
+
+
+def _load_labelset_sources() -> Iterable[Any]:
+    from vtsearch.labels.sources import list_labelset_sources
+
+    return list_labelset_sources()
+
+
+def _load_converters() -> Iterable[Any]:
+    from vtsearch.converters import list_converters
+
+    return list_converters()
+
+
+def _load_media_sources() -> Iterable[Any]:
+    from vtsearch.datasets.sources import list_media_sources
+
+    return list_media_sources()
+
+
+def _load_media_types() -> Iterable[Any]:
+    from vtsearch.media import all_types
+
+    return all_types()
+
+
+def _load_embedders() -> Iterable[Any]:
+    from vtsearch.media import all_embedders
+
+    return all_embedders()
+
+
+def _load_clippers() -> Iterable[Any]:
+    from vtsearch.media import all_clippers
+
+    return all_clippers()
+
+
+# App-only families (settings importers/exporters/sources) are NOT
+# registered here; the app installs them at startup via
+# :func:`vtsearch.shim.register_app_plugin_families`.
+_LIBRARY_FAMILIES: tuple[FamilyProvider, ...] = (
+    FamilyProvider("importers", "Dataset importers", _load_importers),
+    FamilyProvider("exporters", "Results exporters", _load_exporters),
+    FamilyProvider("label_importers", "Label importers", _load_label_importers),
+    FamilyProvider("labelset_sources", "Labelset sources", _load_labelset_sources),
+    FamilyProvider("converters", "Media converters", _load_converters, _converter_entry),
+    FamilyProvider("media_sources", "Media sources", _load_media_sources),
+    FamilyProvider("media_types", "Media types", _load_media_types, _media_type_entry),
+    FamilyProvider("embedders", "Media embedders", _load_embedders, _embedder_entry),
+    FamilyProvider("clippers", "Media clippers", _load_clippers, _clipper_entry),
+)
+
+
+for _provider in _LIBRARY_FAMILIES:
+    register_plugin_family(_provider)
+del _provider
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +371,7 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "FAMILIES",
+    "FAMILIES",  # noqa: F822 — exposed dynamically via module __getattr__
     "FamilyProvider",
     "PluginEntry",
     "family_flag",
