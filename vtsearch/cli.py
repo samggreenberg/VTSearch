@@ -511,7 +511,9 @@ def _run_pipeline(  # noqa: C901
         if media_type is None:
             media_type = _detect_media_type(chunk_medias)
 
-            detector_names = list(override_detectors) if override_detectors is not None else list(config.autorun_detectors)
+            detector_names = (
+                list(override_detectors) if override_detectors is not None else list(config.autorun_detectors)
+            )
             if detector_names:
                 # Train each detector exactly once, using the first chunk as
                 # the fast-path snap; subsequent chunks reuse the cached
