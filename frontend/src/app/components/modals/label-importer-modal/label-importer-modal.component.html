@@ -144,6 +144,10 @@
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
               />
             }
+
+            @if (field.hint) {
+              <p class="form-hint">{{ field.hint }}</p>
+            }
           </div>
         }
       } @else {

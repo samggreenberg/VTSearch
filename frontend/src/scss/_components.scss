@@ -204,6 +204,19 @@
   gap: var(--space-xs);
 }
 
+// Inline format-hint chip rendered below an importer form field when the
+// PluginField declares a `hint` (separate from `description`, which feeds
+// the placeholder).  Stays visible after the user starts typing — used for
+// accepted extensions, expected column schemas, JSON/CSV sample snippets.
+.form-hint {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text-muted, #666);
+  white-space: pre-wrap;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+}
+
 .required {
   color: var(--color-bad);
 }

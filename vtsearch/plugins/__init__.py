@@ -120,6 +120,14 @@ class PluginField:
     required: bool = True
     #: Hint shown as placeholder text inside the input widget.
     placeholder: str = ""
+    #: Inline format-hint text rendered as a visible chip below the input,
+    #: separate from :attr:`description` (which feeds the placeholder).  Use
+    #: this for format / schema hints the user needs to see at a glance even
+    #: after they start typing (e.g. accepted file extensions, expected
+    #: column schema, a short sample of the file layout).  Newlines and
+    #: leading-space indented lines render verbatim, so multi-line samples
+    #: are fine.
+    hint: str = ""
     #: When ``True``, :attr:`options` is computed at runtime by the plugin's
     #: ``get_field_options(field_key, current_values)`` method.  Static
     #: :attr:`options` (if any) are still served as the initial list.
@@ -149,6 +157,7 @@ class PluginField:
             "default": self.default,
             "required": self.required,
             "placeholder": self.placeholder,
+            "hint": self.hint,
             "dynamic_options": self.dynamic_options,
             "depends_on": list(self.depends_on),
             "min": self.min,

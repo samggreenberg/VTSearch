@@ -42,6 +42,13 @@ class ServerCsvLabelImporter(LabelImporter):
                 "Absolute or relative path to a CSV file with md5 and label columns on the server filesystem."
             ),
             placeholder="data/labels/my_labels.csv",
+            hint=(
+                "Expects columns: md5,label\n"
+                "Example:\n"
+                "  md5,label\n"
+                "  d41d8cd98f00b204e9800998ecf8427e,good\n"
+                "  e2fc714c4727ee9395f324cd2e7f331f,bad"
+            ),
         ),
     ]
 
