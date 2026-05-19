@@ -118,6 +118,7 @@ from vtsearch.state import (
     collapse_duplicates,
     register_context,
 )
+from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.concurrency.progress import update_progress
 from vtscore.concurrency.progress import (
     CancelledError,
@@ -726,6 +727,11 @@ def _apply_clipper_stage(
 
     _clipper_progress(0, 0, "clipping")
     _apply_clipper(ctx.medias, clipper, clipper_params, on_progress=_clipper_progress, chain_steps=chain_steps)
+    # Clipping reassigns media IDs starting from 1 and rewrites embeddings
+    # in place; the cached matrix's id list can collide with the new one
+    # while pointing at stale rows. Drop the cache so the next reader
+    # rebuilds against the live medias dict.
+    invalidate_embedding_matrix(ctx)
 
 
 def _collapse_duplicates_stage(ctx: DatasetContext, tracker) -> None:
@@ -742,6 +748,7 @@ def _collapse_duplicates_stage(ctx: DatasetContext, tracker) -> None:
 
     _progress(0, 0)
     collapse_duplicates(ctx.medias, on_progress=_progress)
+    invalidate_embedding_matrix(ctx)
 
 
 def _build_diversity_tree_stage(ctx: DatasetContext, tracker) -> None:

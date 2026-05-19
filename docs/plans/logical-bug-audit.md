@@ -95,16 +95,23 @@ Cross-section interaction agents:
   `_empty_dataset_context` instead of the in-flight context. Mutations
   meant for the new dataset are silently lost.
 
-### C4. Embedding-matrix cache is not invalidated after clip/dedup
+### C4. Embedding-matrix cache is not invalidated after clip/dedup — **SHIPPED 2026-05-19**
 
-- **File:** `vtsearch/datasets/load_pipeline.py`
+- **File:** `vtscore/datasets/load_pipeline.py`
   (`_collapse_duplicates_stage`, `_apply_clipper_stage`) +
-  `vtsearch/embedding/matrix.py`
+  `vtsearch/routes/datasets/registry.py` (registry reload's dedup) +
+  `vtscore/embedding/matrix.py`
 - **Bug:** After media items are removed/renumbered,
   `DatasetContext._emb_matrix_ids` is left stale. The next
   `train_and_score()` reads a matrix whose row order no longer matches
   the live `medias` dict — training vectors and scored results are
   mapped to the wrong media IDs. Silent ranking corruption.
+- **Fix:** Both load-pipeline stages now call
+  `invalidate_embedding_matrix(ctx)` after mutating `ctx.medias`, and
+  the registry's reload-from-pickle path does the same after its own
+  `collapse_duplicates` call. Pattern #4 (a `media_revision` counter
+  hooked into every `medias` mutation) remains the durable fix for the
+  broader category — see the "Recurring patterns" section.
 
 ### C5. `find_label` allows body field to override the request's dataset context
 
@@ -603,11 +610,29 @@ summary, and is also recorded here.
   `job.dataset_id` / `job.detector_id` before invoking the target, and
   clears all three thread-locals (user + dataset + detector) in a
   `finally`. Covered by `tests_lib/integration/test_async_jobs.py::TestThreadContextPropagation`.
+- **C4 — embedding-matrix cache after clip/dedup** (2026-05-19).
+  `_apply_clipper_stage`, `_collapse_duplicates_stage`, and the
+  registry's reload-from-pickle dedup now all call
+  `invalidate_embedding_matrix(ctx)` after mutating the medias dict.
+  Regression coverage in `tests/datasets/test_load_stage_matrix_cache.py`.
+- **C6 — zip-slip in HTTP archive importer (zip, tar, rar)**
+  (2026-05-19). See the finding above for the full landed shape.
 
 ### Still open
 
-Every other finding (C1, C3–C12 and the High / Medium / Low tiers)
-remains as written. When the next fix lands, edit the finding above
-with **— shipped** and add a line here. When every critical and high is
-addressed, this doc can be retired into the relevant subsystem docs (or
-deleted, per the `docs/plans/` lifecycle).
+Every other finding (C1, C3, C5, C7–C12 and the High / Medium / Low
+tiers) remains as written. When the next fix lands, edit the finding
+above with **— shipped** and add a line here. When every critical and
+high is addressed, this doc can be retired into the relevant subsystem
+docs (or deleted, per the `docs/plans/` lifecycle).
+
+Specific open items called out by previously-shipped fixes:
+
+- **Pattern #4 (media_revision counter)** is still unimplemented.
+  The C4 stage-level invalidation closes the known clip/dedup hole,
+  but any future mutation site that changes embeddings without
+  changing the id set will reintroduce the same class of bug. A
+  `media_revision` counter on `DatasetContext` bumped from every
+  `medias` mutation (or a `MediasDict` subclass that does so
+  transparently) would neutralise the whole category and let the
+  matrix accessor compare a single int instead of two id lists.

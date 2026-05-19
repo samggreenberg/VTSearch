@@ -66,6 +66,7 @@ from vtsearch.state import (
 )
 from vtscore.concurrency.progress import CancelledError
 from vtscore.concurrency.progress import loading_tasks as _loading_tasks
+from vtscore.embedding.matrix import invalidate_embedding_matrix
 
 datasets_registry_bp = Blueprint(
     "datasets_registry",
@@ -195,6 +196,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
 
             _dedup_progress(0, 0)
             collapse_duplicates(ctx.medias, on_progress=_dedup_progress)
+            invalidate_embedding_matrix(ctx)
 
             def _diversity_progress(current: int, total: int) -> None:
                 tracker.check_cancelled()
