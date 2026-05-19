@@ -18,57 +18,11 @@
 
   @if (browserOpen) {
     <div class="file-browser-panel">
-      <div class="file-browser-breadcrumbs">
-        <button
-          class="file-browser-crumb"
-          [class.active]="!currentPath"
-          (click)="loadDirectory('')"
-        >Root</button>
-        @for (crumb of breadcrumbs; track $index) {
-          <span class="file-browser-sep">/</span>
-          <button
-            class="file-browser-crumb"
-            [class.active]="$index === breadcrumbs.length - 1"
-            (click)="navigateBreadcrumb($index)"
-          >{{ crumb }}</button>
-        }
-      </div>
-
-      <div class="file-browser-list">
-        @if (loading) {
-          <div class="file-browser-empty">Loading...</div>
-        } @else if (error) {
-          <div class="file-browser-error">{{ error }}</div>
-        } @else {
-          @if (currentPath) {
-            <button class="file-browser-item file-browser-dir" (click)="goUp()" title="Go to parent directory">
-              <span class="file-browser-icon"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 2l5 6H9v6H7V8H3z"/></svg></span>
-              <span class="file-browser-name">..</span>
-            </button>
-          }
-          @for (dir of directories; track dir.path) {
-            <button class="file-browser-item file-browser-dir" (click)="enterDirectory(dir)" [title]="dir.path">
-              <span class="file-browser-icon"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M1 3h5l1.5 1.5H15v9.5H1V3zm1 1v8.5h12V5.5H7.1L5.6 4H2z"/></svg></span>
-              <span class="file-browser-name">{{ dir.name }}</span>
-              <span class="file-browser-date">{{ dir.modified_at }}</span>
-            </button>
-          }
-          @for (file of files; track file.path) {
-            <button class="file-browser-item file-browser-file" (click)="selectFile(file)" [title]="file.path">
-              <span class="file-browser-icon"><svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M3 1h7l4 4v10H3V1zm1 1v12h9V5.5L9.5 2H4zm6 0v3.5h3.5"/></svg></span>
-              <span class="file-browser-name">{{ file.name }}</span>
-              <span class="file-browser-date">{{ file.modified_at }}</span>
-              <span class="file-browser-size">{{ formatSize(file.size_bytes) }}</span>
-            </button>
-          }
-          @if (!loading && directories.length === 0 && files.length === 0 && !currentPath) {
-            <div class="file-browser-empty">No files or directories found.</div>
-          }
-          @if (!loading && directories.length === 0 && files.length === 0 && currentPath) {
-            <div class="file-browser-empty">Empty directory.</div>
-          }
-        }
-      </div>
+      <vt-folder-browser
+        [browse]="browseFn"
+        [showFiles]="true"
+        (confirm)="onFileConfirmed($event)"
+      ></vt-folder-browser>
     </div>
   }
 </div>

@@ -32,6 +32,9 @@ describe('ProgressIndicatorsComponent', () => {
 
   it('should reflect labeling status', () => {
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'yellow' },
       span: { status: '' },
@@ -55,20 +58,35 @@ describe('ProgressIndicatorsComponent', () => {
 
   it('should show smart subtext with cost', () => {
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'yellow', cost: 0.123 },
+      stable: { status: '' },
+      span: { status: '' },
     };
     expect(component.smartSubtext).toBe('Cost: 0.123');
   });
 
   it('should show stable subtext with flips', () => {
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: '' },
       stable: { status: 'yellow', flips: 5 },
+      span: { status: '' },
     };
     expect(component.stableSubtext).toBe('Flips: 5');
   });
 
   it('should show span subtext with diversity level', () => {
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: '' },
+      stable: { status: '' },
       span: { status: 'green', diversity_level: 2.5, max_level: 4 },
     };
     expect(component.spanSubtext).toBe('3/4');
@@ -99,6 +117,9 @@ describe('ProgressIndicatorsComponent', () => {
 
   it('should set data-status attribute on indicators', () => {
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'yellow' },
       span: { status: 'red' },

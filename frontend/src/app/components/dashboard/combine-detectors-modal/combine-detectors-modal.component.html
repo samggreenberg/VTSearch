@@ -5,7 +5,7 @@
       <ul class="source-list">
         @for (row of rows; track row.name) {
           <li class="source-row">
-            <span class="source-name" [title]="row.name">{{ row.name }}</span>
+            <span class="source-name" [title]="row.name"><vt-detector-swatch [name]="row.name"></vt-detector-swatch> {{ row.name }}</span>
             <span class="source-meta">
               <span class="meta-pill" title="Number of labels in this source">{{ row.numLabels }} labels</span>
               @if (row.textQuery) {

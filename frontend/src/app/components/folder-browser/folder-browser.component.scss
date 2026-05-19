@@ -1,0 +1,220 @@
+// vt-folder-browser — single source of truth for the OS-style folder
+// browser used in the importer, new-detector, load-sort, and file-field
+// pickers. Replaces the previous .sf-* and .file-browser-* class
+// families that lived inline in those components.
+
+.vfb {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+// ---------------------------------------------------------------------
+// Breadcrumb
+// ---------------------------------------------------------------------
+
+.vfb-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: .8rem;
+  flex-wrap: wrap;
+}
+
+.vfb-crumb {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: .8rem;
+
+  &:hover { background: var(--bg-subtle); }
+
+  &.active {
+    color: var(--text-primary);
+    font-weight: 600;
+    cursor: default;
+    &:hover { background: none; }
+  }
+}
+
+.vfb-crumb-sep {
+  color: var(--text-muted);
+  font-size: .75rem;
+}
+
+// ---------------------------------------------------------------------
+// List
+// ---------------------------------------------------------------------
+
+.vfb-list {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  outline: none;
+
+  &:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+}
+
+.vfb-list--loading {
+  cursor: progress;
+}
+
+// Sortable header row stays pinned while the list scrolls so the
+// column meaning is always visible.
+.vfb-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--text-secondary, var(--text-muted));
+  user-select: none;
+}
+
+.vfb-col {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover { color: var(--text-primary); }
+}
+
+.vfb-col-name { flex: 1; min-width: 0; text-align: left; }
+.vfb-col-date { width: 110px; flex-shrink: 0; text-align: left; }
+.vfb-col-size { width: 70px; flex-shrink: 0; text-align: right; }
+
+.vfb-sort-ind {
+  display: inline-block;
+  width: 1em;
+  font-size: .7rem;
+}
+
+// Rows are buttons so they're keyboard-and-screen-reader-friendly.
+.vfb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: .85rem;
+  transition: background .12s;
+
+  &:last-child { border-bottom: none; }
+  &:hover:not(:disabled) { background: var(--bg-subtle); }
+  &:disabled { opacity: 0.55; cursor: wait; }
+}
+
+.vfb-row--selected {
+  background: var(--bg-hover);
+
+  &:hover { background: var(--bg-hover); }
+}
+
+.vfb-row--dir .vfb-name { font-weight: 500; }
+.vfb-row--up { color: var(--text-muted); }
+
+.vfb-icon {
+  flex-shrink: 0;
+  width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vfb-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vfb-date {
+  width: 110px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: .75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vfb-size {
+  width: 70px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: .75rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.vfb-empty {
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  font-size: .85rem;
+  color: var(--text-muted);
+}
+
+.vfb-error {
+  margin: 0;
+  padding: 12px;
+  color: var(--color-bad);
+  font-size: .85rem;
+}
+
+// ---------------------------------------------------------------------
+// Path footer
+// ---------------------------------------------------------------------
+
+.vfb-path-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.vfb-path-label {
+  font-size: .8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.vfb-path-value {
+  font-size: .8rem;
+  color: var(--text-secondary, var(--text-muted));
+  background: var(--bg-subtle);
+  padding: 3px 8px;
+  border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}

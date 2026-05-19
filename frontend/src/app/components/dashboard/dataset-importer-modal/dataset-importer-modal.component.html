@@ -103,9 +103,16 @@
               <div class="license-warning" role="note">⚠ {{ notice }}</div>
             }
             @if (demoClippers.length > 1) {
-              <button class="btn btn--secondary btn--sm clipper-btn" (click)="openClipperChooser('demo')" title="Choose a MediaClipper to segment or trim media before embedding">
-                Clipper: {{ clipperDisplayName('demo') }}
-              </button>
+              @if (isDefaultClipperSelected('demo')) {
+                <button type="button" class="advanced-toggle advanced-toggle--inline" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
+                  Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
+                </button>
+              }
+              @if (showClipperPicker('demo')) {
+                <button class="btn btn--secondary btn--sm clipper-btn" (click)="openClipperChooser('demo')" title="Choose a MediaClipper to segment or trim media before embedding">
+                  Clipper: {{ clipperDisplayName('demo') }}
+                </button>
+              }
             }
           </div>
         }
@@ -395,10 +402,17 @@
 
       @if (availableClippers.length > 1) {
         <div class="form-group">
-          <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
-          <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('form')" title="Choose a MediaClipper to segment or trim media before embedding">
-            Use MediaClipper: {{ clipperDisplayName('form') }}
-          </button>
+          @if (isDefaultClipperSelected('form')) {
+            <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
+              Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
+            </button>
+          }
+          @if (showClipperPicker('form')) {
+            <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+            <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('form')" title="Choose a MediaClipper to segment or trim media before embedding">
+              Use MediaClipper: {{ clipperDisplayName('form') }}
+            </button>
+          }
         </div>
       }
 
@@ -624,10 +638,17 @@
 
       @if (lfClippers.length > 1) {
         <div class="form-group form-group--section">
-          <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
-          <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('lf')" title="Choose a MediaClipper to segment or trim media before embedding">
-            Use MediaClipper: {{ clipperDisplayName('lf') }}
-          </button>
+          @if (isDefaultClipperSelected('lf')) {
+            <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
+              Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
+            </button>
+          }
+          @if (showClipperPicker('lf')) {
+            <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+            <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('lf')" title="Choose a MediaClipper to segment or trim media before embedding">
+              Use MediaClipper: {{ clipperDisplayName('lf') }}
+            </button>
+          }
         </div>
       }
 
@@ -744,43 +765,13 @@
 
       <div class="sf-browse-section">
         <label class="form-label">Select Folder</label>
-        <div class="sf-breadcrumbs">
-          <button class="sf-breadcrumb" [class.active]="!sfBrowsePath" (click)="sfLoadDirectory('')">Root</button>
-          @for (crumb of sfBreadcrumbs; track $index) {
-            <span class="sf-breadcrumb-sep">/</span>
-            <button class="sf-breadcrumb" [class.active]="$index === sfBreadcrumbs.length - 1" (click)="sfNavigateBreadcrumb($index)">{{ crumb }}</button>
-          }
-        </div>
-
-        <div class="sf-dir-list">
-          @if (sfBrowseLoading) {
-            <p class="empty-state">Loading...</p>
-          } @else if (sfBrowseError) {
-            <p class="error-text">{{ sfBrowseError }}</p>
-          } @else if (sfBrowseDirs.length === 0) {
-            <p class="sf-empty-dir">No subdirectories. This folder will be imported.</p>
-          }
-          @if (sfBrowsePath) {
-            <button class="sf-dir-item" (click)="sfGoUp()" title="Go to parent directory">
-              <span class="sf-dir-icon"><vt-icon type="arrow-up"></vt-icon></span>
-              <span class="sf-dir-name">..</span>
-            </button>
-          }
-          @for (dir of sfBrowseDirs; track dir.path) {
-            <button class="sf-dir-item" (click)="sfEnterDirectory(dir)" [title]="dir.path">
-              <span class="sf-dir-icon"><vt-icon type="folder"></vt-icon></span>
-              <span class="sf-dir-name">{{ dir.name }}</span>
-              @if (dir.modified_at) {
-                <span class="sf-dir-date">{{ dir.modified_at }}</span>
-              }
-            </button>
-          }
-        </div>
-
-        <div class="sf-selected-path">
-          <span class="form-label">Path:</span>
-          <code class="sf-path-display">{{ sfAbsolutePath }}</code>
-        </div>
+        <vt-folder-browser
+          [browse]="sfBrowseFn"
+          [showFiles]="false"
+          [showPathFooter]="true"
+          emptyMessage="No subdirectories. This folder will be imported."
+          (pathChange)="sfOnPathChange($event)"
+        ></vt-folder-browser>
       </div>
 
       <div class="form-group">
@@ -853,14 +844,21 @@
 
       @if (sfClippers.length > 1) {
         <div class="form-group">
-          <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
-          <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('sf')" title="Choose a MediaClipper to segment or trim media before embedding">
-            Use MediaClipper: {{ clipperDisplayName('sf') }}
-          </button>
+          @if (isDefaultClipperSelected('sf')) {
+            <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
+              Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
+            </button>
+          }
+          @if (showClipperPicker('sf')) {
+            <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+            <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('sf')" title="Choose a MediaClipper to segment or trim media before embedding">
+              Use MediaClipper: {{ clipperDisplayName('sf') }}
+            </button>
+          }
         </div>
       }
 
-      @if (sfBrowseError && !sfBrowseLoading) {
+      @if (sfBrowseError) {
         <p class="error-text">{{ sfBrowseError }}</p>
       }
     </div>

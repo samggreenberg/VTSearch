@@ -107,9 +107,10 @@ PickerView = str  # one of: "form", "demo", "server_folder", "local_folder"
 # Synthetic per-importer field that lets the user pick a name for the new
 # dataset.  Injected at the front of every importer's serialised field list
 # in :meth:`DatasetImporter.to_dict`, so the frontend renders it generically
-# without each subclass having to duplicate the declaration.  The field is
-# extracted out of band by the import route handler — see
-# :func:`vtsearch.routes.datasets._helpers._extract_importer_fields`.
+# without each subclass having to duplicate the declaration.  Routed through
+# the per-plugin marshmallow schema as a regular field (see
+# :func:`vtsearch.routes._shared.validate_plugin_args`) and read downstream
+# by :meth:`DatasetImporter.resolve_display_name`.
 DATASET_NAME_FIELD_KEY = "dataset_name"
 
 

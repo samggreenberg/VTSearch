@@ -8,10 +8,12 @@ importer-field-options) use the standard ``@arguments`` + ``@response``
 decorators; schema-level validation failures surface as 422.
 Multipart-upload routes (``stage-file``) and plugin-field routes
 (``stage-import/<importer>``, ``import/<importer>``) keep ``@arguments``
-omitted — the latter pair stays on the legacy plain-Flask path because
-the request body is a plugin-field shape that doesn't fit a static
-marshmallow schema (see *Resolved questions / Plugin field endpoints*
-in the plan doc).
+omitted — the latter pair's body shape depends on the importer plugin
+and isn't described in the OpenAPI spec.  Runtime validation goes
+through :func:`validate_plugin_args` (per-plugin schema built from the
+importer's :attr:`fields`), so missing required fields / invalid select
+values raise 422.  See *Resolved questions / Plugin field endpoints*
+in the plan doc.
 """
 
 from pathlib import Path
@@ -28,11 +30,8 @@ from vtsearch.datasets.load_pipeline import (
     _run_importer_in_background,
     _stage_importer_in_background,
 )
-from vtsearch.routes._shared import get_plugin_or_404, get_request_field
-from vtsearch.routes.datasets._helpers import (
-    _extract_clipper_params,
-    _extract_importer_fields,
-)
+from vtsearch.routes._shared import get_plugin_or_404, validate_plugin_args
+from vtsearch.routes.datasets._helpers import _extract_clipper_params
 from vtsearch.schemas.datasets import (
     ClearStagingResponseSchema,
     DatasetAvailableFilesResponseSchema,
@@ -142,9 +141,15 @@ def stage_file():
 # ---------------------------------------------------------------------------
 # POST /api/dataset/stage-import/<importer_name>
 #
-# Plugin-field route — multipart-or-JSON depending on the importer's
-# declared ``fields``. Stays on the legacy plain-Flask path; not in spec.
-# See *Resolved questions / Plugin field endpoints* in the plan doc.
+# Plugin-field route — body shape depends on the importer plugin.  Not
+# described in the OpenAPI spec; runtime validation goes through
+# :func:`validate_plugin_args` (per-plugin schema built from the
+# importer's :attr:`fields`), so missing required fields / invalid
+# select values raise 422.  File fields are read into ``BytesIO`` so the
+# background staging thread can consume them after the request context
+# tears down.  Pass-through keys (``converters``, ``source_specs``,
+# ``dataset_name``) ride along on the request body and are preserved via
+# ``Meta.unknown = "include"`` in the per-plugin schema.
 # ---------------------------------------------------------------------------
 
 
@@ -159,17 +164,11 @@ def stage_import(importer_name: str):
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values, field_err = _extract_importer_fields(importer)
-    if field_err:
-        return field_err
-    assert field_values is not None  # narrowed by field_err check
-
-    # Pass through optional keys not declared as plugin fields.
-    file_keys = {f.key for f in importer.fields if f.field_type == "file"}
-    for key in ("converters", "source_specs"):
-        val = get_request_field(key, bool(file_keys))
-        if val:
-            field_values[key] = val
+    field_values = validate_plugin_args(
+        importer,
+        file_mode="bytesio",
+        extra_keys=("converters", "source_specs", "dataset_name"),
+    )
 
     _stage_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Staging started"})
@@ -260,7 +259,12 @@ def importer_field_options(body: dict, importer_name: str):
 # ---------------------------------------------------------------------------
 # POST /api/dataset/import/<importer_name>
 #
-# Plugin-field route — same legacy treatment as ``stage-import``.
+# Plugin-field route — same per-plugin validation pattern as
+# ``stage-import``.  Body shape isn't in the OpenAPI spec, but
+# :func:`validate_plugin_args` enforces the per-plugin field types at
+# request time; pass-through keys (``converters``, ``source_specs``,
+# ``clipper``, ``embedder``, ``clipper_params``, ``dataset_name``) ride
+# along on the body and are preserved via ``Meta.unknown = "include"``.
 # ---------------------------------------------------------------------------
 
 
@@ -275,18 +279,16 @@ def import_dataset(importer_name: str):
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values, field_err = _extract_importer_fields(importer)
-    if field_err:
-        return field_err
-    assert field_values is not None  # narrowed by field_err check
+    field_values = validate_plugin_args(
+        importer,
+        file_mode="bytesio",
+        extra_keys=("converters", "source_specs", "clipper", "embedder", "dataset_name"),
+    )
 
-    # Pass through optional keys not declared as plugin fields.
+    # ``clipper_params`` is multipart-encoded as a JSON string when the
+    # importer has file fields; the per-plugin schema treats it as an
+    # opaque pass-through (string) — decode it here before handing off.
     file_keys = {f.key for f in importer.fields if f.field_type == "file"}
-    for key in ("converters", "source_specs", "clipper", "embedder"):
-        val = get_request_field(key, bool(file_keys))
-        if val:
-            field_values[key] = val
-
     clipper_params, params_err = _extract_clipper_params(bool(file_keys))
     if params_err:
         return params_err

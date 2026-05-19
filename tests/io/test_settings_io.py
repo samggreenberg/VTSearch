@@ -396,12 +396,17 @@ class TestSettingsImportEndpoint:
         res = client.post("/api/settings-importers/import/nonexistent", json={})
         assert res.status_code == 404
 
-    def test_missing_filepath_400(self, client):
+    def test_missing_filepath_422(self, client):
+        # Schema-level validation: the per-plugin marshmallow schema
+        # rejects the empty ``filepath`` with the standard 422 envelope
+        # (the field is declared ``required=True`` on the
+        # server_json_file importer).
         res = client.post(
             "/api/settings-importers/import/server_json_file",
             json={"filepath": ""},
         )
-        assert res.status_code == 400
+        assert res.status_code == 422
+        assert "filepath" in res.get_json().get("errors", {}).get("json", {})
 
 
 # ---------------------------------------------------------------------------

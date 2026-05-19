@@ -12,11 +12,16 @@ GET  /api/label-importers
 POST /api/label-importers/import/<importer_name>
     Run the named label importer. Accepts ``multipart/form-data`` (when
     the importer has a ``"file"`` field) or JSON (for text-only
-    importers). The request body is a plugin-field shape and doesn't fit
-    a static marshmallow schema — this route stays on the legacy
-    plain-Flask path (no ``@arguments`` / ``@response`` decorators) and
-    is omitted from the OpenAPI spec. See *Resolved questions / Plugin
-    field endpoints* in ``docs/plans/openapi-schema.md``.
+    importers). The request body shape is plugin-dependent and not
+    described in the OpenAPI spec — instead, the body is validated at
+    request time via :func:`validate_plugin_args`, which builds a
+    marshmallow schema from the named importer's :attr:`fields`
+    declaration. Schema-level rejects (missing required field, invalid
+    select value) surface as ``422`` with the standard ``errors``
+    envelope; handler-level rejects (path traversal, plugin error) keep
+    their original HTTP codes (400 / 500) with the standard ``message``
+    envelope. See *Resolved questions / Plugin field endpoints* in
+    ``docs/plans/openapi-schema.md``.
 
 POST /api/label-importers/ingest-missing
     Accept a list of missing label entries, re-ingest them from their
@@ -30,11 +35,10 @@ from flask_smorest import Blueprint
 
 from vtsearch.labels.importers import get_label_importer, list_label_importers
 from vtsearch.routes._shared import (
-    extract_plugin_fields,
     get_plugin_or_404,
     run_plugin_or_error,
     validate_filepath_field,
-    validate_required_fields,
+    validate_plugin_args,
 )
 from vtsearch.schemas.labels import (
     IngestMissingRequestSchema,
@@ -102,11 +106,13 @@ def get_label_importers():
 # ---------------------------------------------------------------------------
 # POST /api/label-importers/import/<importer_name>
 #
-# Plugin-field route — stays on the legacy ``request.get_json`` / multipart
-# path. The request body is the importer's declared ``fields`` (file
-# uploads, free-form params) and doesn't fit a static marshmallow schema.
-# See ``docs/plans/openapi-schema.md`` (Resolved questions / Plugin field
-# endpoints). Not described in the OpenAPI spec.
+# Plugin-field route — the request body is the importer's declared ``fields``
+# (file uploads, free-form params).  Static marshmallow schemas can't
+# describe the shape because each importer has its own field list, so the
+# OpenAPI spec doesn't list a request body for this route.  Runtime
+# validation goes through :func:`validate_plugin_args`, which builds a
+# per-plugin schema from the importer's :attr:`fields` declaration and
+# raises 422 on schema-level failures (matching the rest of the API).
 # ---------------------------------------------------------------------------
 
 
@@ -121,11 +127,7 @@ def run_label_import(importer_name: str):  # noqa: C901
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values = extract_plugin_fields(importer)
-
-    err = validate_required_fields(importer, field_values)
-    if err:
-        return err
+    field_values = validate_plugin_args(importer)
 
     err = validate_filepath_field(field_values)
     if err:

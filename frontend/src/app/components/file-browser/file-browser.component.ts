@@ -1,14 +1,25 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { FileBrowserApiService } from '../../services/file-browser-api.service';
-import type { BrowseDirectoryEntry } from '../../generated/api-client/models/browse-directory-entry';
-import type { BrowseFileEntry } from '../../generated/api-client/models/browse-file-entry';
+import { map } from 'rxjs/operators';
 
+import { FileBrowserApiService } from '../../services/file-browser-api.service';
+import {
+  FolderBrowserBrowseFn,
+  FolderBrowserComponent,
+  FolderBrowserFileEntry,
+} from '../folder-browser/folder-browser.component';
+
+/** "Text input + Browse button" field that opens an inline OS-style
+ *  folder browser panel.
+ *
+ *  Thin wrapper around :cmp:`FolderBrowserComponent` — the field
+ *  controls open/close state and binds a ``/api/browse``-backed
+ *  ``browseFn`` to the unified browser. */
 @Component({
   selector: 'vt-file-browser',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, FolderBrowserComponent],
   templateUrl: './file-browser.component.html',
   styleUrl: './file-browser.component.scss',
 })
@@ -26,15 +37,20 @@ export class FileBrowserComponent implements OnInit, OnChanges {
   @Output() pathSelected = new EventEmitter<string>();
 
   browserOpen = false;
-  loading = false;
-  error = '';
-
-  directories: BrowseDirectoryEntry[] = [];
-  files: BrowseFileEntry[] = [];
-  currentPath = '';
 
   /** The text value in the manual input field. */
   inputValue = '';
+
+  /** Bound to the inner ``<vt-folder-browser>``.  Arrow function so
+   *  ``this`` resolves correctly when the child component invokes it. */
+  readonly browseFn: FolderBrowserBrowseFn = (path: string) =>
+    this.fileBrowserApi.browse(path, this.extensions).pipe(
+      map((res) => ({
+        directories: res.directories,
+        files: res.files,
+        currentPath: res.current_path,
+      })),
+    );
 
   constructor(private fileBrowserApi: FileBrowserApiService) {}
 
@@ -48,77 +64,21 @@ export class FileBrowserComponent implements OnInit, OnChanges {
     }
   }
 
-  /** Open the file browser panel and load the root directory. */
   openBrowser(): void {
     this.browserOpen = true;
-    this.error = '';
-    this.loadDirectory('');
   }
 
   closeBrowser(): void {
     this.browserOpen = false;
   }
 
-  /** Navigate into a directory. */
-  loadDirectory(path: string): void {
-    this.loading = true;
-    this.error = '';
-    this.fileBrowserApi.browse(path, this.extensions).subscribe({
-      next: (res) => {
-        this.directories = res.directories;
-        this.files = res.files;
-        this.currentPath = res.current_path;
-        this.loading = false;
-      },
-      error: (err) => {
-        this.error = err.error?.error || 'Failed to browse directory';
-        this.loading = false;
-      },
-    });
-  }
-
-  /** Navigate up one level. */
-  goUp(): void {
-    if (!this.currentPath) return;
-    const parts = this.currentPath.split('/');
-    parts.pop();
-    this.loadDirectory(parts.join('/'));
-  }
-
-  /** Enter a subdirectory. */
-  enterDirectory(dir: BrowseDirectoryEntry): void {
-    this.loadDirectory(dir.path);
-  }
-
-  /** Select a file and emit its relative path. */
-  selectFile(file: BrowseFileEntry): void {
-    this.inputValue = file.path;
-    this.pathSelected.emit(file.path);
+  onFileConfirmed(entry: FolderBrowserFileEntry): void {
+    this.inputValue = entry.path;
+    this.pathSelected.emit(entry.path);
     this.browserOpen = false;
   }
 
-  /** Emit the manually typed path when the user changes it. */
   onInputChange(): void {
     this.pathSelected.emit(this.inputValue);
-  }
-
-  /** Breadcrumb segments from the current path. */
-  get breadcrumbs(): string[] {
-    if (!this.currentPath) return [];
-    return this.currentPath.split('/');
-  }
-
-  /** Navigate to a breadcrumb index. */
-  navigateBreadcrumb(index: number): void {
-    const parts = this.currentPath.split('/');
-    this.loadDirectory(parts.slice(0, index + 1).join('/'));
-  }
-
-  /** Format bytes as a human-readable size. */
-  formatSize(bytes?: number): string {
-    if (bytes === undefined || bytes === null) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 }

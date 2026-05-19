@@ -22,7 +22,7 @@ cd "$(dirname "$0")"
 # Install deps if needed
 bash .claude/hooks/ensure-test-deps.sh
 
-# Ruff lint + format check (matches .github/workflows/lint.yml).
+# Ruff lint + format check.
 # Runs early because it's fast (~1s) and catches mistakes the pytest /
 # frontend stages can't see, e.g. F401 unused-import on TYPE_CHECKING
 # imports whose only "use" is inside a string-form forward reference.
@@ -43,8 +43,6 @@ if ! ruff format --check . ; then
     exit 1
 fi
 
-# codespell + deptry — same checks the lint workflow runs in CI. Cheap
-# locally and worth catching before pytest.
 echo "Running codespell..."
 if ! codespell --toml pyproject.toml ; then
     echo ""
@@ -61,6 +59,62 @@ if ! python -m deptry . ; then
     echo "============================================================"
     exit 1
 fi
+
+# pip-audit — scans installed Python packages against the PyPI advisory
+# database. Auditing the resolved venv (not requirements files) catches
+# transitive vulnerabilities and matches what production will actually run.
+echo "Running pip-audit..."
+if ! pip-audit ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: pip-audit found known vulnerabilities"
+    echo "============================================================"
+    exit 1
+fi
+
+# Pyright — full static type check across vtsearch/ and tests/
+# (see `pyrightconfig.json` for the gated scope). The PYRIGHT_PYTHON_FORCE_VERSION
+# pin keeps everyone on the same underlying pyright binary regardless of
+# what the `pyright` PyPI wrapper would otherwise pull.
+echo "Running pyright..."
+if ! PYRIGHT_PYTHON_FORCE_VERSION=1.1.408 pyright ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: pyright found type errors"
+    echo "============================================================"
+    exit 1
+fi
+
+# OpenAPI snapshot drift check — regenerate the flask-smorest spec from
+# the live app and diff against the checked-in snapshot at
+# frontend/openapi.json. The frontend's generated TS client is built
+# from this snapshot, so a stale file means the generated client lags
+# the real API. Cheap (~2s) and runs every invocation.
+echo "Checking OpenAPI snapshot drift..."
+_openapi_regen=$(mktemp)
+_openapi_dump_log=$(mktemp)
+if ! python scripts/dump_openapi.py > "$_openapi_regen" 2> "$_openapi_dump_log"; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: OpenAPI spec dump failed"
+    echo "============================================================"
+    cat "$_openapi_dump_log"
+    rm -f "$_openapi_regen" "$_openapi_dump_log"
+    exit 1
+fi
+if ! diff -u frontend/openapi.json "$_openapi_regen" > /dev/null; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: OpenAPI snapshot is stale"
+    echo "============================================================"
+    echo "Run 'npm run regenerate-openapi-snapshot' (or"
+    echo "'python scripts/dump_openapi.py > frontend/openapi.json') and"
+    echo "commit the result."
+    diff -u frontend/openapi.json "$_openapi_regen" | head -80
+    rm -f "$_openapi_regen" "$_openapi_dump_log"
+    exit 1
+fi
+rm -f "$_openapi_regen" "$_openapi_dump_log"
 
 # Split arguments into groups and extra pytest args
 TEST_GROUPS=()

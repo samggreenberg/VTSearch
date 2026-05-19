@@ -23,8 +23,11 @@ export interface ErrorContext {
   timestamp: string;
 }
 
+export type ToastLevel = 'error' | 'success';
+
 export interface Toast {
   id: number;
+  level: ToastLevel;
   message: string;
   detail?: string;
   /** Optional rich HTTP error context — enables the Details / Copy debug info actions. */
@@ -46,6 +49,7 @@ interface ShowOptions {
 }
 
 const MAX_TOASTS = 5;
+const SUCCESS_AUTO_DISMISS_MS = 5000;
 
 /**
  * Central toast sink for the frontend. Every error surface routes
@@ -67,6 +71,7 @@ export class ToastService {
   private readonly toastsSubject = new BehaviorSubject<Toast[]>([]);
   readonly toasts$ = this.toastsSubject.asObservable();
   private readonly seenTaskKeys = new Set<string>();
+  private readonly autoDismissTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
   constructor(progressEvents: ProgressEventsService) {
     progressEvents.loadingTasks$.subscribe((tasks) => this.routeTaskErrors(tasks, 'dataset'));
@@ -92,8 +97,22 @@ export class ToastService {
   }
 
   error(opts: ShowOptions): number {
+    return this.push('error', opts);
+  }
+
+  /**
+   * Non-blocking success notification. Auto-dismisses after
+   * ``SUCCESS_AUTO_DISMISS_MS`` so the user is not forced to click
+   * through a modal for "X is done" style messages.
+   */
+  success(opts: ShowOptions): number {
+    return this.push('success', opts, SUCCESS_AUTO_DISMISS_MS);
+  }
+
+  private push(level: ToastLevel, opts: ShowOptions, autoDismissMs = 0): number {
     const toast: Toast = {
       id: this.nextId++,
+      level,
       message: opts.message,
       detail: opts.detail,
       errorContext: opts.errorContext,
@@ -104,15 +123,30 @@ export class ToastService {
     let next = this.toastsSubject.value.slice();
     if (opts.dedupKey) {
       const existing = next.findIndex((t) => t.dedupKey === opts.dedupKey);
-      if (existing >= 0) next.splice(existing, 1);
+      if (existing >= 0) {
+        const evicted = next[existing];
+        this.clearTimer(evicted.id);
+        next.splice(existing, 1);
+      }
     }
     next.push(toast);
-    while (next.length > MAX_TOASTS) next.shift();
+    while (next.length > MAX_TOASTS) {
+      const dropped = next.shift();
+      if (dropped) this.clearTimer(dropped.id);
+    }
     this.toastsSubject.next(next);
+
+    if (autoDismissMs > 0) {
+      this.autoDismissTimers.set(
+        toast.id,
+        setTimeout(() => this.dismiss(toast.id), autoDismissMs),
+      );
+    }
     return toast.id;
   }
 
   dismiss(id: number): void {
+    this.clearTimer(id);
     const next = this.toastsSubject.value.filter((t) => t.id !== id);
     if (next.length !== this.toastsSubject.value.length) {
       this.toastsSubject.next(next);
@@ -120,7 +154,16 @@ export class ToastService {
   }
 
   dismissAll(): void {
+    for (const id of this.autoDismissTimers.keys()) this.clearTimer(id);
     this.toastsSubject.next([]);
+  }
+
+  private clearTimer(id: number): void {
+    const t = this.autoDismissTimers.get(id);
+    if (t !== undefined) {
+      clearTimeout(t);
+      this.autoDismissTimers.delete(id);
+    }
   }
 
   /**

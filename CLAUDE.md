@@ -44,7 +44,24 @@ When you have a question for the user — to disambiguate requirements, choose b
 
 **Always ask via the `AskUserQuestion` tool when the question fits its shape** (a discrete choice with a small number of options). Do not leave dangling questions like "Want me to go with approach A or approach B?" at the end of a prose response — those are easy to miss and force the user to type out an answer that could have been a single click. The tool also captures the choice cleanly in the transcript.
 
+This applies *especially* to end-of-investigation "what scope should I take next?" prompts: when a research/investigation turn ends by offering Phase 1 / Phase 2 / smaller scope, the scope choice goes through `AskUserQuestion`, **not** into the prose summary. The investigation findings stay in prose; the "what next?" question is a tool call.
+
 Use plain prose questions only when the answer is genuinely open-ended (e.g. "What should this field be named?") and a multiple-choice list would be artificial.
+
+### Trip-wire — scan your turn before sending
+
+Before sending a turn, scan its last paragraph for any of these phrases:
+
+- "Want me to …?"
+- "Should I …?"
+- "Do you want … or …?"
+- "Let me know if …"
+- "(a) … and/or (b) …?"
+- "Recommend I …?"
+
+If you see one, **stop**: that sentence is an `AskUserQuestion` call you almost emitted as prose. Convert it into the tool call before sending — even if you're confident the user will say yes, even if the options feel obvious, even if you've already invested effort in the prose summary. The cost of the extra tool call is zero; the cost of a missed or typed-out answer is a wasted round-trip.
+
+This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers belong in the tool too (with `["Yes", "No"]` options) — they are exactly the case where a one-click reply beats a typed reply. A pure progress update with no question at the end is fine; an update that ends in an offer is not.
 
 ## Frontend Scope: Desktop Only
 
@@ -73,7 +90,7 @@ This applies to:
 - TypeScript errors from `tsc` / `npm run build:prod` (including in `*.spec.ts` files, even though specs do not currently run — they must still typecheck).
 - Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them — fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
-- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, and dependency issues from `deptry`. All four run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest — but if you're tempted to skip the test loop, run `ruff check . && ruff format --check . && codespell --toml pyproject.toml && python -m deptry .` at minimum before pushing. CI (`.github/workflows/lint.yml`) is the backstop.
+- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop — VTSearch has no GitHub Actions workflows; `./run-tests.sh` is the source of truth, so do not push a change without running it.
 - Any other diagnostics surfaced by tooling you invoke.
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
@@ -147,7 +164,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - `vtsearch/labels/` — Label importers and sync sources; `importers/` (server_json_file/server_csv_file/holder; auto-discovered via `LABEL_IMPORTER` sentinel) and `sources/` (server_json_file; auto-discovered via `LABELSET_SOURCE` sentinel) for bidirectional label sync
 - `vtsearch/labels/sync.py` — Labelset source sync utilities: `sync_to_labelset_source()` (auto-export on vote change) and `sync_from_labelset_source()` (manual import), with `_syncing` guard to prevent circular re-export
 - `vtsearch/media/` — Media type plugins: audio, image, text, video, document
-- `vtsearch/converters/` — Media converters: document→image, document→text, video→audio, video→image, audio→image (spectrogram), image→text (OCR). Each is a `MediaConverter` (a `PluginBase`) that can declare user-configurable params via `fields: list[PluginField]`. `convert(media, params)` reads those at conversion time. Used by the multi-media import flow (see `docs/plans/multi-media-import.md`) and the legacy per-importer `converters` field
+- `vtsearch/converters/` — Media converters: document→image, document→text, video→audio, video→image, audio→image (spectrogram), audio→text (Whisper ASR), image→text (OCR). Each is a `MediaConverter` (a `PluginBase`) that can declare user-configurable params via `fields: list[PluginField]`. `convert(media, params)` reads those at conversion time. Used by the multi-media import flow (see `docs/plans/multi-media-import.md`) and the legacy per-importer `converters` field
 - `vtsearch/state/` — Multi-dataset / multi-detector global state. `core.py` owns `DatasetContext`, `DetectorContext`, `_state_lock`, the `medias`/votes proxy objects, and the context registries. Sub-modules split the operations by concern: `votes.py` (toggle_vote / apply_label / clear_votes), `clicks.py` (vote click times), `processors.py` (autorun extractor/localizer CRUD), `diversity.py` (diversity tree), `media_lookup.py` (origin-keyed lookup, collapse_duplicates). The package `__init__.py` re-exports every public name and hosts a handful of cross-cutting helpers (`snapshot_medias`, `clear_medias`, `clear_all`, `get_inclusion`/`set_inclusion`, dataset-display-name and safe-thresholds accessors)
 - `vtsearch/plugins/` — `PluginRegistry`, `PluginBase`, `PluginField`, and the sentinel-based auto-discovery scanner shared by every plugin family (dataset importers, exporters, label importers/sources, processor importers, settings importers/exporters/sources)
 - `vtsearch/sync/` — Generic `SyncSource[LoadT, SaveT]` base class (built on `PluginBase`) shared by `SettingsSource` and `LabelsetSource` for bidirectional load/save

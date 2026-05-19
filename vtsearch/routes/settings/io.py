@@ -10,11 +10,12 @@ GET  /api/settings-importers
 
 POST /api/settings-importers/import/<importer_name>
     Run the named settings importer and apply the imported settings.
-    The request body is a plugin-field shape and doesn't fit a static
-    marshmallow schema — this route stays on the legacy plain-Flask path
-    (no ``@arguments`` / ``@response`` decorators) and is omitted from
-    the OpenAPI spec.  See *Resolved questions / Plugin field endpoints*
-    in ``docs/plans/openapi-schema.md``.
+    The request body shape depends on the importer plugin and isn't
+    described in the OpenAPI spec; runtime validation goes through
+    :func:`validate_plugin_args` (per-plugin schema built from the
+    importer's :attr:`fields`), so missing required fields / invalid
+    select values raise 422.  See *Resolved questions / Plugin field
+    endpoints* in ``docs/plans/openapi-schema.md``.
 
 GET  /api/settings-exporters
     List all registered settings exporters with their metadata and fields.
@@ -36,11 +37,10 @@ from flask_smorest import Blueprint, abort
 
 from vtsearch import settings
 from vtsearch.routes._shared import (
-    extract_plugin_fields,
     get_plugin_or_404,
     run_plugin_or_error,
     validate_filepath_field,
-    validate_required_fields,
+    validate_plugin_args,
 )
 from vtsearch.schemas.settings_io import (
     RunSettingsExportRequestSchema,
@@ -76,11 +76,12 @@ def get_settings_importers():
 # ---------------------------------------------------------------------------
 # POST /api/settings-importers/import/<importer_name>
 #
-# Plugin-field route — stays on the legacy ``request.get_json`` / multipart
-# path. The request body is the importer's declared ``fields`` (file
-# uploads, free-form params) and doesn't fit a static marshmallow schema.
-# See ``docs/plans/openapi-schema.md`` (Resolved questions / Plugin field
-# endpoints).  Not described in the OpenAPI spec.
+# Plugin-field route — body shape depends on the importer plugin and isn't
+# described in the OpenAPI spec.  Runtime validation goes through
+# :func:`validate_plugin_args` (per-plugin schema built from the importer's
+# :attr:`fields`), so missing required fields / invalid select values
+# raise 422.  See ``docs/plans/openapi-schema.md`` (Resolved questions /
+# Plugin field endpoints).
 # ---------------------------------------------------------------------------
 
 
@@ -97,11 +98,7 @@ def run_settings_import(importer_name: str):
         return err
     assert importer is not None  # narrowed by err check
 
-    field_values = extract_plugin_fields(importer)
-
-    err = validate_required_fields(importer, field_values)
-    if err:
-        return err
+    field_values = validate_plugin_args(importer)
 
     err = validate_filepath_field(field_values)
     if err:

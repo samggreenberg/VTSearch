@@ -40,11 +40,17 @@ class SyntheticDatasetImporter(DatasetImporter):
     # frontend/src/app/components/icon/icon.component.ts).
     icon = "\U0001f3ed"
     category = "demo"
+    # The generator only ever produces one media type per import
+    # (image | audio | video), so the "Include rows" editor only ever
+    # shows the auto-populated direct row — there are no converters
+    # for synthetic sources.  Flag set to keep the in-tree importer set
+    # uniformly off the legacy shim.
+    multi_media = True
 
     fields = [
         ImporterField(
             key="media_type",
-            label="Media Type",
+            label="Output Media Type",
             field_type="select",
             description="What kind of media to generate.",
             options=_SUPPORTED_MEDIA_TYPES,

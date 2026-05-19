@@ -56,6 +56,11 @@ dev = [
     "codespell",
     "vulture",
     "pip-audit",
+    # `pyright` is the Python wrapper around the Node-based pyright CLI.
+    # The wrapper lazy-downloads the binary on first invocation; the
+    # exact binary version is pinned via PYRIGHT_PYTHON_FORCE_VERSION
+    # in `run-tests.sh`.
+    "pyright",
 ]
 
 [tool.setuptools.packages.find]
@@ -145,6 +150,7 @@ DEP001 = [
     "rarfile",
     "whisper",
     "mediapipe",
+    "facenet_pytorch",
     "torchvision",
     "safetensors",
     "huggingface_hub",
@@ -174,6 +180,7 @@ DEP002 = [
     "codespell",
     "vulture",
     "pip-audit",
+    "pyright",
     "gunicorn",
     "sentencepiece",
     "protobuf",
@@ -222,4 +229,4 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # slope formulas, medias as the global state proxy, goup as a TS method),
 # and stylistic spellings the project uses consistently (re-use,
 # pre-select, unparseable, invokable).
-ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te"
+ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,ser"

@@ -75,7 +75,141 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
-def run_converters_on_folder(  # noqa: C901
+_OPTIONAL_OUTPUT_FIELDS = ("media_bytes", "media_string", "width", "height", "word_count", "character_count")
+
+
+def _resolve_target_embedder(target_type: str):
+    """Resolve and (if necessary) warm up the embedder for *target_type*."""
+    from vtsearch.media import embedders_for_type  # noqa: PLC0415
+
+    avail = embedders_for_type(target_type)
+    target_emb = avail[0] if avail else None
+    if target_emb is not None and getattr(target_emb, "_model", None) is None:
+        target_emb.load_models()
+    return target_emb
+
+
+def _scan_source_files(folder_path: Path, source_mt, recursive: bool) -> list[Path]:
+    source_files: list[Path] = []
+    for ext in source_mt.file_extensions:
+        if recursive:
+            source_files.extend(rglob_follow_symlinks(folder_path, ext))
+        else:
+            source_files.extend(glob_top_level(folder_path, ext))
+    source_files.sort()
+    return source_files
+
+
+def _build_converter_origin(
+    converter_name: str,
+    source_rel: str,
+    conv_params: dict[str, Any],
+    base_origin: dict[str, Any] | None,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {"converter": converter_name, "source_file": source_rel}
+    for pk, pv in conv_params.items():
+        params[f"converter_param_{pk}"] = str(pv)
+    if base_origin:
+        params["parent_importer"] = base_origin.get("importer", "")
+        parent_params = base_origin.get("params", {})
+        if "path" in parent_params:
+            params["parent_path"] = parent_params["path"]
+        if "url" in parent_params:
+            params["parent_url"] = parent_params["url"]
+    return {"importer": "converter", "params": params}
+
+
+def _build_converted_media_dict(
+    media_id: int,
+    output: dict[str, Any],
+    target_type: str,
+    target_emb,
+    origin: dict[str, Any],
+    origin_name: str,
+    media_path: str,
+    category: str,
+) -> dict[str, Any]:
+    media_data: dict[str, Any] = {
+        "id": media_id,
+        "type": target_type,
+        "embedder": target_emb.name if target_emb else "",
+        "file_size": len(output.get("media_bytes", b"") or output.get("media_string", "").encode()),
+        "md5": _compute_md5(output),
+        "embedding": None,
+        "filename": origin_name,
+        "category": category,
+        "origin": origin,
+        "origin_name": origin_name,
+        "media_bytes": None,
+        "media_string": None,
+        "media_path": media_path,
+        "duration": output.get("duration", 0),
+    }
+    for key in _OPTIONAL_OUTPUT_FIELDS:
+        if key in output:
+            media_data[key] = output[key]
+    return media_data
+
+
+def _run_converter_on_source(
+    converter, source_path: Path, source_rel: str, conv_params: dict[str, Any], thin: bool
+) -> list[dict[str, Any]] | None:
+    """Build the source-media dict and invoke the converter; ``None`` on failure."""
+    source_media: dict[str, Any] = {
+        "filename": source_rel,
+        "media_path": str(source_path.resolve()),
+    }
+    if not thin:
+        try:
+            source_media["media_bytes"] = source_path.read_bytes()
+        except Exception:
+            return None
+    try:
+        return converter.convert(source_media, conv_params)
+    except Exception as exc:
+        print(f"Converter {converter.name} failed on {source_rel}: {exc}")
+        return None
+
+
+def _emit_converted_outputs(
+    *,
+    outputs: list[dict[str, Any]],
+    source_rel: str,
+    source_path: Path,
+    target_type: str,
+    target_emb,
+    origin: dict[str, Any],
+    medias: dict[int, dict[str, Any]],
+    start_id: int,
+    category: str,
+) -> int:
+    """Embed each converter output, append to *medias*, return next media_id."""
+    media_id = start_id
+    for output in outputs:
+        output_filename = output.get("filename", f"converted_{media_id}")
+        origin_name = f"{source_rel}\u2192{output_filename}"
+
+        embedding = _embed_converted_output(target_emb, output)
+        if embedding is None:
+            continue
+
+        media_data = _build_converted_media_dict(
+            media_id,
+            output,
+            target_type,
+            target_emb,
+            origin,
+            origin_name,
+            str(source_path.resolve()),
+            category,
+        )
+        media_data["embedding"] = embedding
+        medias[media_id] = media_data
+        media_id += 1
+    return media_id
+
+
+def run_converters_on_folder(
     folder_path: Path,
     converter_names: list[str] | None = None,
     target_media_type: str = "",
@@ -133,42 +267,23 @@ def run_converters_on_folder(  # noqa: C901
     if on_progress is None:
         on_progress = _default_progress()
 
-    from vtsearch.media import embedders_for_type, get as media_get, get_by_folder_name  # noqa: PLC0415
+    from vtsearch.media import get as media_get, get_by_folder_name  # noqa: PLC0415
 
-    # Resolve target media type and its embedder.
     target_mt = get_by_folder_name(target_media_type)
-
-    # Filter to converters that actually target this media type.
     converters_with_params = [(c, p) for c, p in converters_with_params if c.target_type == target_mt.type_id]
     if not converters_with_params:
         return
 
-    # Resolve the embedder for the target media type
-    avail = embedders_for_type(target_mt.type_id)
-    target_emb = avail[0] if avail else None
-
-    if target_emb is not None and getattr(target_emb, "_model", None) is None:
-        target_emb.load_models()
-
+    target_emb = _resolve_target_embedder(target_mt.type_id)
     media_id = max(medias.keys(), default=0) + 1
 
     for converter, conv_params in converters_with_params:
-        # Get the source media type to know which file extensions to scan.
         try:
             source_mt = media_get(converter.source_type)
         except KeyError:
             continue
 
-        # Scan folder for source files.  When ``recursive=False`` only the
-        # top-level entries are considered.
-        source_files: list[Path] = []
-        for ext in source_mt.file_extensions:
-            if recursive:
-                source_files.extend(rglob_follow_symlinks(folder_path, ext))
-            else:
-                source_files.extend(glob_top_level(folder_path, ext))
-        source_files.sort()
-
+        source_files = _scan_source_files(folder_path, source_mt, recursive)
         if not source_files:
             continue
 
@@ -188,94 +303,22 @@ def run_converters_on_folder(  # noqa: C901
                 len(source_files),
             )
 
-            # Build a minimal source media dict for the converter.
-            source_media: dict[str, Any] = {
-                "filename": source_rel,
-                "media_path": str(source_path.resolve()),
-            }
-            # Only load bytes if the file is small enough or thin is False.
-            if not thin:
-                try:
-                    source_media["media_bytes"] = source_path.read_bytes()
-                except Exception:
-                    continue
-
-            try:
-                outputs = converter.convert(source_media, conv_params)
-            except Exception as exc:
-                print(f"Converter {converter.name} failed on {source_rel}: {exc}")
-                continue
-
+            outputs = _run_converter_on_source(converter, source_path, source_rel, conv_params, thin)
             if not outputs:
                 continue
 
-            # Build origin for converted media.
-            origin_params: dict[str, Any] = {
-                "converter": converter.name,
-                "source_file": source_rel,
-            }
-            for pk, pv in conv_params.items():
-                # Record converter params so the import is reproducible.
-                origin_params[f"converter_param_{pk}"] = str(pv)
-            origin = {
-                "importer": "converter",
-                "params": origin_params,
-            }
-            if base_origin:
-                origin["params"]["parent_importer"] = base_origin.get("importer", "")
-                parent_params = base_origin.get("params", {})
-                if "path" in parent_params:
-                    origin["params"]["parent_path"] = parent_params["path"]
-                if "url" in parent_params:
-                    origin["params"]["parent_url"] = parent_params["url"]
-
-            for output in outputs:
-                output_filename = output.get("filename", f"converted_{media_id}")
-                # Derive an origin_name that shows provenance:
-                # "source_file → output_filename"
-                origin_name = f"{source_rel}\u2192{output_filename}"
-
-                # Embed the converted output.
-                embedding = _embed_converted_output(target_emb, output)
-                if embedding is None:
-                    continue
-
-                # Compute MD5 from the output bytes or string.
-                md5 = _compute_md5(output)
-
-                media_data: dict[str, Any] = {
-                    "id": media_id,
-                    "type": target_mt.type_id,
-                    "embedder": target_emb.name if target_emb else "",
-                    "file_size": len(output.get("media_bytes", b"") or output.get("media_string", "").encode()),
-                    "md5": md5,
-                    "embedding": embedding,
-                    "filename": origin_name,
-                    "category": "custom",
-                    "origin": origin,
-                    "origin_name": origin_name,
-                    "media_bytes": None,
-                    "media_string": None,
-                    "media_path": str(source_path.resolve()),
-                    "duration": output.get("duration", 0),
-                }
-
-                # Merge in converter output fields.
-                if "media_bytes" in output:
-                    media_data["media_bytes"] = output["media_bytes"]
-                if "media_string" in output:
-                    media_data["media_string"] = output["media_string"]
-                if "width" in output:
-                    media_data["width"] = output["width"]
-                if "height" in output:
-                    media_data["height"] = output["height"]
-                if "word_count" in output:
-                    media_data["word_count"] = output["word_count"]
-                if "character_count" in output:
-                    media_data["character_count"] = output["character_count"]
-
-                medias[media_id] = media_data
-                media_id += 1
+            origin = _build_converter_origin(converter.name, source_rel, conv_params, base_origin)
+            media_id = _emit_converted_outputs(
+                outputs=outputs,
+                source_rel=source_rel,
+                source_path=source_path,
+                target_type=target_mt.type_id,
+                target_emb=target_emb,
+                origin=origin,
+                medias=medias,
+                start_id=media_id,
+                category="custom",
+            )
 
 
 def _embed_converted_output(target_emb, output: dict[str, Any]):
@@ -330,7 +373,25 @@ def _compute_md5(output: dict[str, Any]) -> str:
     return hashlib.md5(b"").hexdigest()
 
 
-def apply_converter_to_demo(  # noqa: C901
+def _resolve_demo_target_embedder(converter, embedder_name: str):
+    """Resolve the target embedder for *converter* (named override > default)."""
+    from vtsearch.media import get_embedder  # noqa: PLC0415
+
+    target_emb = None
+    if embedder_name:
+        try:
+            target_emb = get_embedder(embedder_name)
+        except KeyError:
+            pass
+    if target_emb is None:
+        target_emb = _resolve_target_embedder(converter.target_type)
+        return target_emb
+    if getattr(target_emb, "_model", None) is None:
+        target_emb.load_models()
+    return target_emb
+
+
+def apply_converter_to_demo(
     converter_name: str,
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
@@ -350,44 +411,25 @@ def apply_converter_to_demo(  # noqa: C901
     if on_progress is None:
         on_progress = _default_progress()
 
-    from vtsearch.media import embedders_for_type, get_embedder  # noqa: PLC0415
+    target_emb = _resolve_demo_target_embedder(converter, embedder_name)
 
-    # Resolve embedder for the *target* type.
-    target_emb = None
-    if embedder_name:
-        try:
-            target_emb = get_embedder(embedder_name)
-        except KeyError:
-            pass
-    if target_emb is None:
-        avail = embedders_for_type(converter.target_type)
-        if avail:
-            target_emb = avail[0]
-    if target_emb is not None and getattr(target_emb, "_model", None) is None:
-        target_emb.load_models()
-
-    # Convert each original media and collect the outputs.
     source_items = list(medias.items())
     converted: dict[int, dict[str, Any]] = {}
     new_id = 1
 
-    on_progress(
-        "converting",
-        f"Converting {len(source_items)} items via {converter.display_name or converter.name}...",
-        0,
-        len(source_items),
-    )
+    label = converter.display_name or converter.name
+    on_progress("converting", f"Converting {len(source_items)} items via {label}...", 0, len(source_items))
 
-    for idx, (_, src) in enumerate(source_items):
+    for idx, (_, src_media) in enumerate(source_items):
         on_progress(
             "converting",
-            f"Converting {src.get('filename', '')} via {converter.display_name or converter.name}...",
+            f"Converting {src_media.get('filename', '')} via {label}...",
             idx + 1,
             len(source_items),
         )
 
         try:
-            outputs = converter.convert(src, {})
+            outputs = converter.convert(src_media, {})
         except Exception:
             continue
         if not outputs:
@@ -397,55 +439,59 @@ def apply_converter_to_demo(  # noqa: C901
             "importer": "converter",
             "params": {
                 "converter": converter_name,
-                "source_file": src.get("filename", ""),
+                "source_file": src_media.get("filename", ""),
                 "parent_importer": "demo",
                 "parent_demo": dataset_name,
             },
         }
-
-        for output in outputs:
-            output_filename = output.get("filename", f"converted_{new_id}")
-            source_name = src.get("filename", str(src.get("id", "")))
-            origin_name = f"{source_name}\u2192{output_filename}"
-
-            embedding = _embed_converted_output(target_emb, output)
-            if embedding is None:
-                continue
-
-            md5 = _compute_md5(output)
-
-            media_data: dict[str, Any] = {
-                "id": new_id,
-                "type": converter.target_type,
-                "embedder": target_emb.name if target_emb else "",
-                "file_size": len(output.get("media_bytes", b"") or output.get("media_string", "").encode()),
-                "md5": md5,
-                "embedding": embedding,
-                "filename": origin_name,
-                "category": src.get("category", "custom"),
-                "origin": origin,
-                "origin_name": origin_name,
-                "media_bytes": None,
-                "media_string": None,
-                "media_path": src.get("media_path", ""),
-                "duration": output.get("duration", 0),
-            }
-
-            if "media_bytes" in output:
-                media_data["media_bytes"] = output["media_bytes"]
-            if "media_string" in output:
-                media_data["media_string"] = output["media_string"]
-            if "width" in output:
-                media_data["width"] = output["width"]
-            if "height" in output:
-                media_data["height"] = output["height"]
-            if "word_count" in output:
-                media_data["word_count"] = output["word_count"]
-            if "character_count" in output:
-                media_data["character_count"] = output["character_count"]
-
-            converted[new_id] = media_data
-            new_id += 1
+        source_name = src_media.get("filename", str(src_media.get("id", "")))
+        new_id = _emit_converted_demo_outputs(
+            outputs=outputs,
+            source_name=source_name,
+            source_media=src_media,
+            target_type=converter.target_type,
+            target_emb=target_emb,
+            origin=origin,
+            converted=converted,
+            start_id=new_id,
+        )
 
     medias.clear()
     medias.update(converted)
+
+
+def _emit_converted_demo_outputs(
+    *,
+    outputs: list[dict[str, Any]],
+    source_name: str,
+    source_media: dict[str, Any],
+    target_type: str,
+    target_emb,
+    origin: dict[str, Any],
+    converted: dict[int, dict[str, Any]],
+    start_id: int,
+) -> int:
+    """Embed each converter output, append to *converted*, return next id."""
+    new_id = start_id
+    for output in outputs:
+        output_filename = output.get("filename", f"converted_{new_id}")
+        origin_name = f"{source_name}\u2192{output_filename}"
+
+        embedding = _embed_converted_output(target_emb, output)
+        if embedding is None:
+            continue
+
+        media_data = _build_converted_media_dict(
+            new_id,
+            output,
+            target_type,
+            target_emb,
+            origin,
+            origin_name,
+            source_media.get("media_path", ""),
+            source_media.get("category", "custom"),
+        )
+        media_data["embedding"] = embedding
+        converted[new_id] = media_data
+        new_id += 1
+    return new_id

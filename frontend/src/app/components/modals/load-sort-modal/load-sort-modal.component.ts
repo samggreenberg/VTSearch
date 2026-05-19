@@ -1,7 +1,13 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { map } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
+import {
+  FolderBrowserBrowseFn,
+  FolderBrowserComponent,
+  FolderBrowserFileEntry,
+} from '../../folder-browser/folder-browser.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
@@ -11,18 +17,11 @@ import {
   MediaCropModalComponent,
   MediaCropResult,
 } from '../media-crop-modal/media-crop-modal.component';
+import { DetectorSwatchComponent } from '../../detector-swatch/detector-swatch.component';
 
 interface BrowseItem {
   key: string;
   display: string;
-}
-
-interface BrowseEntry {
-  name: string;
-  path: string;
-  size_bytes?: number;
-  modified_at?: string;
-  isDir: boolean;
 }
 
 type MediaPickerView = 'sources' | 'browse-items' | 'file-browser';
@@ -30,7 +29,7 @@ type MediaPickerView = 'sources' | 'browse-items' | 'file-browser';
 @Component({
   selector: 'vt-load-sort-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent, IconComponent, MediaCropModalComponent],
+  imports: [CommonModule, ModalComponent, IconComponent, FolderBrowserComponent, MediaCropModalComponent, DetectorSwatchComponent],
   templateUrl: './load-sort-modal.component.html',
   styleUrl: './load-sort-modal.component.scss',
 })
@@ -55,9 +54,21 @@ export class LoadSortModalComponent implements OnInit {
 
   // File browser state (for demo & folder drill-down)
   browseSource = '';
-  browsePath: string[] = [];
-  browseEntries: BrowseEntry[] = [];
+  browseSourceLabel = '';
   fileLoading = false;
+
+  /** Browse fn for the embedded ``<vt-folder-browser>``.  Routes through
+   *  ``/api/browse-media-files`` with whichever source the user picked
+   *  (``demo:<name>`` or ``folder``). */
+  readonly browseFn: FolderBrowserBrowseFn = (path: string) =>
+    this.datasetsApi.browseMediaFiles(this.browseSource, path).pipe(
+      map((res) => ({
+        directories: res.directories || [],
+        files: res.files || [],
+        rootPath: res.root_path,
+        currentPath: path,
+      })),
+    );
 
   // Pending crop confirmation state.
   pendingFile: File | null = null;
@@ -162,9 +173,8 @@ export class LoadSortModalComponent implements OnInit {
     this.selectedSource = null;
     this.mediaPickerView = 'sources';
     this.browseItems = [];
-    this.browseEntries = [];
-    this.browsePath = [];
     this.browseSource = '';
+    this.browseSourceLabel = '';
     this.loadMediaSources();
   }
 
@@ -242,50 +252,22 @@ export class LoadSortModalComponent implements OnInit {
   private startFileBrowsing(source: string, label: string): void {
     this.mediaPickerView = 'file-browser';
     this.browseSource = source;
-    this.browsePath = [label];
-    this.loadDirectory('');
+    this.browseSourceLabel = label;
   }
 
-  private loadDirectory(relPath: string): void {
-    this.fileLoading = true;
-    this.browseEntries = [];
-
-    this.datasetsApi.browseMediaFiles(this.browseSource, relPath).subscribe({
-      next: (res) => {
-        const entries: BrowseEntry[] = [];
-        for (const d of res.directories || []) {
-          entries.push({ name: d.name, path: d.path, modified_at: d.modified_at, isDir: true });
-        }
-        for (const f of res.files || []) {
-          entries.push({ name: f.name, path: f.path, size_bytes: f.size_bytes, modified_at: f.modified_at, isDir: false });
-        }
-        this.browseEntries = entries;
-        this.fileLoading = false;
-      },
-      error: () => {
-        this.fileLoading = false;
-      },
-    });
+  /** Back-arrow handler for the file-browser view — returns to the
+   *  source-listing step that opened it (demo list / saved-datasets
+   *  list). */
+  backFromFileBrowser(): void {
+    this.mediaPickerView = this.selectedSource?.name === 'demo' ? 'browse-items' : 'sources';
+    this.browseSource = '';
+    this.browseSourceLabel = '';
   }
 
-  enterDirectory(entry: BrowseEntry): void {
-    this.browsePath.push(entry.name);
-    this.loadDirectory(entry.path);
-  }
-
-  navigateBreadcrumb(index: number): void {
-    if (index === 0) {
-      this.mediaPickerView = 'browse-items';
-      this.browseEntries = [];
-      this.browsePath = [];
-      return;
-    }
-    this.browsePath = this.browsePath.slice(0, index + 1);
-    const relPath = this.browsePath.slice(1).join('/');
-    this.loadDirectory(relPath);
-  }
-
-  selectFile(entry: BrowseEntry): void {
+  /** Confirm handler for the file browser — materialises the picked
+   *  file via ``/api/browse-media-files/select`` and kicks off an
+   *  example sort. */
+  onFileConfirmed(entry: FolderBrowserFileEntry): void {
     this.fileLoading = true;
     this.datasetsApi.selectBrowsedFile(this.browseSource, entry.path).subscribe({
       next: (res) => {

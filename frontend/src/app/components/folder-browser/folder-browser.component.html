@@ -1,0 +1,108 @@
+<div class="vfb">
+  <div class="vfb-breadcrumbs" role="navigation" aria-label="Folder path">
+    <button
+      type="button"
+      class="vfb-crumb"
+      [class.active]="!currentPath"
+      (click)="navigateRoot()"
+    >{{ rootLabel }}</button>
+    @for (crumb of breadcrumbs; track $index) {
+      <span class="vfb-crumb-sep">/</span>
+      <button
+        type="button"
+        class="vfb-crumb"
+        [class.active]="$index === breadcrumbs.length - 1"
+        (click)="navigateBreadcrumb($index)"
+      >{{ crumb }}</button>
+    }
+  </div>
+
+  <div
+    #listEl
+    class="vfb-list"
+    tabindex="0"
+    role="listbox"
+    [class.vfb-list--loading]="loading"
+  >
+    <div class="vfb-header" role="row">
+      <button
+        type="button"
+        class="vfb-col vfb-col-name"
+        (click)="setSort('name')"
+        title="Sort by name"
+      >Name <span class="vfb-sort-ind">{{ sortIndicator('name') }}</span></button>
+      @if (showDate) {
+        <button
+          type="button"
+          class="vfb-col vfb-col-date"
+          (click)="setSort('modified')"
+          title="Sort by modified date"
+        >Modified <span class="vfb-sort-ind">{{ sortIndicator('modified') }}</span></button>
+      }
+      @if (showFiles && showSize) {
+        <button
+          type="button"
+          class="vfb-col vfb-col-size"
+          (click)="setSort('size')"
+          title="Sort by size"
+        >Size <span class="vfb-sort-ind">{{ sortIndicator('size') }}</span></button>
+      }
+    </div>
+
+    @if (loading) {
+      <p class="vfb-empty">Loading…</p>
+    } @else if (error) {
+      <p class="vfb-error">{{ error }}</p>
+    } @else {
+      @if (currentPath) {
+        <button
+          type="button"
+          class="vfb-row vfb-row--up"
+          (click)="goUp()"
+          title="Go to parent directory"
+        >
+          <span class="vfb-icon"><vt-icon type="arrow-up"></vt-icon></span>
+          <span class="vfb-name">..</span>
+        </button>
+      }
+      @if (rows.length === 0) {
+        <p class="vfb-empty">{{ emptyMessage || (showFiles ? 'Empty folder.' : 'No subdirectories.') }}</p>
+      }
+      @for (row of rows; track trackRow($index, row); let i = $index) {
+        <button
+          type="button"
+          class="vfb-row"
+          [class.vfb-row--dir]="row.kind === 'dir'"
+          [class.vfb-row--file]="row.kind === 'file'"
+          [class.vfb-row--selected]="i === selectedIndex"
+          [disabled]="busy && row.kind === 'file'"
+          (click)="selectRow(i)"
+          (dblclick)="onRowDblClick(row)"
+          [title]="row.path"
+        >
+          <span class="vfb-icon">
+            @if (row.kind === 'dir') {
+              <vt-icon type="folder"></vt-icon>
+            } @else {
+              <vt-icon type="file-text"></vt-icon>
+            }
+          </span>
+          <span class="vfb-name">{{ row.name }}</span>
+          @if (showDate) {
+            <span class="vfb-date">{{ row.modified_at }}</span>
+          }
+          @if (showFiles && showSize) {
+            <span class="vfb-size">{{ row.kind === 'file' ? formatSize(row.size_bytes) : '' }}</span>
+          }
+        </button>
+      }
+    }
+  </div>
+
+  @if (showPathFooter && rootPath) {
+    <div class="vfb-path-footer">
+      <span class="vfb-path-label">Path:</span>
+      <code class="vfb-path-value">{{ absolutePath }}</code>
+    </div>
+  }
+</div>

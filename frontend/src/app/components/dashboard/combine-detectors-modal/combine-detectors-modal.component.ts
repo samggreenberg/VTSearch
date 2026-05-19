@@ -2,6 +2,7 @@ import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
+import { DetectorSwatchComponent } from '../../detector-swatch/detector-swatch.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import type { DetectorCombineResponse } from '../../../generated/api-client/models/detector-combine-response';
 import { DetectorRegistryEntry } from '../../../models/api.models';
@@ -15,7 +16,7 @@ interface SourceRow {
 @Component({
   selector: 'vt-combine-detectors-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, DetectorSwatchComponent],
   templateUrl: './combine-detectors-modal.component.html',
   styleUrl: './combine-detectors-modal.component.scss',
 })

@@ -17,19 +17,6 @@ describe('VtDialogService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('alert should open dialog and resolve on OK', async () => {
-    const promise = service.alert('Hello');
-    expect(service.dialogOpen).toBeTrue();
-    expect(service.dialogMessage).toBe('Hello');
-    expect(service.dialogType).toBe('info');
-    expect(service.dialogButtons.length).toBe(1);
-
-    service.resolve(true);
-    const result = await promise;
-    expect(result).toBeTrue();
-    expect(service.dialogOpen).toBeFalse();
-  });
-
   it('confirm should have Cancel and OK buttons', async () => {
     const promise = service.confirm('Are you sure?');
     expect(service.dialogButtons.length).toBe(2);

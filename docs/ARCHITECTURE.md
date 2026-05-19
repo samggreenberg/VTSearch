@@ -87,6 +87,7 @@ VTSearch/
 │   │   ├── base.py                 MediaConverter ABC
 │   │   ├── runner.py               Converter orchestration (run_converters_on_folder)
 │   │   ├── audio2image.py          Render audio as a mel/CQT spectrogram image
+│   │   ├── audio2text.py           Transcribe audio to text via Whisper ASR
 │   │   ├── document2image.py       Render document pages as images
 │   │   ├── document2text.py        Extract text from documents
 │   │   ├── image2text.py           Extract text from images via OCR (PaddleOCR)

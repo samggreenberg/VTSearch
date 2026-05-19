@@ -20,7 +20,7 @@ The expensive work is **introducing seams in the current monolith**. Once `vtsea
 ## Phase 0 — Preparation (non-blocking, do anytime)
 
 - [x] Inventory the actual public surface that external consumers would call. Captured in [`docs/vtscore-api.md`](../vtscore-api.md) as a docstring-only API sketch. This is the contract the refactor must preserve.
-- [ ] Add a CI job that runs the full test suite with `flask` *uninstalled* against a candidate library subset, to prove import-cleanliness as the seams land. Initially this job will fail; it becomes the green light for Phase 5.
+- [ ] Add a CI job that runs the full test suite with `flask` *uninstalled* against a candidate library subset, to prove import-cleanliness as the seams land. *(Caveat: VTSearch has no GitHub Actions workflows today — `./run-tests.sh` is the source of truth per CLAUDE.md. The equivalent gate here is a new `./run-tests.sh vtscore-clean` mode that runs library-candidate tests in a venv with Flask absent; revisit when Phase 5 is ready.)*
 
 ## Phase 1 — Cut the Flask seam
 
@@ -186,9 +186,11 @@ static/                    # built Angular output
 
 ## Risks and open questions
 
-- **Settings sources / labelset sources straddle the boundary.** `SettingsSource` is inherently a user-pref concern (app-side), but `LabelsetSource` is library-side (detector training writes labels). The shared `SyncSource[L,S]` ABC stays in the library; the settings-source registry stays app-side; the labelset-source registry moves to the library. Confirm before Phase 5.
-- **Test-media generator** already lives at `tests/fixtures/medias.py` (loaded by `tests/conftest.py`), so it is *not* a runtime concern of either distribution — when Phase 7 splits the test tree, the fixtures move with `tests_lib/` (or stay shared via a `pythonpath` entry).
-- **`eval/visualize.py`** pulls in matplotlib — keep as an optional extra (`vtscore[viz]`) to avoid forcing the dep on lean consumers.
+- **Settings sources / labelset sources straddle the boundary.** *Resolved (Phase 0 review):* `SettingsSource` is a user-pref concern and stays app-side. `LabelsetSource` ships in `vtscore.labels` — pulling labels in from external systems is a core library affordance, and the registry (`get_labelset_source` / `list_labelset_sources`) ships with it. The shared `SyncSource[L,S]` ABC remains in `vtscore.sync`.
+- **`medias.py` test-media generator** is used both at startup (app concern) and by `conftest.py`. The generator already moved to `tests/fixtures/medias.py` and is not part of the runtime app — no Phase action needed.
+- **`eval/visualize.py`** *Resolved (Phase 0 review):* plotting (`plot_eval_results`, `plot_voting_iterations`) is presentation, not computation, and stays in `vtsearch/`. The library exports the data (`DatasetResult`, `QueryMetrics`, `LearnedSortMetrics`, `format_results_json`); the app renders it. No `vtscore[viz]` extra needed.
+- **`autorun_*` global state.** *Resolved (Phase 0 review):* the registry of which processors to autorun (`autorun_detectors`, `autorun_extractors`, `autorun_localizers` and their CRUD) is *policy* and stays app-side. The library keeps the `Processor` / `Detector` / `Localizer` / `Extractor` ABCs plus the code that applies them; the app passes in the resolved list. Phase 3 wires this as an explicit argument.
+- **Per-thread progress callback on `vtscore.media`.** *Resolved (Phase 0 review):* mirror `vtscore.concurrency.progress.set_thread_progress` — add `set_thread_progress_callback` that takes priority when set on the calling thread, keep `set_progress_callback` as the global default. Library consumers running multi-threaded ingestion won't have one thread clobber another's callback.
 - **Heavy ML deps** (torch/transformers/CLAP/CLIP) — declare as required for now; revisit extras (`vtscore[embedders]`) if a consumer asks for a leaner install.
 
 ## Order of operations recap

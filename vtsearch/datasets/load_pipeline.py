@@ -251,108 +251,123 @@ def _normalize_media_type(value: str) -> str:
         return value
 
 
+def _parse_chain_field(raw: Any) -> list[dict] | None:
+    """Decode a ``clipper_chain`` importer field value into a step list.
+
+    The field may arrive as a JSON string (typical client encoding) or as
+    a native list (programmatic callers). Returns ``None`` for missing /
+    malformed values so the legacy single-clipper path stays in effect.
+    """
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, str):
+        import json as _json
+
+        try:
+            decoded = _json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+        if isinstance(decoded, list):
+            return decoded
+        return None
+    return None
+
+
 def _apply_clipper(  # noqa: C901
     clips_dict: dict,
     clipper_name: str,
     clipper_params: dict | None = None,
     on_progress: Callable[[int, int, str], None] | None = None,
+    chain_steps: list[dict] | None = None,
 ) -> None:
-    """Apply a clipper to all medias in *clips_dict*, replacing them in-place.
+    """Apply a clipper (or full chain) to all medias in *clips_dict*, in place.
 
-    After clipping, each clip gets:
+    Either *clipper_name* (single-step legacy path) or *chain_steps*
+    (ordered list of converter/clipper steps, see
+    ``docs/plans/clipper-chain.md``) may be supplied.  When both are
+    given, *chain_steps* wins; the single name/params get folded into
+    the chain by callers that want both encodings on the same clip.
+
+    After running the chain, each clip gets:
     - A recomputed MD5 based on its actual content (so that dedup doesn't
       collapse distinct clips from the same parent).
-    - Clip boundaries stored in ``origin["params"]`` (``clip_start``,
-      ``clip_end``, ``clip_box``) so they survive label export/import.
+    - The full chain trail in ``origin.params['clipper_chain']`` plus
+      legacy single-clipper keys (``clipper``, ``clipper_<param>``,
+      ``clip_start``/``clip_end``/``clip_box``/``clip_index``) describing
+      the last clipper step.
     - A fresh embedding computed from the clipped content (audio/image/text)
       instead of inheriting the parent's embedding.
 
     Any importer-provided MD5 or embedding on the *parent* media is
-    discarded for clips produced by a non-trivial clipper, since those
+    discarded for clips produced by a non-trivial chain, since those
     values describe the full media item, not the sub-item.
 
     Args:
         on_progress: Optional callback ``(current, total, phase)`` invoked
             during clipping and re-embedding so callers can report progress.
     """
-    if not clipper_name:
-        return
-    from vtsearch.media import get_clipper
+    from vtsearch.datasets.clipper_chain import apply_chain_to_clips, normalise_chain
 
-    try:
-        clipper = get_clipper(clipper_name)
-    except KeyError:
-        return
+    # Resolve the effective step list. A non-empty `chain_steps` takes
+    # precedence; otherwise build a length-1 chain from the legacy
+    # single-clipper args (if any).
+    steps = normalise_chain(chain_steps)
+    legacy_default = not steps and not chain_steps and clipper_name and clipper_name.endswith("_default")
+    if legacy_default:
+        # Legacy fast path: a single ``*_default`` clipper is a no-op on
+        # the data but stamps ``clipper`` / ``clipper_<key>`` in every
+        # origin. We don't put it in the chain (so ``clipper_chain``
+        # isn't written for default-only loads) but we do preserve the
+        # legacy stamp so existing readers continue to see it.
+        from vtsearch.media import get_clipper  # noqa: PLC0415
 
-    if clipper_params:
-        clipper = clipper.with_params(clipper_params)
-
-    # Per-dataset resolution hook.  Default base implementation returns
-    # self; reserved for clippers that need a dataset-level decision.
-    # Auto routing now happens per-item via resolve_for_media() below.
-    durations = [float(m.get("duration", 0) or 0) for m in clips_dict.values()]
-    clipper = clipper.resolve_for_durations(durations)
-
-    _base_keys = {"name", "display_name", "media_type", "parameters", "description", "creation_questions"}
-
-    all_clipped: list[dict] = []
-    # Track which clips need MD5/embedding recomputation.  Any clip that
-    # came from a multi-output clipper call is a genuine sub-item whose
-    # inherited MD5 and embedding describe the *parent*, not the clip.
-    needs_recompute: list[bool] = []
-
-    media_list = list(clips_dict.values())
-    total_medias = len(media_list)
-    media_type = clipper.media_type
-    for media_idx, media in enumerate(media_list):
-        if on_progress:
-            on_progress(media_idx, total_medias, "clipping")
-        # Per-media resolution.  Non-auto clippers return self; auto
-        # clippers branch on the item's own duration so different items
-        # can take different routes.  Each clip records the resolved
-        # concrete clipper's name and parameters in its origin, so
-        # cross-dataset replay is deterministic regardless of the
-        # original auto policy.
-        resolved = clipper.resolve_for_media(media)
-        resolved_dict = resolved.to_dict()
-        effective_params = {k: v for k, v in resolved_dict.items() if k not in _base_keys}
-        clipped = resolved.clip(media)
-        is_real_clip = len(clipped) > 1
-        for idx, clip in enumerate(clipped):
-            orig = clip.get("origin")
+        try:
+            clipper = get_clipper(clipper_name)
+        except KeyError:
+            return
+        if clipper_params:
+            clipper = clipper.with_params(clipper_params)
+        resolved_dict = clipper.to_dict()
+        base_keys = {"name", "display_name", "media_type", "parameters", "description", "creation_questions"}
+        effective_params = {k: v for k, v in resolved_dict.items() if k not in base_keys}
+        for media in clips_dict.values():
+            orig = media.get("origin")
             if isinstance(orig, dict):
-                clip["origin"] = dict(orig)
-                clip["origin"]["params"] = dict(clip["origin"].get("params", {}))
-                clip["origin"]["params"]["clipper"] = resolved.name
-                # Store the clipper's effective parameter values so that
-                # cross-dataset resolution can reconstruct the exact same
-                # clipper configuration.
+                media["origin"] = dict(orig)
+                media["origin"]["params"] = dict(orig.get("params", {}))
+                media["origin"]["params"]["clipper"] = clipper.name
                 for pk, pv in effective_params.items():
-                    clip["origin"]["params"][f"clipper_{pk}"] = str(pv)
-                if is_real_clip:
-                    clip["origin"]["params"]["clip_index"] = str(idx)
-                # Persist clip boundaries in origin so they survive label
-                # export/import and can be used for cross-dataset resolution.
-                if clip.get("clip_start") is not None:
-                    clip["origin"]["params"]["clip_start"] = str(clip["clip_start"])
-                if clip.get("clip_end") is not None:
-                    clip["origin"]["params"]["clip_end"] = str(clip["clip_end"])
-                if clip.get("clip_box") is not None:
-                    clip["origin"]["params"]["clip_box"] = ",".join(str(v) for v in clip["clip_box"])
-            all_clipped.append(clip)
-            needs_recompute.append(is_real_clip)
+                    media["origin"]["params"][f"clipper_{pk}"] = str(pv)
+        return
 
-    # Recompute MD5 and re-embed every genuine sub-item.
-    _fixup_clip_md5_and_embeddings(all_clipped, needs_recompute, media_type, on_progress=on_progress)
+    if not steps and clipper_name:
+        # Resolve the legacy single-clipper args into a length-1 chain.
+        # Catch unknown names here so we match the legacy no-op semantics.
+        from vtsearch.media import get_clipper  # noqa: PLC0415
 
-    # Regenerate thumbnails so audio/video clips show their own range
-    # rather than the parent's full waveform / mid-frame.
-    _regenerate_clip_thumbnails(all_clipped, needs_recompute, media_type)
+        try:
+            get_clipper(clipper_name)
+        except KeyError:
+            return
+        steps = [{"kind": "clipper", "name": clipper_name, "params": dict(clipper_params or {})}]
+    if not steps:
+        return
 
-    clips_dict.clear()
-    for new_id, clip in enumerate(all_clipped, 1):
-        clip["id"] = new_id
-        clips_dict[new_id] = clip
+    result = apply_chain_to_clips(clips_dict, steps, on_progress=on_progress)
+    if result is None:
+        return
+    final_type, needs_recompute = result
+
+    clips_list = list(clips_dict.values())
+    _fixup_clip_md5_and_embeddings(clips_list, needs_recompute, final_type, on_progress=on_progress)
+    _regenerate_clip_thumbnails(clips_list, needs_recompute, final_type)
+
+    # Update `type` on every clip so downstream code sees the final type
+    # (converter chains change the media_type of the carriers).
+    for clip in clips_dict.values():
+        clip["type"] = final_type
 
 
 def _regenerate_clip_thumbnails(  # noqa: C901
@@ -661,6 +676,7 @@ def _run_origin_load_in_background(  # noqa: C901
     name: str = "",
     clipper: str = "",
     clipper_params: dict | None = None,
+    chain_steps: list[dict] | None = None,
     embedder: str = "",
     created_by: str = "",
     media_type: str = "",
@@ -799,12 +815,14 @@ def _run_origin_load_in_background(  # noqa: C901
                 if not media.get("origin_name"):
                     media["origin_name"] = media.get("filename", "")
 
-            if clipper:
+            if clipper or chain_steps:
 
                 def _clipper_progress(current: int, total: int, phase: str) -> None:
                     tracker.check_cancelled()
                     if phase == "clipping":
                         msg = "Clipping media…"
+                    elif phase == "converting":
+                        msg = "Converting media…"
                     else:
                         msg = "Embedding clips…"
                     tracker.update(
@@ -817,7 +835,13 @@ def _run_origin_load_in_background(  # noqa: C901
                     )
 
                 _clipper_progress(0, 0, "clipping")
-                _apply_clipper(ctx.medias, clipper, clipper_params, on_progress=_clipper_progress)
+                _apply_clipper(
+                    ctx.medias,
+                    clipper,
+                    clipper_params,
+                    on_progress=_clipper_progress,
+                    chain_steps=chain_steps,
+                )
 
             def _dedup_progress(current: int, total: int) -> None:
                 tracker.check_cancelled()
@@ -1010,17 +1034,18 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     origin = importer.build_origin(field_values)
     clipper_name = field_values.pop("clipper", "") or ""
     clipper_params = field_values.pop("clipper_params", None)
+    chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
     # Keep clipper in field_values for importers that need it (e.g. demo
     # importer writes a .clipper sidecar for readiness tracking).
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
 
-    # When a multi-output clipper is selected, skip embedding during the
-    # import phase.  The clipper step will re-embed every clip anyway, so
-    # computing parent embeddings up front is wasted work.  Default
-    # clippers (pass-through, single output) still need the parent
-    # embedding since it won't be recomputed.
-    if clipper_name and not clipper_name.endswith("_default"):
+    # When a multi-output clipper (or any non-empty chain) is selected,
+    # skip embedding during the import phase.  The chain re-embeds every
+    # final clip anyway, so computing parent embeddings up front is
+    # wasted work.  Default clippers (pass-through, single output) still
+    # need the parent embedding since it won't be recomputed.
+    if (clipper_name and not clipper_name.endswith("_default")) or chain_steps:
         field_values["skip_embedding"] = True
 
     # Extract media_type from field_values so in-progress tasks can expose it
@@ -1042,6 +1067,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         name=importer.resolve_display_name(field_values),
         clipper=clipper_name,
         clipper_params=clipper_params,
+        chain_steps=chain_steps,
         embedder=embedder_name,
         created_by=created_by,
         media_type=media_type_hint,
