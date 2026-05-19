@@ -80,6 +80,50 @@ def _pool_box_from_media(
     return box_to_vote_vector(np.asarray(grid), region_box)
 
 
+def _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name: str) -> None:
+    """Drop the label-embedding cache when the active dataset's embedder changed.
+
+    Mixing vectors from two embedders into one MLP produces garbage.  When
+    ``det_ctx.embedder`` is empty (fresh load or legacy state) we keep the
+    cache; otherwise a mismatch with the active embedder forces a rebuild.
+    """
+    if det_ctx.embedder and embedder_name and det_ctx.embedder != embedder_name:
+        det_ctx.label_embeddings.clear()
+
+
+def _resolve_uncached_embedding(
+    elem: LabeledElement,
+    snap: dict[int, dict[str, Any]] | None,
+    *,
+    media_type: str,
+    embedder_name: str,
+) -> np.ndarray | None:
+    """Produce a training vector for *elem*, not consulting the cache.
+
+    Tries the in-dataset path first: when *elem* resolves to a cid in the
+    active *snap*, reuse the stored embedding (region-pooling from
+    ``patch_grid`` when the element has a ``region_box`` and a patch grid
+    is available).  Falls back to the cross-dataset path — resolve via the
+    importer and embed freshly.  Returns ``None`` when neither path
+    produces a vector.
+    """
+    from vtsearch.detectors.labelset_elements import resolve_current_dataset_cid
+
+    if snap:
+        cid = resolve_current_dataset_cid(elem)
+        if cid is not None and cid in snap:
+            media = snap[cid]
+            pooled = _pool_box_from_media(media, elem.region_box)
+            emb = pooled if pooled is not None else media.get("embedding")
+            if emb is not None:
+                return np.asarray(emb)
+
+    # Cross-dataset path: no patch_grid is available, so a stashed
+    # ``region_box`` falls back to the image-level embedding.
+    emb = _embed_one(elem, media_type=media_type, embedder_name=embedder_name)
+    return np.asarray(emb) if emb is not None else None
+
+
 def populate_label_embeddings(
     det_ctx,
     labelset: LabelSet,
@@ -103,19 +147,10 @@ def populate_label_embeddings(
     Returns the number of elements that have a cached vector after this
     pass.
     """
-    from vtsearch.detectors.labelset_elements import (
-        resolve_current_dataset_cid,
-        stable_element_id,
-    )
+    from vtsearch.detectors.labelset_elements import stable_element_id
 
     embedder_name = _embedder_for_active_dataset(snap)
-    # If the cache was built against a different embedder, drop it: mixing
-    # vectors from two embedders into one MLP produces garbage. The detector
-    # stamps ``det_ctx.embedder`` after each successful pass; an empty
-    # ``det_ctx.embedder`` means the cache is fresh (legacy or first-load)
-    # and is safe to keep.
-    if det_ctx.embedder and embedder_name and det_ctx.embedder != embedder_name:
-        det_ctx.label_embeddings.clear()
+    _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name)
     cache: dict[str, np.ndarray] = det_ctx.label_embeddings
     total = len(labelset.elements)
     cached = 0
@@ -133,29 +168,9 @@ def populate_label_embeddings(
             cached += 1
             continue
 
-        cid = resolve_current_dataset_cid(elem) if snap else None
-        if cid is not None and snap and cid in snap:
-            media = snap[cid]
-            # Region-aware path: pool from ``patch_grid`` when the element has
-            # a ``region_box`` annotation and the source media has a stored
-            # patch grid (i.e. the dataset was loaded with a patch-region
-            # embedder).  Otherwise fall back to the full-image embedding.
-            pooled = _pool_box_from_media(media, elem.region_box)
-            emb = pooled if pooled is not None else media.get("embedding")
-            if emb is not None:
-                cache[eid] = np.asarray(emb)
-                cached += 1
-                if on_progress:
-                    on_progress(elem.origin_name or elem.filename or eid, idx + 1, total)
-                continue
-
-        # Cross-dataset path: we resolve the element via its importer and
-        # embed it freshly.  No patch_grid is available here, so a stashed
-        # ``region_box`` falls back to the image-level embedding — exactly
-        # the design's fallback for legacy / non-patch datasets.
-        emb = _embed_one(elem, media_type=media_type, embedder_name=embedder_name)
+        emb = _resolve_uncached_embedding(elem, snap, media_type=media_type, embedder_name=embedder_name)
         if emb is not None:
-            cache[eid] = np.asarray(emb)
+            cache[eid] = emb
             cached += 1
         if on_progress:
             on_progress(elem.origin_name or elem.filename or eid, idx + 1, total)

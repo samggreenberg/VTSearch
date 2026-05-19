@@ -433,7 +433,92 @@ def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.
     return result
 
 
-def _apply_clip_and_embed(  # noqa: C901
+def _clip_audio_to_bytes(file_path: Path, clip_start: float, clip_end: float) -> tuple[bytes, str]:
+    """Slice a WAV file to ``[clip_start, clip_end]`` seconds.  Returns ``(bytes, suffix)``."""
+    from vtsearch.media.audio.clipper import _wav_slice
+
+    wav_bytes = file_path.read_bytes()
+    return _wav_slice(wav_bytes, clip_start, clip_end), ".wav"
+
+
+def _clip_image_to_bytes(file_path: Path, clip_box: str) -> tuple[bytes, str]:
+    """Crop an image to the comma-separated ``clip_box``.  Returns ``(bytes, suffix)``."""
+    import io as _io
+
+    from PIL import Image
+
+    parts = [int(float(v)) for v in clip_box.split(",")]
+    if len(parts) != 4:
+        raise ValueError(f"clip_box must have 4 values, got {len(parts)}")
+    box: tuple[int, int, int, int] = (parts[0], parts[1], parts[2], parts[3])
+    with Image.open(file_path) as img:
+        cropped = img.crop(box)
+        buf = _io.BytesIO()
+        cropped.save(buf, format=img.format or "PNG")
+    return buf.getvalue(), ".png"
+
+
+def _clip_text_to_bytes(file_path: Path, clip_index: int) -> tuple[bytes, str] | None:
+    """Extract the ``clip_index``-th sentence.  Returns None when the index is out of range."""
+    import re
+
+    text = file_path.read_text(encoding="utf-8")
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    if 0 <= clip_index < len(sentences):
+        return sentences[clip_index].encode("utf-8"), ".txt"
+    return None
+
+
+def _embed_via_tempfile(data: bytes, suffix: str, media_type: str, embedder_name: str) -> np.ndarray | None:
+    """Write *data* to a tempfile with *suffix* and embed it; clean up the tempfile."""
+    import os
+    import tempfile
+
+    fd, tmp = tempfile.mkstemp(suffix=suffix)
+    try:
+        os.write(fd, data)
+        os.close(fd)
+        return embed_file(Path(tmp), media_type, embedder_name)
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+def _clip_to_bytes(file_path: Path, media_type: str, params: dict[str, Any]) -> tuple[bytes, str] | None:
+    """Dispatch to the per-media-type clipper.  Returns None when no clip applies."""
+    if media_type == "audio":
+        clip_start = params.get("clip_start")
+        clip_end = params.get("clip_end")
+        if clip_start is not None and clip_end is not None:
+            return _clip_audio_to_bytes(file_path, float(clip_start), float(clip_end))
+    elif media_type == "image":
+        clip_box = params.get("clip_box")
+        if clip_box is not None:
+            return _clip_image_to_bytes(file_path, clip_box)
+    elif media_type == "text":
+        clip_index = params.get("clip_index")
+        if clip_index is not None:
+            return _clip_text_to_bytes(file_path, int(clip_index))
+    return None
+
+
+def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> np.ndarray | None:
+    """Replay a clipper chain on *file_path*.  Returns None when nothing applies or the replay fails."""
+    from vtsearch.datasets.clipper_chain import parse_trail, replay_chain_on_file
+
+    steps = parse_trail(chain_raw)
+    if not steps:
+        return None
+    try:
+        return replay_chain_on_file(file_path, steps, embedder_name)
+    except Exception:
+        log.debug("_apply_clip_and_embed: chain replay failed, falling back", exc_info=True)
+        return None
+
+
+def _apply_clip_and_embed(
     file_path: Path,
     media_type: str,
     origin: dict[str, Any],
@@ -444,120 +529,166 @@ def _apply_clip_and_embed(  # noqa: C901
     If the origin contains clip parameters (``clip_start``/``clip_end`` for
     audio, ``clip_box`` for images, or a text sentence clipper), the file is
     clipped first and the clipped content is embedded.  Falls back to
-    :func:`embed_file` when no clip params are present.
+    :func:`embed_file` when no clip params apply (e.g. video, or an
+    unrecognised clipper) or when the clip step raises.
     """
-    import os
-    import tempfile
-
     params = origin.get("params", {})
 
-    # Chain replay takes precedence over the legacy single-clipper path.
     chain_raw = params.get("clipper_chain")
     if chain_raw:
-        from vtsearch.datasets.clipper_chain import parse_trail, replay_chain_on_file
+        embedding = _replay_chain(file_path, chain_raw, embedder_name)
+        if embedding is not None:
+            return embedding
+        # Fall through to legacy/full-file embed.
 
-        steps = parse_trail(chain_raw)
-        if steps:
-            try:
-                embedding = replay_chain_on_file(file_path, steps, embedder_name)
-            except Exception:
-                log.debug("_apply_clip_and_embed: chain replay failed, falling back", exc_info=True)
-                embedding = None
-            if embedding is not None:
-                return embedding
-            # Fall through to legacy/full-file embed.
-
-    clipper_name = params.get("clipper", "")
-
-    if not clipper_name:
+    if not params.get("clipper"):
         return embed_file(file_path, media_type, embedder_name)
 
-    clip_start = params.get("clip_start")
-    clip_end = params.get("clip_end")
-    clip_box = params.get("clip_box")
+    try:
+        clipped = _clip_to_bytes(file_path, media_type, params)
+    except Exception:
+        log.debug("_apply_clip_and_embed: %s clip failed, falling back", media_type, exc_info=True)
+        return embed_file(file_path, media_type, embedder_name)
 
-    # --- Audio clips: slice WAV bytes ---
-    if clip_start is not None and clip_end is not None and media_type == "audio":
-        try:
-            from vtsearch.media.audio.clipper import _wav_slice
+    if clipped is None:
+        return embed_file(file_path, media_type, embedder_name)
 
-            wav_bytes = file_path.read_bytes()
-            sliced = _wav_slice(wav_bytes, float(clip_start), float(clip_end))
-            fd, tmp = tempfile.mkstemp(suffix=".wav")
-            try:
-                os.write(fd, sliced)
-                os.close(fd)
-                return embed_file(Path(tmp), media_type, embedder_name)
-            finally:
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-        except Exception:
-            log.debug("_apply_clip_and_embed: audio clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type, embedder_name)
-
-    # --- Image clips: crop to clip_box ---
-    if clip_box is not None and media_type == "image":
-        try:
-            import io as _io
-
-            from PIL import Image
-
-            parts = [int(float(v)) for v in clip_box.split(",")]
-            if len(parts) != 4:
-                raise ValueError(f"clip_box must have 4 values, got {len(parts)}")
-            box_values: tuple[int, int, int, int] = (parts[0], parts[1], parts[2], parts[3])
-            with Image.open(file_path) as img:
-                cropped = img.crop(box_values)
-                buf = _io.BytesIO()
-                cropped.save(buf, format=img.format or "PNG")
-            crop_bytes = buf.getvalue()
-            fd, tmp = tempfile.mkstemp(suffix=".png")
-            try:
-                os.write(fd, crop_bytes)
-                os.close(fd)
-                return embed_file(Path(tmp), media_type, embedder_name)
-            finally:
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-        except Exception:
-            log.debug("_apply_clip_and_embed: image clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type, embedder_name)
-
-    # --- Text clips: extract the sentence by clip_index ---
-    if media_type == "text":
-        try:
-            clip_index = params.get("clip_index")
-            if clip_index is not None:
-                import re
-
-                text = file_path.read_text(encoding="utf-8")
-                sentence_re = re.compile(r"(?<=[.!?])\s+")
-                sentences = [s.strip() for s in sentence_re.split(text) if s.strip()]
-                idx = int(clip_index)
-                if 0 <= idx < len(sentences):
-                    fd, tmp = tempfile.mkstemp(suffix=".txt")
-                    try:
-                        os.write(fd, sentences[idx].encode("utf-8"))
-                        os.close(fd)
-                        return embed_file(Path(tmp), media_type, embedder_name)
-                    finally:
-                        try:
-                            os.unlink(tmp)
-                        except OSError:
-                            pass
-        except Exception:
-            log.debug("_apply_clip_and_embed: text clip failed, falling back", exc_info=True)
-            return embed_file(file_path, media_type, embedder_name)
-
-    # Video clips and unrecognised clippers: embed the full file.
-    return embed_file(file_path, media_type, embedder_name)
+    data, suffix = clipped
+    return _embed_via_tempfile(data, suffix, media_type, embedder_name)
 
 
-def resolve_label_embeddings(  # noqa: C901
+@dataclass
+class _LabelOutcome:
+    """One label entry's resolution result.
+
+    ``status`` is one of: ``"skipped"`` (label not ``good``/``bad``, does
+    not count toward totals), ``"success"`` (carries ``embedding`` +
+    ``label_value``), or a failure tag: ``"no_origin"`` / ``"file_not_found"``
+    / ``"embed_failed"``.
+    """
+
+    status: str
+    embedding: np.ndarray | None = None
+    label_value: float = 0.0
+
+
+def _log_resolve_failure(
+    index: int,
+    entry: dict[str, Any],
+    status: str,
+    origin: dict[str, Any] | None,
+    origin_name: str,
+    filename: str,
+) -> None:
+    """Emit the per-entry failure message for the file-resolution path."""
+    if status == "no_origin":
+        log.info(
+            "  label[%d] FAILED (no origin): md5=%s, origin_name=%r, "
+            "filename=%r — this label has no origin trail and cannot "
+            "be resolved to a file",
+            index,
+            entry.get("md5", "?")[:12],
+            origin_name,
+            filename,
+        )
+        return
+    # file_not_found
+    assert origin is not None
+    log.info(
+        "  label[%d] FAILED (file not found): importer=%r, origin_name=%r, filename=%r, params=%r",
+        index,
+        origin.get("importer", "?"),
+        origin_name,
+        filename,
+        origin.get("params", {}),
+    )
+
+
+def _embed_resolved_label(file_path: Path, media_type: str, origin: dict[str, Any] | None) -> np.ndarray | None:
+    """Embed a resolved file, switching to clip-aware embedding when the origin demands it."""
+    params = origin.get("params", {}) if origin is not None else {}
+    if origin is not None and (params.get("clipper") or params.get("clipper_chain")):
+        return _apply_clip_and_embed(file_path, media_type, origin)
+    return embed_file(file_path, media_type)
+
+
+def _resolve_one_label(entry: dict[str, Any], media_type: str, index: int) -> _LabelOutcome:
+    """Resolve a single label entry to an embedding.  Logs success / failure inline."""
+    label_val = entry.get("label", "")
+    if label_val not in ("good", "bad"):
+        return _LabelOutcome(status="skipped")
+
+    origin = entry.get("origin")
+    origin_name = entry.get("origin_name", "")
+    filename = entry.get("filename", "")
+
+    with resolve_file_context(origin, origin_name, filename) as file_path:
+        if file_path is None:
+            status = "no_origin" if origin is None else "file_not_found"
+            _log_resolve_failure(index, entry, status, origin, origin_name, filename)
+            return _LabelOutcome(status=status)
+
+        embedding = _embed_resolved_label(file_path, media_type, origin)
+        if embedding is None:
+            log.info(
+                "  label[%d] FAILED (embed): file resolved to %s but embedding returned None for media_type=%r",
+                index,
+                file_path,
+                media_type,
+            )
+            return _LabelOutcome(status="embed_failed")
+
+        log.debug(
+            "  label[%d] OK: %s → %s (label=%s)",
+            index,
+            origin_name or filename,
+            file_path.name,
+            label_val,
+        )
+        return _LabelOutcome(
+            status="success",
+            embedding=embedding,
+            label_value=1.0 if label_val == "good" else 0.0,
+        )
+
+
+def _log_resolve_summary(result: ResolvedLabels, failure_counts: dict[str, int]) -> None:
+    """Emit the final per-batch summary at info / warning level based on outcome."""
+    n_good = sum(1 for v in result.labels if v == 1.0)
+    n_bad = sum(1 for v in result.labels if v == 0.0)
+    summary = (
+        f"resolve_label_embeddings: {result.resolved_count} of "
+        f"{result.total_count} labels resolved ({n_good} good, {n_bad} bad)"
+    )
+    if result.missing_entries:
+        summary += (
+            f" | {len(result.missing_entries)} FAILED: "
+            f"{failure_counts['no_origin']} had no origin, "
+            f"{failure_counts['file_not_found']} file not found, "
+            f"{failure_counts['embed_failed']} embed failed"
+        )
+
+    if result.total_count > 0 and result.resolved_count == 0:
+        log.warning(
+            "%s. This usually means the importer's resolve_file() method "
+            "is missing or the source files are no longer on disk.",
+            summary,
+        )
+        if result.missing_entries:
+            first = result.missing_entries[0]
+            log.warning(
+                "First unresolved label: origin=%r, origin_name=%r, filename=%r",
+                first.get("origin"),
+                first.get("origin_name", ""),
+                first.get("filename", ""),
+            )
+    elif result.missing_entries:
+        log.warning("%s", summary)
+    else:
+        log.info("%s", summary)
+
+
+def resolve_label_embeddings(
     labels: list[dict[str, Any]],
     media_type: str,
     progress_callback: Any | None = None,
@@ -577,128 +708,30 @@ def resolve_label_embeddings(  # noqa: C901
         A :class:`ResolvedLabels` with resolved embeddings, stats, and missing entries.
     """
     result = ResolvedLabels()
-
-    # Track failure reasons for the summary log
-    _no_origin = 0
-    _file_not_found = 0
-    _embed_failed = 0
+    failure_counts = {"no_origin": 0, "file_not_found": 0, "embed_failed": 0}
+    total = len(labels)
 
     log.info(
         "resolve_label_embeddings: starting resolution of %d label entries for media_type=%r",
-        len(labels),
+        total,
         media_type,
     )
 
-    _total_entries = len(labels)
-
     for i, entry in enumerate(labels):
-        label_val = entry.get("label", "")
-        if label_val not in ("good", "bad"):
-            if progress_callback is not None:
-                progress_callback(current=i + 1, total=_total_entries)
+        outcome = _resolve_one_label(entry, media_type, i)
+        if progress_callback is not None:
+            progress_callback(current=i + 1, total=total)
+
+        if outcome.status == "skipped":
             continue
-
         result.total_count += 1
-
-        origin = entry.get("origin")
-        origin_name = entry.get("origin_name", "")
-        filename = entry.get("filename", "")
-
-        with resolve_file_context(origin, origin_name, filename) as file_path:
-            if file_path is None:
-                result.missing_entries.append(entry)
-                if origin is None:
-                    _no_origin += 1
-                    log.info(
-                        "  label[%d] FAILED (no origin): md5=%s, origin_name=%r, "
-                        "filename=%r — this label has no origin trail and cannot "
-                        "be resolved to a file",
-                        i,
-                        entry.get("md5", "?")[:12],
-                        origin_name,
-                        filename,
-                    )
-                else:
-                    _file_not_found += 1
-                    log.info(
-                        "  label[%d] FAILED (file not found): importer=%r, origin_name=%r, filename=%r, params=%r",
-                        i,
-                        origin.get("importer", "?"),
-                        origin_name,
-                        filename,
-                        origin.get("params", {}),
-                    )
-                if progress_callback is not None:
-                    progress_callback(current=i + 1, total=_total_entries)
-                continue
-
-            # Use clip-aware embedding when the label has clip params in its
-            # origin (e.g. from a clipped dataset).  This ensures cross-dataset
-            # resolution embeds the clipped content, not the whole parent file.
-            origin_params = origin.get("params", {}) if origin is not None else {}
-            if origin is not None and (origin_params.get("clipper") or origin_params.get("clipper_chain")):
-                embedding = _apply_clip_and_embed(file_path, media_type, origin)
-            else:
-                embedding = embed_file(file_path, media_type)
-            if embedding is None:
-                result.missing_entries.append(entry)
-                _embed_failed += 1
-                log.info(
-                    "  label[%d] FAILED (embed): file resolved to %s but embedding returned None for media_type=%r",
-                    i,
-                    file_path,
-                    media_type,
-                )
-                if progress_callback is not None:
-                    progress_callback(current=i + 1, total=_total_entries)
-                continue
-
-            result.embeddings.append(embedding)
-            result.labels.append(1.0 if label_val == "good" else 0.0)
+        if outcome.status == "success" and outcome.embedding is not None:
+            result.embeddings.append(outcome.embedding)
+            result.labels.append(outcome.label_value)
             result.resolved_count += 1
-            log.debug(
-                "  label[%d] OK: %s → %s (label=%s)",
-                i,
-                origin_name or filename,
-                file_path.name,
-                label_val,
-            )
-            if progress_callback is not None:
-                progress_callback(current=i + 1, total=_total_entries)
+        else:
+            result.missing_entries.append(entry)
+            failure_counts[outcome.status] += 1
 
-    # --- Summary ---
-    n_good = sum(1 for v in result.labels if v == 1.0)
-    n_bad = sum(1 for v in result.labels if v == 0.0)
-    _summary = (
-        f"resolve_label_embeddings: {result.resolved_count} of "
-        f"{result.total_count} labels resolved "
-        f"({n_good} good, {n_bad} bad)"
-    )
-    if result.missing_entries:
-        _summary += (
-            f" | {len(result.missing_entries)} FAILED: "
-            f"{_no_origin} had no origin, "
-            f"{_file_not_found} file not found, "
-            f"{_embed_failed} embed failed"
-        )
-
-    if result.total_count > 0 and result.resolved_count == 0:
-        log.warning(
-            "%s. This usually means the importer's resolve_file() method "
-            "is missing or the source files are no longer on disk.",
-            _summary,
-        )
-        if result.missing_entries:
-            first = result.missing_entries[0]
-            log.warning(
-                "First unresolved label: origin=%r, origin_name=%r, filename=%r",
-                first.get("origin"),
-                first.get("origin_name", ""),
-                first.get("filename", ""),
-            )
-    elif result.missing_entries:
-        log.warning("%s", _summary)
-    else:
-        log.info("%s", _summary)
-
+    _log_resolve_summary(result, failure_counts)
     return result

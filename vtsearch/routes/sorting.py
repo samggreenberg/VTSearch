@@ -776,6 +776,89 @@ def example_sort():
         abort(500, message=f"Example sort failed: {format_exception_detail(exc)}")
 
 
+def _parse_label_file(file) -> list[dict]:
+    """Parse the uploaded label file and return its ``labels`` list, or abort 400."""
+    text = file.read().decode("utf-8")
+    try:
+        label_data = json.loads(text)
+    except Exception:
+        abort(400, message="Invalid label file format")
+    labels = label_data.get("labels", [])
+    if not labels:
+        abort(400, message="No labels found in file")
+    return labels
+
+
+def _embed_external_labels(labels: list[dict], emb) -> tuple[list, list[float], int, int]:
+    """Embed every well-formed entry in *labels* using *emb*.
+
+    Returns ``(X_list, y_list, loaded_count, skipped_count)``. Entries are
+    skipped (not aborted) when the label is malformed, the path is missing
+    or escapes the allowed directory, the file doesn't exist, or the
+    embedder returns None.
+    """
+    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+
+    X_list: list = []
+    y_list: list[float] = []
+    loaded = 0
+    skipped = 0
+    file_base = _paths.get_file_access_base_dir()
+
+    for entry in labels:
+        label = entry.get("label")
+        if label not in ("good", "bad"):
+            skipped += 1
+            continue
+
+        raw_path = entry.get("path") or entry.get("file") or entry.get("filename")
+        if not raw_path:
+            skipped += 1
+            continue
+
+        media_path = Path(raw_path)
+        try:
+            _paths.validate_server_filepath(str(media_path), base_dir=file_base)
+        except ValueError:
+            skipped += 1
+            continue
+        if not media_path.exists():
+            skipped += 1
+            continue
+
+        embedding = emb.embed_media(media_from_path(media_path))
+        if embedding is None:
+            skipped += 1
+            continue
+
+        X_list.append(embedding)
+        y_list.append(1.0 if label == "good" else 0.0)
+        loaded += 1
+
+    return X_list, y_list, loaded, skipped
+
+
+def _train_and_score_dataset(X_list: list, y_list: list[float]) -> tuple[list[dict], float]:
+    """Train an MLP on (X, y), then score every media in the active dataset."""
+    import torch  # noqa: PLC0415
+
+    from vtsearch.detectors.training import train_and_threshold
+    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+
+    snap = snapshot_medias()
+    model, threshold = train_and_threshold(X_list, y_list, snap=snap)
+
+    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+    X_all = torch.from_numpy(all_embs)
+    with torch.no_grad():
+        X_all = X_all.to(next(model.parameters()).device)
+        scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().tolist()
+
+    paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
+    results = [{"id": cid, "score": round(s, 4)} for cid, s in paired]
+    return results, threshold
+
+
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])
 @sorting_bp.response(200, LabelFileSortResponseSchema)
 @sorting_bp.alt_response(
@@ -786,7 +869,7 @@ def example_sort():
     ),
 )
 @sorting_bp.alt_response(500, description="Label file sort failed (unexpected exception).")
-def label_file_sort():  # noqa: C901
+def label_file_sort():
     """Train MLP on external media files from a label file, then sort all medias."""
     if "file" not in request.files:
         abort(400, message="No file provided")
@@ -798,73 +881,20 @@ def label_file_sort():  # noqa: C901
     if not snapshot_medias():
         abort(400, message="No medias loaded")
 
-    # Determine embedder from loaded dataset
     emb = _get_embedder_for_loaded_data()
     if emb is None:
         abort(400, message="No embedder available for loaded dataset")
 
     try:
-        # Parse the label file
-        text = file.read().decode("utf-8")
-        try:
-            label_data = json.loads(text)
-        except Exception:
-            abort(400, message="Invalid label file format")
+        labels = _parse_label_file(file)
+        X_list, y_list, loaded, skipped = _embed_external_labels(labels, emb)
 
-        # Extract labels list
-        labels = label_data.get("labels", [])
-        if not labels:
-            abort(400, message="No labels found in file")
-
-        # Load and embed each labeled media file
-        X_list = []
-        y_list = []
-        loaded_count = 0
-        skipped_count = 0
-        _file_base = _paths.get_file_access_base_dir()
-
-        for entry in labels:
-            label = entry.get("label")
-            if label not in ("good", "bad"):
-                skipped_count += 1
-                continue
-
-            # Try to get media file path
-            media_path = entry.get("path") or entry.get("file") or entry.get("filename")
-            if not media_path:
-                skipped_count += 1
-                continue
-
-            media_path = Path(media_path)
-            # Ensure the path doesn't escape the allowed directory
-            try:
-                _paths.validate_server_filepath(str(media_path), base_dir=_file_base)
-            except ValueError:
-                skipped_count += 1
-                continue
-            if not media_path.exists():
-                skipped_count += 1
-                continue
-
-            # Embed the media file using the dataset's embedder
-            from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
-
-            embedding = emb.embed_media(media_from_path(media_path))
-            if embedding is None:
-                skipped_count += 1
-                continue
-
-            X_list.append(embedding)
-            y_list.append(1.0 if label == "good" else 0.0)
-            loaded_count += 1
-
-        if loaded_count < 2:
+        if loaded < 2:
             abort(
                 400,
-                message=f"Need at least 2 valid labeled files (loaded {loaded_count}, skipped {skipped_count})",
+                message=f"Need at least 2 valid labeled files (loaded {loaded}, skipped {skipped})",
             )
 
-        # Check if we have both good and bad examples
         from vtsearch.detectors.training import validate_good_bad_split
 
         try:
@@ -872,32 +902,12 @@ def label_file_sort():  # noqa: C901
         except ValueError:
             abort(400, message="Need at least one good and one bad labeled example")
 
-        # Train MLP and compute threshold using the shared pipeline
-        import torch  # noqa: PLC0415
-
-        from vtsearch.detectors.training import train_and_threshold
-
-        snap = snapshot_medias()
-        model, threshold = train_and_threshold(X_list, y_list, snap=snap)
-
-        # Score every media in the dataset
-        from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
-
-        all_ids, all_embs = get_embedding_matrix_for_snap(snap)
-        X_all = torch.from_numpy(all_embs)
-        with torch.no_grad():
-            X_all = X_all.to(next(model.parameters()).device)
-            scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().tolist()
-
-        # Sort by raw scores (full precision) before rounding for display.
-        paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
-        results = [{"id": cid, "score": round(s, 4)} for cid, s in paired]
-
+        results, threshold = _train_and_score_dataset(X_list, y_list)
         return {
             "results": results,
             "threshold": round(threshold, 4),
-            "loaded": loaded_count,
-            "skipped": skipped_count,
+            "loaded": loaded,
+            "skipped": skipped,
         }
 
     except Exception as exc:

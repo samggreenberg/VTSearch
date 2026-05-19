@@ -10,6 +10,69 @@ from vtsearch.converters.base import MediaConverter
 from vtsearch.plugins import PluginField
 
 
+def _resolve_media_bytes(media: dict[str, Any]) -> bytes | None:
+    """Read raw bytes from ``media_bytes`` or, failing that, ``media_path``."""
+    media_bytes = media.get("media_bytes")
+    if media_bytes is not None:
+        return media_bytes
+    media_path = media.get("media_path")
+    if media_path:
+        path = Path(media_path)
+        if path.exists():
+            return path.read_bytes()
+    return None
+
+
+def _run_paddleocr(media_bytes: bytes, filename: str, language: str) -> list | None:
+    """Decode image bytes and run PaddleOCR, returning the raw per-region results."""
+    try:
+        import numpy as np  # noqa: PLC0415
+        from PIL import Image  # noqa: PLC0415
+    except ImportError:
+        print("Image2TextMediaConverter requires Pillow and numpy")
+        return None
+
+    try:
+        from paddleocr import PaddleOCR  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+    except ImportError:
+        print("Image2TextMediaConverter requires PaddleOCR: pip install paddleocr paddlepaddle")
+        return None
+
+    try:
+        image = Image.open(io.BytesIO(media_bytes)).convert("RGB")
+    except Exception as e:
+        print(f"Image2TextMediaConverter: failed to open {filename}: {e}")
+        return None
+
+    try:
+        model = PaddleOCR(use_angle_cls=True, lang=language, show_log=False)
+        return model.ocr(np.array(image), cls=True)
+    except Exception as e:
+        print(f"Image2TextMediaConverter: PaddleOCR failed on {filename}: {e}")
+        return None
+
+
+def _extract_text_lines(results: list, threshold: float) -> list[str]:
+    """Flatten PaddleOCR per-region output into a list of confident text lines."""
+    lines: list[str] = []
+    if not results:
+        return lines
+    for line_group in results:
+        if not line_group:
+            continue
+        for line in line_group:
+            try:
+                _polygon, (text, conf) = line
+            except (TypeError, ValueError):
+                continue
+            if conf is None or conf < threshold:
+                continue
+            text = (text or "").strip()
+            if text:
+                lines.append(text)
+    return lines
+
+
 class Image2TextMediaConverter(MediaConverter):
     """Run OCR over an image and emit the detected text as a single text media.
 
@@ -80,68 +143,24 @@ class Image2TextMediaConverter(MediaConverter):
     def target_type(self) -> str:
         return "text"
 
-    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:  # noqa: C901
+    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         language = str(self.get_param(params, "language") or "en")
         try:
             threshold = float(self.get_param(params, "threshold") or 0.5)
         except (TypeError, ValueError):
             threshold = 0.5
 
-        media_bytes = media.get("media_bytes")
-        media_path = media.get("media_path")
         filename = media.get("filename", "image.png")
         stem = Path(filename).stem
-
-        if media_bytes is None and media_path:
-            path = Path(media_path)
-            if path.exists():
-                media_bytes = path.read_bytes()
-
+        media_bytes = _resolve_media_bytes(media)
         if not media_bytes:
             return []
 
-        try:
-            import numpy as np  # noqa: PLC0415
-            from PIL import Image  # noqa: PLC0415
-        except ImportError:
-            print("Image2TextMediaConverter requires Pillow and numpy")
+        results = _run_paddleocr(media_bytes, filename, language)
+        if results is None:
             return []
 
-        try:
-            from paddleocr import PaddleOCR  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
-        except ImportError:
-            print("Image2TextMediaConverter requires PaddleOCR: pip install paddleocr paddlepaddle")
-            return []
-
-        try:
-            image = Image.open(io.BytesIO(media_bytes)).convert("RGB")
-        except Exception as e:
-            print(f"Image2TextMediaConverter: failed to open {filename}: {e}")
-            return []
-
-        try:
-            model = PaddleOCR(use_angle_cls=True, lang=language, show_log=False)
-            results = model.ocr(np.array(image), cls=True)
-        except Exception as e:
-            print(f"Image2TextMediaConverter: PaddleOCR failed on {filename}: {e}")
-            return []
-
-        lines: list[str] = []
-        if results:
-            for line_group in results:
-                if not line_group:
-                    continue
-                for line in line_group:
-                    try:
-                        _polygon, (text, conf) = line
-                    except (TypeError, ValueError):
-                        continue
-                    if conf is None or conf < threshold:
-                        continue
-                    text = (text or "").strip()
-                    if text:
-                        lines.append(text)
-
+        lines = _extract_text_lines(results, threshold)
         if not lines:
             return []
 

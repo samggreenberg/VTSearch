@@ -16,6 +16,7 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | [extract-library.md](extract-library.md) | **Proposed** | Split VTSearch into a `vtscore` Python library plus the Flask/Angular app, gated on a CI job that runs the test suite without Flask installed. Not started. |
 | [openapi-schema.md](openapi-schema.md) | **Migration complete; one cosmetic follow-up** | flask-smorest plumbing + Swagger UI + per-plugin runtime validation live across every blueprint. Remaining: per-plugin OpenAPI **spec** types for the six plugin-field route bodies (deferred — runtime validation already captures the field types). |
 | [brainstorm.md](brainstorm.md) | **Backlog** | Combined feature + UX backlog (formerly `feature-brainstorm.md` + `ux-brainstorm.md`). Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, UX friction, architecture, experiments. Items graduate into their own plan doc as they mature. |
+| [c901-refactor-triage.md](c901-refactor-triage.md) | **All 8 refactors shipped — ready to retire** | Per-function refactor/skip decisions for the eight functions with cyclomatic complexity ≥20 identified in 2026-05. All eight in the "Refactor" list landed; five "Skip" rows stay skipped. See Open follow-ups for the next triage pass. |
 
 ## Recently completed (removed)
 
