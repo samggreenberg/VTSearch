@@ -1,34 +1,70 @@
 #!/bin/bash
-set -euo pipefail
+# Note: deliberately NOT using `set -u`. The hook used to start with
+# `set -euo pipefail` and `cd "$CLAUDE_PROJECT_DIR"` — if CLAUDE_PROJECT_DIR
+# was unset (which happens in some harness configurations), nounset would
+# error out before the rebase ever ran, and the harness silently swallowed
+# the failure. Removing -u plus the fallback below keeps the rebase running
+# even when the env var is missing.
+set -eo pipefail
 
 # Only run in remote (Claude Code on the web) environments
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
+# Resolve project dir defensively. CLAUDE_PROJECT_DIR is set by the harness
+# but has been observed unset in practice; fall back to the script's repo.
+project_dir="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$project_dir" ]; then
+  project_dir=$(cd "$(dirname "$0")/../.." && pwd)
+fi
+cd "$project_dir"
+
+# Helper: print to BOTH stdout (so Claude sees it in session context via
+# the SessionStart hook output) and stderr (so it shows in container logs).
+notify() {
+  echo "$1"
+  echo "$1" >&2
+}
+
 # Rebase the working branch onto origin/dev. The harness cuts new branches
 # off `main` (the GitHub default), so without this the session starts
 # without commits already merged to `dev`. See CLAUDE.md "Branch Policy".
-cd "$CLAUDE_PROJECT_DIR"
 current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+skip_reason=""
 if [ -z "$current_branch" ] || [ "$current_branch" = "HEAD" ]; then
-  echo "‼ session-start: detached HEAD or no branch; skipping dev rebase." >&2
+  skip_reason="detached HEAD or no branch"
 elif [ "$current_branch" = "dev" ] || [ "$current_branch" = "main" ]; then
-  echo "ℹ session-start: on $current_branch; skipping dev rebase." >&2
+  notify "ℹ session-start: on $current_branch; skipping dev rebase."
 elif ! git diff-index --quiet HEAD -- 2>/dev/null; then
-  echo "‼ session-start: working tree dirty; skipping dev rebase to avoid clobbering changes." >&2
+  skip_reason="working tree dirty (would clobber changes)"
 elif git rev-parse --verify --quiet "refs/remotes/origin/$current_branch" >/dev/null \
     && [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$current_branch")" ]; then
-  echo "‼ session-start: local $current_branch differs from origin/$current_branch (pushed work would be orphaned); skipping dev rebase." >&2
+  skip_reason="local $current_branch differs from origin/$current_branch (pushed work would be orphaned)"
 else
-  echo "ℹ session-start: fetching and rebasing $current_branch onto origin/dev..." >&2
+  notify "ℹ session-start: fetching and rebasing $current_branch onto origin/dev..."
   if git fetch origin --prune 2>&1 | sed 's/^/  /' >&2 \
       && git rebase origin/dev 2>&1 | sed 's/^/  /' >&2; then
-    echo "✓ session-start: rebased $current_branch onto origin/dev." >&2
+    notify "✓ session-start: rebased $current_branch onto origin/dev."
   else
-    echo "‼ session-start: rebase failed; aborting and leaving branch as-is." >&2
+    skip_reason="rebase failed (aborted, branch left as-is)"
     git rebase --abort 2>/dev/null || true
   fi
+fi
+
+# When the auto-rebase didn't happen, make it impossible for Claude to miss.
+# Echoed to stdout so it appears as session-context for the assistant.
+if [ -n "$skip_reason" ]; then
+  cat <<EOF
+‼ session-start: DID NOT rebase onto origin/dev — $skip_reason.
+
+ACTION REQUIRED before editing any code:
+  1. Save / commit / stash any in-progress work.
+  2. Run: git fetch origin --prune && git rebase origin/dev
+  3. Resolve conflicts (or hard-reset to origin/dev if local commits are stale duplicates).
+  4. Re-run any complexity / lint / test analysis AFTER the rebase — the pre-rebase
+     view of the codebase is stale and conclusions drawn from it will be wrong.
+EOF
 fi
 
 # Install lightweight dev tools only — linter and formatter.
