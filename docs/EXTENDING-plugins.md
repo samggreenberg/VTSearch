@@ -170,7 +170,7 @@ changes to routes or core code are needed.
 ### File structure
 
 ```
-vtsearch/datasets/importers/<your_importer>/
+vtscore/datasets/importers/<your_importer>/
 └── __init__.py       # Importer class + IMPORTER instance (required)
 ```
 
@@ -181,7 +181,7 @@ Set the required class attributes and implement the `run()` method.
 Expose a module-level `IMPORTER` instance.
 
 ```python
-# vtsearch/datasets/importers/s3/__init__.py
+# vtscore/datasets/importers/s3/__init__.py
 
 from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 from vtscore.media import all_folder_names
@@ -440,7 +440,7 @@ Records returning `None` are skipped (gaps are squeezed out, IDs stay
 sequential).
 
 For an end-to-end example see
-`vtsearch/datasets/importers/recaller/__init__.py`, which overrides the
+`vtscore/datasets/importers/recaller/__init__.py`, which overrides the
 bulk hook to issue DataWrest embedding lookups and PullWrest downloads
 concurrently via a thread pool.
 
@@ -822,7 +822,7 @@ external sources. Auto-discovered at runtime.
 ### File structure
 
 ```
-vtsearch/labels/importers/<your_importer>/
+vtscore/labels/importers/<your_importer>/
 └── __init__.py       # Importer class + LABEL_IMPORTER instance (required)
 ```
 
@@ -832,7 +832,7 @@ Subclass `LabelImporter` from `vtscore.labels.importers.base`. The
 `run()` method must return a list of label dicts.
 
 ```python
-# vtsearch/labels/importers/postgres/__init__.py
+# vtscore/labels/importers/postgres/__init__.py
 
 from vtscore.labels.importers.base import LabelImporter, LabelImporterField
 
@@ -1196,7 +1196,7 @@ Use a **Label Importer** (above) for one-shot label import. Use a
 ### File structure
 
 ```
-vtsearch/labels/sources/<your_source>/
+vtscore/labels/sources/<your_source>/
 └── __init__.py       # Source class + LABELSET_SOURCE instance (required)
 ```
 
@@ -1205,7 +1205,7 @@ vtsearch/labels/sources/<your_source>/
 Subclass `LabelsetSource` from `vtscore.labels.sources.base`.
 
 ```python
-# vtsearch/labels/sources/database/__init__.py
+# vtscore/labels/sources/database/__init__.py
 
 from vtscore.labels.sources.base import LabelsetSource, PluginField
 from vtscore.datasets.labelset import LabelSet
@@ -1254,7 +1254,7 @@ at runtime from the active `DetectorContext`.
 
 When a source imports labels (via `sync_from_labelset_source()`), each
 applied label would normally trigger a re-export back. A thread-local
-`_syncing` guard in `vtsearch/labels/sync.py` suppresses this:
+`_syncing` guard in `vtscore/labels/sync.py` suppresses this:
 
 ```python
 with _sync_guard():

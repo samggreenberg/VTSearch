@@ -2,7 +2,7 @@
 
 How to add new content types, embedders, clippers, converters, and media
 sources. Media plugins are auto-discovered via sentinel attributes on
-sub-packages of `vtsearch/media/`.
+sub-packages of `vtscore/media/`.
 
 **Related docs:** [EXTENDING.md](EXTENDING.md) (index, checklists, auth,
 dependencies) · [EXTENDING-plugins.md](EXTENDING-plugins.md) (importers,
@@ -29,7 +29,7 @@ extractors).
 
 Media types, embedders, and clippers are **auto-discovered** at import
 time. The `_discover_media_plugins()` function in
-`vtsearch/media/__init__.py` scans sub-packages of `vtsearch/media/` for
+`vtscore/media/__init__.py` scans sub-packages of `vtscore/media/` for
 module-level sentinel attributes:
 
 | Sentinel     | Location                         | Type                 | Description                          |
@@ -59,7 +59,7 @@ datasets are available, and how to load media-specific fields from files.
 ### File structure
 
 ```
-vtsearch/media/<your_type>/
+vtscore/media/<your_type>/
 ├── __init__.py       # Must expose MEDIA_TYPE and CLIPPERS sentinels
 ├── media_type.py     # Your MediaType subclass (required)
 └── embedder_<name>.py  # Optional — one file per embedder, each exposing EMBEDDER
@@ -71,7 +71,7 @@ Subclass `MediaType` from `vtscore.media.base` and implement all abstract
 properties and methods.
 
 ```python
-# vtsearch/media/code/media_type.py
+# vtscore/media/code/media_type.py
 
 from __future__ import annotations
 
@@ -153,7 +153,7 @@ class CodeMediaType(MediaType):
 Expose the sentinels in your sub-package's `__init__.py`:
 
 ```python
-# vtsearch/media/code/__init__.py
+# vtscore/media/code/__init__.py
 
 from vtscore.media.code.media_type import CodeMediaType
 
@@ -165,7 +165,7 @@ Each embedder lives in its own `embedder_<name>.py` file with an `EMBEDDER`
 sentinel at the bottom:
 
 ```python
-# vtsearch/media/code/embedder_codebert.py
+# vtscore/media/code/embedder_codebert.py
 
 # ... class definition ...
 
@@ -173,7 +173,7 @@ EMBEDDER = CodeBertEmbedder()
 ```
 
 The auto-discovery system finds these sentinels at import time. No
-changes to `vtsearch/media/__init__.py` are needed.
+changes to `vtscore/media/__init__.py` are needed.
 
 ### MediaType abstract interface reference
 
@@ -246,7 +246,7 @@ media type may have multiple embedders.
 ### File structure
 
 ```
-vtsearch/media/<type>/
+vtscore/media/<type>/
 └── embedder_<name>.py    # One file per embedder, each exposing EMBEDDER
 ```
 
@@ -271,7 +271,7 @@ embedder per media type should override the `is_default` property to return
 Subclass `MediaEmbedder` from `vtscore.media.embedder`.
 
 ```python
-# vtsearch/media/code/embedder_codebert.py
+# vtscore/media/code/embedder_codebert.py
 
 from __future__ import annotations
 
@@ -411,7 +411,7 @@ package and expose an `EMBEDDER` sentinel at the bottom. Discovery is
 automatic — no edits to `__init__.py` are needed:
 
 ```python
-# vtsearch/media/code/embedder_codebert.py
+# vtscore/media/code/embedder_codebert.py
 
 class CodeBertEmbedder(MediaEmbedder):
     ...
@@ -421,7 +421,7 @@ EMBEDDER = CodeBertEmbedder()
 
 For an alternative embedder on an **existing** media type, drop a new
 `embedder_<name>.py` file into that type's package (e.g.
-`vtsearch/media/image/embedder_myclip.py`) with its own `EMBEDDER`
+`vtscore/media/image/embedder_myclip.py`) with its own `EMBEDDER`
 sentinel. To wire in a custom embedder living outside the VTSearch
 source tree, symlink the file in — symlinked embedder modules are
 loaded via `spec_from_file_location` so discovery still works.
@@ -525,7 +525,7 @@ clippers return **new media dicts** that can replace the original.
 Subclass `MediaClipper` from `vtscore.media.base`.
 
 ```python
-# vtsearch/media/audio/clipper.py  (or a new file)
+# vtscore/media/audio/clipper.py  (or a new file)
 
 from vtscore.media.clipper import MediaClipper
 from typing import Any
@@ -574,7 +574,7 @@ Add the clipper to the `CLIPPERS` sentinel list in your media type's
 `__init__.py`:
 
 ```python
-# vtsearch/media/audio/__init__.py
+# vtscore/media/audio/__init__.py
 
 from vtscore.media.audio.clipper import SoundOverlapClipper
 # ...
@@ -641,7 +641,7 @@ just like other plugin families.
 ### File structure
 
 ```
-vtsearch/converters/<source>2<target>.py   # Your converter class
+vtscore/converters/<source>2<target>.py   # Your converter class
 ```
 
 ### What to implement
@@ -649,7 +649,7 @@ vtsearch/converters/<source>2<target>.py   # Your converter class
 Subclass `MediaConverter` from `vtscore.converters.base`.
 
 ```python
-# vtsearch/converters/audio2text.py
+# vtscore/converters/audio2text.py
 
 from vtscore.converters.base import MediaConverter
 from typing import Any
@@ -690,12 +690,12 @@ class Audio2TextMediaConverter(MediaConverter):
 Expose a `CONVERTER` sentinel at module level in your converter file:
 
 ```python
-# At the bottom of vtsearch/converters/audio2text.py
+# At the bottom of vtscore/converters/audio2text.py
 
 CONVERTER = Audio2TextMediaConverter()
 ```
 
-The `PluginRegistry` auto-discovers `.py` files in `vtsearch/converters/`
+The `PluginRegistry` auto-discovers `.py` files in `vtscore/converters/`
 that expose a `CONVERTER` attribute. No manual registration in
 `__init__.py` is needed.
 
@@ -754,7 +754,7 @@ fresh instance. Callers should call `cleanup()` when done.
 ### File structure
 
 ```
-vtsearch/datasets/sources/<your_source>/
+vtscore/datasets/sources/<your_source>/
 └── __init__.py       # Source factory + SOURCE instance (required)
 ```
 
@@ -765,7 +765,7 @@ The `SOURCE` sentinel is a factory object with a `create_from_origin()`
 method that returns a `MediaSource` instance.
 
 ```python
-# vtsearch/datasets/sources/s3/__init__.py
+# vtscore/datasets/sources/s3/__init__.py
 
 from __future__ import annotations
 

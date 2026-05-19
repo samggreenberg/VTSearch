@@ -248,7 +248,7 @@ checks off this follow-up.
   option (c) and option (b).**
 
   Per-plugin marshmallow schemas are built lazily from each plugin's
-  `fields` declaration (`vtsearch/plugins/schema.py::make_plugin_arg_schema`)
+  `fields` declaration (`vtscore/plugins/schema.py::make_plugin_arg_schema`)
   and cached on the plugin instance — the runtime validation tier.
   Each route handler looks up `plugin._arg_schema_instance` via
   `validate_plugin_args(plugin, ...)` and feeds the request body
@@ -995,7 +995,7 @@ checks off this follow-up.
       ``selectedMedia`` getter).
 - [x] Per-plugin marshmallow schemas built from each plugin's ``fields``
       declaration, cached on the plugin instance
-      (``vtsearch/plugins/schema.py``). The six plugin-field routes
+      (``vtscore/plugins/schema.py``). The six plugin-field routes
       (``stage-import``, ``import``, ``label-importers/import``,
       ``detectors/<name>/import-labels``, ``from-labelset``,
       ``settings-importers/import``) now run their request bodies
@@ -1019,7 +1019,7 @@ checks off this follow-up.
   ``POST /api/detectors/registry/from-labelset/<imp>``,
   ``POST /api/settings-importers/import/<imp>``) now validate the
   request body against a marshmallow schema built from the named
-  plugin's :attr:`fields` declaration (``vtsearch/plugins/schema.py``).
+  plugin's :attr:`fields` declaration (``vtscore/plugins/schema.py``).
   Schema-level rejects (missing required field, invalid select value,
   unparseable number) surface as 422 with the standard ``errors``
   envelope, matching the rest of the API. Pass-through keys

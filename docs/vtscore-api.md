@@ -1,43 +1,39 @@
 # `vtscore` Public API Sketch
 
 > **Status:** Phase 0 deliverable for [`docs/plans/extract-library.md`](plans/extract-library.md).
-> This document is the **contract the refactor must preserve** — the set of symbols an
-> external `vtscore` consumer is expected to import, and the one-line semantics each one
-> guarantees. Exact signatures, types, and parameter names will be pinned down during
-> Phases 1–4 as call sites are converted from globals/Flask to explicit arguments;
-> what this sketch fixes is the **shape**: what exists, where it lives, and what it does.
+> Phase 8 (physical move) has shipped, so every path below now lives at its final
+> `vtscore.*` home. The contract this document captures — the set of symbols an external
+> `vtscore` consumer is expected to import, and the one-line semantics each one
+> guarantees — is what the refactor preserved.
 
 ## Methodology
 
-The inventory was assembled by walking the current VTSearch tree under `vtsearch/` and
-identifying public symbols (no leading underscore) in each candidate library subpackage,
-cross-referenced against each package's `__init__.py` re-exports. The mapping from
-current import path → future library path is one-to-one:
+The inventory was assembled by walking the library tree under `vtscore/` and
+identifying public symbols (no leading underscore) in each library subpackage,
+cross-referenced against each package's `__init__.py` re-exports. Every package below
+lives at its final library path. `vtsearch.state` is an app-tier shim that re-exports
+`vtscore.state` plus the proxy view (`medias`, `good_votes`, …) — library callers
+should use `vtscore.state`, app callers may continue using either.
 
-| Today                        | After Phase 8                |
-|------------------------------|------------------------------|
-| `vtscore.datasets.X`        | `vtscore.datasets.X`         |
-| `vtscore.media.X`           | `vtscore.media.X`            |
-| `vtscore.converters.X`      | `vtscore.converters.X`       |
-| `vtscore.labels.X`          | `vtscore.labels.X`           |
-| `vtscore.embedding.X`       | `vtscore.embedding.X`        |
-| `vtscore.training.X`        | `vtscore.training.X`         |
-| `vtscore.detectors.X`       | `vtscore.detectors.X`        |
-| `vtscore.eval.X`            | `vtscore.eval.X`             |
-| `vtsearch.state.X`           | `vtscore.state.X` (contexts only — proxies stay app-side) |
-| `vtscore.plugins.X`         | `vtscore.plugins.X`          |
-| `vtscore.sync.X`            | `vtscore.sync.X`             |
-| `vtscore.concurrency.X`     | `vtscore.concurrency.X`      |
-| `vtscore.security.X`        | `vtscore.security.X`         |
-| `vtscore.utils.X`           | `vtscore.utils.X`            |
-| `vtscore.exporters.X`       | `vtscore.exporters.X`        |
-| `vtscore.cli` etc.          | `vtscore.cli` etc.           |
-| `vtscore.config`            | `vtscore.config`             |
-
-The plan's "final shape" in extract-library.md was written before the codebase split
-`models/` into `detectors/`/`embedding/`/`training/`, and before `concurrency/` and
-`security/` graduated into their own packages. The mapping above is canonical; the
-plan's tree should be updated to match it during Phase 1.
+| Library import path         | Notes                                                       |
+|------------------------------|-------------------------------------------------------------|
+| `vtscore.datasets.X`         |                                                             |
+| `vtscore.media.X`            |                                                             |
+| `vtscore.converters.X`       |                                                             |
+| `vtscore.labels.X`           |                                                             |
+| `vtscore.embedding.X`        |                                                             |
+| `vtscore.training.X`         |                                                             |
+| `vtscore.detectors.X`        |                                                             |
+| `vtscore.eval.X`             |                                                             |
+| `vtscore.state.X`            | Contexts + helpers; the `medias` / `good_votes` proxies are app-side in `vtsearch.shim.state_proxies` |
+| `vtscore.plugins.X`          |                                                             |
+| `vtscore.sync.X`             |                                                             |
+| `vtscore.concurrency.X`      |                                                             |
+| `vtscore.security.X`         |                                                             |
+| `vtscore.utils.X`            |                                                             |
+| `vtscore.exporters.X`        |                                                             |
+| `vtscore.cli` etc.           |                                                             |
+| `vtscore.config`             |                                                             |
 
 Symbols flagged **[SEAM]** import `flask` or `vtsearch.settings` today and must be
 detangled before they can ship in `vtscore`. They are listed here because they belong
@@ -558,7 +554,7 @@ def cosine_sort_with_boxes(
 ## `vtscore.detectors`
 
 Detector lifecycle and the resolve → embed → train pipeline. The current
-`vtsearch/detectors/workflow.py` is **Flask-aware** today and needs Phase 1 surgery
+`vtscore/detectors/workflow.py` is **Flask-aware** today and needs Phase 1 surgery
 before it ships — but the public name and intent stay.
 
 ### Registry
@@ -1203,25 +1199,25 @@ A single-source list of everything the inventory flagged as importing `flask` or
 
 | Module                                      | Imports                       | Plan phase |
 |---------------------------------------------|-------------------------------|-----------|
-| `vtsearch/detectors/workflow.py`            | `flask.g`                     | Phase 1   |
-| `vtsearch/state/core.py` (proxies only)     | `flask` (request context)     | Phase 1 (proxies stay app-side, not migrated) |
-| `vtsearch/datasets/load_pipeline.py`        | `vtsearch.settings`           | Phase 2   |
-| `vtsearch/datasets/registry.py`             | `vtsearch.settings`           | Phase 2   |
-| `vtsearch/detectors/store.py`               | `vtsearch.settings`           | Phase 2   |
-| `vtsearch/detectors/label_sync.py`          | `vtsearch.settings`           | Phase 2   |
-| `vtsearch/detectors/label_restoration.py`   | `vtsearch.settings`           | Phase 2   |
-| `vtsearch/detectors/dataset_sync.py`        | `vtsearch.settings`           | Phase 2   |
-| `vtsearch/detectors/media_seeding.py`       | `vtsearch.settings`           | Phase 2   |
-| `vtsearch/embedding/loader.py`              | `vtsearch.settings` (defaults helpers) | Phase 2 |
-| `vtsearch/detectors/labeling_progress.py`   | `vtsearch.settings`           | Phase 2   |
-| `vtsearch/labels/sync.py`                   | implicit Flask via state proxies | Phase 1/3 — takes explicit ctx after detangling |
+| `vtscore/detectors/workflow.py`            | `flask.g`                     | Phase 1   |
+| `vtscore/state/core.py` (proxies only)     | `flask` (request context)     | Phase 1 (proxies stay app-side, not migrated) |
+| `vtscore/datasets/load_pipeline.py`        | `vtsearch.settings`           | Phase 2   |
+| `vtscore/datasets/registry.py`             | `vtsearch.settings`           | Phase 2   |
+| `vtscore/detectors/store.py`               | `vtsearch.settings`           | Phase 2   |
+| `vtscore/detectors/label_sync.py`          | `vtsearch.settings`           | Phase 2   |
+| `vtscore/detectors/label_restoration.py`   | `vtsearch.settings`           | Phase 2   |
+| `vtscore/detectors/dataset_sync.py`        | `vtsearch.settings`           | Phase 2   |
+| `vtscore/detectors/media_seeding.py`       | `vtsearch.settings`           | Phase 2   |
+| `vtscore/embedding/loader.py`              | `vtsearch.settings` (defaults helpers) | Phase 2 |
+| `vtscore/detectors/labeling_progress.py`   | `vtsearch.settings`           | Phase 2   |
+| `vtscore/labels/sync.py`                   | implicit Flask via state proxies | Phase 1/3 — takes explicit ctx after detangling |
 
 Two earlier seams the plan called out have already been resolved by the codebase split:
 
 - The plan refers to `vtsearch/models/training_workflow.py` (Flask-aware); that module
-  is today `vtsearch/detectors/workflow.py` — same seam, new location.
+  is today `vtscore/detectors/workflow.py` — same seam, new location.
 - The plan refers to `vtsearch/models/loader.py`; that module is today
-  `vtsearch/embedding/loader.py` — same settings imports.
+  `vtscore/embedding/loader.py` — same settings imports.
 
 The plan's "final shape" tree should be updated during Phase 1 to reflect the
 current packages: `detectors/`, `embedding/`, `training/`, `concurrency/`,

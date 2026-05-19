@@ -2,7 +2,7 @@
 
 How to add new detectors, localizers, and extractors — the three kinds
 of **Processor** in VTSearch. All three subclass `Processor` from
-`vtsearch/media/base.py`.
+`vtscore/media/base.py`.
 
 **Related docs:** [EXTENDING.md](EXTENDING.md) (index, checklists, auth,
 dependencies) · [EXTENDING-plugins.md](EXTENDING-plugins.md) (importers,
@@ -23,7 +23,7 @@ types, embedders, clippers, converters).
 
 Processors analyze media items. The hierarchy has a common base
 (`Processor`) with three concrete subtypes. All are defined in
-`vtsearch/media/base.py`.
+`vtscore/media/base.py`.
 
 ```
 Processor (ABC)

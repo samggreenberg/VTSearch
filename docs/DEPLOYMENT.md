@@ -128,7 +128,7 @@ VTSearch downloads four embedding models on first use. Each model is
 lazy-loaded when a dataset of the corresponding media type is opened for
 the first time. At startup, VTSearch also runs a smart-preload pass that
 warms every embedder referenced by the dataset and detector registries
-(see `predict_embedders_to_preload()` in `vtsearch/embedding/loader.py`),
+(see `predict_embedders_to_preload()` in `vtscore/embedding/loader.py`),
 so the first request that uses each embedder doesn't pay the cold-load
 cost. On an empty registry, nothing is preloaded.
 

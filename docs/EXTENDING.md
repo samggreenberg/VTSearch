@@ -10,7 +10,7 @@ matches what you want to build.
 | Guide | What you build |
 |-------|----------------|
 | [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, results exporters, label importers, processor importers, settings importers/exporters, settings sources, labelset sources — eight auto-discovered plugin families that share a common registry-based architecture. |
-| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, converters, and media sources — anything in `vtsearch/media/` or `vtsearch/converters/`. |
+| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, converters, and media sources — anything in `vtscore/media/` or `vtscore/converters/`. |
 | [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors — the three kinds of `Processor`. |
 
 Each guide explains the interface contract, where files go, how
@@ -127,7 +127,7 @@ Each checklist below links to the detailed guide for that extension type.
 
 See [EXTENDING-plugins.md § Adding a Data Importer](EXTENDING-plugins.md#adding-a-data-importer).
 
-- [ ] Create `vtsearch/datasets/importers/<name>/__init__.py`
+- [ ] Create `vtscore/datasets/importers/<name>/__init__.py`
 - [ ] Subclass `DatasetImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values, medias, thin=False)` — populate `medias` in-place
 - [ ] Expose `IMPORTER = YourImporter()` at module level
@@ -138,7 +138,7 @@ See [EXTENDING-plugins.md § Adding a Data Importer](EXTENDING-plugins.md#adding
 
 See [EXTENDING-plugins.md § Adding a Results Exporter](EXTENDING-plugins.md#adding-a-results-exporter).
 
-- [ ] Create `vtsearch/exporters/<name>/__init__.py`
+- [ ] Create `vtscore/exporters/<name>/__init__.py`
 - [ ] Subclass `LabelsetExporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `export(self, results, field_values)` — return a dict with a `"message"` key
 - [ ] Expose `EXPORTER = YourExporter()` at module level
@@ -149,7 +149,7 @@ See [EXTENDING-plugins.md § Adding a Results Exporter](EXTENDING-plugins.md#add
 
 See [EXTENDING-plugins.md § Adding a Label Importer](EXTENDING-plugins.md#adding-a-label-importer).
 
-- [ ] Create `vtsearch/labels/importers/<name>/__init__.py`
+- [ ] Create `vtscore/labels/importers/<name>/__init__.py`
 - [ ] Subclass `LabelImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values)` — return a list of `{"md5": ..., "label": ...}` dicts
 - [ ] Expose `LABEL_IMPORTER = YourImporter()` at module level
@@ -183,7 +183,7 @@ See [EXTENDING-plugins.md § Adding a Settings Source](EXTENDING-plugins.md#addi
 
 See [EXTENDING-plugins.md § Adding a Labelset Source](EXTENDING-plugins.md#adding-a-labelset-source).
 
-- [ ] Create `vtsearch/labels/sources/<name>/__init__.py`
+- [ ] Create `vtscore/labels/sources/<name>/__init__.py`
 - [ ] Subclass `LabelsetSource`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `load(self, field_values)` — return a list of label dicts
 - [ ] Implement `save(self, labelset, field_values)` — persist a `LabelSet`
@@ -215,7 +215,7 @@ See [EXTENDING-plugins.md § Adding a Settings Exporter](EXTENDING-plugins.md#ad
 
 See [EXTENDING-media.md § Adding a Media Source](EXTENDING-media.md#adding-a-media-source).
 
-- [ ] Create `vtsearch/datasets/sources/<name>/__init__.py`
+- [ ] Create `vtscore/datasets/sources/<name>/__init__.py`
 - [ ] Create a `MediaSource` subclass with `list_items()`, `fetch_item()`, `resolve_path()`
 - [ ] Create a factory class with `name` and `create_from_origin(origin)` method
 - [ ] Expose `SOURCE = YourFactory()` at module level
@@ -225,7 +225,7 @@ See [EXTENDING-media.md § Adding a Media Source](EXTENDING-media.md#adding-a-me
 
 See [EXTENDING-media.md § Adding a Media Type](EXTENDING-media.md#adding-a-media-type).
 
-- [ ] Create `vtsearch/media/<type>/` directory with `__init__.py`, `media_type.py`
+- [ ] Create `vtscore/media/<type>/` directory with `__init__.py`, `media_type.py`
 - [ ] Subclass `MediaType` and implement all abstract properties and methods
 - [ ] Expose `MEDIA_TYPE` and `CLIPPERS` sentinels in `__init__.py` (embedders are discovered per-module — see the embedder checklist below)
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
@@ -236,7 +236,7 @@ See [EXTENDING-media.md § Adding a Media Type](EXTENDING-media.md#adding-a-medi
 
 See [EXTENDING-media.md § Adding a Media Embedder](EXTENDING-media.md#adding-a-media-embedder).
 
-- [ ] Create `vtsearch/media/<type>/embedder.py` (or `embedder_<variant>.py` for alternatives)
+- [ ] Create `vtscore/media/<type>/embedder.py` (or `embedder_<variant>.py` for alternatives)
 - [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `_load_models_impl()`, `embed_media()`
 - [ ] Optionally implement `embed_text()` for text-query sorting
 - [ ] Optionally set `description_wrappers` for enriched text embedding
@@ -247,7 +247,7 @@ See [EXTENDING-media.md § Adding a Media Embedder](EXTENDING-media.md#adding-a-
 
 See [EXTENDING-media.md § Adding a Media Clipper](EXTENDING-media.md#adding-a-media-clipper).
 
-- [ ] Create or add to `vtsearch/media/<type>/clipper.py`
+- [ ] Create or add to `vtscore/media/<type>/clipper.py`
 - [ ] Subclass `MediaClipper`, implement `name`, `media_type`, `clip()`
 - [ ] Override `description` with a short tooltip string for the chooser UI
 - [ ] If adding `parameters`, include a `description` key in each param dict
@@ -258,7 +258,7 @@ See [EXTENDING-media.md § Adding a Media Clipper](EXTENDING-media.md#adding-a-m
 
 See [EXTENDING-media.md § Adding a Media Converter](EXTENDING-media.md#adding-a-media-converter).
 
-- [ ] Create `vtsearch/converters/<source>2<target>.py`
+- [ ] Create `vtscore/converters/<source>2<target>.py`
 - [ ] Subclass `MediaConverter`, implement `source_type`, `target_type`, and `convert()`
 - [ ] Expose `CONVERTER = YourConverter()` at module level
 - [ ] Test: convert a source-type media and verify output dicts are valid

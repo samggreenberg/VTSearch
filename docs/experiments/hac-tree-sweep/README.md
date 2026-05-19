@@ -1,6 +1,6 @@
 # HAC tree (K, α) sweep — Places365
 
-Throwaway experiment for `docs/plans/patch-embedder.md` — confirms the K=12, α=0.5 defaults pinned in `vtsearch/datasets/loader_folder.py::_attach_patch_regions`.
+Throwaway experiment for `docs/plans/patch-embedder.md` — confirms the K=12, α=0.5 defaults pinned in `vtscore/datasets/loader_folder.py::_attach_patch_regions`.
 
 Sample drawn from the **Places365 validation set** (`val_256`, 365 scene categories, 100 images per category).  Places365 is closer to the application's real-world imagery than the cropped-object photos of caltech-101 — indoor rooms, outdoor natural scenes, and outdoor man-made environments, with the kind of background clutter and scene-level structure that the patch-embedder's region tree actually has to handle in production.
 

@@ -20,7 +20,7 @@ class TestClearClipsGarbageCollection:
     """clear_medias() should call gc.collect() to free old dataset memory."""
 
     def test_clear_medias_calls_gc_collect(self):
-        with mock.patch("vtsearch.state.gc.collect") as mock_gc:
+        with mock.patch("vtscore.state.gc.collect") as mock_gc:
             clear_medias()
             mock_gc.assert_called_once()
 
