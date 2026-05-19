@@ -101,6 +101,7 @@ def register_last_embedder_persistence_hook(fn: Callable[[str, str], None]) -> N
     global _last_embedder_persistence_hook
     _last_embedder_persistence_hook = fn
 
+
 from vtsearch.auth import get_current_user
 from vtsearch.config import DATA_DIR
 from vtsearch.datasets import export_dataset_to_file
