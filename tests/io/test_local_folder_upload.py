@@ -197,49 +197,50 @@ class TestImportLocalFolderEndpoint:
 
 class TestFolderImporterPickerVisibility:
     """The renamed ``server_folder`` importer powers the dedicated
-    "Server Folder" picker card via ``picker_view``.
+    "Server" picker card via ``picker_view``.
 
-    The browser-side upload flow has its own ``local_folder`` importer
-    that delegates to ``/api/dataset/import-local-folder`` (and from there
-    re-enters the ``server_folder`` importer on a server-side temp directory)."""
+    The browser-side upload flow has its own unified ``local`` importer
+    (handling folder and individual-file picks alike) that delegates to
+    ``/api/dataset/import-local-folder`` (and from there re-enters the
+    ``server_folder`` importer on a server-side temp directory)."""
 
     def test_server_folder_importer_uses_server_folder_picker_view(self, client):
         resp = client.get("/api/dataset/all-importers")
         importers = {imp["name"]: imp for imp in resp.get_json()["importers"]}
         assert importers["server_folder"]["picker_view"] == "server_folder"
-        # The Server Folder card is part of the picker (not hidden).
+        # The Server card is part of the picker (not hidden).
         assert importers["server_folder"]["hidden_from_picker"] is False
 
-    def test_local_folder_importer_card_exists(self, client):
-        """The Local Folder card is registered as its own importer so the
+    def test_local_importer_card_exists(self, client):
+        """The unified Local card is registered as its own importer so the
         picker can render it from the importer registry without hard-coded
         markup."""
         resp = client.get("/api/dataset/all-importers")
         importers = {imp["name"]: imp for imp in resp.get_json()["importers"]}
-        assert "local_folder" in importers
-        local = importers["local_folder"]
-        assert local["picker_view"] == "local_folder"
+        assert "local" in importers
+        local = importers["local"]
+        assert local["picker_view"] == "local"
         assert local["hidden_from_picker"] is False
         assert "browser" in local["description"].lower()
 
-    def test_local_files_importer_card_exists(self, client):
-        """The Local Files card mirrors Local Folder with a multi-file picker."""
+    def test_legacy_local_importers_are_gone(self, client):
+        """``local_folder`` / ``local_files`` have been merged into a single
+        ``local`` importer; the legacy names should no longer appear."""
         resp = client.get("/api/dataset/all-importers")
         importers = {imp["name"]: imp for imp in resp.get_json()["importers"]}
-        assert "local_files" in importers
-        local = importers["local_files"]
-        assert local["picker_view"] == "local_files"
-        assert local["hidden_from_picker"] is False
-        assert "browser" in local["description"].lower()
+        assert "local_folder" not in importers
+        assert "local_files" not in importers
 
-    def test_server_files_importer_card_exists(self, client):
-        """The Server Files importer takes a paths file on the server."""
+    def test_server_files_importer_is_hidden_from_picker(self, client):
+        """``server_files`` stays registered (CLI / direct API still use it)
+        but is hidden from the picker — its paths-manifest workflow is
+        surfaced on the unified Server card via the ``paths_file`` field."""
         resp = client.get("/api/dataset/all-importers")
         importers = {imp["name"]: imp for imp in resp.get_json()["importers"]}
         assert "server_files" in importers
         server = importers["server_files"]
         assert server["picker_view"] == "form"
-        assert server["hidden_from_picker"] is False
+        assert server["hidden_from_picker"] is True
         keys = {f["key"] for f in server["fields"]}
         assert "paths_file" in keys
         assert "media_type" in keys

@@ -194,19 +194,28 @@ class ServerFolderDatasetImporter(DatasetImporter):
 
     .. note::
        This importer reads files from the server's filesystem.  In the web
-       UI it powers the dedicated "Server Folder" flow via
+       UI it powers the dedicated "Server" card via
        :attr:`picker_view` ``= "server_folder"``, which opens a server-side
-       directory browser instead of the generic form.  For importing files
+       directory browser instead of the generic form.  The same card also
+       exposes an optional ``paths_file`` input — when set, the frontend
+       routes the submit through :class:`~vtsearch.datasets.importers.server_files.ServerFilesDatasetImporter`
+       instead of this importer (so a single picker card handles both
+       "pick a folder" and "supply a manifest file").  For importing files
        from the **browser machine** (which may be different from the
-       server), there is a separate :class:`LocalFolderDatasetImporter`
-       whose card delegates to ``/api/dataset/import-local-folder``; that
+       server), there is a separate :class:`LocalDatasetImporter` whose
+       card delegates to ``/api/dataset/import-local-folder``; that
        endpoint streams the upload to a temp directory and then re-enters
        this importer to do the actual scanning and embedding.
     """
 
     name = "server_folder"
-    display_name = "Folder"
-    description = "Browse the server's filesystem and import media files from a directory"
+    display_name = "Server"
+    description = (
+        "Browse the server's filesystem and import media files from a directory.  "
+        "Alternatively, supply a server-side paths manifest (.txt / .list / .npz) "
+        "to import a curated list of files instead — the modal exposes both inputs "
+        "on the same card."
+    )
     icon = "\U0001f4c1"  # 📁 — frontend renders as a folder icon
     picker_view = "server_folder"
     category = "server"

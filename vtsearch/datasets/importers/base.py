@@ -273,7 +273,7 @@ class DatasetImporter(PluginBase):
     #: ``"form"`` (default) builds a generic form from :attr:`fields`.  The
     #: other values trigger dedicated UI sections in the modal:
     #:
-    #: - ``"local_folder"`` — browser-side folder upload widget.
+    #: - ``"local"`` — browser-side folder/files upload widget (unified).
     #: - ``"server_folder"`` — server filesystem browser.
     #: - ``"demo"`` — demo-dataset table.
     picker_view: str = "form"

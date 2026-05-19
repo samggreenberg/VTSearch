@@ -444,33 +444,23 @@
       }
 
       <!-- Local file upload: pick a single file from the user's machine.
-           local_folder and local_files share this view since only one example
-           file is needed regardless of how many the input collects. -->
-      @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
+           The unified local picker accepts either a folder or individual
+           files; whatever the user drops, only the first file is used as
+           the detector example. -->
+      @if (activePickerView === 'local' && selectedImporter) {
         <div class="local-folder-uploader">
           <p class="info-text">
             Pick a media file on <strong>this computer</strong>. It will be uploaded to the server
-            and used as the example for this detector.
+            and used as the example for this detector.  If you drop or pick a folder, the first
+            file inside is used.
           </p>
-          @if (activePickerView === 'local_folder') {
-            <vt-drop-zone
-              label="Drop a folder here to use as example"
-              sublabel="or click to browse — the first file is used"
-              [directory]="true"
-              [multiple]="true"
-              (filesSelected)="onLocalFileDropped($event)"
-            ></vt-drop-zone>
-            <p class="info-text">
-              The first file in the picked folder will be used. To pick a single file directly,
-              switch to the <strong>Local Files</strong> tab.
-            </p>
-          } @else {
-            <vt-drop-zone
-              label="Drop a media file here to use as example"
-              sublabel="or click to browse"
-              (filesSelected)="onLocalFileDropped($event)"
-            ></vt-drop-zone>
-          }
+          <vt-drop-zone
+            label="Drop a media file or folder here to use as example"
+            sublabel="or click to browse"
+            [directory]="true"
+            [multiple]="true"
+            (filesSelected)="onLocalFileDropped($event)"
+          ></vt-drop-zone>
         </div>
       }
     </div>

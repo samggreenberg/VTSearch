@@ -1,4 +1,4 @@
-"""Tests for ``.npz`` support in the ``server_files`` and ``local_files`` importers.
+"""Tests for ``.npz`` support in the ``server_files`` and unified ``local`` importers.
 
 The ``server_files`` importer accepts a ``.npz`` archive (in addition to
 plain text) that supplies both the media-file paths and their
