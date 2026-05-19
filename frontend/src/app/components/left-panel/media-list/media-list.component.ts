@@ -18,6 +18,8 @@ import { takeUntil } from 'rxjs/operators';
 import { MediaItemComponent } from '../media-item/media-item.component';
 import { Media } from '../../../models/api.models';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
+import { MediaStateService } from '../../../services/media-state.service';
+import { SkeletonComponent } from '../../skeleton/skeleton.component';
 import { SortedItem } from '../left-panel.component';
 import { prefersReducedMotion } from '../../../utils/reduced-motion';
 
@@ -31,7 +33,7 @@ const PREFETCH_BUFFER = 50;
 @Component({
   selector: 'vt-media-list',
   standalone: true,
-  imports: [CommonModule, ScrollingModule, MediaItemComponent],
+  imports: [CommonModule, ScrollingModule, MediaItemComponent, SkeletonComponent],
   templateUrl: './media-list.component.html',
   styleUrl: './media-list.component.scss',
 })
@@ -63,7 +65,15 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   private readonly destroy$ = new Subject<void>();
   private scrollSubscribed = false;
 
-  constructor(private metadataCache: MediaMetadataCacheService) {}
+  /** Mirror of ``MediaStateService.loading``; drives the skeleton rows when the
+   *  list is empty during the initial /api/medias/ids fetch. */
+  loadingMedias = false;
+  readonly skeletonPlaceholders = Array.from({ length: 12 });
+
+  constructor(
+    private metadataCache: MediaMetadataCacheService,
+    private mediaState: MediaStateService,
+  ) {}
 
   ngOnInit(): void {
     // When the cache hydrates new items, re-enrich the displayed rows so
@@ -71,6 +81,13 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     this.metadataCache.version$
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.rebuildOrderedItems());
+    this.mediaState.loading$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((loading) => (this.loadingMedias = loading));
+  }
+
+  get showSkeletons(): boolean {
+    return this.loadingMedias && this.cachedOrderedItems.length === 0;
   }
 
   ngOnDestroy(): void {

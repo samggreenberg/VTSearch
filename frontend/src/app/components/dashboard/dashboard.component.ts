@@ -23,6 +23,7 @@ import {
   DetectorColumn,
 } from '../../services/dashboard-columns.service';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
+import { SkeletonComponent } from '../skeleton/skeleton.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { DetectorCardComponent } from './detector-card/detector-card.component';
@@ -50,6 +51,7 @@ import { DiskUsageComponent, DiskUsageBytes } from './disk-usage/disk-usage.comp
     DatasetStatsModalComponent,
     IconComponent,
     DiskUsageComponent,
+    SkeletonComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -368,6 +370,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get loading(): boolean {
     return this.datasetState.loading;
   }
+
+  /** True once the registry's first fetch has resolved (success or empty). Used to
+   *  pick between skeleton rows and the welcome/empty state on initial render. */
+  get registryLoaded(): boolean {
+    return this.datasetState.loaded;
+  }
+
+  /** Iterable for *ngFor of N skeleton rows (a sized array of zeros). */
+  readonly skeletonRows = Array.from({ length: 4 });
 
   get progressMessage(): string {
     return this.datasetState.progressMessage;

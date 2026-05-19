@@ -63,3 +63,34 @@
   font-style: italic;
   font-size: 0.85rem;
 }
+
+.media-list-skeleton {
+  // List-mode placeholder rows: each row holds a thumbnail-sized block + a
+  // text bar at the same dimensions as a real media-item, so swapping in
+  // real rows doesn't cause a layout shift.
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px;
+
+  &.grid-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
+    gap: 4px;
+    padding: 4px;
+    align-content: start;
+    justify-content: start;
+  }
+}
+
+.media-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 28px;
+}
+
+.media-skeleton-card {
+  width: 100%;
+  aspect-ratio: 1;
+}
