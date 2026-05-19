@@ -264,13 +264,14 @@ Cross-referenced with the [extract-library plan](plans/extract-library.md):
 |-----------------------------------------------------|--------------------------------|-------|--------|
 | `state.core._request_*_context()`                   | `flask.g`                      | 1     | ✅ shipped — pluggable resolver hook |
 | `detectors.workflow.apply_and_retrain`              | `flask.g`                      | 1     | ✅ shipped — `override_detector_context()` |
-| `cli.main` / `cli.autodetect`                       | `vtsearch.settings`            | 2     | open   |
-| `cli_pipeline`                                      | `vtsearch.settings`            | 2     | open   |
-| `datasets.load_pipeline`                            | `vtsearch.settings`            | 2     | open   |
+| `cli.main` / `cli.autodetect`                       | `vtsearch.settings`            | 2     | ✅ shipped — `CoreConfig.from_settings(settings_path=…)` |
+| `cli_pipeline`                                      | `vtsearch.settings`            | 2     | ✅ shipped — same pattern |
+| `datasets.load_pipeline`                            | `vtsearch.settings`            | 2     | ✅ shipped — gates via `CoreConfig`, writes via app hook |
 | `datasets.registry.get_saved_datasets_dir`          | `vtsearch.settings`            | 2     | ✅ shipped — routes through `CoreConfig.from_settings()` |
 | `detectors.store.get_detectors_dir`                 | `vtsearch.settings`            | 2     | ✅ shipped — routes through `CoreConfig.from_settings()` |
-| `detectors.labeling_progress`                       | `vtsearch.settings`            | 2     | open   |
-| `state/__init__` (inclusion, calibrate_*, etc.)     | `vtsearch.settings`            | 2     | open   |
+| `detectors.labeling_progress`                       | `vtsearch.settings`            | 2     | ✅ shipped — routes through `CoreConfig.from_settings()` |
+| `state/__init__` (inclusion, calibrate_*, etc.)     | `vtsearch.settings`            | 2     | ✅ shipped — reads via `CoreConfig`, writes via persister hook |
+| `config.CoreConfig.from_settings()` bridge          | `vtsearch.settings`            | 8     | open — relocates to app-side shim at the physical move |
 | Module-level proxies (`medias`, `good_votes`, …)    | global state                   | 3     | open   |
 | `autorun_extractors` / `autorun_localizers`         | module globals in `state/core` | 3     | open   |
 | Hardcoded `data/` paths (if any)                    | filesystem                     | 4     | open   |
