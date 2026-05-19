@@ -10,7 +10,11 @@ of quiet (currently 200ms).  Rapid voting bursts collapse into a single
 sync run that uses the latest state, so a slow target (webhook, slow
 disk) never stalls the voting request handler.  Use
 :func:`flush_pending_label_syncs` to drain the queue synchronously when
-deterministic behaviour is needed (tests, graceful shutdown).
+deterministic behaviour is needed (tests, graceful shutdown).  An
+``atexit`` hook calls ``flush_pending_label_syncs`` so the most recent
+vote's push survives normal interpreter exit (Ctrl-C, gunicorn SIGQUIT,
+``sys.exit``).  Hard kills (SIGKILL, ``os._exit``) bypass atexit and
+still drop the last 200ms of work — accept that as the cost of debounce.
 
 A module-level (NOT thread-local) flag, coordinated by ``_sync_lock``,
 prevents re-exporting during an import pass — including from concurrent
@@ -19,6 +23,7 @@ prevents re-exporting during an import pass — including from concurrent
 
 from __future__ import annotations
 
+import atexit
 import logging
 import threading
 from dataclasses import dataclass
@@ -180,6 +185,13 @@ def reset_label_sync_for_tests() -> None:
             _pending_syncs.clear()
         with _sync_lock:
             _syncing = False
+
+
+# Drain any pending debounced push at interpreter exit so the most recent
+# vote isn't dropped on Ctrl-C / SIGQUIT / sys.exit.  Fires once per
+# process; no-op when the queue is empty.  SIGKILL / os._exit bypass
+# atexit and still lose the last 200ms — unavoidable for any debounce.
+atexit.register(flush_pending_label_syncs)
 
 
 def _push_to_labelset_source() -> None:
