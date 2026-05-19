@@ -2,7 +2,7 @@
 
 Covers:
 
-- :class:`~vtsearch.plugins.PluginField` ``dynamic_options`` /
+- :class:`~vtscore.plugins.PluginField` ``dynamic_options`` /
   ``depends_on`` attributes serialise via ``to_dict``.
 - :meth:`DatasetImporter.get_field_options` default raises
   ``NotImplementedError``.
@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import pytest
 
-from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.plugins import PluginField
+from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.plugins import PluginField
 
 
 class _StubImporter(DatasetImporter):
@@ -55,7 +55,7 @@ class _StubImporter(DatasetImporter):
 @pytest.fixture
 def registered_stub():
     """Register a stub importer in the live registry for the duration of a test."""
-    from vtsearch.datasets.importers import get_importer
+    from vtscore.datasets.importers import get_importer
 
     registry = get_importer.__self__
     registry._ensure_discovered()
@@ -178,7 +178,7 @@ class TestImporterFieldOptionsRoute:
         assert resp.status_code == 422
 
     def test_not_implemented_returns_501(self, client):
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         registry = get_importer.__self__
         registry._ensure_discovered()
@@ -195,7 +195,7 @@ class TestImporterFieldOptionsRoute:
             registry._items.pop(stub.name, None)
 
     def test_plugin_exception_returns_502(self, client):
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         registry = get_importer.__self__
         registry._ensure_discovered()
@@ -240,7 +240,7 @@ class TestImporterMetadataExposes:
 
 class TestReCallerDynamicQueryId:
     def test_query_id_field_is_dynamic_with_media_type_dep(self):
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         rc = get_importer("recaller")
         assert rc is not None
@@ -249,8 +249,8 @@ class TestReCallerDynamicQueryId:
         assert query_field.depends_on == ["media_type"]
 
     def test_get_field_options_routes_through_rc_list_queries(self, monkeypatch):
-        from vtsearch.datasets.importers import get_importer
-        from vtsearch.datasets.importers import recaller as rc_module
+        from vtscore.datasets.importers import get_importer
+        from vtscore.datasets.importers import recaller as rc_module
 
         rc = get_importer("recaller")
         captured: list[str] = []
@@ -266,8 +266,8 @@ class TestReCallerDynamicQueryId:
         assert captured == ["image"]
 
     def test_get_field_options_default_media_type(self, monkeypatch):
-        from vtsearch.datasets.importers import get_importer
-        from vtsearch.datasets.importers import recaller as rc_module
+        from vtscore.datasets.importers import get_importer
+        from vtscore.datasets.importers import recaller as rc_module
 
         rc = get_importer("recaller")
         seen: list[str] = []
@@ -278,7 +278,7 @@ class TestReCallerDynamicQueryId:
         assert seen == ["audio"]
 
     def test_get_field_options_unknown_key_raises(self):
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         rc = get_importer("recaller")
         with pytest.raises(NotImplementedError):

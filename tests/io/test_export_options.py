@@ -267,9 +267,9 @@ class TestCliScoringNegativeHits:
         """The detector CLI scorer should include negative_hits."""
         import torch
 
-        from vtsearch.cli import _score_medias_with_detectors
-        from vtsearch.training import build_model_from_weights
-        from vtsearch.detectors.training import serialize_weights, train_and_threshold
+        from vtscore.cli import _score_medias_with_detectors
+        from vtscore.training import build_model_from_weights
+        from vtscore.detectors.training import serialize_weights, train_and_threshold
         from vtsearch.state import (
             medias,
             snapshot_medias,

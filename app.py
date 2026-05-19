@@ -6,8 +6,8 @@ import warnings
 # Limit threads to reduce memory overhead in constrained environments.  Native
 # math libraries read these env vars during *their* import, which happens the
 # moment torch / numpy / scipy are imported — so they have to be set before
-# anything triggers that.  Mirrors ``vtsearch.config.TORCH_THREADS`` but
-# resolved inline to avoid importing ``vtsearch.config`` (and therefore
+# anything triggers that.  Mirrors ``vtscore.config.TORCH_THREADS`` but
+# resolved inline to avoid importing ``vtscore.config`` (and therefore
 # everything it transitively imports) this early.
 _torch_threads = str(max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1"))))
 os.environ["OMP_NUM_THREADS"] = _torch_threads
@@ -38,7 +38,7 @@ from werkzeug.exceptions import MethodNotAllowed, NotFound
 
 # Import refactored modules
 from vtsearch.auth import get_login_provider  # noqa: E402
-from vtsearch.embedding import initialize_models, preload_predicted_embedders  # noqa: E402
+from vtscore.embedding import initialize_models, preload_predicted_embedders  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
     achievements_bp,
     auth_bp,
@@ -73,8 +73,8 @@ from vtsearch.routes import (  # noqa: E402
     sorting_bp,
     sync_sources_bp,
 )
-from vtsearch.media import set_progress_callback  # noqa: E402
-from vtsearch.concurrency.progress import update_progress
+from vtscore.media import set_progress_callback  # noqa: E402
+from vtscore.concurrency.progress import update_progress
 
 # Wire media types into the Flask app's progress reporting system.
 # Without this call, media types use a silent no-op callback and can run
@@ -90,7 +90,7 @@ app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-
 # Install Flask-aware request-context resolvers on the (library-candidate)
 # ``vtsearch.state`` core so its ``get_active_*_context()`` helpers can read
 # the per-request dataset/detector context from ``flask.g`` without
-# ``vtsearch.state.core`` itself having to import Flask.  Also wire the
+# ``vtscore.state.core`` itself having to import Flask.  Also wire the
 # library's "persist this" hooks (currently just last-embedder-per-media-
 # type) to ``vtsearch.settings``.  See ``docs/plans/extract-library.md`` for
 # the seam.
@@ -109,7 +109,7 @@ register_app_plugin_families()
 # Optional cap on request body size (uploads).  ``MAX_UPLOAD_MB == 0`` leaves
 # Flask's default of no limit in place; a positive value rejects oversized
 # requests with HTTP 413 before they consume disk.
-from vtsearch.config import MAX_UPLOAD_MB as _MAX_UPLOAD_MB  # noqa: E402
+from vtscore.config import MAX_UPLOAD_MB as _MAX_UPLOAD_MB  # noqa: E402
 
 if _MAX_UPLOAD_MB > 0:
     app.config["MAX_CONTENT_LENGTH"] = _MAX_UPLOAD_MB * 1024 * 1024
@@ -221,7 +221,7 @@ def _set_request_context():
     the default (empty) context.
     """
     from flask import request
-    from vtsearch.state.core import (
+    from vtscore.state.core import (
         get_context,
         get_detector_context,
     )
@@ -250,7 +250,7 @@ def _set_request_context():
     # specific, so without this the left-pane shows stale cids from the
     # previous dataset as if they were votes in the current one.
     try:
-        from vtsearch.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
 
         ensure_votes_match_active_dataset()
     except Exception:
@@ -477,8 +477,8 @@ if __name__ == "__main__":
 
     # Per-family shortcuts: ``--list-importers`` ≡ ``--list-plugins
     # --plugin-family importers``, and so on for every family in
-    # vtsearch.plugins.inventory.FAMILIES.
-    from vtsearch.plugins.inventory import register_family_shortcuts
+    # vtscore.plugins.inventory.FAMILIES.
+    from vtscore.plugins.inventory import register_family_shortcuts
 
     register_family_shortcuts(parser)
     parser.add_argument(
@@ -575,7 +575,7 @@ if __name__ == "__main__":
         help=(
             "Format for CLI status output. 'text' (default) prints "
             "human-readable prose; 'json' emits NDJSON on stdout, one event "
-            "per line, for scripted callers and CI. See vtsearch.cli_progress "
+            "per line, for scripted callers and CI. See vtscore.cli_progress "
             "for the event schema. Applies to --autodetect."
         ),
     )
@@ -588,7 +588,7 @@ if __name__ == "__main__":
     # These run before the autodetect / server paths so they don't trigger
     # model loading or the full Flask app boot.
     if args.list_plugins:
-        from vtsearch.plugins.inventory import format_json, format_names, format_plain, gather_plugins
+        from vtscore.plugins.inventory import format_json, format_names, format_plain, gather_plugins
 
         inventory = gather_plugins()
         if args.plugin_family:
@@ -630,7 +630,7 @@ if __name__ == "__main__":
                 f"--pipeline does not accept extra flags ({' '.join(remaining)}); "
                 "declare plugin field values in the YAML file instead."
             )
-        from vtsearch.cli_pipeline import run_pipeline_file
+        from vtscore.cli_pipeline import run_pipeline_file
 
         run_pipeline_file(args.pipeline)
         sys.exit(0)
@@ -639,7 +639,7 @@ if __name__ == "__main__":
     exporter = None
 
     if args.autodetect and args.importer:
-        from vtsearch.datasets.importers import get_importer, list_importers
+        from vtscore.datasets.importers import get_importer, list_importers
 
         importer = get_importer(args.importer)
         if importer is None:
@@ -649,7 +649,7 @@ if __name__ == "__main__":
         importer.add_cli_arguments(parser)
 
     if args.autodetect and args.exporter:
-        from vtsearch.exporters import get_exporter, list_exporters
+        from vtscore.exporters import get_exporter, list_exporters
 
         exporter = get_exporter(args.exporter)
         if exporter is None:
@@ -670,7 +670,7 @@ if __name__ == "__main__":
         # produces output. In JSON mode we also re-route the global media
         # progress callback from update_progress (which writes to a tracker
         # nothing reads in CLI mode) to an NDJSON emitter on stdout.
-        from vtsearch import cli_progress
+        from vtscore import cli_progress
 
         cli_progress.set_format(args.progress_format)
         if args.progress_format == "json":
@@ -712,7 +712,7 @@ if __name__ == "__main__":
                 if cli_progress.get_format() == "text":
                     print("", flush=True)
             else:
-                from vtsearch.cli import import_labels_into_detector_from_file
+                from vtscore.cli import import_labels_into_detector_from_file
 
                 try:
                     applied, skipped = import_labels_into_detector_from_file(
@@ -739,7 +739,7 @@ if __name__ == "__main__":
             field_values = {f.key: getattr(args, f.key, f.default) for f in importer.fields}
 
             if chunk_size:
-                from vtsearch.cli import autodetect_importer_main_chunked
+                from vtscore.cli import autodetect_importer_main_chunked
 
                 autodetect_importer_main_chunked(
                     args.importer,
@@ -751,7 +751,7 @@ if __name__ == "__main__":
                     dry_run=dry_run,
                 )
             else:
-                from vtsearch.cli import autodetect_importer_main
+                from vtscore.cli import autodetect_importer_main
 
                 autodetect_importer_main(
                     args.importer,
@@ -765,7 +765,7 @@ if __name__ == "__main__":
         elif args.dataset:
             # Pickle-file path
             if chunk_size:
-                from vtsearch.cli import autodetect_main_chunked
+                from vtscore.cli import autodetect_main_chunked
 
                 autodetect_main_chunked(
                     args.dataset,
@@ -776,7 +776,7 @@ if __name__ == "__main__":
                     dry_run=dry_run,
                 )
             else:
-                from vtsearch.cli import autodetect_main
+                from vtscore.cli import autodetect_main
 
                 autodetect_main(
                     args.dataset,
@@ -799,7 +799,7 @@ if __name__ == "__main__":
             print("\U0001f511 Trivial login enabled \u2014 users will be prompted for a username", flush=True)
         elif login_choice == "api_key":
             from vtsearch.auth import ApiKeyLoginProvider, set_login_provider
-            from vtsearch.config import DATA_DIR
+            from vtscore.config import DATA_DIR
 
             provider = ApiKeyLoginProvider()
             set_login_provider(provider)

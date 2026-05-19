@@ -15,8 +15,8 @@ import numpy as np
 import pytest
 
 import app as app_module
-from vtsearch.detectors.training import train_and_score
-from vtsearch.training.thresholds import (
+from vtscore.detectors.training import train_and_score
+from vtscore.training.thresholds import (
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
     calculate_safe_threshold,
@@ -215,7 +215,7 @@ class TestSafeThresholdsEval:
         return medias
 
     def test_simulate_voting_iterations_accepts_safe_thresholds(self):
-        from vtsearch.eval.voting_iterations import simulate_voting_iterations
+        from vtscore.eval.voting_iterations import simulate_voting_iterations
 
         medias = self._make_clips()
         rows_off = simulate_voting_iterations(
@@ -240,7 +240,7 @@ class TestSafeThresholdsEval:
             assert "fnr" in row
 
     def test_run_voting_iterations_eval_accepts_safe_thresholds(self):
-        from vtsearch.eval.voting_iterations import run_voting_iterations_eval
+        from vtscore.eval.voting_iterations import run_voting_iterations_eval
 
         medias = self._make_clips()
         df = run_voting_iterations_eval(
@@ -254,8 +254,8 @@ class TestSafeThresholdsEval:
 
     def test_eval_runner_accepts_safe_thresholds(self):
         """Verify eval_learned_sort accepts safe_thresholds kwarg."""
-        from vtsearch.eval.runner import eval_learned_sort
-        from vtsearch.eval.config import EvalQuery
+        from vtscore.eval.runner import eval_learned_sort
+        from vtscore.eval.config import EvalQuery
 
         medias = self._make_clips()
         queries = [EvalQuery(text="target things", target_category="target")]
@@ -427,7 +427,7 @@ class TestCalibrationFractionEval:
         return medias
 
     def test_simulate_voting_iterations_accepts_calibration_fraction(self):
-        from vtsearch.eval.voting_iterations import simulate_voting_iterations
+        from vtscore.eval.voting_iterations import simulate_voting_iterations
 
         medias = self._make_clips()
         rows = simulate_voting_iterations(
@@ -441,7 +441,7 @@ class TestCalibrationFractionEval:
             assert "cost" in row
 
     def test_run_voting_iterations_eval_accepts_calibration_fraction(self):
-        from vtsearch.eval.voting_iterations import run_voting_iterations_eval
+        from vtscore.eval.voting_iterations import run_voting_iterations_eval
 
         medias = self._make_clips()
         df = run_voting_iterations_eval(
@@ -453,8 +453,8 @@ class TestCalibrationFractionEval:
         assert len(df) > 0
 
     def test_eval_runner_accepts_calibration_fraction(self):
-        from vtsearch.eval.runner import eval_learned_sort
-        from vtsearch.eval.config import EvalQuery
+        from vtscore.eval.runner import eval_learned_sort
+        from vtscore.eval.config import EvalQuery
 
         medias = self._make_clips()
         queries = [EvalQuery(text="target things", target_category="target")]

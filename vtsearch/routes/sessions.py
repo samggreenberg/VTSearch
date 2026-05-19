@@ -21,8 +21,8 @@ from typing import Any
 from flask_smorest import Blueprint
 
 from vtsearch import settings
-from vtsearch.datasets.registry import list_datasets
-from vtsearch.detectors.registry import list_detectors
+from vtscore.datasets.registry import list_datasets
+from vtscore.detectors.registry import list_detectors
 from vtsearch.schemas.sessions import (
     BumpRecentSessionRequestSchema,
     RecentSessionsResponseSchema,

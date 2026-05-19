@@ -30,7 +30,7 @@ from helpers import make_raw_wav_bytes as _make_wav_bytes
 
 class TestImporterBaseContentVectors:
     def test_base_class_instance_has_content_vectors(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class MinimalImporter(DatasetImporter):
             name = "minimal"
@@ -46,7 +46,7 @@ class TestImporterBaseContentVectors:
         assert imp.content_vectors == {}
 
     def test_content_vectors_defaults_to_empty_dict(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class Imp(DatasetImporter):
             name = "t"
@@ -60,7 +60,7 @@ class TestImporterBaseContentVectors:
         assert Imp().content_vectors == {}
 
     def test_content_vectors_are_independent_across_instances(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class Imp(DatasetImporter):
             name = "t"
@@ -79,7 +79,7 @@ class TestImporterBaseContentVectors:
     def test_subclass_can_populate_content_vectors_during_run(self):
         import numpy as np
 
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class VectorImporter(DatasetImporter):
             name = "vec"
@@ -98,7 +98,7 @@ class TestImporterBaseContentVectors:
 
 class TestImporterBaseContentMD5s:
     def test_base_class_instance_has_content_md5s(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class MinimalImporter(DatasetImporter):
             name = "minimal"
@@ -114,7 +114,7 @@ class TestImporterBaseContentMD5s:
         assert imp.content_md5s == {}
 
     def test_content_md5s_defaults_to_empty_dict(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class Imp(DatasetImporter):
             name = "t"
@@ -128,7 +128,7 @@ class TestImporterBaseContentMD5s:
         assert Imp().content_md5s == {}
 
     def test_content_md5s_are_independent_across_instances(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class Imp(DatasetImporter):
             name = "t"
@@ -145,7 +145,7 @@ class TestImporterBaseContentMD5s:
         assert b.content_md5s == {}
 
     def test_subclass_can_populate_content_md5s_during_run(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class MD5Importer(DatasetImporter):
             name = "md5"
@@ -164,7 +164,7 @@ class TestImporterBaseContentMD5s:
 
 class TestImporterBaseCustomMetadataMap:
     def test_base_class_instance_has_custom_metadata_map(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class MinimalImporter(DatasetImporter):
             name = "minimal"
@@ -180,7 +180,7 @@ class TestImporterBaseCustomMetadataMap:
         assert imp.custom_metadata_map == {}
 
     def test_custom_metadata_map_independent_across_instances(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class Imp(DatasetImporter):
             name = "t"
@@ -199,13 +199,13 @@ class TestImporterBaseCustomMetadataMap:
 
 class TestImporterBaseIcon:
     def test_base_class_has_icon_attribute(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         assert hasattr(DatasetImporter, "icon")
         assert DatasetImporter.icon == "🔌"
 
     def test_to_dict_includes_icon(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class DummyImporter(DatasetImporter):
             name = "dummy"
@@ -222,7 +222,7 @@ class TestImporterBaseIcon:
         assert d["icon"] == "🧪"
 
     def test_to_dict_uses_default_icon_when_not_overridden(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class MinimalImporter(DatasetImporter):
             name = "minimal"
@@ -244,7 +244,7 @@ class TestImporterBaseIcon:
 
 class TestHttpArchiveImporterMetadata:
     def _get_importer(self):
-        from vtsearch.datasets.importers.http_archive import IMPORTER
+        from vtscore.datasets.importers.http_archive import IMPORTER
 
         return IMPORTER
 
@@ -294,7 +294,7 @@ class TestHttpArchiveImporterMetadata:
 
 class TestFolderImporterMetadata:
     def _get_importer(self):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         return IMPORTER
 
@@ -339,7 +339,7 @@ class TestImporterDatasetName:
     field that overrides the per-importer default name."""
 
     def _make_importer(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class Imp(DatasetImporter):
             name = "named"
@@ -356,7 +356,7 @@ class TestImporterDatasetName:
         return Imp()
 
     def test_to_dict_prepends_dataset_name_field(self):
-        from vtsearch.datasets.importers.base import (
+        from vtscore.datasets.importers.base import (
             DATASET_NAME_FIELD_KEY,
             DatasetImporter,
             ImporterField,
@@ -380,7 +380,7 @@ class TestImporterDatasetName:
     def test_class_fields_attribute_unchanged_by_to_dict(self):
         """to_dict() prepends dataset_name only on the serialised payload —
         the class-level ``fields`` attribute remains as the developer wrote it."""
-        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
         class Imp(DatasetImporter):
             name = "imp2"
@@ -422,35 +422,35 @@ class TestImporterDefaultDisplayName:
     """Each importer derives a sensible default name from its field values."""
 
     def test_demo_uses_entry_label(self):
-        from vtsearch.datasets.config import DEMO_DATASETS
-        from vtsearch.datasets.importers.demo import IMPORTER
+        from vtscore.datasets.config import DEMO_DATASETS
+        from vtscore.datasets.importers.demo import IMPORTER
 
         first_name = next(iter(DEMO_DATASETS.keys()))
         first_label = DEMO_DATASETS[first_name].get("label", first_name)
         assert IMPORTER.default_display_name({"name": first_name}) == first_label
 
     def test_demo_user_typed_name_wins(self):
-        from vtsearch.datasets.config import DEMO_DATASETS
-        from vtsearch.datasets.importers.demo import IMPORTER
+        from vtscore.datasets.config import DEMO_DATASETS
+        from vtscore.datasets.importers.demo import IMPORTER
 
         first_name = next(iter(DEMO_DATASETS.keys()))
         assert IMPORTER.resolve_display_name({"name": first_name, "dataset_name": "Override"}) == "Override"
 
     def test_synthetic_default_name_matches_size_and_type(self):
-        from vtsearch.datasets.importers.synthetic import IMPORTER
+        from vtscore.datasets.importers.synthetic import IMPORTER
 
         out = IMPORTER.default_display_name({"media_type": "audio", "size": "12"})
         assert "audio" in out
         assert "12" in out
 
     def test_server_folder_uses_leaf_path(self):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         assert IMPORTER.default_display_name({"path": "/data/sounds/sirens"}) == "sirens"
         assert IMPORTER.default_display_name({}) == IMPORTER.display_name
 
     def test_http_archive_strips_archive_extension(self):
-        from vtsearch.datasets.importers.http_archive import IMPORTER
+        from vtscore.datasets.importers.http_archive import IMPORTER
 
         assert IMPORTER.default_display_name({"url": "https://example.org/data/genres.tar.gz"}) == "genres"
         assert IMPORTER.default_display_name({"url": "https://example.org/data/photos.zip"}) == "photos"
@@ -458,19 +458,19 @@ class TestImporterDefaultDisplayName:
         assert IMPORTER.default_display_name({}) == IMPORTER.display_name
 
     def test_pickle_default_name_strips_extension(self):
-        from vtsearch.datasets.importers.pickle import IMPORTER
+        from vtscore.datasets.importers.pickle import IMPORTER
 
         assert IMPORTER.default_display_name({"file": "/tmp/genres.pkl"}) == "genres"
 
     def test_server_files_default_name_uses_paths_file_stem(self):
-        from vtsearch.datasets.importers.server_files import IMPORTER
+        from vtscore.datasets.importers.server_files import IMPORTER
 
         assert IMPORTER.default_display_name({"paths_file": "/tmp/audio_list.txt"}) == "audio_list"
 
     def test_origin_does_not_include_dataset_name(self):
         """The user-typed display name is UI metadata, not provenance —
         it must NOT leak into origin params (which feed Detector reload)."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         origin = IMPORTER.build_origin({"path": "/data/x", "media_type": "audio", "dataset_name": "My Set"})
         assert "dataset_name" not in origin["params"]
@@ -483,14 +483,14 @@ class TestImporterDefaultDisplayName:
 
 class TestBuiltinImporterNames:
     def test_folder_has_form_ui_mode(self):
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         imp = get_importer("server_folder")
         assert imp is not None
         assert imp.ui_mode == "form"
 
     def test_pickle_has_file_upload_ui_mode(self):
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         imp = get_importer("pickle")
         assert imp is not None
@@ -504,7 +504,7 @@ class TestBuiltinImporterNames:
 
 class TestExtractArchive:
     def test_extract_zip(self, tmp_path):
-        from vtsearch.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.importers.http_archive import _extract_archive
 
         wav_data = _make_wav_bytes()
         zip_path = tmp_path / "test.zip"
@@ -516,7 +516,7 @@ class TestExtractArchive:
         assert (extract_dir / "sounds" / "tone.wav").exists()
 
     def test_extract_tar_uncompressed(self, tmp_path):
-        from vtsearch.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.importers.http_archive import _extract_archive
 
         wav_data = _make_wav_bytes()
         tar_path = tmp_path / "test.tar"
@@ -530,7 +530,7 @@ class TestExtractArchive:
         assert (extract_dir / "tone.wav").exists()
 
     def test_extract_tar_gz(self, tmp_path):
-        from vtsearch.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.importers.http_archive import _extract_archive
 
         wav_data = _make_wav_bytes()
         tar_path = tmp_path / "test.tar.gz"
@@ -544,7 +544,7 @@ class TestExtractArchive:
         assert (extract_dir / "sounds" / "tone.wav").exists()
 
     def test_extract_tar_bz2(self, tmp_path):
-        from vtsearch.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.importers.http_archive import _extract_archive
 
         wav_data = _make_wav_bytes()
         tar_path = tmp_path / "test.tar.bz2"
@@ -558,7 +558,7 @@ class TestExtractArchive:
         assert (extract_dir / "tone.wav").exists()
 
     def test_unsupported_extension_raises_value_error(self, tmp_path):
-        from vtsearch.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.importers.http_archive import _extract_archive
 
         # A file that is not a zip or tar and doesn't end in .rar
         bad_archive = tmp_path / "test.7z"
@@ -573,7 +573,7 @@ class TestExtractArchive:
         import sys
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.importers.http_archive import _extract_archive
 
         rar_path = tmp_path / "test.rar"
         # Write RAR v4 magic bytes so it's identified as .rar by extension
@@ -586,7 +586,7 @@ class TestExtractArchive:
                 _extract_archive(rar_path, extract_dir)
 
     def test_zip_preserves_multiple_files(self, tmp_path):
-        from vtsearch.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.importers.http_archive import _extract_archive
 
         zip_path = tmp_path / "multi.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -608,7 +608,7 @@ class TestImporterBulkHooks:
     """Verify the per-record / bulk-record split mirrors the embedder pattern."""
 
     def _make_importer(self, *, fetch_one=None, fetch_bulk=None, records=None):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class _BulkTestImporter(DatasetImporter):
             name = "bulk_test"
@@ -718,7 +718,7 @@ class TestImporterBulkHooks:
         assert imp.fetch_records_bulk([], {}) == []
 
     def test_run_raises_when_neither_run_nor_hooks_implemented(self):
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers.base import DatasetImporter
 
         class _BareImporter(DatasetImporter):
             name = "bare"
@@ -738,7 +738,7 @@ class TestReCallerBulkOverride:
     def _stub_apis(self, monkeypatch):
         import numpy as np
 
-        from vtsearch.datasets.importers import recaller as rc
+        from vtscore.datasets.importers import recaller as rc
 
         results = [
             {
@@ -763,7 +763,7 @@ class TestReCallerBulkOverride:
         return results
 
     def test_per_item_and_bulk_paths_agree(self, monkeypatch):
-        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
         records = self._stub_apis(monkeypatch)
         field_values = {"query_id": "Q1", "media_type": "audio"}
@@ -781,7 +781,7 @@ class TestReCallerBulkOverride:
             assert (a["embedding"] == b["embedding"]).all()
 
     def test_run_uses_bulk_override(self, monkeypatch):
-        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
         self._stub_apis(monkeypatch)
         imp = ReCallerDatasetImporter()

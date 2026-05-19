@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtsearch.plugins import PluginBase, PluginField
+from vtscore.plugins import PluginBase, PluginField
 
 SettingsImporterField = PluginField
 

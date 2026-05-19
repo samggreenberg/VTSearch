@@ -6,11 +6,11 @@ CLS-pooled DINOv2, DINOv3, and what dev calls "eupe" (actually `facebook/PE-Core
 
 **This plan upgrades the patch-capable subset to produce a hierarchical region set per image, and replaces the misnamed "eupe" entry with the real EUPE model.** Each backbone is exposed as **two embedders** — a single-vector variant (fast, small storage, no region search) and a patch-region variant (~30× compute, ~100× storage per image, enables region similarity / region-aware MLP scoring). Single-vs-patch is a static capability on the embedder class, not a runtime flag, so the loader / similarity helper / MLP scorer never branch on a mode toggle. Concretely v1 ships six embedders:
 
-- `vtsearch/media/image/embedder_dinov2_single.py::ImageDinov2SingleEmbedder` (slug `dinov2_single`) and `embedder_dinov2_patch.py::ImageDinov2PatchEmbedder` (slug `dinov2_patch`) — backbone `facebook/dinov2-base` (ViT-B/14, 224² input, 16×16 = 256 patches, 768-dim). **Ungated, Apache-2.0**, default-friendly. Standard HF transformers ViT; the patch variant extracts attention via `output_attentions=True`. Both share weights via `_dinov2_shared.py::_Dinov2Base`.
-- `vtsearch/media/image/embedder_dinov3_single.py::ImageDinov3SingleEmbedder` (slug `dinov3_single`) and `embedder_dinov3_patch.py::ImageDinov3PatchEmbedder` (slug `dinov3_patch`) — backbone `facebook/dinov3-vitb16-pretrain-lvd1689m` (ViT-B/16, 224² input, 14×14 = 196 patches, 768-dim). **Gated (manual licence acceptance on HF), Apache-2.0**, premium quality (register tokens + Gram anchoring → cleaner patch saliency than DINOv2). Both share weights via `_dinov3_shared.py::_Dinov3Base`.
-- `vtsearch/media/image/embedder_eupe_single.py::ImageEupeSingleEmbedder` (slug `eupe_single`) and `embedder_eupe_patch.py::ImageEupePatchEmbedder` (slug `eupe_patch`) — rewritten to point at the **real** facebookresearch/EUPE model (`facebook/EUPE-ViT-B/`), not PE-Core. Loaded via `torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16', weights=…)` — see "EUPE backbone & licence". Marketed as a "universal" encoder distilled across multiple downstream tasks. **FAIR Noncommercial Research License — outputs (embeddings, datasets) become noncommercial-only**; both variants surface this via `license_notice`. Both share weights via `_eupe_shared.py::_EupeBase`.
+- `vtscore/media/image/embedder_dinov2_single.py::ImageDinov2SingleEmbedder` (slug `dinov2_single`) and `embedder_dinov2_patch.py::ImageDinov2PatchEmbedder` (slug `dinov2_patch`) — backbone `facebook/dinov2-base` (ViT-B/14, 224² input, 16×16 = 256 patches, 768-dim). **Ungated, Apache-2.0**, default-friendly. Standard HF transformers ViT; the patch variant extracts attention via `output_attentions=True`. Both share weights via `_dinov2_shared.py::_Dinov2Base`.
+- `vtscore/media/image/embedder_dinov3_single.py::ImageDinov3SingleEmbedder` (slug `dinov3_single`) and `embedder_dinov3_patch.py::ImageDinov3PatchEmbedder` (slug `dinov3_patch`) — backbone `facebook/dinov3-vitb16-pretrain-lvd1689m` (ViT-B/16, 224² input, 14×14 = 196 patches, 768-dim). **Gated (manual licence acceptance on HF), Apache-2.0**, premium quality (register tokens + Gram anchoring → cleaner patch saliency than DINOv2). Both share weights via `_dinov3_shared.py::_Dinov3Base`.
+- `vtscore/media/image/embedder_eupe_single.py::ImageEupeSingleEmbedder` (slug `eupe_single`) and `embedder_eupe_patch.py::ImageEupePatchEmbedder` (slug `eupe_patch`) — rewritten to point at the **real** facebookresearch/EUPE model (`facebook/EUPE-ViT-B/`), not PE-Core. Loaded via `torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16', weights=…)` — see "EUPE backbone & licence". Marketed as a "universal" encoder distilled across multiple downstream tasks. **FAIR Noncommercial Research License — outputs (embeddings, datasets) become noncommercial-only**; both variants surface this via `license_notice`. Both share weights via `_eupe_shared.py::_EupeBase`.
 
-The shared bases live in underscore-prefixed modules (`_dinov2_shared.py`, `_dinov3_shared.py`, `_eupe_shared.py`) so the `embedder*.py` auto-discovery scan in `vtsearch/media/__init__.py` skips them; only the six concrete `embedder_*_single.py` / `embedder_*_patch.py` modules expose an `EMBEDDER` sentinel.
+The shared bases live in underscore-prefixed modules (`_dinov2_shared.py`, `_dinov3_shared.py`, `_eupe_shared.py`) so the `embedder*.py` auto-discovery scan in `vtscore/media/__init__.py` skips them; only the six concrete `embedder_*_single.py` / `embedder_*_patch.py` modules expose an `EMBEDDER` sentinel.
 
 `MediaEmbedder.supports_text` already exists. `MediaEmbedder.supports_patch_regions` was added as a sibling capability flag in commit 441233b (defaults False; flipped True on the three `_patch` variants above). We also add `MediaEmbedder.license_notice: Optional[str] = None` (default None) so EUPE-real can surface its FAIR-Noncommercial restriction to the UI before the user picks it.
 
@@ -20,7 +20,7 @@ The previous version of this doc proposed loading PE-Core via open_clip and expo
 
 Concretely:
 
-- **What changes:** `embedder_eupe.py` is rewritten end-to-end to load the real EUPE ViT-B/16 weights via `torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16', weights=<HF URL or local path>)`. `EUPE_MODEL_ID` in `vtsearch/config.py` changes from `"facebook/PE-Core-B16-224"` to a concrete EUPE weight URL (or stays as a marker constant and the URL lives in the embedder). The previous AutoModel + `trust_remote_code=True` path goes away entirely (it was broken in dev anyway — the HF repo has no `config.json`).
+- **What changes:** `embedder_eupe.py` is rewritten end-to-end to load the real EUPE ViT-B/16 weights via `torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16', weights=<HF URL or local path>)`. `EUPE_MODEL_ID` in `vtscore/config.py` changes from `"facebook/PE-Core-B16-224"` to a concrete EUPE weight URL (or stays as a marker constant and the URL lives in the embedder). The previous AutoModel + `trust_remote_code=True` path goes away entirely (it was broken in dev anyway — the HF repo has no `config.json`).
 - **What's pinned by probe:** the exact `torch.hub` entrypoint, the weights URL, and the cleanest way to extract per-patch tokens + CLS-to-patch attention. The README documents loading but not the dense-feature API. I'll do a short static probe of the repo's source before writing the embedder.
 - **Licence:** outputs ("Research Materials" includes inference outputs) are bound to noncommercial research uses under FAIR Noncommercial v1 §1.b.i. We surface this on the embedder card and on the dataset-create flow when the user picks `eupe`, via `license_notice`. We do **not** automatically gate it behind a licence-acceptance click — the user said users who object can simply skip the embedder, and forcing an interstitial would slow down the people who already know.
 
@@ -333,15 +333,15 @@ schema level.
 ## Backend integration points
 
 - **Embedder upgrades** (six embedders for v1 — single/patch pairs for each of three backbones):
-  - `vtsearch/media/image/_dinov2_shared.py::_Dinov2Base` holds the shared DINOv2 load + forward logic. `embedder_dinov2_single.py::ImageDinov2SingleEmbedder` (slug `dinov2_single`) exposes just CLS pooling; `embedder_dinov2_patch.py::ImageDinov2PatchEmbedder` (slug `dinov2_patch`) additionally overrides `supports_patch_regions = True` and `_patch_forward_impl` to return a `PatchEmbedOutput`. Standard HF transformers ViT-B/14, `output_attentions=True`, no register tokens to strip. 16×16 = 256 patch grid.
+  - `vtscore/media/image/_dinov2_shared.py::_Dinov2Base` holds the shared DINOv2 load + forward logic. `embedder_dinov2_single.py::ImageDinov2SingleEmbedder` (slug `dinov2_single`) exposes just CLS pooling; `embedder_dinov2_patch.py::ImageDinov2PatchEmbedder` (slug `dinov2_patch`) additionally overrides `supports_patch_regions = True` and `_patch_forward_impl` to return a `PatchEmbedOutput`. Standard HF transformers ViT-B/14, `output_attentions=True`, no register tokens to strip. 16×16 = 256 patch grid.
   - `_dinov3_shared.py::_Dinov3Base` holds the shared DINOv3 logic; `embedder_dinov3_single.py` and `embedder_dinov3_patch.py` are the two thin variants. Standard HF transformers ViT-B/16 with 4 register tokens (sliced out before reshaping to a 14×14 patch grid). Requires `HF_TOKEN` env var.
   - `_eupe_shared.py::_EupeBase` holds the shared EUPE logic; `embedder_eupe_single.py` and `embedder_eupe_patch.py` are the two thin variants. EUPE loads via `torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16', weights=…)` (replacing the broken `AutoModel + trust_remote_code` PE-Core path). Both variants surface `license_notice = "FAIR Noncommercial Research Licence — outputs are bound to research-only use."`
   - `requirements-image-embedders.txt`: removes the `einops` comment about EUPE-as-PE-Core. EUPE-real's runtime deps (likely just torch + PIL) are confirmed via the source probe.
-  - `EUPE_MODEL_ID` in `vtsearch/config.py` updates to refer to the real EUPE weights (URL or HF path determined by the probe).
+  - `EUPE_MODEL_ID` in `vtscore/config.py` updates to refer to the real EUPE weights (URL or HF path determined by the probe).
 - **License surfacing**: `MediaEmbedder.license_notice: Optional[str] = None` is added next to `supports_text` / `supports_patch_regions`. `to_dict` includes it. The frontend embedder picker shows a small warning chip when an embedder reports a notice, and the dataset-create flow surfaces the same notice inline when the user picks an embedder with one. We don't gate selection behind an acceptance click — users who object simply pick a different embedder.
-- **Capability flag**: `MediaEmbedder.supports_patch_regions: bool = False` lives next to `supports_text` in `vtsearch/media/embedder.py`. The metadata dict returned by `MediaEmbedder.to_dict()` surfaces it under `supports_patch_regions`, matching the `supports_text` convention already in place.
-- **Region builder**: new module `vtsearch/media/patch_embed.py` — pure functions `propose_leaves(patch_grid, saliency, k) -> list[Leaf]` and `build_hac_tree(leaves, alpha) -> list[RegionVector]`. No torch dependency; takes numpy arrays.
-- **Loader hook**: `vtsearch/datasets/loader_pickle.py` and `loader_folder.py` already call `embedder.embed_media`/`embed_media_bulk`. We add a sibling pass that, *only if `embedder.supports_patch_regions`*, runs `_patch_forward` and `build_hac_tree`, then stores `media["patch_regions"]` (and in v2, also `media["patch_grid"]`).
+- **Capability flag**: `MediaEmbedder.supports_patch_regions: bool = False` lives next to `supports_text` in `vtscore/media/embedder.py`. The metadata dict returned by `MediaEmbedder.to_dict()` surfaces it under `supports_patch_regions`, matching the `supports_text` convention already in place.
+- **Region builder**: new module `vtscore/media/patch_embed.py` — pure functions `propose_leaves(patch_grid, saliency, k) -> list[Leaf]` and `build_hac_tree(leaves, alpha) -> list[RegionVector]`. No torch dependency; takes numpy arrays.
+- **Loader hook**: `vtscore/datasets/loader_pickle.py` and `loader_folder.py` already call `embedder.embed_media`/`embed_media_bulk`. We add a sibling pass that, *only if `embedder.supports_patch_regions`*, runs `_patch_forward` and `build_hac_tree`, then stores `media["patch_regions"]` (and in v2, also `media["patch_grid"]`).
 - **Similarity helper**: single helper function `score_against_query(media, q) -> (score, box)` in `vtsearch/models/region_similarity.py` is the one place that knows the max-over-regions rule. Used by sort, find-label, example-sort.
 - **MLP training & scoring**: `vtsearch/models/detector_training.py` and `vtsearch/models/training_workflow.py` adopt the region-aware *scoring* path. Training stays image-level in v1; `LabeledElement` is unchanged.
 - **Vote recording**: unchanged in v1. Votes attach to the whole image as today.
@@ -454,7 +454,7 @@ was independent so they could be picked up in any order.
      L-shapes over background patches.  The α=0.5 design pin sits in
      between; geometric metrics differ by single-digit percent across
      the sweep, so the production defaults stand and
-     `_attach_patch_regions` in `vtsearch/datasets/loader_folder.py`
+     `_attach_patch_regions` in `vtscore/datasets/loader_folder.py`
      was not changed.
    - **Diversity-tree sanity check** on CLS-pooled DINOv2 vectors for
      the same 30 images: multiple semantically-coherent clusters
@@ -465,7 +465,7 @@ was independent so they could be picked up in any order.
    - Sweep ran via `scripts/run_hac_tree_sweep.py` (kept in-tree so
      the same sweep can be re-run on a different dataset without
      having to reconstruct the harness).  Code under
-     `vtsearch/media/patch_embed.py` is parameterised on `K` and
+     `vtscore/media/patch_embed.py` is parameterised on `K` and
      `α` per the same goal.
 
 4. **FP16 ↔ FP32 rank-stability check — DONE.**
@@ -499,11 +499,11 @@ identical to v1.  Semantics live under "Vote attribution → v2: region
 voting" above; closeout summary below.
 
 1. **Backend region plumbing — DONE (PRs #1271, #1272, #1273).**
-   - `vtsearch/datasets/labelset.py::LabeledElement` gained an
+   - `vtscore/datasets/labelset.py::LabeledElement` gained an
      optional `region_box: tuple[float, float, float, float] | None`
      that round-trips through the dict-serialisation path used by
      label export/import.
-   - `vtsearch/media/patch_embed.py::box_to_vote_vector(patch_grid,
+   - `vtscore/media/patch_embed.py::box_to_vote_vector(patch_grid,
      box)` does the on-the-fly pooling: select grid cells whose
      centers fall inside the normalised box, uniform-mean their
      vectors, L2-normalise.  Uniform mean is the only rule that keeps

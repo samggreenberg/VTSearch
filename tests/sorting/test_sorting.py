@@ -122,14 +122,14 @@ class TestBuildModel:
     """Tests for the build_model helper."""
 
     def test_build_model_returns_sequential(self):
-        from vtsearch.training.mlp import build_model
+        from vtscore.training.mlp import build_model
 
         model = build_model(64)
         assert isinstance(model, torch.nn.Sequential)
 
     def test_build_model_output_is_logits(self):
         """build_model should NOT include sigmoid — output can be outside [0,1]."""
-        from vtsearch.training.mlp import build_model
+        from vtscore.training.mlp import build_model
 
         # Use a seeded generator so the random weights are deterministic —
         # without this, the test is flaky because random initialisation can
@@ -146,14 +146,14 @@ class TestBuildModel:
         assert logit < 0.0 or logit > 1.0, f"Expected unbounded logit outside [0,1] with extreme input, got {logit}"
 
     def test_build_model_has_no_sigmoid_layer(self):
-        from vtsearch.training.mlp import build_model
+        from vtscore.training.mlp import build_model
 
         model = build_model(64)
         for layer in model:
             assert not isinstance(layer, torch.nn.Sigmoid)
 
     def test_build_model_state_dict_keys(self):
-        from vtsearch.training.mlp import build_model
+        from vtscore.training.mlp import build_model
 
         model = build_model(128)
         keys = set(model.state_dict().keys())
@@ -166,7 +166,7 @@ class TestTrainModelConfig:
 
     def test_deterministic_training(self):
         """Same inputs should produce the same model (manual seed)."""
-        from vtsearch.training.mlp import train_model
+        from vtscore.training.mlp import train_model
 
         rng = np.random.RandomState(0)
         X = torch.tensor(rng.randn(10, 32).astype(np.float32))
@@ -183,8 +183,8 @@ class TestTrainModelConfig:
 
     def test_weight_decay_is_applied(self):
         """Weight decay should keep weights smaller than without it."""
-        import vtsearch.config as config
-        from vtsearch.training.mlp import _auto_hidden_dim, build_model
+        import vtscore.config as config
+        from vtscore.training.mlp import _auto_hidden_dim, build_model
 
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 200
@@ -194,7 +194,7 @@ class TestTrainModelConfig:
             y = torch.tensor([1.0] * 10 + [0.0] * 10).unsqueeze(1)
 
             # Train with weight decay (default: 1e-4)
-            from vtsearch.training.mlp import train_model
+            from vtscore.training.mlp import train_model
 
             model = train_model(X, y, 16)
 
@@ -223,7 +223,7 @@ class TestTrainModelConfig:
 
     def test_train_model_outputs_logits(self):
         """train_model should return a model that outputs raw logits."""
-        from vtsearch.training.mlp import train_model
+        from vtscore.training.mlp import train_model
 
         rng = np.random.RandomState(5)
         X = torch.tensor(rng.randn(6, 16).astype(np.float32))
@@ -264,8 +264,8 @@ class TestTrainModelEpochs:
 
     def test_early_stop_fires_on_loss_plateau(self):
         """With a small patience, training stops well before TRAIN_EPOCHS."""
-        import vtsearch.config as config
-        from vtsearch.training import mlp
+        import vtscore.config as config
+        from vtscore.training import mlp
 
         saved_epochs = config.TRAIN_EPOCHS
         saved_patience = config.TRAIN_PATIENCE
@@ -292,8 +292,8 @@ class TestTrainModelEpochs:
 
     def test_patience_zero_disables_early_stop(self):
         """``TRAIN_PATIENCE=0`` should always run the full ``TRAIN_EPOCHS``."""
-        import vtsearch.config as config
-        from vtsearch.training import mlp
+        import vtscore.config as config
+        from vtscore.training import mlp
 
         saved_epochs = config.TRAIN_EPOCHS
         saved_patience = config.TRAIN_PATIENCE
@@ -321,8 +321,8 @@ class TestCalibrationSkippedForTinyLabels:
     def test_skips_calibration_when_safe_and_under_six_labels(self):
         """With safe_thresholds=True and n_labels<6, calculate_cross_calibration_threshold
         must not be invoked — its output is entirely discarded by the blender."""
-        from vtsearch.detectors import training as detector_training
-        from vtsearch.training import thresholds
+        from vtscore.detectors import training as detector_training
+        from vtscore.training import thresholds
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
@@ -345,8 +345,8 @@ class TestCalibrationSkippedForTinyLabels:
         """With safe_thresholds=False and n_labels<6, calibration is still
         skipped — fold trainings are unreliable with so few labels, and the
         gate is purely a function of n_labels."""
-        from vtsearch.detectors import training as detector_training
-        from vtsearch.training import thresholds
+        from vtscore.detectors import training as detector_training
+        from vtscore.training import thresholds
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4, 5]})
@@ -366,8 +366,8 @@ class TestCalibrationSkippedForTinyLabels:
 
     def test_still_calibrates_when_enough_labels(self):
         """With safe_thresholds=True and n_labels>=6, calibration still runs."""
-        from vtsearch.detectors import training as detector_training
-        from vtsearch.training import thresholds
+        from vtscore.detectors import training as detector_training
+        from vtscore.training import thresholds
 
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})  # 6 labels
@@ -390,7 +390,7 @@ class TestCalibrateCountEnvDefault:
     """``VTSEARCH_CALIBRATE_COUNT`` should drive the settings default."""
 
     def test_default_calibrate_count_constant_exists(self):
-        from vtsearch import config
+        from vtscore import config
 
         assert isinstance(config.DEFAULT_CALIBRATE_COUNT, int)
         assert config.DEFAULT_CALIBRATE_COUNT >= 1
@@ -401,7 +401,7 @@ class TestCalibrationCache:
     the cross-calibration trainings should be skipped on the second call."""
 
     def _det_ctx(self):
-        from vtsearch.state.core import DetectorContext
+        from vtscore.state.core import DetectorContext
 
         return DetectorContext("test-det")
 
@@ -412,8 +412,8 @@ class TestCalibrationCache:
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
 
     def test_second_call_with_same_inputs_skips_calibration(self):
-        from vtsearch.detectors import training as detector_training
-        from vtsearch.training import thresholds
+        from vtscore.detectors import training as detector_training
+        from vtscore.training import thresholds
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
@@ -440,7 +440,7 @@ class TestCalibrationCache:
         patched.assert_not_called()
 
     def test_second_call_returns_same_threshold(self):
-        from vtsearch.detectors import training as detector_training
+        from vtscore.detectors import training as detector_training
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
@@ -460,8 +460,8 @@ class TestCalibrationCache:
         assert t1 == t2
 
     def test_label_change_invalidates_cache(self):
-        from vtsearch.detectors import training as detector_training
-        from vtsearch.training import thresholds
+        from vtscore.detectors import training as detector_training
+        from vtscore.training import thresholds
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
@@ -495,8 +495,8 @@ class TestCalibrationCache:
         assert det_ctx.calibration_cache[0] != first_key
 
     def test_inclusion_change_invalidates_cache(self):
-        from vtsearch.detectors import training as detector_training
-        from vtsearch.training import thresholds
+        from vtscore.detectors import training as detector_training
+        from vtscore.training import thresholds
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
@@ -525,8 +525,8 @@ class TestCalibrationCache:
 
     def test_no_cache_when_det_ctx_missing(self):
         """Without a det_ctx, every call must recompute calibration."""
-        from vtsearch.detectors import training as detector_training
-        from vtsearch.training import thresholds
+        from vtscore.detectors import training as detector_training
+        from vtscore.training import thresholds
 
         self._seed_six_labels()
 
@@ -548,7 +548,9 @@ class TestCalibrationCache:
         assert patched.call_count == 2
 
     def test_settings_default_matches_config(self):
-        from vtsearch import config, settings
+        from vtsearch import settings
+
+        from vtscore import config
 
         assert settings._DEFAULTS["calibrate_count"] == config.DEFAULT_CALIBRATE_COUNT
 
@@ -613,7 +615,7 @@ class TestLearnedSortAsync:
 
     def test_async_returns_job_id_then_polling_yields_result(self, client):
         from tests.conftest import _wait_for_job
-        from vtsearch.concurrency.async_jobs import learned_sort_jobs
+        from vtscore.concurrency.async_jobs import learned_sort_jobs
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
@@ -636,7 +638,7 @@ class TestLearnedSortAsync:
 
     def test_unchanged_votes_short_circuit_to_cached(self, client):
         """The signature cache lets re-sorts skip training entirely."""
-        from vtsearch.concurrency.async_jobs import learned_sort_jobs
+        from vtscore.concurrency.async_jobs import learned_sort_jobs
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4]})
@@ -706,7 +708,7 @@ class TestEvalTrainAndScoreAsync:
 
     def test_async_polls_to_done(self, client):
         from tests.conftest import _wait_for_job
-        from vtsearch.concurrency.async_jobs import eval_jobs
+        from vtscore.concurrency.async_jobs import eval_jobs
 
         self._seed_history()
         envelope = client.post("/api/eval/train-and-score", json={"metric": "stable"}).get_json()
@@ -858,7 +860,7 @@ class TestLoadEmbedderConcurrentCallback:
 
         mock_mt.load_models = slow_load_models
 
-        with unittest.mock.patch("vtsearch.media.get", return_value=mock_mt):
+        with unittest.mock.patch("vtscore.media.get", return_value=mock_mt):
             t1 = threading.Thread(target=_load_embedder_with_progress, args=("audio", 5))
             t2 = threading.Thread(target=_load_embedder_with_progress, args=("audio", 5))
             t1.start()

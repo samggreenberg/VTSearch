@@ -18,7 +18,7 @@ class TestDownloadHmdb51:
 
     def test_extracts_into_category_dirs(self, tmp_path):
         """download_hmdb51 should create per-category dirs with .avi files."""
-        from vtsearch.datasets.downloader import video as vid_module
+        from vtscore.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -62,7 +62,7 @@ class TestDownloadHmdb51:
 
     def test_skips_if_already_present(self, tmp_path):
         """If hmdb51/ already has videos, skip download entirely."""
-        from vtsearch.datasets.downloader import video as vid_module
+        from vtscore.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         video_dir = data_dir / "video"
@@ -88,7 +88,7 @@ class TestDownloadHmdb51:
 
     def test_temp_files_cleaned_up(self, tmp_path):
         """Temp archive and staging dir should be removed after extraction."""
-        from vtsearch.datasets.downloader import video as vid_module
+        from vtscore.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -135,7 +135,7 @@ class TestExtractRar:
         """_extract_rar raises RuntimeError with install instructions when unrar is absent."""
         import pytest
 
-        from vtsearch.datasets.downloader.video import _extract_rar
+        from vtscore.datasets.downloader.video import _extract_rar
 
         rar_file = tmp_path / "test.rar"
         rar_file.write_bytes(b"Rar!")
@@ -163,7 +163,7 @@ class TestDownloadUcf101Full:
 
     def test_extracts_into_category_dirs(self, tmp_path):
         """download_ucf101_full should create per-category dirs with .avi files."""
-        from vtsearch.datasets.downloader import video as vid_module
+        from vtscore.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -175,7 +175,7 @@ class TestDownloadUcf101Full:
             patch.object(vid_module._core, "DATA_DIR", data_dir),
             patch.object(vid_module._core, "VIDEO_DIR", video_dir),
             patch(
-                "vtsearch.datasets.downloader.core.download_file_with_progress",
+                "vtscore.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
             ),
         ):
@@ -190,7 +190,7 @@ class TestDownloadUcf101Full:
 
     def test_staging_dir_cleaned_up(self, tmp_path):
         """The UCF-101 staging directory should be removed after moving."""
-        from vtsearch.datasets.downloader import video as vid_module
+        from vtscore.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -202,7 +202,7 @@ class TestDownloadUcf101Full:
             patch.object(vid_module._core, "DATA_DIR", data_dir),
             patch.object(vid_module._core, "VIDEO_DIR", video_dir),
             patch(
-                "vtsearch.datasets.downloader.core.download_file_with_progress",
+                "vtscore.datasets.downloader.core.download_file_with_progress",
                 lambda url, dest, size, cb: shutil.copy(str(zip_path), str(dest)),
             ),
         ):
@@ -213,7 +213,7 @@ class TestDownloadUcf101Full:
 
     def test_skips_if_already_present(self, tmp_path):
         """If ucf101_full/ already has videos, skip download entirely."""
-        from vtsearch.datasets.downloader import video as vid_module
+        from vtscore.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         video_dir = data_dir / "video"
@@ -227,7 +227,7 @@ class TestDownloadUcf101Full:
             patch.object(vid_module._core, "DATA_DIR", data_dir),
             patch.object(vid_module._core, "VIDEO_DIR", video_dir),
             patch(
-                "vtsearch.datasets.downloader.core.download_file_with_progress",
+                "vtscore.datasets.downloader.core.download_file_with_progress",
                 lambda *a, **kw: download_called.append(True),
             ),
         ):
@@ -255,7 +255,7 @@ class TestDownloadKth:
 
     def test_extracts_into_category_dirs(self, tmp_path):
         """download_kth should create per-action dirs with .avi files."""
-        from vtsearch.datasets.downloader import video as vid_module
+        from vtscore.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -291,7 +291,7 @@ class TestDownloadKth:
 
     def test_skips_if_already_present(self, tmp_path):
         """If kth/ already has all action videos, skip download entirely."""
-        from vtsearch.datasets.downloader import video as vid_module
+        from vtscore.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         video_dir = data_dir / "video"
@@ -320,7 +320,7 @@ class TestDownloadKth:
 
     def test_skips_already_extracted_actions(self, tmp_path):
         """Actions already extracted should not be re-downloaded."""
-        from vtsearch.datasets.downloader import video as vid_module
+        from vtscore.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -355,7 +355,7 @@ class TestDownloadKth:
 
     def test_temp_zips_cleaned_up(self, tmp_path):
         """Temp zip files should be removed after extraction."""
-        from vtsearch.datasets.downloader import video as vid_module
+        from vtscore.datasets.downloader import video as vid_module
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -388,7 +388,7 @@ class TestVideoDemoDatasetRegistration:
 
     def test_hmdb51_variants_registered(self):
         """HMDB51 S/M/L/A variants should appear in demo_datasets."""
-        from vtsearch.media.video.media_type import VideoMediaType
+        from vtscore.media.video.media_type import VideoMediaType
 
         mt = VideoMediaType()
         ids = [d.id for d in mt.demo_datasets]
@@ -397,7 +397,7 @@ class TestVideoDemoDatasetRegistration:
 
     def test_ucf101_full_variants_registered(self):
         """UCF-101 Full S/M/L/A variants should appear in demo_datasets."""
-        from vtsearch.media.video.media_type import VideoMediaType
+        from vtscore.media.video.media_type import VideoMediaType
 
         mt = VideoMediaType()
         ids = [d.id for d in mt.demo_datasets]
@@ -406,7 +406,7 @@ class TestVideoDemoDatasetRegistration:
 
     def test_kth_variants_registered(self):
         """KTH Actions S/M/L/A variants should appear in demo_datasets."""
-        from vtsearch.media.video.media_type import VideoMediaType
+        from vtscore.media.video.media_type import VideoMediaType
 
         mt = VideoMediaType()
         ids = [d.id for d in mt.demo_datasets]
@@ -415,7 +415,7 @@ class TestVideoDemoDatasetRegistration:
 
     def test_hmdb51_has_51_categories(self):
         """HMDB51 demo datasets should reference all 51 action categories."""
-        from vtsearch.media.video.media_type import VideoMediaType
+        from vtscore.media.video.media_type import VideoMediaType
 
         mt = VideoMediaType()
         hmdb = next(d for d in mt.demo_datasets if d.id == "hmdb51_a")
@@ -423,7 +423,7 @@ class TestVideoDemoDatasetRegistration:
 
     def test_ucf101_full_has_101_categories(self):
         """UCF-101 Full demo datasets should reference all 101 action categories."""
-        from vtsearch.media.video.media_type import VideoMediaType
+        from vtscore.media.video.media_type import VideoMediaType
 
         mt = VideoMediaType()
         ucf = next(d for d in mt.demo_datasets if d.id == "ucf101_full_a")
@@ -431,7 +431,7 @@ class TestVideoDemoDatasetRegistration:
 
     def test_kth_has_6_categories(self):
         """KTH Actions demo datasets should reference all 6 action categories."""
-        from vtsearch.media.video.media_type import VideoMediaType
+        from vtscore.media.video.media_type import VideoMediaType
 
         mt = VideoMediaType()
         kth = next(d for d in mt.demo_datasets if d.id == "kth_a")
@@ -439,7 +439,7 @@ class TestVideoDemoDatasetRegistration:
 
     def test_source_dirs_registered(self):
         """New video sources should appear in the demo importer source dirs."""
-        from vtsearch.datasets.importers import demo as demo_module
+        from vtscore.datasets.importers import demo as demo_module
 
         # Force lazy init
         demo_module._source_directory("hmdb51")
@@ -469,9 +469,9 @@ class TestLoadDemoSourceHmdb51:
 
     def test_hmdb51_source_populates_clips(self, tmp_path):
         """load_demo_source with source='hmdb51' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.video.media_type import VideoMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.video.media_type import VideoMediaType
 
         fake_metadata = {
             "brush_hair/brush_hair_video_0.avi": {
@@ -523,9 +523,9 @@ class TestLoadDemoSourceUcf101Full:
 
     def test_ucf101_full_source_populates_clips(self, tmp_path):
         """load_demo_source with source='ucf101_full' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.video.media_type import VideoMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.video.media_type import VideoMediaType
 
         fake_metadata = {
             "Archery/v_Archery_g01_c01.avi": {
@@ -577,9 +577,9 @@ class TestLoadDemoSourceKth:
 
     def test_kth_source_populates_clips(self, tmp_path):
         """load_demo_source with source='kth' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.video.media_type import VideoMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.video.media_type import VideoMediaType
 
         fake_metadata = {
             "walking/person01_walking_d1_uncomp.avi": {
@@ -619,7 +619,7 @@ class TestLoadDemoSourceKth:
 
     def test_unsupported_source_raises(self):
         """Non-existent sources still raise ValueError."""
-        from vtsearch.media.video.media_type import VideoMediaType
+        from vtscore.media.video.media_type import VideoMediaType
 
         mt = VideoMediaType()
         import pytest

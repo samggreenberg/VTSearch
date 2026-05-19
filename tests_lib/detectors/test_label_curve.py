@@ -1,11 +1,11 @@
-"""Tests for the label-curve sweep (vtsearch.eval.label_curve)."""
+"""Tests for the label-curve sweep (vtscore.eval.label_curve)."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from vtsearch.eval.label_curve import (
+from vtscore.eval.label_curve import (
     TRAINERS,
     _auroc,
     _average_precision,
@@ -162,7 +162,7 @@ class TestSampleLabels:
 class TestCrossCalibratedThreshold:
     def test_returns_finite_threshold_with_balanced_labels(self):
         # 10 labels, balanced — every fold should produce a valid threshold.
-        from vtsearch.eval.label_curve import TRAINERS as T
+        from vtscore.eval.label_curve import TRAINERS as T
 
         rng = np.random.default_rng(0)
         X = rng.standard_normal((20, 4)).astype(np.float32)
@@ -173,7 +173,7 @@ class TestCrossCalibratedThreshold:
         assert np.isfinite(t)
 
     def test_too_few_labels_returns_default(self):
-        from vtsearch.eval.label_curve import TRAINERS as T
+        from vtscore.eval.label_curve import TRAINERS as T
 
         X = np.zeros((3, 4), dtype=np.float32)
         y = np.array([1, 0, 1], dtype=np.int32)

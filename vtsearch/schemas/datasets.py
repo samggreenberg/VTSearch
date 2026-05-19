@@ -255,7 +255,7 @@ class DetectMediaTypeQuerySchema(Schema):
 class DetectMediaTypeResponseSchema(Schema):
     """Response for ``GET /api/dataset/detect-media-type``.
 
-    Mirrors :func:`vtsearch.datasets.media_type_detection.detect_media_types_in_folder`'s
+    Mirrors :func:`vtscore.datasets.media_type_detection.detect_media_types_in_folder`'s
     return value.
     """
 

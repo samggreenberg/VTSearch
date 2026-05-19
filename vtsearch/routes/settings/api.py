@@ -78,7 +78,7 @@ def _apply_inclusion(value) -> None:
 
 def _apply_dir(key: str, value: str, setter) -> None:
     """Validate and apply a directory-path setting."""
-    import vtsearch.security.path_validation as _paths
+    import vtscore.security.path_validation as _paths
 
     if not value or not value.strip():
         abort(400, message=f"{key} must be a non-empty string")

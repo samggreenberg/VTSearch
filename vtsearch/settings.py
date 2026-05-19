@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
-from vtsearch.config import DATA_DIR
+from vtscore.config import DATA_DIR
 from vtsearch.settings_models import (
     VALID_FOCUS_MODES,
     VALID_GRID_ICON_SIZES,
@@ -529,7 +529,7 @@ del _model, _field_name, _g, _s
 # Their validation rules differ from the simple settings in two ways:
 #
 # 1. The set of valid media-type IDs is resolved dynamically from
-#    :func:`vtsearch.media.all_type_ids` (plugins may register more).
+#    :func:`vtscore.media.all_type_ids` (plugins may register more).
 # 2. ``panel_pct_*`` raises on out-of-range writes but clamps on reads
 #    (the disk value can become invalid via direct file edits).
 #
@@ -545,7 +545,7 @@ _PANEL_PX_DEFAULTS: dict[str, int] = {"left": 260, "right": 300}
 
 def _valid_media_types() -> tuple[str, ...]:
     """Return valid media type IDs from the media registry."""
-    from vtsearch.media import all_type_ids
+    from vtscore.media import all_type_ids
 
     return tuple(all_type_ids())
 

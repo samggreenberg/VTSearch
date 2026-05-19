@@ -13,8 +13,8 @@ Covers:
 from __future__ import annotations
 
 import app as app_module
-from vtsearch.datasets.labelset import LabelSet, LabeledElement
-from vtsearch.datasets.origin import Origin
+from vtscore.datasets.labelset import LabelSet, LabeledElement
+from vtscore.datasets.origin import Origin
 from vtsearch.state import (
     build_media_lookup,
     resolve_media_ids,
@@ -356,7 +356,7 @@ class TestLabelSet:
 
 class TestBuildOrigin:
     def test_build_origin_from_fields(self):
-        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
         class TestImporter(DatasetImporter):
             name = "test"
@@ -376,7 +376,7 @@ class TestBuildOrigin:
         assert origin == {"importer": "test", "params": {"path": "/data/audio", "media_type": "audio"}}
 
     def test_build_origin_excludes_empty_values(self):
-        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
         class TestImporter(DatasetImporter):
             name = "t"

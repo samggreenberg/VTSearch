@@ -14,19 +14,19 @@ class TestImageSiglipEmbedderProperties:
     """Verify ImageSiglipEmbedder class properties and registration."""
 
     def test_name(self):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         assert emb.name == "siglip"
 
     def test_media_type_id(self):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         assert emb.media_type_id == "image"
 
     def test_description_wrappers_non_empty(self):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         wrappers = emb.description_wrappers
@@ -34,21 +34,21 @@ class TestImageSiglipEmbedderProperties:
         assert all("{text}" in w for w in wrappers)
 
     def test_registered_in_registry(self):
-        from vtsearch.media import get_embedder
+        from vtscore.media import get_embedder
 
         emb = get_embedder("siglip")
         assert emb.name == "siglip"
         assert emb.media_type_id == "image"
 
     def test_listed_in_embedders_for_type(self):
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         embedders = embedders_for_type("image")
         names = [e.name for e in embedders]
         assert "siglip" in names
 
     def test_to_dict(self):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         d = emb.to_dict()
@@ -63,7 +63,7 @@ class TestImageSiglipEmbedderProperties:
         }
 
     def test_load_models_idempotent(self):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         # Simulate already-loaded model
@@ -75,7 +75,7 @@ class TestImageSiglipEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         # Patch load_models to not actually load anything
@@ -84,7 +84,7 @@ class TestImageSiglipEmbedderProperties:
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         with patch.object(emb, "load_models"):
@@ -92,7 +92,7 @@ class TestImageSiglipEmbedderProperties:
         assert result is None
 
     def test_embed_pil_image_returns_none_when_not_loaded(self):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         with patch.object(emb, "load_models"):
@@ -101,7 +101,7 @@ class TestImageSiglipEmbedderProperties:
         assert result is None
 
     def test_uses_correct_model_id(self):
-        from vtsearch.config import SIGLIP_MODEL_ID
+        from vtscore.config import SIGLIP_MODEL_ID
 
         assert SIGLIP_MODEL_ID == "google/siglip-base-patch16-224"
 
@@ -110,19 +110,19 @@ class TestAudioClapMusicEmbedderProperties:
     """Verify AudioClapMusicEmbedder class properties and registration."""
 
     def test_name(self):
-        from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
+        from vtscore.media.audio.embedder_clap_music import AudioClapMusicEmbedder
 
         emb = AudioClapMusicEmbedder()
         assert emb.name == "clap_music"
 
     def test_media_type_id(self):
-        from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
+        from vtscore.media.audio.embedder_clap_music import AudioClapMusicEmbedder
 
         emb = AudioClapMusicEmbedder()
         assert emb.media_type_id == "audio"
 
     def test_description_wrappers_non_empty(self):
-        from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
+        from vtscore.media.audio.embedder_clap_music import AudioClapMusicEmbedder
 
         emb = AudioClapMusicEmbedder()
         wrappers = emb.description_wrappers
@@ -130,21 +130,21 @@ class TestAudioClapMusicEmbedderProperties:
         assert all("{text}" in w for w in wrappers)
 
     def test_registered_in_registry(self):
-        from vtsearch.media import get_embedder
+        from vtscore.media import get_embedder
 
         emb = get_embedder("clap_music")
         assert emb.name == "clap_music"
         assert emb.media_type_id == "audio"
 
     def test_listed_in_embedders_for_type(self):
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         embedders = embedders_for_type("audio")
         names = [e.name for e in embedders]
         assert "clap_music" in names
 
     def test_to_dict(self):
-        from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
+        from vtscore.media.audio.embedder_clap_music import AudioClapMusicEmbedder
 
         emb = AudioClapMusicEmbedder()
         d = emb.to_dict()
@@ -159,7 +159,7 @@ class TestAudioClapMusicEmbedderProperties:
         }
 
     def test_load_models_idempotent(self):
-        from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
+        from vtscore.media.audio.embedder_clap_music import AudioClapMusicEmbedder
 
         emb = AudioClapMusicEmbedder()
         emb._model = MagicMock()
@@ -168,7 +168,7 @@ class TestAudioClapMusicEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
+        from vtscore.media.audio.embedder_clap_music import AudioClapMusicEmbedder
 
         emb = AudioClapMusicEmbedder()
         with patch.object(emb, "load_models"):
@@ -176,7 +176,7 @@ class TestAudioClapMusicEmbedderProperties:
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
-        from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
+        from vtscore.media.audio.embedder_clap_music import AudioClapMusicEmbedder
 
         emb = AudioClapMusicEmbedder()
         with patch.object(emb, "load_models"):
@@ -184,7 +184,7 @@ class TestAudioClapMusicEmbedderProperties:
         assert result is None
 
     def test_uses_correct_model_id(self):
-        from vtsearch.config import CLAP_MUSIC_MODEL_ID
+        from vtscore.config import CLAP_MUSIC_MODEL_ID
 
         assert CLAP_MUSIC_MODEL_ID == "laion/larger_clap_music_and_speech"
 
@@ -193,19 +193,19 @@ class TestAudioClapGeneralEmbedderProperties:
     """Verify AudioClapGeneralEmbedder class properties and registration."""
 
     def test_name(self):
-        from vtsearch.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
+        from vtscore.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
 
         emb = AudioClapGeneralEmbedder()
         assert emb.name == "clap_general"
 
     def test_media_type_id(self):
-        from vtsearch.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
+        from vtscore.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
 
         emb = AudioClapGeneralEmbedder()
         assert emb.media_type_id == "audio"
 
     def test_description_wrappers_non_empty(self):
-        from vtsearch.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
+        from vtscore.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
 
         emb = AudioClapGeneralEmbedder()
         wrappers = emb.description_wrappers
@@ -213,14 +213,14 @@ class TestAudioClapGeneralEmbedderProperties:
         assert all("{text}" in w for w in wrappers)
 
     def test_registered_in_registry(self):
-        from vtsearch.media import get_embedder
+        from vtscore.media import get_embedder
 
         emb = get_embedder("clap_general")
         assert emb.name == "clap_general"
         assert emb.media_type_id == "audio"
 
     def test_to_dict(self):
-        from vtsearch.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
+        from vtscore.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
 
         emb = AudioClapGeneralEmbedder()
         d = emb.to_dict()
@@ -235,7 +235,7 @@ class TestAudioClapGeneralEmbedderProperties:
         }
 
     def test_uses_correct_model_id(self):
-        from vtsearch.config import CLAP_GENERAL_MODEL_ID
+        from vtscore.config import CLAP_GENERAL_MODEL_ID
 
         assert CLAP_GENERAL_MODEL_ID == "laion/larger_clap_general"
 
@@ -244,40 +244,40 @@ class TestAudioASTEmbedderProperties:
     """Verify AudioASTEmbedder class properties and registration."""
 
     def test_name(self):
-        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+        from vtscore.media.audio.embedder_ast import AudioASTEmbedder
 
         emb = AudioASTEmbedder()
         assert emb.name == "ast"
 
     def test_media_type_id(self):
-        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+        from vtscore.media.audio.embedder_ast import AudioASTEmbedder
 
         emb = AudioASTEmbedder()
         assert emb.media_type_id == "audio"
 
     def test_supports_text_is_false(self):
         """AST has no text encoder."""
-        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+        from vtscore.media.audio.embedder_ast import AudioASTEmbedder
 
         emb = AudioASTEmbedder()
         assert emb.supports_text is False
 
     def test_inherits_default_embed_text(self):
         """Without a custom override, ``embed_text`` returns ``None``."""
-        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+        from vtscore.media.audio.embedder_ast import AudioASTEmbedder
 
         emb = AudioASTEmbedder()
         assert emb.embed_text("any query") is None
 
     def test_registered_in_registry(self):
-        from vtsearch.media import get_embedder
+        from vtscore.media import get_embedder
 
         emb = get_embedder("ast")
         assert emb.name == "ast"
         assert emb.media_type_id == "audio"
 
     def test_to_dict(self):
-        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
+        from vtscore.media.audio.embedder_ast import AudioASTEmbedder
 
         emb = AudioASTEmbedder()
         d = emb.to_dict()
@@ -292,7 +292,7 @@ class TestAudioASTEmbedderProperties:
         }
 
     def test_uses_correct_model_id(self):
-        from vtsearch.config import AST_MODEL_ID, AST_SAMPLE_RATE
+        from vtscore.config import AST_MODEL_ID, AST_SAMPLE_RATE
 
         assert AST_MODEL_ID == "MIT/ast-finetuned-audioset-10-10-0.4593"
         assert AST_SAMPLE_RATE == 16000
@@ -302,39 +302,39 @@ class TestAudioWhisperEncoderEmbedderProperties:
     """Verify AudioWhisperEncoderEmbedder class properties and registration."""
 
     def test_name(self):
-        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+        from vtscore.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
 
         emb = AudioWhisperEncoderEmbedder()
         assert emb.name == "whisper_encoder"
 
     def test_media_type_id(self):
-        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+        from vtscore.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
 
         emb = AudioWhisperEncoderEmbedder()
         assert emb.media_type_id == "audio"
 
     def test_supports_text_is_false(self):
         """Whisper's decoder is text-OUT, not a text encoder; no shared space."""
-        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+        from vtscore.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
 
         emb = AudioWhisperEncoderEmbedder()
         assert emb.supports_text is False
 
     def test_inherits_default_embed_text(self):
-        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+        from vtscore.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
 
         emb = AudioWhisperEncoderEmbedder()
         assert emb.embed_text("any query") is None
 
     def test_registered_in_registry(self):
-        from vtsearch.media import get_embedder
+        from vtscore.media import get_embedder
 
         emb = get_embedder("whisper_encoder")
         assert emb.name == "whisper_encoder"
         assert emb.media_type_id == "audio"
 
     def test_to_dict(self):
-        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+        from vtscore.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
 
         emb = AudioWhisperEncoderEmbedder()
         d = emb.to_dict()
@@ -349,7 +349,7 @@ class TestAudioWhisperEncoderEmbedderProperties:
         }
 
     def test_uses_correct_model_id(self):
-        from vtsearch.config import WHISPER_MODEL_ID, WHISPER_SAMPLE_RATE
+        from vtscore.config import WHISPER_MODEL_ID, WHISPER_SAMPLE_RATE
 
         assert WHISPER_MODEL_ID == "openai/whisper-base"
         assert WHISPER_SAMPLE_RATE == 16000
@@ -359,19 +359,19 @@ class TestTextBGEEmbedderProperties:
     """Verify TextBGEEmbedder class properties and registration."""
 
     def test_name(self):
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         assert emb.name == "bge"
 
     def test_media_type_id(self):
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         assert emb.media_type_id == "text"
 
     def test_description_wrappers_non_empty(self):
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         wrappers = emb.description_wrappers
@@ -379,21 +379,21 @@ class TestTextBGEEmbedderProperties:
         assert all("{text}" in w for w in wrappers)
 
     def test_registered_in_registry(self):
-        from vtsearch.media import get_embedder
+        from vtscore.media import get_embedder
 
         emb = get_embedder("bge")
         assert emb.name == "bge"
         assert emb.media_type_id == "text"
 
     def test_listed_in_embedders_for_type(self):
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         embedders = embedders_for_type("text")
         names = [e.name for e in embedders]
         assert "bge" in names
 
     def test_to_dict(self):
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         d = emb.to_dict()
@@ -408,7 +408,7 @@ class TestTextBGEEmbedderProperties:
         }
 
     def test_load_models_idempotent(self):
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         emb._model = MagicMock()
@@ -416,7 +416,7 @@ class TestTextBGEEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         with patch.object(emb, "load_models"):
@@ -424,7 +424,7 @@ class TestTextBGEEmbedderProperties:
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         with patch.object(emb, "load_models"):
@@ -432,7 +432,7 @@ class TestTextBGEEmbedderProperties:
         assert result is None
 
     def test_embed_text_passage_returns_none_when_not_loaded(self):
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         with patch.object(emb, "load_models"):
@@ -440,13 +440,13 @@ class TestTextBGEEmbedderProperties:
         assert result is None
 
     def test_uses_correct_model_id(self):
-        from vtsearch.config import BGE_MODEL_ID
+        from vtscore.config import BGE_MODEL_ID
 
         assert BGE_MODEL_ID == "BAAI/bge-base-en-v1.5"
 
     def test_embed_text_uses_query_prefix(self):
         """BGE uses 'Represent this sentence: ' prefix for query embedding."""
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         mock_model = MagicMock()
@@ -458,7 +458,7 @@ class TestTextBGEEmbedderProperties:
 
     def test_embed_media_reads_file(self, tmp_path):
         """embed_media should read the text file and encode it."""
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         mock_model = MagicMock()
@@ -474,7 +474,7 @@ class TestTextBGEEmbedderProperties:
 
     def test_embed_text_passage_no_prefix(self):
         """BGE passage embedding should not add a query prefix."""
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         emb = TextBGEEmbedder()
         mock_model = MagicMock()
@@ -489,19 +489,19 @@ class TestVideoLanguageBindEmbedderProperties:
     """Verify VideoLanguageBindEmbedder class properties and registration."""
 
     def test_name(self):
-        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+        from vtscore.media.video.embedder_languagebind import VideoLanguageBindEmbedder
 
         emb = VideoLanguageBindEmbedder()
         assert emb.name == "languagebind"
 
     def test_media_type_id(self):
-        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+        from vtscore.media.video.embedder_languagebind import VideoLanguageBindEmbedder
 
         emb = VideoLanguageBindEmbedder()
         assert emb.media_type_id == "video"
 
     def test_description_wrappers_non_empty(self):
-        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+        from vtscore.media.video.embedder_languagebind import VideoLanguageBindEmbedder
 
         emb = VideoLanguageBindEmbedder()
         wrappers = emb.description_wrappers
@@ -509,21 +509,21 @@ class TestVideoLanguageBindEmbedderProperties:
         assert all("{text}" in w for w in wrappers)
 
     def test_registered_in_registry(self):
-        from vtsearch.media import get_embedder
+        from vtscore.media import get_embedder
 
         emb = get_embedder("languagebind")
         assert emb.name == "languagebind"
         assert emb.media_type_id == "video"
 
     def test_listed_in_embedders_for_type(self):
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         embedders = embedders_for_type("video")
         names = [e.name for e in embedders]
         assert "languagebind" in names
 
     def test_to_dict(self):
-        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+        from vtscore.media.video.embedder_languagebind import VideoLanguageBindEmbedder
 
         emb = VideoLanguageBindEmbedder()
         d = emb.to_dict()
@@ -538,7 +538,7 @@ class TestVideoLanguageBindEmbedderProperties:
         }
 
     def test_load_models_idempotent(self):
-        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+        from vtscore.media.video.embedder_languagebind import VideoLanguageBindEmbedder
 
         emb = VideoLanguageBindEmbedder()
         # Simulate already-loaded model
@@ -550,7 +550,7 @@ class TestVideoLanguageBindEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+        from vtscore.media.video.embedder_languagebind import VideoLanguageBindEmbedder
 
         emb = VideoLanguageBindEmbedder()
         with patch.object(emb, "load_models"):
@@ -558,7 +558,7 @@ class TestVideoLanguageBindEmbedderProperties:
         assert result is None
 
     def test_embed_text_returns_none_when_not_loaded(self):
-        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+        from vtscore.media.video.embedder_languagebind import VideoLanguageBindEmbedder
 
         emb = VideoLanguageBindEmbedder()
         with patch.object(emb, "load_models"):
@@ -566,7 +566,7 @@ class TestVideoLanguageBindEmbedderProperties:
         assert result is None
 
     def test_uses_correct_model_id(self):
-        from vtsearch.config import LANGUAGEBIND_VIDEO_MODEL_ID
+        from vtscore.config import LANGUAGEBIND_VIDEO_MODEL_ID
 
         assert LANGUAGEBIND_VIDEO_MODEL_ID == "LanguageBind/LanguageBind_Video_V1.5_FT"
 
@@ -575,47 +575,47 @@ class TestVideoMAEEmbedderProperties:
     """Verify VideoVideoMAEEmbedder class properties and registration."""
 
     def test_name(self):
-        from vtsearch.media.video.embedder_videomae import VideoVideoMAEEmbedder
+        from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         emb = VideoVideoMAEEmbedder()
         assert emb.name == "videomae"
 
     def test_media_type_id(self):
-        from vtsearch.media.video.embedder_videomae import VideoVideoMAEEmbedder
+        from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         emb = VideoVideoMAEEmbedder()
         assert emb.media_type_id == "video"
 
     def test_supports_text_is_false(self):
         """VideoMAE is vision-only — no text encoder, so text queries are unsupported."""
-        from vtsearch.media.video.embedder_videomae import VideoVideoMAEEmbedder
+        from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         emb = VideoVideoMAEEmbedder()
         assert emb.supports_text is False
 
     def test_is_not_default(self):
         """X-CLIP remains the default video embedder; VideoMAE is opt-in."""
-        from vtsearch.media.video.embedder_videomae import VideoVideoMAEEmbedder
+        from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         emb = VideoVideoMAEEmbedder()
         assert emb.is_default is False
 
     def test_registered_in_registry(self):
-        from vtsearch.media import get_embedder
+        from vtscore.media import get_embedder
 
         emb = get_embedder("videomae")
         assert emb.name == "videomae"
         assert emb.media_type_id == "video"
 
     def test_listed_in_embedders_for_type(self):
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         embedders = embedders_for_type("video")
         names = [e.name for e in embedders]
         assert "videomae" in names
 
     def test_to_dict(self):
-        from vtsearch.media.video.embedder_videomae import VideoVideoMAEEmbedder
+        from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         emb = VideoVideoMAEEmbedder()
         d = emb.to_dict()
@@ -630,7 +630,7 @@ class TestVideoMAEEmbedderProperties:
         }
 
     def test_load_models_idempotent(self):
-        from vtsearch.media.video.embedder_videomae import VideoVideoMAEEmbedder
+        from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         emb = VideoVideoMAEEmbedder()
         # Simulate already-loaded model
@@ -641,7 +641,7 @@ class TestVideoMAEEmbedderProperties:
         assert isinstance(emb._model, MagicMock)
 
     def test_embed_media_returns_none_when_not_loaded(self):
-        from vtsearch.media.video.embedder_videomae import VideoVideoMAEEmbedder
+        from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         emb = VideoVideoMAEEmbedder()
         with patch.object(emb, "load_models"):
@@ -650,7 +650,7 @@ class TestVideoMAEEmbedderProperties:
 
     def test_embed_text_always_returns_none(self):
         """VideoMAE has no text tower — embed_text returns None even when loaded."""
-        from vtsearch.media.video.embedder_videomae import VideoVideoMAEEmbedder
+        from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         emb = VideoVideoMAEEmbedder()
         # Loaded or not, text embedding is unsupported.
@@ -658,7 +658,7 @@ class TestVideoMAEEmbedderProperties:
         assert emb.embed_text("an action") is None
 
     def test_uses_correct_model_id(self):
-        from vtsearch.config import VIDEOMAE_MODEL_ID
+        from vtscore.config import VIDEOMAE_MODEL_ID
 
         assert VIDEOMAE_MODEL_ID == "OpenGVLab/VideoMAEv2-Base"
 
@@ -669,7 +669,7 @@ class TestPreprocessFrames:
     def test_output_shape(self):
         from PIL import Image
 
-        from vtsearch.media.video.embedder_languagebind import _preprocess_frames
+        from vtscore.media.video.embedder_languagebind import _preprocess_frames
 
         # Create 8 dummy RGB frames of varying sizes.
         rng = np.random.default_rng(42)
@@ -681,7 +681,7 @@ class TestPreprocessFrames:
     def test_output_dtype(self):
         from PIL import Image
 
-        from vtsearch.media.video.embedder_languagebind import _preprocess_frames
+        from vtscore.media.video.embedder_languagebind import _preprocess_frames
 
         rng = np.random.default_rng(42)
         frames = [Image.fromarray(rng.integers(0, 255, (224, 224, 3), dtype=np.uint8)) for _ in range(4)]
@@ -691,7 +691,7 @@ class TestPreprocessFrames:
     def test_single_frame(self):
         from PIL import Image
 
-        from vtsearch.media.video.embedder_languagebind import _preprocess_frames
+        from vtscore.media.video.embedder_languagebind import _preprocess_frames
 
         frame = Image.fromarray(np.zeros((300, 400, 3), dtype=np.uint8))
         result = _preprocess_frames([frame])
@@ -708,7 +708,7 @@ class TestVideoMAEPreprocessFrames:
     def test_output_shape(self):
         from PIL import Image
 
-        from vtsearch.media.video.embedder_videomae import _preprocess_frames
+        from vtscore.media.video.embedder_videomae import _preprocess_frames
 
         rng = np.random.default_rng(42)
         frames = [Image.fromarray(rng.integers(0, 255, (320, 240, 3), dtype=np.uint8)) for _ in range(16)]
@@ -719,7 +719,7 @@ class TestVideoMAEPreprocessFrames:
     def test_output_dtype(self):
         from PIL import Image
 
-        from vtsearch.media.video.embedder_videomae import _preprocess_frames
+        from vtscore.media.video.embedder_videomae import _preprocess_frames
 
         rng = np.random.default_rng(42)
         frames = [Image.fromarray(rng.integers(0, 255, (224, 224, 3), dtype=np.uint8)) for _ in range(4)]
@@ -729,7 +729,7 @@ class TestVideoMAEPreprocessFrames:
     def test_single_frame(self):
         from PIL import Image
 
-        from vtsearch.media.video.embedder_videomae import _preprocess_frames
+        from vtscore.media.video.embedder_videomae import _preprocess_frames
 
         frame = Image.fromarray(np.zeros((300, 400, 3), dtype=np.uint8))
         result = _preprocess_frames([frame])
@@ -740,7 +740,7 @@ class TestAllEmbeddersRegistration:
     """Verify all expected embedders are registered."""
 
     def test_total_embedder_count(self):
-        from vtsearch.media import all_embedders
+        from vtscore.media import all_embedders
 
         embedders = all_embedders()
         # 7 original + 8 image embedders (clip, siglip2, plus single/patch
@@ -752,7 +752,7 @@ class TestAllEmbeddersRegistration:
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
         so the frontend can hide text-search UI for vision-only embedders."""
-        from vtsearch.media import all_embedders_dict
+        from vtscore.media import all_embedders_dict
 
         dicts = all_embedders_dict()
         by_name = {d["name"]: d for d in dicts}
@@ -774,7 +774,7 @@ class TestAllEmbeddersRegistration:
             assert by_name[name]["supports_text"] is False, name
 
     def test_all_expected_names_present(self):
-        from vtsearch.media import all_embedders
+        from vtscore.media import all_embedders
 
         names = {e.name for e in all_embedders()}
         expected = {
@@ -802,13 +802,13 @@ class TestAllEmbeddersRegistration:
         assert names == expected
 
     def test_embedders_for_audio(self):
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("audio")}
         assert names == {"clap", "clap_music", "clap_general", "ast", "whisper_encoder"}
 
     def test_embedders_for_image(self):
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("image")}
         assert names == {
@@ -828,26 +828,26 @@ class TestAllEmbeddersRegistration:
         """SigLIP must remain the first (default) image embedder so callers
         using ``embedders_for_type('image')[0]`` keep the historical default
         even after the new image embedders land."""
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         ordered = embedders_for_type("image")
         assert ordered[0].name == "siglip"
         assert ordered[0].is_default is True
 
     def test_embedders_for_text(self):
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("text")}
         assert names == {"e5", "bge"}
 
     def test_embedders_for_video(self):
-        from vtsearch.media import embedders_for_type
+        from vtscore.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("video")}
         assert names == {"xclip", "languagebind", "videomae"}
 
     def test_all_embedders_dict(self):
-        from vtsearch.media import all_embedders_dict
+        from vtscore.media import all_embedders_dict
 
         dicts = all_embedders_dict()
         # 7 original + 8 image embedders (clip, siglip2, plus single/patch
@@ -873,19 +873,19 @@ class TestEmbedderSentinelDiscovery:
     """
 
     def test_every_builtin_embedder_module_has_sentinel(self):
-        from vtsearch.media.audio import embedder_ast
-        from vtsearch.media.audio import embedder_clap
-        from vtsearch.media.audio import embedder_clap_general
-        from vtsearch.media.audio import embedder_clap_music
-        from vtsearch.media.audio import embedder_whisper
-        from vtsearch.media.image import embedder_siglip
-        from vtsearch.media.text import embedder_bge
-        from vtsearch.media.text import embedder_e5
-        from vtsearch.media.video import embedder_languagebind
-        from vtsearch.media.video import embedder_videomae
-        from vtsearch.media.video import embedder_xclip
+        from vtscore.media.audio import embedder_ast
+        from vtscore.media.audio import embedder_clap
+        from vtscore.media.audio import embedder_clap_general
+        from vtscore.media.audio import embedder_clap_music
+        from vtscore.media.audio import embedder_whisper
+        from vtscore.media.image import embedder_siglip
+        from vtscore.media.text import embedder_bge
+        from vtscore.media.text import embedder_e5
+        from vtscore.media.video import embedder_languagebind
+        from vtscore.media.video import embedder_videomae
+        from vtscore.media.video import embedder_xclip
 
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         modules = [
             embedder_ast,
@@ -907,11 +907,11 @@ class TestEmbedderSentinelDiscovery:
 
     def test_sentinel_identity_matches_registry(self):
         """The registered embedder for each name should be the module's EMBEDDER sentinel."""
-        from vtsearch.media import get_embedder
-        from vtsearch.media.audio.embedder_clap import EMBEDDER as clap_sentinel
-        from vtsearch.media.text.embedder_bge import EMBEDDER as bge_sentinel
-        from vtsearch.media.video.embedder_languagebind import EMBEDDER as lb_sentinel
-        from vtsearch.media.video.embedder_videomae import EMBEDDER as vm_sentinel
+        from vtscore.media import get_embedder
+        from vtscore.media.audio.embedder_clap import EMBEDDER as clap_sentinel
+        from vtscore.media.text.embedder_bge import EMBEDDER as bge_sentinel
+        from vtscore.media.video.embedder_languagebind import EMBEDDER as lb_sentinel
+        from vtscore.media.video.embedder_videomae import EMBEDDER as vm_sentinel
 
         assert get_embedder("clap") is clap_sentinel
         assert get_embedder("bge") is bge_sentinel
@@ -922,7 +922,7 @@ class TestEmbedderSentinelDiscovery:
         """Media-type package ``__init__.py`` files should not expose an
         ``EMBEDDERS`` attribute — embedders are discovered per-module.
         """
-        from vtsearch.media import audio, document, image, text, video
+        from vtscore.media import audio, document, image, text, video
 
         for pkg in (audio, image, text, video, document):
             assert not hasattr(pkg, "EMBEDDERS"), (
@@ -940,8 +940,8 @@ class TestEmbedderSentinelDiscovery:
         import sys
         from pathlib import Path
 
-        from vtsearch.media import _discover_embedders_in
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media import _discover_embedders_in
+        from vtscore.media.embedder import MediaEmbedder
 
         # Fake media-type package containing an embedder *sub-package*
         # (not a flat module) exposing the EMBEDDER sentinel from its
@@ -953,7 +953,7 @@ class TestEmbedderSentinelDiscovery:
         embedder_pkg = fake_pkg / "embedder_folder"
         embedder_pkg.mkdir()
         (embedder_pkg / "__init__.py").write_text(
-            "from vtsearch.media.embedder import MediaEmbedder\n"
+            "from vtscore.media.embedder import MediaEmbedder\n"
             "\n"
             "class _FolderEmbedder(MediaEmbedder):\n"
             "    @property\n"
@@ -970,7 +970,7 @@ class TestEmbedderSentinelDiscovery:
             "EMBEDDER = _FolderEmbedder()\n"
         )
 
-        package_name = "vtsearch.media._fakemedia_folder_test"
+        package_name = "vtscore.media._fakemedia_folder_test"
         spec = importlib.util.spec_from_file_location(
             package_name,
             str(fake_pkg / "__init__.py"),
@@ -981,7 +981,7 @@ class TestEmbedderSentinelDiscovery:
         sys.modules[package_name] = mod
         try:
             spec.loader.exec_module(mod)
-            from vtsearch.media import _embedder_registry
+            from vtscore.media import _embedder_registry
 
             saved = dict(_embedder_registry)
             try:
@@ -1007,8 +1007,8 @@ class TestEmbedderSentinelDiscovery:
         import sys
         from pathlib import Path
 
-        from vtsearch.media import _discover_embedders_in
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media import _discover_embedders_in
+        from vtscore.media.embedder import MediaEmbedder
 
         # Create a throwaway media-type package under tmp_path with a single
         # embedder module exposing the EMBEDDER sentinel.
@@ -1016,7 +1016,7 @@ class TestEmbedderSentinelDiscovery:
         fake_pkg.mkdir()
         (fake_pkg / "__init__.py").write_text("")
         embedder_src = (
-            "from vtsearch.media.embedder import MediaEmbedder\n"
+            "from vtscore.media.embedder import MediaEmbedder\n"
             "\n"
             "class _FakeEmbedder(MediaEmbedder):\n"
             "    @property\n"
@@ -1034,8 +1034,8 @@ class TestEmbedderSentinelDiscovery:
         )
         (fake_pkg / "embedder_fake.py").write_text(embedder_src)
 
-        # Make the fake package importable as if it lived under vtsearch.media.
-        package_name = "vtsearch.media._fakemedia_test"
+        # Make the fake package importable as if it lived under vtscore.media.
+        package_name = "vtscore.media._fakemedia_test"
         spec = importlib.util.spec_from_file_location(
             package_name,
             str(fake_pkg / "__init__.py"),
@@ -1047,7 +1047,7 @@ class TestEmbedderSentinelDiscovery:
         try:
             spec.loader.exec_module(mod)
             # Snapshot the registry so we can restore it after the test.
-            from vtsearch.media import _embedder_registry
+            from vtscore.media import _embedder_registry
 
             saved = dict(_embedder_registry)
             try:
@@ -1070,56 +1070,56 @@ class TestNewEmbeddersInheritance:
     """Verify new embedders correctly extend MediaEmbedder."""
 
     def test_siglip_is_media_embedder(self):
-        from vtsearch.media.embedder import MediaEmbedder
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.embedder import MediaEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         assert issubclass(ImageSiglipEmbedder, MediaEmbedder)
 
     def test_clap_music_is_media_embedder(self):
-        from vtsearch.media.audio.embedder_clap_music import AudioClapMusicEmbedder
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.audio.embedder_clap_music import AudioClapMusicEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         assert issubclass(AudioClapMusicEmbedder, MediaEmbedder)
 
     def test_bge_is_media_embedder(self):
-        from vtsearch.media.embedder import MediaEmbedder
-        from vtsearch.media.text.embedder_bge import TextBGEEmbedder
+        from vtscore.media.embedder import MediaEmbedder
+        from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
         assert issubclass(TextBGEEmbedder, MediaEmbedder)
 
     def test_languagebind_is_media_embedder(self):
-        from vtsearch.media.embedder import MediaEmbedder
-        from vtsearch.media.video.embedder_languagebind import VideoLanguageBindEmbedder
+        from vtscore.media.embedder import MediaEmbedder
+        from vtscore.media.video.embedder_languagebind import VideoLanguageBindEmbedder
 
         assert issubclass(VideoLanguageBindEmbedder, MediaEmbedder)
 
     def test_videomae_is_media_embedder(self):
-        from vtsearch.media.embedder import MediaEmbedder
-        from vtsearch.media.video.embedder_videomae import VideoVideoMAEEmbedder
+        from vtscore.media.embedder import MediaEmbedder
+        from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         assert issubclass(VideoVideoMAEEmbedder, MediaEmbedder)
 
     def test_clap_general_is_media_embedder(self):
-        from vtsearch.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.audio.embedder_clap_general import AudioClapGeneralEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         assert issubclass(AudioClapGeneralEmbedder, MediaEmbedder)
 
     def test_ast_is_media_embedder(self):
-        from vtsearch.media.audio.embedder_ast import AudioASTEmbedder
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.audio.embedder_ast import AudioASTEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         assert issubclass(AudioASTEmbedder, MediaEmbedder)
 
     def test_whisper_encoder_is_media_embedder(self):
-        from vtsearch.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.audio.embedder_whisper import AudioWhisperEncoderEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         assert issubclass(AudioWhisperEncoderEmbedder, MediaEmbedder)
 
     def test_embed_text_enriched_works(self):
         """embed_text_enriched (inherited from base) should work with mocked embed_text."""
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         fake_vec = np.random.RandomState(42).randn(768).astype(np.float32)
@@ -1134,7 +1134,7 @@ class TestEmbedMediaLock:
 
     def test_concurrent_embed_media_serialised(self):
         """Two threads calling embed_media must not overlap (global lock)."""
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         inside = threading.Event()
         proceed = threading.Event()
@@ -1204,7 +1204,7 @@ class TestEmbedMediaLock:
 
     def test_embed_media_delegates_to_impl(self):
         """embed_media() should call _embed_media_impl() and return its result."""
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         class SimpleEmbedder(MediaEmbedder):
             @property

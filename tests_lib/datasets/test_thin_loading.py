@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-from vtsearch.datasets.loader import (
+from vtscore.datasets.loader import (
     _streaming_md5,
     load_dataset_from_folder,
     load_dataset_from_pickle,
@@ -259,7 +259,7 @@ class TestThinImporters:
 
     def test_folder_importer_thin(self, tmp_path):
         _make_wav_file(tmp_path, "test.wav")
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         importer = ServerFolderDatasetImporter()
         medias: dict[int, dict[str, Any]] = {}
@@ -270,7 +270,7 @@ class TestThinImporters:
 
     def test_folder_importer_run_cli_thin(self, tmp_path):
         _make_wav_file(tmp_path, "test.wav")
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
 
         importer = ServerFolderDatasetImporter()
         medias: dict[int, dict[str, Any]] = {}
@@ -300,7 +300,7 @@ class TestThinImporters:
         with open(pkl_path, "wb") as f:
             pickle.dump(pkl_data, f)
 
-        from vtsearch.datasets.importers.pickle import PickleDatasetImporter
+        from vtscore.datasets.importers.pickle import PickleDatasetImporter
 
         importer = PickleDatasetImporter()
         medias: dict[int, dict[str, Any]] = {}
@@ -313,14 +313,14 @@ class TestLazyLoadingMediaType:
     """Test that MediaType._resolve_media_bytes/string lazy-loads from media_path."""
 
     def test_resolve_bytes_from_preloaded(self):
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         mt = AudioMediaType()
         media = {"media_bytes": b"hello", "media_path": None}
         assert mt._resolve_media_bytes(media) == b"hello"
 
     def test_resolve_bytes_from_media_path(self, tmp_path):
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         content = b"lazy loaded content"
         p = tmp_path / "test.wav"
@@ -331,28 +331,28 @@ class TestLazyLoadingMediaType:
         assert mt._resolve_media_bytes(media) == content
 
     def test_resolve_bytes_missing_file(self):
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         mt = AudioMediaType()
         media = {"media_bytes": None, "media_path": "/nonexistent/file.wav"}
         assert mt._resolve_media_bytes(media) is None
 
     def test_resolve_bytes_no_path(self):
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         mt = AudioMediaType()
         media = {"media_bytes": None, "media_path": None}
         assert mt._resolve_media_bytes(media) is None
 
     def test_resolve_string_from_preloaded(self):
-        from vtsearch.media.text.media_type import TextMediaType
+        from vtscore.media.text.media_type import TextMediaType
 
         mt = TextMediaType()
         media = {"media_string": "hello world", "media_path": None}
         assert mt._resolve_media_string(media) == "hello world"
 
     def test_resolve_string_from_media_path(self, tmp_path):
-        from vtsearch.media.text.media_type import TextMediaType
+        from vtscore.media.text.media_type import TextMediaType
 
         content = "lazy loaded text content"
         p = tmp_path / "test.txt"
@@ -367,7 +367,7 @@ class TestClipResponseLazyLoading:
     """Test that media_response works with lazy-loaded media."""
 
     def test_audio_media_response_lazy(self, tmp_path):
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         wav_bytes = _make_wav_bytes()
         p = tmp_path / "test.wav"
@@ -380,7 +380,7 @@ class TestClipResponseLazyLoading:
         assert resp.mimetype == "audio/wav"
 
     def test_image_media_response_lazy(self, tmp_path):
-        from vtsearch.media.image.media_type import ImageMediaType
+        from vtscore.media.image.media_type import ImageMediaType
 
         # Create a minimal PNG
         from PIL import Image as PILImage
@@ -401,7 +401,7 @@ class TestClipResponseLazyLoading:
         assert resp.mimetype == "image/png"
 
     def test_text_media_response_lazy(self, tmp_path):
-        from vtsearch.media.text.media_type import TextMediaType
+        from vtscore.media.text.media_type import TextMediaType
 
         content = "lazy loaded paragraph"
         p = tmp_path / "test.txt"
@@ -423,7 +423,7 @@ class TestClipResponseLazyLoading:
 
     def test_audio_media_response_no_data(self):
         """media_response returns empty bytes when no data is available."""
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         mt = AudioMediaType()
         media = {"id": 1, "media_bytes": None, "media_path": None, "filename": "test.wav"}

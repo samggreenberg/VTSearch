@@ -1,4 +1,4 @@
-"""Tests for the vtsearch.eval.visualize module.
+"""Tests for the vtscore.eval.visualize module.
 
 All tests use synthetic data structures — no real model downloads or
 embeddings required.  Charts are written to a temporary directory and
@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from vtsearch.eval.metrics import DatasetResult, LearnedSortMetrics, QueryMetrics
-from vtsearch.eval.visualize import plot_eval_results, plot_voting_iterations
+from vtscore.eval.metrics import DatasetResult, LearnedSortMetrics, QueryMetrics
+from vtscore.eval.visualize import plot_eval_results, plot_voting_iterations
 
 
 @pytest.fixture()

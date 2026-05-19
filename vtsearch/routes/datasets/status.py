@@ -12,7 +12,7 @@ validation is unused (all bodies are empty); handler-level rejects
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.concurrency.progress import (
+from vtscore.concurrency.progress import (
     cancel_dataset_progress,
     loading_tasks as _loading_tasks,
 )

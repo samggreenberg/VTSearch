@@ -41,8 +41,8 @@ class TestInitMedias:
 
     def test_deterministic_embeddings(self):
         """CLAP embeddings should be deterministic for the same input audio."""
-        from vtsearch.config import DATA_DIR
-        from vtsearch.embedding import embed_audio_file
+        from vtscore.config import DATA_DIR
+        from vtscore.embedding import embed_audio_file
 
         media = app_module.medias[1]
         # Re-embed the same WAV and verify the result matches
@@ -78,7 +78,7 @@ class TestApplyCustomMetadataMD5:
     """Tests for apply_custom_metadata_md5: use MD5 from custom_metadata when provided."""
 
     def test_replaces_md5_from_custom_metadata(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"md5": "provided_hash", "title": "foo"}},
@@ -91,7 +91,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["custom_metadata"]["title"] == "foo"
 
     def test_skips_when_no_custom_metadata(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash"},
@@ -101,7 +101,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["md5"] == "calculated_hash"
 
     def test_skips_when_custom_metadata_has_no_md5(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"title": "foo"}},
@@ -111,7 +111,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["md5"] == "calculated_hash"
 
     def test_skips_when_custom_metadata_md5_is_empty(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"md5": ""}},
@@ -121,7 +121,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["md5"] == "calculated_hash"
 
     def test_handles_mixed_medias(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calc1", "custom_metadata": {"md5": "provided1"}},
@@ -139,7 +139,7 @@ class TestApplyCustomMetadataMD5:
         assert "md5" not in media_dict[4]["custom_metadata"]
 
     def test_skips_when_custom_metadata_md5_is_none(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"md5": None}},
@@ -149,7 +149,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["md5"] == "calculated_hash"
 
     def test_replaces_md5_from_uppercase_key(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"MD5": "upper_hash", "title": "foo"}},
@@ -161,7 +161,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["custom_metadata"]["title"] == "foo"
 
     def test_lowercase_md5_takes_priority_over_uppercase(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"md5": "lower_hash", "MD5": "upper_hash"}},
@@ -180,8 +180,8 @@ class TestCustomMetadataMapInLoader:
 
     def test_md5_from_custom_metadata_map_used(self, tmp_path):
         """When custom_metadata_map provides md5, the loader uses it."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.media.audio.audio_generator import generate_wav
 
         # Create a WAV file in tmp_path
         wav_path = tmp_path / "test.wav"
@@ -208,8 +208,8 @@ class TestCustomMetadataMapInLoader:
 
     def test_empty_md5_in_custom_metadata_map_falls_through(self, tmp_path):
         """When custom_metadata_map has empty md5, the loader computes it."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.media.audio.audio_generator import generate_wav
 
         wav_path = tmp_path / "test.wav"
         wav_bytes = generate_wav(440, 0.5)
@@ -233,8 +233,8 @@ class TestCustomMetadataMapInLoader:
 
     def test_no_custom_metadata_map_computes_md5(self, tmp_path):
         """Without custom_metadata_map, md5 is computed normally."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.media.audio.audio_generator import generate_wav
 
         wav_path = tmp_path / "test.wav"
         wav_bytes = generate_wav(440, 0.5)
@@ -250,8 +250,8 @@ class TestCustomMetadataMapInLoader:
 
     def test_custom_metadata_map_with_relative_path_key(self, tmp_path):
         """custom_metadata_map keys can be relative paths (subdir/file.wav)."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.media.audio.audio_generator import generate_wav
 
         subdir = tmp_path / "sub"
         subdir.mkdir()
@@ -274,8 +274,8 @@ class TestCustomMetadataMapInLoader:
 
     def test_uppercase_md5_key_in_custom_metadata_map(self, tmp_path):
         """When custom_metadata_map provides MD5 (uppercase), the loader uses it."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.media.audio.audio_generator import generate_wav
 
         wav_path = tmp_path / "test.wav"
         wav_path.write_bytes(generate_wav(440, 0.5))

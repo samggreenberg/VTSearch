@@ -109,7 +109,7 @@ All clips live in a global dict keyed by integer ID.
 
 Users vote clips as **good** or **bad**. Votes are stored as
 `dict[int, None]` (not sets) per-detector in `DetectorContext` objects
-(defined in `vtsearch/state/core.py`, re-exported via
+(defined in `vtscore/state/core.py`, re-exported via
 `vtsearch/state/__init__.py`). Votes drive both the learned-sort training
 and the label export.
 
@@ -132,7 +132,7 @@ Models are loaded lazily on first use. Default models total ~3.1 GB.
 Media converters transform content between types (e.g. document pages to
 images, video to audio). Available converters: `Document2ImageConverter`,
 `Document2TextConverter`, `Video2AudioConverter`, `Video2ImageConverter`.
-See `vtsearch/converters/`.
+See `vtscore/converters/`.
 
 ### Detectors and processors
 
@@ -169,7 +169,7 @@ argument parsing. Key startup sequence:
 1. Create `data/` directory structure
 2. Initialize model cache directory
 3. Load persistent settings from `data/settings.json`
-4. Smart-preload predicted embedders (`predict_embedders_to_preload()` in `vtsearch/embedding/loader.py`) — walks the dataset and detector registries and warms each unique embedder referenced
+4. Smart-preload predicted embedders (`predict_embedders_to_preload()` in `vtscore/embedding/loader.py`) — walks the dataset and detector registries and warms each unique embedder referenced
 5. Start Flask server (or run CLI autodetect workflow)
 
 ### Where things live (quick lookup)
@@ -177,10 +177,10 @@ argument parsing. Key startup sequence:
 | What | Where |
 |------|-------|
 | Flask routes (REST API) | `vtsearch/routes/` |
-| Global state (medias, votes) | `vtsearch/state/core.py` |
+| Global state (medias, votes) | `vtscore/state/core.py` |
 | Persistent settings | `vtsearch/settings.py` → `data/settings.json` |
-| ML training, embedding models | `vtsearch/training/`, `vtsearch/embedding/`, `vtsearch/media/*/embedder.py` |
-| Dataset loading, demo downloads | `vtsearch/datasets/` |
+| ML training, embedding models | `vtscore/training/`, `vtscore/embedding/`, `vtscore/media/*/embedder.py` |
+| Dataset loading, demo downloads | `vtscore/datasets/` |
 | Frontend (Angular source / build output) | `frontend/` → `static/` |
 
 For the full module-by-module map — extractability matrix, dependency
@@ -327,7 +327,7 @@ server-side JSON files.
 ### Evaluate sorting quality
 
 ```bash
-python -m vtsearch.eval --plot-dir eval_output
+python -m vtscore.eval --plot-dir eval_output
 ```
 
 See [EVAL.md](EVAL.md) for the full evaluation framework guide.

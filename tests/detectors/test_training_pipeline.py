@@ -1,4 +1,4 @@
-"""Tests for :mod:`vtsearch.detectors.training`.
+"""Tests for :mod:`vtscore.detectors.training`.
 
 The existing :mod:`tests/io/test_export_options.py` covers
 ``train_and_threshold`` happy path indirectly.  This file fills in:
@@ -18,7 +18,7 @@ from contextlib import contextmanager
 import numpy as np
 import pytest
 
-from vtsearch.detectors.training import (
+from vtscore.detectors.training import (
     collect_media_origins,
     train_and_score,
     train_detector_from_origins,
@@ -203,7 +203,7 @@ class TestTrainDetectorFromOrigins:
                 return _vec_for(name, 0)
             return None
 
-        import vtsearch.detectors.resolver as resolver_mod
+        import vtscore.detectors.resolver as resolver_mod
 
         monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_ctx)
         monkeypatch.setattr(resolver_mod, "embed_file", _fake_embed)
@@ -287,7 +287,7 @@ class TestTrainDetectorFromOrigins:
         def _none_ctx(origin, origin_name="", filename=""):
             yield None
 
-        import vtsearch.detectors.resolver as resolver_mod
+        import vtscore.detectors.resolver as resolver_mod
 
         monkeypatch.setattr(resolver_mod, "resolve_file_context", _none_ctx)
 

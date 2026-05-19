@@ -57,13 +57,13 @@ def _make_text_media(media_id: int, text: str, *, origin_path: str = "/data/text
 
 class TestNormaliseChain:
     def test_empty_input(self):
-        from vtsearch.datasets.clipper_chain import normalise_chain
+        from vtscore.datasets.clipper_chain import normalise_chain
 
         assert normalise_chain(None) == []
         assert normalise_chain([]) == []
 
     def test_drops_default_clipper_steps(self):
-        from vtsearch.datasets.clipper_chain import normalise_chain
+        from vtscore.datasets.clipper_chain import normalise_chain
 
         steps = [
             {"kind": "clipper", "name": "text_default", "params": {}},
@@ -75,13 +75,13 @@ class TestNormaliseChain:
         assert out[0]["name"] == "text_sentence"
 
     def test_rejects_missing_kind(self):
-        from vtsearch.datasets.clipper_chain import normalise_chain
+        from vtscore.datasets.clipper_chain import normalise_chain
 
         with pytest.raises(ValueError):
             normalise_chain([{"name": "text_sentence"}])
 
     def test_rejects_missing_name(self):
-        from vtsearch.datasets.clipper_chain import normalise_chain
+        from vtscore.datasets.clipper_chain import normalise_chain
 
         with pytest.raises(ValueError):
             normalise_chain([{"kind": "clipper"}])
@@ -89,18 +89,18 @@ class TestNormaliseChain:
 
 class TestValidateChain:
     def test_empty_chain_returns_source_type(self):
-        from vtsearch.datasets.clipper_chain import validate_chain
+        from vtscore.datasets.clipper_chain import validate_chain
 
         assert validate_chain([], "text") == "text"
 
     def test_same_type_chain(self):
-        from vtsearch.datasets.clipper_chain import validate_chain
+        from vtscore.datasets.clipper_chain import validate_chain
 
         steps = [{"kind": "clipper", "name": "text_sentence", "params": {}}]
         assert validate_chain(steps, "text") == "text"
 
     def test_cross_type_chain(self):
-        from vtsearch.datasets.clipper_chain import validate_chain
+        from vtscore.datasets.clipper_chain import validate_chain
 
         steps = [
             {"kind": "converter", "name": "document2text", "params": {}},
@@ -109,19 +109,19 @@ class TestValidateChain:
         assert validate_chain(steps, "document") == "text"
 
     def test_rejects_unknown_clipper(self):
-        from vtsearch.datasets.clipper_chain import validate_chain
+        from vtscore.datasets.clipper_chain import validate_chain
 
         with pytest.raises(ValueError, match="unknown clipper"):
             validate_chain([{"kind": "clipper", "name": "nope", "params": {}}], "text")
 
     def test_rejects_unknown_converter(self):
-        from vtsearch.datasets.clipper_chain import validate_chain
+        from vtscore.datasets.clipper_chain import validate_chain
 
         with pytest.raises(ValueError, match="unknown converter"):
             validate_chain([{"kind": "converter", "name": "nope", "params": {}}], "document")
 
     def test_rejects_type_mismatch(self):
-        from vtsearch.datasets.clipper_chain import validate_chain
+        from vtscore.datasets.clipper_chain import validate_chain
 
         # text → text_sentence is fine; sound_tiling expects audio.
         steps = [
@@ -142,7 +142,7 @@ class TestApplyChainToClips:
         """A length-1 clipper chain produces the same origin stamp shape
         as the legacy single-clipper path: ``clipper`` plus ``clip_index``
         for genuine sub-items."""
-        from vtsearch.datasets.clipper_chain import apply_chain_to_clips
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips
 
         text = "First. Second. Third."
         media = _make_text_media(1, text)
@@ -171,7 +171,7 @@ class TestApplyChainToClips:
         """A non-default clipper that short-circuits to ``[media]`` (e.g.
         TextSentence on a single-sentence text) must NOT mark the clip as
         a sub-item and must NOT stamp ``clip_index``."""
-        from vtsearch.datasets.clipper_chain import apply_chain_to_clips
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips
 
         media = _make_text_media(1, "Only one sentence with no terminator")
         clips = {1: media}
@@ -191,7 +191,7 @@ class TestApplyChainToClips:
     def test_chain_preserves_parent_origin(self):
         """The parent's origin (importer, path, etc.) survives all chain
         steps and lands on the final clips."""
-        from vtsearch.datasets.clipper_chain import apply_chain_to_clips
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips
 
         media = _make_text_media(1, "A. B. C.", origin_path="/srv/abc")
         clips = {1: media}
@@ -212,7 +212,7 @@ class TestApplyChainToClips:
 
 class TestParseTrail:
     def test_accepts_json_string(self):
-        from vtsearch.datasets.clipper_chain import parse_trail
+        from vtscore.datasets.clipper_chain import parse_trail
 
         raw = json.dumps([{"kind": "clipper", "name": "text_sentence", "out_index": 0}])
         steps = parse_trail(raw)
@@ -220,14 +220,14 @@ class TestParseTrail:
         assert steps[0]["name"] == "text_sentence"
 
     def test_accepts_list(self):
-        from vtsearch.datasets.clipper_chain import parse_trail
+        from vtscore.datasets.clipper_chain import parse_trail
 
         steps = parse_trail([{"kind": "clipper", "name": "text_sentence", "out_index": 0}])
         assert steps is not None
         assert steps[0]["name"] == "text_sentence"
 
     def test_rejects_malformed(self):
-        from vtsearch.datasets.clipper_chain import parse_trail
+        from vtscore.datasets.clipper_chain import parse_trail
 
         assert parse_trail(None) is None
         assert parse_trail("") is None
@@ -248,8 +248,8 @@ class TestReplayChainOnFile:
         ``out_index``-th sentence, and embeds it. The returned embedding
         should match what we would get by embedding the same sentence
         directly via ``embed_file``."""
-        from vtsearch.datasets.clipper_chain import replay_chain_on_file
-        from vtsearch.detectors import resolver as resolver_module
+        from vtscore.datasets.clipper_chain import replay_chain_on_file
+        from vtscore.detectors import resolver as resolver_module
 
         # Stub embed_file to a deterministic function of the source bytes.
         captured: list[tuple[str, str]] = []
@@ -284,7 +284,7 @@ class TestReplayChainOnFile:
         assert captured[0][1] == "text"
 
     def test_replay_returns_none_for_empty_chain(self, tmp_path):
-        from vtsearch.datasets.clipper_chain import replay_chain_on_file
+        from vtscore.datasets.clipper_chain import replay_chain_on_file
 
         source = tmp_path / "x.txt"
         source.write_text("anything", encoding="utf-8")
@@ -303,7 +303,7 @@ class TestApplyClipperBackwardsCompat:
         captured by the existing single-clipper code path."""
         # We stub _fixup_clip_md5_and_embeddings and _regenerate_clip_thumbnails
         # so the test doesn't need real audio/embedding wiring.
-        from vtsearch.datasets import load_pipeline
+        from vtscore.datasets import load_pipeline
 
         calls: dict[str, int] = {"fixup": 0, "thumb": 0}
 

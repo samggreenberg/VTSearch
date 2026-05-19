@@ -36,7 +36,7 @@ def _make_bbc_zip(tmp_path: Path, top_folder: str = "") -> Path:
 class TestFindBbcRoot:
     def test_flat_structure(self, tmp_path):
         """Category directories sit directly inside the root."""
-        from vtsearch.datasets.downloader import _find_bbc_root
+        from vtscore.datasets.downloader import _find_bbc_root
 
         for cat in ("business", "sport", "tech"):
             (tmp_path / cat).mkdir()
@@ -46,7 +46,7 @@ class TestFindBbcRoot:
 
     def test_nested_structure(self, tmp_path):
         """Category directories are one level deeper (zip has a top-level folder)."""
-        from vtsearch.datasets.downloader import _find_bbc_root
+        from vtscore.datasets.downloader import _find_bbc_root
 
         inner = tmp_path / "bbc"
         inner.mkdir()
@@ -57,7 +57,7 @@ class TestFindBbcRoot:
         assert result == inner
 
     def test_no_match_returns_none(self, tmp_path):
-        from vtsearch.datasets.downloader import _find_bbc_root
+        from vtscore.datasets.downloader import _find_bbc_root
 
         (tmp_path / "unrelated").mkdir()
         assert _find_bbc_root(tmp_path) is None
@@ -71,7 +71,7 @@ class TestFindBbcRoot:
 class TestDownloadBbcNews:
     def test_returns_articles_by_category(self, tmp_path):
         """download_bbc_news returns a dict of category -> list[str] from a zip."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         zip_path = _make_bbc_zip(tmp_path)
 
@@ -95,7 +95,7 @@ class TestDownloadBbcNews:
 
     def test_nested_zip_structure(self, tmp_path):
         """download_bbc_news handles a zip with a top-level 'bbc/' folder."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         zip_path = _make_bbc_zip(tmp_path, top_folder="bbc")
 
@@ -112,7 +112,7 @@ class TestDownloadBbcNews:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If the extract directory already exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         # Pre-create the extract directory with one category.
         extract_dir = tmp_path / "bbc-fulltext"
@@ -146,7 +146,7 @@ class TestLoadDemoSourceBbcNews:
 
     def test_bbc_news_source_populates_clips(self, tmp_path):
         """load_demo_source with source='bbc_news' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
         from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
@@ -175,7 +175,7 @@ class TestLoadDemoSourceBbcNews:
 
     def test_bbc_news_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits articles per category."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
         from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
@@ -202,7 +202,7 @@ class TestLoadDemoSourceBbcNews:
 
     def test_unsupported_source_still_raises(self):
         """Non-existent sources still raise ValueError."""
-        from vtsearch.media.text.media_type import TextMediaType
+        from vtscore.media.text.media_type import TextMediaType
 
         mt = TextMediaType()
         with pytest.raises(ValueError, match="Unsupported text source"):

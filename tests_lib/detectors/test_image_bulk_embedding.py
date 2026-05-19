@@ -1,7 +1,7 @@
 """Tests for the batched ``_embed_media_bulk_impl`` overrides on image embedders.
 
 The overrides themselves are model-free — they delegate to the shared
-helper in ``vtsearch.media.image._image_bulk`` and a per-embedder
+helper in ``vtscore.media.image._image_bulk`` and a per-embedder
 ``_forward_pil_batch`` callable.  These tests stub the model + processor
 so we can assert:
 
@@ -44,7 +44,7 @@ def _media(path: Path) -> dict:
 
 class TestResolveEmbedBatchSize:
     def test_default(self, monkeypatch):
-        from vtsearch.media.embedder import (
+        from vtscore.media.embedder import (
             DEFAULT_EMBED_BATCH_SIZE,
             resolve_embed_batch_size,
         )
@@ -53,13 +53,13 @@ class TestResolveEmbedBatchSize:
         assert resolve_embed_batch_size() == DEFAULT_EMBED_BATCH_SIZE
 
     def test_env_override(self, monkeypatch):
-        from vtsearch.media.embedder import resolve_embed_batch_size
+        from vtscore.media.embedder import resolve_embed_batch_size
 
         monkeypatch.setenv("VTSEARCH_EMBED_BATCH_SIZE", "7")
         assert resolve_embed_batch_size() == 7
 
     def test_invalid_env_falls_back(self, monkeypatch):
-        from vtsearch.media.embedder import (
+        from vtscore.media.embedder import (
             DEFAULT_EMBED_BATCH_SIZE,
             resolve_embed_batch_size,
         )
@@ -68,7 +68,7 @@ class TestResolveEmbedBatchSize:
         assert resolve_embed_batch_size() == DEFAULT_EMBED_BATCH_SIZE
 
     def test_nonpositive_env_falls_back(self, monkeypatch):
-        from vtsearch.media.embedder import (
+        from vtscore.media.embedder import (
             DEFAULT_EMBED_BATCH_SIZE,
             resolve_embed_batch_size,
         )
@@ -83,10 +83,10 @@ class TestResolveEmbedBatchSize:
 
 
 class TestBulkEmbedImageFilesHelper:
-    """The shared helper in ``vtsearch.media.image._image_bulk``."""
+    """The shared helper in ``vtscore.media.image._image_bulk``."""
 
     def test_chunks_into_batch_size_groups(self, tmp_path):
-        from vtsearch.media.image._image_bulk import bulk_embed_image_files
+        from vtscore.media.image._image_bulk import bulk_embed_image_files
 
         paths = []
         for i in range(5):
@@ -117,7 +117,7 @@ class TestBulkEmbedImageFilesHelper:
         assert all(v is not None for v in out)
 
     def test_pil_decode_failure_keeps_others_in_batch(self, tmp_path):
-        from vtsearch.media.image._image_bulk import bulk_embed_image_files
+        from vtscore.media.image._image_bulk import bulk_embed_image_files
 
         good = tmp_path / "good.png"
         _write_image(good)
@@ -144,7 +144,7 @@ class TestBulkEmbedImageFilesHelper:
         assert out[2] is not None
 
     def test_forward_exception_drops_batch_but_continues(self, tmp_path):
-        from vtsearch.media.image._image_bulk import bulk_embed_image_files
+        from vtscore.media.image._image_bulk import bulk_embed_image_files
 
         # 4 images, batch_size=2 → 2 chunks; first chunk's forward raises.
         paths = []
@@ -176,7 +176,7 @@ class TestBulkEmbedImageFilesHelper:
         assert out[3] is not None
 
     def test_empty_input(self):
-        from vtsearch.media.image._image_bulk import bulk_embed_image_files
+        from vtscore.media.image._image_bulk import bulk_embed_image_files
 
         out = bulk_embed_image_files(
             [],
@@ -188,7 +188,7 @@ class TestBulkEmbedImageFilesHelper:
         assert out == []
 
     def test_progress_emitted_per_batch(self, tmp_path):
-        from vtsearch.media.image._image_bulk import bulk_embed_image_files
+        from vtscore.media.image._image_bulk import bulk_embed_image_files
 
         paths = []
         for i in range(3):
@@ -245,7 +245,7 @@ def _stub_image_embedder(emb, dim: int = 3):
 
 class TestSiglipBulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         _stub_image_embedder(emb)
@@ -264,7 +264,7 @@ class TestSiglipBulkOverride:
         assert out[2][0] == 2.0  # pyright: ignore[reportOptionalSubscript]
 
     def test_routes_through_bulk_helper(self, tmp_path):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         emb = ImageSiglipEmbedder()
         _stub_image_embedder(emb)
@@ -273,9 +273,9 @@ class TestSiglipBulkOverride:
         _write_image(p)
 
         with mock.patch(
-            "vtsearch.media.image.embedder_siglip.bulk_embed_image_files",
+            "vtscore.media.image.embedder_siglip.bulk_embed_image_files",
             wraps=__import__(
-                "vtsearch.media.image._image_bulk", fromlist=["bulk_embed_image_files"]
+                "vtscore.media.image._image_bulk", fromlist=["bulk_embed_image_files"]
             ).bulk_embed_image_files,
         ) as wrapped:
             emb.embed_media_bulk([_media(p)])
@@ -287,7 +287,7 @@ class TestSiglipBulkOverride:
 
 class TestClipBulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtsearch.media.image.embedder_clip import ImageClipEmbedder
+        from vtscore.media.image.embedder_clip import ImageClipEmbedder
 
         emb = ImageClipEmbedder()
         _stub_image_embedder(emb)
@@ -304,7 +304,7 @@ class TestClipBulkOverride:
 
 class TestSiglip2BulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtsearch.media.image.embedder_siglip2 import ImageSiglip2Embedder
+        from vtscore.media.image.embedder_siglip2 import ImageSiglip2Embedder
 
         emb = ImageSiglip2Embedder()
         _stub_image_embedder(emb)
@@ -317,7 +317,7 @@ class TestSiglip2BulkOverride:
 
 class TestDinov2BulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtsearch.media.image.embedder_dinov2_single import (
+        from vtscore.media.image.embedder_dinov2_single import (
             ImageDinov2SingleEmbedder,
         )
 
@@ -335,7 +335,7 @@ class TestDinov2BulkOverride:
 
 class TestDinov3BulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtsearch.media.image.embedder_dinov3_single import (
+        from vtscore.media.image.embedder_dinov3_single import (
             ImageDinov3SingleEmbedder,
         )
 
@@ -352,7 +352,7 @@ class TestDinov3BulkOverride:
 
 class TestEupeBulkOverride:
     def test_bulk_returns_per_input_vector(self, tmp_path):
-        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+        from vtscore.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
 
         emb = ImageEupeSingleEmbedder()
         emb._model = mock.MagicMock()
@@ -382,7 +382,7 @@ class TestPatchForwardBulkDefault:
     """The ABC's default impl loops :meth:`patch_forward` per item."""
 
     def test_default_loops_per_item(self):
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):
             @property
@@ -412,7 +412,7 @@ class TestPatchForwardBulkDefault:
         assert out == [{"id": 1}, {"id": 2}, {"id": 3}]
 
     def test_default_emits_progress(self):
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):
             @property
@@ -449,7 +449,7 @@ class TestPatchForwardBulkOverrides:
     """The DINOv2/v3 + EUPE patch embedders override the bulk hook."""
 
     def test_dinov3_patch_routes_through_helper(self, tmp_path):
-        from vtsearch.media.image.embedder_dinov3_patch import (
+        from vtscore.media.image.embedder_dinov3_patch import (
             ImageDinov3PatchEmbedder,
         )
 
@@ -475,7 +475,7 @@ class TestPatchForwardBulkOverrides:
         assert all(o is not None for o in out)
 
     def test_dinov2_patch_routes_through_helper(self, tmp_path):
-        from vtsearch.media.image.embedder_dinov2_patch import (
+        from vtscore.media.image.embedder_dinov2_patch import (
             ImageDinov2PatchEmbedder,
         )
 
@@ -502,7 +502,7 @@ class TestPatchForwardBulkOverrides:
 
 class TestLoaderRoutesToPatchForwardBulk:
     def test_loader_calls_patch_forward_bulk_once(self, tmp_path):
-        from vtsearch.datasets.loader_folder import _bulk_patch_forward_files
+        from vtscore.datasets.loader_folder import _bulk_patch_forward_files
 
         # Build a mock embedder that mimics the new bulk surface.
         emb = mock.MagicMock()

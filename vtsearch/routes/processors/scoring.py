@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.concurrency.memory_budget import cap_workers_by_memory
+from vtscore.concurrency.memory_budget import cap_workers_by_memory
 from vtsearch.routes.processors.crud import _build_extractor, _build_localizer
 from vtsearch.schemas.processors import (
     AutoExtractResponseSchema,

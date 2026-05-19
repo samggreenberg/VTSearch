@@ -122,7 +122,7 @@ VTSearch trains a small MLP neural network on user votes to learn a binary class
 VTSearch includes an evaluation framework that measures sorting quality on demo datasets. Run it with:
 
 ```bash
-python -m vtsearch.eval --plot-dir eval_output
+python -m vtscore.eval --plot-dir eval_output
 ```
 
 This runs text-sort and learned-sort evaluations across all demo datasets, prints a summary, and saves visualisation charts as PNGs. See [docs/EVAL.md](docs/EVAL.md) for the full guide, including:

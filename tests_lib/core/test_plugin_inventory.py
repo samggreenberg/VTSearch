@@ -1,4 +1,4 @@
-"""Tests for the centralised plugin inventory (`vtsearch.plugins.inventory`).
+"""Tests for the centralised plugin inventory (`vtscore.plugins.inventory`).
 
 Backs the ``python app.py --list-plugins`` CLI: every plugin family must
 show up with at least one entry (since the codebase ships built-ins for
@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from vtsearch.plugins.inventory import (
+from vtscore.plugins.inventory import (
     FAMILIES,
     family_flag,
     format_json,

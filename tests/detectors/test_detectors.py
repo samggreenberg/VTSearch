@@ -203,7 +203,7 @@ class TestRenameDetector:
 
     def test_rename_updates_model_registry(self, client):
         """Renaming a detector should update registry references."""
-        from vtsearch.detectors.registry import find_by_name, get_detector
+        from vtscore.detectors.registry import find_by_name, get_detector
 
         # Create a detector and register it in the model registry
         client.post(
@@ -268,7 +268,7 @@ class TestRenameLabelsetSourceCleanup:
         return res.get_json()["detector"]["id"]
 
     def _attach_labelset_source(self, detector_id, template):
-        from vtsearch.state.core import DetectorContext, register_detector_context
+        from vtscore.state.core import DetectorContext, register_detector_context
 
         ctx = DetectorContext(detector_id, name="Old Name", media_type="audio")
         ctx.labelset_source = {
@@ -301,7 +301,7 @@ class TestRenameLabelsetSourceCleanup:
         assert pending["new_path"].endswith("New Name.labels.json")
 
     def test_rename_updates_ctx_name_for_future_syncs(self, client, tmp_path):
-        from vtsearch.state.core import get_detector_context
+        from vtscore.state.core import get_detector_context
 
         detector_id = self._create_registered_detector(client)
         template = str(tmp_path / "{detector_name}.labels.json")
@@ -499,7 +499,7 @@ class TestSaveLabels:
 
     def test_save_labels_captures_active_clipper_into_input_spec(self, client):
         """When the active dataset has a clipper, save_detector_labels stamps it onto input_spec."""
-        from vtsearch.detectors.store import _detector_path, _read_detector
+        from vtscore.detectors.store import _detector_path, _read_detector
         from vtsearch.state import medias
 
         if not medias:
@@ -543,7 +543,7 @@ class TestSaveLabels:
 
     def test_save_labels_drops_input_spec_when_dataset_has_no_clipper(self, client):
         """Re-saving labels against an unclipped dataset clears any stale input_spec."""
-        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
 
         client.post(
             "/api/detectors",
@@ -695,7 +695,7 @@ class TestDeleteRegisteredModel:
 
     def test_delete_registered_model(self, client):
         """Deleting a registered model removes it from the registry."""
-        from vtsearch.detectors.registry import get_detector
+        from vtscore.detectors.registry import get_detector
 
         res = client.post(
             "/api/detectors/registry",
@@ -715,7 +715,7 @@ class TestDeleteRegisteredModel:
 
     def test_delete_loaded_model(self, client):
         """Deleting a loaded model should also unload it."""
-        from vtsearch.detectors.registry import get_detector, is_detector_loaded
+        from vtscore.detectors.registry import get_detector, is_detector_loaded
 
         client.post(
             "/api/detectors",
@@ -736,7 +736,7 @@ class TestDeleteRegisteredModel:
 
     def test_delete_removes_autorun_flag(self, client):
         """Deleting a model that is flagged for autorun clears it from settings."""
-        from vtsearch.detectors.registry import get_detector
+        from vtscore.detectors.registry import get_detector
         from vtsearch.settings import add_autorun_detector, get_autorun_detectors
 
         res = client.post(
@@ -756,7 +756,7 @@ class TestLoadModelEndpoint:
     """Tests for POST /api/detectors/registry/load."""
 
     def test_load_model(self, client):
-        from vtsearch.detectors.registry import is_detector_loaded
+        from vtscore.detectors.registry import is_detector_loaded
 
         res = client.post(
             "/api/detectors/registry",
@@ -769,7 +769,7 @@ class TestLoadModelEndpoint:
         assert is_detector_loaded(detector_id)
 
     def test_unload_model(self, client):
-        from vtsearch.detectors.registry import add_loaded_detector_id, is_detector_loaded
+        from vtscore.detectors.registry import add_loaded_detector_id, is_detector_loaded
 
         add_loaded_detector_id("fake")
         assert is_detector_loaded("fake")
@@ -867,7 +867,7 @@ class TestLoadModelEndpoint:
 
         import numpy as np
 
-        from vtsearch.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
         from vtsearch.state import (
             DatasetContext,
             bad_votes,
@@ -938,7 +938,7 @@ class TestVoteSyncsToLoadedModel:
 
     def test_vote_updates_model_labels(self, client):
         """Casting a vote with a loaded model should persist labels and update registry stats."""
-        from vtsearch.detectors.registry import get_detector
+        from vtscore.detectors.registry import get_detector
         from vtsearch.state import medias
 
         if not medias:
@@ -1024,7 +1024,7 @@ class TestVoteSyncsToLoadedModel:
 
     def test_label_import_syncs_to_loaded_model(self, client):
         """Importing labels with a loaded model should persist to the model."""
-        from vtsearch.detectors.registry import get_detector
+        from vtscore.detectors.registry import get_detector
         from vtsearch.state import medias
 
         if not medias:
@@ -1074,7 +1074,7 @@ class TestSeedVotesFromExamples:
 
     def _create_example_file(self, media_bytes: bytes, filename: str = "ex.wav") -> str:
         """Write *media_bytes* into data/example_media/<filename> and return the filename."""
-        from vtsearch.config import DATA_DIR
+        from vtscore.config import DATA_DIR
 
         example_dir = DATA_DIR / "example_media"
         example_dir.mkdir(parents=True, exist_ok=True)
@@ -1442,8 +1442,8 @@ class TestLoadModelCrossDatasetResolution:
 
         import numpy as np
 
-        from vtsearch.detectors.registry import register_detector, reset_for_tests
-        from vtsearch.detectors.store import _write_detector
+        from vtscore.detectors.registry import register_detector, reset_for_tests
+        from vtscore.detectors.store import _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.state import (
             good_votes,
@@ -1557,8 +1557,8 @@ class TestLoadModelCrossDatasetResolution:
         """
         import numpy as np
 
-        from vtsearch.detectors.registry import register_detector, reset_for_tests
-        from vtsearch.detectors.store import _write_detector
+        from vtscore.detectors.registry import register_detector, reset_for_tests
+        from vtscore.detectors.store import _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.state import (
             good_votes,

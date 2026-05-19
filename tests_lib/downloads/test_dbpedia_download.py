@@ -44,7 +44,7 @@ def _make_dbpedia_tgz(tmp_path: Path, articles_per_class: int = 3) -> Path:
 
 class TestDownloadDbpedia:
     def test_returns_articles_by_ontology_class(self, tmp_path):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         archive_path = _make_dbpedia_tgz(tmp_path, articles_per_class=3)
 
@@ -68,7 +68,7 @@ class TestDownloadDbpedia:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If the extract dir exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "dbpedia_csv"
         extract_dir.mkdir()
@@ -91,7 +91,7 @@ class TestDownloadDbpedia:
 
     def test_uses_classes_txt_when_present(self, tmp_path):
         """A classes.txt sidecar overrides the hardcoded ontology names."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "dbpedia_csv"
         extract_dir.mkdir()
@@ -104,7 +104,7 @@ class TestDownloadDbpedia:
         assert set(result.keys()) == {"Alpha", "Beta"}
 
     def test_skips_malformed_rows(self, tmp_path):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "dbpedia_csv"
         extract_dir.mkdir()
@@ -127,7 +127,7 @@ class TestDownloadDbpedia:
 
 class TestLoadDemoSourceDbpedia:
     def test_dbpedia_source_populates_clips(self):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
         from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
@@ -154,7 +154,7 @@ class TestLoadDemoSourceDbpedia:
         assert {c["category"] for c in clips.values()} == {"Company", "Animal"}
 
     def test_dbpedia_slice_is_applied(self):
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
         from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {"Plant": [f"Plant abstract {i}." for i in range(10)]}

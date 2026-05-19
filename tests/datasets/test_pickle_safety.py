@@ -11,7 +11,7 @@ import pickle
 import numpy as np
 import pytest
 
-from vtsearch.datasets.loader import (
+from vtscore.datasets.loader import (
     export_dataset_to_file,
     load_dataset_from_pickle,
     load_dataset_from_pickle_chunked,

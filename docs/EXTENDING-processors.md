@@ -2,7 +2,7 @@
 
 How to add new detectors, localizers, and extractors — the three kinds
 of **Processor** in VTSearch. All three subclass `Processor` from
-`vtsearch/media/base.py`.
+`vtscore/media/base.py`.
 
 **Related docs:** [EXTENDING.md](EXTENDING.md) (index, checklists, auth,
 dependencies) · [EXTENDING-plugins.md](EXTENDING-plugins.md) (importers,
@@ -23,7 +23,7 @@ types, embedders, clippers, converters).
 
 Processors analyze media items. The hierarchy has a common base
 (`Processor`) with three concrete subtypes. All are defined in
-`vtsearch/media/base.py`.
+`vtscore/media/base.py`.
 
 ```
 Processor (ABC)
@@ -39,7 +39,7 @@ Each processor operates on exactly one media type.
 A Detector answers "is this media Good?" with a boolean.
 
 ```python
-from vtsearch.media.processors import Detector
+from vtscore.media.processors import Detector
 from typing import Any
 
 
@@ -67,7 +67,7 @@ class LoudnessDetector(Detector):
 A Localizer returns bounding boxes with confidence scores.
 
 ```python
-from vtsearch.media.processors import Localizer
+from vtscore.media.processors import Localizer
 from typing import Any
 
 
@@ -100,7 +100,7 @@ class FaceLocalizer(Localizer):
 An Extractor returns structured details for each occurrence found.
 
 ```python
-from vtsearch.media.processors import Extractor
+from vtscore.media.processors import Extractor
 from typing import Any
 
 

@@ -52,15 +52,15 @@ class TestLoadDatasetContentVectors:
         from contextlib import ExitStack
 
         stack = ExitStack()
-        stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
-        stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[mt._mock_embedder]))
+        stack.enter_context(mock.patch("vtscore.media.get_by_folder_name", return_value=mt))
+        stack.enter_context(mock.patch("vtscore.media.embedders_for_type", return_value=[mt._mock_embedder]))
         return stack
 
     def test_uses_content_vector_when_provided(self, tmp_path):
         """A file whose name is in content_vectors should use that vector."""
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "a.wav"
         self._write_wav(wav)
@@ -86,7 +86,7 @@ class TestLoadDatasetContentVectors:
         """A file NOT in content_vectors falls back to embed_media()."""
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "b.wav"
         self._write_wav(wav)
@@ -110,7 +110,7 @@ class TestLoadDatasetContentVectors:
         """Only files in content_vectors skip embed_media; others are embedded."""
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav_a = tmp_path / "a.wav"
         wav_b = tmp_path / "b.wav"
@@ -141,7 +141,7 @@ class TestLoadDatasetContentVectors:
         """When content_vectors is None (default), all files are embedded."""
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "c.wav"
         self._write_wav(wav)
@@ -168,7 +168,7 @@ class TestLoadDatasetContentVectors:
         """
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav_pre = tmp_path / "pre.wav"
         wav_model = tmp_path / "model.wav"
@@ -202,7 +202,7 @@ class TestLoadDatasetContentVectors:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "d.wav"
         self._write_wav(wav)
@@ -216,7 +216,7 @@ class TestLoadDatasetContentVectors:
         def _noop(*a):
             pass
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
                 tmp_path, "audio", medias, content_vectors={"d.wav": pre_vector}, on_progress=_noop
             )
@@ -243,7 +243,7 @@ class TestLoadDatasetSkipEmbedding:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "a.wav"
         self._write_wav(wav)
@@ -257,9 +257,9 @@ class TestLoadDatasetSkipEmbedding:
         mt.load_media_data.return_value = {"duration": 1.0}
 
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtsearch.media.embedders_for_type") as mock_emb_for_type,
-            mock.patch("vtsearch.media.get_embedder") as mock_get_emb,
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtscore.media.embedders_for_type") as mock_emb_for_type,
+            mock.patch("vtscore.media.get_embedder") as mock_get_emb,
         ):
             load_dataset_from_folder(
                 tmp_path,
@@ -280,7 +280,7 @@ class TestLoadDatasetSkipEmbedding:
         """Files without pre-computed vectors get embedding=None."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "a.wav"
         self._write_wav(wav)
@@ -293,8 +293,8 @@ class TestLoadDatasetSkipEmbedding:
         mt.load_media_data.return_value = {"duration": 1.0}
 
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtsearch.media.embedders_for_type") as mock_emb_for_type,
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtscore.media.embedders_for_type") as mock_emb_for_type,
         ):
             load_dataset_from_folder(
                 tmp_path,
@@ -313,7 +313,7 @@ class TestLoadDatasetSkipEmbedding:
         """Progress messages should say 'Loading' not 'Embedding'."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "a.wav"
         self._write_wav(wav)
@@ -330,8 +330,8 @@ class TestLoadDatasetSkipEmbedding:
 
         medias: dict = {}
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtsearch.media.embedders_for_type"),
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtscore.media.embedders_for_type"),
         ):
             load_dataset_from_folder(
                 tmp_path,
@@ -353,7 +353,7 @@ class TestLoadDatasetSkipEmbedding:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+        from vtscore.datasets.loader import load_dataset_from_folder_chunked
 
         for name in ("a.wav", "b.wav"):
             self._write_wav(tmp_path / name)
@@ -369,8 +369,8 @@ class TestLoadDatasetSkipEmbedding:
         mt.load_media_data.return_value = {"duration": 1.0}
 
         with (
-            mock.patch("vtsearch.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtsearch.media.embedders_for_type") as mock_emb_for_type,
+            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
+            mock.patch("vtscore.media.embedders_for_type") as mock_emb_for_type,
         ):
             chunks = list(
                 load_dataset_from_folder_chunked(
@@ -418,7 +418,7 @@ class TestLoadDatasetContentMD5s:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "a.wav"
         self._write_wav(wav)
@@ -431,7 +431,7 @@ class TestLoadDatasetContentMD5s:
         def _noop(*a):
             pass
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
 
         assert len(medias) == 1
@@ -444,7 +444,7 @@ class TestLoadDatasetContentMD5s:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "b.wav"
         self._write_wav(wav)
@@ -457,7 +457,7 @@ class TestLoadDatasetContentMD5s:
         def _noop(*a):
             pass
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, content_md5s={}, on_progress=_noop)
 
         assert len(medias) == 1
@@ -470,7 +470,7 @@ class TestLoadDatasetContentMD5s:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav_a = tmp_path / "a.wav"
         wav_b = tmp_path / "b.wav"
@@ -486,7 +486,7 @@ class TestLoadDatasetContentMD5s:
         def _noop(*a):
             pass
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop)
 
         assert len(medias) == 2
@@ -501,7 +501,7 @@ class TestLoadDatasetContentMD5s:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "c.wav"
         self._write_wav(wav)
@@ -514,7 +514,7 @@ class TestLoadDatasetContentMD5s:
         def _noop(*a):
             pass
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=_noop)
 
         assert len(medias) == 1
@@ -526,7 +526,7 @@ class TestLoadDatasetContentMD5s:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "a.wav"
         self._write_wav(wav)
@@ -539,7 +539,7 @@ class TestLoadDatasetContentMD5s:
         def _noop(*a):
             pass
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
                 tmp_path, "audio", medias, content_md5s={"a.wav": pre_md5}, on_progress=_noop, thin=True
             )
@@ -575,13 +575,13 @@ class TestLoadDatasetRelativePaths:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         self._write_wav(tmp_path / "a.wav")
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
         medias: dict = {}
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
         assert medias[1]["filename"] == "a.wav"
@@ -593,7 +593,7 @@ class TestLoadDatasetRelativePaths:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         sub = tmp_path / "cat_a"
         sub.mkdir()
@@ -601,7 +601,7 @@ class TestLoadDatasetRelativePaths:
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
         medias: dict = {}
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
         assert medias[1]["filename"] == "cat_a/clip.wav"
@@ -613,7 +613,7 @@ class TestLoadDatasetRelativePaths:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         (tmp_path / "dir_a").mkdir()
         (tmp_path / "dir_b").mkdir()
@@ -622,7 +622,7 @@ class TestLoadDatasetRelativePaths:
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
         medias: dict = {}
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
         filenames = {m["filename"] for m in medias.values()}
@@ -636,14 +636,14 @@ class TestLoadDatasetRelativePaths:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         self._write_wav(tmp_path / "x.wav")
         pre = np.array([99.0, 99.0, 99.0])
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
         medias: dict = {}
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
                 tmp_path, "audio", medias, content_vectors={"x.wav": pre}, on_progress=lambda *a: None
             )
@@ -656,14 +656,14 @@ class TestLoadDatasetRelativePaths:
 
         import numpy as np
 
-        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+        from vtscore.datasets.loader import load_dataset_from_folder_chunked
 
         sub = tmp_path / "sub"
         sub.mkdir()
         self._write_wav(sub / "chunk.wav")
         mt = self._make_fake_media_type(embed_return=np.zeros(3))
 
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             chunks = list(load_dataset_from_folder_chunked(tmp_path, "audio", 10, on_progress=lambda *a: None))
 
         media = chunks[0][1]
@@ -683,7 +683,7 @@ class TestHttpArchiveExtractDirIsolation:
         """Each run() call should create a uniquely-named extract directory."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
         dirs_used = []
@@ -693,18 +693,18 @@ class TestHttpArchiveExtractDirIsolation:
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.validate_url",
+                "vtscore.datasets.importers.http_archive.validate_url",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.download_file_with_progress",
+                "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.load_dataset_from_folder",
+                "vtscore.datasets.importers.http_archive.load_dataset_from_folder",
                 side_effect=capture_load,
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.DATA_DIR",
+                "vtscore.datasets.importers.http_archive.DATA_DIR",
                 tmp_path,
             ),
         ):
@@ -719,23 +719,23 @@ class TestHttpArchiveExtractDirIsolation:
         """The old fixed name 'http_archive_extract' must no longer appear."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.validate_url",
+                "vtscore.datasets.importers.http_archive.validate_url",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.download_file_with_progress",
+                "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.load_dataset_from_folder",
+                "vtscore.datasets.importers.http_archive.load_dataset_from_folder",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.DATA_DIR",
+                "vtscore.datasets.importers.http_archive.DATA_DIR",
                 tmp_path,
             ),
         ):
@@ -748,23 +748,23 @@ class TestHttpArchiveExtractDirIsolation:
         """The unique extract directory should be removed after run() completes."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.validate_url",
+                "vtscore.datasets.importers.http_archive.validate_url",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.download_file_with_progress",
+                "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.load_dataset_from_folder",
+                "vtscore.datasets.importers.http_archive.load_dataset_from_folder",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.DATA_DIR",
+                "vtscore.datasets.importers.http_archive.DATA_DIR",
                 tmp_path,
             ),
         ):
@@ -778,24 +778,24 @@ class TestHttpArchiveExtractDirIsolation:
         """The extract directory should still be cleaned up if loading fails."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.validate_url",
+                "vtscore.datasets.importers.http_archive.validate_url",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.download_file_with_progress",
+                "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.load_dataset_from_folder",
+                "vtscore.datasets.importers.http_archive.load_dataset_from_folder",
                 side_effect=RuntimeError("boom"),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.DATA_DIR",
+                "vtscore.datasets.importers.http_archive.DATA_DIR",
                 tmp_path,
             ),
         ):
@@ -809,27 +809,27 @@ class TestHttpArchiveExtractDirIsolation:
         """run_chunked() should clean up its extract directory after iteration."""
         import unittest.mock as mock
 
-        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
 
         with (
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.validate_url",
+                "vtscore.datasets.importers.http_archive.validate_url",
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.download_file_with_progress",
+                "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive._extract_archive",
+                "vtscore.datasets.importers.http_archive._extract_archive",
             ),
             mock.patch(
-                "vtsearch.datasets.loader.load_dataset_from_folder_chunked",
+                "vtscore.datasets.loader.load_dataset_from_folder_chunked",
                 return_value=iter([{1: {"test": True}}]),
             ),
             mock.patch(
-                "vtsearch.datasets.importers.http_archive.DATA_DIR",
+                "vtscore.datasets.importers.http_archive.DATA_DIR",
                 tmp_path,
             ),
         ):
@@ -878,8 +878,8 @@ class TestImporterResolveFileContract:
 
     def test_all_disk_importers_override_resolve_file(self):
         """Every registered importer that stores files must override resolve_file."""
-        from vtsearch.datasets.importers import list_importers
-        from vtsearch.datasets.importers.base import DatasetImporter
+        from vtscore.datasets.importers import list_importers
+        from vtscore.datasets.importers.base import DatasetImporter
 
         default_method = DatasetImporter.resolve_file
 
@@ -932,8 +932,8 @@ class TestLoadDatasetRecursive:
         from contextlib import ExitStack
 
         stack = ExitStack()
-        stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
-        stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[mt._mock_embedder]))
+        stack.enter_context(mock.patch("vtscore.media.get_by_folder_name", return_value=mt))
+        stack.enter_context(mock.patch("vtscore.media.embedders_for_type", return_value=[mt._mock_embedder]))
         return stack
 
     def _seed_layout(self, tmp_path):
@@ -944,7 +944,7 @@ class TestLoadDatasetRecursive:
         self._write_wav(sub / "nested.wav")
 
     def test_recursive_default_includes_subfolders(self, tmp_path):
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         self._seed_layout(tmp_path)
         medias: dict = {}
@@ -955,7 +955,7 @@ class TestLoadDatasetRecursive:
         assert names == ["sub/nested.wav", "top.wav"]
 
     def test_recursive_false_only_top_level(self, tmp_path):
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         self._seed_layout(tmp_path)
         medias: dict = {}
@@ -966,7 +966,7 @@ class TestLoadDatasetRecursive:
         assert names == ["top.wav"]
 
     def test_chunked_recursive_false_only_top_level(self, tmp_path):
-        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+        from vtscore.datasets.loader import load_dataset_from_folder_chunked
 
         self._seed_layout(tmp_path)
         with self._patch_media_registry(self._make_fake_media_type()):
@@ -988,7 +988,7 @@ class TestServerFolderImporterRecursive:
     """The ``server_folder`` importer exposes a ``recursive`` checkbox field."""
 
     def test_field_present_default_true(self):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         recursive = next((f for f in IMPORTER.fields if f.key == "recursive"), None)
         assert recursive is not None
@@ -996,7 +996,7 @@ class TestServerFolderImporterRecursive:
         assert str(recursive.default).lower() == "true"
 
     def test_build_origin_records_recursive(self):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         origin = IMPORTER.build_origin({"path": "/tmp/x", "media_type": "audio", "recursive": False})
         assert origin["params"]["recursive"] == "false"

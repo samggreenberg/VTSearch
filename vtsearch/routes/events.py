@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from flask import Blueprint, Response, stream_with_context
 
-from vtsearch.concurrency.events import stream_progress_events
+from vtscore.concurrency.events import stream_progress_events
 
 events_bp = Blueprint("events", __name__)
 

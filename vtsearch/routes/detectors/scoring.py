@@ -16,8 +16,8 @@ from typing import Any
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.concurrency.memory_budget import cap_workers_by_memory
-from vtsearch.concurrency.progress import find_progress, update_find_progress
+from vtscore.concurrency.memory_budget import cap_workers_by_memory
+from vtscore.concurrency.progress import find_progress, update_find_progress
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
@@ -60,7 +60,7 @@ def _resolve_or_train_detector(  # noqa: C901
     origin importer.  Returns ``(None, _, diag)`` when training is not
     possible.
     """
-    from vtsearch.state.core import get_detector_context
+    from vtscore.state.core import get_detector_context
 
     det_ctx = get_detector_context(detector_id)
     if det_ctx is not None and det_ctx.model is not None:
@@ -82,8 +82,8 @@ def _resolve_or_train_detector(  # noqa: C901
         total_steps=progress_total_steps,
     )
 
-    from vtsearch.detectors.training import train_and_threshold
-    from vtsearch.detectors.resolver import resolve_label_embeddings
+    from vtscore.detectors.training import train_and_threshold
+    from vtscore.detectors.resolver import resolve_label_embeddings
 
     X_list: list = []
     y_list: list[float] = []
@@ -190,8 +190,8 @@ def find_label(body: dict):  # noqa: C901
     """
     import torch  # noqa: PLC0415
 
-    from vtsearch.detectors.registry import get_detector as reg_get_detector
-    from vtsearch.detectors.store import _detector_path, _read_detector
+    from vtscore.detectors.registry import get_detector as reg_get_detector
+    from vtscore.detectors.store import _detector_path, _read_detector
     from vtsearch.state import (
         apply_labels_bulk_with_click_time,
         set_find_initial_labels,
@@ -291,7 +291,7 @@ def find_label(body: dict):  # noqa: C901
         total_steps=_FIND_LABEL_STEPS,
     )
 
-    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap
+    from vtscore.embedding.matrix import get_embedding_matrix_for_snap
 
     all_ids, all_embs = get_embedding_matrix_for_snap(snap)
     X_all = torch.from_numpy(all_embs).to(next(mlp.parameters()).device)
@@ -337,11 +337,11 @@ def find_label(body: dict):  # noqa: C901
 
     set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
 
-    from vtsearch.detectors.registry import set_find_mode
+    from vtscore.detectors.registry import set_find_mode
 
     set_find_mode(True)
 
-    from vtsearch.labels.sync import sync_to_labelset_source
+    from vtscore.labels.sync import sync_to_labelset_source
 
     sync_to_labelset_source()
 
@@ -389,8 +389,8 @@ def _resolve_autorun_names(body: dict, media_type: str) -> list[str]:
 
 def _collect_detectors_for_media_type(autorun_names: list[str], media_type: str) -> list[tuple[str, dict, dict | None]]:
     """Load detector data + registry entry for each autorun name matching *media_type*."""
-    from vtsearch.detectors.registry import find_by_name, list_detectors  # noqa: PLC0415
-    from vtsearch.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+    from vtscore.detectors.registry import find_by_name, list_detectors  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
 
     detectors: list[tuple[str, dict, dict | None]] = []
     for name in autorun_names:
@@ -493,7 +493,7 @@ def auto_detect(body: dict):
     if not detectors_to_run:
         abort(400, message=f"No autorun detectors found for media type: {media_type}")
 
-    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
     all_ids, all_embs = get_embedding_matrix_for_snap(snap)
     X_all = torch.from_numpy(all_embs)

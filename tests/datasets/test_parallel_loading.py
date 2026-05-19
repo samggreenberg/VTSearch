@@ -7,7 +7,7 @@ from unittest import mock
 import numpy as np
 import pytest
 
-from vtsearch.concurrency.progress import (
+from vtscore.concurrency.progress import (
     CancelledError,
     LoadingTasksTracker,
     get_progress,
@@ -241,7 +241,7 @@ class TestGetProgressWithLoadingTasks:
 
     def test_falls_back_to_global(self):
         """With no loading tasks, get_progress() returns the global tracker."""
-        from vtsearch.concurrency.progress import update_progress
+        from vtscore.concurrency.progress import update_progress
 
         update_progress("idle", "Ready")
         progress = get_progress()
@@ -321,7 +321,7 @@ class TestImportEndpointsReturnTaskId:
     """Verify that import endpoints include task_id in the response."""
 
     def test_load_demo_returns_task_id(self, client):
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.datasets import DEMO_DATASETS
 
         demo_name = list(DEMO_DATASETS.keys())[0]
 
@@ -475,7 +475,7 @@ class TestResetCancelSafety:
 
     def test_reset_cancel_skipped_when_tasks_active(self):
         """dataset_progress.reset_cancel() must not fire when loads are in progress."""
-        from vtsearch.concurrency.progress import dataset_progress
+        from vtscore.concurrency.progress import dataset_progress
 
         # Create an active task
         pt = loading_tasks.create_task("active_task", "Running")
@@ -489,9 +489,9 @@ class TestResetCancelSafety:
             # Start a new load — should NOT reset global cancel since a task is active
             from unittest.mock import patch
 
-            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+            from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
-            with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
+            with patch("vtscore.datasets.load_pipeline.threading.Thread"):
                 _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},
@@ -505,16 +505,16 @@ class TestResetCancelSafety:
 
     def test_reset_cancel_allowed_when_no_tasks_active(self):
         """dataset_progress.reset_cancel() fires when no loads are in progress."""
-        from vtsearch.concurrency.progress import dataset_progress
+        from vtscore.concurrency.progress import dataset_progress
 
         dataset_progress.cancel()
         assert dataset_progress.is_cancelled
 
         from unittest.mock import patch
 
-        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
-        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
+        with patch("vtscore.datasets.load_pipeline.threading.Thread"):
             task_id = _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -535,7 +535,7 @@ class TestConcurrentModelLoading:
         """Two threads calling load_models() on the same embedder must not
         both execute _load_models_impl() concurrently — the lock should
         serialise them so the second caller sees the model already loaded."""
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         call_count = 0
         started = threading.Event()
@@ -602,7 +602,7 @@ class TestLoadingGates:
         both gates to settle at zero before yielding, then does the
         same again on teardown so the next test starts clean.
         """
-        from vtsearch.datasets.load_pipeline import _download_gate, _embed_gate
+        from vtscore.datasets.load_pipeline import _download_gate, _embed_gate
 
         def drain(timeout_s: float = 10.0) -> None:
             loading_tasks.cancel_all()
@@ -626,7 +626,7 @@ class TestLoadingGates:
         """With the download limit at 1, a second load should show 'Waiting…'
         for the download gate and only proceed after the first releases it."""
         from vtsearch import settings as settings_mod
-        from vtsearch.datasets.load_pipeline import (
+        from vtscore.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
@@ -698,7 +698,7 @@ class TestLoadingGates:
         """Cancelling a queued task must not release the gate it never
         acquired, which would let extra loads through."""
         from vtsearch import settings as settings_mod
-        from vtsearch.datasets.load_pipeline import (
+        from vtscore.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
@@ -751,7 +751,7 @@ class TestLoadingGates:
         """When the importer signals the embedding phase, the download gate
         is released so a second dataset can start downloading in parallel
         even though the first hasn't finished embedding."""
-        from vtsearch.datasets.load_pipeline import (
+        from vtscore.datasets.load_pipeline import (
             _download_gate,
             _embed_gate,
             _run_origin_load_in_background,
@@ -814,7 +814,7 @@ class TestLoadingGates:
         """Bumping ``max_concurrent_dataset_downloads`` should let the second
         load start its download phase in parallel with the first."""
         from vtsearch import settings as settings_mod
-        from vtsearch.datasets.load_pipeline import (
+        from vtscore.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
@@ -868,7 +868,7 @@ class TestConcurrencyGate:
 
     def test_blocking_acquire_when_limit_changes(self):
         """A waiter blocked at limit=1 must wake up when limit grows to 2."""
-        from vtsearch.datasets.load_pipeline import ConcurrencyGate
+        from vtscore.datasets.load_pipeline import ConcurrencyGate
 
         limit = [1]
         gate = ConcurrencyGate(lambda: limit[0])
@@ -897,7 +897,7 @@ class TestConcurrencyGate:
         assert gate.active == 0
 
     def test_non_blocking_acquire_respects_limit(self):
-        from vtsearch.datasets.load_pipeline import ConcurrencyGate
+        from vtscore.datasets.load_pipeline import ConcurrencyGate
 
         gate = ConcurrencyGate(lambda: 2)
         assert gate.acquire(blocking=False)
@@ -910,7 +910,7 @@ class TestConcurrencyGate:
 
     def test_zero_limit_is_clamped_to_one(self):
         """A configured limit of 0 should still allow one acquisition."""
-        from vtsearch.datasets.load_pipeline import ConcurrencyGate
+        from vtscore.datasets.load_pipeline import ConcurrencyGate
 
         gate = ConcurrencyGate(lambda: 0)
         assert gate.acquire(blocking=False)
@@ -922,8 +922,8 @@ class TestBuildDiversityTreeForContext:
     """Test the context-specific diversity tree builder."""
 
     def test_builds_tree_on_context(self):
-        from vtsearch.state.core import DatasetContext
-        from vtsearch.state.diversity import build_diversity_tree_for_context
+        from vtscore.state.core import DatasetContext
+        from vtscore.state.diversity import build_diversity_tree_for_context
 
         rng = np.random.default_rng(42)
         ctx = DatasetContext("test_diversity")
@@ -937,8 +937,8 @@ class TestBuildDiversityTreeForContext:
         assert ctx.diversity_tree is not None
 
     def test_empty_context_sets_none(self):
-        from vtsearch.state.core import DatasetContext
-        from vtsearch.state.diversity import build_diversity_tree_for_context
+        from vtscore.state.core import DatasetContext
+        from vtscore.state.diversity import build_diversity_tree_for_context
 
         ctx = DatasetContext("test_empty")
         build_diversity_tree_for_context(ctx)

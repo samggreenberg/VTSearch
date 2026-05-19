@@ -16,7 +16,7 @@ import yaml
 
 import app as app_module
 from helpers import make_dataset_file as _make_dataset_file
-from vtsearch.media.audio.audio_generator import generate_wav
+from vtscore.media.audio.audio_generator import generate_wav
 from vtsearch.settings import get_detectors_dir
 
 
@@ -32,7 +32,7 @@ def _clean_detectors_dir():
 
 
 def _write_detector(name: str, labelset: dict) -> Path:
-    from vtsearch.detectors.store import _detector_path, _write_detector
+    from vtscore.detectors.store import _detector_path, _write_detector
 
     path = _detector_path(name)
     _write_detector(
@@ -49,7 +49,7 @@ def _write_detector(name: str, labelset: dict) -> Path:
 
 
 def _stub_resolve(monkeypatch, file_map: dict[str, Path]) -> None:
-    import vtsearch.detectors.resolver as resolver_mod
+    import vtscore.detectors.resolver as resolver_mod
 
     @contextmanager
     def _fake_ctx(origin, origin_name="", filename=""):
@@ -109,13 +109,13 @@ def _trained_labelset() -> dict:
 
 class TestLoadPipelineFile:
     def test_missing_file_raises_filenotfound(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         with pytest.raises(FileNotFoundError):
             load_pipeline_file(tmp_path / "nope.yaml")
 
     def test_non_mapping_raises(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text("- just\n- a\n- list\n")
@@ -123,7 +123,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_unknown_top_level_key_raises(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text("dataset: foo.pkl\nbogus_key: 1\n")
@@ -131,7 +131,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_neither_dataset_nor_importer_raises(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text("settings: settings.json\n")
@@ -139,7 +139,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_both_dataset_and_importer_raises(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -154,7 +154,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_unknown_importer_name_raises(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"importer": {"name": "no_such_importer"}}))
@@ -162,7 +162,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_unknown_exporter_name_raises(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -177,7 +177,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_chunk_size_must_be_positive_int(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 0}))
@@ -185,7 +185,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_detectors_must_be_list_of_strings(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "detectors": "not-a-list"}))
@@ -193,7 +193,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_import_labels_requires_detector_and_file(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "import_labels": {"detector": "d"}}))
@@ -203,7 +203,7 @@ class TestLoadPipelineFile:
     def test_unknown_importer_field_key_raises(self, tmp_path):
         """A typo in importer.fields surfaces at load time, like argparse
         rejects unknown CLI flags."""
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -220,7 +220,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_unknown_exporter_field_key_raises(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(
@@ -235,7 +235,7 @@ class TestLoadPipelineFile:
             load_pipeline_file(p)
 
     def test_minimal_valid_config_round_trips(self, tmp_path):
-        from vtsearch.cli_pipeline import load_pipeline_file
+        from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "data/sounds.pkl"}))
@@ -281,7 +281,7 @@ class TestRunPipelineFile:
             )
         )
 
-        from vtsearch.cli_pipeline import run_pipeline_file
+        from vtscore.cli_pipeline import run_pipeline_file
 
         run_pipeline_file(pipeline_path)
 
@@ -317,7 +317,7 @@ class TestRunPipelineFile:
             )
         )
 
-        from vtsearch.cli_pipeline import run_pipeline_file
+        from vtscore.cli_pipeline import run_pipeline_file
 
         run_pipeline_file(pipeline_path)
 
@@ -328,14 +328,14 @@ class TestRunPipelineFile:
         assert on_disk["autorun_detectors"] == ["nonexistent-detector"]
 
     def test_missing_file_exits_with_nonzero_status(self, tmp_path):
-        from vtsearch.cli_pipeline import run_pipeline_file
+        from vtscore.cli_pipeline import run_pipeline_file
 
         with pytest.raises(SystemExit) as exc:
             run_pipeline_file(tmp_path / "nope.yaml")
         assert exc.value.code == 1
 
     def test_bad_schema_exits_with_nonzero_status(self, tmp_path):
-        from vtsearch.cli_pipeline import run_pipeline_file
+        from vtscore.cli_pipeline import run_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text("dataset: 123\n")  # dataset must be a string

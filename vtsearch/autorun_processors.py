@@ -20,12 +20,12 @@ from typing import Any
 
 
 # Independent lock so this module has no import-time coupling to
-# ``vtsearch.state.core``.  Reentrant so callers that already hold it
+# ``vtscore.state.core``.  Reentrant so callers that already hold it
 # can call back in safely.
 _lock = threading.RLock()
 
 # Module-level singletons — same shape and semantics as the old
-# ``vtsearch.state.core.autorun_extractors`` / ``autorun_localizers`` dicts.
+# ``vtscore.state.core.autorun_extractors`` / ``autorun_localizers`` dicts.
 autorun_extractors: dict[str, dict[str, Any]] = {}
 autorun_localizers: dict[str, dict[str, Any]] = {}
 

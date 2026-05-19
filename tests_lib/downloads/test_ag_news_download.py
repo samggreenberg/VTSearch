@@ -32,7 +32,7 @@ def _make_ag_news_csv(tmp_path: Path) -> Path:
 class TestDownloadAgNews:
     def test_returns_articles_by_category(self, tmp_path):
         """download_ag_news returns a dict of category -> list[str] from a CSV."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         csv_path = _make_ag_news_csv(tmp_path)
 
@@ -61,7 +61,7 @@ class TestDownloadAgNews:
 
     def test_articles_combine_title_and_description(self, tmp_path):
         """Each article text should contain both the title and description."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         _make_ag_news_csv(tmp_path)
 
@@ -75,7 +75,7 @@ class TestDownloadAgNews:
 
     def test_cached_csv_skips_download(self, tmp_path):
         """If the CSV already exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         _make_ag_news_csv(tmp_path)
         download_called = []
@@ -95,7 +95,7 @@ class TestDownloadAgNews:
 
     def test_skips_malformed_rows(self, tmp_path):
         """Rows with fewer than 3 columns are silently skipped."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         csv_path = tmp_path / "ag_news_train.csv"
         csv_path.write_text(
@@ -119,7 +119,7 @@ class TestLoadDemoSourceAgNews:
 
     def test_ag_news_source_populates_clips(self):
         """load_demo_source with source='ag_news' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
         from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {
@@ -148,7 +148,7 @@ class TestLoadDemoSourceAgNews:
 
     def test_ag_news_slice_is_applied(self):
         """slice_start/slice_end limits articles per category."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
         from tests_lib.downloads._helpers import make_text_embedder_stub, make_text_media_type_stub
 
         fake_articles = {

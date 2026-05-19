@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 def make_text_media_type_stub(embedding_dim: int = 768):
     """Return a ``TextMediaType`` instance with its embedding model stubbed."""
-    from vtsearch.media.text.media_type import TextMediaType
+    from vtscore.media.text.media_type import TextMediaType
 
     # _model is a runtime-only attr set by load_models on the subclass; not
     # declared on the ABC, so cast to Any to assign it directly.

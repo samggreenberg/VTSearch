@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from vtsearch.datasets.importers import get_importer, list_importers
-from vtsearch.datasets.importers.synthetic import SyntheticDatasetImporter
+from vtscore.datasets.importers import get_importer, list_importers
+from vtscore.datasets.importers.synthetic import SyntheticDatasetImporter
 
 
 def _has_module(name: str) -> bool:
@@ -109,7 +109,7 @@ class TestOriginRoundTrip:
 
 class TestAudioGenerator:
     def test_generates_requested_count(self, tmp_path):
-        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
 
         paths = generate_audio_dataset(tmp_path, 12, seed=1)
         assert len(paths) == 12
@@ -119,7 +119,7 @@ class TestAudioGenerator:
             assert p.stat().st_size > 100  # something was actually written
 
     def test_cycles_through_all_ideas(self, tmp_path):
-        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
 
         paths = generate_audio_dataset(tmp_path, 12, seed=1)
         prefixes = {p.name.split("_")[0] for p in paths}
@@ -127,7 +127,7 @@ class TestAudioGenerator:
         assert prefixes == {"tone", "chord", "drum", "rain", "wind", "bird"}
 
     def test_caches_existing_files(self, tmp_path):
-        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
 
         paths = generate_audio_dataset(tmp_path, 6, seed=1)
         first_mtime = paths[0].stat().st_mtime_ns
@@ -136,7 +136,7 @@ class TestAudioGenerator:
         assert paths[0].stat().st_mtime_ns == first_mtime
 
     def test_emits_per_file_progress(self, tmp_path):
-        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
 
         events: list[tuple[str, str, int, int]] = []
 
@@ -158,7 +158,7 @@ class TestAudioGenerator:
         assert any("Synthesising" in ev[1] for ev in events)
 
     def test_progress_marks_cached_runs(self, tmp_path):
-        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
 
         generate_audio_dataset(tmp_path, 3, seed=1)
 
@@ -181,7 +181,7 @@ class TestAudioGenerator:
 @pytest.mark.skipif(not _has_module("PIL"), reason="Pillow not installed")
 class TestImageGenerator:
     def test_generates_pngs(self, tmp_path):
-        from vtsearch.utils.synthetic.images import generate_image_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.images import generate_image_dataset  # noqa: PLC0415
 
         paths = generate_image_dataset(tmp_path, 8, seed=1)
         assert len(paths) == 8
@@ -191,7 +191,7 @@ class TestImageGenerator:
             assert p.stat().st_size > 100
 
     def test_includes_both_smiley_and_shapes(self, tmp_path):
-        from vtsearch.utils.synthetic.images import generate_image_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.images import generate_image_dataset  # noqa: PLC0415
 
         paths = generate_image_dataset(tmp_path, 4, seed=1)
         prefixes = {p.name.split("_")[0] for p in paths}
@@ -210,7 +210,7 @@ class TestImageGenerator:
 )
 class TestVideoGenerator:
     def test_generates_mp4s(self, tmp_path):
-        from vtsearch.utils.synthetic.video import generate_video_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.video import generate_video_dataset  # noqa: PLC0415
 
         paths = generate_video_dataset(tmp_path, 4, seed=1)
         assert len(paths) == 4
@@ -228,11 +228,11 @@ class TestVideoGenerator:
 class TestResolveFile:
     def test_resolves_known_file_under_cache_dir(self, tmp_path, monkeypatch):
         # Redirect DATA_DIR to tmp so we don't pollute the real one.
-        from vtsearch.datasets.importers import synthetic as syn  # noqa: PLC0415
+        from vtscore.datasets.importers import synthetic as syn  # noqa: PLC0415
 
         monkeypatch.setattr(syn, "DATA_DIR", tmp_path)
 
-        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
 
         cache_dir = tmp_path / "synthetic" / "audio_3"
         generate_audio_dataset(cache_dir, 3, seed=42)
@@ -245,7 +245,7 @@ class TestResolveFile:
         assert resolved.name == "tone_0000.wav"
 
     def test_returns_none_for_missing_file(self, tmp_path, monkeypatch):
-        from vtsearch.datasets.importers import synthetic as syn  # noqa: PLC0415
+        from vtscore.datasets.importers import synthetic as syn  # noqa: PLC0415
 
         monkeypatch.setattr(syn, "DATA_DIR", tmp_path)
         imp = SyntheticDatasetImporter()
@@ -261,7 +261,7 @@ class TestResolveFile:
 @pytest.mark.skipif(not _has_module("librosa"), reason="librosa needed by audio loader")
 class TestRunEndToEnd:
     def test_audio_run_populates_medias(self, tmp_path, monkeypatch):
-        from vtsearch.datasets.importers import synthetic as syn  # noqa: PLC0415
+        from vtscore.datasets.importers import synthetic as syn  # noqa: PLC0415
 
         monkeypatch.setattr(syn, "DATA_DIR", tmp_path)
 
@@ -283,8 +283,8 @@ class TestRunEndToEnd:
         generator so the loading-task progress bar updates while files are
         being synthesised, instead of stalling on "Preparing new dataset…".
         """
-        from vtsearch.datasets.importers import synthetic as syn  # noqa: PLC0415
-        from vtsearch.concurrency.progress import (  # noqa: PLC0415
+        from vtscore.datasets.importers import synthetic as syn  # noqa: PLC0415
+        from vtscore.concurrency.progress import (  # noqa: PLC0415
             clear_thread_progress,
             set_thread_progress,
         )
@@ -310,7 +310,7 @@ class TestRunEndToEnd:
 
     def test_run_then_resolve_file_round_trip(self, tmp_path, monkeypatch):
         """Origin produced by run() must resolve back to a real file via resolve_file."""
-        from vtsearch.datasets.importers import synthetic as syn  # noqa: PLC0415
+        from vtscore.datasets.importers import synthetic as syn  # noqa: PLC0415
 
         monkeypatch.setattr(syn, "DATA_DIR", tmp_path)
         imp = SyntheticDatasetImporter()
@@ -329,7 +329,7 @@ class TestRunEndToEnd:
 
 class TestDeterminism:
     def test_same_seed_produces_same_audio_bytes(self, tmp_path):
-        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
 
         a_dir = tmp_path / "a"
         b_dir = tmp_path / "b"
@@ -339,7 +339,7 @@ class TestDeterminism:
             assert ap.read_bytes() == bp.read_bytes(), f"non-deterministic for {ap.name}"
 
     def test_different_seed_produces_different_audio_bytes(self, tmp_path):
-        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
 
         a_paths = generate_audio_dataset(tmp_path / "a", 3, seed=1)
         b_paths = generate_audio_dataset(tmp_path / "b", 3, seed=2)
@@ -352,7 +352,7 @@ class TestPartialRegeneration:
     """Pre-existing files in the cache dir must be respected."""
 
     def test_generator_does_not_overwrite_existing_files(self, tmp_path):
-        from vtsearch.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
+        from vtscore.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
 
         # Create the file paths the generator would produce, but with sentinel
         # contents. The generator must not overwrite them.

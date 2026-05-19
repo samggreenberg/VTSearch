@@ -5,8 +5,8 @@ import wave
 
 import pytest
 
-from vtsearch.media.audio.audio_generator import generate_wav
-from vtsearch.media.clipper import MediaClipper
+from vtscore.media.audio.audio_generator import generate_wav
+from vtscore.media.clipper import MediaClipper
 
 
 # ---------------------------------------------------------------------------
@@ -20,7 +20,7 @@ class TestMediaClipperABC:
             MediaClipper()  # pyright: ignore[reportAbstractUsage]
 
     def test_to_dict_on_concrete(self):
-        from vtsearch.media.audio.clipper import SoundDefaultClipper
+        from vtscore.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
         d = c.to_dict()
@@ -32,39 +32,39 @@ class TestMediaClipperABC:
         }
 
     def test_display_name_default(self):
-        from vtsearch.media.audio.clipper import SoundDefaultClipper
+        from vtscore.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
         assert c.display_name == "Default"
 
     def test_display_name_tiling(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
         assert c.display_name == "Tiling"
 
     def test_display_name_video_scene(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         c = VideoSceneClipper()
         assert c.display_name == "Scene"
 
     def test_creation_questions_defaults_to_parameters(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
         assert c.creation_questions == c.parameters
         assert len(c.creation_questions) == 2
 
     def test_creation_questions_empty_for_default_clipper(self):
-        from vtsearch.media.audio.clipper import SoundDefaultClipper
+        from vtscore.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
         assert c.creation_questions == []
         assert c.creation_questions == c.parameters
 
     def test_to_dict_includes_creation_questions_when_present(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
         d = c.to_dict()
@@ -73,7 +73,7 @@ class TestMediaClipperABC:
         assert d["creation_questions"][0]["key"] == "duration"
 
     def test_to_dict_omits_creation_questions_when_empty(self):
-        from vtsearch.media.audio.clipper import SoundDefaultClipper
+        from vtscore.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
         d = c.to_dict()
@@ -87,14 +87,14 @@ class TestMediaClipperABC:
 
 class TestSoundDefaultClipper:
     def test_returns_media_unchanged(self):
-        from vtsearch.media.audio.clipper import SoundDefaultClipper
+        from vtscore.media.audio.clipper import SoundDefaultClipper
 
         media = {"id": 1, "type": "audio", "media_bytes": b"fake", "duration": 3.0}
         result = SoundDefaultClipper().clip(media)
         assert result == [media]
 
     def test_identity(self):
-        from vtsearch.media.audio.clipper import SoundDefaultClipper
+        from vtscore.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
         assert c.name == "sound_default"
@@ -109,7 +109,7 @@ class TestSoundDefaultClipper:
 
 class TestSoundTilingClipper:
     def test_identity(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
         assert c.name == "sound_tiling"
@@ -119,7 +119,7 @@ class TestSoundTilingClipper:
         assert isinstance(c, MediaClipper)
 
     def test_rejects_non_positive_duration(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         with pytest.raises(ValueError):
             SoundTilingClipper(0)
@@ -127,13 +127,13 @@ class TestSoundTilingClipper:
             SoundTilingClipper(-1)
 
     def test_rejects_negative_min_overlap(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         with pytest.raises(ValueError):
             SoundTilingClipper(2.0, min_overlap=-0.1)
 
     def test_rejects_min_overlap_ge_duration(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         with pytest.raises(ValueError):
             SoundTilingClipper(2.0, min_overlap=2.0)
@@ -141,7 +141,7 @@ class TestSoundTilingClipper:
             SoundTilingClipper(2.0, min_overlap=3.0)
 
     def test_short_audio_returned_unchanged(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         wav = generate_wav(440, 1.5)
         media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 1.5}
@@ -150,7 +150,7 @@ class TestSoundTilingClipper:
         assert result[0] is media
 
     def test_tiles_longer_audio(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         wav = generate_wav(440, 5.0)
         media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 5.0}
@@ -167,7 +167,7 @@ class TestSoundTilingClipper:
                 assert wf.getframerate() == 48000
 
     def test_9_5s_produces_five_2s_tiles(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         wav = generate_wav(440, 9.5)
         media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 9.5}
@@ -180,14 +180,14 @@ class TestSoundTilingClipper:
         assert result[-1]["clip_end"] == pytest.approx(9.5, abs=0.01)
 
     def test_no_media_bytes_returns_unchanged(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         media = {"id": 1, "type": "audio", "duration": 10.0}
         result = SoundTilingClipper(2.0).clip(media)
         assert result == [media]
 
     def test_to_dict_includes_duration_and_min_overlap(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(3.5)
         d = c.to_dict()
@@ -198,7 +198,7 @@ class TestSoundTilingClipper:
         assert d["min_overlap"] == 0.0
 
     def test_min_overlap_produces_more_tiles(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         wav = generate_wav(440, 10.0)
         media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 10.0}
@@ -227,7 +227,7 @@ class TestSoundTilingClipper:
 
 class TestSoundClipClipper:
     def test_identity(self):
-        from vtsearch.media.audio.clipper import SoundClipClipper
+        from vtscore.media.audio.clipper import SoundClipClipper
 
         c = SoundClipClipper(0.5, 1.5)
         assert c.name == "sound_clip"
@@ -237,13 +237,13 @@ class TestSoundClipClipper:
         assert isinstance(c, MediaClipper)
 
     def test_rejects_negative_start(self):
-        from vtsearch.media.audio.clipper import SoundClipClipper
+        from vtscore.media.audio.clipper import SoundClipClipper
 
         with pytest.raises(ValueError):
             SoundClipClipper(-0.1, 1.0)
 
     def test_rejects_end_le_start(self):
-        from vtsearch.media.audio.clipper import SoundClipClipper
+        from vtscore.media.audio.clipper import SoundClipClipper
 
         with pytest.raises(ValueError):
             SoundClipClipper(1.0, 1.0)
@@ -251,7 +251,7 @@ class TestSoundClipClipper:
             SoundClipClipper(2.0, 1.0)
 
     def test_extracts_requested_range(self):
-        from vtsearch.media.audio.clipper import SoundClipClipper
+        from vtscore.media.audio.clipper import SoundClipClipper
 
         wav = generate_wav(440, 5.0)
         media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 5.0}
@@ -267,7 +267,7 @@ class TestSoundClipClipper:
             assert wf.getframerate() == 48000
 
     def test_clamps_to_audio_duration(self):
-        from vtsearch.media.audio.clipper import SoundClipClipper
+        from vtscore.media.audio.clipper import SoundClipClipper
 
         wav = generate_wav(440, 2.0)
         media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.0}
@@ -278,14 +278,14 @@ class TestSoundClipClipper:
         assert result[0]["clip_end"] == pytest.approx(2.0, abs=0.01)
 
     def test_no_media_bytes_returns_unchanged(self):
-        from vtsearch.media.audio.clipper import SoundClipClipper
+        from vtscore.media.audio.clipper import SoundClipClipper
 
         media = {"id": 1, "type": "audio", "duration": 3.0}
         result = SoundClipClipper(0.0, 1.0).clip(media)
         assert result == [media]
 
     def test_with_params(self):
-        from vtsearch.media.audio.clipper import SoundClipClipper
+        from vtscore.media.audio.clipper import SoundClipClipper
 
         c = SoundClipClipper(0.0, 1.0)
         c2 = c.with_params({"start": 2.0, "end": 4.5})
@@ -297,7 +297,7 @@ class TestSoundClipClipper:
         assert c.end == 1.0
 
     def test_to_dict(self):
-        from vtsearch.media.audio.clipper import SoundClipClipper
+        from vtscore.media.audio.clipper import SoundClipClipper
 
         c = SoundClipClipper(1.5, 3.0)
         d = c.to_dict()
@@ -335,7 +335,7 @@ def _concat_wavs(*wavs: bytes) -> bytes:
 
 class TestSoundSilenceClipper:
     def test_identity(self):
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         c = SoundSilenceClipper()
         assert c.name == "sound_silence"
@@ -346,7 +346,7 @@ class TestSoundSilenceClipper:
         assert isinstance(c, MediaClipper)
 
     def test_custom_params(self):
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         c = SoundSilenceClipper(top_db=20.0, min_clip_duration=0.5, pad=0.1)
         assert c.top_db == 20.0
@@ -354,7 +354,7 @@ class TestSoundSilenceClipper:
         assert c.pad == 0.1
 
     def test_rejects_non_positive_top_db(self):
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         with pytest.raises(ValueError):
             SoundSilenceClipper(top_db=0)
@@ -362,26 +362,26 @@ class TestSoundSilenceClipper:
             SoundSilenceClipper(top_db=-1)
 
     def test_rejects_negative_min_clip_duration(self):
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         with pytest.raises(ValueError):
             SoundSilenceClipper(min_clip_duration=-0.1)
 
     def test_rejects_negative_pad(self):
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         with pytest.raises(ValueError):
             SoundSilenceClipper(pad=-0.1)
 
     def test_no_media_bytes_returns_unchanged(self):
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         media = {"id": 1, "type": "audio", "duration": 3.0}
         result = SoundSilenceClipper().clip(media)
         assert result == [media]
 
     def test_invalid_bytes_returns_unchanged(self):
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         media = {"id": 1, "type": "audio", "media_bytes": b"not a wav", "duration": 1.0}
         result = SoundSilenceClipper().clip(media)
@@ -389,7 +389,7 @@ class TestSoundSilenceClipper:
 
     def test_splits_tone_silence_tone(self):
         """Tone | silence | tone | silence | tone → three non-silent clips."""
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         # Build a 5 s clip: 1 s tone, 1 s silence, 1 s tone, 1 s silence, 1 s tone.
         wav = _concat_wavs(
@@ -414,7 +414,7 @@ class TestSoundSilenceClipper:
 
     def test_drops_intro_outro_silence(self):
         """Leading and trailing silence should be discarded."""
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         # 0.5 s silence | 1 s tone | 0.5 s silence
         wav = _concat_wavs(
@@ -433,7 +433,7 @@ class TestSoundSilenceClipper:
         assert clip["duration"] < 2.0  # intro/outro silence was dropped
 
     def test_padding_extends_clip_bounds(self):
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         wav = _concat_wavs(
             generate_wav(0, 0.5),
@@ -454,7 +454,7 @@ class TestSoundSilenceClipper:
 
     def test_min_clip_duration_drops_short_intervals(self):
         """Non-silent intervals shorter than min_clip_duration are dropped."""
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         # 50 ms blip | 1 s silence | 1 s tone
         wav = _concat_wavs(
@@ -471,7 +471,7 @@ class TestSoundSilenceClipper:
 
     def test_all_silence_returns_unchanged(self):
         """Audio that's silent throughout is returned unchanged (not dropped)."""
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         wav = generate_wav(0, 2.0)
         media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.0}
@@ -479,7 +479,7 @@ class TestSoundSilenceClipper:
         assert result == [media]
 
     def test_with_params(self):
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         c = SoundSilenceClipper()
         c2 = c.with_params({"top_db": 25, "min_clip_duration": 0.5, "pad": 0.2})
@@ -493,7 +493,7 @@ class TestSoundSilenceClipper:
         assert c.pad == 0.05
 
     def test_to_dict(self):
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         c = SoundSilenceClipper(top_db=30, min_clip_duration=0.4, pad=0.1)
         d = c.to_dict()
@@ -511,7 +511,7 @@ class TestSoundSilenceClipper:
         """If librosa import fails, clipper returns the media unchanged."""
         import builtins
 
-        from vtsearch.media.audio.clipper import SoundSilenceClipper
+        from vtscore.media.audio.clipper import SoundSilenceClipper
 
         real_import = builtins.__import__
 
@@ -534,7 +534,7 @@ class TestSoundSilenceClipper:
 
 class TestSoundSpeechActivityClipper:
     def test_identity(self):
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         c = SoundSpeechActivityClipper()
         assert c.name == "sound_speech_activity"
@@ -545,7 +545,7 @@ class TestSoundSpeechActivityClipper:
         assert isinstance(c, MediaClipper)
 
     def test_custom_params(self):
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         c = SoundSpeechActivityClipper(threshold=0.7, min_clip_duration=0.5, pad=0.1)
         assert c.threshold == 0.7
@@ -553,7 +553,7 @@ class TestSoundSpeechActivityClipper:
         assert c.pad == 0.1
 
     def test_rejects_threshold_out_of_range(self):
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         with pytest.raises(ValueError):
             SoundSpeechActivityClipper(threshold=0.0)
@@ -563,19 +563,19 @@ class TestSoundSpeechActivityClipper:
             SoundSpeechActivityClipper(threshold=1.5)
 
     def test_rejects_negative_min_clip_duration(self):
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         with pytest.raises(ValueError):
             SoundSpeechActivityClipper(min_clip_duration=-0.1)
 
     def test_rejects_negative_pad(self):
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         with pytest.raises(ValueError):
             SoundSpeechActivityClipper(pad=-0.1)
 
     def test_no_media_bytes_returns_unchanged(self):
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         media = {"id": 1, "type": "audio", "duration": 3.0}
         result = SoundSpeechActivityClipper().clip(media)
@@ -583,7 +583,7 @@ class TestSoundSpeechActivityClipper:
 
     def test_returns_unchanged_when_silero_unavailable(self, monkeypatch):
         """If Silero can't be loaded, clipper returns the media unchanged."""
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         c = SoundSpeechActivityClipper()
         # Force the lazy loader to report unavailable so we never touch torch.hub.
@@ -595,7 +595,7 @@ class TestSoundSpeechActivityClipper:
 
     def test_splits_on_mocked_intervals(self):
         """Three mocked speech intervals → three clips with right boundaries."""
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         wav = _concat_wavs(
             generate_wav(440, 1.0),
@@ -621,7 +621,7 @@ class TestSoundSpeechActivityClipper:
 
     def test_returns_unchanged_when_no_intervals(self):
         """An empty detector result keeps the original media intact."""
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         wav = generate_wav(440, 1.0)
         media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 1.0}
@@ -632,7 +632,7 @@ class TestSoundSpeechActivityClipper:
 
     def test_returns_unchanged_on_detector_error(self):
         """If detection returns None (decoder failure, missing torch), pass through."""
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         wav = generate_wav(440, 1.0)
         media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 1.0}
@@ -642,7 +642,7 @@ class TestSoundSpeechActivityClipper:
         assert result == [media]
 
     def test_with_params(self):
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         c = SoundSpeechActivityClipper()
         c2 = c.with_params({"threshold": 0.7, "min_clip_duration": 0.5, "pad": 0.2})
@@ -656,7 +656,7 @@ class TestSoundSpeechActivityClipper:
         assert c.pad == 0.05
 
     def test_to_dict(self):
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         c = SoundSpeechActivityClipper(threshold=0.6, min_clip_duration=0.4, pad=0.1)
         d = c.to_dict()
@@ -669,7 +669,7 @@ class TestSoundSpeechActivityClipper:
 
     def test_min_clip_duration_drops_short_intervals(self):
         """Short detector intervals are dropped at the post-filter stage."""
-        from vtsearch.media.audio.clipper import SoundSpeechActivityClipper
+        from vtscore.media.audio.clipper import SoundSpeechActivityClipper
 
         wav = _concat_wavs(generate_wav(440, 0.05), generate_wav(0, 1.0), generate_wav(440, 1.0))
         media = {"id": 1, "type": "audio", "media_bytes": wav, "duration": 2.05}
@@ -694,14 +694,14 @@ class TestSoundSpeechActivityClipper:
 
 class TestVideoDefaultClipper:
     def test_returns_media_unchanged(self):
-        from vtsearch.media.video.clipper import VideoDefaultClipper
+        from vtscore.media.video.clipper import VideoDefaultClipper
 
         media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 10.0}
         result = VideoDefaultClipper().clip(media)
         assert result == [media]
 
     def test_identity(self):
-        from vtsearch.media.video.clipper import VideoDefaultClipper
+        from vtscore.media.video.clipper import VideoDefaultClipper
 
         c = VideoDefaultClipper()
         assert c.name == "video_default"
@@ -716,7 +716,7 @@ class TestVideoDefaultClipper:
 
 class TestVideoTilingClipper:
     def test_identity(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         c = VideoTilingClipper(2.0)
         assert c.name == "video_tiling"
@@ -726,7 +726,7 @@ class TestVideoTilingClipper:
         assert isinstance(c, MediaClipper)
 
     def test_rejects_non_positive_duration(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         with pytest.raises(ValueError):
             VideoTilingClipper(0)
@@ -734,13 +734,13 @@ class TestVideoTilingClipper:
             VideoTilingClipper(-1)
 
     def test_rejects_negative_min_overlap(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         with pytest.raises(ValueError):
             VideoTilingClipper(2.0, min_overlap=-0.1)
 
     def test_rejects_min_overlap_ge_duration(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         with pytest.raises(ValueError):
             VideoTilingClipper(2.0, min_overlap=2.0)
@@ -748,7 +748,7 @@ class TestVideoTilingClipper:
             VideoTilingClipper(2.0, min_overlap=3.0)
 
     def test_short_video_returned_unchanged(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 1.5}
         result = VideoTilingClipper(2.0).clip(media)
@@ -756,7 +756,7 @@ class TestVideoTilingClipper:
         assert result[0] is media
 
     def test_9_5s_produces_five_2s_tiles(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 9.5}
         result = VideoTilingClipper(2.0).clip(media)
@@ -768,7 +768,7 @@ class TestVideoTilingClipper:
             assert tile["duration"] == pytest.approx(2.0)
 
     def test_exact_multiple_duration(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 10.0}
         result = VideoTilingClipper(2.0).clip(media)
@@ -778,7 +778,7 @@ class TestVideoTilingClipper:
         assert result[-1]["clip_end"] == pytest.approx(10.0)
 
     def test_to_dict_includes_duration_and_min_overlap(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         c = VideoTilingClipper(3.5)
         d = c.to_dict()
@@ -789,14 +789,14 @@ class TestVideoTilingClipper:
         assert d["min_overlap"] == 0.0
 
     def test_zero_duration_video_returned_unchanged(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 0}
         result = VideoTilingClipper(2.0).clip(media)
         assert result == [media]
 
     def test_min_overlap_produces_more_tiles(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 10.0}
         # Without overlap: ceil(10/2) = 5 tiles
@@ -822,14 +822,14 @@ class TestVideoTilingClipper:
 
 class TestImageDefaultClipper:
     def test_returns_media_unchanged(self):
-        from vtsearch.media.image.clipper import ImageDefaultClipper
+        from vtscore.media.image.clipper import ImageDefaultClipper
 
         media = {"id": 1, "type": "image", "media_bytes": b"fake", "width": 100, "height": 100}
         result = ImageDefaultClipper().clip(media)
         assert result == [media]
 
     def test_identity(self):
-        from vtsearch.media.image.clipper import ImageDefaultClipper
+        from vtscore.media.image.clipper import ImageDefaultClipper
 
         c = ImageDefaultClipper()
         assert c.name == "image_default"
@@ -854,7 +854,7 @@ def _make_image_bytes(width, height, fmt="PNG"):
 
 class TestImageTilingClipper:
     def test_identity(self):
-        from vtsearch.media.image.clipper import ImageTilingClipper
+        from vtscore.media.image.clipper import ImageTilingClipper
 
         c = ImageTilingClipper()
         assert c.name == "image_tiling"
@@ -862,7 +862,7 @@ class TestImageTilingClipper:
         assert isinstance(c, MediaClipper)
 
     def test_square_image_returned_unchanged(self):
-        from vtsearch.media.image.clipper import ImageTilingClipper
+        from vtscore.media.image.clipper import ImageTilingClipper
 
         img_bytes = _make_image_bytes(100, 100)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 100, "height": 100}
@@ -873,7 +873,7 @@ class TestImageTilingClipper:
     def test_portrait_image_tiled_vertically(self):
         from PIL import Image
 
-        from vtsearch.media.image.clipper import ImageTilingClipper
+        from vtscore.media.image.clipper import ImageTilingClipper
 
         # 100 x 250 image → tile_size = 100, ceil(250/100) = 3 tiles
         img_bytes = _make_image_bytes(100, 250)
@@ -891,7 +891,7 @@ class TestImageTilingClipper:
     def test_landscape_image_tiled_horizontally(self):
         from PIL import Image
 
-        from vtsearch.media.image.clipper import ImageTilingClipper
+        from vtscore.media.image.clipper import ImageTilingClipper
 
         # 300 x 100 image → tile_size = 100, 300/100 = 3 → 3 tiles
         img_bytes = _make_image_bytes(300, 100)
@@ -908,7 +908,7 @@ class TestImageTilingClipper:
         """An 8.5x11 (scaled to 85x110) yields two 85x85 tiles."""
         from PIL import Image
 
-        from vtsearch.media.image.clipper import ImageTilingClipper
+        from vtscore.media.image.clipper import ImageTilingClipper
 
         # 85 x 110 portrait: tile_size = 85, ceil(110/85) = 2 tiles
         img_bytes = _make_image_bytes(85, 110)
@@ -925,14 +925,14 @@ class TestImageTilingClipper:
             assert img.size == (85, 85)
 
     def test_no_media_bytes_returns_unchanged(self):
-        from vtsearch.media.image.clipper import ImageTilingClipper
+        from vtscore.media.image.clipper import ImageTilingClipper
 
         media = {"id": 1, "type": "image", "width": 100, "height": 200}
         result = ImageTilingClipper().clip(media)
         assert result == [media]
 
     def test_missing_dimensions_returns_unchanged(self):
-        from vtsearch.media.image.clipper import ImageTilingClipper
+        from vtscore.media.image.clipper import ImageTilingClipper
 
         media = {"id": 1, "type": "image", "media_bytes": b"fake"}
         result = ImageTilingClipper().clip(media)
@@ -946,7 +946,7 @@ class TestImageTilingClipper:
 
 class TestImageBboxClipper:
     def test_identity(self):
-        from vtsearch.media.image.clipper import ImageBboxClipper
+        from vtscore.media.image.clipper import ImageBboxClipper
 
         c = ImageBboxClipper([10, 20, 50, 80])
         assert c.name == "image_bbox"
@@ -955,7 +955,7 @@ class TestImageBboxClipper:
         assert isinstance(c, MediaClipper)
 
     def test_rejects_invalid_box(self):
-        from vtsearch.media.image.clipper import ImageBboxClipper
+        from vtscore.media.image.clipper import ImageBboxClipper
 
         with pytest.raises(ValueError):
             ImageBboxClipper([0, 0, 0, 0])  # zero size
@@ -969,7 +969,7 @@ class TestImageBboxClipper:
     def test_crops_to_box(self):
         from PIL import Image
 
-        from vtsearch.media.image.clipper import ImageBboxClipper
+        from vtscore.media.image.clipper import ImageBboxClipper
 
         img_bytes = _make_image_bytes(200, 100)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 100}
@@ -984,7 +984,7 @@ class TestImageBboxClipper:
         assert img.size == (100, 80)
 
     def test_clamps_box_to_image_bounds(self):
-        from vtsearch.media.image.clipper import ImageBboxClipper
+        from vtscore.media.image.clipper import ImageBboxClipper
 
         img_bytes = _make_image_bytes(50, 50)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 50, "height": 50}
@@ -997,14 +997,14 @@ class TestImageBboxClipper:
         assert clip["height"] == 50
 
     def test_no_media_bytes_returns_unchanged(self):
-        from vtsearch.media.image.clipper import ImageBboxClipper
+        from vtscore.media.image.clipper import ImageBboxClipper
 
         media = {"id": 1, "type": "image", "width": 100, "height": 100}
         result = ImageBboxClipper([0, 0, 50, 50]).clip(media)
         assert result == [media]
 
     def test_with_params(self):
-        from vtsearch.media.image.clipper import ImageBboxClipper
+        from vtscore.media.image.clipper import ImageBboxClipper
 
         c = ImageBboxClipper([0, 0, 10, 10])
         c2 = c.with_params({"box": [5, 5, 25, 25]})
@@ -1014,7 +1014,7 @@ class TestImageBboxClipper:
         assert c.box == (0, 0, 10, 10)
 
     def test_to_dict(self):
-        from vtsearch.media.image.clipper import ImageBboxClipper
+        from vtscore.media.image.clipper import ImageBboxClipper
 
         c = ImageBboxClipper([1, 2, 3, 4])
         d = c.to_dict()
@@ -1057,7 +1057,7 @@ def _make_mock_yolo(detections, class_names):
 
 class TestImageObjectClipper:
     def test_identity(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         c = ImageObjectClipper()
         assert c.name == "image_object"
@@ -1066,7 +1066,7 @@ class TestImageObjectClipper:
         assert isinstance(c, MediaClipper)
 
     def test_default_params(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         c = ImageObjectClipper()
         assert c.threshold == 0.25
@@ -1076,20 +1076,20 @@ class TestImageObjectClipper:
         assert c.model_id == "yolo11n.pt"
 
     def test_parameters_schema(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         params = ImageObjectClipper().parameters
         keys = {p["key"] for p in params}
         assert keys == {"threshold", "class_filter", "max_detections", "padding", "model_id"}
 
     def test_creation_questions_match_parameters(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         c = ImageObjectClipper()
         assert c.creation_questions == c.parameters
 
     def test_to_dict(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         c = ImageObjectClipper(threshold=0.4, class_filter="person,car", max_detections=5, padding=0.1)
         d = c.to_dict()
@@ -1103,7 +1103,7 @@ class TestImageObjectClipper:
         assert "creation_questions" in d
 
     def test_with_params_returns_new_instance(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         c = ImageObjectClipper()
         c2 = c.with_params({"threshold": 0.7, "class_filter": "dog", "max_detections": 3, "padding": 0.2})
@@ -1117,7 +1117,7 @@ class TestImageObjectClipper:
         assert c.class_filter == ""
 
     def test_no_media_bytes_returns_unchanged(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         c = ImageObjectClipper()
         media = {"id": 1, "type": "image", "width": 100, "height": 100}
@@ -1125,7 +1125,7 @@ class TestImageObjectClipper:
         assert result == [media]
 
     def test_no_detections_returns_original(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         img_bytes = _make_image_bytes(200, 200)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
@@ -1138,7 +1138,7 @@ class TestImageObjectClipper:
     def test_emits_one_clip_per_detection(self):
         from PIL import Image
 
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         img_bytes = _make_image_bytes(200, 200)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
@@ -1161,7 +1161,7 @@ class TestImageObjectClipper:
             assert clip["file_size"] == len(clip["media_bytes"])
 
     def test_sorts_by_confidence_desc(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         img_bytes = _make_image_bytes(200, 200)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
@@ -1179,7 +1179,7 @@ class TestImageObjectClipper:
         assert result[2]["clip_box"] == [10, 10, 40, 40]
 
     def test_threshold_filters_low_confidence(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         img_bytes = _make_image_bytes(200, 200)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
@@ -1194,7 +1194,7 @@ class TestImageObjectClipper:
         assert result[0]["clip_box"] == [10, 10, 60, 60]
 
     def test_class_filter_keeps_only_whitelisted(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         img_bytes = _make_image_bytes(200, 200)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
@@ -1212,7 +1212,7 @@ class TestImageObjectClipper:
         assert boxes == {(10, 10, 60, 60), (120, 120, 190, 190)}
 
     def test_empty_class_filter_keeps_all(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         img_bytes = _make_image_bytes(200, 200)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
@@ -1226,7 +1226,7 @@ class TestImageObjectClipper:
         assert len(result) == 2
 
     def test_max_detections_caps_output(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         img_bytes = _make_image_bytes(400, 400)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 400, "height": 400}
@@ -1248,7 +1248,7 @@ class TestImageObjectClipper:
         assert confs_kept == {(30, 30), (120, 120), (240, 240)}
 
     def test_padding_expands_box(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         img_bytes = _make_image_bytes(400, 400)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 400, "height": 400}
@@ -1264,7 +1264,7 @@ class TestImageObjectClipper:
         assert result[0]["height"] == 120
 
     def test_padding_clamps_to_image_bounds(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         img_bytes = _make_image_bytes(200, 200)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
@@ -1282,7 +1282,7 @@ class TestImageObjectClipper:
         assert box[3] <= 200
 
     def test_clip_index_is_set(self):
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         img_bytes = _make_image_bytes(200, 200)
         media = {"id": 1, "type": "image", "media_bytes": img_bytes, "width": 200, "height": 200}
@@ -1296,8 +1296,8 @@ class TestImageObjectClipper:
         assert [r["clip_index"] for r in result] == [0, 1]
 
     def test_registered_in_clippers_list(self):
-        from vtsearch.media.image import CLIPPERS
-        from vtsearch.media.image.clipper import ImageObjectClipper
+        from vtscore.media.image import CLIPPERS
+        from vtscore.media.image.clipper import ImageObjectClipper
 
         assert any(isinstance(c, ImageObjectClipper) for c in CLIPPERS)
 
@@ -1309,14 +1309,14 @@ class TestImageObjectClipper:
 
 class TestTextDefaultClipper:
     def test_returns_media_unchanged(self):
-        from vtsearch.media.text.clipper import TextDefaultClipper
+        from vtscore.media.text.clipper import TextDefaultClipper
 
         media = {"id": 1, "type": "text", "media_string": "Hello world."}
         result = TextDefaultClipper().clip(media)
         assert result == [media]
 
     def test_identity(self):
-        from vtsearch.media.text.clipper import TextDefaultClipper
+        from vtscore.media.text.clipper import TextDefaultClipper
 
         c = TextDefaultClipper()
         assert c.name == "text_default"
@@ -1331,7 +1331,7 @@ class TestTextDefaultClipper:
 
 class TestTextParagraphClipper:
     def test_identity(self):
-        from vtsearch.media.text.clipper import TextParagraphClipper
+        from vtscore.media.text.clipper import TextParagraphClipper
 
         c = TextParagraphClipper()
         assert c.name == "text_paragraph"
@@ -1339,7 +1339,7 @@ class TestTextParagraphClipper:
         assert isinstance(c, MediaClipper)
 
     def test_single_paragraph_unchanged(self):
-        from vtsearch.media.text.clipper import TextParagraphClipper
+        from vtscore.media.text.clipper import TextParagraphClipper
 
         media = {"id": 1, "type": "text", "media_string": "Just one paragraph here."}
         result = TextParagraphClipper().clip(media)
@@ -1347,7 +1347,7 @@ class TestTextParagraphClipper:
         assert result[0] is media
 
     def test_splits_multiple_paragraphs(self):
-        from vtsearch.media.text.clipper import TextParagraphClipper
+        from vtscore.media.text.clipper import TextParagraphClipper
 
         text = "First paragraph.\n\nSecond paragraph.\n\nThird one."
         media = {"id": 1, "type": "text", "media_string": text, "word_count": 6, "character_count": len(text)}
@@ -1363,7 +1363,7 @@ class TestTextParagraphClipper:
 
     def test_multiline_paragraphs_preserved(self):
         """A paragraph that internally contains single newlines stays intact."""
-        from vtsearch.media.text.clipper import TextParagraphClipper
+        from vtscore.media.text.clipper import TextParagraphClipper
 
         text = "Line one.\nLine two of the same para.\n\nSecond paragraph here."
         media = {"id": 1, "type": "text", "media_string": text}
@@ -1373,7 +1373,7 @@ class TestTextParagraphClipper:
         assert result[1]["media_string"] == "Second paragraph here."
 
     def test_collapses_runs_of_blank_lines(self):
-        from vtsearch.media.text.clipper import TextParagraphClipper
+        from vtscore.media.text.clipper import TextParagraphClipper
 
         text = "Alpha.\n\n\n\nBeta.\n\n\nGamma."
         media = {"id": 1, "type": "text", "media_string": text}
@@ -1381,7 +1381,7 @@ class TestTextParagraphClipper:
         assert [t["media_string"] for t in result] == ["Alpha.", "Beta.", "Gamma."]
 
     def test_handles_windows_line_endings(self):
-        from vtsearch.media.text.clipper import TextParagraphClipper
+        from vtscore.media.text.clipper import TextParagraphClipper
 
         text = "Para one.\r\n\r\nPara two.\r\n\r\nPara three."
         media = {"id": 1, "type": "text", "media_string": text}
@@ -1390,7 +1390,7 @@ class TestTextParagraphClipper:
 
     def test_blank_line_with_whitespace_still_splits(self):
         """A blank line that contains spaces/tabs still counts as a separator."""
-        from vtsearch.media.text.clipper import TextParagraphClipper
+        from vtscore.media.text.clipper import TextParagraphClipper
 
         text = "First.\n   \nSecond."
         media = {"id": 1, "type": "text", "media_string": text}
@@ -1398,14 +1398,14 @@ class TestTextParagraphClipper:
         assert [t["media_string"] for t in result] == ["First.", "Second."]
 
     def test_empty_string_returns_unchanged(self):
-        from vtsearch.media.text.clipper import TextParagraphClipper
+        from vtscore.media.text.clipper import TextParagraphClipper
 
         media = {"id": 1, "type": "text", "media_string": ""}
         result = TextParagraphClipper().clip(media)
         assert result == [media]
 
     def test_no_media_string_returns_unchanged(self):
-        from vtsearch.media.text.clipper import TextParagraphClipper
+        from vtscore.media.text.clipper import TextParagraphClipper
 
         media = {"id": 1, "type": "text"}
         result = TextParagraphClipper().clip(media)
@@ -1413,13 +1413,13 @@ class TestTextParagraphClipper:
 
     def test_registered_for_text_type(self):
         """The paragraph clipper is auto-discovered for the text media type."""
-        from vtsearch.media import clippers_for_type
+        from vtscore.media import clippers_for_type
 
         names = {c.name for c in clippers_for_type("text")}
         assert "text_paragraph" in names
 
     def test_to_dict_shape(self):
-        from vtsearch.media.text.clipper import TextParagraphClipper
+        from vtscore.media.text.clipper import TextParagraphClipper
 
         d = TextParagraphClipper().to_dict()
         assert d["name"] == "text_paragraph"
@@ -1435,7 +1435,7 @@ class TestTextParagraphClipper:
 
 class TestTextSentenceClipper:
     def test_identity(self):
-        from vtsearch.media.text.clipper import TextSentenceClipper
+        from vtscore.media.text.clipper import TextSentenceClipper
 
         c = TextSentenceClipper()
         assert c.name == "text_sentence"
@@ -1443,7 +1443,7 @@ class TestTextSentenceClipper:
         assert isinstance(c, MediaClipper)
 
     def test_single_sentence_unchanged(self):
-        from vtsearch.media.text.clipper import TextSentenceClipper
+        from vtscore.media.text.clipper import TextSentenceClipper
 
         media = {"id": 1, "type": "text", "media_string": "Hello world."}
         result = TextSentenceClipper().clip(media)
@@ -1451,7 +1451,7 @@ class TestTextSentenceClipper:
         assert result[0] is media
 
     def test_splits_multiple_sentences(self):
-        from vtsearch.media.text.clipper import TextSentenceClipper
+        from vtscore.media.text.clipper import TextSentenceClipper
 
         text = "First sentence. Second sentence. Third one!"
         media = {"id": 1, "type": "text", "media_string": text, "word_count": 7, "character_count": len(text)}
@@ -1466,7 +1466,7 @@ class TestTextSentenceClipper:
             assert tile["character_count"] == len(tile["media_string"])
 
     def test_question_and_exclamation(self):
-        from vtsearch.media.text.clipper import TextSentenceClipper
+        from vtscore.media.text.clipper import TextSentenceClipper
 
         text = "Is this a test? Yes it is! Great."
         media = {"id": 1, "type": "text", "media_string": text}
@@ -1477,14 +1477,14 @@ class TestTextSentenceClipper:
         assert result[2]["media_string"] == "Great."
 
     def test_empty_string_returns_unchanged(self):
-        from vtsearch.media.text.clipper import TextSentenceClipper
+        from vtscore.media.text.clipper import TextSentenceClipper
 
         media = {"id": 1, "type": "text", "media_string": ""}
         result = TextSentenceClipper().clip(media)
         assert result == [media]
 
     def test_no_media_string_returns_unchanged(self):
-        from vtsearch.media.text.clipper import TextSentenceClipper
+        from vtscore.media.text.clipper import TextSentenceClipper
 
         media = {"id": 1, "type": "text"}
         result = TextSentenceClipper().clip(media)
@@ -1498,14 +1498,14 @@ class TestTextSentenceClipper:
 
 class TestDocumentDefaultClipper:
     def test_returns_media_unchanged(self):
-        from vtsearch.media.document.clipper import DocumentDefaultClipper
+        from vtscore.media.document.clipper import DocumentDefaultClipper
 
         media = {"id": 1, "type": "document", "media_bytes": b"fake-pdf"}
         result = DocumentDefaultClipper().clip(media)
         assert result == [media]
 
     def test_identity(self):
-        from vtsearch.media.document.clipper import DocumentDefaultClipper
+        from vtscore.media.document.clipper import DocumentDefaultClipper
 
         c = DocumentDefaultClipper()
         assert c.name == "document_default"
@@ -1520,7 +1520,7 @@ class TestDocumentDefaultClipper:
 
 class TestVideoSceneClipper:
     def test_identity(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         c = VideoSceneClipper()
         assert c.name == "video_scene"
@@ -1530,14 +1530,14 @@ class TestVideoSceneClipper:
         assert isinstance(c, MediaClipper)
 
     def test_custom_params(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         c = VideoSceneClipper(threshold=0.5, min_scene_duration=2.0)
         assert c.threshold == 0.5
         assert c.min_scene_duration == 2.0
 
     def test_rejects_invalid_threshold(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         with pytest.raises(ValueError):
             VideoSceneClipper(threshold=-0.1)
@@ -1545,7 +1545,7 @@ class TestVideoSceneClipper:
             VideoSceneClipper(threshold=1.1)
 
     def test_rejects_non_positive_min_scene_duration(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         with pytest.raises(ValueError):
             VideoSceneClipper(min_scene_duration=0)
@@ -1553,21 +1553,21 @@ class TestVideoSceneClipper:
             VideoSceneClipper(min_scene_duration=-1)
 
     def test_zero_duration_returns_unchanged(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         media = {"id": 1, "type": "video", "duration": 0}
         result = VideoSceneClipper().clip(media)
         assert result == [media]
 
     def test_no_media_bytes_or_path_returns_unchanged(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         media = {"id": 1, "type": "video", "duration": 10.0}
         result = VideoSceneClipper().clip(media)
         assert result == [media]
 
     def test_to_dict_includes_params(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         c = VideoSceneClipper(threshold=0.4, min_scene_duration=1.5)
         d = c.to_dict()
@@ -1580,7 +1580,7 @@ class TestVideoSceneClipper:
         """When OpenCV is not available, clip returns the media unchanged."""
         import builtins
 
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         real_import = builtins.__import__
 
@@ -1596,8 +1596,8 @@ class TestVideoSceneClipper:
 
     def test_detect_scene_boundaries_helper_empty(self, monkeypatch):
         """When _detect_scene_boundaries returns no cuts, media is unchanged."""
-        from vtsearch.media.video import clipper as clipper_mod
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video import clipper as clipper_mod
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         monkeypatch.setattr(clipper_mod, "_detect_scene_boundaries", lambda *a, **kw: [])
         media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 10.0}
@@ -1606,8 +1606,8 @@ class TestVideoSceneClipper:
 
     def test_splits_at_detected_boundaries(self, monkeypatch):
         """When boundaries are found, the clipper produces the right scenes."""
-        from vtsearch.media.video import clipper as clipper_mod
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video import clipper as clipper_mod
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         # Simulate two scene boundaries at 3.0s and 7.0s in a 10s video.
         monkeypatch.setattr(clipper_mod, "_detect_scene_boundaries", lambda *a, **kw: [3.0, 7.0])
@@ -1638,8 +1638,8 @@ class TestVideoSceneClipper:
         assert result[2]["scene_index"] == 2
 
     def test_single_boundary_produces_two_scenes(self, monkeypatch):
-        from vtsearch.media.video import clipper as clipper_mod
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video import clipper as clipper_mod
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         monkeypatch.setattr(clipper_mod, "_detect_scene_boundaries", lambda *a, **kw: [5.0])
         media = {"id": 1, "type": "video", "media_bytes": b"fake", "duration": 8.0}
@@ -1652,8 +1652,8 @@ class TestVideoSceneClipper:
 
     def test_media_path_used_when_available(self, monkeypatch, tmp_path):
         """When media_path exists, it's used instead of writing a temp file."""
-        from vtsearch.media.video import clipper as clipper_mod
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video import clipper as clipper_mod
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         video_file = tmp_path / "test.mp4"
         video_file.write_bytes(b"fake video data")
@@ -1679,14 +1679,14 @@ class TestVideoSceneClipper:
 
 class TestClipperRegistry:
     def test_all_clippers_returns_list(self):
-        from vtsearch.media import all_clippers
+        from vtscore.media import all_clippers
 
         clippers = all_clippers()
         assert isinstance(clippers, list)
         assert len(clippers) >= 9  # 5 defaults + 4 tiling/sentence
 
     def test_all_clippers_dict_returns_dicts(self):
-        from vtsearch.media import all_clippers_dict
+        from vtscore.media import all_clippers_dict
 
         dicts = all_clippers_dict()
         assert all(isinstance(d, dict) for d in dicts)
@@ -1701,19 +1701,19 @@ class TestClipperRegistry:
             assert "display_name" in d
 
     def test_get_clipper(self):
-        from vtsearch.media import get_clipper
+        from vtscore.media import get_clipper
 
         c = get_clipper("sound_default")
         assert c.name == "sound_default"
 
     def test_get_clipper_unknown_raises(self):
-        from vtsearch.media import get_clipper
+        from vtscore.media import get_clipper
 
         with pytest.raises(KeyError):
             get_clipper("nonexistent_clipper")
 
     def test_clippers_for_type(self):
-        from vtsearch.media import clippers_for_type
+        from vtscore.media import clippers_for_type
 
         audio_clippers = clippers_for_type("audio")
         assert len(audio_clippers) >= 2
@@ -1722,7 +1722,7 @@ class TestClipperRegistry:
         assert "sound_tiling" in names
 
     def test_clippers_for_type_image(self):
-        from vtsearch.media import clippers_for_type
+        from vtscore.media import clippers_for_type
 
         image_clippers = clippers_for_type("image")
         assert len(image_clippers) >= 2
@@ -1731,7 +1731,7 @@ class TestClipperRegistry:
         assert "image_tiling" in names
 
     def test_clippers_for_type_paragraph(self):
-        from vtsearch.media import clippers_for_type
+        from vtscore.media import clippers_for_type
 
         text_clippers = clippers_for_type("text")
         names = [c.name for c in text_clippers]
@@ -1739,7 +1739,7 @@ class TestClipperRegistry:
         assert "text_sentence" in names
 
     def test_clippers_for_type_video(self):
-        from vtsearch.media import clippers_for_type
+        from vtscore.media import clippers_for_type
 
         video_clippers = clippers_for_type("video")
         names = [c.name for c in video_clippers]
@@ -1747,7 +1747,7 @@ class TestClipperRegistry:
         assert "video_tiling" in names
 
     def test_clippers_for_type_document(self):
-        from vtsearch.media import clippers_for_type
+        from vtscore.media import clippers_for_type
 
         doc_clippers = clippers_for_type("document")
         assert len(doc_clippers) >= 1
@@ -1755,7 +1755,7 @@ class TestClipperRegistry:
         assert "document_default" in names
 
     def test_every_media_type_has_default_clipper(self):
-        from vtsearch.media import all_types, clippers_for_type
+        from vtscore.media import all_types, clippers_for_type
 
         for mt in all_types():
             clippers = clippers_for_type(mt.type_id)
@@ -1833,7 +1833,7 @@ class TestCropFileBytes:
     """The helper used by routes to crop user-supplied example files."""
 
     def test_crop_audio_file(self, tmp_path):
-        from vtsearch.media.cropping import crop_file_bytes
+        from vtscore.media.cropping import crop_file_bytes
 
         wav_path = tmp_path / "ex.wav"
         wav_path.write_bytes(generate_wav(440, 5.0))
@@ -1846,7 +1846,7 @@ class TestCropFileBytes:
     def test_crop_image_file(self, tmp_path):
         from PIL import Image
 
-        from vtsearch.media.cropping import crop_file_bytes
+        from vtscore.media.cropping import crop_file_bytes
 
         img_path = tmp_path / "ex.png"
         img_path.write_bytes(_make_image_bytes(100, 100))
@@ -1855,13 +1855,13 @@ class TestCropFileBytes:
         assert img.size == (50, 60)
 
     def test_missing_file_raises(self, tmp_path):
-        from vtsearch.media.cropping import crop_file_bytes
+        from vtscore.media.cropping import crop_file_bytes
 
         with pytest.raises(FileNotFoundError):
             crop_file_bytes(tmp_path / "nope.wav", "audio", {"start": 0.0, "end": 1.0})
 
     def test_unknown_media_type_raises(self, tmp_path):
-        from vtsearch.media.cropping import crop_file_bytes
+        from vtscore.media.cropping import crop_file_bytes
 
         wav_path = tmp_path / "ex.wav"
         wav_path.write_bytes(generate_wav(440, 1.0))
@@ -1869,7 +1869,7 @@ class TestCropFileBytes:
             crop_file_bytes(wav_path, "video", {"start": 0.0, "end": 0.5})
 
     def test_image_missing_box_raises(self, tmp_path):
-        from vtsearch.media.cropping import crop_file_bytes
+        from vtscore.media.cropping import crop_file_bytes
 
         img_path = tmp_path / "ex.png"
         img_path.write_bytes(_make_image_bytes(100, 100))
@@ -1884,21 +1884,21 @@ class TestCropFileBytes:
 
 class TestApplyClipper:
     def test_apply_clipper_noop_for_empty_name(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         clips = {1: {"id": 1, "type": "audio", "origin": {"importer": "test", "params": {}}}}
         _apply_clipper(clips, "")
         assert len(clips) == 1
 
     def test_apply_clipper_unknown_name_noop(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         clips = {1: {"id": 1, "type": "audio", "origin": {"importer": "test", "params": {}}}}
         _apply_clipper(clips, "nonexistent_clipper")
         assert len(clips) == 1
 
     def test_apply_default_clipper_passthrough(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         media = {"id": 1, "type": "audio", "media_bytes": b"fake", "origin": {"importer": "test", "params": {}}}
         clips = {1: media}
@@ -1907,7 +1907,7 @@ class TestApplyClipper:
         assert clips[1]["origin"]["params"]["clipper"] == "sound_default"
 
     def test_apply_clipper_annotates_origin(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         media = {
             "id": 1,
@@ -1936,7 +1936,7 @@ class TestApplyClipper:
 
 class TestDatasetRegistryClipperColumn:
     def test_registry_includes_clipper(self, client):
-        from vtsearch.datasets.registry import register_dataset
+        from vtscore.datasets.registry import register_dataset
 
         register_dataset(
             name="clip-ds",
@@ -1951,7 +1951,7 @@ class TestDatasetRegistryClipperColumn:
         assert ds["clipper"] == "Tiling"
 
     def test_registry_clipper_defaults_to_empty(self, client):
-        from vtsearch.datasets.registry import register_dataset
+        from vtscore.datasets.registry import register_dataset
 
         register_dataset(
             name="no-clip",
@@ -1965,7 +1965,7 @@ class TestDatasetRegistryClipperColumn:
         assert ds["clipper"] == ""
 
     def test_registry_default_clipper_shows_dash(self, client):
-        from vtsearch.datasets.registry import register_dataset
+        from vtscore.datasets.registry import register_dataset
 
         register_dataset(
             name="default-clip",
@@ -1989,19 +1989,19 @@ class TestClipperParameters:
     """Test the parameters property and with_params method on clippers."""
 
     def test_default_clipper_has_no_parameters(self):
-        from vtsearch.media.audio.clipper import SoundDefaultClipper
+        from vtscore.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
         assert c.parameters == []
 
     def test_default_clipper_with_params_returns_self(self):
-        from vtsearch.media.audio.clipper import SoundDefaultClipper
+        from vtscore.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
         assert c.with_params({"anything": 42}) is c
 
     def test_sound_tiling_parameters(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
         params = c.parameters
@@ -2016,7 +2016,7 @@ class TestClipperParameters:
         assert params[1]["min"] == 0
 
     def test_sound_tiling_with_params(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
         c2 = c.with_params({"duration": 5.0})
@@ -2027,7 +2027,7 @@ class TestClipperParameters:
         assert c.duration == 2.0  # original unchanged
 
     def test_sound_tiling_with_params_overlap(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
         c2 = c.with_params({"duration": 5.0, "min_overlap": 1.0})
@@ -2035,14 +2035,14 @@ class TestClipperParameters:
         assert c2.min_overlap == 1.0
 
     def test_sound_tiling_with_params_ignores_unknown_keys(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
         c2 = c.with_params({"unknown_key": 99})
         assert c2.duration == 2.0  # falls back to current value
 
     def test_video_tiling_parameters(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         c = VideoTilingClipper(2.0)
         params = c.parameters
@@ -2053,7 +2053,7 @@ class TestClipperParameters:
         assert params[1]["default"] == 0.0
 
     def test_video_tiling_with_params(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         c = VideoTilingClipper(2.0)
         c2 = c.with_params({"duration": 10.0})
@@ -2063,7 +2063,7 @@ class TestClipperParameters:
         assert c.duration == 2.0
 
     def test_video_tiling_with_params_overlap(self):
-        from vtsearch.media.video.clipper import VideoTilingClipper
+        from vtscore.media.video.clipper import VideoTilingClipper
 
         c = VideoTilingClipper(2.0)
         c2 = c.with_params({"duration": 10.0, "min_overlap": 2.0})
@@ -2071,7 +2071,7 @@ class TestClipperParameters:
         assert c2.min_overlap == 2.0
 
     def test_video_scene_parameters(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         c = VideoSceneClipper()
         params = c.parameters
@@ -2086,7 +2086,7 @@ class TestClipperParameters:
         assert min_dur_param["default"] == 1.0
 
     def test_video_scene_with_params(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         c = VideoSceneClipper()
         c2 = c.with_params({"threshold": 0.5, "min_scene_duration": 2.5})
@@ -2096,7 +2096,7 @@ class TestClipperParameters:
         assert c.threshold == 0.3  # original unchanged
 
     def test_video_scene_with_partial_params(self):
-        from vtsearch.media.video.clipper import VideoSceneClipper
+        from vtscore.media.video.clipper import VideoSceneClipper
 
         c = VideoSceneClipper(threshold=0.4, min_scene_duration=1.5)
         c2 = c.with_params({"threshold": 0.6})
@@ -2104,7 +2104,7 @@ class TestClipperParameters:
         assert c2.min_scene_duration == 1.5  # kept from original
 
     def test_to_dict_includes_parameters(self):
-        from vtsearch.media.audio.clipper import SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundTilingClipper
 
         c = SoundTilingClipper(2.0)
         d = c.to_dict()
@@ -2114,7 +2114,7 @@ class TestClipperParameters:
         assert d["parameters"][1]["key"] == "min_overlap"
 
     def test_to_dict_no_parameters_for_default_clipper(self):
-        from vtsearch.media.audio.clipper import SoundDefaultClipper
+        from vtscore.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
         d = c.to_dict()
@@ -2158,8 +2158,8 @@ class TestApplyClipperWithParams:
     """Test _apply_clipper with custom clipper_params."""
 
     def test_apply_clipper_with_custom_duration(self):
-        from vtsearch.media.audio.audio_generator import generate_wav
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         # Generate a 10s audio clip
         wav = generate_wav(440, 10.0)
@@ -2176,8 +2176,8 @@ class TestApplyClipperWithParams:
         assert len(clips) == 5
 
     def test_apply_clipper_with_overridden_duration(self):
-        from vtsearch.media.audio.audio_generator import generate_wav
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         wav = generate_wav(440, 10.0)
         media = {
@@ -2193,8 +2193,8 @@ class TestApplyClipperWithParams:
         assert len(clips) == 2
 
     def test_apply_clipper_params_none_uses_defaults(self):
-        from vtsearch.media.audio.audio_generator import generate_wav
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         wav = generate_wav(440, 10.0)
         media = {
@@ -2209,8 +2209,8 @@ class TestApplyClipperWithParams:
         assert len(clips) == 5  # default 2s → 5 tiles
 
     def test_apply_clipper_with_min_overlap(self):
-        from vtsearch.media.audio.audio_generator import generate_wav
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         wav = generate_wav(440, 10.0)
         media = {
@@ -2233,7 +2233,7 @@ class TestApplyClipperWithParams:
 
 class TestSoundAutoClipper:
     def test_identity(self):
-        from vtsearch.media.audio.clipper import SoundAutoClipper
+        from vtscore.media.audio.clipper import SoundAutoClipper
 
         c = SoundAutoClipper()
         assert c.name == "sound_auto"
@@ -2244,7 +2244,7 @@ class TestSoundAutoClipper:
         assert isinstance(c, MediaClipper)
 
     def test_rejects_non_positive_params(self):
-        from vtsearch.media.audio.clipper import SoundAutoClipper
+        from vtscore.media.audio.clipper import SoundAutoClipper
 
         with pytest.raises(ValueError):
             SoundAutoClipper(threshold=0)
@@ -2256,14 +2256,14 @@ class TestSoundAutoClipper:
             SoundAutoClipper(tile_duration=-1)
 
     def test_resolve_for_media_short_returns_default(self):
-        from vtsearch.media.audio.clipper import SoundAutoClipper, SoundDefaultClipper
+        from vtscore.media.audio.clipper import SoundAutoClipper, SoundDefaultClipper
 
         media = {"id": 1, "type": "audio", "duration": 5.0}
         resolved = SoundAutoClipper().resolve_for_media(media)
         assert isinstance(resolved, SoundDefaultClipper)
 
     def test_resolve_for_media_long_returns_tiling(self):
-        from vtsearch.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
 
         media = {"id": 1, "type": "audio", "duration": 120.0}
         resolved = SoundAutoClipper().resolve_for_media(media)
@@ -2272,7 +2272,7 @@ class TestSoundAutoClipper:
 
     def test_resolve_for_media_uses_own_duration_not_dataset(self):
         """Each media gets its own routing decision — no median trick."""
-        from vtsearch.media.audio.clipper import (
+        from vtscore.media.audio.clipper import (
             SoundAutoClipper,
             SoundDefaultClipper,
             SoundTilingClipper,
@@ -2285,7 +2285,7 @@ class TestSoundAutoClipper:
         assert isinstance(c.resolve_for_media(long_media), SoundTilingClipper)
 
     def test_resolve_for_media_falls_back_to_wav_when_no_duration(self):
-        from vtsearch.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
 
         long_wav = generate_wav(440, 5.0)
         media = {"id": 1, "type": "audio", "media_bytes": long_wav}
@@ -2294,14 +2294,14 @@ class TestSoundAutoClipper:
 
     def test_resolve_for_durations_is_noop(self):
         """Phase 2 routing is per-media; the per-dataset hook is a no-op."""
-        from vtsearch.media.audio.clipper import SoundAutoClipper
+        from vtscore.media.audio.clipper import SoundAutoClipper
 
         c = SoundAutoClipper()
         assert c.resolve_for_durations([1.0, 1000.0]) is c
         assert c.resolve_for_durations([]) is c
 
     def test_with_params_overrides_threshold(self):
-        from vtsearch.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
+        from vtscore.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
 
         c = SoundAutoClipper().with_params({"threshold": 5.0, "tile_duration": 3.0})
         assert c.threshold == 5.0
@@ -2312,7 +2312,7 @@ class TestSoundAutoClipper:
         assert resolved.duration == 3.0
 
     def test_to_dict_exposes_params_and_strategy_fields(self):
-        from vtsearch.media.audio.clipper import SoundAutoClipper
+        from vtscore.media.audio.clipper import SoundAutoClipper
 
         d = SoundAutoClipper().to_dict()
         assert d["name"] == "sound_auto"
@@ -2326,7 +2326,7 @@ class TestSoundAutoClipper:
 
     def test_clip_routes_per_media(self):
         """Direct .clip() use (outside the load pipeline) routes per-media."""
-        from vtsearch.media.audio.clipper import SoundAutoClipper
+        from vtscore.media.audio.clipper import SoundAutoClipper
 
         c = SoundAutoClipper(threshold=3.0, tile_duration=1.0)
         # Short clip → pass-through
@@ -2340,7 +2340,7 @@ class TestSoundAutoClipper:
         assert len(result) > 1
 
     def test_first_in_audio_clipper_registry(self):
-        from vtsearch.media import clippers_for_type
+        from vtscore.media import clippers_for_type
 
         names = [c.name for c in clippers_for_type("audio")]
         assert names[0] == "sound_auto"
@@ -2348,7 +2348,7 @@ class TestSoundAutoClipper:
 
 class TestVideoAutoClipper:
     def test_identity(self):
-        from vtsearch.media.video.clipper import VideoAutoClipper
+        from vtscore.media.video.clipper import VideoAutoClipper
 
         c = VideoAutoClipper()
         assert c.name == "video_auto"
@@ -2359,7 +2359,7 @@ class TestVideoAutoClipper:
         assert isinstance(c, MediaClipper)
 
     def test_rejects_non_positive_params(self):
-        from vtsearch.media.video.clipper import VideoAutoClipper
+        from vtscore.media.video.clipper import VideoAutoClipper
 
         with pytest.raises(ValueError):
             VideoAutoClipper(threshold=0)
@@ -2367,20 +2367,20 @@ class TestVideoAutoClipper:
             VideoAutoClipper(tile_duration=0)
 
     def test_resolve_for_media_short_returns_default(self):
-        from vtsearch.media.video.clipper import VideoAutoClipper, VideoDefaultClipper
+        from vtscore.media.video.clipper import VideoAutoClipper, VideoDefaultClipper
 
         resolved = VideoAutoClipper().resolve_for_media({"id": 1, "type": "video", "duration": 10.0})
         assert isinstance(resolved, VideoDefaultClipper)
 
     def test_resolve_for_media_long_returns_tiling(self):
-        from vtsearch.media.video.clipper import VideoAutoClipper, VideoTilingClipper
+        from vtscore.media.video.clipper import VideoAutoClipper, VideoTilingClipper
 
         resolved = VideoAutoClipper().resolve_for_media({"id": 1, "type": "video", "duration": 90.0})
         assert isinstance(resolved, VideoTilingClipper)
         assert resolved.duration == 10.0
 
     def test_resolve_for_media_uses_own_duration_not_dataset(self):
-        from vtsearch.media.video.clipper import (
+        from vtscore.media.video.clipper import (
             VideoAutoClipper,
             VideoDefaultClipper,
             VideoTilingClipper,
@@ -2393,14 +2393,14 @@ class TestVideoAutoClipper:
         assert isinstance(c.resolve_for_media(long_media), VideoTilingClipper)
 
     def test_resolve_for_durations_is_noop(self):
-        from vtsearch.media.video.clipper import VideoAutoClipper
+        from vtscore.media.video.clipper import VideoAutoClipper
 
         c = VideoAutoClipper()
         assert c.resolve_for_durations([1.0, 1000.0]) is c
         assert c.resolve_for_durations([]) is c
 
     def test_with_params_overrides(self):
-        from vtsearch.media.video.clipper import VideoAutoClipper, VideoTilingClipper
+        from vtscore.media.video.clipper import VideoAutoClipper, VideoTilingClipper
 
         c = VideoAutoClipper().with_params({"threshold": 4.0, "tile_duration": 2.0})
         assert c.threshold == 4.0
@@ -2409,7 +2409,7 @@ class TestVideoAutoClipper:
         assert resolved.duration == 2.0
 
     def test_first_in_video_clipper_registry(self):
-        from vtsearch.media import clippers_for_type
+        from vtscore.media import clippers_for_type
 
         names = [c.name for c in clippers_for_type("video")]
         assert names[0] == "video_auto"
@@ -2420,7 +2420,7 @@ class TestApplyClipperResolvesAuto:
     clip's origin with the resolved concrete clipper, not the auto one."""
 
     def test_short_dataset_resolves_to_default(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         wav = generate_wav(440, 5.0)
         media = {
@@ -2439,7 +2439,7 @@ class TestApplyClipperResolvesAuto:
         assert clip["origin"]["params"]["clipper"] == "sound_default"
 
     def test_long_dataset_resolves_to_tiling(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         wav = generate_wav(440, 60.0)
         media = {
@@ -2461,7 +2461,7 @@ class TestApplyClipperResolvesAuto:
     def test_mixed_durations_resolve_per_media(self):
         """A short and a long item in the same dataset take different
         branches, and each clip records its own resolved concrete clipper."""
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         short_wav = generate_wav(440, 2.0)
         long_wav = generate_wav(440, 8.0)
@@ -2490,7 +2490,7 @@ class TestApplyClipperResolvesAuto:
         assert resolved_names.count("sound_tiling") == 4
 
     def test_user_threshold_override_propagates(self):
-        from vtsearch.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.load_pipeline import _apply_clipper
 
         wav = generate_wav(440, 8.0)
         media = {
@@ -2549,7 +2549,7 @@ def _stub_detector(detections: list[_FakeDetection]):
 
 class TestImageFaceClipper:
     def test_identity(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         c = ImageFaceClipper()
         assert c.name == "image_face"
@@ -2558,14 +2558,14 @@ class TestImageFaceClipper:
         assert isinstance(c, MediaClipper)
 
     def test_registered_in_registry(self):
-        from vtsearch.media import get_clipper
+        from vtscore.media import get_clipper
 
         c = get_clipper("image_face")
         assert c.name == "image_face"
         assert c.media_type == "image"
 
     def test_rejects_invalid_threshold(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         with pytest.raises(ValueError):
             ImageFaceClipper(threshold=-0.1)
@@ -2573,25 +2573,25 @@ class TestImageFaceClipper:
             ImageFaceClipper(threshold=1.5)
 
     def test_rejects_invalid_model_selection(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         with pytest.raises(ValueError):
             ImageFaceClipper(model_selection=2)
 
     def test_rejects_negative_padding(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         with pytest.raises(ValueError):
             ImageFaceClipper(padding=-0.01)
 
     def test_rejects_non_positive_min_size(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         with pytest.raises(ValueError):
             ImageFaceClipper(min_size=0)
 
     def test_returns_empty_when_no_detections(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         c = ImageFaceClipper()
         c._detector = _stub_detector([])
@@ -2599,14 +2599,14 @@ class TestImageFaceClipper:
         assert c.clip(media) == []
 
     def test_returns_empty_when_no_media_bytes(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         c = ImageFaceClipper()
         c._detector = _stub_detector([_FakeDetection(0.9, _FakeBBox(0.1, 0.1, 0.2, 0.2))])
         assert c.clip({"id": 1, "type": "image"}) == []
 
     def test_emits_one_clip_per_face(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         c = ImageFaceClipper(padding=0.0)
         c._detector = _stub_detector(
@@ -2626,7 +2626,7 @@ class TestImageFaceClipper:
             assert clip["clip_box"] is not None and len(clip["clip_box"]) == 4
 
     def test_clip_index_orders_by_confidence(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         c = ImageFaceClipper(padding=0.0)
         c._detector = _stub_detector(
@@ -2645,7 +2645,7 @@ class TestImageFaceClipper:
         assert x1 >= int(640 * 0.5) - 1
 
     def test_drops_low_confidence(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         c = ImageFaceClipper(threshold=0.7, padding=0.0)
         c._detector = _stub_detector(
@@ -2659,7 +2659,7 @@ class TestImageFaceClipper:
         assert len(clips) == 1
 
     def test_drops_too_small(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         c = ImageFaceClipper(min_size=100, padding=0.0)
         # 0.05 * 640 = 32px — below the 100px floor.
@@ -2668,7 +2668,7 @@ class TestImageFaceClipper:
         assert c.clip(media) == []
 
     def test_padding_expands_box(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         c = ImageFaceClipper(padding=0.5)
         # Face at (320,240) sized 64x64 → padded by 32px on each side → 128x128.
@@ -2683,7 +2683,7 @@ class TestImageFaceClipper:
     def test_clip_drops_inherited_embedding_and_md5(self):
         """Cropped faces must not keep the parent's embedding / md5 —
         otherwise the load-pipeline fixup won't re-embed single-face crops."""
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
         import numpy as np
 
         c = ImageFaceClipper(padding=0.0)
@@ -2701,7 +2701,7 @@ class TestImageFaceClipper:
         assert "md5" not in clips[0]
 
     def test_with_params_overrides(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         c = ImageFaceClipper().with_params({"threshold": 0.8, "padding": 0.4, "min_size": 64, "model_selection": 0})
         assert isinstance(c, ImageFaceClipper)
@@ -2711,7 +2711,7 @@ class TestImageFaceClipper:
         assert c._model_selection == 0
 
     def test_to_dict_includes_params(self):
-        from vtsearch.media.image.clipper import ImageFaceClipper
+        from vtscore.media.image.clipper import ImageFaceClipper
 
         d = ImageFaceClipper(threshold=0.7, padding=0.3, min_size=48, model_selection=0).to_dict()
         assert d["name"] == "image_face"

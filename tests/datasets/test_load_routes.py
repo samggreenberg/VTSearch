@@ -25,7 +25,7 @@ import io
 
 class TestExportDataset:
     def test_returns_pickle_for_loaded_dataset(self, client, tmp_path):
-        from vtsearch.datasets.loader import load_dataset_from_pickle
+        from vtscore.datasets.loader import load_dataset_from_pickle
         from vtsearch.state import medias
 
         # Default fixture medias are loaded; export should succeed.

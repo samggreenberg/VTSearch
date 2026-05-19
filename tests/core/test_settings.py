@@ -119,7 +119,7 @@ class TestSettingsModule:
 
     def test_max_concurrent_embeddings_default_from_hardware(self, isolated_settings):
         """CPU-only boxes default to 1; CUDA boxes default to min(2, gpu_count)."""
-        from vtsearch.embedding.loader import _detect_cuda_devices
+        from vtscore.embedding.loader import _detect_cuda_devices
 
         gpus = _detect_cuda_devices()
         expected = max(1, min(2, gpus)) if gpus > 0 else 1

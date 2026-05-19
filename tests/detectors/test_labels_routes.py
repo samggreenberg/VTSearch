@@ -9,7 +9,7 @@ remaining gaps:
 * ``GET /api/detectors/<name>/labels/<element_id>/preview`` — file path
   resolution, mimetype selection, text-mode JSON branch.
 
-Tests use a stub :class:`~vtsearch.labels.importers.LabelImporter` to
+Tests use a stub :class:`~vtscore.labels.importers.LabelImporter` to
 avoid touching the real filesystem importer chain.
 """
 
@@ -19,7 +19,7 @@ import shutil
 
 import pytest
 
-from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
+from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
 from vtsearch.settings import get_detectors_dir
 
 
@@ -36,7 +36,7 @@ def clean_detectors_dir():
 
 def _write_seed_detector(name: str = "labels-target", media_type: str = "audio") -> str:
     """Write a detector with an empty labelset and register it."""
-    from vtsearch.detectors.registry import register_detector, reset_for_tests
+    from vtscore.detectors.registry import register_detector, reset_for_tests
 
     reset_for_tests()
     _write_detector(
@@ -100,7 +100,7 @@ class TestImportLabelsRoute:
         """A ValueError from the importer surfaces as 400 with the message."""
         _write_seed_detector()
         # A file that doesn't exist → server_json_file raises ValueError.
-        from vtsearch.config import DATA_DIR
+        from vtscore.config import DATA_DIR
 
         # Place the path under DATA_DIR so validate_filepath_field accepts it.
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -117,7 +117,7 @@ class TestImportLabelsRoute:
 
     def test_happy_path_merges_labels(self, client, tmp_path, monkeypatch):
         """Successful import writes the entries into the on-disk labelset."""
-        from vtsearch.config import DATA_DIR
+        from vtscore.config import DATA_DIR
 
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         labels_file = DATA_DIR / "import_happy.json"
@@ -153,7 +153,7 @@ class TestImportLabelsRoute:
 
     def test_skips_invalid_label_values(self, client):
         """Entries whose ``label`` isn't 'good'/'bad' are counted as skipped."""
-        from vtsearch.config import DATA_DIR
+        from vtscore.config import DATA_DIR
 
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         labels_file = DATA_DIR / "import_invalid.json"
@@ -180,7 +180,7 @@ class TestImportLabelsRoute:
 
     def test_dedups_existing_md5_label_pair(self, client):
         """An entry whose (md5, label) pair is already present is skipped."""
-        from vtsearch.config import DATA_DIR
+        from vtscore.config import DATA_DIR
 
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         labels_file = DATA_DIR / "import_dupe.json"
@@ -259,7 +259,7 @@ class TestPreviewLabelRoute:
         def _fake_resolve(origin, origin_name="", filename=""):
             yield text_path
 
-        import vtsearch.detectors.labelset_elements as le_mod
+        import vtscore.detectors.labelset_elements as le_mod
 
         monkeypatch.setattr(le_mod, "resolve_element_to_path", _fake_resolve)
 
@@ -304,7 +304,7 @@ class TestPreviewLabelRoute:
         def _fake_resolve(origin, origin_name="", filename=""):
             yield img_path
 
-        import vtsearch.detectors.labelset_elements as le_mod
+        import vtscore.detectors.labelset_elements as le_mod
 
         monkeypatch.setattr(le_mod, "resolve_element_to_path", _fake_resolve)
 

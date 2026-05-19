@@ -2,7 +2,7 @@
 
 import pytest
 
-from vtsearch.media.processors import Detector, Extractor, Localizer, Processor
+from vtscore.media.processors import Detector, Extractor, Localizer, Processor
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ class TestExtractorAsProcessor:
 
 class TestOCRExtractor:
     def test_identity(self):
-        from vtsearch.media.image.ocr_extractor import OCRExtractor
+        from vtscore.media.image.ocr_extractor import OCRExtractor
 
         ext = OCRExtractor(name="test-ocr", language="en", threshold=0.6)
         assert ext.name == "test-ocr"
@@ -220,7 +220,7 @@ class TestOCRExtractor:
         assert isinstance(ext, Extractor)
 
     def test_to_dict(self):
-        from vtsearch.media.image.ocr_extractor import OCRExtractor
+        from vtscore.media.image.ocr_extractor import OCRExtractor
 
         ext = OCRExtractor(name="ocr1", language="fr", threshold=0.7)
         d = ext.to_dict()
@@ -231,7 +231,7 @@ class TestOCRExtractor:
         assert d["config"]["threshold"] == 0.7
 
     def test_from_config(self):
-        from vtsearch.media.image.ocr_extractor import OCRExtractor
+        from vtscore.media.image.ocr_extractor import OCRExtractor
 
         config = {"language": "de", "threshold": 0.8}
         ext = OCRExtractor.from_config("rebuilt", config)
@@ -240,14 +240,14 @@ class TestOCRExtractor:
         assert ext.threshold == 0.8
 
     def test_from_config_defaults(self):
-        from vtsearch.media.image.ocr_extractor import OCRExtractor
+        from vtscore.media.image.ocr_extractor import OCRExtractor
 
         ext = OCRExtractor.from_config("default", {})
         assert ext.language == "en"
         assert ext.threshold == 0.5
 
     def test_extract_returns_empty_when_no_clip_bytes(self):
-        from vtsearch.media.image.ocr_extractor import OCRExtractor
+        from vtscore.media.image.ocr_extractor import OCRExtractor
 
         ext = OCRExtractor(name="test", language="en")
         ext._model = True  # Skip model loading
@@ -262,7 +262,7 @@ class TestOCRExtractor:
 
 class TestSpeechExtractor:
     def test_identity(self):
-        from vtsearch.media.audio.speech_extractor import SpeechExtractor
+        from vtscore.media.audio.speech_extractor import SpeechExtractor
 
         ext = SpeechExtractor(name="test-speech", model_size="tiny", language="en")
         assert ext.name == "test-speech"
@@ -272,7 +272,7 @@ class TestSpeechExtractor:
         assert isinstance(ext, Extractor)
 
     def test_to_dict(self):
-        from vtsearch.media.audio.speech_extractor import SpeechExtractor
+        from vtscore.media.audio.speech_extractor import SpeechExtractor
 
         ext = SpeechExtractor(name="speech1", model_size="base", language="fr")
         d = ext.to_dict()
@@ -283,7 +283,7 @@ class TestSpeechExtractor:
         assert d["config"]["language"] == "fr"
 
     def test_from_config(self):
-        from vtsearch.media.audio.speech_extractor import SpeechExtractor
+        from vtscore.media.audio.speech_extractor import SpeechExtractor
 
         config = {"model_size": "small", "language": "es"}
         ext = SpeechExtractor.from_config("rebuilt", config)
@@ -292,14 +292,14 @@ class TestSpeechExtractor:
         assert ext.language == "es"
 
     def test_from_config_defaults(self):
-        from vtsearch.media.audio.speech_extractor import SpeechExtractor
+        from vtscore.media.audio.speech_extractor import SpeechExtractor
 
         ext = SpeechExtractor.from_config("default", {})
         assert ext.model_size == "tiny"
         assert ext.language is None
 
     def test_extract_returns_empty_when_no_clip_bytes(self):
-        from vtsearch.media.audio.speech_extractor import SpeechExtractor
+        from vtscore.media.audio.speech_extractor import SpeechExtractor
 
         ext = SpeechExtractor(name="test")
         ext._model = True  # Skip model loading
@@ -314,7 +314,7 @@ class TestSpeechExtractor:
 
 class TestFaceLocalizer:
     def test_identity(self):
-        from vtsearch.media.image.face_localizer import FaceLocalizer
+        from vtscore.media.image.face_localizer import FaceLocalizer
 
         loc = FaceLocalizer(name="test-face", threshold=0.6, model_selection=0)
         assert loc.name == "test-face"
@@ -324,7 +324,7 @@ class TestFaceLocalizer:
         assert isinstance(loc, Localizer)
 
     def test_to_dict(self):
-        from vtsearch.media.image.face_localizer import FaceLocalizer
+        from vtscore.media.image.face_localizer import FaceLocalizer
 
         loc = FaceLocalizer(name="face1", threshold=0.7, model_selection=1)
         d = loc.to_dict()
@@ -335,7 +335,7 @@ class TestFaceLocalizer:
         assert d["config"]["model_selection"] == 1
 
     def test_from_config(self):
-        from vtsearch.media.image.face_localizer import FaceLocalizer
+        from vtscore.media.image.face_localizer import FaceLocalizer
 
         config = {"threshold": 0.3, "model_selection": 0}
         loc = FaceLocalizer.from_config("rebuilt", config)
@@ -344,14 +344,14 @@ class TestFaceLocalizer:
         assert loc.model_selection == 0
 
     def test_from_config_defaults(self):
-        from vtsearch.media.image.face_localizer import FaceLocalizer
+        from vtscore.media.image.face_localizer import FaceLocalizer
 
         loc = FaceLocalizer.from_config("default", {})
         assert loc.threshold == 0.5
         assert loc.model_selection == 1
 
     def test_localize_returns_empty_when_no_clip_bytes(self):
-        from vtsearch.media.image.face_localizer import FaceLocalizer
+        from vtscore.media.image.face_localizer import FaceLocalizer
 
         loc = FaceLocalizer(name="test")
         loc._detector = True  # Skip model loading

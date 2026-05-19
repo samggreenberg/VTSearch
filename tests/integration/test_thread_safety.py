@@ -4,12 +4,12 @@ Validates that the ``_state_lock`` in ``vtsearch.state`` correctly
 serialises concurrent access to votes, click-times, label history, and
 autorun detectors.  Also validates the ``_settings_lock`` in
 ``vtsearch.settings`` and the ``_progress_lock`` in
-``vtsearch.detectors.labeling_progress``.
+``vtscore.detectors.labeling_progress``.
 """
 
 import threading
 
-from vtsearch.state.core import (
+from vtscore.state.core import (
     get_thread_dataset_context,
     get_thread_detector_context,
     set_thread_dataset_context,
@@ -26,9 +26,9 @@ from vtsearch.state import (
     vote_click_times,
 )
 import vtsearch.state as _state
-import vtsearch.state.core as _core
+import vtscore.state.core as _core
 import vtsearch.settings as _settings_mod
-import vtsearch.detectors.labeling_progress as _progress_mod
+import vtscore.detectors.labeling_progress as _progress_mod
 
 
 class TestStateLock:
@@ -412,9 +412,9 @@ class TestPluginRegistryLock:
     """Verify that PluginRegistry._ensure_discovered is thread-safe."""
 
     def test_registry_has_lock(self):
-        from vtsearch.plugins import PluginRegistry
+        from vtscore.plugins import PluginRegistry
 
-        reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter", eager=False)
+        reg = PluginRegistry(package="vtscore.exporters", sentinel="EXPORTER", label="exporter", eager=False)
         assert isinstance(reg._lock, type(threading.Lock()))
 
     def test_concurrent_first_access_discovers_once(self):
@@ -425,9 +425,9 @@ class TestPluginRegistryLock:
         on subsequent calls entirely, so the lock is uninteresting there.
         """
         from unittest.mock import patch
-        from vtsearch.plugins import PluginRegistry
+        from vtscore.plugins import PluginRegistry
 
-        reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter", eager=False)
+        reg = PluginRegistry(package="vtscore.exporters", sentinel="EXPORTER", label="exporter", eager=False)
         call_count = 0
         original_discover = reg._discover
 

@@ -19,14 +19,14 @@ class TestSymlinkedImporterDiscovery:
         import os
         import sys
 
-        from vtsearch.plugins import PluginRegistry
+        from vtscore.plugins import PluginRegistry
 
         # Create a minimal importer package outside the importers tree.
         ext_pkg = tmp_path / "my_custom_importer"
         ext_pkg.mkdir()
         (ext_pkg / "__init__.py").write_text(
-            "from vtsearch.datasets.importers.base import DatasetImporter\n"
-            "from vtsearch.plugins import PluginField\n"
+            "from vtscore.datasets.importers.base import DatasetImporter\n"
+            "from vtscore.plugins import PluginField\n"
             "\n"
             "class _Imp(DatasetImporter):\n"
             '    name = "symlink_test_imp"\n'
@@ -41,7 +41,7 @@ class TestSymlinkedImporterDiscovery:
         # Symlink it into the real importers directory.
         import importlib
 
-        parent = importlib.import_module("vtsearch.datasets.importers")
+        parent = importlib.import_module("vtscore.datasets.importers")
         assert parent.__file__ is not None
         pkg_dir = os.path.dirname(parent.__file__)
         link = os.path.join(pkg_dir, "symlink_test_pkg")
@@ -50,7 +50,7 @@ class TestSymlinkedImporterDiscovery:
         try:
             # Build a fresh registry so discovery runs from scratch.
             reg = PluginRegistry(
-                package="vtsearch.datasets.importers",
+                package="vtscore.datasets.importers",
                 sentinel="IMPORTER",
                 label="dataset importer",
             )
@@ -70,14 +70,14 @@ class TestSymlinkedImporterDiscovery:
         import os
         import sys
 
-        from vtsearch.plugins import PluginRegistry
+        from vtscore.plugins import PluginRegistry
 
         # Create a valid importer package.
         ext_pkg = tmp_path / "dotted_imp"
         ext_pkg.mkdir()
         (ext_pkg / "__init__.py").write_text(
-            "from vtsearch.datasets.importers.base import DatasetImporter\n"
-            "from vtsearch.plugins import PluginField\n"
+            "from vtscore.datasets.importers.base import DatasetImporter\n"
+            "from vtscore.plugins import PluginField\n"
             "\n"
             "class _Imp(DatasetImporter):\n"
             '    name = "dotted_symlink_test"\n'
@@ -92,7 +92,7 @@ class TestSymlinkedImporterDiscovery:
         # Symlink with a dotted name into the importers directory.
         import importlib
 
-        parent = importlib.import_module("vtsearch.datasets.importers")
+        parent = importlib.import_module("vtscore.datasets.importers")
         assert parent.__file__ is not None
         pkg_dir = os.path.dirname(parent.__file__)
         link = os.path.join(pkg_dir, "dx_uuid.symbolic_link")
@@ -100,7 +100,7 @@ class TestSymlinkedImporterDiscovery:
 
         try:
             reg = PluginRegistry(
-                package="vtsearch.datasets.importers",
+                package="vtscore.datasets.importers",
                 sentinel="IMPORTER",
                 label="dataset importer",
             )
@@ -119,13 +119,13 @@ class TestSymlinkedImporterDiscovery:
         import os
         import sys
 
-        from vtsearch.plugins import PluginRegistry
+        from vtscore.plugins import PluginRegistry
 
         ext_pkg = tmp_path / "attr_check_importer"
         ext_pkg.mkdir()
         (ext_pkg / "__init__.py").write_text(
-            "from vtsearch.datasets.importers.base import DatasetImporter\n"
-            "from vtsearch.plugins import PluginField\n"
+            "from vtscore.datasets.importers.base import DatasetImporter\n"
+            "from vtscore.plugins import PluginField\n"
             "\n"
             "class _Imp(DatasetImporter):\n"
             '    name = "attr_check_imp"\n'
@@ -139,7 +139,7 @@ class TestSymlinkedImporterDiscovery:
 
         import importlib
 
-        parent = importlib.import_module("vtsearch.datasets.importers")
+        parent = importlib.import_module("vtscore.datasets.importers")
         assert parent.__file__ is not None
         pkg_dir = os.path.dirname(parent.__file__)
         link = os.path.join(pkg_dir, "attr_check_pkg")
@@ -147,15 +147,15 @@ class TestSymlinkedImporterDiscovery:
 
         try:
             reg = PluginRegistry(
-                package="vtsearch.datasets.importers",
+                package="vtscore.datasets.importers",
                 sentinel="IMPORTER",
                 label="dataset importer",
             )
             names = [p.name for p in reg.list()]
             assert "attr_check_imp" in names
 
-            mod = sys.modules["vtsearch.datasets.importers.attr_check_pkg"]
-            assert mod.__name__ == "vtsearch.datasets.importers.attr_check_pkg"
+            mod = sys.modules["vtscore.datasets.importers.attr_check_pkg"]
+            assert mod.__name__ == "vtscore.datasets.importers.attr_check_pkg"
             # __path__ should be set (it's a package)
             assert hasattr(mod, "__path__")
             assert len(mod.__path__) == 1
@@ -171,7 +171,7 @@ class TestSymlinkedImporterDiscovery:
         import os
         import sys
 
-        from vtsearch.plugins import PluginRegistry
+        from vtscore.plugins import PluginRegistry
 
         # Create an external .py module with a sentinel.
         ext_module = tmp_path / "my_flat_source.py"
@@ -211,7 +211,7 @@ class TestRglobFollowSymlinks:
     """rglob_follow_symlinks should descend into symlinked directories."""
 
     def test_finds_files_through_symlinked_directory(self, tmp_path):
-        from vtsearch.security.path_validation import rglob_follow_symlinks
+        from vtscore.security.path_validation import rglob_follow_symlinks
 
         root = tmp_path / "root"
         root.mkdir()
@@ -229,7 +229,7 @@ class TestRglobFollowSymlinks:
         assert "b.wav" in names
 
     def test_no_matches_returns_empty(self, tmp_path):
-        from vtsearch.security.path_validation import rglob_follow_symlinks
+        from vtscore.security.path_validation import rglob_follow_symlinks
 
         root = tmp_path / "empty"
         root.mkdir()
@@ -240,7 +240,7 @@ class TestGlobTopLevelSymlinks:
     """glob_top_level should pick up symlinked files at the top level."""
 
     def test_finds_symlinked_file_at_top_level(self, tmp_path):
-        from vtsearch.security.path_validation import glob_top_level
+        from vtscore.security.path_validation import glob_top_level
 
         external = tmp_path / "external"
         external.mkdir()
@@ -262,7 +262,7 @@ class TestGlobTopLevelSymlinks:
         result set — only top-level *files* (real or symlinked) are
         returned.
         """
-        from vtsearch.security.path_validation import glob_top_level
+        from vtscore.security.path_validation import glob_top_level
 
         external = tmp_path / "external"
         external.mkdir()
@@ -307,12 +307,12 @@ class TestSymlinkedFolderImport:
         from contextlib import ExitStack
 
         stack = ExitStack()
-        stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
-        stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[mt._mock_embedder]))
+        stack.enter_context(mock.patch("vtscore.media.get_by_folder_name", return_value=mt))
+        stack.enter_context(mock.patch("vtscore.media.embedders_for_type", return_value=[mt._mock_embedder]))
         return stack
 
     def test_load_dataset_from_folder_follows_symlinks(self, tmp_path):
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         root = tmp_path / "root"
         root.mkdir()
@@ -334,7 +334,7 @@ class TestSymlinkedFolderImport:
         assert "linked/b.wav" in filenames
 
     def test_load_dataset_from_folder_chunked_follows_symlinks(self, tmp_path):
-        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+        from vtscore.datasets.loader import load_dataset_from_folder_chunked
 
         root = tmp_path / "root"
         root.mkdir()

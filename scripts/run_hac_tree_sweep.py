@@ -39,7 +39,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-from vtsearch.media.patch_embed import (
+from vtscore.media.patch_embed import (
     PatchEmbedOutput,
     RegionVector,
     build_region_tree,
@@ -71,8 +71,8 @@ def sample_places365_paths(places_dir: Path, n: int, seed: int) -> list[tuple[Pa
     explicitly because the on-disk layout is flat — the parent dir is
     just ``val_256/`` for everything.
     """
-    from vtsearch.datasets.metadata import load_places365_metadata
-    from vtsearch.media.image._demo_categories import PLACES365_CATEGORIES
+    from vtscore.datasets.metadata import load_places365_metadata
+    from vtscore.media.image._demo_categories import PLACES365_CATEGORIES
 
     metadata = load_places365_metadata(places_dir, PLACES365_CATEGORIES)
 
@@ -644,7 +644,7 @@ def main() -> None:
 
     # Download Places365 val_256 (501 MB) + label file on first run.
     if not (args.places_dir / "val_256").is_dir() or not (args.places_dir / "places365_val.txt").is_file():
-        from vtsearch.datasets.downloader import download_places365
+        from vtscore.datasets.downloader import download_places365
 
         print(f"downloading Places365 to {args.places_dir.parent}…")
         download_places365()

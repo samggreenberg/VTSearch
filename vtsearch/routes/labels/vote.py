@@ -27,7 +27,7 @@ from vtsearch.state import (
     snapshot_medias,
     vote_region_boxes,
 )
-from vtsearch.utils.hits import build_media_hit
+from vtscore.utils.hits import build_media_hit
 
 labels_bp = Blueprint(
     "labels",
@@ -84,7 +84,7 @@ def _annotate_corrections(result: dict, all_medias: dict) -> None:
 
 def _build_entry_metadata(media: dict) -> dict:
     """Return the metadata blob for one labelled media — display + origin + custom."""
-    from vtsearch.media import get as get_media_type  # noqa: PLC0415
+    from vtscore.media import get as get_media_type  # noqa: PLC0415
 
     try:
         meta = get_media_type(media.get("type", "audio")).display_metadata(media)
@@ -133,14 +133,14 @@ def _enrich_with_metadata(result: dict, all_medias: dict) -> None:
 @labels_bp.arguments(LabelsExportQuerySchema, location="query")
 @labels_bp.response(200, LabelsExportResponseSchema)
 def export_labels(query: dict):
-    """Export labels as a :class:`~vtsearch.datasets.labelset.LabelSet`.
+    """Export labels as a :class:`~vtscore.datasets.labelset.LabelSet`.
 
     Each label entry includes the element's ``origin`` and ``origin_name``
     so consumers know exactly where each labeled element came from. The
     format is a superset of the legacy export format — old consumers
     that only read ``md5`` and ``label`` keys continue to work unchanged.
     """
-    from vtsearch.datasets.labelset import LabelSet
+    from vtscore.datasets.labelset import LabelSet
 
     label_filter = query["label_filter"]
     goods, bads = _select_vote_pools(label_filter, query["goods_only"])
@@ -196,11 +196,11 @@ def import_labels(body: dict):
             apply_label(cid, label, region_box=region_box)
         applied += 1
 
-    from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
     sync_labels_to_loaded_detector()
 
-    from vtsearch.labels.sync import sync_to_labelset_source
+    from vtscore.labels.sync import sync_to_labelset_source
 
     sync_to_labelset_source()
 
@@ -286,11 +286,11 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
         },
     }
 
-    from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
     sync_labels_to_loaded_detector()
 
-    from vtsearch.labels.sync import sync_to_labelset_source
+    from vtscore.labels.sync import sync_to_labelset_source
 
     sync_to_labelset_source()
 

@@ -1,4 +1,4 @@
-"""Tests for vtsearch.detectors.resolver — media file resolution from origin trails."""
+"""Tests for vtscore.detectors.resolver — media file resolution from origin trails."""
 
 from pathlib import Path
 from unittest.mock import patch
@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from vtsearch.detectors.resolver import (
+from vtscore.detectors.resolver import (
     ResolvedLabels,
     resolve_file_from_origin,
     resolve_label_embeddings,
@@ -161,7 +161,7 @@ class TestResolveDemoOrigin:
 
     def test_resolves_demo_file(self, tmp_path):
         """Demo importer resolve_file finds files in the expected download dir."""
-        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+        from vtscore.datasets.importers.demo import DemoDatasetImporter
 
         # Create a fake download directory structure
         img_dir = tmp_path / "caltech-101" / "101_ObjectCategories"
@@ -173,7 +173,7 @@ class TestResolveDemoOrigin:
         origin = {"importer": "demo", "params": {"name": "caltech101_s"}}
 
         # Patch _SOURCE_DIRS to use our tmp_path
-        import vtsearch.datasets.importers.demo as demo_mod
+        import vtscore.datasets.importers.demo as demo_mod
 
         old = demo_mod._SOURCE_DIRS
         demo_mod._SOURCE_DIRS = {"caltech101": img_dir}
@@ -185,7 +185,7 @@ class TestResolveDemoOrigin:
 
     def test_returns_none_for_missing_file(self, tmp_path):
         """resolve_file returns None when the file doesn't exist on disk."""
-        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+        from vtscore.datasets.importers.demo import DemoDatasetImporter
 
         img_dir = tmp_path / "caltech-101" / "101_ObjectCategories"
         img_dir.mkdir(parents=True)
@@ -193,7 +193,7 @@ class TestResolveDemoOrigin:
         importer = DemoDatasetImporter()
         origin = {"importer": "demo", "params": {"name": "caltech101_s"}}
 
-        import vtsearch.datasets.importers.demo as demo_mod
+        import vtscore.datasets.importers.demo as demo_mod
 
         old = demo_mod._SOURCE_DIRS
         demo_mod._SOURCE_DIRS = {"caltech101": img_dir}
@@ -205,7 +205,7 @@ class TestResolveDemoOrigin:
 
     def test_returns_none_for_unknown_demo(self):
         """resolve_file returns None for an unrecognized demo dataset name."""
-        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+        from vtscore.datasets.importers.demo import DemoDatasetImporter
 
         importer = DemoDatasetImporter()
         origin = {"importer": "demo", "params": {"name": "nonexistent_dataset"}}
@@ -213,7 +213,7 @@ class TestResolveDemoOrigin:
 
     def test_resolves_flat_dir_with_category_prefix(self, tmp_path):
         """ESC-50 style: origin_name has category prefix but dir is flat."""
-        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+        from vtscore.datasets.importers.demo import DemoDatasetImporter
 
         # Create a flat audio directory (like ESC-50-master/audio/)
         audio_dir = tmp_path / "ESC-50-master" / "audio"
@@ -224,7 +224,7 @@ class TestResolveDemoOrigin:
         importer = DemoDatasetImporter()
         origin = {"importer": "demo", "params": {"name": "esc50_s"}}
 
-        import vtsearch.datasets.importers.demo as demo_mod
+        import vtscore.datasets.importers.demo as demo_mod
 
         old = demo_mod._SOURCE_DIRS
         demo_mod._SOURCE_DIRS = {"esc50": audio_dir}
@@ -237,7 +237,7 @@ class TestResolveDemoOrigin:
 
     def test_resolves_fold_dir_with_category_prefix(self, tmp_path):
         """UrbanSound8K style: origin_name has category prefix, files in fold subdirs."""
-        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+        from vtscore.datasets.importers.demo import DemoDatasetImporter
 
         # Create fold-based directory structure (like UrbanSound8K/audio/)
         audio_dir = tmp_path / "UrbanSound8K" / "audio"
@@ -249,7 +249,7 @@ class TestResolveDemoOrigin:
         importer = DemoDatasetImporter()
         origin = {"importer": "demo", "params": {"name": "urbansound8k_a"}}
 
-        import vtsearch.datasets.importers.demo as demo_mod
+        import vtscore.datasets.importers.demo as demo_mod
 
         old = demo_mod._SOURCE_DIRS
         demo_mod._SOURCE_DIRS = {"urbansound8k": audio_dir}
@@ -262,7 +262,7 @@ class TestResolveDemoOrigin:
 
     def test_basename_fallback_skips_ambiguous(self, tmp_path):
         """When multiple files share the same basename, fallback returns None."""
-        from vtsearch.datasets.importers.demo import DemoDatasetImporter
+        from vtscore.datasets.importers.demo import DemoDatasetImporter
 
         audio_dir = tmp_path / "audio"
         (audio_dir / "fold1").mkdir(parents=True)
@@ -273,7 +273,7 @@ class TestResolveDemoOrigin:
         importer = DemoDatasetImporter()
         origin = {"importer": "demo", "params": {"name": "esc50_s"}}
 
-        import vtsearch.datasets.importers.demo as demo_mod
+        import vtscore.datasets.importers.demo as demo_mod
 
         old = demo_mod._SOURCE_DIRS
         demo_mod._SOURCE_DIRS = {"esc50": audio_dir}
@@ -290,7 +290,7 @@ class TestResolveDemoOrigin:
         target = img_dir / "elephant" / "image_0012.jpg"
         target.write_bytes(b"fake_image")
 
-        import vtsearch.datasets.importers.demo as demo_mod
+        import vtscore.datasets.importers.demo as demo_mod
 
         old = demo_mod._SOURCE_DIRS
         demo_mod._SOURCE_DIRS = {"caltech101": img_dir}
@@ -306,7 +306,7 @@ class TestAudioDemoDatasetSources:
     """Verify all audio demo datasets have source fields for proper resolution."""
 
     def test_esc50_datasets_have_source(self):
-        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtscore.datasets.config import DEMO_DATASETS
 
         for ds_id in ("esc50_s", "esc50_m", "esc50_l"):
             assert ds_id in DEMO_DATASETS, f"{ds_id} not in DEMO_DATASETS"
@@ -314,7 +314,7 @@ class TestAudioDemoDatasetSources:
             assert DEMO_DATASETS[ds_id]["source"] == "esc50"
 
     def test_all_audio_demos_have_source(self):
-        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtscore.datasets.config import DEMO_DATASETS
 
         audio_demos = {k: v for k, v in DEMO_DATASETS.items() if v.get("media_type") == "audio"}
         for ds_id, info in audio_demos.items():
@@ -346,7 +346,7 @@ class TestDynamicImporterDispatch:
 
     def test_custom_importer_resolve_file_is_called(self, tmp_path):
         """A custom importer registered at runtime has its resolve_file called."""
-        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
         marker_file = tmp_path / "custom_media.wav"
         marker_file.write_bytes(b"custom_audio")
@@ -370,7 +370,7 @@ class TestDynamicImporterDispatch:
         custom = CustomImporter()
 
         # Temporarily register it in the importer registry
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         registry = get_importer.__self__
         registry._ensure_discovered()
@@ -397,7 +397,7 @@ class TestResolveLabelEmbeddings:
         ]
 
         fake_emb = np.zeros(512, dtype=np.float32)
-        with patch("vtsearch.detectors.resolver.embed_file", return_value=fake_emb):
+        with patch("vtscore.detectors.resolver.embed_file", return_value=fake_emb):
             result = resolve_label_embeddings(labels, "audio")
 
         assert result.resolved_count == 2
@@ -419,7 +419,7 @@ class TestResolveLabelEmbeddings:
         ]
 
         fake_emb = np.zeros(512, dtype=np.float32)
-        with patch("vtsearch.detectors.resolver.embed_file", return_value=fake_emb):
+        with patch("vtscore.detectors.resolver.embed_file", return_value=fake_emb):
             result = resolve_label_embeddings(labels, "audio")
 
         assert result.resolved_count == 1
@@ -445,7 +445,7 @@ class TestResolveLabelEmbeddings:
             {"label": "good", "origin": origin, "origin_name": "clip.wav", "md5": "aaa", "filename": "clip.wav"},
         ]
 
-        with patch("vtsearch.detectors.resolver.embed_file", return_value=None):
+        with patch("vtscore.detectors.resolver.embed_file", return_value=None):
             result = resolve_label_embeddings(labels, "audio")
 
         assert result.resolved_count == 0
@@ -463,8 +463,8 @@ class TestMultiFindCrossDatasetFallback:
         import pickle
         import time
 
-        from vtsearch.datasets.registry import register_dataset
-        from vtsearch.detectors.registry import register_detector
+        from vtscore.datasets.registry import register_dataset
+        from vtscore.detectors.registry import register_detector
 
         # Create a folder with media files for the detector's labels
         label_folder = tmp_path / "label_audio"
@@ -500,7 +500,7 @@ class TestMultiFindCrossDatasetFallback:
 
         # Create a detector with labels from label_folder
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder), "media_type": "audio"}}
-        from vtsearch.detectors.store import _detector_path, _write_detector
+        from vtscore.detectors.store import _detector_path, _write_detector
 
         tm_name = "Test Cross Detector"
         tm_path = _detector_path(tm_name)
@@ -548,7 +548,7 @@ class TestMultiFindCrossDatasetFallback:
                 return good_emb
             return bad_emb
 
-        with patch("vtsearch.detectors.resolver.embed_file", side_effect=fake_embed):
+        with patch("vtscore.detectors.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find",
                 data=json.dumps(
@@ -577,8 +577,8 @@ class TestMultiFindCrossDatasetFallback:
         import pickle
         import time
 
-        from vtsearch.datasets.registry import register_dataset
-        from vtsearch.detectors.registry import register_detector
+        from vtscore.datasets.registry import register_dataset
+        from vtscore.detectors.registry import register_detector
 
         # Create a target dataset pkl
         target_medias = {}
@@ -607,7 +607,7 @@ class TestMultiFindCrossDatasetFallback:
         (label_folder / "bad.wav").write_bytes(b"bad_content")
 
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder)}}
-        from vtsearch.detectors.store import _detector_path, _write_detector
+        from vtscore.detectors.store import _detector_path, _write_detector
 
         tm_name = "Test MT Detector"
         tm_data = {
@@ -649,7 +649,7 @@ class TestMultiFindCrossDatasetFallback:
         def fake_embed(path, media_type):
             return good_emb if "good" in Path(path).name else bad_emb
 
-        with patch("vtsearch.detectors.resolver.embed_file", side_effect=fake_embed):
+        with patch("vtscore.detectors.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find",
                 data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
@@ -666,8 +666,8 @@ class TestMultiFindCrossDatasetFallback:
         import pickle
         import time
 
-        from vtsearch.datasets.registry import register_dataset
-        from vtsearch.detectors.registry import register_detector
+        from vtscore.datasets.registry import register_dataset
+        from vtscore.detectors.registry import register_detector
 
         # Create a target dataset pkl
         target_medias = {}
@@ -696,7 +696,7 @@ class TestMultiFindCrossDatasetFallback:
         (label_folder / "bad.jpg").write_bytes(b"bad_content")
 
         label_origin = {"importer": "server_folder", "params": {"path": str(label_folder)}}
-        from vtsearch.detectors.store import _detector_path, _write_detector
+        from vtscore.detectors.store import _detector_path, _write_detector
 
         tm_name = "Test NR Detector"
         tm_data = {
@@ -738,7 +738,7 @@ class TestMultiFindCrossDatasetFallback:
         def fake_embed(path, media_type):
             return good_emb if "good" in Path(path).name else bad_emb
 
-        with patch("vtsearch.detectors.resolver.embed_file", side_effect=fake_embed):
+        with patch("vtscore.detectors.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find",
                 data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
@@ -778,9 +778,9 @@ class TestFindCheckLabels:
         import pickle
         import time
 
-        from vtsearch.datasets.registry import register_dataset
-        from vtsearch.detectors.registry import register_detector
-        from vtsearch.detectors.store import _detector_path, _write_detector
+        from vtscore.datasets.registry import register_dataset
+        from vtscore.detectors.registry import register_detector
+        from vtscore.detectors.store import _detector_path, _write_detector
 
         # Create a dataset where labels match by md5
         medias = {}
@@ -837,9 +837,9 @@ class TestFindCheckLabels:
         import pickle
         import time
 
-        from vtsearch.datasets.registry import register_dataset
-        from vtsearch.detectors.registry import register_detector
-        from vtsearch.detectors.store import _detector_path, _write_detector
+        from vtscore.datasets.registry import register_dataset
+        from vtscore.detectors.registry import register_detector
+        from vtscore.detectors.store import _detector_path, _write_detector
 
         # Create a target dataset (no overlap with labels)
         medias = {}
@@ -923,9 +923,9 @@ class TestFindCheckLabels:
         import pickle
         import time
 
-        from vtsearch.datasets.registry import register_dataset
-        from vtsearch.detectors.registry import register_detector
-        from vtsearch.detectors.store import _detector_path, _write_detector
+        from vtscore.datasets.registry import register_dataset
+        from vtscore.detectors.registry import register_detector
+        from vtscore.detectors.store import _detector_path, _write_detector
 
         # Create a target dataset (no overlap with labels)
         medias = {}
@@ -991,7 +991,7 @@ class TestFindCheckLabels:
         def fake_embed(path, media_type):
             return good_emb
 
-        with patch("vtsearch.detectors.resolver.embed_file", side_effect=fake_embed):
+        with patch("vtscore.detectors.resolver.embed_file", side_effect=fake_embed):
             resp = client.post(
                 "/api/find/check-labels",
                 data=json.dumps({"dataset_ids": [ds["id"]], "detector_ids": [model_entry["id"]]}),
@@ -1035,7 +1035,7 @@ class TestResolutionWarningLogs:
                 "filename": "b.wav",
             },
         ]
-        with caplog.at_level(logging.WARNING, logger="vtsearch.detectors.resolver"):
+        with caplog.at_level(logging.WARNING, logger="vtscore.detectors.resolver"):
             result = resolve_label_embeddings(labels, "audio")
 
         assert result.resolved_count == 0
@@ -1062,8 +1062,8 @@ class TestResolutionWarningLogs:
 
         dummy_emb = np.zeros(10)
         with (
-            caplog.at_level(logging.WARNING, logger="vtsearch.detectors.resolver"),
-            patch("vtsearch.detectors.resolver.embed_file", return_value=dummy_emb),
+            caplog.at_level(logging.WARNING, logger="vtscore.detectors.resolver"),
+            patch("vtscore.detectors.resolver.embed_file", return_value=dummy_emb),
         ):
             result = resolve_label_embeddings(labels, "audio")
 
@@ -1086,7 +1086,7 @@ class TestResolveFileContextLifetime:
     def test_source_cleanup_deferred_to_context_exit(self, tmp_path, monkeypatch):
         from contextlib import ExitStack
 
-        from vtsearch.detectors import resolver as resolver_mod
+        from vtscore.detectors import resolver as resolver_mod
 
         staging = tmp_path / "staging"
         staging.mkdir()
@@ -1137,7 +1137,7 @@ class TestResolveFileContextLifetime:
         """
         from contextlib import ExitStack
 
-        from vtsearch.detectors import resolver as resolver_mod
+        from vtscore.detectors import resolver as resolver_mod
 
         cleaned: list[bool] = []
 

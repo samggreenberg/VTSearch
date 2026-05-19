@@ -8086,7 +8086,7 @@
     },
     "/api/example-sort-origin": {
       "post": {
-        "description": "Accepts a JSON body with ``origin`` (an origin dict as stored on medias)\nand ``key`` (the item key / relative path within the source).  The file\nis fetched via the :class:`~vtsearch.datasets.sources.base.MediaSource`\nabstraction, embedded, and used for cosine-similarity sorting.\n\nExample request::\n\n    {\n        \"origin\": {\"importer\": \"server_folder\", \"params\": {\"path\": \"/data/sounds\"}},\n        \"key\": \"subdir/audio123.wav\"\n    }",
+        "description": "Accepts a JSON body with ``origin`` (an origin dict as stored on medias)\nand ``key`` (the item key / relative path within the source).  The file\nis fetched via the :class:`~vtscore.datasets.sources.base.MediaSource`\nabstraction, embedded, and used for cosine-similarity sorting.\n\nExample request::\n\n    {\n        \"origin\": {\"importer\": \"server_folder\", \"params\": {\"path\": \"/data/sounds\"}},\n        \"key\": \"subdir/audio123.wav\"\n    }",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8795,7 +8795,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Export labels as a :class:`~vtsearch.datasets.labelset.LabelSet`.",
+        "summary": "Export labels as a :class:`~vtscore.datasets.labelset.LabelSet`.",
         "tags": [
           "labels"
         ]
@@ -9251,7 +9251,7 @@
     },
     "/api/medias/{media_id}/media": {
       "get": {
-        "description": "Determines the media type from the media item's ``\"type\"`` field and\ndelegates to the registered :class:`~vtsearch.media.base.MediaType`'s\n:meth:`~vtsearch.media.base.MediaType.media_response` method. This\nendpoint works for all current and future media types without\nmodification. Response body is either binary (image/audio/video bytes\nwith the appropriate mimetype) or JSON (text content); the spec leaves\nthe success body undescribed.",
+        "description": "Determines the media type from the media item's ``\"type\"`` field and\ndelegates to the registered :class:`~vtscore.media.base.MediaType`'s\n:meth:`~vtscore.media.base.MediaType.media_response` method. This\nendpoint works for all current and future media types without\nmodification. Response body is either binary (image/audio/video bytes\nwith the appropriate mimetype) or JSON (text content); the spec leaves\nthe success body undescribed.",
         "responses": {
           "400": {
             "description": "Media has an unsupported media type."
@@ -10368,7 +10368,7 @@
     },
     "/readyz": {
       "get": {
-        "description": "Sub-checks:\n\n* ``data_dir`` \u2014 :data:`vtsearch.config.DATA_DIR` exists and is\n  writable (the app needs this for embeddings, model cache, settings).\n* ``models`` \u2014 every embedder implied by the dataset/detector\n  registries is warm (``_model is not None``).",
+        "description": "Sub-checks:\n\n* ``data_dir`` \u2014 :data:`vtscore.config.DATA_DIR` exists and is\n  writable (the app needs this for embeddings, model cache, settings).\n* ``models`` \u2014 every embedder implied by the dataset/detector\n  registries is warm (``_model is not None``).",
         "responses": {
           "200": {
             "content": {

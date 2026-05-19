@@ -38,7 +38,7 @@ import time
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.detectors.store import (
+from vtscore.detectors.store import (
     _detector_path,
     _read_detector,
     _write_detector,
@@ -233,9 +233,9 @@ def rename_detector(body: dict, name: str):
         old_path.unlink(missing_ok=True)
 
     # Update the detector registry entry that references this detector
-    from vtsearch.detectors.labelset_rename import detect_pending_labelset_move
-    from vtsearch.detectors.registry import find_by_name, rename_detector as _rename_in_registry
-    from vtsearch.state.core import get_detector_context
+    from vtscore.detectors.labelset_rename import detect_pending_labelset_move
+    from vtscore.detectors.registry import find_by_name, rename_detector as _rename_in_registry
+    from vtscore.state.core import get_detector_context
 
     reg_entry = find_by_name(name)
     pending_move: dict[str, str] | None = None
@@ -338,7 +338,7 @@ def combine_detectors(body: dict):  # noqa: C901
     if new_path.exists():
         abort(409, message=f"A detector named '{new_name}' already exists")
 
-    from vtsearch.datasets.labelset import LabelSet
+    from vtscore.datasets.labelset import LabelSet
 
     sources: list[dict] = []
     for src_name in names:

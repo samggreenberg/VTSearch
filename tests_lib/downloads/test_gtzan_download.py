@@ -36,7 +36,7 @@ def _make_gtzan_tar(tmp_path: Path) -> Path:
 class TestDownloadGtzan:
     def test_returns_genres_directory(self, tmp_path):
         """download_gtzan returns the genres/ directory path."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = _make_gtzan_tar(tmp_path)
 
@@ -57,7 +57,7 @@ class TestDownloadGtzan:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If the genres directory already exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         genres_dir = tmp_path / "gtzan" / "genres" / "blues"
         genres_dir.mkdir(parents=True)
@@ -87,7 +87,7 @@ class TestDownloadGtzan:
 class TestDownloadSpeechCommandsV2:
     def test_returns_extract_directory(self, tmp_path):
         """download_speech_commands_v2 returns the extract directory."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = tmp_path / "speech_commands_v0.02.tar.gz"
 
@@ -118,7 +118,7 @@ class TestDownloadSpeechCommandsV2:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If the extract directory already exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "speech_commands_v2"
         (extract_dir / "yes").mkdir(parents=True)
@@ -148,7 +148,7 @@ class TestDownloadSpeechCommandsV2:
 class TestDownloadUrbansound8k:
     def test_returns_extract_directory(self, tmp_path):
         """download_urbansound8k returns the UrbanSound8K directory."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         tar_path = tmp_path / "UrbanSound8K.tar.gz"
 
@@ -182,7 +182,7 @@ class TestDownloadUrbansound8k:
 
     def test_cached_extraction_skips_download(self, tmp_path):
         """If the extract directory already exists, no download is triggered."""
-        from vtsearch.datasets import downloader as dl_module
+        from vtscore.datasets import downloader as dl_module
 
         extract_dir = tmp_path / "UrbanSound8K"
         (extract_dir / "audio" / "fold1").mkdir(parents=True)
@@ -212,7 +212,7 @@ class TestDownloadUrbansound8k:
 class TestLoadAudioMetadataFromFolders:
     def test_scans_category_subdirectories(self, tmp_path):
         """Finds WAV files in matching category subdirectories."""
-        from vtsearch.datasets.loader import load_audio_metadata_from_folders
+        from vtscore.datasets.loader import load_audio_metadata_from_folders
 
         for genre in ("blues", "rock"):
             d = tmp_path / genre
@@ -233,7 +233,7 @@ class TestLoadAudioMetadataFromFolders:
 
     def test_ignores_non_audio_files(self, tmp_path):
         """Non-audio files (like .txt) are not included."""
-        from vtsearch.datasets.loader import load_audio_metadata_from_folders
+        from vtscore.datasets.loader import load_audio_metadata_from_folders
 
         d = tmp_path / "blues"
         d.mkdir()
@@ -252,7 +252,7 @@ class TestLoadAudioMetadataFromFolders:
 class TestLoadUrbansound8kMetadata:
     def test_loads_csv_metadata(self, tmp_path):
         """Reads UrbanSound8K.csv and maps filenames to metadata."""
-        from vtsearch.datasets.loader import load_urbansound8k_metadata
+        from vtscore.datasets.loader import load_urbansound8k_metadata
 
         meta_dir = tmp_path / "metadata"
         meta_dir.mkdir()
@@ -295,9 +295,9 @@ class TestLoadDemoSourceGtzan:
 
     def test_gtzan_source_populates_clips(self, tmp_path):
         """load_demo_source with source='gtzan' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.audio.media_type import AudioMediaType
 
         fake_metadata = {
             "blues/blues.00001.wav": {"category": "blues", "path": tmp_path / "blues.00001.wav"},
@@ -333,9 +333,9 @@ class TestLoadDemoSourceGtzan:
 
     def test_gtzan_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits files per category."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.audio.media_type import AudioMediaType
 
         fake_metadata = {}
         for i in range(10):
@@ -380,9 +380,9 @@ class TestLoadDemoSourceSpeechCommands:
 
     def test_speech_commands_source_populates_clips(self, tmp_path):
         """load_demo_source with source='speech_commands_v2' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.audio.media_type import AudioMediaType
 
         fake_metadata = {
             "yes/u1.wav": {"category": "yes", "path": tmp_path / "u1.wav"},
@@ -430,9 +430,9 @@ class TestLoadDemoSourceUrbansound8k:
 
     def test_urbansound8k_source_populates_clips(self, tmp_path):
         """load_demo_source with source='urbansound8k' fills the clips dict."""
-        from vtsearch.datasets import downloader as dl_module
-        from vtsearch.datasets import loader as loader_module
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.audio.media_type import AudioMediaType
 
         f1 = tmp_path / "100032-3-0-0.wav"
         f2 = tmp_path / "200032-8-0-0.wav"
@@ -469,7 +469,7 @@ class TestLoadDemoSourceUrbansound8k:
 
     def test_unsupported_source_still_raises(self):
         """Non-existent sources still raise ValueError."""
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         mt = AudioMediaType()
         import pytest

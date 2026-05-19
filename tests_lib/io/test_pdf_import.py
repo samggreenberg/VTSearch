@@ -40,7 +40,7 @@ class TestRenderPdfPages:
         pdf = tmp_path / "doc.pdf"
         _create_test_pdf(pdf, num_pages=3)
 
-        from vtsearch.datasets.pdf import render_pdf_pages
+        from vtscore.datasets.pdf import render_pdf_pages
 
         pages = render_pdf_pages(pdf)
         assert len(pages) == 3
@@ -49,7 +49,7 @@ class TestRenderPdfPages:
         pdf = tmp_path / "mydoc.pdf"
         _create_test_pdf(pdf, num_pages=2)
 
-        from vtsearch.datasets.pdf import render_pdf_pages
+        from vtscore.datasets.pdf import render_pdf_pages
 
         pages = render_pdf_pages(pdf)
         assert pages[0][0] == "mydoc.pdf-1"
@@ -61,7 +61,7 @@ class TestRenderPdfPages:
         pdf = tmp_path / "test.pdf"
         _create_test_pdf(pdf, num_pages=1)
 
-        from vtsearch.datasets.pdf import render_pdf_pages
+        from vtscore.datasets.pdf import render_pdf_pages
 
         pages = render_pdf_pages(pdf)
         assert isinstance(pages[0][1], Image.Image)
@@ -70,7 +70,7 @@ class TestRenderPdfPages:
         pdf = tmp_path / "test.pdf"
         _create_test_pdf(pdf, num_pages=1)
 
-        from vtsearch.datasets.pdf import render_pdf_pages
+        from vtscore.datasets.pdf import render_pdf_pages
 
         pages = render_pdf_pages(pdf)
         assert pages[0][1].mode == "RGB"
@@ -79,7 +79,7 @@ class TestRenderPdfPages:
         pdf = tmp_path / "test.pdf"
         _create_test_pdf(pdf, num_pages=1)
 
-        from vtsearch.datasets.pdf import render_pdf_pages
+        from vtscore.datasets.pdf import render_pdf_pages
 
         pages_low = render_pdf_pages(pdf, dpi=72)
         pages_high = render_pdf_pages(pdf, dpi=300)
@@ -91,7 +91,7 @@ class TestRenderPdfPages:
         pdf = tmp_path / "single.pdf"
         _create_test_pdf(pdf, num_pages=1)
 
-        from vtsearch.datasets.pdf import render_pdf_pages
+        from vtscore.datasets.pdf import render_pdf_pages
 
         pages = render_pdf_pages(pdf)
         assert len(pages) == 1
@@ -126,13 +126,13 @@ class TestFolderImporterPdf:
         from contextlib import ExitStack
 
         stack = ExitStack()
-        stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
-        stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]))
+        stack.enter_context(mock.patch("vtscore.media.get_by_folder_name", return_value=mt))
+        stack.enter_context(mock.patch("vtscore.media.embedders_for_type", return_value=[emb]))
         return stack
 
     def test_pdf_pages_added_to_medias(self, tmp_path):
         """PDFs in an image folder should produce per-page medias."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         pdf = tmp_path / "doc.pdf"
         _create_test_pdf(pdf, num_pages=2)
@@ -151,7 +151,7 @@ class TestFolderImporterPdf:
 
     def test_pdf_origin_is_pdf_importer(self, tmp_path):
         """PDF-derived medias should have origin importer='pdf'."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         pdf = tmp_path / "report.pdf"
         _create_test_pdf(pdf, num_pages=1)
@@ -170,7 +170,7 @@ class TestFolderImporterPdf:
 
     def test_pdf_page_filenames(self, tmp_path):
         """PDF page filenames should follow the name-N pattern."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         pdf = tmp_path / "slides.pdf"
         _create_test_pdf(pdf, num_pages=3)
@@ -188,7 +188,7 @@ class TestFolderImporterPdf:
 
     def test_pdf_only_folder(self, tmp_path):
         """A folder with only PDFs (no regular images) should still work."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         pdf = tmp_path / "only.pdf"
         _create_test_pdf(pdf, num_pages=2)
@@ -229,10 +229,10 @@ class TestFolderImporterPdf:
             wf.writeframes(struct.pack("<" + "h" * 100, *([0] * 100)))
         (tmp_path / "tone.wav").write_bytes(buf.getvalue())
 
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         medias: dict = {}
-        with mock.patch("vtsearch.media.get_by_folder_name", return_value=mt):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             IMPORTER.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         # Only the WAV should be loaded, not the PDF
@@ -241,7 +241,7 @@ class TestFolderImporterPdf:
 
     def test_pdf_thin_mode_no_media_bytes(self, tmp_path):
         """In thin mode, PDF-derived medias should have media_bytes=None."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         pdf = tmp_path / "doc.pdf"
         _create_test_pdf(pdf, num_pages=1)
@@ -259,7 +259,7 @@ class TestFolderImporterPdf:
 
     def test_pdf_media_has_image_type(self, tmp_path):
         """PDF-derived medias should have type='image'."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         pdf = tmp_path / "doc.pdf"
         _create_test_pdf(pdf, num_pages=1)
@@ -278,7 +278,7 @@ class TestFolderImporterPdf:
 
     def test_pdf_media_has_width_height(self, tmp_path):
         """PDF-derived medias should have non-None width and height."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         pdf = tmp_path / "doc.pdf"
         _create_test_pdf(pdf, num_pages=1)
@@ -299,7 +299,7 @@ class TestFolderImporterPdf:
 
     def test_pdf_media_has_md5(self, tmp_path):
         """PDF-derived medias should have a valid MD5 hash."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         pdf = tmp_path / "doc.pdf"
         _create_test_pdf(pdf, num_pages=1)
@@ -317,7 +317,7 @@ class TestFolderImporterPdf:
 
     def test_multiple_pdfs_in_folder(self, tmp_path):
         """Multiple PDFs should all be expanded."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         _create_test_pdf(tmp_path / "a.pdf", num_pages=2)
         _create_test_pdf(tmp_path / "b.pdf", num_pages=3)
@@ -334,7 +334,7 @@ class TestFolderImporterPdf:
 
     def test_pdf_origin_name_matches_filename(self, tmp_path):
         """origin_name should equal the page filename."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         _create_test_pdf(tmp_path / "doc.pdf", num_pages=1)
 
@@ -375,7 +375,7 @@ class TestPdfSymlinkDiscovery:
         """PDFs inside a symlinked subdirectory should be found and rendered."""
         from contextlib import ExitStack
 
-        from vtsearch.datasets.importers.server_folder import _load_pdf_images
+        from vtscore.datasets.importers.server_folder import _load_pdf_images
 
         root = tmp_path / "root"
         root.mkdir()
@@ -391,9 +391,9 @@ class TestPdfSymlinkDiscovery:
         medias: dict = {}
 
         with ExitStack() as stack:
-            stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
-            stack.enter_context(mock.patch("vtsearch.media.get_embedder", return_value=emb))
-            stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]))
+            stack.enter_context(mock.patch("vtscore.media.get_by_folder_name", return_value=mt))
+            stack.enter_context(mock.patch("vtscore.media.get_embedder", return_value=emb))
+            stack.enter_context(mock.patch("vtscore.media.embedders_for_type", return_value=[emb]))
             _load_pdf_images(root, medias, embedder_name="siglip")
 
         assert len(medias) == 2

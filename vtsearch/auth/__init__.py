@@ -197,7 +197,7 @@ class ApiKeyLoginProvider(LoginProvider):
 
     def __init__(self, keys_file: Path | None = None) -> None:
         if keys_file is None:
-            from vtsearch.config import DATA_DIR
+            from vtscore.config import DATA_DIR
 
             keys_file = DATA_DIR / "api_keys.json"
         self._keys_file: Path = Path(keys_file)
@@ -368,7 +368,7 @@ def get_user_data_dir(username: str | None = None) -> Path:
     :class:`DefaultLoginProvider` this always returns ``DATA_DIR``
     unchanged.
     """
-    from vtsearch.config import DATA_DIR
+    from vtscore.config import DATA_DIR
 
     if username is None:
         username = get_current_user()

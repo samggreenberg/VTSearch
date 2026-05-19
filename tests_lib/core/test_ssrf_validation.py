@@ -1,6 +1,6 @@
 """Tests for SSRF URL validation.
 
-Verifies that :func:`vtsearch.security.url_validation.validate_url` blocks
+Verifies that :func:`vtscore.security.url_validation.validate_url` blocks
 requests to private/internal network addresses while allowing public URLs.
 Also verifies that the HTTP archive importer and webhook exporter both
 call the validator.
@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from vtsearch.security.url_validation import validate_url
+from vtscore.security.url_validation import validate_url
 
 
 # ---------------------------------------------------------------------------
@@ -38,12 +38,12 @@ class TestValidateUrlScheme:
             validate_url("javascript:alert(1)")
 
     def test_accepts_http(self):
-        with mock.patch("vtsearch.security.url_validation.socket.getaddrinfo") as mock_gai:
+        with mock.patch("vtscore.security.url_validation.socket.getaddrinfo") as mock_gai:
             mock_gai.return_value = [(2, 1, 0, "", ("93.184.216.34", 0))]
             assert validate_url("http://example.com") == "http://example.com"
 
     def test_accepts_https(self):
-        with mock.patch("vtsearch.security.url_validation.socket.getaddrinfo") as mock_gai:
+        with mock.patch("vtscore.security.url_validation.socket.getaddrinfo") as mock_gai:
             mock_gai.return_value = [(2, 1, 0, "", ("93.184.216.34", 0))]
             assert validate_url("https://example.com") == "https://example.com"
 
@@ -71,7 +71,7 @@ class TestValidateUrlHostname:
 class TestValidateUrlPrivateIPs:
     def _mock_resolve(self, ip):
         return mock.patch(
-            "vtsearch.security.url_validation.socket.getaddrinfo",
+            "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", (ip, 0))],
         )
 
@@ -107,7 +107,7 @@ class TestValidateUrlPrivateIPs:
 
     def test_blocks_ipv6_loopback(self):
         with mock.patch(
-            "vtsearch.security.url_validation.socket.getaddrinfo",
+            "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(10, 1, 0, "", ("::1", 0, 0, 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
@@ -122,7 +122,7 @@ class TestValidateUrlPrivateIPs:
         import socket
 
         with mock.patch(
-            "vtsearch.security.url_validation.socket.getaddrinfo",
+            "vtscore.security.url_validation.socket.getaddrinfo",
             side_effect=socket.gaierror("Name or service not known"),
         ):
             with pytest.raises(ValueError, match="Could not resolve"):
@@ -136,7 +136,7 @@ class TestValidateUrlPrivateIPs:
     def test_checks_all_resolved_addresses(self):
         """If a hostname has multiple A records, block if ANY is private."""
         with mock.patch(
-            "vtsearch.security.url_validation.socket.getaddrinfo",
+            "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[
                 (2, 1, 0, "", ("93.184.216.34", 0)),
                 (2, 1, 0, "", ("127.0.0.1", 0)),
@@ -155,29 +155,29 @@ class TestHttpArchiveImporterSSRF:
     """Verify that the HTTP archive importer validates URLs before downloading."""
 
     def test_run_rejects_private_url(self):
-        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
         with mock.patch(
-            "vtsearch.security.url_validation.socket.getaddrinfo",
+            "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("127.0.0.1", 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
                 imp.run({"url": "http://localhost:8080/secret.zip", "media_type": "audio"}, {})
 
     def test_run_rejects_non_http_scheme(self):
-        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
         with pytest.raises(ValueError, match="http or https"):
             imp.run({"url": "file:///etc/passwd", "media_type": "audio"}, {})
 
     def test_download_and_extract_rejects_private_url(self):
-        from vtsearch.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
 
         imp = HttpArchiveDatasetImporter()
         with mock.patch(
-            "vtsearch.security.url_validation.socket.getaddrinfo",
+            "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("10.0.0.5", 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
@@ -193,25 +193,25 @@ class TestWebhookExporterSSRF:
     """Verify that the webhook exporter validates URLs before POSTing."""
 
     def test_export_rejects_private_url(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         with mock.patch(
-            "vtsearch.security.url_validation.socket.getaddrinfo",
+            "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("192.168.1.1", 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
                 exp.export({}, {"url": "http://192.168.1.1:9090/hook"})
 
     def test_export_rejects_non_http_scheme(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         with pytest.raises(ValueError, match="http or https"):
             exp.export({}, {"url": "ftp://evil.example/hook"})
 
     def test_export_allows_public_url(self):
-        from vtsearch.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookLabelsetExporter
 
         exp = WebhookLabelsetExporter()
         mock_resp = mock.MagicMock()
@@ -219,10 +219,10 @@ class TestWebhookExporterSSRF:
         mock_resp.raise_for_status.return_value = None
 
         with mock.patch(
-            "vtsearch.security.url_validation.socket.getaddrinfo",
+            "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
         ):
-            with mock.patch("vtsearch.exporters.webhook.requests.post", return_value=mock_resp):
+            with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
                 result = exp.export(
                     {"detectors_run": 0, "results": {}},
                     {"url": "https://example.com/hook"},

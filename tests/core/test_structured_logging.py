@@ -60,7 +60,7 @@ def _emit_with_empty_context(stream: io.StringIO, fmt: str, fn):
     ``_test_default`` contexts; tests that assert *absence* of context need
     those out of the way."""
     from vtsearch.auth import set_thread_user
-    from vtsearch.state.core import (
+    from vtscore.state.core import (
         get_thread_dataset_context,
         get_thread_detector_context,
         set_thread_dataset_context,
@@ -149,7 +149,7 @@ class TestTextFormatter:
 
     def test_basic_line_with_thread_local_context(self):
         """When thread-local context is set, the bracketed tags appear."""
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DatasetContext,
             get_thread_dataset_context,
             get_thread_detector_context,
@@ -264,7 +264,7 @@ class TestThreadLocalContext:
         assert captured[0]["user"] == "alice"
 
     def test_thread_local_dataset_and_detector_id(self):
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DatasetContext,
             DetectorContext,
             set_thread_dataset_context,

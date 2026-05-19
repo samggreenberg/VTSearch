@@ -17,7 +17,7 @@ from flask import request, send_file
 from flask_smorest import Blueprint, abort
 from werkzeug.exceptions import HTTPException
 
-from vtsearch.config import DATA_DIR
+from vtscore.config import DATA_DIR
 from vtsearch.routes._shared import format_exception_detail
 from vtsearch.schemas.media import (
     ExampleSortByIdRequestSchema,
@@ -124,7 +124,7 @@ def upload_server_media_file():
         if isinstance(crop_params, dict):
             media_type = request.form.get("media_type", "").strip()
             try:
-                from vtsearch.media.cropping import crop_file_bytes
+                from vtscore.media.cropping import crop_file_bytes
 
                 cropped = crop_file_bytes(dest, media_type, crop_params)
                 dest.write_bytes(cropped)
@@ -169,7 +169,7 @@ def server_media_file_thumbnail(filename: str):
         )
 
     if media_type == "audio":
-        from vtsearch.media.audio.media_type import generate_waveform_thumbnail_from_file
+        from vtscore.media.audio.media_type import generate_waveform_thumbnail_from_file
 
         thumb = generate_waveform_thumbnail_from_file(file_path)
         if thumb is None:
@@ -181,7 +181,7 @@ def server_media_file_thumbnail(filename: str):
         )
 
     if media_type == "video":
-        from vtsearch.media.video.media_type import generate_video_thumbnail_from_file
+        from vtscore.media.video.media_type import generate_video_thumbnail_from_file
 
         thumb = generate_video_thumbnail_from_file(file_path)
         if thumb is None:
@@ -255,7 +255,7 @@ def example_sort_server(body: dict):
             # Crop into a temp file so the saved server-side example is unchanged.
             import uuid
 
-            from vtsearch.config import DATA_DIR
+            from vtscore.config import DATA_DIR
 
             DATA_DIR.mkdir(exist_ok=True)
             tmp = DATA_DIR / f"temp_example_{uuid.uuid4().hex}{file_path.suffix or '.bin'}"
@@ -291,7 +291,7 @@ def example_sort_origin(body: dict):
 
     Accepts a JSON body with ``origin`` (an origin dict as stored on medias)
     and ``key`` (the item key / relative path within the source).  The file
-    is fetched via the :class:`~vtsearch.datasets.sources.base.MediaSource`
+    is fetched via the :class:`~vtscore.datasets.sources.base.MediaSource`
     abstraction, embedded, and used for cosine-similarity sorting.
 
     Example request::
@@ -309,7 +309,7 @@ def example_sort_origin(body: dict):
     if not snapshot_medias():
         abort(400, message="No medias loaded")
 
-    from vtsearch.datasets.sources import get_source_for_origin
+    from vtscore.datasets.sources import get_source_for_origin
 
     source = get_source_for_origin(origin)
     if source is None:
@@ -327,7 +327,7 @@ def example_sort_origin(body: dict):
         if crop_params:
             import uuid
 
-            from vtsearch.config import DATA_DIR
+            from vtscore.config import DATA_DIR
 
             DATA_DIR.mkdir(exist_ok=True)
             tmp = DATA_DIR / f"temp_example_{uuid.uuid4().hex}{file_path.suffix or '.bin'}"
@@ -483,7 +483,7 @@ def server_media_file_from_media_id(body: dict):
     if crop_params:
         media_type = media.get("type", "")
         try:
-            from vtsearch.media.cropping import crop_file_bytes
+            from vtscore.media.cropping import crop_file_bytes
 
             DATA_DIR.mkdir(exist_ok=True)
             tmp = DATA_DIR / f"temp_seed_{uuid.uuid4().hex}{_media_extension(media)}"

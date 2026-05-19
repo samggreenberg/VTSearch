@@ -50,7 +50,7 @@ class TestDetectorContextStore:
     """Register, unregister, and list detector contexts."""
 
     def test_register_and_get(self):
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             get_detector_context,
             register_detector_context,
@@ -61,13 +61,13 @@ class TestDetectorContextStore:
         assert get_detector_context("det_reg") is ctx
 
     def test_list_loaded(self):
-        from vtsearch.state.core import list_loaded_detector_ids
+        from vtscore.state.core import list_loaded_detector_ids
 
         ids = list_loaded_detector_ids()
         assert "_test_default_det" in ids
 
     def test_unregister_removes_context(self):
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             get_detector_context,
             register_detector_context,
@@ -81,7 +81,7 @@ class TestDetectorContextStore:
         assert get_detector_context("det_unreg") is None
 
     def test_unregister_clears_active_if_match(self):
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             get_thread_detector_context,
             register_detector_context,
@@ -96,7 +96,7 @@ class TestDetectorContextStore:
         assert get_thread_detector_context() is None
 
     def test_clear_all_detector_contexts(self):
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             clear_all_detector_contexts,
             list_loaded_detector_ids,
@@ -111,8 +111,8 @@ class TestDetectorContextStore:
     def test_register_clears_progress_cache(self):
         """Registering a new detector must clear the progress cache so stale
         training indicators from a previous detector don't carry over."""
-        from vtsearch.detectors.labeling_progress import _cached_steps, clear_progress_cache
-        from vtsearch.state.core import DetectorContext, register_detector_context
+        from vtscore.detectors.labeling_progress import _cached_steps, clear_progress_cache
+        from vtscore.state.core import DetectorContext, register_detector_context
 
         # Seed the cache with a fake entry (simulating a previous detector's training)
         clear_progress_cache()
@@ -126,8 +126,8 @@ class TestDetectorContextStore:
     def test_unregister_clears_progress_cache(self):
         """Unregistering a detector must clear the progress cache so stale
         training indicators don't leak to the next detector."""
-        from vtsearch.detectors.labeling_progress import _cached_steps
-        from vtsearch.state.core import (
+        from vtscore.detectors.labeling_progress import _cached_steps
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             unregister_detector_context,
@@ -156,7 +156,7 @@ class TestVoteIsolation:
             bad_votes,
             good_votes,
         )
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -187,7 +187,7 @@ class TestVoteIsolation:
             good_votes,
             toggle_vote,
         )
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -206,7 +206,7 @@ class TestVoteIsolation:
             clear_votes,
             good_votes,
         )
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -238,7 +238,7 @@ class TestModelRegistryMultiLoaded:
     """Model registry supports multiple loaded models."""
 
     def test_multiple_models_loaded(self):
-        from vtsearch.detectors.registry import (
+        from vtscore.detectors.registry import (
             add_loaded_detector_id,
             get_loaded_detector_ids,
             is_detector_loaded,
@@ -251,7 +251,7 @@ class TestModelRegistryMultiLoaded:
         assert len(get_loaded_detector_ids()) == 2
 
     def test_remove_loaded_removes_from_set(self):
-        from vtsearch.detectors.registry import (
+        from vtscore.detectors.registry import (
             add_loaded_detector_id,
             is_detector_loaded,
             remove_loaded_detector_id,
@@ -263,7 +263,7 @@ class TestModelRegistryMultiLoaded:
         assert not is_detector_loaded("m1")
 
     def test_add_loaded_model_id_adds_to_loaded_set(self):
-        from vtsearch.detectors.registry import (
+        from vtscore.detectors.registry import (
             add_loaded_detector_id,
             is_detector_loaded,
         )
@@ -297,7 +297,7 @@ class TestModelLoadEndpoints:
         return res.get_json()["detector"]["id"]
 
     def test_load_creates_detector_context(self, client):
-        from vtsearch.state.core import get_detector_context
+        from vtscore.state.core import get_detector_context
 
         mid = self._register_trainable_model(client, "LoadCtx")
         res = _load_detector_and_wait(client, mid)
@@ -308,7 +308,7 @@ class TestModelLoadEndpoints:
         assert det.detector_id == mid
 
     def test_load_twice_reuses_context(self, client):
-        from vtsearch.state.core import get_detector_context
+        from vtscore.state.core import get_detector_context
 
         mid = self._register_trainable_model(client, "LoadTwice")
         _load_detector_and_wait(client, mid)
@@ -333,8 +333,8 @@ class TestModelLoadEndpoints:
         assert models[mid2]["loaded"] is True
 
     def test_unload_removes_context(self, client):
-        from vtsearch.detectors.registry import is_detector_loaded
-        from vtsearch.state.core import get_detector_context
+        from vtscore.detectors.registry import is_detector_loaded
+        from vtscore.state.core import get_detector_context
 
         mid = self._register_trainable_model(client, "Unload")
         _load_detector_and_wait(client, mid)
@@ -351,8 +351,8 @@ class TestModelLoadEndpoints:
         assert res.status_code == 400
 
     def test_delete_cleans_up_context(self, client):
-        from vtsearch.detectors.registry import is_detector_loaded
-        from vtsearch.state.core import get_detector_context
+        from vtscore.detectors.registry import is_detector_loaded
+        from vtscore.state.core import get_detector_context
 
         mid = self._register_trainable_model(client, "Delete")
         _load_detector_and_wait(client, mid)
@@ -373,7 +373,7 @@ class TestModelLoadingTasks:
     """Test the model loading tasks progress API."""
 
     def test_loading_tasks_empty(self, client):
-        from vtsearch.concurrency.progress import detector_loading_tasks
+        from vtscore.concurrency.progress import detector_loading_tasks
 
         assert detector_loading_tasks.list_tasks() == []
 
@@ -395,7 +395,7 @@ class TestMLPCaching:
             good_votes,
             bad_votes,
         )
-        from vtsearch.state.core import get_active_detector_context, _empty_detector_context
+        from vtscore.state.core import get_active_detector_context, _empty_detector_context
 
         # Vote to enable training
         good_votes[1] = None
@@ -419,7 +419,7 @@ class TestMLPCaching:
             good_votes,
             bad_votes,
         )
-        from vtsearch.state.core import get_active_detector_context
+        from vtscore.state.core import get_active_detector_context
 
         good_votes[1] = None
         good_votes[2] = None
@@ -460,13 +460,13 @@ class TestLabelingStatusResetOnDetectorSwitch:
     def test_labeling_status_not_green_after_detector_switch(self, client):
         """After building up cached progress on detector A, switching to
         a fresh detector B must NOT return green smart/stable status."""
-        from vtsearch.detectors.labeling_progress import _cached_steps, _progress_lock
+        from vtscore.detectors.labeling_progress import _cached_steps, _progress_lock
         from vtsearch.state import (
             good_votes,
             bad_votes,
             label_history,
         )
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,

@@ -44,8 +44,8 @@ def _patch_media_registry(mt, emb):
     from contextlib import ExitStack
 
     stack = ExitStack()
-    stack.enter_context(mock.patch("vtsearch.media.get_by_folder_name", return_value=mt))
-    stack.enter_context(mock.patch("vtsearch.media.embedders_for_type", return_value=[emb]))
+    stack.enter_context(mock.patch("vtscore.media.get_by_folder_name", return_value=mt))
+    stack.enter_context(mock.patch("vtscore.media.embedders_for_type", return_value=[emb]))
     return stack
 
 
@@ -59,8 +59,8 @@ class _VectorAndMD5Importer:
 
     @staticmethod
     def create(folder: Path, vectors: dict[str, Any], md5s: dict[str, str]):
-        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         class Importer(DatasetImporter):
             name = "test_vec_md5"
@@ -327,8 +327,8 @@ class TestImporterCustomMetadataMD5:
 
     def test_custom_metadata_md5_used_as_media_md5(self, tmp_path):
         """When custom_metadata_map has an 'md5' key, it should be used as the media's MD5."""
-        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         class MetadataMD5Importer(DatasetImporter):
             name = "test_cm_md5"
@@ -368,7 +368,7 @@ class TestImporterCustomMetadataMD5:
 
     def test_custom_metadata_md5_takes_priority_over_content_md5s(self, tmp_path):
         """custom_metadata_map MD5 should beat content_md5s."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         cm_md5 = "custom_meta_" + "1" * 20
         content_md5 = "content_md5_" + "2" * 20
@@ -391,7 +391,7 @@ class TestImporterCustomMetadataMD5:
 
     def test_custom_metadata_md5_in_thin_mode(self, tmp_path):
         """custom_metadata_map MD5 should work in thin mode too."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         cm_md5 = "thinmeta_" + "f" * 23
 
@@ -413,7 +413,7 @@ class TestImporterCustomMetadataMD5:
 
     def test_folder_importer_custom_metadata_md5_passthrough(self, tmp_path):
         """The folder importer should pass custom_metadata_map through, including its MD5."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         cm_md5 = "folder_cm_" + "9" * 22
         _write_wav(tmp_path / "cm.wav")
@@ -431,7 +431,7 @@ class TestImporterCustomMetadataMD5:
 
     def test_apply_custom_metadata_md5_post_load(self):
         """apply_custom_metadata_md5 should extract MD5 from custom_metadata after loading."""
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "original_hash", "custom_metadata": {"md5": "authoritative_hash", "extra": "data"}},
@@ -451,7 +451,7 @@ class TestImporterCustomMetadataEmbedding:
 
     def test_custom_metadata_embedding_used_as_media_embedding(self, tmp_path):
         """When custom_metadata_map has an 'embedding' key, it should be used as the media's embedding."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         rng = np.random.default_rng(42)
         cm_vec = rng.standard_normal(8).astype(np.float32)
@@ -476,7 +476,7 @@ class TestImporterCustomMetadataEmbedding:
 
     def test_custom_metadata_embedding_takes_priority_over_content_vectors(self, tmp_path):
         """custom_metadata_map embedding should beat content_vectors."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         rng = np.random.default_rng(7)
         cm_vec = rng.standard_normal(8).astype(np.float32)
@@ -500,7 +500,7 @@ class TestImporterCustomMetadataEmbedding:
 
     def test_custom_metadata_embedding_in_thin_mode(self, tmp_path):
         """custom_metadata_map embedding should work in thin mode."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         rng = np.random.default_rng(11)
         cm_vec = rng.standard_normal(8).astype(np.float32)
@@ -524,7 +524,7 @@ class TestImporterCustomMetadataEmbedding:
 
     def test_custom_metadata_both_embedding_and_md5(self, tmp_path):
         """custom_metadata_map can provide both embedding and MD5 in a single entry."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         rng = np.random.default_rng(55)
         cm_vec = rng.standard_normal(8).astype(np.float32)
@@ -549,7 +549,7 @@ class TestImporterCustomMetadataEmbedding:
 
     def test_custom_metadata_embedding_mixed_with_model(self, tmp_path):
         """Files with custom_metadata embedding skip the model; others use the model."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         rng = np.random.default_rng(33)
         cm_vec = rng.standard_normal(8).astype(np.float32)
@@ -576,7 +576,7 @@ class TestImporterCustomMetadataEmbedding:
 
     def test_custom_metadata_embedding_chunked(self, tmp_path):
         """custom_metadata_map embedding should work with the chunked loader."""
-        from vtsearch.datasets.loader import load_dataset_from_folder_chunked
+        from vtscore.datasets.loader import load_dataset_from_folder_chunked
 
         rng = np.random.default_rng(88)
         cm_vec = rng.standard_normal(8).astype(np.float32)
@@ -604,8 +604,8 @@ class TestImporterCustomMetadataEmbedding:
 
     def test_importer_custom_metadata_embedding_end_to_end(self, tmp_path):
         """A DatasetImporter providing embedding via custom_metadata_map should work end-to-end."""
-        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.loader import load_dataset_from_folder
 
         rng = np.random.default_rng(77)
         cm_vec = rng.standard_normal(8).astype(np.float32)
@@ -652,8 +652,8 @@ class TestImporterCustomMetadataEmbedding:
     def test_importer_custom_metadata_embedding_in_sorting(self, tmp_path):
         """Embeddings from custom_metadata_map should work in train_and_score."""
 
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.detectors.training import train_and_score
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.detectors.training import train_and_score
 
         rng = np.random.default_rng(42)
         names = [f"s{i}.wav" for i in range(6)]
@@ -686,7 +686,7 @@ class TestFolderImporterPassthrough:
     """Verify the folder importer wires content_vectors/content_md5s to load_dataset_from_folder."""
 
     def test_folder_importer_passes_content_vectors(self, tmp_path):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         rng = np.random.default_rng(11)
         pre_vec = rng.standard_normal(8).astype(np.float32)
@@ -708,7 +708,7 @@ class TestFolderImporterPassthrough:
             IMPORTER.content_md5s = {}
 
     def test_folder_importer_passes_content_md5s(self, tmp_path):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         pre_md5 = "e" * 32
         _write_wav(tmp_path / "g.wav")
@@ -778,7 +778,7 @@ class TestImporterMediasInSorting:
     def test_train_and_score_uses_importer_embeddings(self, tmp_path):
         """train_and_score should work with importer-provided embeddings."""
 
-        from vtsearch.detectors.training import train_and_score
+        from vtscore.detectors.training import train_and_score
 
         medias, _, _ = self._load_importer_medias_into_app(tmp_path)
 

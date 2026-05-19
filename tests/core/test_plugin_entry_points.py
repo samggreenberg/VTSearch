@@ -13,7 +13,7 @@ import warnings
 
 import pytest
 
-from vtsearch.plugins import PluginRegistry
+from vtscore.plugins import PluginRegistry
 
 
 class _FakeEntryPoint:
@@ -54,7 +54,7 @@ class TestEntryPointDiscovery:
             # Use an existing package whose own scan turns up nothing matching
             # the test sentinel, so the only registration comes from the entry
             # point.
-            package="vtsearch.plugins",
+            package="vtscore.plugins",
             sentinel="TEST_SENTINEL_NEVER_PRESENT",
             label="test plugin",
             entry_point_group="vtsearch.test_family",
@@ -63,7 +63,7 @@ class TestEntryPointDiscovery:
         assert plugin in registry.list()
 
     def test_built_in_wins_over_entry_point_name_clash(self, monkeypatch):
-        from vtsearch.datasets.importers import list_importers
+        from vtscore.datasets.importers import list_importers
 
         # server_folder is an established built-in importer.
         built_in_names = {imp.name for imp in list_importers()}
@@ -75,7 +75,7 @@ class TestEntryPointDiscovery:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             registry: PluginRegistry = PluginRegistry(
-                package="vtsearch.datasets.importers",
+                package="vtscore.datasets.importers",
                 sentinel="IMPORTER",
                 label="dataset importer",
                 entry_point_group="vtsearch.test_family",
@@ -95,7 +95,7 @@ class TestEntryPointDiscovery:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             registry: PluginRegistry = PluginRegistry(
-                package="vtsearch.plugins",
+                package="vtscore.plugins",
                 sentinel="TEST_SENTINEL_NEVER_PRESENT",
                 label="test plugin",
                 entry_point_group="vtsearch.test_family",
@@ -115,7 +115,7 @@ class TestEntryPointDiscovery:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             registry: PluginRegistry = PluginRegistry(
-                package="vtsearch.plugins",
+                package="vtscore.plugins",
                 sentinel="TEST_SENTINEL_NEVER_PRESENT",
                 label="test plugin",
                 entry_point_group="vtsearch.test_family",
@@ -136,7 +136,7 @@ class TestEntryPointDiscovery:
         monkeypatch.setattr(importlib.metadata, "entry_points", fake_entry_points)
 
         registry: PluginRegistry = PluginRegistry(
-            package="vtsearch.plugins",
+            package="vtscore.plugins",
             sentinel="TEST_SENTINEL_NEVER_PRESENT",
             label="test plugin",
             entry_point_group=None,
@@ -148,15 +148,15 @@ class TestEntryPointDiscovery:
 @pytest.mark.parametrize(
     "module_path,registry_var,expected_group",
     [
-        ("vtsearch.datasets.importers", "list_importers", "vtsearch.importers"),
-        ("vtsearch.exporters", "list_exporters", "vtsearch.exporters"),
-        ("vtsearch.labels.importers", "list_label_importers", "vtsearch.label_importers"),
-        ("vtsearch.labels.sources", "list_labelset_sources", "vtsearch.labelset_sources"),
+        ("vtscore.datasets.importers", "list_importers", "vtscore.importers"),
+        ("vtscore.exporters", "list_exporters", "vtscore.exporters"),
+        ("vtscore.labels.importers", "list_label_importers", "vtscore.label_importers"),
+        ("vtscore.labels.sources", "list_labelset_sources", "vtscore.labelset_sources"),
         ("vtsearch.settings_io.importers", "list_settings_importers", "vtsearch.settings_importers"),
         ("vtsearch.settings_io.exporters", "list_settings_exporters", "vtsearch.settings_exporters"),
         ("vtsearch.settings_io.sources", "list_settings_sources", "vtsearch.settings_sources"),
-        ("vtsearch.converters", "list_converters", "vtsearch.converters"),
-        ("vtsearch.datasets.sources", "list_media_sources", "vtsearch.media_sources"),
+        ("vtscore.converters", "list_converters", "vtscore.converters"),
+        ("vtscore.datasets.sources", "list_media_sources", "vtscore.media_sources"),
     ],
 )
 def test_built_in_registries_declare_entry_point_groups(module_path, registry_var, expected_group):

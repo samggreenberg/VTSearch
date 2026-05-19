@@ -23,10 +23,10 @@ from __future__ import annotations
 
 import logging
 
-import vtsearch.security.path_validation as _paths
+import vtscore.security.path_validation as _paths
 from flask_smorest import Blueprint, abort
 
-from vtsearch.exporters import get_exporter, list_exporters
+from vtscore.exporters import get_exporter, list_exporters
 from vtsearch.schemas.labels import (
     ExporterEntrySchema,
     RunExportRequestSchema,

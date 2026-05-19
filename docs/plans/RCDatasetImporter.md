@@ -19,10 +19,10 @@ Four plugins are scaffolded (all `hidden_from_picker = True` until ready):
 
 | Plugin | File | Type | Sentinel |
 |--------|------|------|----------|
-| ReCaller Dataset Importer | `vtsearch/datasets/importers/recaller/__init__.py` | `DatasetImporter` | `IMPORTER` |
-| Holder Labelset Exporter | `vtsearch/exporters/holder/__init__.py` | `LabelsetExporter` | `EXPORTER` |
-| Holder Label Importer | `vtsearch/labels/importers/holder/__init__.py` | `LabelImporter` | `LABEL_IMPORTER` |
-| PullWrest Media Source | `vtsearch/datasets/sources/pullwrest.py` | `MediaSource` factory | `SOURCE` |
+| ReCaller Dataset Importer | `vtscore/datasets/importers/recaller/__init__.py` | `DatasetImporter` | `IMPORTER` |
+| Holder Labelset Exporter | `vtscore/exporters/holder/__init__.py` | `LabelsetExporter` | `EXPORTER` |
+| Holder Label Importer | `vtscore/labels/importers/holder/__init__.py` | `LabelImporter` | `LABEL_IMPORTER` |
+| PullWrest Media Source | `vtscore/datasets/sources/pullwrest.py` | `MediaSource` factory | `SOURCE` |
 
 ## What's already done (VTSearch core)
 
@@ -78,7 +78,7 @@ def _rc_fetch_results(query_id: str) -> list[dict[str, Any]]:
 ```
 
 Replace the `NotImplementedError` stubs in
-`vtsearch/datasets/importers/recaller/__init__.py`.
+`vtscore/datasets/importers/recaller/__init__.py`.
 
 ### 1b. DataWrest client
 
@@ -102,8 +102,8 @@ def _pw_fetch_media(media_url: str) -> bytes:
 ```
 
 This function appears in **two** places — DRY it up:
-- `vtsearch/datasets/importers/recaller/__init__.py`
-- `vtsearch/datasets/sources/pullwrest.py`
+- `vtscore/datasets/importers/recaller/__init__.py`
+- `vtscore/datasets/sources/pullwrest.py`
 
 Consider extracting to a shared module that both import from.
 
@@ -125,9 +125,9 @@ def _holder_read_folder(holder_id: str, folder_name: str) -> list[dict]:
 ```
 
 Replace stubs in:
-- `vtsearch/exporters/holder/__init__.py` (create_package, create_folder,
+- `vtscore/exporters/holder/__init__.py` (create_package, create_folder,
   write_entry)
-- `vtsearch/labels/importers/holder/__init__.py` (read_folder)
+- `vtscore/labels/importers/holder/__init__.py` (read_folder)
 
 ---
 
@@ -156,7 +156,7 @@ from unittest.mock import patch
 import numpy as np
 
 def test_rc_importer_builds_media_dicts():
-    from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+    from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
     rc_results = [{
         "contentID": "C1", "mediaID": "M1",
@@ -166,9 +166,9 @@ def test_rc_importer_builds_media_dicts():
 
     imp = ReCallerDatasetImporter()
     medias = {}
-    with patch("vtsearch.datasets.importers.recaller._rc_fetch_results", return_value=rc_results), \
-         patch("vtsearch.datasets.importers.recaller._dw_get_embedding", return_value=dw_result), \
-         patch("vtsearch.datasets.importers.recaller._pw_fetch_media", return_value=b"\x00"):
+    with patch("vtscore.datasets.importers.recaller._rc_fetch_results", return_value=rc_results), \
+         patch("vtscore.datasets.importers.recaller._dw_get_embedding", return_value=dw_result), \
+         patch("vtscore.datasets.importers.recaller._pw_fetch_media", return_value=b"\x00"):
         imp.run({"query_id": "Q1", "media_type": "audio"}, medias)
 
     assert len(medias) == 1

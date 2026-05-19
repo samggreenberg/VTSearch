@@ -40,7 +40,7 @@ def _make_png_bytes(width: int = 4, height: int = 4) -> bytes:
 
 class TestConverterRegistry:
     def test_list_converters_returns_all(self):
-        from vtsearch.converters import list_converters
+        from vtscore.converters import list_converters
 
         converters = list_converters()
         assert len(converters) >= 4
@@ -51,7 +51,7 @@ class TestConverterRegistry:
         assert "video2image" in names
 
     def test_get_converter_existing(self):
-        from vtsearch.converters import get_converter
+        from vtscore.converters import get_converter
 
         c = get_converter("video2image")
         assert c is not None
@@ -60,12 +60,12 @@ class TestConverterRegistry:
         assert c.target_type == "image"
 
     def test_get_converter_nonexistent(self):
-        from vtsearch.converters import get_converter
+        from vtscore.converters import get_converter
 
         assert get_converter("nonexistent") is None
 
     def test_list_converters_for_target_image(self):
-        from vtsearch.converters import list_converters_for_target
+        from vtscore.converters import list_converters_for_target
 
         converters = list_converters_for_target("image")
         names = [c.name for c in converters]
@@ -74,7 +74,7 @@ class TestConverterRegistry:
         assert "video2audio" not in names
 
     def test_list_converters_for_target_audio(self):
-        from vtsearch.converters import list_converters_for_target
+        from vtscore.converters import list_converters_for_target
 
         converters = list_converters_for_target("audio")
         names = [c.name for c in converters]
@@ -82,14 +82,14 @@ class TestConverterRegistry:
         assert "video2image" not in names
 
     def test_list_converters_for_target_text(self):
-        from vtsearch.converters import list_converters_for_target
+        from vtscore.converters import list_converters_for_target
 
         converters = list_converters_for_target("text")
         names = [c.name for c in converters]
         assert "document2text" in names
 
     def test_list_converters_for_target_none(self):
-        from vtsearch.converters import list_converters_for_target
+        from vtscore.converters import list_converters_for_target
 
         converters = list_converters_for_target("video")
         assert converters == []
@@ -102,25 +102,25 @@ class TestConverterRegistry:
 
 class TestConverterBase:
     def test_name_derived(self):
-        from vtsearch.converters import Video2AudioMediaConverter
+        from vtscore.converters import Video2AudioMediaConverter
 
         c = Video2AudioMediaConverter()
         assert c.name == "video2audio"
 
     def test_display_name(self):
-        from vtsearch.converters import Video2ImageMediaConverter
+        from vtscore.converters import Video2ImageMediaConverter
 
         c = Video2ImageMediaConverter()
         assert c.display_name == "Video \u2192 Images"
 
     def test_converter_description(self):
-        from vtsearch.converters import Document2ImageMediaConverter
+        from vtscore.converters import Document2ImageMediaConverter
 
         c = Document2ImageMediaConverter()
         assert c.converter_description != ""
 
     def test_to_dict(self):
-        from vtsearch.converters import Video2AudioMediaConverter
+        from vtscore.converters import Video2AudioMediaConverter
 
         c = Video2AudioMediaConverter()
         d = c.to_dict()
@@ -132,7 +132,7 @@ class TestConverterBase:
 
     def test_to_dict_fallback_display_name(self):
         """If display_name is empty, to_dict derives one from type IDs."""
-        from vtsearch.converters.base import MediaConverter
+        from vtscore.converters.base import MediaConverter
 
         class Dummy(MediaConverter):
             @property
@@ -217,13 +217,13 @@ class TestConvertersAPI:
 
 class TestFolderImporterConverterFields:
     def test_build_cli_args_without_source_specs(self):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         args = IMPORTER.build_cli_args({"media_type": "image", "path": "/data"})
         assert "--source-specs" not in args
 
     def test_build_cli_args_with_source_specs(self):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         args = IMPORTER.build_cli_args(
             {
@@ -239,14 +239,14 @@ class TestFolderImporterConverterFields:
         assert "video2image" in args
 
     def test_build_origin_without_source_specs(self):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         origin = IMPORTER.build_origin({"media_type": "image", "path": "/data"})
         assert origin["importer"] == "server_folder"
         assert "source_specs" not in origin["params"]
 
     def test_build_origin_with_source_specs(self):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         origin = IMPORTER.build_origin(
             {
@@ -264,7 +264,7 @@ class TestHttpArchiveImporterConverterFields:
     def test_build_cli_args_with_source_specs(self):
         import json
 
-        from vtsearch.datasets.importers.http_archive import IMPORTER
+        from vtscore.datasets.importers.http_archive import IMPORTER
 
         specs = [
             {"source_type": "image", "converter": None, "params": {}},
@@ -283,7 +283,7 @@ class TestHttpArchiveImporterConverterFields:
     def test_build_origin_with_source_specs(self):
         import json
 
-        from vtsearch.datasets.importers.http_archive import IMPORTER
+        from vtscore.datasets.importers.http_archive import IMPORTER
 
         specs = [{"source_type": "document", "converter": "document2image", "params": {}}]
         origin = IMPORTER.build_origin(
@@ -341,7 +341,7 @@ class TestRunConvertersOnFolder:
         return c
 
     def test_no_converters_is_noop(self, tmp_path):
-        from vtsearch.converters.runner import run_converters_on_folder
+        from vtscore.converters.runner import run_converters_on_folder
 
         medias: dict = {}
         run_converters_on_folder(
@@ -353,7 +353,7 @@ class TestRunConvertersOnFolder:
         assert medias == {}
 
     def test_nonexistent_converter_name_is_skipped(self, tmp_path):
-        from vtsearch.converters.runner import run_converters_on_folder
+        from vtscore.converters.runner import run_converters_on_folder
 
         medias: dict = {}
         # get_converter returns None for unknown names, so this is a no-op.
@@ -368,15 +368,15 @@ class TestRunConvertersOnFolder:
 
     def test_no_matching_source_files(self, tmp_path):
         """Converter exists but no source files in the folder."""
-        from vtsearch.converters.runner import run_converters_on_folder
+        from vtscore.converters.runner import run_converters_on_folder
 
         # Create a folder with only text files — no videos.
         (tmp_path / "file.txt").write_text("hello")
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.runner._embed_converted_output", return_value=np.zeros(768)),
-            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
+            patch("vtscore.converters.runner._embed_converted_output", return_value=np.zeros(768)),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -389,7 +389,7 @@ class TestRunConvertersOnFolder:
 
     def test_converter_produces_output_with_origin(self, tmp_path):
         """Mock converter + embedder to verify the full pipeline."""
-        from vtsearch.converters.runner import run_converters_on_folder
+        from vtscore.converters.runner import run_converters_on_folder
 
         # Create a fake "video" file.
         (tmp_path / "clip.mp4").write_bytes(b"fake-video-data")
@@ -399,9 +399,9 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.get_converter", return_value=mock_converter),
-            patch("vtsearch.converters.runner._embed_converted_output", return_value=fake_embedding),
-            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
+            patch("vtscore.converters.get_converter", return_value=mock_converter),
+            patch("vtscore.converters.runner._embed_converted_output", return_value=fake_embedding),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -433,7 +433,7 @@ class TestRunConvertersOnFolder:
 
     def test_converter_with_multiple_outputs(self, tmp_path):
         """A converter that produces multiple outputs per source file."""
-        from vtsearch.converters.runner import run_converters_on_folder
+        from vtscore.converters.runner import run_converters_on_folder
 
         (tmp_path / "long_video.mp4").write_bytes(b"video-data")
 
@@ -465,9 +465,9 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.get_converter", return_value=mock_converter),
-            patch("vtsearch.converters.runner._embed_converted_output", return_value=np.ones(768)),
-            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
+            patch("vtscore.converters.get_converter", return_value=mock_converter),
+            patch("vtscore.converters.runner._embed_converted_output", return_value=np.ones(768)),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -483,7 +483,7 @@ class TestRunConvertersOnFolder:
 
     def test_converter_failure_skips_file(self, tmp_path):
         """If converter.convert() raises, that file is skipped."""
-        from vtsearch.converters.runner import run_converters_on_folder
+        from vtscore.converters.runner import run_converters_on_folder
 
         (tmp_path / "bad.mp4").write_bytes(b"corrupt")
         (tmp_path / "good.mp4").write_bytes(b"good-video")
@@ -501,9 +501,9 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.get_converter", return_value=mock_converter),
-            patch("vtsearch.converters.runner._embed_converted_output", return_value=np.ones(768)),
-            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
+            patch("vtscore.converters.get_converter", return_value=mock_converter),
+            patch("vtscore.converters.runner._embed_converted_output", return_value=np.ones(768)),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -518,7 +518,7 @@ class TestRunConvertersOnFolder:
 
     def test_continues_from_existing_medias(self, tmp_path):
         """IDs continue from the max existing ID in medias."""
-        from vtsearch.converters.runner import run_converters_on_folder
+        from vtscore.converters.runner import run_converters_on_folder
 
         (tmp_path / "clip.mp4").write_bytes(b"video")
 
@@ -527,9 +527,9 @@ class TestRunConvertersOnFolder:
         # Pre-populate with some existing medias
         medias: dict = {1: {"id": 1}, 5: {"id": 5}, 10: {"id": 10}}
         with (
-            patch("vtsearch.converters.get_converter", return_value=mock_converter),
-            patch("vtsearch.converters.runner._embed_converted_output", return_value=np.ones(768)),
-            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
+            patch("vtscore.converters.get_converter", return_value=mock_converter),
+            patch("vtscore.converters.runner._embed_converted_output", return_value=np.ones(768)),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -544,7 +544,7 @@ class TestRunConvertersOnFolder:
 
     def test_embed_failure_skips_output(self, tmp_path):
         """If embedding returns None, that output is skipped."""
-        from vtsearch.converters.runner import run_converters_on_folder
+        from vtscore.converters.runner import run_converters_on_folder
 
         (tmp_path / "clip.mp4").write_bytes(b"video")
 
@@ -552,9 +552,9 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.get_converter", return_value=mock_converter),
-            patch("vtsearch.converters.runner._embed_converted_output", return_value=None),
-            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
+            patch("vtscore.converters.get_converter", return_value=mock_converter),
+            patch("vtscore.converters.runner._embed_converted_output", return_value=None),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
@@ -568,7 +568,7 @@ class TestRunConvertersOnFolder:
 
     def test_converter_follows_symlinked_directories(self, tmp_path):
         """Source files in a symlinked subdirectory must be discovered."""
-        from vtsearch.converters.runner import run_converters_on_folder
+        from vtscore.converters.runner import run_converters_on_folder
 
         root = tmp_path / "root"
         root.mkdir()
@@ -584,9 +584,9 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtsearch.converters.get_converter", return_value=mock_converter),
-            patch("vtsearch.converters.runner._embed_converted_output", return_value=fake_embedding),
-            patch("vtsearch.media.get_by_folder_name", return_value=self._mock_target_mt()),
+            patch("vtscore.converters.get_converter", return_value=mock_converter),
+            patch("vtscore.converters.runner._embed_converted_output", return_value=fake_embedding),
+            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
                 folder_path=root,
@@ -609,27 +609,27 @@ class TestRunConvertersOnFolder:
 
 class TestEmbedAndMd5Helpers:
     def test_compute_md5_bytes(self):
-        from vtsearch.converters.runner import _compute_md5
+        from vtscore.converters.runner import _compute_md5
 
         data = b"hello world"
         expected = hashlib.md5(data).hexdigest()
         assert _compute_md5({"media_bytes": data}) == expected
 
     def test_compute_md5_string(self):
-        from vtsearch.converters.runner import _compute_md5
+        from vtscore.converters.runner import _compute_md5
 
         text = "hello world"
         expected = hashlib.md5(text.encode("utf-8")).hexdigest()
         assert _compute_md5({"media_string": text}) == expected
 
     def test_compute_md5_empty(self):
-        from vtsearch.converters.runner import _compute_md5
+        from vtscore.converters.runner import _compute_md5
 
         assert _compute_md5({}) == hashlib.md5(b"").hexdigest()
 
     def test_embed_converted_output_binary(self, tmp_path):
         """Binary output is written to temp file and embed_media is called."""
-        from vtsearch.converters.runner import _embed_converted_output
+        from vtscore.converters.runner import _embed_converted_output
 
         png_bytes = _make_png_bytes()
         fake_embedding = np.ones(768)
@@ -644,7 +644,7 @@ class TestEmbedAndMd5Helpers:
 
     def test_embed_converted_output_text(self, tmp_path):
         """Text output is written to temp .txt and embed_media is called."""
-        from vtsearch.converters.runner import _embed_converted_output
+        from vtscore.converters.runner import _embed_converted_output
 
         fake_embedding = np.ones(768)
         mock_mt = MagicMock()
@@ -658,7 +658,7 @@ class TestEmbedAndMd5Helpers:
 
     def test_embed_converted_output_empty(self):
         """Empty output returns None."""
-        from vtsearch.converters.runner import _embed_converted_output
+        from vtscore.converters.runner import _embed_converted_output
 
         mock_mt = MagicMock()
         result = _embed_converted_output(mock_mt, {})
@@ -673,14 +673,14 @@ class TestEmbedAndMd5Helpers:
 class TestFolderImporterWithConverters:
     def test_run_passes_converter_specs_to_runner(self, tmp_path):
         """server_folder hands converter rows from source_specs to _run_converter_specs."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         # Create a folder with an image file so the normal load succeeds.
         (tmp_path / "photo.png").write_bytes(_make_png_bytes())
 
         with (
-            patch("vtsearch.datasets.importers.server_folder.load_dataset_from_folder") as mock_load,
-            patch("vtsearch.datasets.importers.server_folder._run_converter_specs") as mock_conv,
+            patch("vtscore.datasets.importers.server_folder.load_dataset_from_folder") as mock_load,
+            patch("vtscore.datasets.importers.server_folder._run_converter_specs") as mock_conv,
         ):
             medias: dict = {}
             IMPORTER.run(
@@ -708,13 +708,13 @@ class TestFolderImporterWithConverters:
         """When source_specs has only a direct row, _run_converter_specs is still
         called but gets an empty spec list and bails out without running the
         runner."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         (tmp_path / "photo.png").write_bytes(_make_png_bytes())
 
         with (
-            patch("vtsearch.datasets.importers.server_folder.load_dataset_from_folder"),
-            patch("vtsearch.datasets.importers.server_folder._run_converter_specs") as mock_conv,
+            patch("vtscore.datasets.importers.server_folder.load_dataset_from_folder"),
+            patch("vtscore.datasets.importers.server_folder._run_converter_specs") as mock_conv,
         ):
             medias: dict = {}
             IMPORTER.run({"path": str(tmp_path), "media_type": "image"}, medias)
@@ -724,7 +724,7 @@ class TestFolderImporterWithConverters:
 
     def test_folder_only_converters_no_regular_files(self, tmp_path):
         """When only converter source files exist and no regular target files."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         # Create only a video file — no image files.
         (tmp_path / "clip.mp4").write_bytes(b"fake-video")
@@ -739,10 +739,10 @@ class TestFolderImporterWithConverters:
 
         with (
             patch(
-                "vtsearch.datasets.importers.server_folder.load_dataset_from_folder",
+                "vtscore.datasets.importers.server_folder.load_dataset_from_folder",
                 side_effect=ValueError("No images files found"),
             ),
-            patch("vtsearch.datasets.importers.server_folder._run_converter_specs", side_effect=_fake_run_converters),
+            patch("vtscore.datasets.importers.server_folder._run_converter_specs", side_effect=_fake_run_converters),
         ):
             medias: dict = {}
             IMPORTER.run(
@@ -803,7 +803,7 @@ class TestImportAPIConverters:
 
 class TestSourceSpecParsing:
     def test_from_dict_roundtrip(self):
-        from vtsearch.datasets.importers.base import SourceSpec
+        from vtscore.datasets.importers.base import SourceSpec
 
         spec = SourceSpec.from_dict({"source_type": "video", "converter": "video2image", "params": {"n_clips": "12"}})
         assert spec.source_type == "video"
@@ -813,7 +813,7 @@ class TestSourceSpecParsing:
         assert d == {"source_type": "video", "converter": "video2image", "params": {"n_clips": "12"}}
 
     def test_direct_row_has_no_converter(self):
-        from vtsearch.datasets.importers.base import SourceSpec
+        from vtscore.datasets.importers.base import SourceSpec
 
         spec = SourceSpec.from_dict({"source_type": "image", "converter": None, "params": {}})
         assert spec.converter is None
@@ -830,7 +830,7 @@ class _LegacyTestImporter:
 
     @staticmethod
     def make():
-        from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
         class _Legacy(DatasetImporter):
             name = "_legacy_test"
@@ -877,7 +877,7 @@ class TestMultiMediaEffectiveSourceSpecs:
     """multi_media=True importers parse the explicit source_specs form value."""
 
     def test_parses_list_of_dicts(self):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         specs = IMPORTER.effective_source_specs(
             {
@@ -896,7 +896,7 @@ class TestMultiMediaEffectiveSourceSpecs:
     def test_parses_json_string(self):
         import json
 
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         raw = json.dumps(
             [
@@ -911,7 +911,7 @@ class TestMultiMediaEffectiveSourceSpecs:
         """When the multi_media flag is set but the form omits source_specs,
         a single 'include directly' row is synthesised so the importer still
         loads cleanly."""
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         specs = IMPORTER.effective_source_specs({"media_type": "image"})
         assert len(specs) == 1
@@ -920,7 +920,7 @@ class TestMultiMediaEffectiveSourceSpecs:
     def test_rejects_invalid_converter(self):
         import pytest
 
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         with pytest.raises(ValueError, match="Unknown converter"):
             IMPORTER.effective_source_specs(
@@ -937,7 +937,7 @@ class TestMultiMediaEffectiveSourceSpecs:
         is rejected — e.g. video2audio applied to an image-output dataset."""
         import pytest
 
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         with pytest.raises(ValueError, match="produces"):
             IMPORTER.effective_source_specs(
@@ -954,7 +954,7 @@ class TestMultiMediaEffectiveSourceSpecs:
         is rejected — that's the form a stale UI submission would take."""
         import pytest
 
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         with pytest.raises(ValueError, match="does not match"):
             IMPORTER.effective_source_specs(
@@ -969,46 +969,46 @@ class TestMultiMediaEffectiveSourceSpecs:
 
 class TestImporterMultiMediaFlagInToDict:
     def test_server_folder_advertises_multi_media(self):
-        from vtsearch.datasets.importers.server_folder import IMPORTER
+        from vtscore.datasets.importers.server_folder import IMPORTER
 
         d = IMPORTER.to_dict()
         assert d.get("multi_media") is True
 
     def test_http_archive_advertises_multi_media(self):
-        from vtsearch.datasets.importers.http_archive import IMPORTER
+        from vtscore.datasets.importers.http_archive import IMPORTER
 
         d = IMPORTER.to_dict()
         assert d.get("multi_media") is True
 
     def test_pickle_advertises_multi_media(self):
-        from vtsearch.datasets.importers.pickle import IMPORTER
+        from vtscore.datasets.importers.pickle import IMPORTER
 
         assert IMPORTER.to_dict().get("multi_media") is True
 
     def test_combine_datasets_advertises_multi_media(self):
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         assert IMPORTER.to_dict().get("multi_media") is True
 
     def test_synthetic_advertises_multi_media(self):
-        from vtsearch.datasets.importers.synthetic import IMPORTER
+        from vtscore.datasets.importers.synthetic import IMPORTER
 
         assert IMPORTER.to_dict().get("multi_media") is True
 
     def test_recaller_advertises_multi_media(self):
-        from vtsearch.datasets.importers.recaller import IMPORTER
+        from vtscore.datasets.importers.recaller import IMPORTER
 
         assert IMPORTER.to_dict().get("multi_media") is True
 
     def test_demo_advertises_multi_media(self):
-        from vtsearch.datasets.importers.demo import IMPORTER
+        from vtscore.datasets.importers.demo import IMPORTER
 
         assert IMPORTER.to_dict().get("multi_media") is True
 
 
 class TestConverterFieldsInToDict:
     def test_video2image_exposes_n_clips_field(self):
-        from vtsearch.converters import get_converter
+        from vtscore.converters import get_converter
 
         c = get_converter("video2image")
         assert c is not None
@@ -1022,7 +1022,7 @@ class TestConverterAcceptsParams:
     fields use params to drive behaviour, others ignore it gracefully."""
 
     def test_video2audio_accepts_empty_params(self):
-        from vtsearch.converters import get_converter
+        from vtscore.converters import get_converter
 
         c = get_converter("video2audio")
         assert c is not None
@@ -1030,7 +1030,7 @@ class TestConverterAcceptsParams:
         assert c.convert({}, {}) == []
 
     def test_document2image_accepts_none_params(self):
-        from vtsearch.converters import get_converter
+        from vtscore.converters import get_converter
 
         c = get_converter("document2image")
         assert c is not None
@@ -1038,7 +1038,7 @@ class TestConverterAcceptsParams:
 
     def test_video2image_reads_n_clips_param(self):
         """Verify the converter reads its declared n_clips param from the dict."""
-        from vtsearch.converters import get_converter
+        from vtscore.converters import get_converter
 
         c = get_converter("video2image")
         assert c is not None
@@ -1079,12 +1079,12 @@ class TestMultiMediaImportersFlag:
     editor for each."""
 
     def test_local_advertises_multi_media(self):
-        from vtsearch.datasets.importers.local import IMPORTER
+        from vtscore.datasets.importers.local import IMPORTER
 
         assert IMPORTER.to_dict().get("multi_media") is True
 
     def test_server_files_advertises_multi_media(self):
-        from vtsearch.datasets.importers.server_files import IMPORTER
+        from vtscore.datasets.importers.server_files import IMPORTER
 
         assert IMPORTER.to_dict().get("multi_media") is True
 
@@ -1092,7 +1092,7 @@ class TestMultiMediaImportersFlag:
         """server_files.to_dict() includes the converter map so the
         frontend form view can render the Include rows without an extra
         API call to /api/converters."""
-        from vtsearch.datasets.importers.server_files import IMPORTER
+        from vtscore.datasets.importers.server_files import IMPORTER
 
         d = IMPORTER.to_dict()
         assert "available_converters_by_media_type" in d
@@ -1106,7 +1106,7 @@ class TestServerFilesEffectiveSourceSpecs:
     def test_multi_media_with_converter_row(self):
         """server_files.effective_source_specs() validates against the
         same registries as server_folder."""
-        from vtsearch.datasets.importers.server_files import IMPORTER
+        from vtscore.datasets.importers.server_files import IMPORTER
 
         specs = IMPORTER.effective_source_specs(
             {
@@ -1124,7 +1124,7 @@ class TestServerFilesEffectiveSourceSpecs:
     def test_rejects_target_mismatch(self):
         import pytest
 
-        from vtsearch.datasets.importers.server_files import IMPORTER
+        from vtscore.datasets.importers.server_files import IMPORTER
 
         with pytest.raises(ValueError, match="produces"):
             IMPORTER.effective_source_specs(

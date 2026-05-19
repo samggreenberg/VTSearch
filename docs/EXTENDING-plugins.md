@@ -33,7 +33,7 @@ Ten plugin systems — data importers, results exporters, label
 importers, processor importers, settings importers, settings exporters,
 settings sources, labelset sources, media converters, and media
 sources — share the same architecture built on two base classes in
-`vtsearch/plugins/__init__.py`:
+`vtscore/plugins/__init__.py`:
 
 ### PluginField
 
@@ -97,21 +97,21 @@ attribute; if found, the plugin is registered by its `name`.
 
 Most plugin families use sub-packages, which pair well with per-plugin
 `requirements.txt` files. The exception is **media sources**
-(`vtsearch.datasets.sources`), which use flat `.py` modules
+(`vtscore.datasets.sources`), which use flat `.py` modules
 (`local_folder.py`, `http_archive.py`, `pullwrest.py`).
 
 | Plugin Family       | Package                            | Sentinel              | Base Class          | Entry-point group              |
 |---------------------|------------------------------------|-----------------------|---------------------|--------------------------------|
-| Data Importers      | `vtsearch.datasets.importers`      | `IMPORTER`            | `DatasetImporter`   | `vtsearch.importers`           |
-| Results Exporters   | `vtsearch.exporters`               | `EXPORTER`            | `LabelsetExporter`  | `vtsearch.exporters`           |
-| Label Importers     | `vtsearch.labels.importers`        | `LABEL_IMPORTER`      | `LabelImporter`     | `vtsearch.label_importers`     |
+| Data Importers      | `vtscore.datasets.importers`      | `IMPORTER`            | `DatasetImporter`   | `vtscore.importers`            |
+| Results Exporters   | `vtscore.exporters`               | `EXPORTER`            | `LabelsetExporter`  | `vtscore.exporters`            |
+| Label Importers     | `vtscore.labels.importers`        | `LABEL_IMPORTER`      | `LabelImporter`     | `vtscore.label_importers`      |
 | Processor Importers | `vtsearch.processors.importers`    | `PROCESSOR_IMPORTER`  | `ProcessorImporter` | —                              |
 | Settings Importers  | `vtsearch.settings_io.importers`   | `SETTINGS_IMPORTER`   | `SettingsImporter`  | `vtsearch.settings_importers`  |
 | Settings Exporters  | `vtsearch.settings_io.exporters`   | `SETTINGS_EXPORTER`   | `SettingsExporter`  | `vtsearch.settings_exporters`  |
 | Settings Sources    | `vtsearch.settings_io.sources`     | `SETTINGS_SOURCE`     | `SettingsSource`    | `vtsearch.settings_sources`    |
-| Labelset Sources    | `vtsearch.labels.sources`          | `LABELSET_SOURCE`     | `LabelsetSource`    | `vtsearch.labelset_sources`    |
-| Media Converters    | `vtsearch.converters`              | `CONVERTER`           | `MediaConverter`    | `vtsearch.converters`          |
-| Media Sources       | `vtsearch.datasets.sources`        | `SOURCE`              | `MediaSource`       | `vtsearch.media_sources`       |
+| Labelset Sources    | `vtscore.labels.sources`          | `LABELSET_SOURCE`     | `LabelsetSource`    | `vtscore.labelset_sources`     |
+| Media Converters    | `vtscore.converters`              | `CONVERTER`           | `MediaConverter`    | `vtscore.converters`           |
+| Media Sources       | `vtscore.datasets.sources`        | `SOURCE`              | `MediaSource`       | `vtscore.media_sources`        |
 
 Failed imports emit a warning but do not break the application — a missing
 optional dependency gracefully disables that plugin.
@@ -124,7 +124,7 @@ the family's group (see the rightmost column above). For example, a
 third-party importer would add this to its `pyproject.toml`:
 
 ```toml
-[project.entry-points."vtsearch.importers"]
+[project.entry-points."vtscore.importers"]
 my_importer = "my_pkg.importer:IMPORTER"
 ```
 
@@ -157,7 +157,7 @@ Output formats:
 | `names`         | One name per line; with a family, bare names — without one, `family:name` pairs |
 
 The same inventory is also available programmatically as
-`vtsearch.plugins.inventory.gather_plugins()`.
+`vtscore.plugins.inventory.gather_plugins()`.
 
 ---
 
@@ -170,21 +170,21 @@ changes to routes or core code are needed.
 ### File structure
 
 ```
-vtsearch/datasets/importers/<your_importer>/
+vtscore/datasets/importers/<your_importer>/
 └── __init__.py       # Importer class + IMPORTER instance (required)
 ```
 
 ### What to implement
 
-Subclass `DatasetImporter` from `vtsearch.datasets.importers.base`.
+Subclass `DatasetImporter` from `vtscore.datasets.importers.base`.
 Set the required class attributes and implement the `run()` method.
 Expose a module-level `IMPORTER` instance.
 
 ```python
-# vtsearch/datasets/importers/s3/__init__.py
+# vtscore/datasets/importers/s3/__init__.py
 
-from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.media import all_folder_names
+from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.media import all_folder_names
 
 
 class S3Importer(DatasetImporter):
@@ -232,8 +232,8 @@ class S3Importer(DatasetImporter):
         """
         import boto3
         from pathlib import Path
-        from vtsearch.config import DATA_DIR
-        from vtsearch.concurrency.progress import update_progress
+        from vtscore.config import DATA_DIR
+        from vtscore.concurrency.progress import update_progress
 
         bucket = field_values["bucket"]
         prefix = field_values.get("prefix", "")
@@ -252,7 +252,7 @@ class S3Importer(DatasetImporter):
             s3.download_file(bucket, key, str(local_path))
 
         # Delegate to the standard folder loader
-        from vtsearch.datasets.loader import load_dataset_from_folder
+        from vtscore.datasets.loader import load_dataset_from_folder
         load_dataset_from_folder(download_dir, media_type, medias, thin=thin)
 
 
@@ -440,7 +440,7 @@ Records returning `None` are skipped (gaps are squeezed out, IDs stay
 sequential).
 
 For an end-to-end example see
-`vtsearch/datasets/importers/recaller/__init__.py`, which overrides the
+`vtscore/datasets/importers/recaller/__init__.py`, which overrides the
 bulk hook to issue DataWrest embedding lookups and PullWrest downloads
 concurrently via a thread pool.
 
@@ -502,7 +502,7 @@ errors directly to the user.
 ### Progress reporting
 
 ```python
-from vtsearch.concurrency.progress import update_progress
+from vtscore.concurrency.progress import update_progress
 update_progress("downloading", "Downloading file 3/10", 3, 10)
 ```
 
@@ -532,7 +532,7 @@ Importers that want to pull in **multiple source media types** (e.g.
 images") set the class attribute `multi_media = True` and iterate
 `self.effective_source_specs(field_values)` inside `run()`.
 
-A `SourceSpec` (defined in `vtsearch.datasets.importers.base`) is:
+A `SourceSpec` (defined in `vtscore.datasets.importers.base`) is:
 
 ```python
 SourceSpec(
@@ -561,7 +561,7 @@ class DXImporter(DatasetImporter):
     ]
 
     def run(self, field_values, medias, thin=False):
-        from vtsearch.converters import get_converter
+        from vtscore.converters import get_converter
 
         for spec in self.effective_source_specs(field_values):
             for record in self._dx_list(spec.source_type, field_values):
@@ -594,24 +594,24 @@ A `MediaConverter` takes media of one type and produces one or more
 media dicts of a *different* type.  Built-in examples:
 `video2image`, `video2audio`, `document2image`, `document2text`,
 `audio2image` (spectrogram), `audio2text` (Whisper ASR), `image2text` (OCR).
-Converters are auto-discovered from `vtsearch.converters` via the
+Converters are auto-discovered from `vtscore.converters` via the
 `CONVERTER` sentinel.
 
 ### File structure
 
 ```
-vtsearch/converters/<your_converter>.py    # flat module — single file per converter
+vtscore/converters/<your_converter>.py    # flat module — single file per converter
 ```
 
 ### What to implement
 
-Subclass `MediaConverter` from `vtsearch.converters.base`.  Implement
+Subclass `MediaConverter` from `vtscore.converters.base`.  Implement
 `source_type`, `target_type`, and `convert()`.  Optionally declare
 user-configurable parameters as a list of `PluginField`s on the class.
 
 ```python
-from vtsearch.converters.base import MediaConverter
-from vtsearch.plugins import PluginField
+from vtscore.converters.base import MediaConverter
+from vtscore.plugins import PluginField
 
 
 class Image2TextMediaConverter(MediaConverter):
@@ -688,18 +688,18 @@ CSV/JSON/webhook exporters handle both formats.
 ### File structure
 
 ```
-vtsearch/exporters/<your_exporter>/
+vtscore/exporters/<your_exporter>/
 └── __init__.py       # Exporter class + EXPORTER instance (required)
 ```
 
 ### What to implement
 
-Subclass `LabelsetExporter` from `vtsearch.exporters.base`.
+Subclass `LabelsetExporter` from `vtscore.exporters.base`.
 
 ```python
-# vtsearch/exporters/sftp/__init__.py
+# vtscore/exporters/sftp/__init__.py
 
-from vtsearch.exporters.base import LabelsetExporter, ExporterField
+from vtscore.exporters.base import LabelsetExporter, ExporterField
 
 
 class SftpLabelsetExporter(LabelsetExporter):
@@ -822,19 +822,19 @@ external sources. Auto-discovered at runtime.
 ### File structure
 
 ```
-vtsearch/labels/importers/<your_importer>/
+vtscore/labels/importers/<your_importer>/
 └── __init__.py       # Importer class + LABEL_IMPORTER instance (required)
 ```
 
 ### What to implement
 
-Subclass `LabelImporter` from `vtsearch.labels.importers.base`. The
+Subclass `LabelImporter` from `vtscore.labels.importers.base`. The
 `run()` method must return a list of label dicts.
 
 ```python
-# vtsearch/labels/importers/postgres/__init__.py
+# vtscore/labels/importers/postgres/__init__.py
 
-from vtsearch.labels.importers.base import LabelImporter, LabelImporterField
+from vtscore.labels.importers.base import LabelImporter, LabelImporterField
 
 
 class PostgresLabelImporter(LabelImporter):
@@ -1196,19 +1196,19 @@ Use a **Label Importer** (above) for one-shot label import. Use a
 ### File structure
 
 ```
-vtsearch/labels/sources/<your_source>/
+vtscore/labels/sources/<your_source>/
 └── __init__.py       # Source class + LABELSET_SOURCE instance (required)
 ```
 
 ### What to implement
 
-Subclass `LabelsetSource` from `vtsearch.labels.sources.base`.
+Subclass `LabelsetSource` from `vtscore.labels.sources.base`.
 
 ```python
-# vtsearch/labels/sources/database/__init__.py
+# vtscore/labels/sources/database/__init__.py
 
-from vtsearch.labels.sources.base import LabelsetSource, PluginField
-from vtsearch.datasets.labelset import LabelSet
+from vtscore.labels.sources.base import LabelsetSource, PluginField
+from vtscore.datasets.labelset import LabelSet
 
 
 class DatabaseLabelsetSource(LabelsetSource):
@@ -1254,7 +1254,7 @@ at runtime from the active `DetectorContext`.
 
 When a source imports labels (via `sync_from_labelset_source()`), each
 applied label would normally trigger a re-export back. A thread-local
-`_syncing` guard in `vtsearch/labels/sync.py` suppresses this:
+`_syncing` guard in `vtscore/labels/sync.py` suppresses this:
 
 ```python
 with _sync_guard():

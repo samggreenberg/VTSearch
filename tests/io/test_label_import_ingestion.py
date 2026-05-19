@@ -67,7 +67,7 @@ class TestIngestMissingEndpoint:
 
 class TestIngestMissingClips:
     def test_groups_by_origin(self):
-        from vtsearch.datasets.ingest import _group_by_origin
+        from vtscore.datasets.ingest import _group_by_origin
 
         entries = [
             {"origin": {"importer": "a", "params": {}}, "origin_name": "x", "md5": "1", "label": "good"},
@@ -81,7 +81,7 @@ class TestIngestMissingClips:
         assert counts == [1, 2]
 
     def test_entries_without_origin_skipped(self):
-        from vtsearch.datasets.ingest import _group_by_origin
+        from vtscore.datasets.ingest import _group_by_origin
 
         entries = [{"md5": "abc", "label": "good"}]
         groups = _group_by_origin(entries)
@@ -89,15 +89,15 @@ class TestIngestMissingClips:
 
     def test_media_type_from_origin_folder(self):
         """Folder origins resolve media type from params."""
-        from vtsearch.datasets.ingest import _media_type_from_origin
+        from vtscore.datasets.ingest import _media_type_from_origin
 
         origin = {"importer": "server_folder", "params": {"path": "/tmp/x", "media_type": "text"}}
         assert _media_type_from_origin(origin) == "text"
 
     def test_media_type_from_origin_demo(self):
         """Demo origins resolve media type from DEMO_DATASETS config."""
-        from vtsearch.datasets.config import DEMO_DATASETS
-        from vtsearch.datasets.ingest import _media_type_from_origin
+        from vtscore.datasets.config import DEMO_DATASETS
+        from vtscore.datasets.ingest import _media_type_from_origin
 
         # Find a real demo dataset name from the config
         for name, info in DEMO_DATASETS.items():
@@ -109,7 +109,7 @@ class TestIngestMissingClips:
 
     def test_media_type_from_origin_unknown(self):
         """Unknown origins return empty string."""
-        from vtsearch.datasets.ingest import _media_type_from_origin
+        from vtscore.datasets.ingest import _media_type_from_origin
 
         origin = {"importer": "unknown_xyz", "params": {}}
         assert _media_type_from_origin(origin) == ""
@@ -118,7 +118,7 @@ class TestIngestMissingClips:
         """_ingest_via_resolver resolves demo origin files item-by-item."""
         import numpy as np
 
-        from vtsearch.datasets.ingest import _ingest_via_resolver
+        from vtscore.datasets.ingest import _ingest_via_resolver
 
         rng = np.random.default_rng(42)
 
@@ -163,9 +163,9 @@ class TestIngestMissingClips:
             yield img_path
 
         with (
-            patch("vtsearch.datasets.ingest._media_type_from_origin", return_value="image"),
-            patch("vtsearch.detectors.resolver.resolve_file_context", _fake_resolve_ctx),
-            patch("vtsearch.detectors.resolver.embed_file", return_value=fake_embedding),
+            patch("vtscore.datasets.ingest._media_type_from_origin", return_value="image"),
+            patch("vtscore.detectors.resolver.resolve_file_context", _fake_resolve_ctx),
+            patch("vtscore.detectors.resolver.embed_file", return_value=fake_embedding),
         ):
             result = _ingest_via_resolver(origin, entries, existing, noop_progress)
 
@@ -177,7 +177,7 @@ class TestIngestMissingClips:
 
     def test_ingest_via_resolver_returns_neg1_for_unknown_media_type(self):
         """_ingest_via_resolver returns -1 when media type can't be determined."""
-        from vtsearch.datasets.ingest import _ingest_via_resolver
+        from vtscore.datasets.ingest import _ingest_via_resolver
 
         origin = {"importer": "unknown_xyz", "params": {}}
         entries = [{"origin": origin, "origin_name": "x", "md5": "m", "label": "good"}]
@@ -194,7 +194,7 @@ class TestIngestMissingClips:
 
         import numpy as np
 
-        from vtsearch.datasets.ingest import ingest_missing_medias
+        from vtscore.datasets.ingest import ingest_missing_medias
 
         # Create a folder with a text file to simulate a media source
         text_dir = tmp_path / "texts"

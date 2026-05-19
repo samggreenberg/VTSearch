@@ -1,4 +1,4 @@
-"""Tests for the vtsearch.eval evaluation framework.
+"""Tests for the vtscore.eval evaluation framework.
 
 These tests exercise the metrics, config, and runner modules using
 synthetic data — no real model downloads or embeddings required.
@@ -10,8 +10,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from vtsearch.eval.config import EVAL_DATASETS, EvalQuery
-from vtsearch.eval.metrics import (
+from vtscore.eval.config import EVAL_DATASETS, EvalQuery
+from vtscore.eval.metrics import (
     DatasetResult,
     LearnedSortMetrics,
     QueryMetrics,
@@ -20,7 +20,7 @@ from vtsearch.eval.metrics import (
     compute_metrics,
     compute_precision_recall_at_k,
 )
-from vtsearch.eval.runner import (
+from vtscore.eval.runner import (
     _cosine_similarity,
     eval_learned_sort,
     eval_text_sort,
@@ -242,7 +242,7 @@ class TestEvalConfig:
                 assert q.target_category.strip(), f"{ds_id}: empty target_category"
 
     def test_all_eval_datasets_reference_demo_datasets(self):
-        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtscore.datasets.config import DEMO_DATASETS
 
         for ds_id, ds_cfg in EVAL_DATASETS.items():
             demo_id = ds_cfg["demo_dataset"]
@@ -250,7 +250,7 @@ class TestEvalConfig:
 
     def test_query_categories_match_demo_categories(self):
         """Every query's target_category must appear in the demo dataset's category list."""
-        from vtsearch.datasets.config import DEMO_DATASETS
+        from vtscore.datasets.config import DEMO_DATASETS
 
         for ds_id, ds_cfg in EVAL_DATASETS.items():
             demo_id = ds_cfg["demo_dataset"]
@@ -332,7 +332,7 @@ class TestEvalTextSort:
                 return cat_dir.copy()
             return dog_dir.copy()
 
-        with patch("vtsearch.embedding.helpers.embed_text_query", side_effect=mock_embed):
+        with patch("vtscore.embedding.helpers.embed_text_query", side_effect=mock_embed):
             results = eval_text_sort(medias, queries, "image", k_values=[5, 10])
 
         assert len(results) == 2
@@ -345,7 +345,7 @@ class TestEvalTextSort:
         medias, cat_dir, _ = self._make_synthetic_clips()
         queries = [EvalQuery("a cat", "cat")]
 
-        with patch("vtsearch.embedding.helpers.embed_text_query", return_value=cat_dir.copy()):
+        with patch("vtscore.embedding.helpers.embed_text_query", return_value=cat_dir.copy()):
             results = eval_text_sort(medias, queries, "image", k_values=[5])
 
         qm = results[0]
@@ -359,7 +359,7 @@ class TestEvalTextSort:
         """Without start_time, elapsed_seconds defaults to 0."""
         medias, cat_dir, _ = self._make_synthetic_clips()
         queries = [EvalQuery("a cat", "cat")]
-        with patch("vtsearch.embedding.helpers.embed_text_query", return_value=cat_dir.copy()):
+        with patch("vtscore.embedding.helpers.embed_text_query", return_value=cat_dir.copy()):
             results = eval_text_sort(medias, queries, "image", k_values=[5])
         assert results[0].elapsed_seconds == 0.0
 
@@ -374,7 +374,7 @@ class TestEvalTextSort:
             return cat_dir.copy()
 
         start = time.monotonic()
-        with patch("vtsearch.embedding.helpers.embed_text_query", side_effect=mock_embed):
+        with patch("vtscore.embedding.helpers.embed_text_query", side_effect=mock_embed):
             results = eval_text_sort(medias, queries, "image", k_values=[5], start_time=start)
         for qm in results:
             assert qm.elapsed_seconds >= 0.0

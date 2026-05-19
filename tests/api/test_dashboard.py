@@ -1,8 +1,8 @@
 """Tests for the VTSearch dashboard API endpoint."""
 
 import app as app_module  # noqa: F401 — triggers conftest side effects
-from vtsearch.datasets.registry import register_dataset
-from vtsearch.detectors.registry import register_detector
+from vtscore.datasets.registry import register_dataset
+from vtscore.detectors.registry import register_detector
 from vtsearch.state import medias
 
 
@@ -199,7 +199,7 @@ class TestGuessMediaEmbedder:
 
     def test_loading_task_includes_embedder(self, client):
         """Loading tasks expose the embedder field for in-progress guessing."""
-        from vtsearch.concurrency.progress import loading_tasks
+        from vtscore.concurrency.progress import loading_tasks
 
         tracker = loading_tasks.create_task("test_emb_task", "test-ds", media_type="image", embedder="siglip")
         tracker.update("loading", "Embedding...", 0, 10)
@@ -209,7 +209,7 @@ class TestGuessMediaEmbedder:
 
     def test_loading_task_omits_empty_embedder(self, client):
         """Loading tasks without an embedder do not include the field."""
-        from vtsearch.concurrency.progress import loading_tasks
+        from vtscore.concurrency.progress import loading_tasks
 
         tracker = loading_tasks.create_task("test_no_emb", "test-ds", media_type="image")
         tracker.update("loading", "Loading...", 0, 10)
@@ -561,7 +561,7 @@ class TestDashboardModelRegistryColumns:
 
     def test_model_registry_detector_loaded_follows_loaded(self, client):
         """detector_loaded reflects whether a DetectorContext is registered."""
-        from vtsearch.detectors.registry import add_loaded_detector_id
+        from vtscore.detectors.registry import add_loaded_detector_id
 
         entry = register_detector(name="train-ld", media_type="audio")
         resp = client.get("/api/detectors/registry")
@@ -584,7 +584,7 @@ class TestDashboardModelRegistryColumns:
 
     def test_model_registry_last_trained_at_set_on_label_save(self, client):
         """Saving labels updates last_trained_at to a timestamp."""
-        from vtsearch.detectors.registry import register_detector as reg_model, update_detector
+        from vtscore.detectors.registry import register_detector as reg_model, update_detector
 
         entry = reg_model(name="lt-save", media_type="audio")
         import time
@@ -712,7 +712,7 @@ class TestFindProgress:
 
     def test_find_progress_returns_idle_by_default(self, client):
         """The find_progress tracker is idle when no Find is running."""
-        from vtsearch.concurrency.progress import find_progress
+        from vtscore.concurrency.progress import find_progress
 
         data = find_progress.get()
         assert data["status"] == "idle"
@@ -727,7 +727,7 @@ class TestFindProgress:
         import numpy as np
 
         from helpers import setup_trainable_model_in_registry
-        from vtsearch.concurrency.progress import find_progress
+        from vtscore.concurrency.progress import find_progress
 
         # Create a dataset pkl with three items whose md5s match a labelset.
         ds_medias = {}
@@ -799,7 +799,7 @@ class TestFindProgress:
 
     def test_find_progress_resets_on_error(self, client):
         """Progress resets to idle when Find returns an error."""
-        from vtsearch.concurrency.progress import find_progress
+        from vtscore.concurrency.progress import find_progress
 
         resp = client.post("/api/find", json={"dataset_ids": [], "detector_ids": []})
         assert resp.status_code == 400
