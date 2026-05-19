@@ -357,8 +357,12 @@ The `embedder` dropdown is populated by `/api/datasets/embedders/<media_type>` b
 ### 11.4 OS dark mode for `theme` ★★ XS
 `theme` defaults to `"dark"` in `_SETTING_SPECS`. On first load, read `prefers-color-scheme` from the browser and store that as the initial value. (See `vtsearch/settings.py`.)
 
-### 11.5 Concurrency limits from hardware ★★ S
-`max_concurrent_dataset_downloads` and `max_concurrent_dataset_embeddings` both default to 1, then sit untouched. On startup, detect cores/VRAM via `torch.cuda.mem_get_info()` (already available in `embedding/loader.py`) and set sensible defaults — e.g. downloads = `min(4, cpu_count)`, embeddings = `1` if CPU-only else `min(2, gpu_count)`. Bake this into the spec's default callable, not a one-time write.
+### 11.5 Concurrency limits from hardware ★★ S — shipped
+Was: `max_concurrent_dataset_downloads` and `max_concurrent_dataset_embeddings` both defaulted to `1` and sat untouched.
+
+**What shipped:** `vtsearch/embedding/loader.py` exposes two hardware-derived defaults — `default_concurrent_downloads()` returns `max(1, min(4, os.cpu_count() or 1))`, and `default_concurrent_embeddings()` returns `1` on CPU-only boxes or `min(2, torch.cuda.device_count())` when CUDA is available. `ServerSettings` in `vtsearch/settings_models.py` wires them in via `default_factory=` (with lazy imports so settings-model import doesn't pull torch), so the values are computed on first read of an unset key rather than being baked into `data/settings.json` — a manual override in the file always wins.
+
+**Deviation from the brief:** the brief suggested `torch.cuda.mem_get_info()` for VRAM probing; we use `torch.cuda.device_count()` instead. `mem_get_info()` reports *currently free* VRAM, which fluctuates with whatever else is on the GPU; device count is stable and gives the same "one task per visible device, capped at 2" behaviour without depending on box state at startup.
 
 ### 11.6 Detector media type from selected dataset ★★★ XS
 New-detector modal forces a `media_type` pick. If the user already has a dataset selected on the dashboard, pre-fill it (already partially done — extend to *lock* and gray-out unless they explicitly unlock).
