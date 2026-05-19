@@ -445,9 +445,7 @@ class TestMultiDatasetAPI:
         embedder it warmed in the background."""
         from vtsearch.datasets.registry import register_dataset
 
-        e = register_dataset(
-            name="Pre", media_type="audio", num_items=1, pkl_path="/tmp/fake_pre.pkl"
-        )
+        e = register_dataset(name="Pre", media_type="audio", num_items=1, pkl_path="/tmp/fake_pre.pkl")
         resp = client.post(f"/api/datasets/registry/{e['id']}/preload-embedder")
         assert resp.status_code == 200
         data = resp.get_json()
