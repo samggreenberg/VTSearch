@@ -50,6 +50,7 @@ class AppSettingsSchema(Schema):
     audio_playing = fields.Boolean()
     swipe_animation = fields.Boolean()
     show_metadata = fields.Boolean()
+    label_hint_dismissed = fields.Boolean()
     autopilot_enabled = fields.Boolean()
     hide_autopilot = fields.Boolean()
     autopilot_top_greens = fields.Integer()
@@ -106,6 +107,7 @@ class SettingsUpdateSchema(Schema):
     audio_playing = fields.Boolean()
     swipe_animation = fields.Boolean()
     show_metadata = fields.Boolean()
+    label_hint_dismissed = fields.Boolean()
 
     view_mode_left = fields.Raw()
     view_mode_right = fields.Raw()

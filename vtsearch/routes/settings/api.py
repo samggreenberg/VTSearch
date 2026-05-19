@@ -49,6 +49,7 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "audio_playing": settings.set_audio_playing,
     "swipe_animation": settings.set_swipe_animation,
     "show_metadata": settings.set_show_metadata,
+    "label_hint_dismissed": settings.set_label_hint_dismissed,
     "view_mode_left": settings.set_view_mode_left,
     "view_mode_right": settings.set_view_mode_right,
     "grid_icon_size_left": settings.set_grid_icon_size_left,

@@ -138,6 +138,11 @@ class UserSettings(BaseModel):
     audio_playing: bool = True
     swipe_animation: bool = True
     show_metadata: bool = True
+    # Set to True once the user dismisses the zero-votes "Use ← / → or click"
+    # hint that overlays the Good/Bad buttons when a fresh labeling session
+    # has no votes yet. Persisting it keeps the hint from re-appearing every
+    # time the same user starts a new session.
+    label_hint_dismissed: bool = False
     autopilot_enabled: bool = True
     hide_autopilot: bool = False
     autopilot_top_greens: Annotated[int, _clamp_min(1)] = 3

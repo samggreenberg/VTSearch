@@ -198,6 +198,9 @@
           "inclusion": {
             "type": "integer"
           },
+          "label_hint_dismissed": {
+            "type": "boolean"
+          },
           "last_embedder_per_media_type": {
             "additionalProperties": {
               "type": "string"
@@ -3707,6 +3710,9 @@
           },
           "inclusion": {
             "type": "integer"
+          },
+          "label_hint_dismissed": {
+            "type": "boolean"
           },
           "last_embedder_per_media_type": {},
           "panel_pct_left": {},
