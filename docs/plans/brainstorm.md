@@ -126,7 +126,7 @@ A **`clipper_chain`** abstraction so we can run e.g. `document_section → text_
 
 ### 4.4 Video
 - **InternVideo2** ★★ — current SOTA for video-text retrieval.
-- **VideoMAE-v2** ★ — single-modality but very strong action features.
+- ~~**VideoMAE-v2** ★ — single-modality but very strong action features.~~ Shipped (`OpenGVLab/VideoMAEv2-Base`, vision-only, mean-pooled patch features, L2-normalised); registered as the `videomae` embedder on the `video` media type.
 
 ### 4.5 Multimodal-shared
 - **ImageBind / LanguageBind family** ★★★ — *one* embedder that handles audio, image, text, video, depth, IMU. Would let us run cross-modal queries like "audio clips that match this photo" without converter chains. Big architectural win for the cross-modal voting story.

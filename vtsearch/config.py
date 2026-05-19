@@ -144,6 +144,15 @@ HF repo has no ``config.json`` so ``AutoModel`` could never load it).
 CLAP_MUSIC_MODEL_ID = "laion/larger_clap_music_and_speech"
 BGE_MODEL_ID = "BAAI/bge-base-en-v1.5"
 LANGUAGEBIND_VIDEO_MODEL_ID = "LanguageBind/LanguageBind_Video_V1.5_FT"
+VIDEOMAE_MODEL_ID = "OpenGVLab/VideoMAEv2-Base"
+"""Hugging Face repo for VideoMAE v2 Base weights.
+
+Loaded via ``AutoModel.from_pretrained(..., trust_remote_code=True)``.
+Vision-only encoder — there is no paired text tower, so the embedder
+sets ``supports_text=False`` and :meth:`embed_text` returns ``None``.
+The masked-autoencoder objective produces unusually strong action /
+motion features compared to image-only encoders applied per frame.
+"""
 
 
 # ---------------------------------------------------------------------------
