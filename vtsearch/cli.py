@@ -418,7 +418,168 @@ def _load_importer_chunked(
     yield from importer.run_chunked_cli(field_values, chunk_size, thin=True)
 
 
-def _run_pipeline(  # noqa: C901
+def _validate_dry_run_source(sd: dict[str, Any]) -> None:
+    """Validate the source description block passed to a dry run."""
+    kind = sd.get("kind")
+    if kind == "pickle":
+        dataset = sd.get("dataset", "")
+        if dataset and not Path(dataset).exists():
+            raise FileNotFoundError(f"Dataset file not found: {dataset}")
+    elif kind == "importer":
+        from vtsearch.datasets.importers import get_importer
+
+        importer_name = sd.get("importer", "")
+        importer = get_importer(importer_name)
+        if importer is None:
+            available = _list_importer_names()
+            raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
+        importer.validate_cli_field_values(sd.get("params") or {})
+
+
+def _validate_dry_run_exporter(exporter_name: str, exporter_field_values: dict[str, Any] | None) -> None:
+    """Resolve *exporter_name* in the registry and validate its CLI field values."""
+    from vtsearch.exporters import get_exporter
+
+    exporter = get_exporter(exporter_name)
+    if exporter is None:
+        available = _list_exporter_names()
+        raise ValueError(f"Unknown exporter: {exporter_name}. Available: {', '.join(available)}")
+    exporter.validate_cli_field_values(exporter_field_values or {})
+
+
+def _emit_dry_run_plan(
+    source_description: dict[str, Any],
+    settings_path: str | None,
+    autorun_detectors: list[str],
+    exporter_name: str | None,
+    exporter_field_values: dict[str, Any] | None,
+) -> None:
+    """Emit the JSON ``dry_run_plan`` event or the human-readable plan text."""
+    if cli_progress.get_format() == "json":
+        cli_progress.emit(
+            "dry_run_plan",
+            source=source_description,
+            settings_path=settings_path,
+            autorun_detectors=_summarize_autorun_detectors(autorun_detectors),
+            exporter=exporter_name,
+            exporter_field_values=exporter_field_values or {},
+        )
+    else:
+        _print_dry_run_plan(
+            source_description=source_description,
+            settings_path=settings_path,
+            autorun_detectors=autorun_detectors,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+        )
+
+
+def _run_dry_run(
+    source_description: dict[str, Any] | None,
+    settings_path: str | None,
+    autorun_detectors: list[str],
+    exporter_name: str | None,
+    exporter_field_values: dict[str, Any] | None,
+) -> None:
+    """Validate the planned pipeline + exporter and emit the dry-run plan."""
+    sd = source_description or {}
+    _validate_dry_run_source(sd)
+    if exporter_name:
+        _validate_dry_run_exporter(exporter_name, exporter_field_values)
+    _emit_dry_run_plan(sd, settings_path, autorun_detectors, exporter_name, exporter_field_values)
+
+
+def _train_detectors_for_first_chunk(
+    chunk_medias: dict[int, dict[str, Any]],
+    media_type: str,
+    override_detectors: list[str] | None,
+    autorun_detectors: list[str],
+) -> dict[str, dict[str, Any]]:
+    """Train each autorun (or override) detector once against the first chunk.
+
+    Raises :class:`ValueError` when no detector applies to *media_type* —
+    that's almost always a settings-file misconfiguration the caller wants
+    surfaced immediately.
+    """
+    detector_names = list(override_detectors) if override_detectors is not None else list(autorun_detectors)
+    detector_mlps: dict[str, dict[str, Any]] = (
+        _load_and_train_detectors(detector_names, media_type, chunk_medias) if detector_names else {}
+    )
+    if not detector_mlps:
+        raise ValueError(
+            f"No autorun detectors found for media type: {media_type}. "
+            "Add detectors to the settings file's autorun_detectors list."
+        )
+    return detector_mlps
+
+
+def _score_chunk(
+    chunk_medias: dict[int, dict[str, Any]],
+    chunk_num: int,
+    total_medias: int,
+    detector_mlps: dict[str, dict[str, Any]],
+    merged_results: dict[str, dict[str, Any]],
+) -> None:
+    """Emit chunk-start progress when relevant, score this chunk, and merge in place."""
+    if chunk_num > 1 or total_medias != len(chunk_medias):
+        cli_progress.emit(
+            "chunk_start",
+            text=f"Processing chunk {chunk_num} ({len(chunk_medias)} medias)...",
+            chunk_num=chunk_num,
+            chunk_size=len(chunk_medias),
+        )
+    chunk_results = _score_medias_with_detectors(chunk_medias, detector_mlps)
+    _merge_detector_results(merged_results, chunk_results)
+
+
+def _run_live_pipeline(
+    media_source: Iterator[dict[int, dict[str, Any]]],
+    *,
+    exporter_name: str | None,
+    exporter_field_values: dict[str, Any] | None,
+    override_detectors: list[str] | None,
+    autorun_detectors: list[str],
+    empty_error: str,
+) -> None:
+    """Iterate *media_source*, score each chunk, and run the exporter on the merged results."""
+    merged_results: dict[str, dict[str, Any]] = {}
+    media_type: str | None = None
+    detector_mlps: dict[str, dict[str, Any]] | None = None
+    total_medias = 0
+    chunk_num = 0
+
+    for chunk_num, chunk_medias in enumerate(media_source, 1):
+        if not chunk_medias:
+            continue
+
+        apply_custom_metadata_md5(chunk_medias)
+        total_medias += len(chunk_medias)
+
+        if media_type is None:
+            media_type = _detect_media_type(chunk_medias)
+            detector_mlps = _train_detectors_for_first_chunk(
+                chunk_medias, media_type, override_detectors, autorun_detectors
+            )
+
+        if detector_mlps:
+            _score_chunk(chunk_medias, chunk_num, total_medias, detector_mlps, merged_results)
+
+    if not merged_results:
+        raise ValueError(empty_error)
+
+    if chunk_num > 1:
+        cli_progress.emit(
+            "chunks_done",
+            text=f"Finished processing {total_medias} medias across {chunk_num} chunk(s).",
+            total_medias=total_medias,
+            chunks=chunk_num,
+        )
+
+    results = _build_multi_results_dict(merged_results, media_type or "unknown")
+    _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
+
+
+def _run_pipeline(
     media_source: Iterator[dict[int, dict[str, Any]]],
     *,
     settings_path: str | None = None,
@@ -447,112 +608,29 @@ def _run_pipeline(  # noqa: C901
     from vtsearch.config import CoreConfig
 
     # Build the runtime config once (routing the optional settings_path
-    # redirect through the same call) so this function — and the library
-    # code below it — never imports ``vtsearch.settings`` directly.
+    # redirect through the same call) so this function — and the helpers
+    # below — never import ``vtsearch.settings`` directly.
     config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
+    autorun_detectors = list(config.autorun_detectors)
 
     if dry_run:
-        sd = source_description or {}
-        if sd.get("kind") == "pickle":
-            dataset = sd.get("dataset", "")
-            if dataset and not Path(dataset).exists():
-                raise FileNotFoundError(f"Dataset file not found: {dataset}")
-        elif sd.get("kind") == "importer":
-            from vtsearch.datasets.importers import get_importer
-
-            importer_name = sd.get("importer", "")
-            importer = get_importer(importer_name)
-            if importer is None:
-                available = _list_importer_names()
-                raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
-            importer.validate_cli_field_values(sd.get("params") or {})
-
-        if exporter_name:
-            from vtsearch.exporters import get_exporter
-
-            exporter = get_exporter(exporter_name)
-            if exporter is None:
-                available = _list_exporter_names()
-                raise ValueError(f"Unknown exporter: {exporter_name}. Available: {', '.join(available)}")
-            exporter.validate_cli_field_values(exporter_field_values or {})
-        autorun_detectors = list(config.autorun_detectors)
-        if cli_progress.get_format() == "json":
-            cli_progress.emit(
-                "dry_run_plan",
-                source=source_description or {},
-                settings_path=settings_path,
-                autorun_detectors=_summarize_autorun_detectors(autorun_detectors),
-                exporter=exporter_name,
-                exporter_field_values=exporter_field_values or {},
-            )
-        else:
-            _print_dry_run_plan(
-                source_description=source_description or {},
-                settings_path=settings_path,
-                autorun_detectors=autorun_detectors,
-                exporter_name=exporter_name,
-                exporter_field_values=exporter_field_values,
-            )
+        _run_dry_run(
+            source_description,
+            settings_path,
+            autorun_detectors,
+            exporter_name,
+            exporter_field_values,
+        )
         return
 
-    merged_results: dict[str, dict[str, Any]] = {}
-    media_type: str | None = None
-    detector_mlps: dict[str, dict[str, Any]] | None = None
-    total_medias = 0
-    chunk_num = 0
-
-    for chunk_num, chunk_medias in enumerate(media_source, 1):
-        if not chunk_medias:
-            continue
-
-        apply_custom_metadata_md5(chunk_medias)
-        total_medias += len(chunk_medias)
-
-        if media_type is None:
-            media_type = _detect_media_type(chunk_medias)
-
-            detector_names = (
-                list(override_detectors) if override_detectors is not None else list(config.autorun_detectors)
-            )
-            if detector_names:
-                # Train each detector exactly once, using the first chunk as
-                # the fast-path snap; subsequent chunks reuse the cached
-                # MLPs.
-                detector_mlps = _load_and_train_detectors(detector_names, media_type, chunk_medias)
-            else:
-                detector_mlps = {}
-
-            if not detector_mlps:
-                raise ValueError(
-                    f"No autorun detectors found for media type: {media_type}. "
-                    "Add detectors to the settings file's autorun_detectors list."
-                )
-
-        if chunk_num > 1 or total_medias != len(chunk_medias):
-            cli_progress.emit(
-                "chunk_start",
-                text=f"Processing chunk {chunk_num} ({len(chunk_medias)} medias)...",
-                chunk_num=chunk_num,
-                chunk_size=len(chunk_medias),
-            )
-
-        if detector_mlps:
-            chunk_results = _score_medias_with_detectors(chunk_medias, detector_mlps)
-            _merge_detector_results(merged_results, chunk_results)
-
-    if not merged_results:
-        raise ValueError(empty_error)
-
-    if chunk_num > 1:
-        cli_progress.emit(
-            "chunks_done",
-            text=f"Finished processing {total_medias} medias across {chunk_num} chunk(s).",
-            total_medias=total_medias,
-            chunks=chunk_num,
-        )
-
-    results = _build_multi_results_dict(merged_results, media_type or "unknown")
-    _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
+    _run_live_pipeline(
+        media_source,
+        exporter_name=exporter_name,
+        exporter_field_values=exporter_field_values,
+        override_detectors=override_detectors,
+        autorun_detectors=autorun_detectors,
+        empty_error=empty_error,
+    )
 
 
 def autodetect_main(

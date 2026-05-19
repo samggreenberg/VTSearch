@@ -1,6 +1,7 @@
 # C901 Refactor Triage (≥20 complexity)
 
-**Status:** Triage complete; 7 of 8 refactors shipped.
+**Status:** All 8 refactors shipped. Plan ready to retire — see the
+"What shipped" / "Open follow-ups" sections at the bottom.
 
 ## Why this file exists
 
@@ -42,7 +43,7 @@ classified as either:
 | ~~`vtsearch/routes/sorting.py:789`~~ | ~~`label_file_sort`~~ | ~~21~~ | **Shipped** — see Done below. |
 | ~~`vtsearch/detectors/resolver.py:560`~~ | ~~`resolve_label_embeddings`~~ | ~~25~~ | **Shipped** — see Done below. |
 | ~~`vtsearch/detectors/labelset_training.py:83`~~ | ~~`populate_label_embeddings`~~ | ~~21~~ | **Shipped** — see Done below. |
-| `vtsearch/cli.py:421` | `_run_pipeline` | 31 | The dry-run branch (~50 lines of validation + emission) is essentially its own function inside an early return. Lift it to `_run_dry_run(...)` and the main path is straightforward. |
+| ~~`vtsearch/cli.py:421`~~ | ~~`_run_pipeline`~~ | ~~31~~ | **Shipped** — see Done below. |
 
 ## Skip (complexity is honest)
 
@@ -64,7 +65,7 @@ Ship in this order — earlier rows are more mechanical / lower risk:
 4. ~~`audio2image.convert` / `image2text.convert` (one PR)~~ — shipped
 5. ~~`resolve_label_embeddings`~~ — shipped
 6. ~~`populate_label_embeddings`~~ — shipped
-7. `_run_pipeline`
+7. ~~`_run_pipeline`~~ — shipped
 
 ## Done
 
@@ -94,6 +95,16 @@ Ship in this order — earlier rows are more mechanical / lower risk:
   call the per-entry helper, compute `available_columns`). The route
   is now: pools → labelset → annotate → optional corrections-only
   filter → optional enrichment → return. `noqa: C901` deleted. Full
+  suite (3842 tests) passes.
+
+- **`_run_pipeline`** (CC 31 → 3). Extracted four dry-run helpers
+  (`_validate_dry_run_source`, `_validate_dry_run_exporter`,
+  `_emit_dry_run_plan`, and the `_run_dry_run` orchestrator), plus
+  `_train_detectors_for_first_chunk` for the lazy detector-train
+  pre-condition, `_score_chunk` for the per-chunk
+  emit-progress + score + merge sequence, and `_run_live_pipeline` for
+  the loop itself. `_run_pipeline` is now a three-line dispatcher:
+  set the settings path, route to either dry-run or live. Full
   suite (3842 tests) passes.
 
 - **`populate_label_embeddings`** (CC 21 → 9). Extracted
@@ -129,10 +140,35 @@ Ship in this order — earlier rows are more mechanical / lower risk:
   short early-returns. `noqa: C901` deleted on both. Full suite
   (3842 tests) passes.
 
+## What shipped
+
+All eight refactors in **Refactor (high payoff)** landed, in the
+sequence above. Combined: roughly 1,000 lines reorganised into named
+helpers, ~250 cyclomatic-complexity points eliminated, eight `# noqa: C901`
+markers deleted, and zero behavioural changes (verified by the full
+test suite at every step).
+
 ## Open follow-ups
 
-- Once all rows in **Refactor** ship, re-run `radon cc -n C` and update
-  brainstorm.md §20.7.1 with the new worst-offenders list.
+- **Update brainstorm.md §20.7.1.** Its "Worst offenders remaining"
+  list still names `_run_pipeline (31)`, `export_labels (29)`,
+  `DatasetImporter.effective_source_specs (27)`, `load_pipeline_file
+  (26)`, `_resolve_or_train_detector (25)`, `resolve_label_embeddings
+  (25)`, `_apply_clip_and_embed (25)`, `Audio2ImageMediaConverter.convert
+  (25)`, and `combine_detectors (24)`. Six of those are now shipped;
+  three remain (the **Skip** rows in this file plus
+  `effective_source_specs`).
+- **Re-triage what radon shows now.** A post-refactor `radon cc -n D
+  --no-assert` reveals additional D-grade functions that were not on
+  the original list — likely a mix of dev-side growth and an
+  incomplete first sweep. Candidates worth a closer look:
+  `DatasetImporter.effective_source_specs (27)`,
+  `sync_labels_to_loaded_detector (23)`, `train_and_score (23)`,
+  `CombineDatasetsImporter.run (21)`. The five **Skip** rows in this
+  file (`load_pipeline_file`, `combine_detectors`,
+  `_resolve_or_train_detector`, `load_demo_dataset`,
+  `_eval_cached_models`) stay skipped — the original rationale still
+  holds. Open a new triage file when picking these up.
 - The remaining C-grade (11-19) noqa entries are the long tail; they
   do not need a new triage file — burn them down as code in the area
   is touched.
