@@ -101,6 +101,7 @@ max-complexity = 10
 # analysis scripts are not production code and don't benefit from
 # the complexity gate.
 "tests/**" = ["S108", "S301", "S314", "C901"]
+"tests_lib/**" = ["S108", "S301", "S314", "C901"]
 "scripts/**" = ["C901"]
 # safe_pickle_load is the centralized helper that calls pickle.load on
 # whitelisted bytes — flagging it would defeat the purpose of the wrapper.

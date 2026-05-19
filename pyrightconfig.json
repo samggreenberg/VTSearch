@@ -1,5 +1,5 @@
 {
-  "include": ["vtsearch", "tests"],
+  "include": ["vtsearch", "tests", "tests_lib"],
   "exclude": [
     "**/__pycache__",
     "**/node_modules",
@@ -7,7 +7,7 @@
     "scripts",
     "data"
   ],
-  "extraPaths": ["tests"],
+  "extraPaths": ["tests", "tests_lib"],
   "pythonVersion": "3.10",
   "typeCheckingMode": "basic",
   "useLibraryCodeForTypes": true,
