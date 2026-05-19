@@ -50,6 +50,16 @@
   }
 }
 
+.file-item-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .item-meta {
   font-size: 0.7rem;
   color: var(--text-secondary);

@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, HostBinding, HostListener, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -12,6 +12,8 @@ import { RunningJobsService, pairKey } from '../../services/running-jobs.service
 import { SortState } from '../../utils/managed-columns';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.models';
 import { isPairCompatible } from '../../utils/context-compat';
+import { detectorHue } from '../../utils/detector-color';
+import { DetectorSwatchComponent } from '../detector-swatch/detector-swatch.component';
 
 type PulldownKind = 'dataset' | 'detector';
 
@@ -44,12 +46,17 @@ interface PulldownRow {
 @Component({
   selector: 'vt-context-pulldown',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, DetectorSwatchComponent],
   templateUrl: './context-pulldown.component.html',
   styleUrl: './context-pulldown.component.scss',
 })
 export class ContextPulldownComponent implements OnInit, OnDestroy {
   @Input() kind: PulldownKind = 'dataset';
+
+  @HostBinding('class.kind-detector')
+  get isDetectorKind(): boolean {
+    return this.kind === 'detector';
+  }
 
   @ViewChild('menuRef') menuRef?: ElementRef<HTMLDivElement>;
 
@@ -336,6 +343,12 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
   trackRow(_: number, row: PulldownRow): string {
     return row.id;
+  }
+
+  /** Hue (0-359) for a detector row, hashed from its name. Returns null for
+   *  dataset rows so the template binding becomes a no-op (no inline style). */
+  hueFor(row: PulldownRow): string | null {
+    return this.isDataset ? null : String(detectorHue(row.name));
   }
 
   /** Sort registry entries the same way the Dashboard's tables sort them
