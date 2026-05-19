@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -179,6 +180,29 @@ motion features compared to image-only encoders applied per frame.
 # The app side will build a fresh ``CoreConfig`` at each request boundary
 # via :meth:`CoreConfig.from_settings`; library callers can construct one
 # directly with whatever values they want.
+#
+# The implementation of :meth:`from_settings` is installed by the app via
+# :func:`register_core_config_builder` — see ``vtsearch/shim`` for the
+# concrete builder that snapshots ``vtsearch.settings``.  This keeps the
+# library import-clean: ``vtsearch.config`` itself never imports
+# ``vtsearch.settings`` (Phase 8 of ``docs/plans/extract-library.md``).
+# Library-only consumers without an app skip ``from_settings()`` entirely
+# and construct ``CoreConfig`` directly.
+
+
+_core_config_builder: Callable[[str | Path | None], CoreConfig] | None = None
+
+
+def register_core_config_builder(fn: Callable[[str | Path | None], CoreConfig]) -> None:
+    """Install the app-side builder that reads ``vtsearch.settings``.
+
+    The Flask app wires this at startup via
+    :func:`vtsearch.shim.register_app_config_builder`.  Once registered,
+    :meth:`CoreConfig.from_settings` delegates to *fn* — the library file
+    itself stays settings-import-free.
+    """
+    global _core_config_builder
+    _core_config_builder = fn
 
 
 @dataclass(frozen=True)
@@ -223,23 +247,17 @@ class CoreConfig:
         redirected to that location first.  The CLI uses this to point at a
         run-specific settings JSON without each call site importing
         :mod:`vtsearch.settings` directly.
+
+        Implementation note: the body of this classmethod lives in
+        ``vtsearch/shim/`` and is installed at app startup via
+        :func:`register_core_config_builder`.  Library-only consumers
+        without the shim should construct :class:`CoreConfig` directly.
         """
-        from vtsearch import settings as _settings  # noqa: PLC0415
-
-        if settings_path is not None:
-            _settings.set_settings_path(settings_path)
-
-        return cls(
-            saved_datasets_dir=_settings.get_saved_datasets_dir(),
-            detectors_dir=_settings.get_detectors_dir(),
-            max_concurrent_dataset_downloads=_settings.get_max_concurrent_dataset_downloads(),
-            max_concurrent_dataset_embeddings=_settings.get_max_concurrent_dataset_embeddings(),
-            autorun_detectors=tuple(_settings.get_autorun_detectors()),
-            safe_thresholds=_settings.get_safe_thresholds(),
-            calibrate_count=_settings.get_calibrate_count(),
-            calibration_fraction=_settings.get_calibration_fraction(),
-            enrich_descriptions=_settings.get_enrich_descriptions(),
-            autopilot_goal_diversity=_settings.get_autopilot_goal_diversity(),
-            inclusion=_settings.get_inclusion(),
-            data_dir=DATA_DIR,
-        )
+        if _core_config_builder is None:
+            raise RuntimeError(
+                "CoreConfig.from_settings() requires the app-side builder to be "
+                "registered.  The Flask app installs it during startup via "
+                "vtsearch.shim.register_app_config_builder().  Library-only "
+                "callers should construct CoreConfig(...) directly instead."
+            )
+        return _core_config_builder(settings_path)
