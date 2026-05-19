@@ -413,8 +413,12 @@ Add a `?` icon next to the embedder dropdown in every importer that exposes one.
 - CSV label importer: show the expected column schema (`md5,label`) with a sample.
 - JSON label importer: show a 3-line sample of the expected structure.
 
-### 12.6 Loading-state context in the progress modal ★★ S
-Today the dataset loading modal shows step numbers like "[Step 3/4] Loading embedding model…". The user has no model for what step 3 means. Add a header `Loading dataset · embedding model` and a subtitle with a one-liner like "Downloading SigLIP weights (~860 MB). First-time only — cached afterwards."
+### 12.6 Loading-state context in the progress modal ★★ S — shipped
+Was: dashboard loading rows showed cryptic step numbers like "[Step 3/4] Loading embedding model…" with no plain-English context for what step 3 actually meant.
+
+**What shipped:** `frontend/src/app/utils/format-progress.ts` gained `formatProgressHeader(progress, kind, embedder?)`, which returns a `{ header, subtitle, detail }` triple derived from the event's `status` + `message` (+ optional `embedder` woven into model-load / embedding-files / embedding-labels subtitles). The dataset card, detector card, and orphan-task row in `dashboard.component.html` were restructured to render the header line ("Loading dataset · embedding model") and a one-line subtitle ("Loading SigLIP weights. First-time only — cached on disk afterwards.") above the existing progress bar; the `[Step S/T]` prefix is stripped from the detail because the header now conveys the phase. Phase vocabulary covers the dataset-load flow (downloading source / unpacking archive / embedding model / warming text encoder / embedding files / slicing clips / embedding clips / converting media / removing duplicates / building diversity index / saving to registry) and the detector-load flow (restoring labels / seeding examples / embedding labels). Embedder names are pretty-printed via a small lookup table (`siglip → SigLIP`, `clap → LAION-CLAP`, `xclip → X-CLIP`, etc.) so the subtitle matches user-facing terminology.
+
+**Open follow-ups:** byte-rate / ETA on the first-run model download (§14.2) and per-file embedding progress (§14.1) remain — the header is now in place but the bar itself still shows a single indeterminate spinner inside `embedding model` and `embedding files`. Folding those in will make the subtitle's "First-time only — cached on disk afterwards." reassurance land harder.
 
 ### 12.7 Inclusion slider tick labels ★★ XS
 The slider is `[-10, +10]` with no anchors. Add tick labels: `-10 strict` / `0 default` / `+10 lenient`, plus a one-line caption "Trades off precision (left) vs recall (right)."

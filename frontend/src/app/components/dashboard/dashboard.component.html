@@ -96,14 +96,25 @@
                       <button class="btn btn--cancel btn--sm" (click)="dismissLoadingTask(task.task_id)" title="Dismiss this error">Dismiss</button>
                     </div>
                   } @else {
+                    @let info = taskProgressInfo(task);
                     <div class="loading-task-progress">
-                      <span class="progress-msg">{{ taskProgressMessage(task) }}</span>
-                      <vt-progress-bar
-                        [value]="task.current"
-                        [max]="task.total"
-                        [indeterminate]="taskIsIndeterminate(task)"
-                      />
-                      <button class="btn btn--cancel btn--sm" (click)="cancelLoadingTask(task.task_id)" title="Cancel this dataset load">Cancel</button>
+                      <div class="progress-context">
+                        <div class="progress-header">{{ info.header }}</div>
+                        @if (info.subtitle) {
+                          <div class="progress-subtitle">{{ info.subtitle }}</div>
+                        }
+                      </div>
+                      <div class="progress-row">
+                        @if (info.detail) {
+                          <span class="progress-msg">{{ info.detail }}</span>
+                        }
+                        <vt-progress-bar
+                          [value]="task.current"
+                          [max]="task.total"
+                          [indeterminate]="taskIsIndeterminate(task)"
+                        />
+                        <button class="btn btn--cancel btn--sm" (click)="cancelLoadingTask(task.task_id)" title="Cancel this dataset load">Cancel</button>
+                      </div>
                     </div>
                   }
                 </td>

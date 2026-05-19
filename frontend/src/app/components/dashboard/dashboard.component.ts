@@ -16,7 +16,12 @@ import { TopBarStateService } from '../../services/top-bar-state.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { AchievementsService } from '../../services/achievements.service';
 import { AutoDetectResultsData, DatasetRegistryEntry, DemoDataset, LoadingTask, DetectorRegistryEntry, ImporterInfo, ProgressEvent } from '../../models/api.models';
-import { formatProgressMessage, isProgressIndeterminate } from '../../utils/format-progress';
+import {
+  ProgressHeader,
+  formatProgressHeader,
+  formatProgressMessage,
+  isProgressIndeterminate,
+} from '../../utils/format-progress';
 import {
   DashboardColumnsService,
   DatasetColumn,
@@ -1414,8 +1419,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Loading task helpers ---
 
-  taskProgressMessage(task: LoadingTask): string {
-    return formatProgressMessage(task, 'Loading...');
+  taskProgressInfo(task: LoadingTask): ProgressHeader {
+    return formatProgressHeader(task, 'dataset', task.embedder);
   }
 
   taskIsIndeterminate(task: LoadingTask): boolean {
