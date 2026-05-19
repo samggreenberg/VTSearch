@@ -425,8 +425,10 @@ Was: dashboard loading rows showed cryptic step numbers like "[Step 3/4] Loading
 ### 12.7 Inclusion slider tick labels ★★ XS
 The slider is `[-10, +10]` with no anchors. Add tick labels: `-10 strict` / `0 default` / `+10 lenient`, plus a one-line caption "Trades off precision (left) vs recall (right)."
 
-### 12.8 Autopilot phase intent ★★ S
+### 12.8 Autopilot phase intent ★★ S — shipped
 The collapsed Autopilot bar shows four dots. Hovering should reveal phase intent: *"Phase 3: Boundary refinement — votes on uncertain items train the model fastest."* Already exists in long-form docs, but not in UI.
+
+**What shipped:** `AutopilotPanelComponent` now computes a `phaseIntent(phase, stepNumber)` string of the form *"Phase N: <short name> — <why this phase matters>"* for each of the four phases (plus a "done" variant), and binds it as the `title` tooltip on every collapsed-mode dot and every expanded-view step label. The active dot/label tooltip leads with the same intent and appends *"Click to reselect recommendation."* so the existing affordance is preserved. Spec coverage added for both the collapsed dots and the expanded labels.
 
 ### 12.9 Keyboard shortcut discoverability ★★ XS
 The keyboard help modal exists but is only reachable via a button most users never click. Show shortcuts inline as tooltips on the Good/Bad buttons (`Good (→)`, `Bad (←)`), and surface "press `?` for keyboard help" as a one-time toast after the third labeling session.
@@ -437,10 +439,12 @@ Region voting requires holding `Shift`. When a patch-region embedder is detected
 ### 12.11 Cross-dataset scoring warning ★★ S
 When the user selects Dataset B + Detector trained on Dataset A and clicks Find/Train, today nothing flags this. Show a non-blocking note: *"This detector was trained on a different dataset (Dataset A). Scoring will still work but may be less accurate."*
 
-### 12.12 What "smart"/"stable" mean ★★ XS *(shipped)*
+### 12.12 What "smart"/"stable" mean ★★ XS — shipped
 The labeling status bar shows colored dots for `smart` and `stable`. Add a hover tooltip explaining each ("Smart: the model fits your votes consistently. Stable: predictions stopped shifting between retrains.").
 
-**Shipped:** `ProgressIndicatorsComponent` now exposes `smartTooltip`, `stableTooltip`, and `spanTooltip` getters that lead with the plain-English meaning, append live subtext (cost / flips / level) when present, and end with the green/yellow/red legend. Wired into the `[title]` attribute on each `.labeling-indicator` button.
+**What shipped:** plain-English `title` tooltips on every Smart/Stable/Diverse indicator the user sees:
+- *Labeling status bar.* `ProgressIndicatorsComponent` exposes `smartTooltip`, `stableTooltip`, and `spanTooltip` getters that lead with the plain-English meaning, append live subtext (cost / flips / level) when present, and end with the green/yellow/red legend. Wired into the `[title]` attribute on each `.labeling-indicator` button.
+- *Autopilot mini-icons.* The matching mini-icons (`.ap-status-icon`) shown next to the active step's detail during the boundary/diversity phases previously bound `title` to the bare ariaLabel (`Smart: green`). The `StatusIcon` shape now carries a richer `title` field populated by `phaseStatusIcons()` with the same explanatory text style, and the template binds it. Spec coverage extended to assert the explanation is present.
 
 ---
 
