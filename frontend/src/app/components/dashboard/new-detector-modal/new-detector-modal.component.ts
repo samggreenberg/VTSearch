@@ -86,8 +86,7 @@ export class NewDetectorModalComponent implements OnInit {
   // --- Media picker state (shares structure with the Add Dataset modal) ---
 
   /** All importers discovered from the backend, filtered to picker_views we
-   *  can use to select a single example file (demo, server_folder,
-   *  local_folder, local_files). */
+   *  can use to select a single example file (demo, server_folder, local). */
   mediaImporters: ImporterInfo[] = [];
   /** Tab declarations (categories) returned by the backend. */
   declaredImporterTabs: ImporterPickerTab[] = [];
@@ -99,10 +98,8 @@ export class NewDetectorModalComponent implements OnInit {
   /** Front-of-list order for sub-importer tabs.  Mirrors the Add Dataset
    *  modal's ordering so users see the same layout in both places. */
   private static readonly PICKER_ORDER = [
-    'local_folder',
-    'local_files',
+    'local',
     'server_folder',
-    'server_files',
     'demo',
   ];
 
@@ -112,8 +109,7 @@ export class NewDetectorModalComponent implements OnInit {
   private static readonly SUPPORTED_PICKER_VIEWS = new Set([
     'demo',
     'server_folder',
-    'local_folder',
-    'local_files',
+    'local',
   ]);
 
   // --- Demo picker state ---
@@ -440,7 +436,7 @@ export class NewDetectorModalComponent implements OnInit {
     } else if (view === 'server_folder') {
       this.openServerFolderBrowser();
     } else {
-      // local_folder / local_files: just reveal the upload input below.
+      // local: just reveal the upload input below.
       this.resetDemoPickerState();
       this.resetServerFolderState();
     }

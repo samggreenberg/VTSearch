@@ -10,26 +10,17 @@ describe('DatasetImporterModalComponent', () => {
 
   const mockImporters = [
     {
-      name: 'local_folder',
-      display_name: 'Folder',
-      description: 'Upload from this computer',
+      name: 'local',
+      display_name: 'Local',
+      description: 'Upload files or a folder from this computer (browser)',
       icon: '📁',
-      picker_view: 'local_folder',
-      category: 'local',
-      fields: [],
-    },
-    {
-      name: 'local_files',
-      display_name: 'Files',
-      description: 'Upload one or more individual files from this computer',
-      icon: '📄',
-      picker_view: 'local_files',
+      picker_view: 'local',
       category: 'local',
       fields: [],
     },
     {
       name: 'server_folder',
-      display_name: 'Folder',
+      display_name: 'Server',
       description: 'Browse the server filesystem',
       icon: '🖥',
       picker_view: 'server_folder',
@@ -37,18 +28,6 @@ describe('DatasetImporterModalComponent', () => {
       fields: [
         { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'image'] },
         { key: 'path', field_type: 'text', label: 'Folder Path', required: true },
-      ],
-    },
-    {
-      name: 'server_files',
-      display_name: 'Files',
-      description: 'Read a text file of paths from the server',
-      icon: '🗂',
-      picker_view: 'form',
-      category: 'server',
-      fields: [
-        { key: 'media_type', field_type: 'select', label: 'Media Type', default: 'audio', options: ['audio', 'image'] },
-        { key: 'paths_file', field_type: 'server_path', label: 'Paths File', required: true },
       ],
     },
     {
@@ -258,17 +237,17 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.importers.find((i) => i.name === 'recaller')).toBeUndefined();
   });
 
-  it('should set activePickerView=local_folder when the Local Folder sub-tab is clicked', () => {
+  it('should set activePickerView=local when the unified Local card is clicked', () => {
     flushImporters();
-    const localFolder = component.importers.find((i) => i.name === 'local_folder')!;
-    component.selectImporter(localFolder);
-    expect(component.activePickerView).toBe('local_folder');
-    expect(component.selectedImporter?.name).toBe('local_folder');
+    const local = component.importers.find((i) => i.name === 'local')!;
+    component.selectImporter(local);
+    expect(component.activePickerView).toBe('local');
+    expect(component.selectedImporter?.name).toBe('local');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
   });
 
-  it('should set activePickerView=server_folder when the Server Folder sub-tab is clicked', () => {
+  it('should set activePickerView=server_folder when the Server card is clicked', () => {
     flushImporters();
     const folder = component.importers.find((i) => i.name === 'server_folder')!;
     component.selectImporter(folder);
@@ -279,15 +258,15 @@ describe('DatasetImporterModalComponent', () => {
     httpMock.expectOne(req => req.url === '/api/browse-media-files').flush({ directories: [], files: [], root_path: '' });
   });
 
-  it('should set activePickerView=local_files (multi-file picker) when the Local Files sub-tab is clicked', () => {
+  it('should infer lfPickerKind=files when the user picks plain files (no webkitRelativePath)', () => {
     flushImporters();
-    const localFiles = component.importers.find((i) => i.name === 'local_files')!;
-    component.selectImporter(localFiles);
-    expect(component.activePickerView).toBe('local_files');
-    expect(component.lfPickerKind).toBe('files');
-    expect(component.selectedImporter?.name).toBe('local_files');
+    const local = component.importers.find((i) => i.name === 'local')!;
+    component.selectImporter(local);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    const file = new File(['x'], 'a.wav');
+    component.lfOnFilesDropped([file]);
+    expect(component.lfPickerKind).toBe('files');
   });
 
   it('should set activePickerView=demo when the Demo sub-tab is clicked', () => {
@@ -306,8 +285,8 @@ describe('DatasetImporterModalComponent', () => {
     flushImporters();
     spyOn(component.importStarted, 'emit');
 
-    const localFolder = component.importers.find((i) => i.name === 'local_folder')!;
-    component.selectImporter(localFolder);
+    const local = component.importers.find((i) => i.name === 'local')!;
+    component.selectImporter(local);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
 

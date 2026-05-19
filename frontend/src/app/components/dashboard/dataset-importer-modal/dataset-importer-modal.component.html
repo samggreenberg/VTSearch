@@ -183,7 +183,7 @@
     </div>
   }
 
-  @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter) {
+  @if (activePickerView !== 'demo' && activePickerView !== 'local' && activePickerView !== 'server_folder' && selectedImporter) {
     <div class="importer-form">
       @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
         @for (field of selectedImporter.fields; track field.key) {
@@ -426,7 +426,7 @@
     </div>
   }
 
-  @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter) {
+  @if (activePickerView !== 'demo' && activePickerView !== 'local' && activePickerView !== 'server_folder' && selectedImporter) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="submit()" [disabled]="submitting">
@@ -439,13 +439,9 @@
     </div>
   }
 
-  @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
+  @if (activePickerView === 'local' && selectedImporter) {
     <div class="local-folder-uploader">
-      @if (lfPickerKind === 'folder') {
-        <p class="info-text">Pick a folder on <strong>this computer</strong> (the machine your browser is running on). Its contents will be uploaded to the server and embedded into a new dataset. If you have already embedded your media, you can <strong>optionally</strong> attach a <code>.npz</code> archive of pre-computed vectors below to skip re-embedding.</p>
-      } @else {
-        <p class="info-text">Pick one or more files on <strong>this computer</strong> (the machine your browser is running on). They will be uploaded to the server and embedded into a new dataset. If you have already embedded your media, you can <strong>optionally</strong> attach a <code>.npz</code> archive of pre-computed vectors below to skip re-embedding.</p>
-      }
+      <p class="info-text">Pick a folder or one or more files on <strong>this computer</strong> (the machine your browser is running on). They will be uploaded to the server and embedded into a new dataset. If you have already embedded your media, you can <strong>optionally</strong> attach a <code>.npz</code> archive of pre-computed vectors below to skip re-embedding.</p>
 
       <div class="form-group">
         <label class="form-label" for="lf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder/file name.">Dataset Name</label>
@@ -538,24 +534,24 @@
       </div>
 
       <div class="form-group form-group--section">
-        @if (lfPickerKind === 'folder') {
-          <label class="form-label" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder<span class="required">*</span></label>
-          <vt-drop-zone
-            label="Drop a folder here to import"
-            sublabel="or click to browse"
-            [directory]="true"
-            [multiple]="true"
-            (filesSelected)="lfOnFilesDropped($event)"
-          ></vt-drop-zone>
-        } @else {
-          <label class="form-label" title="Choose one or more files on your local machine. Each selected file will be uploaded.">Files<span class="required">*</span></label>
-          <vt-drop-zone
-            label="Drop files here to import"
-            sublabel="or click to browse"
-            [multiple]="true"
-            (filesSelected)="lfOnFilesDropped($event)"
-          ></vt-drop-zone>
-        }
+        <label class="form-label" title="Drop a folder or files here, or use the Browse buttons below.">Media<span class="required">*</span></label>
+        <vt-drop-zone
+          label="Drop files or a folder here to import"
+          sublabel="or use a Browse button below"
+          [directory]="true"
+          [multiple]="true"
+          (filesSelected)="lfOnFilesDropped($event)"
+        ></vt-drop-zone>
+        <div class="local-browse-buttons">
+          <button type="button" class="btn btn--secondary" (click)="lfBrowseFolder()" title="Pick a folder on your local machine. All files inside (and optionally subfolders) will be uploaded.">
+            Browse folder
+          </button>
+          <button type="button" class="btn btn--secondary" (click)="lfBrowseFiles()" title="Pick one or more individual files on your local machine.">
+            Browse files
+          </button>
+          <input #lfFolderInput type="file" webkitdirectory multiple hidden (change)="lfOnHiddenInputChange($event)" />
+          <input #lfFilesInput type="file" multiple hidden (change)="lfOnHiddenInputChange($event)" />
+        </div>
         @if (lfFiles.length > 0) {
           <p class="info-text">
             Selected <strong>{{ lfFiles.length | number }}</strong> file{{ lfFiles.length === 1 ? '' : 's' }}
@@ -662,7 +658,7 @@
     </div>
   }
 
-  @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
+  @if (activePickerView === 'local' && selectedImporter) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="lfSubmit()" [disabled]="lfSubmitting || lfFiles.length === 0">
@@ -793,6 +789,30 @@
       <div class="form-group">
         <label
           class="form-label"
+          for="sf-paths-file"
+          title="Optional server path to a paths manifest file (.txt / .list / .npz) listing the media to import. When set, the folder picker above is ignored and the manifest is imported instead."
+        >
+          Or paths file (<code>.txt</code> / <code>.list</code> / <code>.npz</code>) — optional
+        </label>
+        <input
+          id="sf-paths-file"
+          type="text"
+          class="form-input"
+          placeholder="/absolute/server/path/to/paths.txt"
+          [(ngModel)]="sfPathsFile"
+        />
+        <p class="info-text">
+          As an alternative to picking a folder, supply a server-side
+          manifest file: a UTF-8 text file with one media path per line
+          (<code>#</code> comments allowed), or a NumPy <code>.npz</code>
+          archive holding both paths and pre-computed embedding vectors.
+          When this is set the folder selection above is ignored.
+        </p>
+      </div>
+
+      <div class="form-group">
+        <label
+          class="form-label"
           for="sf-vectors-file"
           title="Optional server path to a .npz archive of pre-computed embedding vectors. Files in the folder whose basename or relative path matches a key reuse the supplied vector instead of running the embedder."
         >
@@ -871,7 +891,7 @@
   @if (activePickerView === 'server_folder' && selectedImporter) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="sfSubmit()" [disabled]="sfSubmitting || !sfAbsolutePath">
+      <button class="btn btn--primary" (click)="sfSubmit()" [disabled]="sfSubmitting || (!sfAbsolutePath && !sfPathsFile.trim())">
         @if (sfSubmitting) {
           Importing...
         } @else {

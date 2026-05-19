@@ -183,7 +183,7 @@ def _parse_legacy_specs(raw_converters: Any, output_type: str) -> list[SourceSpe
     return legacy_specs
 
 
-PickerView = str  # one of: "form", "demo", "server_folder", "local_folder"
+PickerView = str  # one of: "form", "demo", "server_folder", "local"
 
 
 # Synthetic per-importer field that lets the user pick a name for the new
@@ -273,7 +273,7 @@ class DatasetImporter(PluginBase):
     #: ``"form"`` (default) builds a generic form from :attr:`fields`.  The
     #: other values trigger dedicated UI sections in the modal:
     #:
-    #: - ``"local_folder"`` — browser-side folder upload widget.
+    #: - ``"local"`` — browser-side folder/files upload widget (unified).
     #: - ``"server_folder"`` — server filesystem browser.
     #: - ``"demo"`` — demo-dataset table.
     picker_view: str = "form"

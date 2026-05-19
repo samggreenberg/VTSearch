@@ -204,6 +204,12 @@ class ServerFilesDatasetImporter(DatasetImporter):
     picker_view = "form"
     category = "server"
     multi_media = True
+    # The Server card in the picker is the server_folder card, which
+    # surfaces this importer's paths-file workflow as an inline field —
+    # so the standalone server_files card is hidden to avoid two cards
+    # for the same conceptual "import from the server" flow.  The
+    # importer itself stays fully functional (CLI, direct API, etc.).
+    hidden_from_picker = True
     fields = [
         ImporterField(
             key="media_type",

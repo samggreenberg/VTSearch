@@ -152,7 +152,10 @@ class TestImporterMetadata:
         assert imp.name == "server_files"
         assert imp.display_name == "Files"
         assert imp.picker_view == "form"
-        assert imp.hidden_from_picker is False
+        # server_files is no longer surfaced as its own picker card —
+        # the unified server_folder card exposes its paths-manifest
+        # workflow via an inline ``paths_file`` field instead.
+        assert imp.hidden_from_picker is True
 
     def test_fields_include_paths_file_and_media_type(self):
         imp = ServerFilesDatasetImporter()
