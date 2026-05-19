@@ -53,7 +53,7 @@ def sync_to_labelset_source() -> None:
     from vtsearch.datasets.labelset import LabelSet
     from vtsearch.detectors.input_spec import build_detector_meta
     from vtsearch.detectors.store import _detector_path, _read_detector
-    from vtsearch.state.core import good_votes, bad_votes, medias, vote_region_boxes
+    from vtsearch.state.core import get_active_context
 
     # Read the detector JSON so the exported labelset can carry its
     # input_spec / media_type alongside the in-memory threshold.  Anything
@@ -69,11 +69,12 @@ def sync_to_labelset_source() -> None:
         if _syncing:
             return
         try:
+            ds_ctx = get_active_context()
             labelset = LabelSet.from_clips_and_votes(
-                dict(medias),
-                dict(good_votes),
-                dict(bad_votes),
-                vote_region_boxes=dict(vote_region_boxes),
+                dict(ds_ctx.medias),
+                dict(ctx.good_votes),
+                dict(ctx.bad_votes),
+                vote_region_boxes=dict(ctx.vote_region_boxes),
                 detector_meta=detector_meta or None,
             )
             source.save(labelset, field_values)
@@ -151,8 +152,10 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
     with _sync_lock:
         _syncing = True
         try:
+            from vtsearch.state.core import get_active_context
             from vtsearch.state.votes import apply_label
 
+            ds_medias = get_active_context().medias
             for entry in labels:
                 label = entry.get("label")
                 md5 = entry.get("md5")
@@ -160,9 +163,7 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
                     continue
 
                 # Find media by md5
-                from vtsearch.state.core import medias
-
-                for mid, media in medias.items():
+                for mid, media in ds_medias.items():
                     if media.get("md5") == md5:
                         apply_label(mid, label)
                         applied_any = True

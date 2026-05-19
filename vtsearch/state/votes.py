@@ -2,56 +2,52 @@
 
 Also contains compound vote operations (toggle_vote, apply_label) that
 coordinate across vote dicts, click tracking, and the diversity tree.
+
+All functions operate on the *active* :class:`DetectorContext` (and the
+active :class:`DatasetContext` for the diversity tree side-effects).  They
+resolve the context themselves via :func:`get_active_detector_context` /
+:func:`get_active_context` — no module-level proxy names are imported, so
+the library has no implicit dependency on the app-side proxy view.  See
+Phase 3 of ``docs/plans/extract-library.md``.
 """
 
 from __future__ import annotations
 
+from vtsearch.state.clicks import assign_click_time, remove_click_time
 from vtsearch.state.core import (
     _state_lock,
-    bad_votes,
-    good_votes,
-    label_history,
-    last_learned_scores,
-    textsort_suggestions,
-    vote_click_times,
-    vote_region_boxes,
+    get_active_context,
+    get_active_detector_context,
 )
-from vtsearch.state.core import (
-    _get_click_counter,
-    _get_diversity_tree,
-    _set_click_counter,
-)
-from vtsearch.state.clicks import assign_click_time, remove_click_time
 from vtsearch.state.diversity import diversity_tree_label, diversity_tree_unlabel
-
-from vtsearch.state.core import get_active_detector_context
 
 
 def clear_votes() -> None:
     """Clear all votes and the full label history.
 
     Removes all entries from ``good_votes``, ``bad_votes``, and
-    ``label_history`` in place. Does not affect the ``medias`` dict.
-    Also clears the progress model cache and click-time / score tracking.
+    ``label_history`` in place on the active detector context. Does not affect
+    any dataset's ``medias`` dict.  Also clears the progress model cache and
+    click-time / score tracking.
     """
     from vtsearch.detectors.labeling_progress import clear_progress_cache
 
     with _state_lock:
-        good_votes.clear()
-        bad_votes.clear()
-        label_history.clear()
-        textsort_suggestions.clear()
-        vote_click_times.clear()
-        vote_region_boxes.clear()
-        _set_click_counter(0)
-        last_learned_scores.clear()
         ctx = get_active_detector_context()
+        ctx.good_votes.clear()
+        ctx.bad_votes.clear()
+        ctx.label_history.clear()
+        ctx.textsort_suggestions.clear()
+        ctx.vote_click_times.clear()
+        ctx.vote_region_boxes.clear()
+        ctx.click_counter = 0
+        ctx.last_learned_scores.clear()
         ctx.find_initial_labels.clear()
         clear_progress_cache()
 
 
 def add_label_to_history(media_id: int, label: str) -> None:
-    """Append a labelling event to the global label history with a timestamp.
+    """Append a labelling event to the active detector's label history.
 
     Args:
         media_id: Integer ID of the media that was labelled.
@@ -60,7 +56,7 @@ def add_label_to_history(media_id: int, label: str) -> None:
     import time
 
     with _state_lock:
-        label_history.append((media_id, label, time.time()))
+        get_active_detector_context().label_history.append((media_id, label, time.time()))
 
 
 def add_textsort_suggestion(text: str) -> None:
@@ -72,23 +68,24 @@ def add_textsort_suggestion(text: str) -> None:
         text: The text-sort query string to store.
     """
     with _state_lock:
-        # Remove existing occurrence so it moves to the end
+        suggestions = get_active_detector_context().textsort_suggestions
         try:
-            textsort_suggestions.remove(text)
+            suggestions.remove(text)
         except ValueError:
             pass
-        textsort_suggestions.append(text)
+        suggestions.append(text)
 
 
 def get_textsort_suggestions() -> list[str]:
     """Return stored text-sort suggestions, most recent last."""
     with _state_lock:
-        return list(textsort_suggestions)
+        return list(get_active_detector_context().textsort_suggestions)
 
 
 def update_learned_scores(scores: dict[int, float]) -> None:
     """Replace the stored learned-sort scores with *scores*."""
     with _state_lock:
+        last_learned_scores = get_active_detector_context().last_learned_scores
         last_learned_scores.clear()
         last_learned_scores.update(scores)
 
@@ -96,7 +93,7 @@ def update_learned_scores(scores: dict[int, float]) -> None:
 def get_learned_scores() -> dict[int, float]:
     """Return a copy of the last learned-sort scores."""
     with _state_lock:
-        return last_learned_scores.copy()
+        return get_active_detector_context().last_learned_scores.copy()
 
 
 def set_find_initial_labels(labels: dict[int, str]) -> None:
@@ -157,6 +154,10 @@ def toggle_vote(
 
     added = False
     with _state_lock:
+        ctx = get_active_detector_context()
+        good_votes = ctx.good_votes
+        bad_votes = ctx.bad_votes
+        vote_region_boxes = ctx.vote_region_boxes
         if vote == "good":
             if media_id in good_votes:
                 good_votes.pop(media_id, None)
@@ -233,19 +234,20 @@ def apply_label(
             (no-votes are always image-level).  Patch-embedder v2.
     """
     with _state_lock:
+        ctx = get_active_detector_context()
         if label == "good":
-            bad_votes.pop(media_id, None)
-            good_votes[media_id] = None
+            ctx.bad_votes.pop(media_id, None)
+            ctx.good_votes[media_id] = None
             if region_box is not None:
-                vote_region_boxes[media_id] = region_box
+                ctx.vote_region_boxes[media_id] = region_box
             else:
-                vote_region_boxes.pop(media_id, None)
+                ctx.vote_region_boxes.pop(media_id, None)
             if not silent:
                 add_label_to_history(media_id, "good")
         else:
-            good_votes.pop(media_id, None)
-            vote_region_boxes.pop(media_id, None)
-            bad_votes[media_id] = None
+            ctx.good_votes.pop(media_id, None)
+            ctx.vote_region_boxes.pop(media_id, None)
+            ctx.bad_votes[media_id] = None
             if not silent:
                 add_label_to_history(media_id, "bad")
         if not silent:
@@ -263,15 +265,16 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
         label: ``"good"`` or ``"bad"``.
     """
     with _state_lock:
+        ctx = get_active_detector_context()
         if label == "good":
-            bad_votes.pop(media_id, None)
-            good_votes[media_id] = None
-            vote_region_boxes.pop(media_id, None)
+            ctx.bad_votes.pop(media_id, None)
+            ctx.good_votes[media_id] = None
+            ctx.vote_region_boxes.pop(media_id, None)
             add_label_to_history(media_id, "good")
         else:
-            good_votes.pop(media_id, None)
-            vote_region_boxes.pop(media_id, None)
-            bad_votes[media_id] = None
+            ctx.good_votes.pop(media_id, None)
+            ctx.vote_region_boxes.pop(media_id, None)
+            ctx.bad_votes[media_id] = None
             add_label_to_history(media_id, "bad")
         assign_click_time(media_id)
         diversity_tree_label(media_id)
@@ -293,9 +296,14 @@ def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all
     import time as _time
 
     with _state_lock:
-        tree = _get_diversity_tree()
+        ctx = get_active_detector_context()
+        good_votes = ctx.good_votes
+        bad_votes = ctx.bad_votes
+        vote_click_times = ctx.vote_click_times
+        vote_region_boxes = ctx.vote_region_boxes
+        label_history = ctx.label_history
+        tree = get_active_context().diversity_tree
         if replace_all:
-            ctx = get_active_detector_context()
             kept = {mid for mid, _ in labels}
             for cid in [c for c in good_votes if c not in kept]:
                 good_votes.pop(cid, None)
@@ -317,8 +325,7 @@ def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all
                 vote_region_boxes.pop(media_id, None)
                 bad_votes[media_id] = None
                 label_history.append((media_id, "bad", _time.time()))
-            new_val = _get_click_counter() + 1
-            _set_click_counter(new_val)
-            vote_click_times[media_id] = new_val
+            ctx.click_counter += 1
+            vote_click_times[media_id] = ctx.click_counter
             if tree is not None and media_id in tree.vector_to_leaf:
                 tree.label(media_id)
