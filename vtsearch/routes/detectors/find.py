@@ -12,6 +12,7 @@ Migrated to ``flask_smorest`` so the routes are described in
 from __future__ import annotations
 
 from pathlib import Path
+from typing import NoReturn
 
 import numpy as np
 from flask_smorest import Blueprint, abort
@@ -149,10 +150,11 @@ def find_check_labels(body: dict):
     return {"warnings": warnings}
 
 
-def _abort_find(code: int, message: str) -> None:
+def _abort_find(code: int, message: str) -> NoReturn:
     """Reset find_progress to idle and abort with *code* / *message*."""
     update_find_progress("idle", "", step=None, total_steps=None)
     abort(code, message=message)
+    raise RuntimeError("unreachable — abort() raises")  # for type narrowing
 
 
 def _resolve_find_datasets(dataset_ids: list[str]) -> list[dict]:
@@ -210,7 +212,6 @@ def _build_detector_config(d: dict) -> dict:
         }
 
     _abort_find(400, f"Detector '{d['name']}' has no labels for detection")
-    return {}  # unreachable — _abort_find raises
 
 
 def _build_detector_configs(detectors: list[dict]) -> list[dict]:
@@ -255,7 +256,6 @@ def _load_find_dataset_medias(ds: dict) -> dict[int, dict]:
         return temp_medias
     except Exception as e:
         _abort_find(500, f"Failed to load dataset '{ds['name']}': {e}")
-        return {}  # unreachable
 
 
 def _seed_media_results(all_ids: list[int], temp_medias: dict[int, dict], dataset_name: str) -> dict[int, dict]:
