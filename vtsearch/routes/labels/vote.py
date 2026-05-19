@@ -6,7 +6,9 @@ Migrated to ``flask_smorest`` so the routes are described in
 
 from __future__ import annotations
 
-from flask_smorest import Blueprint
+import logging
+
+from flask_smorest import Blueprint, abort
 
 from vtsearch.schemas.labels import (
     FillFromSortRequestSchema,
@@ -28,6 +30,8 @@ from vtsearch.state import (
     vote_region_boxes,
 )
 from vtscore.utils.hits import build_media_hit
+
+logger = logging.getLogger(__name__)
 
 labels_bp = Blueprint(
     "labels",
@@ -262,6 +266,26 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
     for entry in bad_candidates:
         apply_label_with_click_time(entry["id"], "bad")
 
+    # Persist labels to disk BEFORE building the response.  Letting a
+    # silent disk-write failure here fall through to ``return {...}`` is
+    # the C11 bug — the UI would treat the labels as committed while
+    # ``detectors/<name>.json`` never received them.  ``sync_to_labelset_source``
+    # is fire-and-forget by design (debounced background timer), so we
+    # only guard against the unlikely synchronous scheduling failure.
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
+    from vtscore.labels.sync import sync_to_labelset_source
+
+    try:
+        sync_labels_to_loaded_detector()
+    except Exception as exc:
+        logger.exception("fill_labels_from_sort: detector label sync failed")
+        abort(500, message=f"Failed to persist labels to detector store: {exc}")
+
+    try:
+        sync_to_labelset_source()
+    except Exception:
+        logger.exception("fill_labels_from_sort: labelset source scheduling failed")
+
     # Build a results dict compatible with exporters
     snap = snapshot_medias()
     good_hits = [build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="good") for e in good_candidates]
@@ -285,14 +309,6 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
             },
         },
     }
-
-    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
-
-    sync_labels_to_loaded_detector()
-
-    from vtscore.labels.sync import sync_to_labelset_source
-
-    sync_to_labelset_source()
 
     return {
         "good_applied": len(good_candidates),
