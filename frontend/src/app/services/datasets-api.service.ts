@@ -308,6 +308,16 @@ export class DatasetsApiService {
     );
   }
 
+  /** Hint the backend to warm this dataset's embedder in a background
+   *  thread, so a subsequent Train click is instant. Fire-and-forget:
+   *  the backend dedupes against already-loaded embedders. */
+  preloadEmbedder(datasetId: string): Observable<{ ok: boolean; embedder: string }> {
+    return this.http.post<{ ok: boolean; embedder: string }>(
+      `/api/datasets/registry/${encodeURIComponent(datasetId)}/preload-embedder`,
+      {},
+    );
+  }
+
   getDatasetStats(datasetId: string): Observable<DatasetRegistryStatsResponse> {
     return apiDatasetsRegistryDatasetIdStatsGet(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
