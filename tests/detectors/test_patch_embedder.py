@@ -1299,7 +1299,7 @@ class TestRegionAwareTraining:
         succeed by md5.  Conftest's ``reset_state`` wipes this between
         tests so there's no cross-test bleed.
         """
-        from vtsearch.state.core import medias
+        from vtsearch.state import medias
 
         media = self._media_with_patch_grid(grid_value, cid=cid)
         medias[cid] = media

@@ -627,7 +627,7 @@ class TestLabelsetSync:
             set_thread_detector_context,
             unregister_detector_context,
         )
-        from vtsearch.state.core import medias, good_votes
+        from vtsearch.state import medias, good_votes
 
         # Create and register a detector context with a labelset source
         ctx = DetectorContext("test_sync", name="test_sync")
@@ -671,7 +671,7 @@ class TestLabelsetSync:
             set_thread_detector_context,
             unregister_detector_context,
         )
-        from vtsearch.state.core import medias, good_votes
+        from vtsearch.state import medias, good_votes
 
         # Create a labels file with an md5 that matches a test media
         # Get an existing media's md5
@@ -715,7 +715,7 @@ class TestLabelsetSync:
             set_thread_detector_context,
             unregister_detector_context,
         )
-        from vtsearch.state.core import medias, good_votes
+        from vtsearch.state import medias, good_votes
 
         det_name = "meta_export"
         det_path = _detector_path(det_name)
@@ -778,7 +778,7 @@ class TestLabelsetSync:
             set_thread_detector_context,
             unregister_detector_context,
         )
-        from vtsearch.state.core import medias, good_votes
+        from vtsearch.state import medias, good_votes
 
         det_name = "meta_no_model"
         det_path = _detector_path(det_name)
