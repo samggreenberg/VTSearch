@@ -119,6 +119,21 @@ def get_find_initial_labels() -> dict[int, str]:
 # ---------------------------------------------------------------------------
 
 
+def _record_vote_locked() -> None:
+    """Credit one vote to the active detector's achievements.
+
+    Must be called while ``_state_lock`` is held so the detector context
+    cannot change between the vote landing in state and the achievement
+    being credited (otherwise a concurrent context switch would credit the
+    wrong detector).  Establishes the lock order ``_state_lock → _settings_lock``;
+    no code path takes the locks in the reverse order.
+    """
+    from vtsearch.achievements import record_vote  # noqa: PLC0415
+
+    det_ctx = get_active_detector_context()
+    record_vote(det_ctx.detector_id, media_type=det_ctx.media_type)
+
+
 def toggle_vote(
     media_id: int,
     vote: str,
@@ -199,11 +214,8 @@ def toggle_vote(
                     invalidate_progress_cache_from(media_id)
                 added = True
 
-    if added:
-        from vtsearch.achievements import record_vote
-
-        det_ctx = get_active_detector_context()
-        record_vote(det_ctx.detector_id, media_type=det_ctx.media_type)
+        if added:
+            _record_vote_locked()
 
 
 def apply_label(
@@ -212,6 +224,7 @@ def apply_label(
     *,
     silent: bool = False,
     region_box: tuple[float, float, float, float] | None = None,
+    record_achievement: bool = True,
 ) -> None:
     """Atomically apply a label to a media (for imports).
 
@@ -219,23 +232,31 @@ def apply_label(
     No click-time is assigned (imported labels have no click-time).
 
     When *silent* is True, the label is recorded in ``good_votes``/``bad_votes``
-    only — ``label_history`` is not appended and the diversity tree is not
-    marked.  This is used when restoring a detector's saved labels into a new
-    dataset: those labels are seeded so autopilot's good/bad-count gates are
-    satisfied, but they should not contaminate the per-session Smart/Stable
-    trends or pre-fill diversity coverage in the new dataset.
+    only — ``label_history`` is not appended, the diversity tree is not
+    marked, and achievement counters are not credited.  This is used when
+    restoring a detector's saved labels into a new dataset: those labels are
+    seeded so autopilot's good/bad-count gates are satisfied, but they should
+    not contaminate the per-session Smart/Stable trends or pre-fill diversity
+    coverage in the new dataset.
 
     Args:
         media_id: Integer ID of the media to label.
         label: ``"good"`` or ``"bad"``.
-        silent: If True, skip history append and diversity-tree marking.
+        silent: If True, skip history append, diversity-tree marking, and
+            achievement credit.
         region_box: Optional normalised ``(x0, y0, x1, y1)`` box from an
             imported labelset entry.  Only stored when *label* is ``"good"``
             (no-votes are always image-level).  Patch-embedder v2.
+        record_achievement: When True (the default), credit one vote in the
+            active detector's achievement counters.  Set to False for
+            system-driven label application that isn't a user vote action
+            (e.g. auto-import from a labelset source, example-media seeding
+            on detector load).
     """
     with _state_lock:
         ctx = get_active_detector_context()
         if label == "good":
+            already = media_id in ctx.good_votes
             ctx.bad_votes.pop(media_id, None)
             ctx.good_votes[media_id] = None
             if region_box is not None:
@@ -245,6 +266,7 @@ def apply_label(
             if not silent:
                 add_label_to_history(media_id, "good")
         else:
+            already = media_id in ctx.bad_votes
             ctx.good_votes.pop(media_id, None)
             ctx.vote_region_boxes.pop(media_id, None)
             ctx.bad_votes[media_id] = None
@@ -252,13 +274,18 @@ def apply_label(
                 add_label_to_history(media_id, "bad")
         if not silent:
             diversity_tree_label(media_id)
+            if record_achievement and not already:
+                _record_vote_locked()
 
 
 def apply_label_with_click_time(media_id: int, label: str) -> None:
     """Atomically apply a label with click-time assignment (for fill-from-sort).
 
     Same as :func:`apply_label` but also assigns a click-time ordinal so the
-    label appears in the frontend's click-time timeline.
+    label appears in the frontend's click-time timeline.  Credits one vote in
+    the active detector's achievement counters — bulk fill-from-sort flows
+    are user vote actions and must show up in ``votes_cast`` etc. (audit
+    finding C8).
 
     Args:
         media_id: Integer ID of the media to label.
@@ -278,6 +305,7 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
             add_label_to_history(media_id, "bad")
         assign_click_time(media_id)
         diversity_tree_label(media_id)
+        _record_vote_locked()
 
 
 def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all: bool = False) -> None:
@@ -285,7 +313,9 @@ def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all
 
     Each entry is ``(media_id, label)`` where *label* is ``"good"`` or
     ``"bad"``.  All labels are applied atomically with click-time ordinals
-    assigned in order.
+    assigned in order.  Each entry credits one vote in the active detector's
+    achievement counters — bulk find-label flows are user vote actions and
+    must show up in ``votes_cast`` etc. (audit finding C8).
 
     When *replace_all* is True, any pre-existing votes/click-times for IDs
     outside *labels* are cleared first.  This is what ``/api/find-label``
@@ -316,11 +346,13 @@ def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all
             ctx.find_initial_labels.clear()
         for media_id, label in labels:
             if label == "good":
+                already = media_id in good_votes
                 bad_votes.pop(media_id, None)
                 good_votes[media_id] = None
                 vote_region_boxes.pop(media_id, None)
                 label_history.append((media_id, "good", _time.time()))
             else:
+                already = media_id in bad_votes
                 good_votes.pop(media_id, None)
                 vote_region_boxes.pop(media_id, None)
                 bad_votes[media_id] = None
@@ -329,3 +361,5 @@ def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all
             vote_click_times[media_id] = ctx.click_counter
             if tree is not None and media_id in tree.vector_to_leaf:
                 tree.label(media_id)
+            if not already:
+                _record_vote_locked()

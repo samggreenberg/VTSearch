@@ -336,7 +336,11 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
                 # Find media by md5
                 for mid, media in ds_medias.items():
                     if media.get("md5") == md5:
-                        apply_label(mid, label)
+                        # System-driven auto-import on detector load; the
+                        # ``record_detector_import`` call below covers the
+                        # achievement credit instead of crediting each
+                        # imported label as a user vote.
+                        apply_label(mid, label, record_achievement=False)
                         applied_any = True
                         break
         finally:

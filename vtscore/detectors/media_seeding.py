@@ -73,8 +73,10 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
 
         if cids:
             # Example matches existing dataset media — just vote good.
+            # System-driven seeding from a detector's saved examples, not a
+            # user vote action, so don't credit achievement counters.
             for cid in cids:
-                apply_label(cid, "good")
+                apply_label(cid, "good", record_achievement=False)
             seeded += 1
         else:
             # Example is NOT in the dataset — embed and insert as new media.
@@ -118,7 +120,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
                     "origin_name": filename,
                 }
 
-            apply_label(new_id, "good")
+            apply_label(new_id, "good", record_achievement=False)
             seeded += 1
 
     return seeded

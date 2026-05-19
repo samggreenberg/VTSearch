@@ -185,14 +185,25 @@ Cross-section interaction agents:
   blended value is finite before returning it. Regression tests cover
   `inf`/`NaN` xcal and the new sentinel.
 
-### C8. Bulk label paths skip achievement recording entirely
+### C8. Bulk label paths skip achievement recording entirely — **SHIPPED 2026-05-19**
 
-- **File:** `vtsearch/state/votes.py` — `apply_label_with_click_time()`
+- **File:** `vtscore/state/votes.py` — `apply_label_with_click_time()`
   (no `record_vote()` call) vs `toggle_vote()` (calls `record_vote()`).
 - **Bug:** `/api/labels/fill-from-sort`, label importers, and bulk
   find-label apply votes without crediting achievements. `votes_cast`,
   `days_active`, `vote_streak` are inert for any user who uses
   search-then-bulk-label flows.
+- **Fix:** Achievement recording is now centralised in
+  `vtscore/state/votes.py` via `_record_vote_locked()`. `toggle_vote`,
+  `apply_label`, `apply_label_with_click_time`, and
+  `apply_labels_bulk_with_click_time` all credit a vote inside
+  `_state_lock` (which also fixes the cross-section "record_vote after
+  releasing the lock" race noted in the High tier). `apply_label` gains
+  a `record_achievement: bool = True` opt-out, used by
+  `sync_from_labelset_source` and `seed_good_votes_from_examples` —
+  system-driven paths that aren't user vote actions.  Idempotent
+  re-applies (the media was already at that label) don't credit, so
+  re-importing the same labelset doesn't inflate `votes_cast`.
 
 ### C9. Path-template substitution missing post-resolution validation
 
@@ -284,7 +295,8 @@ Cross-section interaction agents:
 - **`record_vote()` called after releasing `_state_lock`** —
   `vtsearch/state/votes.py` ~L156–206. Detector context can change
   between unlock and credit; achievement is credited to the wrong
-  detector. Cross-section with C8.
+  detector. Cross-section with C8. **SHIPPED 2026-05-19 as part of
+  C8** — `_record_vote_locked()` runs inside the state lock now.
 - **Vote-progress invalidation / `record_vote` race** when the same
   media is rapid-toggled across two tabs — counter inflates while
   in-memory shows one vote.
@@ -705,6 +717,11 @@ summary, and is also recorded here.
   Regression coverage in `tests/datasets/test_load_stage_matrix_cache.py`.
 - **C6 — zip-slip in HTTP archive importer (zip, tar, rar)**
   (2026-05-19). See the finding above for the full landed shape.
+- **C8 — Bulk label paths skip achievement recording entirely**
+  (2026-05-19). Centralised achievement credit inside `_state_lock`
+  in `vtscore/state/votes.py`; also fixed the related High finding
+  ("`record_vote()` called after releasing `_state_lock`") in the
+  same change. See the C8 entry above for details.
 - **C9 — Path-template post-resolution validation** (2026-05-19).
   `_resolve_filepath()` in both
   `vtscore/labels/sources/server_json_file/__init__.py` and
@@ -720,7 +737,7 @@ summary, and is also recorded here.
 
 ### Still open
 
-Every other finding (C3, C5, C7, C8, C10, C12 and the High / Medium /
+Every other finding (C3, C5, C7, C10, C12 and the High / Medium /
 Low tiers) remains as written. When the next fix lands, edit the
 finding above with **— shipped** and add a line here. When every
 critical and high is addressed, this doc can be retired into the
