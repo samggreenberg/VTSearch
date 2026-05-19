@@ -236,7 +236,7 @@
             title="Send exported data to the selected destination"
           >
             @if (submitting) {
-              Exporting...
+              Exporting {{ filteredLabels.length | number }} labels to {{ activeTabExporter.display_name || activeTabExporter.name }}…
             } @else {
               {{ activeTabAction }}
             }

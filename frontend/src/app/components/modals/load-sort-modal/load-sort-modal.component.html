@@ -1,6 +1,6 @@
 <vt-modal title="Load Sort" [open]="true" (closed)="close()">
   @if (loading) {
-    <p class="empty-state">Loading...</p>
+    <p class="empty-state">Loading detectors…</p>
   } @else if (showMediaPicker) {
     <div class="media-picker">
       <button class="btn btn--secondary btn--sm back-btn" (click)="closeMediaPicker()" title="Return to sort options">&larr; Back</button>
@@ -9,7 +9,7 @@
       @if (mediaPickerView === 'sources') {
         <p class="picker-instructions">Choose a source to browse media from:</p>
         @if (browseLoading) {
-          <p class="empty-state">Loading sources...</p>
+          <p class="empty-state">Loading media sources…</p>
         } @else {
           <div class="source-list">
             @for (src of mediaSources; track src.name) {
@@ -28,7 +28,7 @@
       @if (mediaPickerView === 'browse-items') {
         <p class="picker-instructions">Select an item from <strong>{{ selectedSource?.display_name || selectedSource?.name }}</strong>:</p>
         @if (browseLoading) {
-          <p class="empty-state">Loading items...</p>
+          <p class="empty-state">Loading items from {{ selectedSource?.display_name || selectedSource?.name }}…</p>
         } @else if (browseItems.length > 0) {
           <div class="browse-list">
             @for (item of browseItems; track item.key) {
