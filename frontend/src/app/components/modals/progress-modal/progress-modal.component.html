@@ -5,7 +5,14 @@
         <p aria-live="polite">Loading indicator history...</p>
       } @else {
         <p aria-live="polite">Training detectors over label history...</p>
-        <vt-progress-bar [value]="analysisProgress" [max]="100"></vt-progress-bar>
+        <div class="progress-row">
+          <vt-progress-bar [value]="analysisProgress" [max]="100"></vt-progress-bar>
+          <button
+            class="btn btn--cancel btn--sm"
+            (click)="onCancel()"
+            title="Cancel the running analysis"
+          >Cancel</button>
+        </div>
         <p class="progress-text">{{ analysisProgress }}%</p>
       }
     </div>

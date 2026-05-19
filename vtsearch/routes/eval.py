@@ -18,6 +18,7 @@ from vtsearch.detectors.labeling_progress import (
     compute_labeling_status,
 )
 from vtsearch.schemas.eval import (
+    EvalTrainAndScoreCancelResponseSchema,
     EvalTrainAndScoreRequestSchema,
     EvalTrainAndScoreResponseSchema,
     EvalTrainAndScoreResultQuerySchema,
@@ -256,3 +257,22 @@ def eval_train_and_score_result(query: dict):
     if job.status == "cancelled":
         return {"job_id": job.job_id, "status": "cancelled"}
     return _eval_done_payload(job)
+
+
+@eval_bp.route("/api/eval/train-and-score/cancel/<job_id>", methods=["POST"])
+@eval_bp.response(200, EvalTrainAndScoreCancelResponseSchema)
+@eval_bp.alt_response(404, description="Job not found.")
+def cancel_eval_train_and_score(job_id: str):
+    """Cancel an in-flight eval train-and-score job.
+
+    Sets the cancel flag on the :class:`AsyncJob`; the per-step retrain
+    loop polls it cooperatively. Returns 200 even when the job has
+    already finished — see ``cancel_learned_sort`` for the rationale.
+    """
+    from vtsearch.concurrency.async_jobs import eval_jobs
+
+    job = eval_jobs.get(job_id)
+    if job is None:
+        abort(404, message="Job not found")
+    job.cancel()
+    return {"ok": True}

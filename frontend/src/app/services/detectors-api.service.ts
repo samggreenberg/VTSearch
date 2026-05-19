@@ -40,6 +40,7 @@ import type { DetectorSaveLabelsResponse } from '../generated/api-client/models/
 import type { DetectorsListResponse } from '../generated/api-client/models/detectors-list-response';
 import type { ExtractRequest } from '../generated/api-client/models/extract-request';
 import type { ExtractResponse } from '../generated/api-client/models/extract-response';
+import type { FindCancelResponse } from '../generated/api-client/models/find-cancel-response';
 import type { FindCheckLabelsRequest } from '../generated/api-client/models/find-check-labels-request';
 import type { FindCheckLabelsResponse } from '../generated/api-client/models/find-check-labels-response';
 import type { FindCheckLabelsWarning } from '../generated/api-client/models/find-check-labels-warning';
@@ -82,6 +83,7 @@ import { apiDetectorsRegistryGet } from '../generated/api-client/fn/detectors-re
 import { apiDetectorsRegistryLoadPost } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-load-post';
 import { apiDetectorsRegistryPost } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-post';
 import { apiExtractPost } from '../generated/api-client/fn/processors-scoring/api-extract-post';
+import { apiFindCancelPost } from '../generated/api-client/fn/detector-find/api-find-cancel-post';
 import { apiFindCheckLabelsPost } from '../generated/api-client/fn/detector-find/api-find-check-labels-post';
 import { apiFindLabelPost } from '../generated/api-client/fn/detector-scoring/api-find-label-post';
 import { apiFindPost } from '../generated/api-client/fn/detector-find/api-find-post';
@@ -414,6 +416,11 @@ export class DetectorsApiService {
     return apiFindLabelPost(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
+  }
+
+  /** Cancel any in-flight find / find-label / auto-detect scoring. */
+  cancelFind(): Observable<FindCancelResponse> {
+    return apiFindCancelPost(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   // --- Pregen processors ---

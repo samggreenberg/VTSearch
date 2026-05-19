@@ -34,6 +34,9 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   analysisProgress = 0;
   chartData: ErrorCostDataPoint[] | StabilityDataPoint[] | DiversityDataPoint[] = [];
   emptyHistory = false;
+  /** Job id of the in-flight eval train-and-score run. Set once the
+   *  backend hands back a job envelope; consumed by ``onCancel``. */
+  private currentJobId: string | null = null;
 
   private destroy$ = new Subject<void>();
 
@@ -110,6 +113,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
         if (res.status === 'done') {
           this.applyEvalResult(res);
         } else if (res.status === 'running') {
+          this.currentJobId = res.job_id;
           this.pollEvalJob(res.job_id);
         } else {
           this.analyzing = false;
@@ -131,6 +135,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (res) => {
+          this.currentJobId = null;
           if (res.status === 'done') {
             this.applyEvalResult(res);
           } else {
@@ -138,9 +143,21 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
           }
         },
         error: () => {
+          this.currentJobId = null;
           this.analyzing = false;
         },
       });
+  }
+
+  /** Cancel the in-flight eval job and close the modal. */
+  onCancel(): void {
+    const jobId = this.currentJobId;
+    this.currentJobId = null;
+    if (jobId) {
+      this.sortingApi.cancelEvalTrainAndScore(jobId).pipe(takeUntil(this.destroy$)).subscribe();
+    }
+    this.analyzing = false;
+    this.close();
   }
 
   private applyEvalResult(res: EvalTrainAndScoreResponse): void {

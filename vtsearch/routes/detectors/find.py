@@ -17,9 +17,10 @@ from typing import NoReturn
 import numpy as np
 from flask_smorest import Blueprint, abort
 
-from vtsearch.concurrency.progress import update_find_progress
+from vtsearch.concurrency.progress import find_progress, update_find_progress
 from vtsearch.detectors.training import train_and_threshold
 from vtsearch.schemas.detectors import (
+    FindCancelResponseSchema,
     FindCheckLabelsRequestSchema,
     FindCheckLabelsResponseSchema,
     FindRequestSchema,
@@ -486,6 +487,10 @@ def multi_find(body: dict):
     if not detector_ids:
         _abort_find(400, "No detectors selected")
 
+    # Clear a leftover cancel flag from a previously-cancelled run so
+    # the new operation doesn't trip on it immediately.
+    find_progress.reset_cancel()
+
     update_find_progress(
         "running",
         "Preparing detectors…",
@@ -545,3 +550,19 @@ def multi_find(body: dict):
         "multiple_detectors": len(detector_configs) > 1,
         "total_hits": len(all_results),
     }
+
+
+@detector_find_bp.route("/api/find/cancel", methods=["POST"])
+@detector_find_bp.response(200, FindCancelResponseSchema)
+def cancel_find():
+    """Cancel any in-flight find-style scoring.
+
+    Sets the cancel flag on the shared ``find_progress`` tracker, which
+    every scoring path (``/api/find``, ``/api/find-label``, and
+    ``/api/auto-detect``) reports progress through. Long-running loops
+    poll the flag between iterations and bail out by raising
+    :class:`CancelledError`. Always returns 200 — calling cancel when
+    nothing is running is a no-op.
+    """
+    find_progress.cancel()
+    return {"ok": True}

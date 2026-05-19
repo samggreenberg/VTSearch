@@ -516,8 +516,12 @@ On the frontend, `ProgressEvent.eta_seconds` lands on `frontend/src/app/models/a
 ### 14.5 Per-dataset progress during multi-load ★★ S
 When the user bulk-loads 3 datasets, the dashboard shows 3 stacked task rows but the SSE channel emits a single aggregate. Tag each progress event with `dataset_id` so each row's bar moves independently.
 
-### 14.6 Cancel buttons everywhere ★★★ S
+### 14.6 Cancel buttons everywhere ★★★ S — shipped
 `learned_sort_jobs`, `eval_jobs`, and auto-detect all support `cancel()` in the backend but the UI doesn't expose it. Add a small X button next to every running progress bar. (Dataset cancel already works — use it as the pattern.)
+
+**What shipped:** three new POST endpoints — `/api/learned-sort/cancel/{job_id}`, `/api/eval/train-and-score/cancel/{job_id}`, and `/api/find/cancel` (covers find-label, multi-find, and auto-detect since they all report through `find_progress`) — wire the existing backend cancel flags through to the HTTP API. `find_label`, `auto_detect`, and `multi_find` now call `find_progress.reset_cancel()` at the start of each run so a stuck flag from a previous cancelled run doesn't immediately abort the next operation, matching the pattern dataset loading already uses. The sort progress bar in `vt-progress-indicators` (used by both label-view and find-view) and the eval analysis progress bar in `vt-progress-modal` each gained a small `.btn--cancel.btn--sm` button next to the bar — the same shared pattern dataset / detector cards use. `vt-label-view` tracks the active learned-sort job id between start and result and routes the cancel click to `cancelLearnedSort(jobId)` (or to `cancelFind()` when a load-sort scoring run is in flight); `vt-find-view` always routes to `cancelFind()`; the eval modal owns its own job id from `pollEvalJob` and calls `cancelEvalTrainAndScore(jobId)` directly before closing.
+
+**Open follow-ups:** the new cancel calls flip cooperative flags but the long-running loops don't yet poll them between iterations — calling Cancel today freezes the UI's progress bar immediately but the background worker keeps running to completion. Add `check_cancelled()` calls inside `train_and_score`, the eval per-step retrain loop, and the find/find-label/auto-detect scoring loops so the cancel actually short-circuits the work in flight. Text-sort and example-sort still show a Cancel button while busy but those endpoints are synchronous with no cancel hook — either teach them to honour `sort_progress.cancel()` or hide the button on those modes.
 
 ### 14.7 Voting iterations: progress breakdown ★ S
 Eval voting-iterations modal shows `step X/Y`. Add a sub-line "(dataset 2 of 5: gtzan, category 3 of 4: jazz)" so the user knows what's currently running.

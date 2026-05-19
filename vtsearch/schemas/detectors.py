@@ -42,6 +42,7 @@ Find endpoints (``vtsearch/routes/detectors/find.py``):
                                     :class:`FindCheckLabelsResponseSchema`
 * ``POST /api/find`` — :class:`FindRequestSchema` →
                       :class:`FindResponseSchema`
+* ``POST /api/find/cancel`` — :class:`FindCancelResponseSchema`
 
 Label endpoints (``vtsearch/routes/detectors/labels.py``):
 
@@ -576,6 +577,18 @@ class FindResponseSchema(Schema):
     total_hits = fields.Integer(required=True)
 
 
+class FindCancelResponseSchema(Schema):
+    """Response for ``POST /api/find/cancel``.
+
+    Signals every in-flight scoring path that reads ``find_progress`` —
+    ``/api/find``, ``/api/find-label``, and ``/api/auto-detect`` — to stop
+    cooperatively. The progress tracker holds a single cancel event that
+    long-running loops poll between iterations.
+    """
+
+    ok = fields.Boolean(required=True)
+
+
 # ---------------------------------------------------------------------------
 # Label schemas (vtsearch/routes/detectors/labels.py)
 # ---------------------------------------------------------------------------
@@ -665,6 +678,7 @@ __all__ = [
     "DetectorRenameResponseSchema",
     "DetectorSaveLabelsResponseSchema",
     "DetectorsListResponseSchema",
+    "FindCancelResponseSchema",
     "FindCheckLabelsRequestSchema",
     "FindCheckLabelsResponseSchema",
     "FindLabelRequestSchema",

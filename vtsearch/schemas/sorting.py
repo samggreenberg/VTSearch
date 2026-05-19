@@ -120,6 +120,12 @@ class LearnedSortResponseSchema(Schema):
     error = fields.String()
 
 
+class LearnedSortCancelResponseSchema(Schema):
+    """Response for ``POST /api/learned-sort/cancel/<job_id>``."""
+
+    ok = fields.Boolean(required=True)
+
+
 # ---------------------------------------------------------------------------
 # /api/votes (+ clear, seed-from-examples)
 # ---------------------------------------------------------------------------
@@ -278,6 +284,7 @@ __all__ = [
     "InclusionRequestSchema",
     "InclusionResponseSchema",
     "LabelFileSortResponseSchema",
+    "LearnedSortCancelResponseSchema",
     "LearnedSortRequestSchema",
     "LearnedSortResponseSchema",
     "LearnedSortResultQuerySchema",

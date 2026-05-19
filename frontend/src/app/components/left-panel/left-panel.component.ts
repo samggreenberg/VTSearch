@@ -83,6 +83,8 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
   @Output() mediaContextRequest = new EventEmitter<{ id: number; x: number; y: number }>();
   @Output() indicatorClick = new EventEmitter<string>();
+  /** User clicked the Cancel button on the running sort progress bar. */
+  @Output() sortCancel = new EventEmitter<void>();
   @Output() autopilotStart = new EventEmitter<void>();
   @Output() autopilotStop = new EventEmitter<void>();
   @Output() autopilotRefocus = new EventEmitter<void>();

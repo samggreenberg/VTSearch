@@ -173,7 +173,14 @@ class EvalTrainAndScoreResponseSchema(Schema):
         unknown = "include"
 
 
+class EvalTrainAndScoreCancelResponseSchema(Schema):
+    """Response for ``POST /api/eval/train-and-score/cancel/<job_id>``."""
+
+    ok = fields.Boolean(required=True)
+
+
 __all__ = [
+    "EvalTrainAndScoreCancelResponseSchema",
     "EvalTrainAndScoreRequestSchema",
     "EvalTrainAndScoreResponseSchema",
     "EvalTrainAndScoreResultQuerySchema",

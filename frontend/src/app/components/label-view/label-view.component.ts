@@ -100,6 +100,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private statusPolling$: Subscription | null = null;
   private scoringProgressPoll$: Subscription | null = null;
   private learnedSortPending = false;
+  /** Active learned-sort job id while a training run is in flight. Set in
+   *  ``onLearnedSort`` once the backend returns a job id, cleared in
+   *  ``applyLearnedSortResult`` / the error/cancel paths. Used by the
+   *  Cancel button on the sort progress bar to target the right job. */
+  private currentLearnedSortJobId: string | null = null;
   /** Held subscription to the one-shot `labelsetGoodCount$` watcher that
    *  re-fires `onLearnedSort` after a pair switch, when sortMode was
    *  already `learned`. Cleared on each switch so back-to-back switches
@@ -484,6 +489,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (response.status === 'done') {
           this.applyLearnedSortResult(response, autoSelect);
         } else if (response.status === 'running') {
+          this.currentLearnedSortJobId = response.job_id;
           this.pollLearnedSortJob(response.job_id, autoSelect);
         } else {
           this.sortState.setSortBusy(false);
@@ -509,12 +515,18 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         next: (res) => {
           if (res.status === 'done') {
             this.applyLearnedSortResult(res, autoSelect);
+          } else if (res.status === 'cancelled') {
+            this.currentLearnedSortJobId = null;
+            this.sortState.setSortBusy(false);
+            this.sortState.setSortStatus('Cancelled');
           } else {
+            this.currentLearnedSortJobId = null;
             this.sortState.setSortBusy(false);
             this.sortState.setSortStatus(res.error || 'Training failed');
           }
         },
         error: () => {
+          this.currentLearnedSortJobId = null;
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('Training failed');
         },
@@ -528,10 +540,31 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       results.map((r) => ({ id: r['id'], score: r['score'], bestRegion: r['best_region'] })),
       threshold,
     );
+    this.currentLearnedSortJobId = null;
     this.sortState.setSortBusy(false);
     this.sortState.setSortStatus('');
     if (autoSelect) {
       this.autoSelectNext();
+    }
+  }
+
+  /** Cancel whatever sort run is currently in flight.
+   *
+   *  - Learned sort: targets the active ``AsyncJob`` by id.
+   *  - Load-sort (find-label): trips the shared ``find_progress`` cancel
+   *    flag, which the scoring loop polls.
+   *  - Text / example sort: no cancellation endpoint — those calls run
+   *    synchronously and complete before the user can usefully cancel.
+   */
+  onSortCancel(): void {
+    if (this.currentLearnedSortJobId) {
+      const jobId = this.currentLearnedSortJobId;
+      this.currentLearnedSortJobId = null;
+      this.sortingApi.cancelLearnedSort(jobId).pipe(takeUntil(this.destroy$)).subscribe();
+      return;
+    }
+    if (this.sortState.sortMode === 'load') {
+      this.detectorsApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
     }
   }
 
