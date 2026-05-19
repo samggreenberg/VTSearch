@@ -11,16 +11,36 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 |------|--------|---------|
 | [multi-media-import.md](multi-media-import.md) | **In progress** | Importers can mix multiple source media types via `effective_source_specs()`. `server_folder`, `server_files`, `local_folder`, `local_files` migrated; `pickle`, `combine_datasets`, `synthetic`, `http_archive`, `recaller`, `demo` remain on the legacy shim. |
 | [patch-embedder.md](patch-embedder.md) | **V1 + V2 shipped; V3 design only** | Six image embedders (DINOv2 / DINOv3 / EUPE × single+patch) are live; region voting via Shift-drag is live. V3 ("one text embedder + one patch embedder per dataset") is designed but not implemented — work plan still a sketch. |
+| [clipper-chain.md](clipper-chain.md) | **Phase 1 in flight** | Dataset-load pipeline accepts an ordered list of converter/clipper steps via a new `clipper_chain` field. Phase 2 (frontend chooser), Phase 3 (sidecar/registry schema), Phase 4 (`detector_meta` chain + `input_spec` migration) all deferred — see Open follow-ups. |
 | [RCDatasetImporter.md](RCDatasetImporter.md) | **Scaffolds in place; awaiting client code** | ReCaller / DataWrest / PullWrest / Holder plugin scaffolds exist (`hidden_from_picker = True`); the API client stubs (`_rc_fetch_results`, `_dw_get_embedding`, `_pw_fetch_media`, `_holder_*`) still need real implementations. |
 | [extract-library.md](extract-library.md) | **Proposed** | Split VTSearch into a `vtscore` Python library plus the Flask/Angular app, gated on a CI job that runs the test suite without Flask installed. Not started. |
-| [openapi-schema.md](openapi-schema.md) | **Pilot shipped; rollout in progress** | flask-smorest plumbing + Swagger UI live; `settings/api.py` migrated. Remaining: frontend `SettingsApiService` rewired to the generated client, then the other blueprints (auth, achievements, main, labels, detectors, processors, media, datasets, sorting, eval, file_browser) — and finally delete the legacy permissive `/openapi.json`. |
-| [feature-brainstorm.md](feature-brainstorm.md) | **Backlog** | Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, experiments. Items graduate into their own plan doc as they mature. |
-| [ux-brainstorm.md](ux-brainstorm.md) | **Backlog** | Audit of friction across importers, labeling, sorting, settings, and progress UX. ~75 ideas across auto-fill, hints, speed-ups, clarity, streamlining, and consistency. Items graduate into their own plan doc as they mature. |
-| [smart-clipper-defaults.md](smart-clipper-defaults.md) | **Phase 1 shipped; Phase 2 deferred** | "Auto (recommended)" clipper entry for audio and video — resolves to pass-through or tiling per dataset based on median duration. Phase 2 (per-media routing via clipper options) deferred — see Open follow-ups. |
-| [python-quality-tools.md](python-quality-tools.md) | **Phases 1–3 shipped; CI retired** | pre-commit (ruff + safety hooks) wired up locally, plus deptry, codespell, ruff `S`, opt-in coverage, vulture audit, and the McCabe C901 gate. GitHub Actions workflows have been retired — `./run-tests.sh` now runs ruff + codespell + deptry + pip-audit + pyright + OpenAPI snapshot drift + the frontend build + pytest in one go. See Open follow-ups for the remaining maintenance items. |
+| [openapi-schema.md](openapi-schema.md) | **Migration complete; one cosmetic follow-up** | flask-smorest plumbing + Swagger UI + per-plugin runtime validation live across every blueprint. Remaining: per-plugin OpenAPI **spec** types for the six plugin-field route bodies (deferred — runtime validation already captures the field types). |
+| [brainstorm.md](brainstorm.md) | **Backlog** | Combined feature + UX backlog (formerly `feature-brainstorm.md` + `ux-brainstorm.md`). Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, UX friction, architecture, experiments. Items graduate into their own plan doc as they mature. |
 
 ## Recently completed (removed)
 
+- **smart-clipper-defaults.md** — "Auto (recommended)" clipper entry for
+  audio and video — resolves per-media through pass-through or tiling
+  based on each item's duration, with the clipper picker itself hidden
+  behind an "Advanced ▾" toggle in the importer modal. All three phases
+  shipped: Phase 1 (per-dataset routing), Phase 2 (per-media routing),
+  Phase 3 (Advanced toggle in all four importer-modal contexts). The
+  only deferred item — per-item routing for image and text — was
+  explicitly out of scope.
+- **python-quality-tools.md** — pre-commit (ruff + safety hooks),
+  deptry, codespell, ruff `S` ruleset, opt-in coverage, vulture audit,
+  and the McCabe C901 gate are all in place. GitHub Actions workflows
+  were retired; `./run-tests.sh` now runs ruff + codespell + deptry +
+  pip-audit + pyright + OpenAPI snapshot drift + the frontend build +
+  pytest in one go. Opportunistic maintenance items (C901 noqa
+  burn-down, quarterly `pre-commit autoupdate`, possible future
+  coverage-delta gate) moved to [brainstorm.md §20.7.x](brainstorm.md).
+- **feature-brainstorm.md** and **ux-brainstorm.md** — merged into
+  [brainstorm.md](brainstorm.md), with all completed/shipped items
+  deleted. Open follow-ups attached to formerly-shipped items kept as
+  standalone entries (e.g. faster-whisper backend swap, GPU bulk
+  override for audio CLAP / video X-CLIP, folder-browser Phase 2,
+  video/document crop overlays).
 - **delete-detectors.md** — Collapsed the two-concept "detector vs.
   trainable model" world into a single concept. The old read-only
   detector artifact (with serialized MLP weights), the `autorun_detectors`
@@ -59,7 +79,7 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
   Phase B (bulk `patch_forward`), and Phase C (clip re-embed via
   `embed_media_bulk` with no tempfile) all shipped. Remaining deferred
   follow-ups (audio CLAP / video X-CLIP bulk overrides, fusing DINO
-  single-vector + patch forward) live under feature-brainstorm §12.2.
+  single-vector + patch forward) live under [brainstorm.md §20.2](brainstorm.md).
 - **combine-models-ui.md** — UI for combining two or more trainable
   models into a new one. Backend (`LabelSet.merge` + `POST
   /api/detectors/combine`) shipped earlier; the frontend

@@ -48,6 +48,21 @@ This applies *especially* to end-of-investigation "what scope should I take next
 
 Use plain prose questions only when the answer is genuinely open-ended (e.g. "What should this field be named?") and a multiple-choice list would be artificial.
 
+### Trip-wire — scan your turn before sending
+
+Before sending a turn, scan its last paragraph for any of these phrases:
+
+- "Want me to …?"
+- "Should I …?"
+- "Do you want … or …?"
+- "Let me know if …"
+- "(a) … and/or (b) …?"
+- "Recommend I …?"
+
+If you see one, **stop**: that sentence is an `AskUserQuestion` call you almost emitted as prose. Convert it into the tool call before sending — even if you're confident the user will say yes, even if the options feel obvious, even if you've already invested effort in the prose summary. The cost of the extra tool call is zero; the cost of a missed or typed-out answer is a wasted round-trip.
+
+This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers belong in the tool too (with `["Yes", "No"]` options) — they are exactly the case where a one-click reply beats a typed reply. A pure progress update with no question at the end is fine; an update that ends in an offer is not.
+
 ## Frontend Scope: Desktop Only
 
 VTSearch is a desktop web app. **Do not design, implement, or test for mobile or narrow viewports.** No responsive breakpoints, no touch-targeted controls, no mobile-only layouts, no concerns about portrait orientation. If a design discussion raises "what about mobile?", the answer is "we don't care." When evaluating a layout, assume a standard desktop viewport and skip mobile considerations entirely.
