@@ -16,7 +16,7 @@
       [attr.data-status]="smartStatus"
       (click)="onClick('smart')"
       aria-label="Smart indicator"
-      [title]="smartSubtext ? 'Smart: ' + smartSubtext + '. Tracks detector accuracy over labeling steps.' : 'Tracks detector accuracy over labeling steps. Green when error cost has leveled off (detector has converged). Yellow when still improving. Red when more votes are needed.'"
+      [title]="smartTooltip"
     >
       <span class="indicator-dot"></span>
       <span class="indicator-label">Smart</span>
@@ -27,7 +27,7 @@
       [attr.data-status]="stableStatus"
       (click)="onClick('stable')"
       aria-label="Stable indicator"
-      [title]="stableSubtext ? 'Stable: ' + stableSubtext + '. Tracks prediction stability.' : 'Tracks prediction stability. Green when predictions stop changing between labeling steps (detector is confident). Yellow when predictions are still shifting. Red when more votes are needed.'"
+      [title]="stableTooltip"
     >
       <span class="indicator-dot"></span>
       <span class="indicator-label">Stable</span>
@@ -38,7 +38,7 @@
       [attr.data-status]="spanStatus"
       (click)="onClick('span')"
       aria-label="Diverse indicator"
-      [title]="spanSubtext ? 'Diverse: ' + spanSubtext + '. Tracks dataset exploration coverage.' : 'Tracks how much of the dataset you have explored. Green when you have sampled from all major clusters. Yellow when some regions remain unexplored. Red when coverage data is unavailable.'"
+      [title]="spanTooltip"
     >
       <span class="indicator-dot"></span>
       <span class="indicator-label">Diverse</span>
