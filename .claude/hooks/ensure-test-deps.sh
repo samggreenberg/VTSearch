@@ -9,7 +9,16 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-MARKER="/tmp/.vtsearch-deps-installed"
+# Hash the script content into the marker filename so that any edit to
+# this hook (new upgrade step, new dep, etc.) invalidates the previous
+# session's marker and forces the install block to re-run.  Without this,
+# a long-lived container that ran an older version of the script would
+# keep short-circuiting at the `-f $MARKER` check forever, even after the
+# repo was updated to require new install steps — e.g. the pip-audit
+# system-package upgrade block added in `e3eb87fd` was silently skipped
+# on containers whose marker was created before that fix landed.
+SCRIPT_HASH="$(sha256sum "${BASH_SOURCE[0]}" | cut -d' ' -f1 | cut -c1-12)"
+MARKER="/tmp/.vtsearch-deps-installed-${SCRIPT_HASH}"
 
 if [ -f "$MARKER" ]; then
   exit 0
