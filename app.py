@@ -87,6 +87,15 @@ app = Flask(__name__)
 # deployments should always set the env var.
 app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-in-production")
 
+# Install Flask-aware request-context resolvers on the (library-candidate)
+# ``vtsearch.state`` core so its ``get_active_*_context()`` helpers can read
+# the per-request dataset/detector context from ``flask.g`` without
+# ``vtsearch.state.core`` itself having to import Flask.  See
+# ``docs/plans/extract-library.md`` for the seam.
+from vtsearch.shim import register_flask_context_resolvers  # noqa: E402
+
+register_flask_context_resolvers()
+
 # Optional cap on request body size (uploads).  ``MAX_UPLOAD_MB == 0`` leaves
 # Flask's default of no limit in place; a positive value rejects oversized
 # requests with HTTP 413 before they consume disk.

@@ -23,6 +23,7 @@ return nothing, writes are silently discarded or raise where appropriate).
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from typing import Any
 
 
@@ -33,42 +34,50 @@ _state_lock = threading.RLock()
 
 
 # ---------------------------------------------------------------------------
-# Request-scoped context helpers
+# Pluggable per-request context resolvers
 # ---------------------------------------------------------------------------
-# When running inside a Flask request that carries ``X-Dataset-Id`` or
-# ``X-Detector-Id`` headers, the proxy objects should resolve to the context
-# specified by the request rather than the global "active" pointer.  This
-# allows the frontend to declare which dataset/detector it is operating on
-# per-request, eliminating the need for a persistent "active" flag.
+# In the Flask app, the ``before_request`` hook resolves an
+# ``X-Dataset-Id`` / ``X-Detector-Id`` header to the matching context and
+# stashes it on ``g``.  The proxy objects then need to read it back.
 #
-# Outside a Flask request (background threads, CLI, tests) the proxies
-# fall back to the global ``_active_dataset_id`` / ``_active_detector_id``
-# as before, so existing code continues to work unchanged.
+# To keep this module Flask-free (so it can move into ``vtscore`` later —
+# see ``docs/plans/extract-library.md``), the read side is exposed as a
+# **pluggable resolver**: a callable that returns the current request's
+# DatasetContext / DetectorContext, or ``None`` if there is no request.
+#
+# The Flask integration lives in ``vtsearch/shim/`` and registers Flask-
+# aware resolvers at app startup.  By default both resolvers return
+# ``None``; callers fall back to the thread-local context (set by
+# ``set_thread_*_context`` for background threads and tests).
 # ---------------------------------------------------------------------------
 
 
-def _request_dataset_context():
-    """Return the DatasetContext stashed on ``g`` by the before_request hook, or None."""
-    try:
-        from flask import g, has_request_context
-
-        if has_request_context():
-            return getattr(g, "_dataset_context", None)
-    except ImportError:
-        pass
+def _default_context_resolver() -> Any:
     return None
 
 
-def _request_detector_context():
-    """Return the DetectorContext stashed on ``g`` by the before_request hook, or None."""
-    try:
-        from flask import g, has_request_context
+_dataset_context_resolver: Callable[[], Any] = _default_context_resolver
+_detector_context_resolver: Callable[[], Any] = _default_context_resolver
 
-        if has_request_context():
-            return getattr(g, "_detector_context", None)
-    except ImportError:
-        pass
-    return None
+
+def register_dataset_context_resolver(fn: Callable[[], Any]) -> None:
+    """Install the function used to resolve the current request's dataset context.
+
+    The resolver should return a ``DatasetContext`` or ``None``.  The Flask
+    shim installs a resolver that reads from ``flask.g`` at app startup;
+    library-only callers can leave the default in place.
+    """
+    global _dataset_context_resolver
+    _dataset_context_resolver = fn
+
+
+def register_detector_context_resolver(fn: Callable[[], Any]) -> None:
+    """Install the function used to resolve the current request's detector context.
+
+    Counterpart to :func:`register_dataset_context_resolver`.
+    """
+    global _detector_context_resolver
+    _detector_context_resolver = fn
 
 
 # ---------------------------------------------------------------------------
@@ -240,8 +249,8 @@ def get_active_context() -> DatasetContext:
        background threads and tests)
     3. Empty fallback context
     """
-    # 1. Per-request override
-    req_ctx = _request_dataset_context()
+    # 1. Per-request override (Flask shim or whatever the host app registered)
+    req_ctx = _dataset_context_resolver()
     if req_ctx is not None:
         return req_ctx
     # 2. Thread-local fallback
@@ -324,8 +333,8 @@ def get_active_detector_context() -> DetectorContext:
     2. Thread-local context (set by ``set_thread_detector_context``)
     3. Empty fallback context
     """
-    # 1. Per-request override
-    req_ctx = _request_detector_context()
+    # 1. Per-request override (Flask shim or whatever the host app registered)
+    req_ctx = _detector_context_resolver()
     if req_ctx is not None:
         return req_ctx
     # 2. Thread-local fallback
