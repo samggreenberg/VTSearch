@@ -325,7 +325,12 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             if converter_specs:
                 converter_chunk: dict[int, dict[str, Any]] = {}
                 _run_converter_specs(
-                    extract_dir, media_type, field_values, converter_specs, converter_chunk, thin=thin,
+                    extract_dir,
+                    media_type,
+                    field_values,
+                    converter_specs,
+                    converter_chunk,
+                    thin=thin,
                 )
                 if converter_chunk:
                     yield converter_chunk
