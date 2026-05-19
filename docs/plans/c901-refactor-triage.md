@@ -1,6 +1,6 @@
 # C901 Refactor Triage (≥20 complexity)
 
-**Status:** Triage complete; 1 of 8 refactors shipped.
+**Status:** Triage complete; 2 of 8 refactors shipped.
 
 ## Why this file exists
 
@@ -39,7 +39,7 @@ classified as either:
 | `vtsearch/routes/labels/vote.py:42` | `export_labels` | 29 | Three concerns interleaved: labelset selection, corrections annotation, enrichment. Each is a clean subroutine — extract `_select_labelset(query)`, `_annotate_corrections(result, find_initial, all_medias)`, `_enrich_with_metadata(result, all_medias)`. |
 | `vtsearch/converters/audio2image.py:108` | `convert` | 25 | Linear pipeline: param coerce → load audio → compute spec → render PNG. Extract `_coerce_params`, `_compute_spectrogram`, `_render_to_png`. |
 | `vtsearch/converters/image2text.py:83` | `convert` | 22 | Same shape as audio2image — split by stage. |
-| `vtsearch/routes/sorting.py:789` | `label_file_sort` | 21 | Route handler doing parse + path-validate + embed-loop + train + score. Pull out `_embed_external_labels(file, emb) → (X, y, loaded, skipped)`; route becomes ~30 lines. |
+| ~~`vtsearch/routes/sorting.py:789`~~ | ~~`label_file_sort`~~ | ~~21~~ | **Shipped** — see Done below. |
 | `vtsearch/detectors/resolver.py:560` | `resolve_label_embeddings` | 25 | Per-entry resolution + three logging-by-failure-reason branches + final summary. Extract `_resolve_one(entry, media_type) → ResolvedEntry` (a small dataclass) so the loop becomes accumulate-and-log-summary. |
 | `vtsearch/detectors/labelset_training.py:83` | `populate_label_embeddings` | 21 | Three resolution strategies per element in one loop. Extract `_resolve_one_element_embedding(elem, cache, snap, media_type, embedder_name) → np.ndarray | None`. |
 | `vtsearch/cli.py:421` | `_run_pipeline` | 31 | The dry-run branch (~50 lines of validation + emission) is essentially its own function inside an early return. Lift it to `_run_dry_run(...)` and the main path is straightforward. |
@@ -59,7 +59,7 @@ classified as either:
 Ship in this order — earlier rows are more mechanical / lower risk:
 
 1. ~~`_apply_clip_and_embed`~~ — shipped
-2. `label_file_sort`
+2. ~~`label_file_sort`~~ — shipped
 3. `export_labels`
 4. `audio2image.convert` / `image2text.convert` (one PR)
 5. `resolve_label_embeddings`
@@ -76,6 +76,14 @@ Ship in this order — earlier rows are more mechanical / lower risk:
   three-line dispatch through the clipper helpers, with a single
   fallback to `embed_file`. `noqa: C901` deleted. All 49
   `tests/detectors/test_clipper_workflow.py` tests pass.
+
+- **`label_file_sort`** (CC 21 → 9). Extracted `_parse_label_file(file)`
+  (JSON decode + label-list guard), `_embed_external_labels(labels, emb)`
+  (the per-entry validate-and-embed loop, returning
+  `(X, y, loaded, skipped)`), and `_train_and_score_dataset(X, y)`
+  (MLP train + score every loaded media). The route is now parse →
+  embed → guard → train+score → respond. `noqa: C901` deleted. Full
+  suite (3793 tests) passes.
 
 ## Open follow-ups
 
