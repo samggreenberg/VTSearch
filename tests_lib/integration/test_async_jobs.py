@@ -18,6 +18,16 @@ from __future__ import annotations
 import threading
 
 from vtscore.concurrency.async_jobs import AsyncJob, JobManager
+from vtscore.state.core import (
+    DatasetContext,
+    DetectorContext,
+    get_thread_dataset_context,
+    get_thread_detector_context,
+    register_context,
+    register_detector_context,
+    unregister_context,
+    unregister_detector_context,
+)
 
 
 def _make_target(release: threading.Event, started: threading.Event, marker: list):
@@ -238,3 +248,116 @@ class TestCoalescing:
                 break
             cur.done_event.wait(timeout=2)
         assert max_active == 1
+
+
+class TestThreadContextPropagation:
+    """``_run()`` must resolve and set the dataset/detector thread-local
+    contexts from ``job.dataset_id`` / ``job.detector_id`` so the target's
+    ``get_active_context()`` doesn't fall through to the empty fallback.
+
+    Without this, every learned-sort / eval job target that reads votes,
+    media, or any other context-scoped state from a background thread sees
+    empty containers — silent miscompute. See ``docs/plans/logical-bug-audit.md``
+    finding C2.
+    """
+
+    def test_run_sets_thread_dataset_and_detector_context_from_ids(self):
+        mgr = JobManager("ctx-test")
+        ds_ctx = DatasetContext("ds-ctx-A")
+        det_ctx = DetectorContext("det-ctx-A")
+        register_context(ds_ctx)
+        register_detector_context(det_ctx)
+
+        captured: dict = {}
+
+        def target(job: AsyncJob) -> None:
+            captured["ds"] = get_thread_dataset_context()
+            captured["det"] = get_thread_detector_context()
+            job.result = "ok"
+
+        try:
+            job = mgr.start(
+                signature=("sig",),
+                target=target,
+                dataset_id="ds-ctx-A",
+                detector_id="det-ctx-A",
+            )
+            assert job.done_event.wait(timeout=5)
+            assert job.status == "done"
+            assert captured["ds"] is ds_ctx
+            assert captured["det"] is det_ctx
+        finally:
+            unregister_context("ds-ctx-A")
+            unregister_detector_context("det-ctx-A")
+
+    def test_run_skips_when_ids_resolve_to_no_context(self):
+        """Unknown / unloaded ids must not crash and must not set a context."""
+        mgr = JobManager("ctx-test")
+        captured: dict = {}
+
+        def target(job: AsyncJob) -> None:
+            captured["ds"] = get_thread_dataset_context()
+            captured["det"] = get_thread_detector_context()
+            job.result = "ok"
+
+        job = mgr.start(
+            signature=("sig",),
+            target=target,
+            dataset_id="never-registered",
+            detector_id="never-registered",
+        )
+        assert job.done_event.wait(timeout=5)
+        assert job.status == "done"
+        assert captured["ds"] is None
+        assert captured["det"] is None
+
+    def test_run_clears_thread_context_after_target_returns(self):
+        """The worker thread's thread-locals must be reset after the target
+        runs, including on the error path, so a follow-up job on a freshly
+        spawned thread doesn't inherit stale context (defensive — daemon
+        threads are one-shot today, but the contract should hold)."""
+        mgr = JobManager("ctx-test")
+        ds_ctx = DatasetContext("ds-ctx-B")
+        det_ctx = DetectorContext("det-ctx-B")
+        register_context(ds_ctx)
+        register_detector_context(det_ctx)
+
+        after_done = threading.Event()
+        captured: dict = {}
+
+        def target(job: AsyncJob) -> None:
+            captured["ds_inside"] = get_thread_dataset_context()
+            job.result = "ok"
+
+        def boom(job: AsyncJob) -> None:
+            captured["ds_inside_boom"] = get_thread_dataset_context()
+            raise RuntimeError("kaboom")
+
+        try:
+            ok = mgr.start(("sig-ok",), target, dataset_id="ds-ctx-B", detector_id="det-ctx-B")
+            assert ok.done_event.wait(timeout=5)
+            assert captured["ds_inside"] is ds_ctx
+
+            err = mgr.start(("sig-err",), boom, dataset_id="ds-ctx-B", detector_id="det-ctx-B")
+            assert err.done_event.wait(timeout=5)
+            assert err.status == "error"
+            assert captured["ds_inside_boom"] is ds_ctx
+
+            # The worker thread itself is daemon and one-shot, but verify the
+            # finally block ran by checking that a fresh job with no ids
+            # observes a clean slate (no leak from prior runs into the
+            # registry-keyed lookup path).
+            def verify(job: AsyncJob) -> None:
+                captured["ds_clean"] = get_thread_dataset_context()
+                captured["det_clean"] = get_thread_detector_context()
+                after_done.set()
+                job.result = "ok"
+
+            clean = mgr.start(("sig-clean",), verify)
+            assert clean.done_event.wait(timeout=5)
+            assert after_done.is_set()
+            assert captured["ds_clean"] is None
+            assert captured["det_clean"] is None
+        finally:
+            unregister_context("ds-ctx-B")
+            unregister_detector_context("det-ctx-B")
