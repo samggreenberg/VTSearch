@@ -183,7 +183,7 @@ def _parse_legacy_specs(raw_converters: Any, output_type: str) -> list[SourceSpe
     return legacy_specs
 
 
-PickerView = str  # one of: "form", "demo", "server_folder", "local_folder"
+PickerView = str  # one of: "form", "demo", "server_folder", "local"
 
 
 # Synthetic per-importer field that lets the user pick a name for the new
