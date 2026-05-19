@@ -414,15 +414,24 @@ class TestPluginRegistryLock:
     def test_registry_has_lock(self):
         from vtsearch.plugins import PluginRegistry
 
-        reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter")
+        reg = PluginRegistry(
+            package="vtsearch.exporters", sentinel="EXPORTER", label="exporter", eager=False
+        )
         assert isinstance(reg._lock, type(threading.Lock()))
 
     def test_concurrent_first_access_discovers_once(self):
-        """Concurrent .list() calls should trigger _discover exactly once."""
+        """Concurrent .list() calls should trigger _discover exactly once.
+
+        Uses ``eager=False`` so we can observe the deferred-discovery path —
+        the default eager construction skips :meth:`_ensure_discovered` work
+        on subsequent calls entirely, so the lock is uninteresting there.
+        """
         from unittest.mock import patch
         from vtsearch.plugins import PluginRegistry
 
-        reg = PluginRegistry(package="vtsearch.exporters", sentinel="EXPORTER", label="exporter")
+        reg = PluginRegistry(
+            package="vtsearch.exporters", sentinel="EXPORTER", label="exporter", eager=False
+        )
         call_count = 0
         original_discover = reg._discover
 

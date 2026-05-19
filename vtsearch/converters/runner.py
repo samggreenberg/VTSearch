@@ -14,7 +14,6 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from vtsearch.converters import get_converter
 from vtsearch.security.path_validation import glob_top_level, rglob_follow_symlinks
 
 ProgressCallback = Callable[[str, str, int, int], None]
@@ -40,6 +39,8 @@ def _normalise_converter_specs(
     with both fields populated.  Unknown converter names are silently
     dropped to match the runner's prior behaviour.
     """
+    from vtsearch.converters import get_converter  # noqa: PLC0415 — deferred to avoid circular import during eager registry discovery
+
     result: list[tuple[Any, dict[str, Any]]] = []
     if converter_specs:
         for spec in converter_specs:
