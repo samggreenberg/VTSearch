@@ -58,6 +58,24 @@ export class ProgressIndicatorsComponent {
     return '';
   }
 
+  get smartTooltip(): string {
+    const meaning = 'Smart: the model fits your votes consistently.';
+    const legend = 'Green when error cost has leveled off, yellow when still improving, red when more votes are needed.';
+    return this.smartSubtext ? `${meaning} ${this.smartSubtext}. ${legend}` : `${meaning} ${legend}`;
+  }
+
+  get stableTooltip(): string {
+    const meaning = 'Stable: predictions stopped shifting between retrains.';
+    const legend = 'Green when predictions have settled, yellow when still shifting, red when more votes are needed.';
+    return this.stableSubtext ? `${meaning} ${this.stableSubtext}. ${legend}` : `${meaning} ${legend}`;
+  }
+
+  get spanTooltip(): string {
+    const meaning = 'Diverse: your votes cover the dataset broadly.';
+    const legend = 'Green when you have sampled from all major clusters, yellow when some regions remain unexplored, red when coverage data is unavailable.';
+    return this.spanSubtext ? `${meaning} Level ${this.spanSubtext}. ${legend}` : `${meaning} ${legend}`;
+  }
+
   onClick(name: string): void {
     this.indicatorClick.emit(name);
   }

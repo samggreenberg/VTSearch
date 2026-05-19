@@ -431,8 +431,10 @@ Region voting requires holding `Shift`. When a patch-region embedder is detected
 ### 12.11 Cross-dataset scoring warning ★★ S
 When the user selects Dataset B + Detector trained on Dataset A and clicks Find/Train, today nothing flags this. Show a non-blocking note: *"This detector was trained on a different dataset (Dataset A). Scoring will still work but may be less accurate."*
 
-### 12.12 What "smart"/"stable" mean ★★ XS
+### 12.12 What "smart"/"stable" mean ★★ XS *(shipped)*
 The labeling status bar shows colored dots for `smart` and `stable`. Add a hover tooltip explaining each ("Smart: the model fits your votes consistently. Stable: predictions stopped shifting between retrains.").
+
+**Shipped:** `ProgressIndicatorsComponent` now exposes `smartTooltip`, `stableTooltip`, and `spanTooltip` getters that lead with the plain-English meaning, append live subtext (cost / flips / level) when present, and end with the green/yellow/red legend. Wired into the `[title]` attribute on each `.labeling-indicator` button.
 
 ---
 
