@@ -782,14 +782,17 @@ class TestLoadingGates:
 
         assert started.wait(timeout=10), "Minimalist importer never started"
 
-        # Wait for the task to fully drain — gate release happens in the
-        # task's ``finally`` block after the importer returns and the
-        # post-load stages run.
+        # The task's ``finally`` block calls ``controller.release()`` after
+        # the post-load stages finish.  Poll the gates (rather than
+        # ``has_active_tasks``) because a successful task leaves its
+        # progress status at "loading"; gate release is the true signal
+        # that the task has exited.
         deadline = time.time() + 10
-        while loading_tasks.has_active_tasks() and time.time() < deadline:
+        while time.time() < deadline:
+            if _download_gate.active == 0 and _embed_gate.active == 0:
+                break
             time.sleep(0.05)
 
-        assert not loading_tasks.has_active_tasks(), "Load task never finished"
         assert _download_gate.active == 0, (
             "Download gate leaked after a minimalist importer — the "
             "unconditional swap_to_embed() after the importer, or the "
