@@ -71,11 +71,7 @@ class ProgressTracker:
         """
         now = time.monotonic()
         phase_key = (status, total)
-        if (
-            self._phase_key != phase_key
-            or self._phase_start is None
-            or current < self._phase_current_start
-        ):
+        if self._phase_key != phase_key or self._phase_start is None or current < self._phase_current_start:
             self._phase_key = phase_key
             self._phase_start = now
             self._phase_current_start = current
