@@ -4,26 +4,17 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { AppComponent } from './app.component';
 import { provideRouter } from '@angular/router';
-import { VtDialogService } from './services/dialog.service';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
 
 describe('AppComponent', () => {
-  let dialogSpy: jasmine.SpyObj<VtDialogService>;
-
   beforeEach(async () => {
-    dialogSpy = jasmine.createSpyObj('VtDialogService', ['alert'], {
-      dialogOpen: false,
-    });
-    dialogSpy.alert.and.returnValue(Promise.resolve(true));
-
     await TestBed.configureTestingModule({
       imports: [AppComponent],
       providers: [
         provideRouter([]),
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: VtDialogService, useValue: dialogSpy },
       ],
     }).compileComponents();
   });
@@ -171,7 +162,7 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     const mediaState = TestBed.inject(MediaStateService);
     spyOnProperty(mediaState, 'medias', 'get').and.returnValue([
-      { id: 1, type: 'image', filename: 'a.png', md5: 'abc', custom_metadata: {} },
+      { id: 1, type: 'image' },
     ]);
     fixture.componentInstance.isOnLabelView = true;
     fixture.componentInstance.onSettings();

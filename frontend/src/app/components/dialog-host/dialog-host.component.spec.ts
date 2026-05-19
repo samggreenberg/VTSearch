@@ -54,14 +54,4 @@ describe('DialogHostComponent', () => {
     await promise;
   });
 
-  it('should render alert dialog', async () => {
-    const promise = dialogService.alert('Something happened');
-    fixture.detectChanges();
-
-    expect(dialogService.dialogOpen).toBeTrue();
-    expect(dialogService.dialogMessage).toBe('Something happened');
-
-    component.onButtonClick(true);
-    await promise;
-  });
 });

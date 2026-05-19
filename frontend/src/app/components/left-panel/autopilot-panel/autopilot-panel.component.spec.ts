@@ -75,6 +75,9 @@ describe('AutopilotPanelComponent', () => {
     expect(component.state.phase).toBe('hard');
 
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'green' },
       span: { status: '' },
@@ -92,6 +95,9 @@ describe('AutopilotPanelComponent', () => {
     autopilotState.checkPhaseTransition(3, 0);
     autopilotState.checkPhaseTransition(3, 4);
     autopilotState.updateFromLabelingStatus({
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'green' },
       span: { status: '' },
@@ -100,6 +106,9 @@ describe('AutopilotPanelComponent', () => {
     expect(component.state.phase).toBe('new');
 
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'green' },
       span: { status: 'green' },
@@ -117,6 +126,9 @@ describe('AutopilotPanelComponent', () => {
     autopilotState.checkPhaseTransition(3, 0);
     autopilotState.checkPhaseTransition(3, 4);
     autopilotState.updateFromLabelingStatus({
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'green' },
       span: { status: '' },
@@ -126,6 +138,9 @@ describe('AutopilotPanelComponent', () => {
 
     // A surprise vote causes smart to drop
     component.labelingStatus = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'yellow' },
       stable: { status: 'green' },
       span: { status: 'yellow' },
@@ -141,6 +156,9 @@ describe('AutopilotPanelComponent', () => {
     autopilotState.checkPhaseTransition(3, 0);
     autopilotState.checkPhaseTransition(3, 4);
     autopilotState.updateFromLabelingStatus({
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
       smart: { status: 'green' },
       stable: { status: 'green' },
       span: { status: 'yellow' },

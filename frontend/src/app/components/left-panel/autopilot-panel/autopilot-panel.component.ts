@@ -6,7 +6,7 @@ import {
   AutopilotPhase,
   AutopilotState,
 } from '../../../services/autopilot-state.service';
-import { VtDialogService } from '../../../services/dialog.service';
+import { ToastService } from '../../../services/toast.service';
 
 export type { AutopilotPhase, AutopilotState };
 
@@ -56,7 +56,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
 
   constructor(
     public autopilotState: AutopilotStateService,
-    private dialogService: VtDialogService,
+    private toastService: ToastService,
   ) {}
 
   get state(): AutopilotState {
@@ -106,10 +106,10 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
       this.autopilotState.checkPhaseTransition(this.goodVotes.size, this.badVotes.size);
       if (prevPhase !== 'done' && this.autopilotState.state.phase === 'done' && !this.completionAlerted) {
         this.completionAlerted = true;
-        this.dialogService.alert(
-          'Autopilot is complete! All quality indicators are green. You can continue labeling or export your results.',
-          'success',
-        );
+        this.toastService.success({
+          message: 'Autopilot complete',
+          detail: 'All quality indicators are green. You can continue labeling or export your results.',
+        });
       }
     }
   }
