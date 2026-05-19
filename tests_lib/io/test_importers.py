@@ -597,6 +597,67 @@ class TestExtractArchive:
         _extract_archive(zip_path, extract_dir)
         assert len(list(extract_dir.glob("*.wav"))) == 3
 
+    def test_zip_traversal_rejected_before_extraction(self, tmp_path):
+        """A zip member with ``..`` traversal must be rejected before any file lands on disk."""
+        from vtscore.datasets.importers.http_archive import _extract_archive
+
+        zip_path = tmp_path / "evil.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("../escape.wav", _make_wav_bytes())
+        extract_dir = tmp_path / "out"
+        extract_dir.mkdir()
+        with pytest.raises(ValueError, match="traversal"):
+            _extract_archive(zip_path, extract_dir)
+        # Neither the in-tree nor the escaped target should exist.
+        assert not (tmp_path / "escape.wav").exists()
+        assert not (extract_dir / "escape.wav").exists()
+
+    def test_zip_absolute_path_rejected(self, tmp_path):
+        """A zip member with an absolute path must be rejected."""
+        from vtscore.datasets.importers.http_archive import _extract_archive
+
+        zip_path = tmp_path / "abs.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("/etc/escape.wav", _make_wav_bytes())
+        extract_dir = tmp_path / "out"
+        extract_dir.mkdir()
+        with pytest.raises(ValueError, match="traversal"):
+            _extract_archive(zip_path, extract_dir)
+
+    def test_zip_prefix_collision_rejected(self, tmp_path):
+        """``extract_dir`` prefix collision must NOT pass the traversal check.
+
+        Regression: the previous string-prefix ``startswith`` check would
+        accept ``../out_evil/x`` when extracting into ``.../out`` because
+        ``str.startswith`` does not respect path separators.
+        """
+        from vtscore.datasets.importers.http_archive import _extract_archive
+
+        zip_path = tmp_path / "prefix.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("../out_evil/escape.wav", _make_wav_bytes())
+        extract_dir = tmp_path / "out"
+        extract_dir.mkdir()
+        with pytest.raises(ValueError, match="traversal"):
+            _extract_archive(zip_path, extract_dir)
+        assert not (tmp_path / "out_evil").exists()
+
+    def test_tar_traversal_rejected_before_extraction(self, tmp_path):
+        """A tar member with ``..`` traversal must be rejected before extraction."""
+        from vtscore.datasets.importers.http_archive import _extract_archive
+
+        tar_path = tmp_path / "evil.tar"
+        wav_data = _make_wav_bytes()
+        with tarfile.open(tar_path, "w") as tf:
+            info = tarfile.TarInfo(name="../escape.wav")
+            info.size = len(wav_data)
+            tf.addfile(info, io.BytesIO(wav_data))
+        extract_dir = tmp_path / "out"
+        extract_dir.mkdir()
+        with pytest.raises((ValueError, Exception), match="(?i)traversal|outside"):
+            _extract_archive(tar_path, extract_dir)
+        assert not (tmp_path / "escape.wav").exists()
+
 
 # ---------------------------------------------------------------------------
 # DatasetImporter bulk-record hooks (list_records / fetch_record /

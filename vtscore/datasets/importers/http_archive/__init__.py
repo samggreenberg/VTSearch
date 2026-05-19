@@ -21,6 +21,7 @@ The importer participates in the multi-media import flow.  Each
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tarfile
 import zipfile
@@ -48,6 +49,27 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
+def _reject_traversal(extract_dir_resolved: Path, member_name: str) -> None:
+    """Raise ValueError if *member_name* would extract outside extract_dir.
+
+    Validates before extraction so a malicious member is never written to disk.
+    Rejects absolute paths, ``..`` traversal, and any name that — once joined
+    and normalised — escapes the extraction root.
+    """
+    # Reject absolute member names outright; on Windows they'd also drop the
+    # root prefix when joined, but we want to fail loudly either way.
+    if member_name.startswith(("/", "\\")) or (len(member_name) > 1 and member_name[1] == ":"):
+        raise ValueError(f"Path traversal detected in archive: {member_name}")
+
+    # Use os.path.normpath-style joining without resolving symlinks: the
+    # extract_dir is freshly created and contains no symlinks yet, and we
+    # don't want a symlink planted by an earlier member in the same archive
+    # to mask a later traversal.
+    target = Path(os.path.normpath(extract_dir_resolved / member_name))
+    if target != extract_dir_resolved and not target.is_relative_to(extract_dir_resolved):
+        raise ValueError(f"Path traversal detected in archive: {member_name}")
+
+
 def _extract_archive(  # noqa: C901
     archive_path: Path,
     extract_dir: Path,
@@ -58,6 +80,7 @@ def _extract_archive(  # noqa: C901
         on_progress = _default_progress()
 
     name = archive_path.name.lower()
+    extract_dir_resolved = extract_dir.resolve()
 
     if name.endswith(".zip"):
         with zipfile.ZipFile(archive_path, "r") as zf:
@@ -70,9 +93,7 @@ def _extract_archive(  # noqa: C901
                     i,
                     total,
                 )
-                target = (extract_dir / member).resolve()
-                if not str(target).startswith(str(extract_dir.resolve())):
-                    raise ValueError(f"Path traversal detected in archive: {member}")
+                _reject_traversal(extract_dir_resolved, member)
                 zf.extract(member, extract_dir)
 
     elif tarfile.is_tarfile(archive_path):
@@ -86,6 +107,7 @@ def _extract_archive(  # noqa: C901
                     i,
                     total,
                 )
+                _reject_traversal(extract_dir_resolved, member.name)
                 tf.extract(member, extract_dir, filter="data")
 
     elif name.endswith(".rar"):
@@ -105,9 +127,7 @@ def _extract_archive(  # noqa: C901
                     i,
                     total,
                 )
-                target = (extract_dir / member).resolve()
-                if not str(target).startswith(str(extract_dir.resolve())):
-                    raise ValueError(f"Path traversal detected in archive: {member}")
+                _reject_traversal(extract_dir_resolved, member)
                 rf.extract(member, extract_dir)
 
     else:
