@@ -557,7 +557,138 @@ def _apply_clip_and_embed(
     return _embed_via_tempfile(data, suffix, media_type, embedder_name)
 
 
-def resolve_label_embeddings(  # noqa: C901
+@dataclass
+class _LabelOutcome:
+    """One label entry's resolution result.
+
+    ``status`` is one of: ``"skipped"`` (label not ``good``/``bad``, does
+    not count toward totals), ``"success"`` (carries ``embedding`` +
+    ``label_value``), or a failure tag: ``"no_origin"`` / ``"file_not_found"``
+    / ``"embed_failed"``.
+    """
+
+    status: str
+    embedding: np.ndarray | None = None
+    label_value: float = 0.0
+
+
+def _log_resolve_failure(
+    index: int,
+    entry: dict[str, Any],
+    status: str,
+    origin: dict[str, Any] | None,
+    origin_name: str,
+    filename: str,
+) -> None:
+    """Emit the per-entry failure message for the file-resolution path."""
+    if status == "no_origin":
+        log.info(
+            "  label[%d] FAILED (no origin): md5=%s, origin_name=%r, "
+            "filename=%r — this label has no origin trail and cannot "
+            "be resolved to a file",
+            index,
+            entry.get("md5", "?")[:12],
+            origin_name,
+            filename,
+        )
+        return
+    # file_not_found
+    assert origin is not None
+    log.info(
+        "  label[%d] FAILED (file not found): importer=%r, origin_name=%r, filename=%r, params=%r",
+        index,
+        origin.get("importer", "?"),
+        origin_name,
+        filename,
+        origin.get("params", {}),
+    )
+
+
+def _embed_resolved_label(file_path: Path, media_type: str, origin: dict[str, Any] | None) -> np.ndarray | None:
+    """Embed a resolved file, switching to clip-aware embedding when the origin demands it."""
+    params = origin.get("params", {}) if origin is not None else {}
+    if origin is not None and (params.get("clipper") or params.get("clipper_chain")):
+        return _apply_clip_and_embed(file_path, media_type, origin)
+    return embed_file(file_path, media_type)
+
+
+def _resolve_one_label(entry: dict[str, Any], media_type: str, index: int) -> _LabelOutcome:
+    """Resolve a single label entry to an embedding.  Logs success / failure inline."""
+    label_val = entry.get("label", "")
+    if label_val not in ("good", "bad"):
+        return _LabelOutcome(status="skipped")
+
+    origin = entry.get("origin")
+    origin_name = entry.get("origin_name", "")
+    filename = entry.get("filename", "")
+
+    with resolve_file_context(origin, origin_name, filename) as file_path:
+        if file_path is None:
+            status = "no_origin" if origin is None else "file_not_found"
+            _log_resolve_failure(index, entry, status, origin, origin_name, filename)
+            return _LabelOutcome(status=status)
+
+        embedding = _embed_resolved_label(file_path, media_type, origin)
+        if embedding is None:
+            log.info(
+                "  label[%d] FAILED (embed): file resolved to %s but embedding returned None for media_type=%r",
+                index,
+                file_path,
+                media_type,
+            )
+            return _LabelOutcome(status="embed_failed")
+
+        log.debug(
+            "  label[%d] OK: %s → %s (label=%s)",
+            index,
+            origin_name or filename,
+            file_path.name,
+            label_val,
+        )
+        return _LabelOutcome(
+            status="success",
+            embedding=embedding,
+            label_value=1.0 if label_val == "good" else 0.0,
+        )
+
+
+def _log_resolve_summary(result: ResolvedLabels, failure_counts: dict[str, int]) -> None:
+    """Emit the final per-batch summary at info / warning level based on outcome."""
+    n_good = sum(1 for v in result.labels if v == 1.0)
+    n_bad = sum(1 for v in result.labels if v == 0.0)
+    summary = (
+        f"resolve_label_embeddings: {result.resolved_count} of "
+        f"{result.total_count} labels resolved ({n_good} good, {n_bad} bad)"
+    )
+    if result.missing_entries:
+        summary += (
+            f" | {len(result.missing_entries)} FAILED: "
+            f"{failure_counts['no_origin']} had no origin, "
+            f"{failure_counts['file_not_found']} file not found, "
+            f"{failure_counts['embed_failed']} embed failed"
+        )
+
+    if result.total_count > 0 and result.resolved_count == 0:
+        log.warning(
+            "%s. This usually means the importer's resolve_file() method "
+            "is missing or the source files are no longer on disk.",
+            summary,
+        )
+        if result.missing_entries:
+            first = result.missing_entries[0]
+            log.warning(
+                "First unresolved label: origin=%r, origin_name=%r, filename=%r",
+                first.get("origin"),
+                first.get("origin_name", ""),
+                first.get("filename", ""),
+            )
+    elif result.missing_entries:
+        log.warning("%s", summary)
+    else:
+        log.info("%s", summary)
+
+
+def resolve_label_embeddings(
     labels: list[dict[str, Any]],
     media_type: str,
     progress_callback: Any | None = None,
@@ -577,128 +708,30 @@ def resolve_label_embeddings(  # noqa: C901
         A :class:`ResolvedLabels` with resolved embeddings, stats, and missing entries.
     """
     result = ResolvedLabels()
-
-    # Track failure reasons for the summary log
-    _no_origin = 0
-    _file_not_found = 0
-    _embed_failed = 0
+    failure_counts = {"no_origin": 0, "file_not_found": 0, "embed_failed": 0}
+    total = len(labels)
 
     log.info(
         "resolve_label_embeddings: starting resolution of %d label entries for media_type=%r",
-        len(labels),
+        total,
         media_type,
     )
 
-    _total_entries = len(labels)
-
     for i, entry in enumerate(labels):
-        label_val = entry.get("label", "")
-        if label_val not in ("good", "bad"):
-            if progress_callback is not None:
-                progress_callback(current=i + 1, total=_total_entries)
+        outcome = _resolve_one_label(entry, media_type, i)
+        if progress_callback is not None:
+            progress_callback(current=i + 1, total=total)
+
+        if outcome.status == "skipped":
             continue
-
         result.total_count += 1
-
-        origin = entry.get("origin")
-        origin_name = entry.get("origin_name", "")
-        filename = entry.get("filename", "")
-
-        with resolve_file_context(origin, origin_name, filename) as file_path:
-            if file_path is None:
-                result.missing_entries.append(entry)
-                if origin is None:
-                    _no_origin += 1
-                    log.info(
-                        "  label[%d] FAILED (no origin): md5=%s, origin_name=%r, "
-                        "filename=%r — this label has no origin trail and cannot "
-                        "be resolved to a file",
-                        i,
-                        entry.get("md5", "?")[:12],
-                        origin_name,
-                        filename,
-                    )
-                else:
-                    _file_not_found += 1
-                    log.info(
-                        "  label[%d] FAILED (file not found): importer=%r, origin_name=%r, filename=%r, params=%r",
-                        i,
-                        origin.get("importer", "?"),
-                        origin_name,
-                        filename,
-                        origin.get("params", {}),
-                    )
-                if progress_callback is not None:
-                    progress_callback(current=i + 1, total=_total_entries)
-                continue
-
-            # Use clip-aware embedding when the label has clip params in its
-            # origin (e.g. from a clipped dataset).  This ensures cross-dataset
-            # resolution embeds the clipped content, not the whole parent file.
-            origin_params = origin.get("params", {}) if origin is not None else {}
-            if origin is not None and (origin_params.get("clipper") or origin_params.get("clipper_chain")):
-                embedding = _apply_clip_and_embed(file_path, media_type, origin)
-            else:
-                embedding = embed_file(file_path, media_type)
-            if embedding is None:
-                result.missing_entries.append(entry)
-                _embed_failed += 1
-                log.info(
-                    "  label[%d] FAILED (embed): file resolved to %s but embedding returned None for media_type=%r",
-                    i,
-                    file_path,
-                    media_type,
-                )
-                if progress_callback is not None:
-                    progress_callback(current=i + 1, total=_total_entries)
-                continue
-
-            result.embeddings.append(embedding)
-            result.labels.append(1.0 if label_val == "good" else 0.0)
+        if outcome.status == "success" and outcome.embedding is not None:
+            result.embeddings.append(outcome.embedding)
+            result.labels.append(outcome.label_value)
             result.resolved_count += 1
-            log.debug(
-                "  label[%d] OK: %s → %s (label=%s)",
-                i,
-                origin_name or filename,
-                file_path.name,
-                label_val,
-            )
-            if progress_callback is not None:
-                progress_callback(current=i + 1, total=_total_entries)
+        else:
+            result.missing_entries.append(entry)
+            failure_counts[outcome.status] += 1
 
-    # --- Summary ---
-    n_good = sum(1 for v in result.labels if v == 1.0)
-    n_bad = sum(1 for v in result.labels if v == 0.0)
-    _summary = (
-        f"resolve_label_embeddings: {result.resolved_count} of "
-        f"{result.total_count} labels resolved "
-        f"({n_good} good, {n_bad} bad)"
-    )
-    if result.missing_entries:
-        _summary += (
-            f" | {len(result.missing_entries)} FAILED: "
-            f"{_no_origin} had no origin, "
-            f"{_file_not_found} file not found, "
-            f"{_embed_failed} embed failed"
-        )
-
-    if result.total_count > 0 and result.resolved_count == 0:
-        log.warning(
-            "%s. This usually means the importer's resolve_file() method "
-            "is missing or the source files are no longer on disk.",
-            _summary,
-        )
-        if result.missing_entries:
-            first = result.missing_entries[0]
-            log.warning(
-                "First unresolved label: origin=%r, origin_name=%r, filename=%r",
-                first.get("origin"),
-                first.get("origin_name", ""),
-                first.get("filename", ""),
-            )
-    elif result.missing_entries:
-        log.warning("%s", _summary)
-    else:
-        log.info("%s", _summary)
-
+    _log_resolve_summary(result, failure_counts)
     return result
