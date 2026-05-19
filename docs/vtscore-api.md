@@ -309,7 +309,17 @@ def all_type_ids() -> list[str]: ...
 def all_types_dict() -> list[dict]: ...
 def all_demo_datasets() -> dict[str, DemoDataset]: ...
 def normalize_type_id(type_id: str) -> str: ...
-def set_progress_callback(cb: ProgressCallback) -> None: ...
+def set_progress_callback(cb: ProgressCallback) -> None:
+    """Global default progress callback for media-registry operations.
+    A per-thread override via set_thread_progress_callback takes priority when set."""
+
+def set_thread_progress_callback(cb: ProgressCallback | None) -> None:
+    """Set a progress callback for the current thread only. Multi-threaded library
+    consumers (e.g. parallel evaluation harnesses) should use this to avoid one
+    thread clobbering another's callback. None clears the thread override and
+    falls back to the global. Mirrors vtscore.concurrency.progress.set_thread_progress."""
+
+def get_thread_progress_callback() -> ProgressCallback | None: ...
 ```
 
 ### Embedder registry
@@ -745,12 +755,6 @@ def run_eval(...) -> list[DatasetResult]:
 
 def format_results_json(results: list[DatasetResult]) -> str: ...
 
-def plot_eval_results(results: list[DatasetResult], out_dir: Path) -> None:
-    """Generate evaluation PNGs (mAP, AP, P@k, R@k, F1, metrics).
-    Requires `vtscore[viz]` extra (matplotlib)."""
-
-def plot_voting_iterations(results: list[dict], out_dir: Path) -> None: ...
-
 def simulate_voting_iterations(
     dataset: DatasetContext,
     *,
@@ -769,6 +773,12 @@ def run_voting_iterations_eval(
 
 def run_voting_iterations_eval_from_pickles(pickles: list[Path]) -> list[dict]: ...
 ```
+
+> `plot_eval_results` and `plot_voting_iterations` are **not** part of `vtscore`.
+> Plotting is presentation, not computation — those helpers move to `vtsearch/` and
+> import matplotlib app-side. The library exports the data (`DatasetResult`,
+> `QueryMetrics`, `LearnedSortMetrics`, `format_results_json`); rendering it is
+> the app's job.
 
 ---
 
@@ -886,8 +896,14 @@ The following names appear in `vtsearch.state` today but are app-side concerns a
   `dataset_display_name`, `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
   `enrich_descriptions` — these are `_ProxyDict` / `_ProxyList` objects that read
   `flask.g`. They stay in the app as a thin shim that delegates to library contexts.
-- `autorun_detectors`, `autorun_extractors`, `autorun_localizers` — currently global
-  module state; Phase 3 moves them onto a context-or-config object the app owns.
+- `autorun_detectors`, `autorun_extractors`, `autorun_localizers` and their CRUD
+  (`add_autorun_extractor`, `remove_autorun_extractor`, `rename_autorun_extractor`,
+  `get_autorun_extractors`, `get_autorun_extractors_by_media`, and the matching
+  `_autorun_localizer` set) — *policy* about which processors to run automatically,
+  which is an app concern. The library keeps the `Processor` / `Detector` /
+  `Localizer` / `Extractor` ABCs and the code that applies them; the app keeps
+  the list of which ones to apply on load. Phase 3 wires the resolved list
+  through as an explicit argument to whichever library entry point needs it.
 - `get_inclusion`, `set_inclusion`, `get_calibrate_count`, `set_calibrate_count`,
   `get_calibration_fraction`, `set_calibration_fraction`, `get_safe_thresholds`,
   `set_safe_thresholds`, `get_dataset_display_name`, `set_dataset_display_name`,
@@ -1227,17 +1243,39 @@ Explicit non-goals — these are app concerns that stay in `vtsearch/`:
 - `vtsearch/achievements.py` — pure user-pref / gamification, no library consumer.
 - `vtsearch/schemas/` — flask-smorest marshmallow schemas for the HTTP API.
 
-## Open questions for Phase 1
+## Phase 1 decisions
 
-1. **`labelset_source` plugin family**: the plan's Phase 5 note says the labelset-source
-   registry moves to the library. Confirm before extracting — the alternative is to keep
-   both source registries app-side and have the library merely consume them.
-2. **`vtscore.eval.visualize` dependency on matplotlib**: ship as required, or as an
-   extra `vtscore[viz]`? Plan suggests extra; revisit if downstream prototypes need it
-   in the base install.
-3. **`autorun_*` global state**: today `autorun_detectors`, `autorun_extractors`,
-   `autorun_localizers` live in `vtsearch.state.__init__`. Phase 3 needs to decide
-   where they land — on `CoreConfig`, on a new context object, or app-side.
-4. **`set_progress_callback` on `vtscore.media`**: currently a global wire-up. Library
-   consumers using multiple threads will need a per-thread variant — the
-   `set_thread_progress` shape in `vtscore.concurrency.progress` is the precedent.
+The four open questions surfaced at Phase 0 review are settled. The principle
+that resolves them: **library = "the ability to do X"; app = "the policy that
+decides when X happens, what gets persisted, and where it shows up."**
+
+1. **`labelset_source` plugin family — ships in `vtscore.labels`.** Pulling labels
+   in from external systems is a core consumer affordance (you can't use the
+   library without it), so the ABC, the registry (`get_labelset_source` /
+   `list_labelset_sources`), and the discovery sentinel all live library-side.
+   The shared `SyncSource[L,S]` base in `vtscore.sync` is unchanged. Contrast
+   with `SettingsSource`, which is a user-pref concern and stays in `vtsearch/`.
+2. **Data visualization stays in the app.** Plotting eval results is presentation,
+   not computation — it belongs next to the routes that render charts, not in
+   the library that produces the numbers. `vtscore.eval` exports the dataclasses,
+   metric functions, and runners (`run_eval`, `eval_text_sort`, `eval_learned_sort`,
+   `simulate_voting_iterations`, `format_results_json`); the `plot_*` helpers move
+   to `vtsearch/` and import matplotlib there. This also drops the need for a
+   `vtscore[viz]` extra.
+3. **`autorun_*` lists are app-side; processor execution is library-side.** The
+   `Processor` / `Detector` / `Localizer` / `Extractor` ABCs and the code that
+   applies them to media stay in `vtscore` — the *ability* to run a processor is
+   a library concern. The registry of which processors to autorun
+   (`autorun_detectors`, `autorun_extractors`, `autorun_localizers`) plus its
+   CRUD (`add_autorun_extractor`, `remove_autorun_localizer`, etc.) is *policy*
+   the app owns; it stays in `vtsearch/`. The library accepts the resolved list
+   as an argument when a caller wants to run it.
+4. **Mirror the concurrency progress pattern on `vtscore.media`: per-thread override
+   plus global default.** Add `set_thread_progress_callback()` that takes priority
+   when set on the calling thread, and keep `set_progress_callback()` as the
+   global fallback for single-threaded consumers. Cost is ~10 lines
+   (`threading.local` or a `ContextVar`); benefit is that a library consumer
+   running multi-threaded ingestion (e.g. scoring two detectors in parallel)
+   doesn't have one thread clobber another's callback. The shape mirrors
+   `vtscore.concurrency.progress.set_thread_progress` so the two surfaces are
+   consistent.
