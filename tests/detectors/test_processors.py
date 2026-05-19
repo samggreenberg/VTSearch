@@ -366,7 +366,7 @@ class TestFaceLocalizer:
 
 class TestAutorunLocalizerState:
     def test_add_and_get(self):
-        from vtsearch.state import add_autorun_localizer, get_autorun_localizers
+        from vtsearch.autorun_processors import add_autorun_localizer, get_autorun_localizers
 
         add_autorun_localizer("face1", "face", "image", {"threshold": 0.5})
         locs = get_autorun_localizers()
@@ -375,7 +375,7 @@ class TestAutorunLocalizerState:
         assert locs["face1"]["media_type"] == "image"
 
     def test_remove(self):
-        from vtsearch.state import add_autorun_localizer, get_autorun_localizers, remove_autorun_localizer
+        from vtsearch.autorun_processors import add_autorun_localizer, get_autorun_localizers, remove_autorun_localizer
 
         add_autorun_localizer("face1", "face", "image", {"threshold": 0.5})
         assert remove_autorun_localizer("face1") is True
@@ -383,7 +383,7 @@ class TestAutorunLocalizerState:
         assert get_autorun_localizers() == {}
 
     def test_rename(self):
-        from vtsearch.state import add_autorun_localizer, get_autorun_localizers, rename_autorun_localizer
+        from vtsearch.autorun_processors import add_autorun_localizer, get_autorun_localizers, rename_autorun_localizer
 
         add_autorun_localizer("old", "face", "image", {"threshold": 0.5})
         assert rename_autorun_localizer("old", "new") is True
@@ -392,7 +392,7 @@ class TestAutorunLocalizerState:
         assert "old" not in locs
 
     def test_get_by_media(self):
-        from vtsearch.state import add_autorun_localizer, get_autorun_localizers_by_media
+        from vtsearch.autorun_processors import add_autorun_localizer, get_autorun_localizers_by_media
 
         add_autorun_localizer("face1", "face", "image", {"threshold": 0.5})
         add_autorun_localizer("audio_loc", "face", "audio", {"threshold": 0.5})
@@ -428,7 +428,7 @@ class TestPregenProcessorsRoute:
         assert "Face (MediaPipe)" in data["added"]
 
     def test_pregen_adds_to_autorun(self, client):
-        from vtsearch.state import autorun_extractors, autorun_localizers
+        from vtsearch.autorun_processors import autorun_extractors, autorun_localizers
 
         client.post("/api/pregen-processors/add")
         assert "OCR (PaddleOCR)" in autorun_extractors

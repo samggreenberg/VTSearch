@@ -232,8 +232,9 @@ def reset_state():
 
     medias.update({k: dict(v) for k, v in _test_medias_snapshot.items()})
 
-    _core.autorun_extractors.clear()
-    _core.autorun_localizers.clear()
+    from vtsearch.autorun_processors import clear_all_autorun
+
+    clear_all_autorun()
     clear_progress_cache()
 
     from vtsearch.embedding.helpers import clear_text_query_cache as _clear_query_cache

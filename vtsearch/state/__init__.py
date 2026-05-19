@@ -2,9 +2,8 @@
 
 This module is a re-export facade.  The actual state variables live in
 ``state_core``, and the functions are split across ``state_votes``,
-``state_clicks``, ``state_processors``, ``state_diversity``, and
-``state_media_lookup``.  Remaining functions (clear_medias, clear_all,
-settings wrappers) live here.
+``state_clicks``, ``state_diversity``, and ``state_media_lookup``.
+Remaining functions (clear_medias, clear_all, settings wrappers) live here.
 
 All public names are importable from ``vtsearch.state`` exactly
 as before, so no call-sites need to change.
@@ -19,8 +18,6 @@ from typing import Any
 # Re-export all state variables from state_core --------------------------
 from vtsearch.state.core import (  # noqa: F401
     _state_lock,
-    autorun_extractors,
-    autorun_localizers,
     bad_votes,
     good_votes,
     label_history,
@@ -85,20 +82,6 @@ from vtsearch.state.votes import (  # noqa: F401
     set_find_initial_labels,
     toggle_vote,
     update_learned_scores,
-)
-
-# Re-export processor CRUD -------------------------------------------------
-from vtsearch.state.processors import (  # noqa: F401
-    add_autorun_extractor,
-    add_autorun_localizer,
-    get_autorun_extractors,
-    get_autorun_extractors_by_media,
-    get_autorun_localizers,
-    get_autorun_localizers_by_media,
-    remove_autorun_extractor,
-    remove_autorun_localizer,
-    rename_autorun_extractor,
-    rename_autorun_localizer,
 )
 
 # Re-export diversity tree --------------------------------------------------

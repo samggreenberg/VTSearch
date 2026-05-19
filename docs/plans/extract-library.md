@@ -73,7 +73,7 @@ Currently `medias`, `good_votes`, `label_history`, etc. are module-level proxies
 
 - [ ] Audit every public library function and ensure it accepts a context object as a parameter (most already do via the proxy delegation; some implicitly read globals — make those explicit).
 - [ ] Keep the proxy module in the *app* layer, not the library. The library exports the context classes; the app exports the proxies that delegate to them via Flask `g` / thread-local.
-- [ ] Move `autorun_extractors`, `autorun_localizers` (currently defined as module-level dicts in `vtsearch/state/core.py` and mutated through `vtsearch/state/processors.py`) onto a context-or-config object the app owns. `autorun_detectors` is already an app-side server-tier setting in `vtsearch/settings.py`, so only the two `state/core.py` globals need relocating.
+- [x] Move `autorun_extractors`, `autorun_localizers` off the library-candidate `vtsearch/state/` package onto an app-side singleton (`vtsearch/autorun_processors.py`). The dicts + CRUD now live in a single file outside `state/`; `state/processors.py` is gone, and `state/__init__.py` no longer re-exports any autorun names. Route + test imports were updated to point at the new module. `autorun_detectors` is already an app-side server-tier setting in `vtsearch/settings.py`, so the relocation is complete.
 
 **Exit criteria**: `grep -n "^medias\|^good_votes" vtscore-candidate-paths/` returns zero hits — those names exist only in the app shim.
 
@@ -181,7 +181,7 @@ static/                    # built Angular output
 ```
 
 **Cross-boundary notes**:
-- `state/processors.py`'s autorun-extractor/localizer CRUD operates on globals defined in `state/core.py` — Phase 3 needs to relocate those before `state/` can move into `vtscore/`.
+- ~~`state/processors.py`'s autorun-extractor/localizer CRUD operates on globals defined in `state/core.py` — Phase 3 needs to relocate those before `state/` can move into `vtscore/`.~~ **Done** — the autorun registry now lives in `vtsearch/autorun_processors.py` (app-side); `state/processors.py` is gone and `state/core.py` no longer defines `autorun_extractors`/`autorun_localizers`.
 - `plugins/inventory.py` currently imports from `vtsearch.settings_io.*` to enumerate app-side plugin families. After the split, inventory either lives app-side or accepts the app-side registries via DI.
 
 ## Risks and open questions
@@ -202,7 +202,7 @@ Phases 1 → 4 are independent and can land in parallel PRs. Phase 5 depends on 
 Phase 2 is functionally done. Picking up from here, ordered smallest-first:
 
 1. ~~Phase 0 inventory doc, Phase 1 (Flask seam), Phase 2 (settings seam).~~ **All shipped.** See the per-phase status blocks above.
-2. **Phase 3, easy bit: relocate `autorun_extractors` / `autorun_localizers`.** Module-level dicts in `vtsearch/state/core.py`, mutated through `vtsearch/state/processors.py`. Move onto a context-or-config object the app owns (the plan suggests `DatasetContext` if they should follow the active dataset, or an app-side singleton if they're global like today). Touching this means updating every caller in `state/processors.py` to thread the new container in.
+2. ~~**Phase 3, easy bit: relocate `autorun_extractors` / `autorun_localizers`.**~~ **Shipped.** Moved to the new app-side singleton `vtsearch/autorun_processors.py` (dicts + CRUD); `state/processors.py` deleted; `state/core.py` and `state/__init__.py` no longer reference the autorun names. Route + test imports updated.
 3. **Phase 3, audit: explicit context parameters.** Walk every public library function. The ones that read `medias` / `good_votes` / etc. via the proxies need to accept `DatasetContext` / `DetectorContext` as a parameter (or pull it from a passed-in context). Most already do via the proxy delegation; the goal is to make the dependency *explicit* so the library doesn't depend on the magic module-level names.
 4. **Phase 3, finish: move the proxies to the app layer.** Once #2 and #3 are done, the proxies (`medias`, `good_votes`, the dict/list facades) move out of `vtsearch.state.core` into a new app-side module (e.g. `vtsearch/state_proxies.py` or part of `vtsearch/shim/`) and re-export under the existing `vtsearch.state` names. The library exports the `*Context` classes; the app stitches them into the proxy view route code expects.
 5. **Phase 4, filesystem seam.** All `data/` references move through `CoreConfig.data_dir`. Most are already there via `vtsearch.config.DATA_DIR`; the audit is small (`grep -rn '"data/' vtsearch/`).
