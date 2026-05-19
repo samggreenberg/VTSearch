@@ -345,14 +345,7 @@ Some settings (calibrate_count, inclusion default, autopilot config) are arguabl
 
 The biggest UX cost in VTSearch right now is the volume of decisions the user makes *before* they see any value. Many of these decisions have a clearly best default and could be auto-filled.
 
-### 11.1 Dataset name from path/folder ★★★ XS — shipped
-Almost every dataset importer requires a `name`, but the user almost always wants the folder/file basename. The local-folder importer already derives this in the frontend (`lfDatasetName` in `dataset-importer-modal.component.ts`), but **server_folder**, **server_files**, **http_archive**, and **pickle** importers all leave it blank. Auto-derive name from `os.path.basename(path)`, the URL's last path segment, or the pickle's stem. The field stays editable.
-
-**What shipped:** the `Dataset Name` input is now pre-filled live in every importer view, with a per-importer dirty flag that freezes the value once the user types.
-
-- *server_folder* — its dedicated picker view uses `sfDatasetName` + `sfDerivedDatasetName()` to extract the last segment of the browsed path whenever the user navigates folders.
-- *server_files / http_archive / pickle* (generic-form importers) — `formDerivedDatasetName()` in `dataset-importer-modal.component.ts` runs on every source-field change and matches by `field_type`: `url` → last URL path segment with `.zip` / `.tar.gz` / `.tar.bz2` / `.tar.xz` / `.tar` / `.rar` stripped; `server_path` and `file` → basename with extension stripped; a field literally keyed `path` → final non-empty path segment. The pickle file-picker calls `maybeApplyDerivedDatasetName()` directly from `onFileSelected()` so picking a `.pkl` pre-fills the name.
-- *Backend fallback* — each importer overrides `default_display_name()` (`server_folder/__init__.py:476`, `server_files/__init__.py:508`, `http_archive/__init__.py:344`, `pickle/__init__.py:91`) so CLI imports and any path that skips the modal still get a sensible default; tests in `tests/io/test_importers.py` cover all four.
+### 11.1 ~~Dataset name from path/folder~~ ★★★ XS — shipped
 
 ### 11.2 Media type from file extensions ★★★ S
 Today the user manually picks `media_type` for every folder/file/server import. We already own `vtsearch/media/` extension maps. After the user picks a path or URL, sample the first ~50 entries and auto-select the dominant media type. Show a "Detected: image (47 of 50 files)" hint with a dropdown to override.
@@ -360,21 +353,14 @@ Today the user manually picks `media_type` for every folder/file/server import. 
 ### 11.3 Embedder default per media type ★★★ XS
 The `embedder` dropdown is populated by `/api/datasets/embedders/<media_type>` but defaults to the first option, which is just whatever Python returns first. The user has no basis to choose between `siglip`, `dinov2_patch`, `dinov3_patch`, etc. Pick a *recommended* embedder per media type (the one used by demos), highlight it in the dropdown, and mark others as `Advanced ▼`.
 
-### 11.4 OS dark mode for `theme` ★★ XS
-`theme` defaults to `"dark"` in `_SETTING_SPECS`. On first load, read `prefers-color-scheme` from the browser and store that as the initial value. (See `vtsearch/settings.py`.)
+### 11.4 ~~OS dark mode for `theme`~~ ★★ XS — shipped
 
-### 11.5 Concurrency limits from hardware ★★ S — shipped
-Was: `max_concurrent_dataset_downloads` and `max_concurrent_dataset_embeddings` both defaulted to `1` and sat untouched.
-
-**What shipped:** `vtsearch/embedding/loader.py` exposes two hardware-derived defaults — `default_concurrent_downloads()` returns `max(1, min(4, os.cpu_count() or 1))`, and `default_concurrent_embeddings()` returns `1` on CPU-only boxes or `min(2, torch.cuda.device_count())` when CUDA is available. `ServerSettings` in `vtsearch/settings_models.py` wires them in via `default_factory=` (with lazy imports so settings-model import doesn't pull torch), so the values are computed on first read of an unset key rather than being baked into `data/settings.json` — a manual override in the file always wins.
-
-**Deviation from the brief:** the brief suggested `torch.cuda.mem_get_info()` for VRAM probing; we use `torch.cuda.device_count()` instead. `mem_get_info()` reports *currently free* VRAM, which fluctuates with whatever else is on the GPU; device count is stable and gives the same "one task per visible device, capped at 2" behaviour without depending on box state at startup.
+### 11.5 ~~Concurrency limits from hardware~~ ★★ S — shipped
 
 ### 11.6 Detector media type from selected dataset ★★★ XS
 New-detector modal forces a `media_type` pick. If the user already has a dataset selected on the dashboard, pre-fill it (already partially done — extend to *lock* and gray-out unless they explicitly unlock).
 
-### 11.7 Output filenames with timestamps ★★ XS — shipped
-`server_csv_file` / `server_json_file` exporters now default to `data/autodetect_results_{YYYYMMDD-HHMMSS}.{csv,json}`, so consecutive runs no longer silently overwrite. `vtsearch/exporters/_template.py` resolves `{YYYYMMDD-HHMMSS}` (UTC), `{detector_name}`, and `{username}`, with the latter two routed through `sanitize_template_value` so user-controlled values cannot escape the admin-implied directory. Covered by `tests/io/test_csv_webhook_exporters.py`.
+### 11.7 ~~Output filenames with timestamps~~ ★★ XS — shipped
 
 ### 11.8 Demo embedder from prior demo ★ XS
 Demo dataset picker re-asks for embedder every time. Remember the last embedder used for each media type per user (cheap: piggyback on per-user settings).
@@ -399,10 +385,7 @@ The empty dashboard shows two empty tables and a row of disabled buttons. Add a 
 > "Welcome — load a dataset to get started. Try the **Demo** tab for a one-click example, or **Local Folder** to use your own files."
 with a "Load demo dataset" CTA that opens the importer pre-pinned to Demo. (See `dashboard.component.html`.)
 
-### 12.2 First-vote tooltip in label view ★★★ XS — shipped
-Was: when the labeling view opens with zero votes, overlay a faint hint near the Good/Bad buttons. Dismiss on first vote, persist dismiss in user settings.
-
-**What shipped:** the voting overlay (`frontend/src/app/components/center-panel/voting-overlay/`) now renders a faint `Use ← / → or click. Autopilot will find the next question.` hint above the Good/Bad buttons whenever the parent `vt-center-panel` reports zero votes and the user hasn't previously dismissed it. The center panel subscribes to `voteState.goodVotes$` / `badVotes$`, so the hint also retires when a vote arrives via the left-panel hover-vote or grid click — not just via the center buttons. Dismiss state persists as a new per-user setting `label_hint_dismissed` (`vtsearch/settings_models.py:UserSettings`, default `False`), wired through `AppSettingsSchema` / `SettingsUpdateSchema` and the PUT `/api/settings` dispatch map.
+### 12.2 ~~First-vote tooltip in label view~~ ★★★ XS — shipped
 
 ### 12.3 Explainer below jargon settings ★★★ S
 `enrich_descriptions`, `safe_thresholds`, `calibrate_count`, `calibration_fraction`, the autopilot phase thresholds — none of these have any explainer in the settings modal. Add a one-sentence helper below each, the way Mac System Settings does. Pull from the docstrings already in `settings_models.py` / `settings.py`.
@@ -415,20 +398,14 @@ Add a `?` icon next to the embedder dropdown in every importer that exposes one.
 - CSV label importer: show the expected column schema (`md5,label`) with a sample.
 - JSON label importer: show a 3-line sample of the expected structure.
 
-### 12.6 Loading-state context in the progress modal ★★ S — shipped
-Was: dashboard loading rows showed cryptic step numbers like "[Step 3/4] Loading embedding model…" with no plain-English context for what step 3 actually meant.
+### 12.6 ~~Loading-state context in the progress modal~~ ★★ S — shipped
 
-**What shipped:** `frontend/src/app/utils/format-progress.ts` gained `formatProgressHeader(progress, kind, embedder?)`, which returns a `{ header, subtitle, detail }` triple derived from the event's `status` + `message` (+ optional `embedder` woven into model-load / embedding-files / embedding-labels subtitles). The dataset card, detector card, and orphan-task row in `dashboard.component.html` were restructured to render the header line ("Loading dataset · embedding model") and a one-line subtitle ("Loading SigLIP weights. First-time only — cached on disk afterwards.") above the existing progress bar; the `[Step S/T]` prefix is stripped from the detail because the header now conveys the phase. Phase vocabulary covers the dataset-load flow (downloading source / unpacking archive / embedding model / warming text encoder / embedding files / slicing clips / embedding clips / converting media / removing duplicates / building diversity index / saving to registry) and the detector-load flow (restoring labels / seeding examples / embedding labels). Embedder names are pretty-printed via a small lookup table (`siglip → SigLIP`, `clap → LAION-CLAP`, `xclip → X-CLIP`, etc.) so the subtitle matches user-facing terminology.
-
-**Open follow-ups:** byte-rate / ETA on the first-run model download (§14.2) and per-file embedding progress (§14.1) remain — the header is now in place but the bar itself still shows a single indeterminate spinner inside `embedding model` and `embedding files`. Folding those in will make the subtitle's "First-time only — cached on disk afterwards." reassurance land harder.
+**Open follow-ups:** byte-rate / ETA on the first-run model download (§14.2) and per-file embedding progress (§14.1) remain — the header is now in place but the bar itself still shows a single indeterminate spinner inside `embedding model` and `embedding files`.
 
 ### 12.7 Inclusion slider tick labels ★★ XS
 The slider is `[-10, +10]` with no anchors. Add tick labels: `-10 strict` / `0 default` / `+10 lenient`, plus a one-line caption "Trades off precision (left) vs recall (right)."
 
-### 12.8 Autopilot phase intent ★★ S — shipped
-The collapsed Autopilot bar shows four dots. Hovering should reveal phase intent: *"Phase 3: Boundary refinement — votes on uncertain items train the model fastest."* Already exists in long-form docs, but not in UI.
-
-**What shipped:** `AutopilotPanelComponent` now computes a `phaseIntent(phase, stepNumber)` string of the form *"Phase N: <short name> — <why this phase matters>"* for each of the four phases (plus a "done" variant), and binds it as the `title` tooltip on every collapsed-mode dot and every expanded-view step label. The active dot/label tooltip leads with the same intent and appends *"Click to reselect recommendation."* so the existing affordance is preserved. Spec coverage added for both the collapsed dots and the expanded labels.
+### 12.8 ~~Autopilot phase intent~~ ★★ S — shipped
 
 ### 12.9 Keyboard shortcut discoverability ★★ XS
 The keyboard help modal exists but is only reachable via a button most users never click. Show shortcuts inline as tooltips on the Good/Bad buttons (`Good (→)`, `Bad (←)`), and surface "press `?` for keyboard help" as a one-time toast after the third labeling session.
@@ -439,12 +416,7 @@ Region voting requires holding `Shift`. When a patch-region embedder is detected
 ### 12.11 Cross-dataset scoring warning ★★ S
 When the user selects Dataset B + Detector trained on Dataset A and clicks Find/Train, today nothing flags this. Show a non-blocking note: *"This detector was trained on a different dataset (Dataset A). Scoring will still work but may be less accurate."*
 
-### 12.12 What "smart"/"stable" mean ★★ XS — shipped
-The labeling status bar shows colored dots for `smart` and `stable`. Add a hover tooltip explaining each ("Smart: the model fits your votes consistently. Stable: predictions stopped shifting between retrains.").
-
-**What shipped:** plain-English `title` tooltips on every Smart/Stable/Diverse indicator the user sees:
-- *Labeling status bar.* `ProgressIndicatorsComponent` exposes `smartTooltip`, `stableTooltip`, and `spanTooltip` getters that lead with the plain-English meaning, append live subtext (cost / flips / level) when present, and end with the green/yellow/red legend. Wired into the `[title]` attribute on each `.labeling-indicator` button.
-- *Autopilot mini-icons.* The matching mini-icons (`.ap-status-icon`) shown next to the active step's detail during the boundary/diversity phases previously bound `title` to the bare ariaLabel (`Smart: green`). The `StatusIcon` shape now carries a richer `title` field populated by `phaseStatusIcons()` with the same explanatory text style, and the template binds it. Spec coverage extended to assert the explanation is present.
+### 12.12 ~~What "smart"/"stable" mean~~ ★★ XS — shipped
 
 ---
 
@@ -452,10 +424,7 @@ The labeling status bar shows colored dots for `smart` and `stable`. Add a hover
 
 Latency surfaces are the second-biggest UX cost. Some are real (model training); others are spurious (synchronous downloads in request handlers).
 
-### 13.1 Eliminate first-vote retrain stall ★★★ M — shipped
-Voting calls `train_and_score()` synchronously in the request handler (`routes/sorting.py`). For >100 labels this can block 5–10s per vote. Move retraining to a background job (mirror `learned_sort_jobs`) and return the *previous* score map immediately, then push an updated sort over SSE when the new model is ready. The user keeps voting on stale scores for ~5s instead of staring at a spinner. Effort: M because we need to coalesce rapid votes and decide when the live UI shows new scores.
-
-**What shipped:** training was lifted off the vote path before this item was written. The vote endpoints (`/api/medias/<id>/vote`, `/api/detectors/<name>/labels/<id>/vote`) only toggle state and return `{"ok": true}` — they never called `train_and_score()`. Retraining lives behind `/api/learned-sort`, which hands off to the `learned_sort_jobs` `JobManager` and returns a `job_id` immediately (`vtsearch/routes/sorting.py:356-487`); the manager keeps one running + one pending slot and coalesces rapid retrains in-place (latest signature wins) so a burst of votes collapses to one extra training run after the current one finishes (`vtsearch/concurrency/async_jobs.py:125-199`). A signature cache short-circuits the no-op case so re-sorting without new votes is free (`vtsearch/routes/sorting.py:417-419`). The front-end debounces with a 300ms `scheduleLearnedSort()` (`frontend/src/app/components/label-view/label-view.component.ts:651-658`) and never clears `sortState.sortOrder` while the job runs, so the user keeps voting against the previous score map — only the bottom progress-indicators bar swaps to a "Training…" status (the media list and vote inputs are not gated by `sortBusy`). One deviation from the original text: the client polls `/api/learned-sort/result` every 500ms (`label-view.component.ts:500-522`) rather than receiving the new sort over SSE — UX-equivalent, different transport. Ship commits: `ca166ab1 Move learned-sort + eval train-and-score to background jobs` and `82183bd9 Coalesce rapid learned-sort requests into a single pending slot`.
+### 13.1 ~~Eliminate first-vote retrain stall~~ ★★★ M — shipped
 
 ### 13.2 Eager-preload the next-likely embedder ★★ S
 `predict_embedders_to_preload()` already runs at startup. Extend it to also fire when:
@@ -476,10 +445,7 @@ What's actually missing is the *bulk-load action*. The dashboard supports multi-
 - Add a "Load selected" side-action button next to Combine/Delete in `dashboard.component.html`, plus a `loadSelectedDatasets()` method that fires `loadRegistered(id)` for every entry of `selectedDatasetIds` in a tight loop (no need for a new bulk endpoint — the existing per-id endpoint plus `_download_gate` give the parallelism for free). Disable when `selectedDatasetIds.size === 0` or every selected dataset is already loaded.
 - No new backend tests needed; add a frontend spec asserting the new button calls `loadRegistered` once per selected id.
 
-### 13.5 Don't block voting on labelset-source export ★★ XS — shipped
-`LabelsetSource.sync_to_labelset_source()` runs synchronously on every vote change to push to the external store. For slow targets (webhook, slow disk) this stalls the vote. Run it in a debounced background thread (200ms debounce coalesces rapid voting bursts).
-
-**What shipped:** `sync_to_labelset_source()` (`vtsearch/labels/sync.py`) now schedules a `threading.Timer` keyed by `detector_id` that fires after `_DEBOUNCE_DELAY` (200ms) and runs the actual push on a background thread. Rapid calls inside the window cancel the prior timer and overwrite the captured contexts (user / dataset ctx / detector ctx), so a burst of votes collapses to one save with the latest state. Two new helpers: `flush_pending_label_syncs()` drains the queue synchronously (used by tests and available for graceful shutdown) and `reset_label_sync_for_tests()` cancels pending pushes without running them (wired into conftest's `reset_state` fixture so a sync scheduled by test A can't fire after test A's contexts are gone). The `_workers_lock` serializes the worker against flush so a mid-write push is waited out instead of racing with the assertion. Five new tests in `tests/io/test_sync_sources.py` cover: non-blocking scheduling (slow `save` doesn't stall the caller), 20-call burst → 1 write coalesce, per-detector keying (A's vote doesn't cancel B's pending push), latest-state-wins semantics, and reset-drops-without-writing.
+### 13.5 ~~Don't block voting on labelset-source export~~ ★★ XS — shipped
 
 ### 13.6 Lazy-create per-media-type panel preferences ★ XS
 First time a user opens a new media type, the panel settings (`view_mode_*`, `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`) all write to disk. Coalesce into one save. (Minor but the first-image-open feels janky on slow disks.)
@@ -487,10 +453,7 @@ First time a user opens a new media type, the panel settings (`view_mode_*`, `gr
 ### 13.7 Skip diversity-tree rebuild on small updates ★ M
 When a few medias are added/removed (e.g. clip fix-up), today the whole diversity tree rebuilds. For incremental changes < 1% of dataset size, do an incremental insert/delete instead. Saves seconds on every clip-aware import.
 
-### 13.8 Async embedder warm-up after import ★ XS — shipped
-After a dataset loads, the "warming up text encoder…" step blocks task completion. Move it to fire-and-forget so the dataset is usable for grid-browsing immediately and Text sort just waits on first use.
-
-**What shipped:** the synchronous `_warmup_embedder_stage` was replaced with a fire-and-forget `_warmup_embedder_async(media_dict)` daemon thread (`vtsearch/datasets/load_pipeline.py:800`). Both load paths — the importer-driven `_run_origin_load_in_background` and the registry-driven `load_registered_dataset` (`vtsearch/routes/datasets/registry.py`) — now kick off the warm-up after `_register_and_migrate` / `_reg_add_loaded` and return immediately, so the dashboard row goes green the moment the dataset is in memory. `load_registered_dataset`'s `_LOAD_STEPS` dropped from 3 to 2 (read pickle + build diversity index). The warmup itself still calls `emb.load_models()` then `emb.embed_text("warmup")` on a daemon thread named `warmup-embedder`; if the user clicks Text Sort before warmup finishes, the existing `_embedder_load_lock` in `vtsearch/routes/sorting.py:107` serialises the wait behind the regular "Loading embedder…" sort-progress bar — no race, no double-load (`load_models` is idempotent via `_model_load_lock`, `vtsearch/media/embedder.py:551-555`). The now-orphaned `_load_embedder_with_progress` / `_load_embedder_for_clips` helpers in `vtsearch/datasets/load_pipeline.py` were deleted (the routes/sorting variant of the same name is a separate function).
+### 13.8 ~~Async embedder warm-up after import~~ ★ XS — shipped
 
 ---
 
@@ -504,13 +467,7 @@ The dataset-load progress reports step 1-4 ("downloading", "embedding", "dedupin
 ### 14.2 Bytes/sec for first-run model downloads ★★★ M
 First-run model downloads (CLAP ~1.1 GB, X-CLIP ~600 MB) currently show "Loading embedding model…" with no bar. HuggingFace's `tqdm`-style progress is available — pipe it through `update_progress()` to show `Downloading SigLIP (412 / 860 MB, 18 MB/s, ~25s left)`.
 
-### 14.3 ETA estimates on long bars ★★ S — shipped
-
-Every progress bar now shows a remaining-time estimate once it has been running long enough for the rate to mean something.
-
-**What shipped:** `ProgressTracker._compute_eta` in `vtsearch/concurrency/progress.py` records a per-phase start time, computes `raw = (elapsed / completed) * (total - current)` once `elapsed > 5s` with `current > 0` and a known `total`, and smooths it with an EMA (α = 0.3) against the previous sample. The phase clock resets whenever `status` or `total` changes, or when `current` decreases (a new bar starting), so phase transitions don't pollute the estimate with stale rate from the previous phase. The result lives in a new `eta_seconds` field added to `_PROGRESS_COMMON_EXTRAS`, so every singleton tracker (dataset / sort / eval / find) and every per-task tracker created by `LoadingTasksTracker` carries it for free.
-
-On the frontend, `ProgressEvent.eta_seconds` lands on `frontend/src/app/models/api.models.ts`, and `formatEta()` + a tail in `formatProgressMessage()` in `frontend/src/app/utils/format-progress.ts` render it as `· ~Hh Mm left` / `· ~Mm Ss left` / `· ~Ss left` appended to the existing `(current/total) message` detail line. Because the dashboard cards, find view, label view, and detector card all flow through `formatProgressMessage` / `formatProgressHeader.detail`, no per-component change is needed — the ETA chip appears automatically on every long-running bar that has a `current` and `total`. Short bars (≤5s) keep showing only `(C/T)` so they don't flash a meaningless estimate.
+### 14.3 ~~ETA estimates on long bars~~ ★★ S — shipped
 
 ### 14.4 Per-detector progress during auto-detect ★★ S
 `/api/auto-detect` runs N detectors in parallel and reports a single aggregated bar. Switch to a list of mini-bars in `AutodetectResultsModalComponent` ("Detector A: ✓ done · Detector B: 47% · Detector C: queued"). The frontend already gets per-detector results; just expose progress per-id over SSE.
@@ -518,10 +475,7 @@ On the frontend, `ProgressEvent.eta_seconds` lands on `frontend/src/app/models/a
 ### 14.5 Per-dataset progress during multi-load ★★ S
 When the user bulk-loads 3 datasets, the dashboard shows 3 stacked task rows but the SSE channel emits a single aggregate. Tag each progress event with `dataset_id` so each row's bar moves independently.
 
-### 14.6 Cancel buttons everywhere ★★★ S — shipped
-`learned_sort_jobs`, `eval_jobs`, and auto-detect all support `cancel()` in the backend but the UI doesn't expose it. Add a small X button next to every running progress bar. (Dataset cancel already works — use it as the pattern.)
-
-**What shipped:** three new POST endpoints — `/api/learned-sort/cancel/{job_id}`, `/api/eval/train-and-score/cancel/{job_id}`, and `/api/find/cancel` (covers find-label, multi-find, and auto-detect since they all report through `find_progress`) — wire the existing backend cancel flags through to the HTTP API. `find_label`, `auto_detect`, and `multi_find` now call `find_progress.reset_cancel()` at the start of each run so a stuck flag from a previous cancelled run doesn't immediately abort the next operation, matching the pattern dataset loading already uses. The sort progress bar in `vt-progress-indicators` (used by both label-view and find-view) and the eval analysis progress bar in `vt-progress-modal` each gained a small `.btn--cancel.btn--sm` button next to the bar — the same shared pattern dataset / detector cards use. `vt-label-view` tracks the active learned-sort job id between start and result and routes the cancel click to `cancelLearnedSort(jobId)` (or to `cancelFind()` when a load-sort scoring run is in flight); `vt-find-view` always routes to `cancelFind()`; the eval modal owns its own job id from `pollEvalJob` and calls `cancelEvalTrainAndScore(jobId)` directly before closing.
+### 14.6 ~~Cancel buttons everywhere~~ ★★★ S — shipped
 
 **Open follow-ups:** the new cancel calls flip cooperative flags but the long-running loops don't yet poll them between iterations — calling Cancel today freezes the UI's progress bar immediately but the background worker keeps running to completion. Add `check_cancelled()` calls inside `train_and_score`, the eval per-step retrain loop, and the find/find-label/auto-detect scoring loops so the cancel actually short-circuits the work in flight. Text-sort and example-sort still show a Cancel button while busy but those endpoints are synchronous with no cancel hook — either teach them to honour `sort_progress.cancel()` or hide the button on those modes.
 
