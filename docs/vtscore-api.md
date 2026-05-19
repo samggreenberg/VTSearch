@@ -127,7 +127,7 @@ class LabeledElement:
 
 class LabelSet:
     """Ordered collection of LabeledElement plus optional detector metadata.
-    Supports merge, JSON ser/de, and is what labelset sources/exporters consume."""
+    Supports merge, JSON serialize/deserialize, and is what labelset sources/exporters consume."""
 ```
 
 ### Importer registry
