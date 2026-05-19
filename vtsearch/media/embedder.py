@@ -281,8 +281,101 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:  # noqa: C901
         tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
 
 
+def _patch_safetensors_load_file(counter: list[int], total: list[int], report) -> tuple | None:
+    """Wrap ``safetensors.torch.load_file`` to count returned tensors."""
+    try:
+        import safetensors.torch as _st  # noqa: PLC0415
+    except ImportError:
+        return None
+    orig = _st.load_file
+
+    def tracked(*a: Any, **kw: Any) -> Any:
+        r = orig(*a, **kw)
+        total[0] += len(r)
+        return r
+
+    _st.load_file = tracked
+    return (_st, "load_file", orig)
+
+
+def _patch_torch_load(counter: list[int], total: list[int], report) -> tuple | None:
+    """Wrap ``torch.load`` to count tensors in returned state dicts (.bin weights)."""
+    try:
+        import torch as _torch  # noqa: PLC0415
+    except ImportError:
+        return None
+    orig = _torch.load
+
+    def tracked(*a: Any, **kw: Any) -> Any:
+        r = orig(*a, **kw)
+        if isinstance(r, dict) and r:
+            sample = next(iter(r.values()))
+            if isinstance(sample, _torch.Tensor):
+                total[0] += len(r)
+        return r
+
+    _torch.load = tracked
+    return (_torch, "load", orig)
+
+
+def _patch_set_module_tensor_to_device(counter: list[int], total: list[int], report) -> tuple | None:
+    """Wrap ``set_module_tensor_to_device`` (HF low_cpu_mem_usage path)."""
+    try:
+        import transformers.modeling_utils as _tm  # noqa: PLC0415
+
+        # pyright: ignore[reportAttributeAccessIssue] — set_module_tensor_to_device
+        # is re-exported from accelerate at runtime but isn't in the transformers
+        # stubs. The AttributeError catch handles missing-attribute drift.
+        orig = _tm.set_module_tensor_to_device  # pyright: ignore[reportAttributeAccessIssue]
+    except (ImportError, AttributeError):
+        return None
+
+    def tracked(*a: Any, **kw: Any) -> Any:
+        r = orig(*a, **kw)
+        counter[0] += 1
+        report()
+        return r
+
+    _tm.set_module_tensor_to_device = tracked  # pyright: ignore[reportAttributeAccessIssue]
+    return (_tm, "set_module_tensor_to_device", orig)
+
+
+def _patch_load_state_dict(counter: list[int], total: list[int], report) -> tuple | None:
+    """Wrap ``nn.Module.load_state_dict`` (PyTorch / SentenceTransformers path)."""
+    try:
+        import torch.nn as _nn  # noqa: PLC0415
+    except ImportError:
+        return None
+    orig = _nn.Module.load_state_dict
+
+    class _CountingStateDict(dict):
+        """Dict wrapper that counts unique key accesses for progress."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            self._seen: set = set()
+
+        def __getitem__(self, key: Any) -> Any:
+            val = super().__getitem__(key)
+            if key not in self._seen:
+                self._seen.add(key)
+                counter[0] += 1
+                report()
+            return val
+
+    def tracked(self_model: Any, state_dict: Any, *a: Any, **kw: Any) -> Any:
+        if isinstance(state_dict, dict) and not isinstance(state_dict, _CountingStateDict):
+            if total[0] == 0:
+                total[0] = len(state_dict)
+            state_dict = _CountingStateDict(state_dict)
+        return orig(self_model, state_dict, *a, **kw)
+
+    _nn.Module.load_state_dict = tracked  # type: ignore[assignment]
+    return (_nn.Module, "load_state_dict", orig)
+
+
 @contextlib.contextmanager
-def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "Loading model weights…") -> Any:  # noqa: C901
+def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "Loading model weights…") -> Any:
     """Track tensor-level progress during model weight loading.
 
     HuggingFace ``transformers`` with ``low_cpu_mem_usage=True`` dispatches
@@ -295,106 +388,28 @@ def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "
     discovered by also intercepting ``safetensors.torch.load_file`` and
     ``torch.load`` to count keys in loaded state dicts.
     """
-    _counter = [0]
-    _total = [0]
-    _patches: list[tuple] = []
+    counter = [0]
+    total = [0]
 
-    def _report() -> None:
-        if _total[0] > 0:
-            callback("loading", label, min(_counter[0], _total[0]), _total[0])
+    def report() -> None:
+        if total[0] > 0:
+            callback("loading", label, min(counter[0], total[0]), total[0])
 
-    # --- Intercept safetensors.torch.load_file to learn total tensor count ---
-    try:
-        import safetensors.torch as _st  # noqa: PLC0415
-
-        _orig_lf = _st.load_file
-
-        def _tracked_lf(*a: Any, **kw: Any) -> Any:
-            r = _orig_lf(*a, **kw)
-            _total[0] += len(r)
-            return r
-
-        _st.load_file = _tracked_lf
-        _patches.append((_st, "load_file", _orig_lf))
-    except ImportError:
-        pass
-
-    # --- Intercept torch.load for .bin weight files ---
-    try:
-        import torch as _torch  # noqa: PLC0415
-
-        _orig_tl = _torch.load
-
-        def _tracked_tl(*a: Any, **kw: Any) -> Any:
-            r = _orig_tl(*a, **kw)
-            if isinstance(r, dict) and r:
-                sample = next(iter(r.values()))
-                if isinstance(sample, _torch.Tensor):
-                    _total[0] += len(r)
-            return r
-
-        _torch.load = _tracked_tl
-        _patches.append((_torch, "load", _orig_tl))
-    except ImportError:
-        pass
-
-    # --- Intercept set_module_tensor_to_device (HF with low_cpu_mem_usage) ---
-    try:
-        import transformers.modeling_utils as _tm  # noqa: PLC0415
-
-        # pyright: ignore[reportAttributeAccessIssue] — set_module_tensor_to_device
-        # is re-exported from accelerate at runtime but isn't in the transformers
-        # stubs. The AttributeError catch below handles missing-attribute drift.
-        _orig_smttd = _tm.set_module_tensor_to_device  # pyright: ignore[reportAttributeAccessIssue]
-
-        def _tracked_smttd(*a: Any, **kw: Any) -> Any:
-            r = _orig_smttd(*a, **kw)
-            _counter[0] += 1
-            _report()
-            return r
-
-        _tm.set_module_tensor_to_device = _tracked_smttd  # pyright: ignore[reportAttributeAccessIssue]
-        _patches.append((_tm, "set_module_tensor_to_device", _orig_smttd))
-    except (ImportError, AttributeError):
-        pass
-
-    # --- Intercept Module.load_state_dict (PyTorch / SentenceTransformers) ---
-    try:
-        import torch.nn as _nn  # noqa: PLC0415
-
-        _orig_lsd = _nn.Module.load_state_dict
-
-        class _CountingStateDict(dict):
-            """Dict wrapper that counts unique key accesses for progress."""
-
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                super().__init__(*args, **kwargs)
-                self._seen: set = set()
-
-            def __getitem__(self, key: Any) -> Any:
-                val = super().__getitem__(key)
-                if key not in self._seen:
-                    self._seen.add(key)
-                    _counter[0] += 1
-                    _report()
-                return val
-
-        def _tracked_lsd(self_model: Any, state_dict: Any, *a: Any, **kw: Any) -> Any:
-            if isinstance(state_dict, dict) and not isinstance(state_dict, _CountingStateDict):
-                if _total[0] == 0:
-                    _total[0] = len(state_dict)
-                state_dict = _CountingStateDict(state_dict)
-            return _orig_lsd(self_model, state_dict, *a, **kw)
-
-        _nn.Module.load_state_dict = _tracked_lsd  # type: ignore[assignment]
-        _patches.append((_nn.Module, "load_state_dict", _orig_lsd))
-    except ImportError:
-        pass
+    patches: list[tuple] = []
+    for installer in (
+        _patch_safetensors_load_file,
+        _patch_torch_load,
+        _patch_set_module_tensor_to_device,
+        _patch_load_state_dict,
+    ):
+        result = installer(counter, total, report)
+        if result is not None:
+            patches.append(result)
 
     try:
         yield
     finally:
-        for obj, attr, orig in _patches:
+        for obj, attr, orig in patches:
             setattr(obj, attr, orig)
 
 

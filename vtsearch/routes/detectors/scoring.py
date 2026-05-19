@@ -364,53 +364,34 @@ def find_label(body: dict):  # noqa: C901
     }
 
 
-@detector_scoring_bp.route("/api/auto-detect", methods=["POST"])
-@detector_scoring_bp.arguments(AutoDetectRequestSchema)
-@detector_scoring_bp.response(200, AutoDetectResponseSchema)
-@detector_scoring_bp.alt_response(
-    400,
-    description="No medias loaded, or no autorun detectors match the active media type.",
-)
-@detector_scoring_bp.alt_response(404, description="Named detector is not flagged for autorun.")
-def auto_detect(body: dict):  # noqa: C901
-    """Score the active dataset with every detector flagged for autorun.
+def _resolve_autorun_names(body: dict, media_type: str) -> list[str]:
+    """Return the autorun detector names to consider for this request.
 
-    Iterates :func:`~vtsearch.settings.get_autorun_detectors` and trains each
-    one's MLP on demand from its on-disk labelset.  Returns one result column
-    per detector. Pass ``detector_name`` to run a single autorun detector.
+    Aborts with 404 when ``detector_name`` is given but not in the autorun
+    list, and with 400 when no autorun detectors are configured at all.
     """
-    import torch  # noqa: PLC0415
-
-    from vtsearch.detectors.registry import (
-        find_by_name,
-        list_detectors,
-    )
-    from vtsearch.detectors.store import _detector_path, _read_detector
-    from vtsearch.settings import get_autorun_detectors
-
-    snap = snapshot_medias()
-    if not snap:
-        abort(400, message="No medias loaded")
-
-    media_type = next(iter(snap.values())).get("type", "audio")
+    from vtsearch.settings import get_autorun_detectors  # noqa: PLC0415
 
     autorun_names = get_autorun_detectors()
     single_name = body.get("detector_name") or ""
     if single_name:
         if single_name not in autorun_names:
             abort(404, message=f"Detector '{single_name}' not flagged for autorun")
-        autorun_names = [single_name]
-
+        return [single_name]
     if not autorun_names:
         abort(400, message=f"No autorun detectors found for media type: {media_type}")
+    return autorun_names
 
-    # Build per-name (det_data, registry entry) pairs, filtered by media type.
-    detectors_to_run: list[tuple[str, dict, dict | None]] = []
+
+def _collect_detectors_for_media_type(autorun_names: list[str], media_type: str) -> list[tuple[str, dict, dict | None]]:
+    """Load detector data + registry entry for each autorun name matching *media_type*."""
+    from vtsearch.detectors.registry import find_by_name, list_detectors  # noqa: PLC0415
+    from vtsearch.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+
+    detectors: list[tuple[str, dict, dict | None]] = []
     for name in autorun_names:
         det_data = _read_detector(_detector_path(name))
-        if det_data is None:
-            continue
-        if det_data.get("media_type", "") != media_type:
+        if det_data is None or det_data.get("media_type", "") != media_type:
             continue
         reg_entry = find_by_name(name)
         if reg_entry is None:
@@ -419,57 +400,96 @@ def auto_detect(body: dict):  # noqa: C901
                 if entry.get("name") == name:
                     reg_entry = entry
                     break
-        detectors_to_run.append((name, det_data, reg_entry))
+        detectors.append((name, det_data, reg_entry))
+    return detectors
 
+
+def _score_detector_for_auto_detect(
+    name: str,
+    det_data: dict,
+    reg_entry: dict | None,
+    media_type: str,
+    snap: dict,
+    all_ids: list[int],
+    X_all: Any,
+) -> tuple[str, dict] | None:
+    """Train (or reuse) one detector and score every media in *snap*."""
+    import torch  # noqa: PLC0415
+
+    try:
+        detector_id = reg_entry["id"] if reg_entry else name
+        mlp, threshold, _diag = _resolve_or_train_detector(
+            detector_id,
+            det_data,
+            media_type,
+            snap,
+            progress_step=1,
+            progress_total_steps=1,
+        )
+        if mlp is None:
+            return None
+
+        with torch.no_grad():
+            X_in = X_all.to(next(mlp.parameters()).device)
+            scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
+
+        positive_hits = []
+        negative_hits = []
+        for cid, score in zip(all_ids, scores):
+            clip_info = _media_info_for_response(snap[cid])
+            clip_info["score"] = round(score, 4)
+            if score >= threshold:
+                positive_hits.append(clip_info)
+            else:
+                negative_hits.append(clip_info)
+
+        positive_hits.sort(key=lambda x: x["score"], reverse=True)
+        negative_hits.sort(key=lambda x: x["score"], reverse=True)
+
+        return name, {
+            "detector_name": name,
+            "threshold": round(threshold, 4),
+            "total_hits": len(positive_hits),
+            "hits": positive_hits,
+            "negative_hits": negative_hits,
+        }
+    except Exception:
+        logger.exception("Auto-detect failed for detector %s", name)
+        return None
+
+
+@detector_scoring_bp.route("/api/auto-detect", methods=["POST"])
+@detector_scoring_bp.arguments(AutoDetectRequestSchema)
+@detector_scoring_bp.response(200, AutoDetectResponseSchema)
+@detector_scoring_bp.alt_response(
+    400,
+    description="No medias loaded, or no autorun detectors match the active media type.",
+)
+@detector_scoring_bp.alt_response(404, description="Named detector is not flagged for autorun.")
+def auto_detect(body: dict):
+    """Score the active dataset with every detector flagged for autorun.
+
+    Iterates :func:`~vtsearch.settings.get_autorun_detectors` and trains each
+    one's MLP on demand from its on-disk labelset.  Returns one result column
+    per detector. Pass ``detector_name`` to run a single autorun detector.
+    """
+    import torch  # noqa: PLC0415
+
+    snap = snapshot_medias()
+    if not snap:
+        abort(400, message="No medias loaded")
+
+    media_type = next(iter(snap.values())).get("type", "audio")
+
+    autorun_names = _resolve_autorun_names(body, media_type)
+    detectors_to_run = _collect_detectors_for_media_type(autorun_names, media_type)
     if not detectors_to_run:
         abort(400, message=f"No autorun detectors found for media type: {media_type}")
 
-    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap
+    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
     all_ids, all_embs = get_embedding_matrix_for_snap(snap)
     X_all = torch.from_numpy(all_embs)
-
-    def _run_single(name: str, det_data: dict, reg_entry: dict | None):
-        try:
-            detector_id = reg_entry["id"] if reg_entry else name
-            mlp, threshold, _diag = _resolve_or_train_detector(
-                detector_id,
-                det_data,
-                media_type,
-                snap,
-                progress_step=1,
-                progress_total_steps=1,
-            )
-            if mlp is None:
-                return None
-
-            with torch.no_grad():
-                X_in = X_all.to(next(mlp.parameters()).device)
-                scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
-
-            positive_hits = []
-            negative_hits = []
-            for cid, score in zip(all_ids, scores):
-                clip_info = _media_info_for_response(snap[cid])
-                clip_info["score"] = round(score, 4)
-                if score >= threshold:
-                    positive_hits.append(clip_info)
-                else:
-                    negative_hits.append(clip_info)
-
-            positive_hits.sort(key=lambda x: x["score"], reverse=True)
-            negative_hits.sort(key=lambda x: x["score"], reverse=True)
-
-            return name, {
-                "detector_name": name,
-                "threshold": round(threshold, 4),
-                "total_hits": len(positive_hits),
-                "hits": positive_hits,
-                "negative_hits": negative_hits,
-            }
-        except Exception:
-            logger.exception("Auto-detect failed for detector %s", name)
-            return None
 
     embed_dim = int(all_embs.shape[1]) if all_embs.ndim > 1 else 0
     worker_cap = cap_workers_by_memory(
@@ -479,7 +499,10 @@ def auto_detect(body: dict):  # noqa: C901
     )
     results: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=worker_cap) as pool:
-        futures = [pool.submit(_run_single, name, data, entry) for name, data, entry in detectors_to_run]
+        futures = [
+            pool.submit(_score_detector_for_auto_detect, name, data, entry, media_type, snap, all_ids, X_all)
+            for name, data, entry in detectors_to_run
+        ]
         for future in futures:
             outcome = future.result()
             if outcome is not None:
@@ -487,7 +510,7 @@ def auto_detect(body: dict):  # noqa: C901
                 results[name] = result
 
     if results:
-        from vtsearch.achievements import record_find
+        from vtsearch.achievements import record_find  # noqa: PLC0415
 
         record_find(len(all_ids) * len(results))
 
