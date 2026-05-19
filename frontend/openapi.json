@@ -1044,6 +1044,22 @@
         ],
         "type": "object"
       },
+      "DatasetRegistryPreloadEmbedderResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "embedder": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "embedder",
+          "ok"
+        ],
+        "type": "object"
+      },
       "DatasetRegistryReadersRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6468,6 +6484,47 @@
           }
         },
         "summary": "Load a registered dataset from its saved pkl file.",
+        "tags": [
+          "datasets_registry"
+        ]
+      }
+    },
+    "/api/datasets/registry/{dataset_id}/preload-embedder": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "dataset_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Called by the dashboard when the user selects a dataset row so that\nthe embedder is ready by the time they click Train. Idempotent: the\nbackground worker exits immediately if the embedder is already in\nmemory. Returns ``embedder`` set to the resolved embedder name (or\n``\"\"`` if no embedder could be resolved for this dataset's media\ntype).",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRegistryPreloadEmbedderResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Dataset not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Warm this dataset's embedder in a background daemon thread.",
         "tags": [
           "datasets_registry"
         ]

@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from vtsearch.config import DATA_DIR
 from vtsearch.labels.importers.base import LabelImporter, LabelImporterField
 
 
@@ -41,7 +42,7 @@ class ServerCsvLabelImporter(LabelImporter):
             description=(
                 "Absolute or relative path to a CSV file with md5 and label columns on the server filesystem."
             ),
-            placeholder="data/labels/my_labels.csv",
+            placeholder=f"{DATA_DIR}/labels/my_labels.csv",
             hint=(
                 "Expects columns: md5,label\n"
                 "Example:\n"

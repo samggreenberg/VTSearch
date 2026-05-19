@@ -440,6 +440,40 @@ class TestMultiDatasetAPI:
         resp = client.post(f"/api/datasets/registry/{e['id']}/unload")
         assert resp.status_code == 400
 
+    def test_preload_embedder_returns_resolved_name(self, client):
+        """POST /api/datasets/registry/<id>/preload-embedder reports the
+        embedder it warmed in the background."""
+        from vtsearch.datasets.registry import register_dataset
+
+        e = register_dataset(name="Pre", media_type="audio", num_items=1, pkl_path="/tmp/fake_pre.pkl")
+        resp = client.post(f"/api/datasets/registry/{e['id']}/preload-embedder")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        # The default audio embedder is registered in tests as "clap".
+        assert data["embedder"] == "clap"
+
+    def test_preload_embedder_unknown_dataset_returns_404(self, client):
+        """Unknown dataset id is rejected with 404."""
+        resp = client.post("/api/datasets/registry/does-not-exist/preload-embedder")
+        assert resp.status_code == 404
+
+    def test_preload_embedder_respects_entry_embedder_field(self, client):
+        """When a dataset entry pins an embedder, that name is preferred
+        over the media-type default."""
+        from vtsearch.datasets.registry import register_dataset
+
+        e = register_dataset(
+            name="Pinned",
+            media_type="audio",
+            num_items=1,
+            pkl_path="/tmp/fake_pinned.pkl",
+            embedder="clap",
+        )
+        resp = client.post(f"/api/datasets/registry/{e['id']}/preload-embedder")
+        assert resp.status_code == 200
+        assert resp.get_json()["embedder"] == "clap"
+
     def test_load_already_loaded_returns_instantly(self, client):
         """Loading an already-loaded dataset returns immediately."""
         from vtsearch.datasets.registry import register_dataset, add_loaded_id

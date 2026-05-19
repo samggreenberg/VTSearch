@@ -17,8 +17,11 @@ import os
 from pathlib import Path
 from typing import Any
 
+from vtsearch.config import DATA_DIR
 from vtsearch.exporters._template import resolve_export_filepath
 from vtsearch.exporters.base import ExporterField, LabelsetExporter
+
+_DEFAULT_CSV_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
 
 def _atomic_write_csv(path: Path, write_rows) -> None:
@@ -74,8 +77,8 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
                 "created automatically.  Supports {YYYYMMDD-HHMMSS}, "
                 "{detector_name} and {username} templates."
             ),
-            placeholder="data/autodetect_results_{YYYYMMDD-HHMMSS}.csv",
-            default="data/autodetect_results_{YYYYMMDD-HHMMSS}.csv",
+            placeholder=_DEFAULT_CSV_PATH,
+            default=_DEFAULT_CSV_PATH,
         ),
     ]
 
