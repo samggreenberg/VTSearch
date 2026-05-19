@@ -115,18 +115,22 @@ Cross-section interaction agents:
   malicious client can wipe one detector's votes while the UI thinks
   it's labeling a different one.
 
-### C6. Zip-slip in HTTP archive importer (zip AND tar)
+### C6. Zip-slip in HTTP archive importer (zip AND tar) — SHIPPED 2026-05-19
 
-- **File:** `vtsearch/datasets/importers/http_archive/__init__.py`
-  ~L70–89
-- **Bug (zip):** `zf.extract(member, extract_dir)` is called *before*
-  the post-extraction path-traversal check, so a malicious member is
-  already written outside the directory by the time we reject it.
-- **Bug (tar):** `tf.extract(member, extract_dir, filter="data")` only
-  filters tar-specific attacks (symlink/hardlink), not traversal in
-  member names like `../../etc/x`.
-- **Fix sketch:** Validate every member name before extraction; use
-  `extractall(filter=...)` with explicit name validation.
+- **File:** `vtscore/datasets/importers/http_archive/__init__.py`
+- **What landed:** Added `_reject_traversal(extract_dir_resolved, member_name)`
+  helper that validates member names **before** any extract call.  It
+  rejects absolute paths (POSIX `/`, Windows `\\` and drive-letter form)
+  and any name that, once joined and `os.path.normpath`-normalised,
+  escapes the resolved extract dir (checked with `Path.is_relative_to`,
+  not the old prefix-buggy `str.startswith`).  Applied uniformly to the
+  zip, tar, and rar code paths — the tar branch previously had **no**
+  pre-extraction member validation and relied solely on
+  `filter="data"`; it now validates explicitly *in addition to* the
+  `filter="data"` defense.  Regression tests added in
+  `tests_lib/io/test_importers.py::TestExtractArchive` cover `../`
+  traversal, absolute paths, and the prefix-collision case that the old
+  `startswith` check accepted.
 
 ### C7. NaN/Infinity threshold leaks through safe-threshold blending
 
