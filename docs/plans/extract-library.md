@@ -1,6 +1,6 @@
 # Extract `vtscore` Library Plan
 
-Status: **Phases 0 and 1 shipped** — public API surface captured in [`docs/vtscore-api.md`](../vtscore-api.md). Every library-candidate package is Flask-free; the Flask wiring lives in `vtsearch/shim/` and registers a per-request resolver hook on `vtsearch/state/core.py` plus an `override_detector_context()` context manager that `apply_and_retrain` uses to swap detectors without touching `flask.g`. Phase 2 (settings seam) is next. Phase 5's entry-point hook landed ahead of the split.
+Status: **Phases 0–1 shipped; Phase 2 in progress** — public API surface captured in [`docs/vtscore-api.md`](../vtscore-api.md). Every library-candidate package is Flask-free; the Flask wiring lives in `vtsearch/shim/`. The `CoreConfig` dataclass + `from_settings()` classmethod is in place in `vtsearch/config.py`, and the two easy-win settings call sites (`detectors/store.py::get_detectors_dir`, `datasets/registry.py::get_saved_datasets_dir`) now route through it. Five Phase 2 files still need conversion. Phase 5's entry-point hook landed ahead of the split.
 
 Goal: split VTSearch into two distributions in one repo:
 
@@ -48,9 +48,9 @@ Files to convert (current paths; verified by `grep` over the library-candidate p
 - `vtsearch/cli.py` — calls `set_settings_path`, `get_autorun_detectors`.
 - `vtsearch/cli_pipeline.py` — calls `set_settings_path` (new since the plan was written; same treatment as `cli.py`).
 - `vtsearch/datasets/load_pipeline.py` — module-level `from vtsearch.settings import (...)` plus `set_last_embedder_for_media_type` at line 671.
-- `vtsearch/datasets/registry.py` — reads `get_saved_datasets_dir`.
+- [x] `vtsearch/datasets/registry.py` — formerly read `get_saved_datasets_dir`; now routes through `CoreConfig.from_settings().saved_datasets_dir`.
 - `vtsearch/detectors/labeling_progress.py` — reads `get_autopilot_goal_diversity`.
-- `vtsearch/detectors/store.py` — reads `get_detectors_dir`.
+- [x] `vtsearch/detectors/store.py` — formerly read `get_detectors_dir`; now routes through `CoreConfig.from_settings().detectors_dir`.
 - `vtsearch/state/__init__.py` — 8 lazy imports of `vtsearch.settings` (inclusion, calibrate_count, calibration_fraction, safe_thresholds, etc.) routed through state wrappers. These wrappers should become thin delegates to the per-context config object.
 
 Already clean (no `vtsearch.settings` imports today):
@@ -60,8 +60,8 @@ Already clean (no `vtsearch.settings` imports today):
 
 Approach:
 
-1. Define a `vtscore.config.CoreConfig` dataclass with the knobs library code actually consumes (`safe_thresholds`, `calibrate_count`, `calibration_fraction`, `enrich_descriptions`, `data_dir`, `saved_datasets_dir`, `detectors_dir`, `autopilot_goal_diversity`, `max_concurrent_dataset_downloads`, `max_concurrent_dataset_embeddings`, etc.).
-2. Replace direct `from vtsearch.settings import get_X` calls with reading from a `CoreConfig` argument or attribute of an enclosing context object (`DatasetContext`/`DetectorContext`).
+1. [x] Define a `vtscore.config.CoreConfig` dataclass with the knobs library code actually consumes (`safe_thresholds`, `calibrate_count`, `calibration_fraction`, `enrich_descriptions`, `data_dir`, `saved_datasets_dir`, `detectors_dir`, `autopilot_goal_diversity`, `max_concurrent_dataset_downloads`, `max_concurrent_dataset_embeddings`, `inclusion`). **Shipped** as `vtsearch.config.CoreConfig` (will move to `vtscore.config.CoreConfig` in Phase 8). `CoreConfig.from_settings()` is the app-side bridge.
+2. Replace direct `from vtsearch.settings import get_X` calls with reading from a `CoreConfig` argument or attribute of an enclosing context object (`DatasetContext`/`DetectorContext`). **In progress**: the two easy-win files (`detectors/store.py`, `datasets/registry.py`) now route through `CoreConfig.from_settings()`.
 3. App-side: at request boundary, build a `CoreConfig` from `vtsearch.settings` and pass it down. Settings auto-save behaviour stays in the app.
 4. The `vtsearch/state/__init__.py` setter wrappers (e.g. `set_inclusion`, `set_calibrate_count`) currently both update the in-memory cache **and** call `vtsearch.settings.set_X` to persist. Library callers should only do the in-memory half; the app-side persistence half moves into a thin shim that the app installs.
 
@@ -199,10 +199,14 @@ Phases 1 → 4 are independent and can land in parallel PRs. Phase 5 depends on 
 
 Next concrete pieces of work, smallest-first, so a contributor can grab one without reading the whole plan:
 
-1. ~~**Phase 0 inventory doc.** Stub `docs/vtscore-api.md` with the docstring-only sketch of the public surface.~~ **Shipped.** See [`docs/vtscore-api.md`](../vtscore-api.md).
-2. ~~**Phase 1, file 1 of 2: `vtsearch/state/core.py`.**~~ **Shipped.** Resolver hook installed at app startup via `vtsearch/shim/register_flask_context_resolvers()`; `state/core.py` now imports nothing from Flask. Full test suite (3662) green.
-3. ~~**Phase 1, file 2 of 2: `vtsearch/detectors/workflow.py::apply_and_retrain`.**~~ **Shipped.** `override_detector_context()` context manager added to `state/core.py` (highest-priority tier in the resolution chain). Phase 1 exit criterion now satisfied across the whole library-candidate tree. Full test suite (3662) green.
-4. **Phase 2 scaffold: `vtscore.config.CoreConfig`.** Add the dataclass under `vtsearch/config.py` (or a new `vtsearch/core_config.py`) with the knobs listed in Phase 2 above and a `CoreConfig.from_settings()` classmethod that reads `vtsearch.settings`. No call-site changes yet — landing the type lets follow-up PRs convert one file at a time.
-5. **Phase 2, easy wins.** `vtsearch/datasets/registry.py` and `vtsearch/detectors/store.py` each read exactly one settings value (`get_saved_datasets_dir`, `get_detectors_dir`). Convert those two first as the proof-of-pattern, then `detectors/labeling_progress.py`, then the heavier `datasets/load_pipeline.py` and `state/__init__.py`.
+1. ~~**Phase 0 inventory doc.**~~ **Shipped.** See [`docs/vtscore-api.md`](../vtscore-api.md).
+2. ~~**Phase 1, file 1 of 2: `vtsearch/state/core.py` resolver hook.**~~ **Shipped.** `vtsearch/shim/register_flask_context_resolvers()` installs the Flask-aware resolvers at app startup.
+3. ~~**Phase 1, file 2 of 2: `vtsearch/detectors/workflow.py::apply_and_retrain`.**~~ **Shipped.** `override_detector_context()` context manager. Phase 1 exit criterion satisfied; full test suite (3662) green.
+4. ~~**Phase 2 scaffold: `vtscore.config.CoreConfig`.**~~ **Shipped** as `vtsearch.config.CoreConfig` (frozen dataclass + `from_settings()` classmethod). Will rename to `vtscore.config.CoreConfig` in Phase 8.
+5. ~~**Phase 2, easy wins (1/3).**~~ **Shipped.** `detectors/store.py::get_detectors_dir` and `datasets/registry.py::get_saved_datasets_dir` now route through `CoreConfig.from_settings()`; both files are settings-free.
+6. **Phase 2 next file: `vtsearch/detectors/labeling_progress.py`.** Reads `get_autopilot_goal_diversity` at line 662. Same pattern as #5 — switch to `CoreConfig.from_settings().autopilot_goal_diversity` at the local call site. One-line change; covered by existing detector/integration tests.
+7. **Phase 2 heavyweight: `vtsearch/datasets/load_pipeline.py`.** Module-level `from vtsearch.settings import (...)` block plus a lazy `set_last_embedder_for_media_type` import at line 671. The module-level import is the harder part — it needs to be converted to either (a) read the values lazily inside each function, or (b) accept `CoreConfig` as a function argument. The `set_*` call is an actual *write* and probably belongs on the app side via the shim — pull it behind a thin "persist embedder-for-media-type" hook the library can call but the app implements.
+8. **Phase 2 state wrappers: `vtsearch/state/__init__.py`.** Eight lazy `from vtsearch import settings` imports inside `get_*`/`set_*` wrappers. The reads convert cleanly to `CoreConfig.from_settings().<field>`; the writes (which call `settings.set_X` to persist) need to move into the app-side shim. Pair with #7 since both touch the persistence side.
+9. **Phase 2 CLI: `vtsearch/cli.py` and `vtsearch/cli_pipeline.py`.** `set_settings_path` and `get_autorun_detectors` calls. The CLI is a Flask-free entry point already, so threading `CoreConfig` in is mostly about formalising what's already a procedural script — but it's a bigger refactor since the CLI builds many things from settings.
 
 When you take one of these on, check the box and add a one-line "shipped in #PR" note so the plan tracks reality.

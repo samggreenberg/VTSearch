@@ -267,8 +267,8 @@ Cross-referenced with the [extract-library plan](plans/extract-library.md):
 | `cli.main` / `cli.autodetect`                       | `vtsearch.settings`            | 2     | open   |
 | `cli_pipeline`                                      | `vtsearch.settings`            | 2     | open   |
 | `datasets.load_pipeline`                            | `vtsearch.settings`            | 2     | open   |
-| `datasets.registry.get_saved_datasets_dir` callers  | `vtsearch.settings`            | 2     | open   |
-| `detectors.store.get_detectors_dir`                 | `vtsearch.settings`            | 2     | open   |
+| `datasets.registry.get_saved_datasets_dir`          | `vtsearch.settings`            | 2     | ✅ shipped — routes through `CoreConfig.from_settings()` |
+| `detectors.store.get_detectors_dir`                 | `vtsearch.settings`            | 2     | ✅ shipped — routes through `CoreConfig.from_settings()` |
 | `detectors.labeling_progress`                       | `vtsearch.settings`            | 2     | open   |
 | `state/__init__` (inclusion, calibrate_*, etc.)     | `vtsearch.settings`            | 2     | open   |
 | Module-level proxies (`medias`, `good_votes`, …)    | global state                   | 3     | open   |
