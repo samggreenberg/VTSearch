@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { finalize, takeUntil } from 'rxjs/operators';
 import type { Media } from '../models/api.models';
 import type { MediaIdsListResponse } from '../generated/api-client/models/media-ids-list-response';
 import { MediasApiService } from './medias-api.service';
@@ -20,10 +20,15 @@ import { MediaMetadataCacheService } from './media-metadata-cache.service';
 export class MediaStateService implements OnDestroy {
   private readonly mediasSubject = new BehaviorSubject<MediaIdsListResponse[]>([]);
   private readonly selectedIdSubject = new BehaviorSubject<number | null>(null);
+  /** True while ``/api/medias/ids`` is in flight. Drives skeleton loaders in
+   *  the media list/grid; flips back to ``false`` whether the request succeeds
+   *  or errors. */
+  private readonly loadingSubject = new BehaviorSubject<boolean>(false);
   private readonly destroy$ = new Subject<void>();
 
   readonly medias$ = this.mediasSubject.asObservable();
   readonly selectedId$ = this.selectedIdSubject.asObservable();
+  readonly loading$ = this.loadingSubject.asObservable();
 
   constructor(
     private mediasApi: MediasApiService,
@@ -41,6 +46,10 @@ export class MediaStateService implements OnDestroy {
 
   get selectedId(): number | null {
     return this.selectedIdSubject.value;
+  }
+
+  get loading(): boolean {
+    return this.loadingSubject.value;
   }
 
   get selectedMedia(): Media | null {
@@ -66,9 +75,13 @@ export class MediaStateService implements OnDestroy {
   }
 
   loadMedias(): void {
+    this.loadingSubject.next(true);
     this.mediasApi
       .getMediaIds()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(
+        takeUntil(this.destroy$),
+        finalize(() => this.loadingSubject.next(false)),
+      )
       .subscribe((stubs) => {
         this.mediasSubject.next(stubs);
       });
@@ -77,6 +90,7 @@ export class MediaStateService implements OnDestroy {
   clear(): void {
     this.mediasSubject.next([]);
     this.selectedIdSubject.next(null);
+    this.loadingSubject.next(false);
     this.metadataCache.clear();
   }
 }

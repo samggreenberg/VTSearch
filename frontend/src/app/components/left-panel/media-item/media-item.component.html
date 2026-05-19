@@ -14,7 +14,7 @@
   (keydown.space)="onClick()"
 >
   @if (isGrid) {
-    <div class="thumbnail-wrap">
+    <div class="thumbnail-wrap" [class.skeleton-bg]="thumbnailUrl">
       @if (thumbnailUrl) {
         <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
       } @else if (placeholderIcon) {
@@ -30,7 +30,7 @@
       @if (voteLabel === 'good') { &#x2713; } @else if (voteLabel === 'bad') { &#x2717; }
     </span>
     @if (thumbnailUrl) {
-      <span class="thumbnail-wrap thumbnail-wrap-list">
+      <span class="thumbnail-wrap thumbnail-wrap-list skeleton-bg">
         <img class="media-thumbnail" [src]="thumbnailUrl" [alt]="displayName" loading="lazy" (error)="onThumbnailError()" />
         @if (bestRegionStyle) {
           <span class="best-region-outline" [ngStyle]="bestRegionStyle" aria-hidden="true" title="Region the embedder matched best"></span>

@@ -14,7 +14,18 @@
       </div>
     </div>
 
-    @if (datasets.length === 0 && orphanLoadingTasks.length === 0 && !loading) {
+    @if (!registryLoaded && datasets.length === 0 && orphanLoadingTasks.length === 0) {
+      <ul class="dashboard-skeleton-list" aria-busy="true" aria-label="Loading datasets">
+        @for (_ of skeletonRows; track $index) {
+          <li class="dashboard-skeleton-row">
+            <vt-skeleton width="16px" height="16px" />
+            <vt-skeleton width="40%" height="14px" />
+            <vt-skeleton width="20%" height="12px" />
+            <vt-skeleton width="15%" height="12px" />
+          </li>
+        }
+      </ul>
+    } @else if (datasets.length === 0 && orphanLoadingTasks.length === 0 && !loading) {
       <div class="welcome-banner">
         <p class="welcome-banner-text">{{ welcomeBannerMessage }}</p>
         <button class="btn btn--primary btn--sm welcome-banner-cta"
@@ -161,7 +172,18 @@
       </div>
     </div>
 
-    @if (detectors.length === 0) {
+    @if (!registryLoaded && detectors.length === 0) {
+      <ul class="dashboard-skeleton-list" aria-busy="true" aria-label="Loading detectors">
+        @for (_ of skeletonRows; track $index) {
+          <li class="dashboard-skeleton-row">
+            <vt-skeleton width="16px" height="16px" />
+            <vt-skeleton width="40%" height="14px" />
+            <vt-skeleton width="20%" height="12px" />
+            <vt-skeleton width="15%" height="12px" />
+          </li>
+        }
+      </ul>
+    } @else if (detectors.length === 0) {
       <p class="empty-state">No detectors yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">

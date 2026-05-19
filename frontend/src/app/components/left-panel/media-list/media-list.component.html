@@ -1,4 +1,25 @@
-@if (useVirtualScroll) {
+@if (showSkeletons) {
+  <div
+    class="media-list media-list-skeleton"
+    [class.grid-layout]="viewMode === 'grid'"
+    [style.--grid-goal-width]="gridGoalWidth + 'px'"
+    aria-busy="true"
+    aria-label="Loading media"
+  >
+    @for (_ of skeletonPlaceholders; track $index) {
+      @if (viewMode === 'grid') {
+        <div class="media-skeleton-card">
+          <vt-skeleton width="100%" height="100%" />
+        </div>
+      } @else {
+        <div class="media-skeleton-row">
+          <vt-skeleton width="28px" height="28px" borderRadius="var(--radius-sm)" />
+          <vt-skeleton width="60%" height="10px" />
+        </div>
+      }
+    }
+  </div>
+} @else if (useVirtualScroll) {
   <!-- Virtual scrolling for large datasets in list mode -->
   <cdk-virtual-scroll-viewport [itemSize]="listItemHeight" class="media-list virtual-scroll-viewport">
     <ng-container *cdkVirtualFor="let item of cachedOrderedItems; trackBy: trackByMediaId">
