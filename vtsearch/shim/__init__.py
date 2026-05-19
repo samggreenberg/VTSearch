@@ -61,10 +61,16 @@ def register_app_persistence_hooks() -> None:
     ``docs/plans/extract-library.md``).  This function installs the Flask
     app's settings as the backing store for each hook.
     """
+    from vtsearch import settings
     from vtsearch.datasets.load_pipeline import register_last_embedder_persistence_hook
-    from vtsearch.settings import set_last_embedder_for_media_type
+    from vtsearch.state import register_setting_persister
 
-    register_last_embedder_persistence_hook(set_last_embedder_for_media_type)
+    register_last_embedder_persistence_hook(settings.set_last_embedder_for_media_type)
+
+    register_setting_persister("inclusion", settings.set_inclusion)
+    register_setting_persister("calibrate_count", settings.set_calibrate_count)
+    register_setting_persister("calibration_fraction", settings.set_calibration_fraction)
+    register_setting_persister("safe_thresholds", settings.set_safe_thresholds)
 
 
 __all__ = [

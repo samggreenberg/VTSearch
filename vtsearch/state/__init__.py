@@ -13,6 +13,7 @@ as before, so no call-sites need to change.
 from __future__ import annotations
 
 import gc
+from collections.abc import Callable
 from typing import Any
 
 # Re-export all state variables from state_core --------------------------
@@ -184,37 +185,69 @@ def clear_all() -> None:
         clear_votes()
 
 
+# ---------------------------------------------------------------------------
+# Settings-persistence hooks (app-side wiring; library default = no-op)
+# ---------------------------------------------------------------------------
+# Each ``set_X`` wrapper below does its in-memory work (e.g. cache
+# invalidation) and then delegates persistence to whatever the app
+# installed.  ``vtsearch/shim/register_app_persistence_hooks()`` wires
+# each key here to the matching ``vtsearch.settings.set_*`` function at
+# app startup, so user prefs continue to round-trip through
+# ``data/<user>/user_settings.json`` exactly as before.  Library-only
+# callers (no app) see in-memory mutation only, which is the right
+# default — they can install their own persister via this hook if they
+# want JSON-on-disk persistence.  See Phase 2 of
+# ``docs/plans/extract-library.md``.
+
+_setting_persisters: dict[str, Callable[[Any], None]] = {}
+
+
+def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
+    """Install the persistence callback for setting *key*.
+
+    Recognised keys: ``inclusion``, ``calibrate_count``, ``calibration_fraction``,
+    ``safe_thresholds``.  Called by ``vtsearch/shim`` at app startup.
+    """
+    _setting_persisters[key] = fn
+
+
+def _persist_setting(key: str, value: Any) -> None:
+    fn = _setting_persisters.get(key)
+    if fn is not None:
+        fn(value)
+
+
 def get_inclusion() -> int:
     """Return the current inclusion setting.
 
-    On first call the value is loaded from the persisted settings file so
-    that it survives app restarts.
+    On first call the value is loaded from the persisted settings file via
+    :class:`vtsearch.config.CoreConfig` so it survives app restarts.
     """
+    from vtsearch.config import CoreConfig
+
     with _state_lock:
         val = _core._get_inclusion()
         if val is None:
-            from vtsearch import settings
-
-            val = settings.get_inclusion()
+            val = CoreConfig.from_settings().inclusion
             _core._set_inclusion(val)
         return val
 
 
 def set_inclusion(value: int) -> None:
-    """Set the global inclusion value and persist it to the settings file.
+    """Set the global inclusion value and persist it.
 
     Also clears the progress model cache since cached models were trained
-    with the old inclusion value.
+    with the old inclusion value.  The persistence hop is delegated to
+    whatever the app registered via :func:`register_setting_persister` —
+    library-only callers without that hook just get in-memory mutation.
     """
-    from vtsearch import settings
-
     with _state_lock:
         if value != _core._get_inclusion():
             from vtsearch.detectors.labeling_progress import clear_progress_cache
 
             clear_progress_cache()
         _core._set_inclusion(value)
-        settings.set_inclusion(value)
+        _persist_setting("inclusion", value)
 
 
 def get_dataset_display_name() -> str | None:
@@ -230,45 +263,36 @@ def set_dataset_display_name(name: str | None) -> None:
 
 
 def get_calibrate_count() -> int:
-    """Return the number of calibration splits from settings."""
-    from vtsearch import settings
+    """Return the number of calibration splits."""
+    from vtsearch.config import CoreConfig
 
-    return settings.get_calibrate_count()
+    return CoreConfig.from_settings().calibrate_count
 
 
 def set_calibrate_count(value: int) -> None:
-    """Set the calibrate count and persist it to the settings file."""
-    from vtsearch import settings
-
-    settings.set_calibrate_count(value)
+    """Set the calibrate count.  Persistence delegated to the registered hook."""
+    _persist_setting("calibrate_count", value)
 
 
 def get_calibration_fraction() -> float:
-    """Return the calibration fraction from settings."""
-    from vtsearch import settings
+    """Return the calibration fraction."""
+    from vtsearch.config import CoreConfig
 
-    return settings.get_calibration_fraction()
+    return CoreConfig.from_settings().calibration_fraction
 
 
 def set_calibration_fraction(value: float) -> None:
-    """Set the calibration fraction and persist it to the settings file."""
-    from vtsearch import settings
-
-    settings.set_calibration_fraction(value)
+    """Set the calibration fraction.  Persistence delegated to the registered hook."""
+    _persist_setting("calibration_fraction", value)
 
 
 def get_safe_thresholds() -> bool:
-    """Return whether safe thresholds blending is enabled.
+    """Return whether safe-thresholds blending is enabled."""
+    from vtsearch.config import CoreConfig
 
-    Reads the value from the persisted settings file.
-    """
-    from vtsearch import settings
-
-    return settings.get_safe_thresholds()
+    return CoreConfig.from_settings().safe_thresholds
 
 
 def set_safe_thresholds(value: bool) -> None:
-    """Set the safe thresholds flag and persist it to the settings file."""
-    from vtsearch import settings
-
-    settings.set_safe_thresholds(value)
+    """Set the safe-thresholds flag.  Persistence delegated to the registered hook."""
+    _persist_setting("safe_thresholds", value)
