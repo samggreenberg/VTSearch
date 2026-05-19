@@ -1,6 +1,6 @@
 # C901 Refactor Triage (≥20 complexity)
 
-**Status:** Triage complete; 2 of 8 refactors shipped.
+**Status:** Triage complete; 3 of 8 refactors shipped.
 
 ## Why this file exists
 
@@ -36,7 +36,7 @@ classified as either:
 | File:line | Func | CC | Plan |
 |---|---|---|---|
 | ~~`vtsearch/detectors/resolver.py:436`~~ | ~~`_apply_clip_and_embed`~~ | ~~25~~ | **Shipped** — see Done below. |
-| `vtsearch/routes/labels/vote.py:42` | `export_labels` | 29 | Three concerns interleaved: labelset selection, corrections annotation, enrichment. Each is a clean subroutine — extract `_select_labelset(query)`, `_annotate_corrections(result, find_initial, all_medias)`, `_enrich_with_metadata(result, all_medias)`. |
+| ~~`vtsearch/routes/labels/vote.py:42`~~ | ~~`export_labels`~~ | ~~29~~ | **Shipped** — see Done below. |
 | `vtsearch/converters/audio2image.py:108` | `convert` | 25 | Linear pipeline: param coerce → load audio → compute spec → render PNG. Extract `_coerce_params`, `_compute_spectrogram`, `_render_to_png`. |
 | `vtsearch/converters/image2text.py:83` | `convert` | 22 | Same shape as audio2image — split by stage. |
 | ~~`vtsearch/routes/sorting.py:789`~~ | ~~`label_file_sort`~~ | ~~21~~ | **Shipped** — see Done below. |
@@ -60,7 +60,7 @@ Ship in this order — earlier rows are more mechanical / lower risk:
 
 1. ~~`_apply_clip_and_embed`~~ — shipped
 2. ~~`label_file_sort`~~ — shipped
-3. `export_labels`
+3. ~~`export_labels`~~ — shipped
 4. `audio2image.convert` / `image2text.convert` (one PR)
 5. `resolve_label_embeddings`
 6. `populate_label_embeddings`
@@ -84,6 +84,17 @@ Ship in this order — earlier rows are more mechanical / lower risk:
   (MLP train + score every loaded media). The route is now parse →
   embed → guard → train+score → respond. `noqa: C901` deleted. Full
   suite (3793 tests) passes.
+
+- **`export_labels`** (CC 29 → 5). Split into `_select_vote_pools` (the
+  `label_filter` / `goods_only` branch table), `_annotate_corrections`
+  (build the md5 → media-id map once, then stamp `is_correction` per
+  entry — also fixes the original's O(N×M) per-entry linear scan),
+  `_build_entry_metadata` (per-media display + origin-params + custom
+  blob), and `_enrich_with_metadata` (build the md5 → media map once,
+  call the per-entry helper, compute `available_columns`). The route
+  is now: pools → labelset → annotate → optional corrections-only
+  filter → optional enrichment → return. `noqa: C901` deleted. Full
+  suite (3842 tests) passes.
 
 ## Open follow-ups
 

@@ -36,10 +36,103 @@ labels_bp = Blueprint(
 )
 
 
+def _select_vote_pools(label_filter: str, goods_only: bool) -> tuple[dict, dict]:
+    """Pick the (goods, bads) dicts to feed into ``LabelSet.from_clips_and_votes``.
+
+    ``label_filter == "corrections"`` returns both pools — the corrections
+    filtering step happens after annotation, since "correction" depends on
+    the find-initial labels, not on good vs bad.
+    """
+    if label_filter == "good":
+        return good_votes, {}
+    if label_filter == "bad":
+        return {}, bad_votes
+    if label_filter == "corrections":
+        return good_votes, bad_votes
+    if label_filter:
+        return good_votes, bad_votes
+    return good_votes, ({} if goods_only else bad_votes)
+
+
+def _annotate_corrections(result: dict, all_medias: dict) -> None:
+    """Add ``is_correction`` to every label entry in *result* (mutates in place).
+
+    A label is a correction when the detector's pre-vote label
+    (``find_initial_labels``) differs from the current label. When there is
+    no find-initial state (no detector was run, or the vote came from
+    outside Find), no entries are annotated.
+    """
+    from vtsearch.state import get_find_initial_labels
+
+    find_initial = get_find_initial_labels()
+    if not find_initial:
+        return
+
+    md5_to_id: dict[str, int] = {}
+    for mid, m in all_medias.items():
+        md5_val = m.get("md5")
+        if md5_val and md5_val not in md5_to_id:
+            md5_to_id[md5_val] = mid
+
+    for entry in result["labels"]:
+        media_id = md5_to_id.get(entry.get("md5"))
+        if media_id is not None and media_id in find_initial:
+            entry["is_correction"] = entry.get("label") != find_initial[media_id]
+        else:
+            entry["is_correction"] = False
+
+
+def _build_entry_metadata(media: dict) -> dict:
+    """Return the metadata blob for one labelled media — display + origin + custom."""
+    from vtsearch.media import get as get_media_type  # noqa: PLC0415
+
+    try:
+        meta = get_media_type(media.get("type", "audio")).display_metadata(media)
+    except KeyError:
+        meta = {}
+
+    origin = media.get("origin")
+    if isinstance(origin, dict):
+        for k, v in origin.get("params", {}).items():
+            meta.setdefault(k, v)
+
+    importer_custom = media.get("custom_metadata")
+    if importer_custom:
+        meta.update(importer_custom)
+    return meta
+
+
+_BASE_EXPORT_COLUMNS = ["label", "md5", "origin_name", "filename", "category", "origin"]
+
+
+def _enrich_with_metadata(result: dict, all_medias: dict) -> None:
+    """Attach ``custom_metadata`` per entry and the ``available_columns`` list.
+
+    Flattens origin params so fields like ``contentID`` / ``mediaID`` /
+    ``media_url`` surface as selectable export columns alongside the
+    importer's own ``custom_metadata``.
+    """
+    md5_to_media = {m["md5"]: m for m in all_medias.values() if m.get("md5")}
+
+    all_meta_keys: set[str] = set()
+    for entry in result["labels"]:
+        media = md5_to_media.get(entry.get("md5"))
+        if not media:
+            continue
+        meta = _build_entry_metadata(media)
+        if meta:
+            entry["custom_metadata"] = meta
+            all_meta_keys.update(meta.keys())
+
+    base_lower = {c.lower() for c in _BASE_EXPORT_COLUMNS}
+    extra_keys = sorted(k for k in all_meta_keys if k.lower() not in base_lower)
+    result["available_columns"] = _BASE_EXPORT_COLUMNS + extra_keys
+
+
 @labels_bp.route("/api/labels/export")
 @labels_bp.arguments(LabelsExportQuerySchema, location="query")
 @labels_bp.response(200, LabelsExportResponseSchema)
-def export_labels(query: dict):  # noqa: C901
+def export_labels(query: dict):
     """Export labels as a :class:`~vtsearch.datasets.labelset.LabelSet`.
 
     Each label entry includes the element's ``origin`` and ``origin_name``
@@ -48,23 +141,9 @@ def export_labels(query: dict):  # noqa: C901
     that only read ``md5`` and ``label`` keys continue to work unchanged.
     """
     from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.state import get_find_initial_labels
 
     label_filter = query["label_filter"]
-    corrections_only = label_filter == "corrections"
-
-    if label_filter == "good":
-        goods, bads = good_votes, {}
-    elif label_filter == "bad":
-        goods, bads = {}, bad_votes
-    elif label_filter and not corrections_only:
-        goods, bads = good_votes, bad_votes
-    else:
-        if not corrections_only:
-            goods = good_votes
-            bads = {} if query["goods_only"] else bad_votes
-        else:
-            goods, bads = good_votes, bad_votes
+    goods, bads = _select_vote_pools(label_filter, query["goods_only"])
 
     all_medias = snapshot_medias()
     labelset = LabelSet.from_clips_and_votes(
@@ -75,64 +154,12 @@ def export_labels(query: dict):  # noqa: C901
     )
     result: dict = labelset.to_dict()
 
-    # Annotate corrections: items where the user changed the detector's label.
-    find_initial = get_find_initial_labels()
-    if find_initial:
-        for entry in result["labels"]:
-            # Match by media ID — look up from medias by MD5
-            md5 = entry.get("md5")
-            media_id = None
-            for mid, m in all_medias.items():
-                if m.get("md5") == md5:
-                    media_id = mid
-                    break
-            if media_id is not None and media_id in find_initial:
-                original = find_initial[media_id]
-                current = entry.get("label")
-                entry["is_correction"] = current != original
-            else:
-                entry["is_correction"] = False
-
-    if corrections_only:
+    _annotate_corrections(result, all_medias)
+    if label_filter == "corrections":
         result["labels"] = [e for e in result["labels"] if e.get("is_correction")]
 
     if query["enrich"]:
-        from vtsearch.media import get as get_media_type  # noqa: PLC0415
-
-        md5_to_media: dict = {}
-        for m in all_medias.values():
-            md5_val = m.get("md5")
-            if md5_val:
-                md5_to_media[md5_val] = m
-
-        all_meta_keys: set[str] = set()
-        for entry in result["labels"]:
-            media = md5_to_media.get(entry.get("md5"))
-            if not media:
-                continue
-            media_type_id = media.get("type", "audio")
-            try:
-                mt = get_media_type(media_type_id)
-                meta = mt.display_metadata(media)
-            except KeyError:
-                meta = {}
-            # Flatten origin params so fields like contentID, mediaID,
-            # media_url surface as selectable export columns.
-            origin = media.get("origin")
-            if isinstance(origin, dict):
-                for k, v in origin.get("params", {}).items():
-                    meta.setdefault(k, v)
-            importer_custom = media.get("custom_metadata")
-            if importer_custom:
-                meta.update(importer_custom)
-            if meta:
-                entry["custom_metadata"] = meta
-                all_meta_keys.update(meta.keys())
-
-        base_columns = ["label", "md5", "origin_name", "filename", "category", "origin"]
-        base_lower = {c.lower() for c in base_columns}
-        extra_keys = sorted(k for k in all_meta_keys if k.lower() not in base_lower)
-        result["available_columns"] = base_columns + extra_keys
+        _enrich_with_metadata(result, all_medias)
 
     return result
 
