@@ -132,7 +132,7 @@ def _build_local_folder_field_values(form, upload_dir: Path, clipper_params: dic
     return field_values
 
 
-def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list]:
+def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list[dict] | None]:
     """Pop clipper-related keys, set skip_embedding when applicable.
 
     Returns ``(clipper_name, clipper_params, chain_steps)``; *field_values*
