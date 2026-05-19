@@ -152,6 +152,31 @@ describe('NewDetectorModalComponent', () => {
     component.unlockMediaType();
     expect(component.mediaTypeLocked).toBeFalse();
   });
+
+  it('pre-fills the name from the text seed while the name is untouched', () => {
+    component.onPendingTextInput('dog barking sounds');
+    expect(component.pendingText).toBe('dog barking sounds');
+    expect(component.name).toBe('dog barking sounds');
+  });
+
+  it('sanitises pasted whitespace when mirroring the seed into the name', () => {
+    component.onPendingTextInput('   dog   barking\n  sounds   ');
+    expect(component.pendingText).toBe('   dog   barking\n  sounds   ');
+    expect(component.name).toBe('dog barking sounds');
+  });
+
+  it('stops mirroring once the user edits the name', () => {
+    component.onPendingTextInput('dog');
+    expect(component.name).toBe('dog');
+
+    component.onNameInput('Dog Barks');
+    expect(component.name).toBe('Dog Barks');
+    expect(component.nameTouched).toBeTrue();
+
+    component.onPendingTextInput('cat meowing');
+    expect(component.pendingText).toBe('cat meowing');
+    expect(component.name).toBe('Dog Barks');
+  });
 });
 
 describe('NewDetectorModalComponent with defaultMediaType', () => {
