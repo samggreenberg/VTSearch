@@ -122,9 +122,44 @@ def register_app_config_builder() -> None:
     register_core_config_builder(build_core_config)
 
 
+def register_app_plugin_families() -> None:
+    """Register app-only plugin families with :mod:`vtsearch.plugins.inventory`.
+
+    The settings importers / exporters / sources live in
+    :mod:`vtsearch.settings_io`, which is app-tier (it round-trips
+    ``vtsearch.settings`` to disk).  Registering them here keeps
+    ``vtsearch.plugins.inventory`` free of any ``vtsearch.settings_io``
+    import — see ``docs/plans/extract-library.md`` Phase 5.
+
+    Called once at Flask app startup, before the argparse parser is built
+    so ``--list-settings-importers`` and friends get their shortcut flags.
+    """
+    from vtsearch.plugins.inventory import FamilyProvider, register_plugin_family
+
+    def _settings_importers():
+        from vtsearch.settings_io.importers import list_settings_importers
+
+        return list_settings_importers()
+
+    def _settings_exporters():
+        from vtsearch.settings_io.exporters import list_settings_exporters
+
+        return list_settings_exporters()
+
+    def _settings_sources():
+        from vtsearch.settings_io.sources import list_settings_sources
+
+        return list_settings_sources()
+
+    register_plugin_family(FamilyProvider("settings_importers", "Settings importers", _settings_importers))
+    register_plugin_family(FamilyProvider("settings_exporters", "Settings exporters", _settings_exporters))
+    register_plugin_family(FamilyProvider("settings_sources", "Settings sources", _settings_sources))
+
+
 __all__ = [
     "build_core_config",
     "register_app_config_builder",
     "register_app_persistence_hooks",
+    "register_app_plugin_families",
     "register_flask_context_resolvers",
 ]
