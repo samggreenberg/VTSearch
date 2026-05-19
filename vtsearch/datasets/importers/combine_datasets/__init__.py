@@ -220,9 +220,7 @@ class CombineDatasetsImporter(DatasetImporter):
         seen_md5s: set[str] = set()
         mtype_state: list[str | None] = [None]
 
-        for _pkl_path, deduped, _dupes in _iter_unique_source_clips(
-            paths, thin, seen_md5s, mtype_state, progress
-        ):
+        for _pkl_path, deduped, _dupes in _iter_unique_source_clips(paths, thin, seen_md5s, mtype_state, progress):
             if not deduped:
                 continue
             chunk_medias: dict[int, dict[str, Any]] = {}
