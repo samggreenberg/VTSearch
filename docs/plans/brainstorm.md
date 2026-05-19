@@ -808,8 +808,8 @@ Domain-adapt the embedder on the user's unlabeled corpus (MAE/BYOL style). Heavy
 ### 21.9 Distillation ★ M
 Train a tiny CNN/MLP to mimic SigLIP scores on user's data. Useful for edge deployment / latency-sensitive batch scoring.
 
-### 21.10 Model evaluation card ★★ S
-Per-detector dashboard: precision/recall/F1 from a held-out vote split, calibration plot, confusion matrix, top-K errors. Currently you have to leave the app to get this.
+### 21.10 Model evaluation card ★★ S — **Won't do**
+~~Per-detector dashboard: precision/recall/F1 from a held-out vote split, calibration plot, confusion matrix, top-K errors. Currently you have to leave the app to get this.~~ Declined 2026-05-19: not pursuing an in-app evaluation dashboard; users who need these metrics can keep computing them out-of-app from the existing label export.
 
 ### 21.11 Vote-noise robustness ★★ experiment
 Add synthetic label noise, measure detector quality degradation. Inform UI for "warn user when their vote disagrees with a confident model prediction" feature.
