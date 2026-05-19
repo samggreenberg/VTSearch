@@ -669,7 +669,215 @@ def _auto_register_dataset(
 # ---------------------------------------------------------------------------
 
 
-def _run_origin_load_in_background(  # noqa: C901
+class _LoadGateController:
+    """Tracks which load-pipeline gate (download / embed) is currently held.
+
+    Splits gate-acquisition concerns out of the task body: the importer
+    runs under the download gate (bandwidth-bound), and we swap to the
+    embed gate as soon as the importer signals it's started embedding so
+    another dataset can begin downloading in parallel.
+    """
+
+    def __init__(self, tracker) -> None:
+        self._tracker = tracker
+        self._held: str | None = None
+
+    @property
+    def held(self) -> str | None:
+        return self._held
+
+    def acquire(self, gate: ConcurrencyGate, name: str, wait_msg: str) -> None:
+        if gate.acquire(blocking=False):
+            self._held = name
+            return
+        self._tracker.update("loading", wait_msg, 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
+        while not gate.acquire(timeout=0.5):
+            self._tracker.check_cancelled()
+        self._held = name
+
+    def acquire_download(self) -> None:
+        self.acquire(_download_gate, "download", "Waiting for other datasets to finish downloading…")
+
+    def swap_to_embed(self) -> None:
+        if self._held == "embed":
+            return
+        if self._held == "download":
+            _download_gate.release()
+            self._held = None
+        self.acquire(_embed_gate, "embed", "Waiting for other datasets to finish embedding…")
+
+    def release(self) -> None:
+        if self._held == "download":
+            _download_gate.release()
+        elif self._held == "embed":
+            _embed_gate.release()
+        self._held = None
+
+
+def _make_stepped_progress(controller: _LoadGateController, tracker):
+    """Build the importer-side progress callback.
+
+    Routes status updates into *tracker* with the right step number, and
+    triggers the download→embed gate swap on the first ``"embedding"``
+    status so a queued download can start.
+    """
+
+    def stepped(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+        tracker.check_cancelled()
+        if status == "idle":
+            return
+        if status == "embedding" and controller.held != "embed":
+            controller.swap_to_embed()
+        step = _STATUS_TO_STEP.get(status)
+        tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
+
+    return stepped
+
+
+def _run_importer(load_fn, ctx: DatasetContext, stepped) -> None:
+    """Invoke *load_fn* under thread-local progress, populating ctx.medias."""
+    import inspect  # noqa: PLC0415
+
+    set_thread_progress(stepped)
+    try:
+        sig = inspect.signature(load_fn)
+        if sig.parameters:
+            load_fn(ctx.medias)
+        else:
+            load_fn()
+    finally:
+        clear_thread_progress()
+
+
+def _tag_origins(media_dict: dict, origin: dict) -> None:
+    """Stamp *origin* onto medias that don't already carry one."""
+    for media in media_dict.values():
+        if media.get("origin") is None:
+            media["origin"] = origin
+        if not media.get("origin_name"):
+            media["origin_name"] = media.get("filename", "")
+
+
+def _apply_clipper_stage(
+    ctx: DatasetContext, tracker, clipper: str, clipper_params: dict | None, chain_steps: list[dict] | None
+) -> None:
+    """Run the clipper / chain stage with tracker-routed progress."""
+    if not (clipper or chain_steps):
+        return
+
+    def _clipper_progress(current: int, total: int, phase: str) -> None:
+        tracker.check_cancelled()
+        if phase == "clipping":
+            msg = "Clipping media…"
+        elif phase == "converting":
+            msg = "Converting media…"
+        else:
+            msg = "Embedding clips…"
+        tracker.update(
+            "loading", msg, current=current, total=total, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
+        )
+
+    _clipper_progress(0, 0, "clipping")
+    _apply_clipper(ctx.medias, clipper, clipper_params, on_progress=_clipper_progress, chain_steps=chain_steps)
+
+
+def _collapse_duplicates_stage(ctx: DatasetContext, tracker) -> None:
+    def _progress(current: int, total: int) -> None:
+        tracker.check_cancelled()
+        tracker.update(
+            "loading",
+            "Removing duplicates…",
+            current=current,
+            total=total,
+            step=_TOTAL_LOAD_STEPS,
+            total_steps=_TOTAL_LOAD_STEPS,
+        )
+
+    _progress(0, 0)
+    collapse_duplicates(ctx.medias, on_progress=_progress)
+
+
+def _build_diversity_tree_stage(ctx: DatasetContext, tracker) -> None:
+    def _progress(current: int, total: int) -> None:
+        tracker.check_cancelled()
+        tracker.update(
+            "loading",
+            "Building diversity index…",
+            current=current,
+            total=total,
+            step=_TOTAL_LOAD_STEPS,
+            total_steps=_TOTAL_LOAD_STEPS,
+        )
+
+    _progress(0, 0)
+    build_diversity_tree_for_context(ctx, on_progress=_progress)
+
+
+def _register_and_migrate(
+    ctx: DatasetContext,
+    tracker,
+    task_id: str,
+    origin: dict,
+    name: str,
+    clipper: str,
+    embedder: str,
+    created_by: str,
+    ingest_started_at: float,
+) -> str:
+    """Save to registry, migrate the context from task_id to its real id.
+
+    Returns the (possibly migrated) context_id.
+    """
+    tracker.update("loading", "Saving to registry…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
+    entry = _auto_register_dataset(
+        ctx.medias,
+        name=name,
+        origin_str=_origin_to_str(origin),
+        source=origin,
+        clipper=clipper,
+        embedder=embedder,
+        created_by=created_by,
+        display_name=name,
+        ingest_started_at=ingest_started_at,
+    )
+    if entry is None:
+        return task_id
+    _migrate_context_id(task_id, entry["id"])
+    ctx.dataset_display_name = entry.get("name", name)
+    # Associate the loading task with the real dataset ID so the frontend
+    # can show embedder-warmup progress inline on the dataset row.
+    loading_tasks.set_dataset_id(task_id, entry["id"])
+    return entry["id"]
+
+
+def _warmup_embedder_stage(ctx: DatasetContext, tracker) -> None:
+    def _task_progress(status, message="", current=0, total=0, **kw):
+        tracker.update(status, message, current, total, **kw)
+
+    _load_embedder_with_progress(ctx.medias, _task_progress)
+
+
+def _handle_load_failure(exc: BaseException, context_id: str, tracker) -> None:
+    """Unregister the context and write the failure into *tracker*."""
+    from vtsearch.state.core import unregister_context  # noqa: PLC0415
+
+    if isinstance(exc, CancelledError):
+        error = "Cancelled"
+    elif isinstance(exc, ImportError):
+        traceback.print_exc()
+        error = f"Missing dependency: {exc}. Install all required packages with: pip install -e '.[cpu,dev]'"
+    elif isinstance(exc, MemoryError):
+        error = "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM."
+    else:
+        traceback.print_exc()
+        error = str(exc) or repr(exc) or "Unknown error during dataset loading"
+
+    unregister_context(context_id)
+    gc.collect()
+    tracker.update("idle", "", 0, 0, error=error, step=None, total_steps=None)
+
+
+def _run_origin_load_in_background(
     load_fn,
     origin: dict,
     *,
@@ -694,11 +902,10 @@ def _run_origin_load_in_background(  # noqa: C901
 
     Returns the task_id that can be used to poll progress or cancel.
     """
-
     # Reset the legacy cancellation flag so a previous cancel does not
-    # immediately abort this new operation — but only when no other
-    # parallel loads are running (otherwise we would clear cancellation
-    # that might still be intended for those in-flight tasks).
+    # immediately abort this new operation — but only when no other parallel
+    # loads are running (otherwise we would clear cancellation that might
+    # still be intended for those in-flight tasks).
     if not loading_tasks.has_active_tasks():
         dataset_progress.reset_cancel()
 
@@ -711,253 +918,61 @@ def _run_origin_load_in_background(  # noqa: C901
         except Exception:
             pass
 
-    import time as _time
-
     task_id = f"_loading_{uuid4().hex[:8]}"
-    ingest_started_at = _time.time()
+    ingest_started_at = time.time()
     tracker = loading_tasks.create_task(
         task_id, name or _origin_to_str(origin), media_type=media_type, embedder=embedder
     )
-
-    # Set initial progress synchronously so the first poll sees it.
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     # Snapshot the user that triggered the load so background per-user
     # state (settings writes, settings_source sync) resolves correctly.
-    _request_user = created_by or get_current_user()
+    request_user = created_by or get_current_user()
 
-    def task():  # noqa: C901
-        from vtsearch.auth import set_thread_user
+    def task():
+        from vtsearch.auth import set_thread_user  # noqa: PLC0415
 
-        set_thread_user(_request_user)
+        set_thread_user(request_user)
         ctx = DatasetContext(task_id)
-        context_id = task_id  # tracks the current context key (may change after migration)
-
-        # Tracks which gate (if any) we currently hold.  The download gate
-        # covers the import/download phase; the embed gate covers all
-        # CPU/GPU-bound embedding work (importer-side embedding plus the
-        # post-load clipper, dedup, diversity-tree, and embedder warm-up).
-        # We swap from download → embed when the importer first signals an
-        # "embedding" status, freeing the download slot so another dataset
-        # can start downloading in parallel.
-        held_gate: dict[str, str | None] = {"name": None}
-
-        def _acquire(gate: ConcurrencyGate, name: str, wait_msg: str) -> None:
-            if gate.acquire(blocking=False):
-                held_gate["name"] = name
-                return
-            tracker.update("loading", wait_msg, 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
-            while not gate.acquire(timeout=0.5):
-                tracker.check_cancelled()
-            held_gate["name"] = name
-
-        def _swap_to_embed() -> None:
-            if held_gate["name"] == "embed":
-                return
-            if held_gate["name"] == "download":
-                _download_gate.release()
-                held_gate["name"] = None
-            _acquire(_embed_gate, "embed", "Waiting for other datasets to finish embedding…")
-
-        def stepped(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-            tracker.check_cancelled()
-            if status == "idle":
-                return
-            # Importer transitioned into per-file embedding — swap gates so
-            # another download can start while we do the GPU-bound work.
-            if status == "embedding" and held_gate["name"] != "embed":
-                _swap_to_embed()
-            step = _STATUS_TO_STEP.get(status)
-            tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
+        context_id = task_id
+        controller = _LoadGateController(tracker)
+        stepped = _make_stepped_progress(controller, tracker)
 
         try:
-            # Acquire the download gate up front: every load starts with the
-            # importer's download/import phase.  The task is already visible
-            # in the UI, so the user sees the wait message while queued.
-            _acquire(
-                _download_gate,
-                "download",
-                "Waiting for other datasets to finish downloading…",
-            )
-
+            controller.acquire_download()
             tracker.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
             register_context(ctx)
             gc.collect()
 
-            # Set thread-local progress so that loader/downloader callbacks
-            # route to this task's tracker instead of the global singleton.
-            set_thread_progress(stepped)
-            try:
-                import inspect
-
-                sig = inspect.signature(load_fn)
-                if sig.parameters:
-                    load_fn(ctx.medias)
-                else:
-                    load_fn()
-            finally:
-                clear_thread_progress()
-
+            _run_importer(load_fn, ctx, stepped)
             tracker.check_cancelled()
 
-            # Post-load steps (apply_md5, clipping, dedup, diversity tree,
-            # registry save, embedder warm-up) are all CPU/GPU-bound and
-            # touch embeddings — gate them on the embed semaphore.  This is
-            # a no-op if the importer already swapped mid-load.
-            _swap_to_embed()
+            # Post-load stages are CPU/GPU-bound and touch embeddings —
+            # gate them on the embed semaphore.  No-op if the importer
+            # already swapped mid-load.
+            controller.swap_to_embed()
 
             apply_custom_metadata_md5(ctx.medias)
-
-            # Tag medias that don't already have an origin.
-            for media in ctx.medias.values():
-                if media.get("origin") is None:
-                    media["origin"] = origin
-                if not media.get("origin_name"):
-                    media["origin_name"] = media.get("filename", "")
-
-            if clipper or chain_steps:
-
-                def _clipper_progress(current: int, total: int, phase: str) -> None:
-                    tracker.check_cancelled()
-                    if phase == "clipping":
-                        msg = "Clipping media…"
-                    elif phase == "converting":
-                        msg = "Converting media…"
-                    else:
-                        msg = "Embedding clips…"
-                    tracker.update(
-                        "loading",
-                        msg,
-                        current=current,
-                        total=total,
-                        step=_TOTAL_LOAD_STEPS,
-                        total_steps=_TOTAL_LOAD_STEPS,
-                    )
-
-                _clipper_progress(0, 0, "clipping")
-                _apply_clipper(
-                    ctx.medias,
-                    clipper,
-                    clipper_params,
-                    on_progress=_clipper_progress,
-                    chain_steps=chain_steps,
-                )
-
-            def _dedup_progress(current: int, total: int) -> None:
-                tracker.check_cancelled()
-                tracker.update(
-                    "loading",
-                    "Removing duplicates…",
-                    current=current,
-                    total=total,
-                    step=_TOTAL_LOAD_STEPS,
-                    total_steps=_TOTAL_LOAD_STEPS,
-                )
-
-            _dedup_progress(0, 0)
-            collapse_duplicates(ctx.medias, on_progress=_dedup_progress)
-
-            def _diversity_progress(current: int, total: int) -> None:
-                tracker.check_cancelled()
-                tracker.update(
-                    "loading",
-                    "Building diversity index…",
-                    current=current,
-                    total=total,
-                    step=_TOTAL_LOAD_STEPS,
-                    total_steps=_TOTAL_LOAD_STEPS,
-                )
-
-            _diversity_progress(0, 0)
-            build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
+            _tag_origins(ctx.medias, origin)
+            _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
+            _collapse_duplicates_stage(ctx, tracker)
+            _build_diversity_tree_stage(ctx, tracker)
             tracker.check_cancelled()
-            tracker.update("loading", "Saving to registry…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
-            origin_str = _origin_to_str(origin)
-            entry = _auto_register_dataset(
-                ctx.medias,
-                name=name,
-                origin_str=origin_str,
-                source=origin,
-                clipper=clipper,
-                embedder=embedder,
-                created_by=created_by,
-                display_name=name,
-                ingest_started_at=ingest_started_at,
+            context_id = _register_and_migrate(
+                ctx, tracker, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
             )
+            _warmup_embedder_stage(ctx, tracker)
 
-            # Migrate the context from the temp task_id to the real registry ID.
-            if entry is not None:
-                _migrate_context_id(task_id, entry["id"])
-                context_id = entry["id"]
-                ctx.dataset_display_name = entry.get("name", name)
-                # Associate the loading task with the real dataset ID so the
-                # frontend can show the embedder-warmup progress inline on the
-                # dataset row instead of as an orphan loading task.
-                loading_tasks.set_dataset_id(task_id, entry["id"])
-
-            # Warm up the embedder.  Use a progress wrapper that updates the
-            # task tracker, not the global singleton.
-            def _task_progress(status, message="", current=0, total=0, **kw):
-                tracker.update(status, message, current, total, **kw)
-
-            _load_embedder_with_progress(ctx.medias, _task_progress)
-
-            # Achievement: dataset load succeeded (demos/synthetic excluded).
-            from vtsearch.achievements import record_dataset_load
+            from vtsearch.achievements import record_dataset_load  # noqa: PLC0415
 
             record_dataset_load(str(origin.get("importer", "")))
-        except CancelledError:
-            from vtsearch.state.core import unregister_context
-
-            unregister_context(context_id)
-            gc.collect()
-            tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
-        except ImportError as e:
-            traceback.print_exc()
-            from vtsearch.state.core import unregister_context
-
-            unregister_context(context_id)
-            gc.collect()
-            tracker.update(
-                "idle",
-                "",
-                0,
-                0,
-                error=(f"Missing dependency: {e}. Install all required packages with: pip install -e '.[cpu,dev]'"),
-                step=None,
-                total_steps=None,
-            )
-        except MemoryError:
-            from vtsearch.state.core import unregister_context
-
-            unregister_context(context_id)
-            gc.collect()
-            tracker.update(
-                "idle",
-                "",
-                0,
-                0,
-                error="Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
-                step=None,
-                total_steps=None,
-            )
-        except Exception as e:
-            traceback.print_exc()
-            from vtsearch.state.core import unregister_context
-
-            unregister_context(context_id)
-            gc.collect()
-            error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
-            tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
+        except Exception as exc:
+            _handle_load_failure(exc, context_id, tracker)
         finally:
-            if held_gate["name"] == "download":
-                _download_gate.release()
-            elif held_gate["name"] == "embed":
-                _embed_gate.release()
-            held_gate["name"] = None
+            controller.release()
             clear_thread_progress()
             loading_tasks.mark_finished(task_id)
-            from vtsearch.auth import set_thread_user as _clear_thread_user
+            from vtsearch.auth import set_thread_user as _clear_thread_user  # noqa: PLC0415
 
             _clear_thread_user(None)
 
