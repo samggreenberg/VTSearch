@@ -31,9 +31,7 @@ from pathlib import Path
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.datasets.load_pipeline import (
-    _load_embedder_with_progress as _load_embedder_for_clips_with_progress,
-)
+from vtsearch.datasets.load_pipeline import _warmup_embedder_async
 from vtsearch.datasets.loader import load_dataset_from_pickle
 from vtsearch.datasets.registry import (
     add_loaded_id as _reg_add_loaded,
@@ -138,7 +136,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     if not pkl_path or not Path(pkl_path).is_file():
         abort(404, message=f"Saved dataset file not found: {pkl_path}")
 
-    _LOAD_STEPS = 3  # read pickle + process items, build diversity index, warm up embedder
+    _LOAD_STEPS = 2  # read pickle + process items, build diversity index
 
     # Create a per-task tracker for this load operation.
     task_id = f"_regload_{dataset_id[:8]}"
@@ -221,13 +219,10 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
             _reg_update(dataset_id, num_items=len(ctx.medias), num_dupes=num_dupes)
             ctx.dataset_display_name = entry.get("name", "")
 
-            # Warm up the embedder using the task tracker.
-            def _task_progress(status, message="", current=0, total=0, **kw):
-                tracker.update(status, message, current, total, **kw)
-
-            _load_embedder_for_clips_with_progress(
-                ctx.medias, _task_progress, step=_LOAD_STEPS, total_steps=_LOAD_STEPS
-            )
+            # Embedder warm-up runs fire-and-forget so the dashboard row
+            # goes green immediately; text sort waits behind its own
+            # progress bar on first use if the model isn't ready yet.
+            _warmup_embedder_async(ctx.medias)
         except CancelledError:
             unregister_context(dataset_id)
             _reg_remove_loaded(dataset_id)

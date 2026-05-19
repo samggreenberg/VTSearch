@@ -117,7 +117,6 @@ from vtsearch.state import (
     clear_all,
     collapse_duplicates,
     register_context,
-    snapshot_medias,
 )
 from vtsearch.concurrency.progress import update_progress
 from vtsearch.concurrency.progress import (
@@ -160,58 +159,6 @@ def _get_embedder_for_medias(media_dict: dict):
     from vtsearch.routes._shared import get_embedder_for_medias as _impl
 
     return _impl(media_dict)
-
-
-def _get_embedder_for_clips():
-    """Return the embedder for the current dataset, or None."""
-    return _get_embedder_for_medias(snapshot_medias())
-
-
-def _load_embedder_with_progress(
-    media_dict: dict | None,
-    progress_fn,
-    step: int | None = None,
-    total_steps: int | None = None,
-) -> None:
-    """Eagerly load the embedder and warm up its text encoder.
-
-    *progress_fn* is called as ``progress_fn(status, message, current, total, **kw)``
-    to report progress.  When *media_dict* is passed it is used to determine
-    the embedder; otherwise falls back to the active dataset.
-    """
-    if step is None:
-        step = _TOTAL_LOAD_STEPS
-    if total_steps is None:
-        total_steps = _TOTAL_LOAD_STEPS
-
-    emb = _get_embedder_for_medias(media_dict) if media_dict else _get_embedder_for_clips()
-    if emb is None:
-        progress_fn("idle", "Ready", step=None, total_steps=None)
-        return
-
-    def _model_load_progress(status, message, current, total):
-        progress_fn(status, message, current, total, step=step, total_steps=total_steps)
-
-    progress_fn("loading", "Loading embedding model…", 0, 0, step=step, total_steps=total_steps)
-    original_cb = emb._on_progress
-    emb._on_progress = _model_load_progress
-    try:
-        emb.load_models()
-    finally:
-        emb._on_progress = original_cb
-
-    # Warm up the text encoder so the first text sort is instant.
-    progress_fn("loading", "Warming up text encoder…", 0, 0, step=step, total_steps=total_steps)
-    try:
-        emb.embed_text("warmup")
-    except Exception:
-        pass
-    progress_fn("idle", "Ready", step=None, total_steps=None)
-
-
-def _load_embedder_for_clips(step: int | None = None, total_steps: int | None = None) -> None:
-    """Load embedder using the global progress tracker."""
-    _load_embedder_with_progress(None, update_progress, step=step, total_steps=total_steps)
 
 
 def _origin_to_str(origin: dict | None) -> str:
@@ -844,17 +791,35 @@ def _register_and_migrate(
         return task_id
     _migrate_context_id(task_id, entry["id"])
     ctx.dataset_display_name = entry.get("name", name)
-    # Associate the loading task with the real dataset ID so the frontend
-    # can show embedder-warmup progress inline on the dataset row.
+    # Associate the loading task with the real dataset ID so the
+    # finished-task tick is attributed to the right dashboard row.
     loading_tasks.set_dataset_id(task_id, entry["id"])
     return entry["id"]
 
 
-def _warmup_embedder_stage(ctx: DatasetContext, tracker) -> None:
-    def _task_progress(status, message="", current=0, total=0, **kw):
-        tracker.update(status, message, current, total, **kw)
+def _warmup_embedder_async(media_dict: dict) -> None:
+    """Warm up the embedder (model load + text-encoder prime) in a daemon thread.
 
-    _load_embedder_with_progress(ctx.medias, _task_progress)
+    Fire-and-forget: the caller doesn't wait, and there is no progress
+    surface — the dataset is usable for grid-browsing immediately, and
+    text sort waits behind its own ``_embedder_load_lock`` (see
+    ``vtsearch/routes/sorting.py:_load_embedder_with_progress``) on first
+    use.  ``MediaEmbedder.load_models`` is idempotent and serialised by
+    a per-class lock, so racing this thread against an on-demand sort
+    load is safe.
+    """
+
+    def _run() -> None:
+        emb = _get_embedder_for_medias(media_dict)
+        if emb is None:
+            return
+        try:
+            emb.load_models()
+            emb.embed_text("warmup")
+        except Exception:
+            pass
+
+    threading.Thread(target=_run, name="warmup-embedder", daemon=True).start()
 
 
 def _handle_load_failure(exc: BaseException, context_id: str, tracker) -> None:
@@ -961,7 +926,10 @@ def _run_origin_load_in_background(
             context_id = _register_and_migrate(
                 ctx, tracker, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
             )
-            _warmup_embedder_stage(ctx, tracker)
+            # Embedder warm-up is fire-and-forget so the dashboard row goes
+            # green immediately.  Text sort waits behind its own progress
+            # bar on first use if the model isn't ready yet.
+            _warmup_embedder_async(ctx.medias)
 
             from vtsearch.achievements import record_dataset_load  # noqa: PLC0415
 
