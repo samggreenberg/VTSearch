@@ -992,20 +992,28 @@ class TestValidatedVoteSnapshot:
         assert bad_cid in snap.medias
 
     def test_snapshot_unsafe_on_dataset_mismatch(self, client):
-        """votes_dataset_id != active dataset_id → safe=False with empty vote dicts."""
+        """votes_dataset_id != active dataset_id → safe=False with empty vote dicts.
+
+        Simulates the H14 race: another thread re-keyed the detector against
+        a different dataset between ``ensure_votes_match_active_dataset()``
+        and the snapshot copy.  Patches the rehydrate to a no-op so the
+        forced mismatch survives the snapshot's own rehydrate call.
+        """
+        from vtscore.detectors import dataset_sync as _ds_sync
         from vtscore.detectors.dataset_sync import validated_vote_snapshot
         from vtscore.state.core import get_active_detector_context
 
         self._setup_detector_with_votes(client)
 
-        # Simulate a concurrent rehydrate that re-keyed the detector against a
-        # different dataset between ``before_request`` and the route body —
-        # the detector context's ``votes_dataset_id`` no longer matches the
-        # active dataset's id.
         det_ctx = get_active_detector_context()
-        det_ctx.votes_dataset_id = "some_other_dataset_id"
+        original = _ds_sync.ensure_votes_match_active_dataset
+        _ds_sync.ensure_votes_match_active_dataset = lambda: None
+        try:
+            det_ctx.votes_dataset_id = "some_other_dataset_id"
+            snap = validated_vote_snapshot()
+        finally:
+            _ds_sync.ensure_votes_match_active_dataset = original
 
-        snap = validated_vote_snapshot()
         assert snap.safe is False
         assert snap.good_votes == {}
         assert snap.bad_votes == {}
