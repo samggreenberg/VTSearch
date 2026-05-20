@@ -278,10 +278,18 @@ Cross-section interaction agents:
 
 ### Security / sync
 
-- **H23. Settings-source filepath template not path-validated** —
-  `vtsearch/settings.py` L939–946 + the source plugins above. Even
-  with `sanitize_template_value()`, the template itself can contain
-  `../`, and the substituted path is never re-validated.
+- ~~**H23. Settings-source filepath template not path-validated**~~ —
+  duplicate of C9 (already struck through above); shipped in commit
+  `988dca3b` ("logical-bug-audit C9 — validate resolved sync-source
+  paths"). Both sync sources now call
+  `validate_server_filepath(resolved, base_dir=get_file_access_base_dir())`
+  at the end of `_resolve_filepath()`
+  (`vtsearch/settings_io/sources/server_json_file/__init__.py:89`,
+  `vtscore/labels/sources/server_json_file/__init__.py:121`/L150), so
+  the background sync site at `vtsearch/settings.py:932` is covered
+  alongside route handlers. Regression tests:
+  `tests/io/test_sync_sources.py::test_resolved_template_path_outside_base_dir_rejected`
+  (one per source).
 
 ### Frontend
 
