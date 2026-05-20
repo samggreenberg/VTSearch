@@ -1089,6 +1089,7 @@ class TestValidatedVoteSnapshot:
 
         # The on-disk labelset must be unchanged.
         data_after = _read_detector(path)
+        assert data_after is not None
         labels_after = data_after.get("labelset", {}).get("labels", [])
         assert len(labels_after) == len(labels_before), (
             "sync should have bailed on safe=False, not erased on-disk labels"
