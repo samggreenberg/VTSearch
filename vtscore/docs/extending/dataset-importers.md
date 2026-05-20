@@ -142,8 +142,15 @@ populate during `run()`:
 | `custom_metadata_map: dict[str, dict[str, Any]]` | filename → per-file metadata dict; entries with an `"md5"` or `"embedding"` key override the above |
 
 Lookup tries the relative path first (for files in subdirectories),
-then the basename. Don't persist vectors or MLP weights to disk on
-your own — the library re-derives them from origins.
+then the basename. When both keys exist for the same file with
+different values, the loader logs a warning and keeps the
+relative-path entry. When a bare basename would match multiple files
+in the folder (e.g. `class_a/foo.wav` and `class_b/foo.wav` with a
+single `"foo.wav"` key) without an explicit relative-path entry for
+every match, the loader raises `ValueError` — supply the full
+relative path for each file to disambiguate. Don't persist vectors
+or MLP weights to disk on your own — the library re-derives them
+from origins.
 
 ## Multi-media imports
 
