@@ -122,12 +122,36 @@ Cross-section interaction agents:
   no output. Covered by `TestRegionAwareTrainingCrossDataset` in
   `tests/detectors/test_patch_embedder.py`.
 - ~~**H3. Embedder drift on save → reload**~~
-- **H5. Detector embedder not revalidated on dataset switch** —
-  `vtsearch/routes/detectors/scoring.py` + `dataset_sync.py`.
-  `ensure_votes_match_active_dataset()` rehydrates votes but doesn't
-  check the new dataset's embedder against the detector's training
-  embedder. An MLP trained on CLAP can score SigLIP vectors with no
-  warning.
+- ~~**H5. Detector embedder not revalidated on dataset switch**~~ —
+  fixed in `vtscore/detectors/dataset_sync.py` +
+  `vtsearch/routes/detectors/scoring.py` +
+  `vtsearch/routes/detectors/find.py`.
+  `invalidate_detector_model_on_embedder_mismatch()` drops
+  `DetectorContext.model` / `threshold` / `last_learned_scores` /
+  `training_medias` / `calibration_cache` when the dataset about to be
+  scored uses a different embedder than the one the cached MLP was
+  trained on.  `before_request` calls
+  `ensure_detector_model_matches_active_embedder()` for the active
+  ctx so a dataset switch invalidates immediately; the scoring fast
+  paths (`_resolve_or_train_detector` for find-label / auto-detect,
+  `_select_scorer` in multi-dataset Find) repeat the check
+  per-detector to cover autorun loops and cross-dataset Find where the
+  active ctx wrapper alone isn't enough.  The helper deliberately
+  leaves `label_embeddings` and `embedder` alone so the load
+  endpoint's progress-tracked `_maybe_start_label_reembed()` flow
+  still detects the mismatch and schedules its visible re-embed task;
+  the next training pass restamps the marker via
+  `populate_label_embeddings` and `record_detector_embedder`.  Also
+  fixed the secondary mixed-embedder bug in the resolver:
+  `resolve_label_embeddings()` now accepts an `embedder_name` kwarg
+  and the scoring / find callers pass the dataset's embedder so
+  origin-resolved label vectors share one space with the snap-matched
+  ones (previously the origin path defaulted to the media type's first
+  registered embedder, mixing two spaces into a single MLP).  Covered
+  by `TestEmbedderMismatchInvalidatesStaleModel` in
+  `tests/detectors/test_detectors.py` and the new
+  `test_forwards_embedder_name_to_*` cases in
+  `tests/detectors/test_resolver.py`.
 - ~~**H6. `train_model` produces degenerate single-class model**~~
 - ~~**H7. Vote applied before retrain; retrain failure leaves vote live**~~
 

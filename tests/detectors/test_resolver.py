@@ -604,7 +604,7 @@ class TestMultiFindCrossDatasetFallback:
         good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
         bad_emb = np.random.RandomState(200).randn(512).astype(np.float32)
 
-        def fake_embed(path, media_type):
+        def fake_embed(path, media_type, embedder_name=""):
             name = Path(path).name
             if "good" in name:
                 return good_emb
@@ -708,7 +708,7 @@ class TestMultiFindCrossDatasetFallback:
         good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
         bad_emb = np.random.RandomState(200).randn(512).astype(np.float32)
 
-        def fake_embed(path, media_type):
+        def fake_embed(path, media_type, embedder_name=""):
             return good_emb if "good" in Path(path).name else bad_emb
 
         with patch("vtscore.detectors.resolver.embed_file", side_effect=fake_embed):
@@ -797,7 +797,7 @@ class TestMultiFindCrossDatasetFallback:
         good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
         bad_emb = np.random.RandomState(200).randn(512).astype(np.float32)
 
-        def fake_embed(path, media_type):
+        def fake_embed(path, media_type, embedder_name=""):
             return good_emb if "good" in Path(path).name else bad_emb
 
         with patch("vtscore.detectors.resolver.embed_file", side_effect=fake_embed):
@@ -1050,7 +1050,7 @@ class TestFindCheckLabels:
 
         good_emb = np.random.RandomState(100).randn(512).astype(np.float32)
 
-        def fake_embed(path, media_type):
+        def fake_embed(path, media_type, embedder_name=""):
             return good_emb
 
         with patch("vtscore.detectors.resolver.embed_file", side_effect=fake_embed):

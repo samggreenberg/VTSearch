@@ -933,6 +933,159 @@ class TestLoadModelEndpoint:
         assert a_bad not in bad_votes, "bad cid from dataset A leaked into dataset B's id-space"
 
 
+class TestEmbedderMismatchInvalidatesStaleModel:
+    """H5: a detector's cached MLP is trained against a specific embedder
+    space (``DetectorContext.embedder``).  When the active dataset uses a
+    different embedder, the cached MLP must be invalidated — otherwise
+    scoring with a cross-space MLP either crashes (different dim) or
+    silently produces garbage labels (same dim).
+    """
+
+    def _make_det_ctx(self, embedder: str):
+        from unittest.mock import MagicMock
+
+        from vtscore.state.core import DetectorContext
+
+        det_ctx = DetectorContext("d-h5", name="d-h5", media_type="audio", embedder=embedder)
+        det_ctx.model = MagicMock(name="trained-mlp")
+        det_ctx.threshold = 0.42
+        det_ctx.label_embeddings["e1"] = "vec"  # type: ignore[assignment]
+        det_ctx.last_learned_scores[1] = 0.7
+        det_ctx.training_medias[1] = {"id": 1}
+        det_ctx.calibration_cache = ("sig", 0.5)
+        return det_ctx
+
+    def test_helper_drops_caches_on_mismatch(self):
+        from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
+
+        det_ctx = self._make_det_ctx("clap")
+        invalidated = invalidate_detector_model_on_embedder_mismatch(det_ctx, "ast")
+
+        assert invalidated is True
+        assert det_ctx.model is None
+        assert det_ctx.threshold == 0.5
+        assert det_ctx.last_learned_scores == {}
+        assert det_ctx.training_medias == {}
+        assert det_ctx.calibration_cache is None
+        # ``label_embeddings`` is reset lazily by
+        # ``populate_label_embeddings._maybe_clear_cache_on_embedder_switch``
+        # (the only consumer), and ``embedder`` is left stamped at the old
+        # value so the load endpoint's progress-tracked re-embed task can
+        # still detect the mismatch.
+        assert det_ctx.label_embeddings == {"e1": "vec"}
+        assert det_ctx.embedder == "clap"
+
+    def test_helper_noop_on_match(self):
+        from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
+
+        det_ctx = self._make_det_ctx("clap")
+        original_model = det_ctx.model
+        invalidated = invalidate_detector_model_on_embedder_mismatch(det_ctx, "clap")
+
+        assert invalidated is False
+        assert det_ctx.model is original_model
+        assert det_ctx.embedder == "clap"
+
+    def test_helper_noop_on_empty_new_embedder(self):
+        """An empty new embedder means we can't prove a mismatch; preserve state."""
+        from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
+
+        det_ctx = self._make_det_ctx("clap")
+        original_model = det_ctx.model
+        invalidated = invalidate_detector_model_on_embedder_mismatch(det_ctx, "")
+
+        assert invalidated is False
+        assert det_ctx.model is original_model
+
+    def test_helper_noop_on_empty_existing_embedder(self):
+        """A fresh detector with no recorded embedder has nothing to invalidate."""
+        from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
+
+        det_ctx = self._make_det_ctx("")
+        original_model = det_ctx.model
+        invalidated = invalidate_detector_model_on_embedder_mismatch(det_ctx, "ast")
+
+        assert invalidated is False
+        assert det_ctx.model is original_model
+
+    def test_before_request_hook_invalidates_active_detector(self, client):
+        """End-to-end: switching the active dataset to one with a different
+        embedder triggers invalidation of the active detector's MLP via
+        ``ensure_detector_model_matches_active_embedder``.
+        """
+        import hashlib
+        from unittest.mock import MagicMock
+
+        import numpy as np
+
+        from vtsearch.state import (
+            DatasetContext,
+            get_active_detector_context,
+            medias,
+            register_context,
+            set_thread_dataset_context,
+        )
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        a_ids = list(medias.keys())
+        if len(a_ids) < 2:
+            pytest.skip("Need at least 2 medias")
+
+        # Create and load a detector against dataset A.
+        client.post(
+            "/api/detectors",
+            json={"name": "H5Det", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "H5Det", "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, mid)
+
+        # Cast a vote so the detector's model gets trained and stamped.
+        client.post(f"/api/medias/{a_ids[0]}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{a_ids[1]}/vote", json={"target": "bad"})
+
+        det_ctx = get_active_detector_context()
+        # Pin a fake MLP + embedder marker to simulate a trained model.
+        det_ctx.model = MagicMock(name="stale-mlp")
+        det_ctx.threshold = 0.42
+        det_ctx.embedder = "ye-olde-embedder"
+        det_ctx.label_embeddings["seed"] = "vec"  # type: ignore[assignment]
+
+        # Switch to dataset B with a DIFFERENT embedder.
+        ctx_b = DatasetContext("ds_b_for_h5")
+        for cid in a_ids[:2]:
+            ctx_b.medias[cid] = {
+                "id": cid,
+                "type": "audio",
+                "embedder": "shiny-new-embedder",
+                "md5": hashlib.md5(f"h5_b_{cid}".encode()).hexdigest(),
+                "embedding": np.zeros(512, dtype=np.float32),
+                "media_bytes": b"fake-b",
+                "filename": f"h5_b_{cid}.wav",
+                "category": "test",
+                "origin": {"importer": "test_b", "params": {"id": cid}},
+                "origin_name": f"h5_b_{cid}.wav",
+            }
+        register_context(ctx_b)
+        set_thread_dataset_context(ctx_b)
+
+        # Fire a no-op request — the before_request hook should run and
+        # invalidate the stale MLP because the embedders no longer match.
+        client.get("/healthz", headers={"X-Dataset-Id": "ds_b_for_h5", "X-Detector-Id": mid})
+
+        assert det_ctx.model is None, "stale MLP must be cleared on embedder mismatch"
+        assert det_ctx.threshold == 0.5
+        # The embedder marker stays at the old value so the load endpoint
+        # can still detect the mismatch and schedule a progress-tracked
+        # re-embed task — the next training pass restamps it.
+        assert det_ctx.embedder == "ye-olde-embedder"
+
+
 class TestValidatedVoteSnapshot:
     """``validated_vote_snapshot`` must atomically pair medias + votes (H14).
 

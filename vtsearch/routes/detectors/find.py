@@ -188,31 +188,56 @@ def _resolve_find_detectors(detector_ids: list[str]) -> list[dict]:
 
 
 def _build_detector_config(d: dict) -> dict:
-    """Pick the live-MLP path or the cold-detector path for *d*.
+    """Build a per-detector config carrying both score paths.
+
+    Multi-dataset Find loads each dataset's medias on demand, so the
+    embedder check that decides live vs cold has to happen per (detector,
+    dataset) pair — not once at config-build time.  We therefore carry
+    *both* the live MLP (when one is cached on the detector context) and
+    the on-disk labelset (when present) so the per-dataset dispatcher can
+    pick safely (see :func:`_select_scorer`).
 
     Aborts with 400 when the detector has no usable labels in either form.
     """
     from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
     from vtscore.state.core import get_detector_context  # noqa: PLC0415
 
+    config: dict = {"name": d["name"], "detector_id": d["id"]}
+
     det_ctx = get_detector_context(d["id"])
     if det_ctx is not None and det_ctx.model is not None:
-        return {
-            "name": d["name"],
-            "detector_id": d["id"],
-            "live_mlp": det_ctx.model,
-            "threshold": det_ctx.threshold,
-        }
+        config["live_mlp"] = det_ctx.model
+        config["threshold"] = det_ctx.threshold
+        config["live_embedder"] = det_ctx.embedder or ""
 
     det_data = _read_detector(_detector_path(d["name"]))
     if det_data and det_data.get("labelset", {}).get("labels"):
-        return {
-            "name": d["name"],
-            "detector_id": d["id"],
-            "detector_data": det_data,
-        }
+        config["detector_data"] = det_data
 
-    _abort_find(400, f"Detector '{d['name']}' has no labels for detection")
+    if "live_mlp" not in config and "detector_data" not in config:
+        _abort_find(400, f"Detector '{d['name']}' has no labels for detection")
+    return config
+
+
+def _select_scorer(dc: dict, temp_medias: dict[int, dict]) -> str:
+    """Pick ``"live"`` / ``"cold"`` / ``"na"`` for *dc* against *temp_medias*.
+
+    The cached MLP can only be reused when its embedder matches the
+    dataset about to be scored — otherwise the cross-space output is
+    silent garbage at best and a ``nn.Linear`` size-mismatch crash at
+    worst (H5).  When the embedders don't match, fall back to the cold
+    path (which retrains from the labelset using *temp_medias*'s
+    embedder), or ``"na"`` if no cold data is available.
+    """
+    temp_embedder = next(iter(temp_medias.values()), {}).get("embedder", "") or "" if temp_medias else ""
+    live_embedder = dc.get("live_embedder", "") or ""
+    has_live = "live_mlp" in dc
+    has_cold = "detector_data" in dc
+    if has_live and (not live_embedder or not temp_embedder or live_embedder == temp_embedder):
+        return "live"
+    if has_cold:
+        return "cold"
+    return "na"
 
 
 def _build_detector_configs(detectors: list[dict]) -> list[dict]:
@@ -452,10 +477,13 @@ def _score_dataset(
             total_steps=_FIND_STEPS,
         )
 
-        if "live_mlp" in dc:
+        choice = _select_scorer(dc, temp_medias)
+        if choice == "live":
             _score_with_live_mlp(dc, X_all, all_ids, media_results)
-        elif "detector_data" in dc:
+        elif choice == "cold":
             _score_with_cold_detector(dc, temp_medias, X_all, all_ids, media_results)
+        else:
+            _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
 
         scored_units += len(all_ids)
         update_find_progress(
