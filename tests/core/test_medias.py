@@ -607,7 +607,7 @@ class TestAddToPile:
         finally:
             app_module.medias.update(saved)
 
-    def test_concurrent_uploads_same_md5_no_duplicate(self, client):
+    def test_concurrent_uploads_same_md5_no_duplicate(self):
         """H32 regression: two concurrent uploads of identical bytes must
         not produce duplicate medias.
 
@@ -659,11 +659,17 @@ class TestAddToPile:
             try:
                 set_thread_dataset_context(ds_ctx)
                 set_thread_detector_context(det_ctx)
-                r = client.post(
-                    "/api/medias/add-to-pile",
-                    data={"label": "good", "file": (io.BytesIO(wav_bytes), "race.wav")},
-                    content_type="multipart/form-data",
-                )
+                # Each worker thread uses its own test client. The fixture
+                # ``client`` is opened in the main thread, and Flask's test
+                # client preserves request contexts on its own ExitStack —
+                # invoking it from worker threads pushes contexts onto the
+                # workers' ContextVars and breaks the main-thread teardown.
+                with app_module.app.test_client() as c:
+                    r = c.post(
+                        "/api/medias/add-to-pile",
+                        data={"label": "good", "file": (io.BytesIO(wav_bytes), "race.wav")},
+                        content_type="multipart/form-data",
+                    )
                 with lock:
                     results.append((r.status_code, r.get_json()))
             except BaseException as exc:  # noqa: BLE001
