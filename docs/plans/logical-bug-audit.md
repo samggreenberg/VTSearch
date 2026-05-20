@@ -196,9 +196,7 @@ Cross-section interaction agents:
 
 ### Plugins / converters / exporters
 
-- **H17. Plugin scanner silently shadows duplicate names** —
-  `vtsearch/plugins/__init__.py` ~L466. Second plugin with the same
-  `name` overwrites the first; no warning, no error.
+- ~~**H17. Plugin scanner silently shadows duplicate names**~~
 - ~~**H18. CSV exporter doesn't escape embedded newlines**~~ —
   investigation closed (2026-05-20): not a real bug. The audit's
   path is also stale (exporters moved to `vtscore/exporters/`); the
