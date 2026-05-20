@@ -130,10 +130,11 @@ def _stub_detector_training(monkeypatch):
 
     def _fake_load_and_train(detector_names, media_type, first_chunk_medias):
         # Tiny linear "MLP" that always returns 0.5 logit → 0.62 sigmoid.
-        mlp = nn.Sequential(nn.Linear(2, 1))
+        linear = nn.Linear(2, 1)
         with torch.no_grad():
-            mlp[0].weight.zero_()
-            mlp[0].bias.fill_(0.5)
+            linear.weight.data.zero_()
+            linear.bias.data.fill_(0.5)
+        mlp = nn.Sequential(linear)
         mlp.eval()
         return {name: {"mlp": mlp, "threshold": 0.5} for name in detector_names}
 
@@ -141,9 +142,7 @@ def _stub_detector_training(monkeypatch):
 
 
 class TestChunkedPickleIdRenumber:
-    def test_pickle_chunked_export_has_globally_unique_hit_ids(
-        self, client, tmp_path, _stub_detector_training
-    ):
+    def test_pickle_chunked_export_has_globally_unique_hit_ids(self, client, tmp_path, _stub_detector_training):
         """A pickle of 5 medias loaded with chunk_size=2 yields 3 chunks.
 
         Without renumbering, the chunks would carry ids ``[1,2]``,
