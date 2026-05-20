@@ -18,7 +18,9 @@ one code path.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -26,7 +28,25 @@ from typing import Any, Callable
 
 from marshmallow import ValidationError
 
+log = logging.getLogger(__name__)
+
 ChainStep = dict[str, Any]
+
+
+def _content_hash(clip: dict[str, Any]) -> str | None:
+    """Return a short md5 of a clip's payload, or None if no payload is present.
+
+    Used by the chain trail to disambiguate sub-clips when the runtime
+    output count or order drifts from the load-time recording (e.g. a
+    source file changed, a converter library version changed).
+    """
+    s = clip.get("media_string")
+    if isinstance(s, str) and s:
+        return hashlib.md5(s.encode("utf-8")).hexdigest()[:12]
+    b = clip.get("media_bytes")
+    if isinstance(b, (bytes, bytearray)) and b:
+        return hashlib.md5(bytes(b)).hexdigest()[:12]
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +159,7 @@ def _run_clipper_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
     resolved = base.resolve_for_media(media)
     effective = _resolved_clipper_params(resolved)
     outputs = resolved.clip(media)
+    n_out = len(outputs)
     trail_entries: list[ChainStep] = []
     for idx, clip in enumerate(outputs):
         entry: ChainStep = {
@@ -146,6 +167,7 @@ def _run_clipper_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
             "name": resolved.name,
             "params": dict(effective),
             "out_index": idx,
+            "n_out": n_out,
         }
         if clip.get("clip_start") is not None:
             entry["clip_start"] = str(clip["clip_start"])
@@ -153,6 +175,11 @@ def _run_clipper_step(media: dict[str, Any], step: ChainStep) -> tuple[list[dict
             entry["clip_end"] = str(clip["clip_end"])
         if clip.get("clip_box") is not None:
             entry["clip_box"] = ",".join(str(v) for v in clip["clip_box"])
+        if clip.get("clip_index") is not None:
+            entry["clip_index"] = str(clip["clip_index"])
+        ch = _content_hash(clip)
+        if ch is not None:
+            entry["content_hash"] = ch
         trail_entries.append(entry)
     return outputs, trail_entries
 
@@ -166,17 +193,21 @@ def _run_converter_step(media: dict[str, Any], step: ChainStep) -> tuple[list[di
         raise ValueError(f"unknown converter {step['name']!r}")
     outputs = conv.convert(media, step.get("params") or {})
     target = conv.target_type
+    n_out = len(outputs)
     trail_entries: list[ChainStep] = []
     for idx, clip in enumerate(outputs):
         clip.setdefault("type", target)
-        trail_entries.append(
-            {
-                "kind": "converter",
-                "name": conv.name,
-                "params": dict(step.get("params") or {}),
-                "out_index": idx,
-            }
-        )
+        entry: ChainStep = {
+            "kind": "converter",
+            "name": conv.name,
+            "params": dict(step.get("params") or {}),
+            "out_index": idx,
+            "n_out": n_out,
+        }
+        ch = _content_hash(clip)
+        if ch is not None:
+            entry["content_hash"] = ch
+        trail_entries.append(entry)
     return outputs, trail_entries
 
 
@@ -362,29 +393,110 @@ def _load_source_as_media(file_path: Path, source_media_type: str) -> dict[str, 
     return media
 
 
-def _select_chain_output(
+def _output_matches_entry(out: dict[str, Any], entry: ChainStep) -> bool:
+    """Return True iff every recorded disambiguator on *entry* matches *out*.
+
+    Only fields actually recorded in *entry* are checked — missing fields
+    don't constrain the match. Returns True when no disambiguators are
+    recorded (the caller must decide what to do with an empty constraint
+    set, since that case can't distinguish siblings).
+    """
+    cs = entry.get("clip_start")
+    if cs is not None and str(out.get("clip_start")) != str(cs):
+        return False
+    ce = entry.get("clip_end")
+    if ce is not None and str(out.get("clip_end")) != str(ce):
+        return False
+    cb = entry.get("clip_box")
+    if cb is not None and ",".join(str(v) for v in (out.get("clip_box") or [])) != str(cb):
+        return False
+    ci = entry.get("clip_index")
+    if ci is not None and str(out.get("clip_index")) != str(ci):
+        return False
+    ch = entry.get("content_hash")
+    if ch is not None and _content_hash(out) != ch:
+        return False
+    return True
+
+
+def _entry_has_disambiguators(entry: ChainStep) -> bool:
+    """True iff *entry* carries any field that can distinguish sub-outputs."""
+    return any(entry.get(k) is not None for k in ("clip_start", "clip_end", "clip_box", "clip_index", "content_hash"))
+
+
+def _select_chain_output(  # noqa: C901
     outputs: list[dict[str, Any]],
     entry: ChainStep,
 ) -> dict[str, Any] | None:
-    """Pick the matching sub-output by ``out_index`` (or by boundary fields)."""
+    """Pick the sub-output recorded by *entry* from a replay's *outputs* list.
+
+    Selection prefers content-level matching (boundary fields, ``clip_index``,
+    ``content_hash``) over positional matching, because ``out_index`` is only
+    meaningful when the clipper/converter produces the same outputs in the
+    same order at replay time. Returns ``None`` rather than silently
+    selecting an arbitrary output when nothing matches — the caller treats
+    that as an embed failure, which is strictly better than training on
+    the wrong sub-clip's embedding.
+    """
     if not outputs:
         return None
+
+    name = entry.get("name", "?")
     idx = entry.get("out_index")
-    if isinstance(idx, int) and 0 <= idx < len(outputs):
+    n_out_recorded = entry.get("n_out")
+    n_out_now = len(outputs)
+    has_disambiguators = _entry_has_disambiguators(entry)
+
+    drift = isinstance(n_out_recorded, int) and n_out_recorded != n_out_now
+    if drift:
+        log.warning(
+            "clipper_chain: replay output count drift for %r (recorded=%d, now=%d) — falling back to content matching",
+            name,
+            n_out_recorded,
+            n_out_now,
+        )
+
+    # Prefer content matching when we have anything to match against AND
+    # either the count drifted or the indexed pick wouldn't match.
+    if has_disambiguators:
+        in_range_pick = outputs[idx] if isinstance(idx, int) and 0 <= idx < n_out_now else None
+        if in_range_pick is not None and not drift and _output_matches_entry(in_range_pick, entry):
+            return in_range_pick
+        # Either the index is out of range, the count drifted, or the indexed
+        # pick disagrees with the recorded disambiguators. Search every output
+        # for a full disambiguator match.
+        candidates = [out for out in outputs if _output_matches_entry(out, entry)]
+        if len(candidates) == 1:
+            return candidates[0]
+        if not candidates:
+            log.warning(
+                "clipper_chain: no replay output matches recorded disambiguators for %r (idx=%r, n_out=%r→%d)",
+                name,
+                idx,
+                n_out_recorded,
+                n_out_now,
+            )
+            return None
+        log.warning(
+            "clipper_chain: %d replay outputs match recorded disambiguators for %r — ambiguous, refusing to guess",
+            len(candidates),
+            name,
+        )
+        return None
+
+    # No disambiguators recorded — the only handle we have is out_index.
+    if isinstance(idx, int) and 0 <= idx < n_out_now and not drift:
         return outputs[idx]
-    # Fallback: match by clip_start/clip_end/clip_box.
-    cs = entry.get("clip_start")
-    ce = entry.get("clip_end")
-    cb = entry.get("clip_box")
-    for out in outputs:
-        if cs is not None and str(out.get("clip_start")) != str(cs):
-            continue
-        if ce is not None and str(out.get("clip_end")) != str(ce):
-            continue
-        if cb is not None and ",".join(str(v) for v in (out.get("clip_box") or [])) != str(cb):
-            continue
-        return out
-    return outputs[0]
+
+    log.warning(
+        "clipper_chain: cannot select replay output for %r — no disambiguators recorded and "
+        "positional index unusable (idx=%r, n_out=%r→%d)",
+        name,
+        idx,
+        n_out_recorded,
+        n_out_now,
+    )
+    return None
 
 
 _FINAL_EXT_BY_TYPE = {
