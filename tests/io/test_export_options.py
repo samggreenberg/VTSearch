@@ -256,6 +256,38 @@ class TestFillFromSortConfirm:
         assert data["good_applied"] == 0
         assert len(app_module.good_votes) == 0
 
+    def test_disk_sync_failure_surfaces_as_500(self, client, monkeypatch):
+        """C11 regression: a sync failure must not be silently swallowed.
+
+        Before the fix the route logged the failure and still returned 200 —
+        the UI then treated the labels as committed while the detector JSON
+        on disk had never been updated. After the fix the request fails
+        with a 5xx so the client can react.
+        """
+        from vtscore.detectors import label_sync
+
+        def _boom() -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(label_sync, "sync_labels_to_loaded_detector", _boom)
+
+        results = self._sort_results()
+        resp = client.post(
+            "/api/labels/fill-from-sort",
+            json={
+                "sort_results": results,
+                "threshold": 0.5,
+                "sides": "good",
+                "confirm": True,
+            },
+        )
+        assert resp.status_code == 500
+        data = resp.get_json() or {}
+        # flask_smorest places the error text in ``message`` (or ``errors``);
+        # accept either to stay schema-tolerant.
+        blob = json.dumps(data)
+        assert "disk full" in blob or "persist labels" in blob
+
 
 # ---------------------------------------------------------------------------
 # CLI _score_medias_with_detectors negative_hits

@@ -178,7 +178,7 @@ Cross-section interaction agents:
   filename / md5 / custom_metadata for dataset B's id=1.
 - **Fix sketch:** Key the cache by `${datasetId}:${mediaId}`.
 
-### C11. `fill_labels_from_sort` silently swallows sync failures
+### C11. `fill_labels_from_sort` silently swallows sync failures — **SHIPPED 2026-05-19**
 
 - **File:** `vtsearch/routes/labels/vote.py` ~L259–301
 - **Bug:** After applying labels, the endpoint calls
@@ -186,6 +186,28 @@ Cross-section interaction agents:
   outside any try-block. The HTTP response is built before those
   calls' results are known; a failure logs but returns "success" —
   labels appear committed in the UI but never reach disk.
+- **Fix:** Both sync calls now run **before** the response is built
+  and are wrapped in `try/except`. A failure from
+  `sync_labels_to_loaded_detector()` (disk write, detector-registry
+  update, etc.) is logged and re-raised as a 500 with the underlying
+  error message so the frontend can react instead of treating the
+  labels as persisted. `sync_to_labelset_source()` is fire-and-forget
+  by design (debounced background timer) — its synchronous portion is
+  also wrapped defensively, but a failure there does **not** fail the
+  request because disk state is already consistent. Regression test:
+  `tests/io/test_export_options.py::TestFillFromSortConfirm::test_disk_sync_failure_surfaces_as_500`.
+- **Known limitation / follow-up:** When the disk sync fails, the
+  in-memory labels are *not* rolled back — they remain applied until
+  the next successful sync writes them through (any subsequent vote
+  or fill-from-sort run will reconcile). Full transactional rollback
+  (pattern #8) is deferred; this fix only stops the silent-success
+  failure mode that lets the UI diverge from disk indefinitely. The
+  same untrapped sync pattern still exists in
+  `vtsearch/routes/labels/vote.py::import_labels`,
+  `vtsearch/routes/sorting.py`, `vtsearch/routes/media/list.py`,
+  `vtsearch/routes/labels/importers.py`, and
+  `vtsearch/routes/detectors/{registry,scoring}.py`; each is its own
+  audit item under pattern #8 and out of scope for C11.
 
 ### C12. Orphaned dataset registry entry on activation failure
 
