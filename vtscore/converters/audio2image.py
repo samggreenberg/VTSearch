@@ -198,7 +198,10 @@ class Audio2ImageMediaConverter(MediaConverter):
             n_mels = int(self.get_param(params, "n_mels") or 128)
         except (TypeError, ValueError):
             n_mels = 128
-        n_mels = max(8, n_mels)
+        # Defensive clamp to the declared PluginField range — the upstream
+        # plugin schema enforces this for any API-supplied params, but direct
+        # callers of convert() (tests, ad-hoc scripts) skip that path.
+        n_mels = max(8, min(512, n_mels))
 
         try:
             time_window_s = float(self.get_param(params, "time_window_s") or 0)

@@ -24,6 +24,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
+from marshmallow import ValidationError
+
 ChainStep = dict[str, Any]
 
 
@@ -87,6 +89,10 @@ def validate_chain(steps: list[ChainStep], source_media_type: str) -> str:
             conv = get_converter(name)
             if conv is None:
                 raise ValueError(f"chain step {i}: unknown converter {name!r}")
+            try:
+                conv.validate_params(step.get("params") or {})
+            except ValidationError as e:
+                raise ValueError(f"chain step {i} (converter {name!r}): invalid params: {e.messages}") from e
             in_type = conv.source_type
             out_type = conv.target_type
         if in_type != current:

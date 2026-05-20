@@ -102,6 +102,49 @@ class TestSchemaBuilder:
         schema = make_plugin_arg_schema(plugin)()
         assert schema.load({"x": 2.5}) == {"x": 2.5}
 
+    def test_number_integer_range_enforced(self):
+        plugin = _FakePlugin(
+            [PluginField(key="n", label="N", field_type="number", default="128", step="1", min="8", max="512")]
+        )
+        schema = make_plugin_arg_schema(plugin)()
+        # In-range values pass.
+        assert schema.load({"n": 8}) == {"n": 8}
+        assert schema.load({"n": 512}) == {"n": 512}
+        # Below min and above max are both rejected.
+        with pytest.raises(ValidationError) as exc:
+            schema.load({"n": 7})
+        assert "n" in exc.value.messages
+        with pytest.raises(ValidationError) as exc:
+            schema.load({"n": 10_000_000})
+        assert "n" in exc.value.messages
+
+    def test_number_float_range_enforced(self):
+        plugin = _FakePlugin(
+            [PluginField(key="t", label="T", field_type="number", default="0.5", step="0.05", min="0", max="1")]
+        )
+        schema = make_plugin_arg_schema(plugin)()
+        assert schema.load({"t": 0.0}) == {"t": 0.0}
+        assert schema.load({"t": 1.0}) == {"t": 1.0}
+        with pytest.raises(ValidationError):
+            schema.load({"t": -0.1})
+        with pytest.raises(ValidationError):
+            schema.load({"t": 1.5})
+
+    def test_number_min_only_allows_arbitrary_upper(self):
+        # synthetic.size, video2audio.ffmpeg_timeout etc. declare only a floor.
+        plugin = _FakePlugin([PluginField(key="n", label="N", field_type="number", default="100", min="1", step="1")])
+        schema = make_plugin_arg_schema(plugin)()
+        assert schema.load({"n": 1_000_000}) == {"n": 1_000_000}
+        with pytest.raises(ValidationError):
+            schema.load({"n": 0})
+
+    def test_number_no_range_when_unset(self):
+        # No min / no max → no Range validator attached.
+        plugin = _FakePlugin([PluginField(key="n", label="N", field_type="number", default="1", step="1")])
+        schema = make_plugin_arg_schema(plugin)()
+        assert schema.load({"n": -999_999}) == {"n": -999_999}
+        assert schema.load({"n": 999_999_999}) == {"n": 999_999_999}
+
     def test_checkbox_accepts_string_true_false(self):
         plugin = _FakePlugin([PluginField(key="flag", label="Flag", field_type="checkbox", default="false")])
         schema = make_plugin_arg_schema(plugin)()

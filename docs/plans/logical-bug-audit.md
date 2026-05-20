@@ -222,9 +222,22 @@ Cross-section interaction agents:
 - **H19. Required select fields silently accept empty string** —
   `vtsearch/plugins/schema.py` L119. `required` + `load_default=""`
   lets empty value through marshmallow.
-- **H20. `audio2image` has no upper bound on `n_mels`** —
-  `vtsearch/converters/audio2image.py` L201. `max(8, n_mels)` only
-  sets the floor; absurdly large user input → OOM/DoS.
+- ~~**H20. `audio2image` has no upper bound on `n_mels`**~~ — fixed
+  systemically in `vtscore/plugins/schema.py:_build_number()`, which
+  now attaches `validate.Range` whenever a `PluginField` declares
+  numeric `min` / `max` (so every plugin family that goes through
+  `validate_plugin_args` benefits). Converters bypass that route-layer
+  schema because their `params` ride inside `source_specs` /
+  `clipper_chain` pass-through dicts, so they got their own entry
+  point: `MediaConverter.validate_params()` runs the params through
+  the converter's own plugin schema, and the two upstream parsers
+  (`_parse_multi_media_specs` and `clipper_chain.validate_chain`) call
+  it before any expensive work runs. The `audio2image` declared range
+  is now actually enforced — `n_mels=10_000_000` is rejected at
+  request time instead of building a ~41 GB mel filter bank inside
+  librosa. Audited every numeric `PluginField` in the codebase; no
+  declared `max` was tighter than real usage, so attaching `Range`
+  everywhere was safe.
 
 ### CLI / app entry
 
