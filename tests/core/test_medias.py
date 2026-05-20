@@ -689,8 +689,7 @@ class TestAddToPile:
 
         # Exactly one new media inserted (the regression: was 2 before fix).
         assert len(app_module.medias) == initial_count + 1, (
-            f"H32: duplicate insert — medias grew by "
-            f"{len(app_module.medias) - initial_count}, expected 1"
+            f"H32: duplicate insert — medias grew by {len(app_module.medias) - initial_count}, expected 1"
         )
 
         # Both requests succeed and report the same media id.
@@ -705,8 +704,5 @@ class TestAddToPile:
 
         # The single inserted media carries the uploaded bytes' md5.
         inserted_id = next(iter(media_ids))
-        assert (
-            app_module.medias[inserted_id]["md5"]
-            == hashlib.md5(wav_bytes).hexdigest()
-        )
+        assert app_module.medias[inserted_id]["md5"] == hashlib.md5(wav_bytes).hexdigest()
         assert inserted_id in app_module.good_votes
