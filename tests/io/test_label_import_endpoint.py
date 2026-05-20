@@ -650,9 +650,7 @@ class TestPartialFailure:
             p = tmp_path / "labels.json"
             p.write_text(payload)
 
-            real_apply_label = __import__(
-                "vtsearch.routes.labels.importers", fromlist=["apply_label"]
-            )
+            real_apply_label = __import__("vtsearch.routes.labels.importers", fromlist=["apply_label"])
 
             def flaky_apply(cid, label, **kwargs):
                 if cid == 2:
