@@ -179,6 +179,7 @@ def _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name: str) -> None:
     """
     if det_ctx.embedder and embedder_name and det_ctx.embedder != embedder_name:
         det_ctx.label_embeddings.clear()
+        det_ctx.label_embedding_regions.clear()
 
 
 def _resolve_uncached_embedding(
@@ -247,25 +248,29 @@ def populate_label_embeddings(
     embedder_name = _embedder_for_active_dataset(snap)
     _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name)
     cache: dict[str, np.ndarray] = det_ctx.label_embeddings
+    region_cache: dict[str, tuple[float, float, float, float] | None] = det_ctx.label_embedding_regions
     total = len(labelset.elements)
     cached = 0
 
     for idx, elem in enumerate(labelset.elements):
         eid = stable_element_id(elem)
-        # Region-voted elements always re-pool from the source patch grid:
-        # the cache is keyed by ``stable_element_id`` (origin / md5), which
-        # is intentionally stable across region edits.  Re-pooling per
-        # training pass is cheap (one patch grid + uniform mean) and is the
-        # only way region_box changes propagate without an explicit cache
-        # invalidation.  Image-level elements keep the cached embedding so
-        # the existing fast path for non-region datasets is unchanged.
-        if eid in cache and elem.region_box is None:
+        # Cache hit only when the cached vector was built against the same
+        # ``region_box`` the element currently carries.  Region-voted
+        # elements (``region_box is not None``) always fall through so the
+        # patch grid is re-pooled with the latest box.  Image-level
+        # elements use the cache only when the cached vector was *also*
+        # built image-level — otherwise we'd return a stale region-pooled
+        # vector after a region→none transition (e.g. good→bad on a
+        # previously region-voted media; or un-vote / re-vote without a
+        # region).  See ``logical-bug-audit.md`` finding M4.
+        if eid in cache and elem.region_box is None and region_cache.get(eid) is None:
             cached += 1
             continue
 
         emb = _resolve_uncached_embedding(elem, snap, media_type=media_type, embedder_name=embedder_name)
         if emb is not None:
             cache[eid] = emb
+            region_cache[eid] = elem.region_box
             cached += 1
         if on_progress:
             on_progress(elem.origin_name or elem.filename or eid, idx + 1, total)
@@ -440,5 +445,7 @@ def update_cache_for_cid(
         return
     for elem in labelset.elements:
         if element_key(elem) == target_key:
-            det_ctx.label_embeddings[stable_element_id(elem)] = np.asarray(embedding)
+            eid = stable_element_id(elem)
+            det_ctx.label_embeddings[eid] = np.asarray(embedding)
+            det_ctx.label_embedding_regions[eid] = None
             return

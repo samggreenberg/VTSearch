@@ -317,6 +317,14 @@ class DetectorContext:
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
         "label_embeddings",  # str → np.ndarray, keyed by stable_element_id
+        # Region box the cached ``label_embeddings`` entry was built against,
+        # keyed by stable_element_id.  ``None`` means the cached vector is
+        # image-level; a 4-tuple means it was pooled from that box.  Lets
+        # ``populate_label_embeddings`` detect a region→none (or any region
+        # edit) transition and re-resolve instead of returning a stale
+        # region-pooled vector keyed to an element that no longer has a
+        # region.  See ``logical-bug-audit.md`` finding M4.
+        "label_embedding_regions",
         "model",  # nn.Sequential | None — current trained MLP
         "threshold",  # decision threshold
         # Cross-dataset training-corpus counts (from on-disk labelset).  These
@@ -381,6 +389,7 @@ class DetectorContext:
         # training and learned-sort use *all* saved labels — including
         # those whose underlying media isn't part of the active dataset.
         self.label_embeddings: dict[str, Any] = {}
+        self.label_embedding_regions: dict[str, tuple[float, float, float, float] | None] = {}
         self.model: Any = None  # nn.Sequential | None
         self.threshold: float = 0.5
         self.labelset_good_count: int = 0
@@ -573,6 +582,7 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "inclusion", None)
         object.__setattr__(self, "training_medias", _FrozenDict("detector"))
         object.__setattr__(self, "label_embeddings", _FrozenDict("detector"))
+        object.__setattr__(self, "label_embedding_regions", _FrozenDict("detector"))
         object.__setattr__(self, "model", None)
         object.__setattr__(self, "threshold", 0.5)
         object.__setattr__(self, "labelset_good_count", 0)
