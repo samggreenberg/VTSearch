@@ -1,6 +1,7 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import { BehaviorSubject, Subject, timer } from 'rxjs';
-import { switchMap, takeUntil } from 'rxjs/operators';
+import { BehaviorSubject, Observable, Subject, timer } from 'rxjs';
+import { switchMap, takeUntil, tap } from 'rxjs/operators';
+import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import { VotesResponse } from '../models/api.models';
 import { MediasApiService } from './medias-api.service';
 import { SortingApiService } from './sorting-api.service';
@@ -22,6 +23,8 @@ export interface UndoToast {
   mediaName: string;
 }
 
+type VoteState = 'good' | 'bad' | 'none';
+
 const UNDO_STACK_MAX = 20;
 
 @Injectable({ providedIn: 'root' })
@@ -35,8 +38,15 @@ export class VoteStateService implements OnDestroy {
   private readonly destroy$ = new Subject<void>();
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
-  /** Tracks optimistic votes not yet confirmed by the server. */
-  private pendingOptimistic = new Map<number, { vote: 'good' | 'bad'; clickTime: number }>();
+  /**
+   * Optimistic post-vote state per media, used to preserve the user's click
+   * across a polling response that raced ahead of the vote POST.  Cleared
+   * deterministically on every vote POST response — the server's reply IS
+   * the authoritative state, so there is no longer a "permanently stuck"
+   * desync if our prediction disagreed with the server (the persistent-desync
+   * half of logical-bug-audit H1).
+   */
+  private pendingOptimistic = new Map<number, { state: VoteState; clickTime: number | null }>();
 
   /** Past votes available to undo, most-recent last.  Capped at UNDO_STACK_MAX. */
   private past: UndoEntry[] = [];
@@ -103,48 +113,107 @@ export class VoteStateService implements OnDestroy {
     return this.labelsetGoodCount > 0 && this.labelsetBadCount > 0;
   }
 
+  /** Current local polarity for *id*, or ``'none'`` when not voted. */
+  private currentState(id: number): VoteState {
+    if (this.goodVotesSubject.value.has(id)) return 'good';
+    if (this.badVotesSubject.value.has(id)) return 'bad';
+    return 'none';
+  }
+
   /**
-   * Optimistically update local vote sets to reflect a toggle vote.
-   *
-   * This mirrors the backend toggle semantics so that callers checking
-   * vote state immediately after a vote see the updated counts without
-   * waiting for the async loadVotes() HTTP round-trip.
+   * Translate a clicked direction into an absolute target by the local
+   * toggle rule (clicking the current polarity un-votes; anything else sets
+   * to the clicked polarity).  Pure — does not mutate local state.
    */
-  applyOptimisticVote(id: number, vote: 'good' | 'bad'): void {
+  toggleTargetFor(id: number, clickedDirection: 'good' | 'bad'): VoteState {
+    return this.currentState(id) === clickedDirection ? 'none' : clickedDirection;
+  }
+
+  /**
+   * Submit a click on a media with the local-view toggle rule.
+   *
+   * Computes the target from current local state, optimistically applies
+   * it, POSTs ``target`` to ``/api/medias/<id>/vote``, and reconciles the
+   * local view from the server's response when it arrives.  All callers in
+   * the components (centre / right / find / label views) funnel through
+   * here so the toggle-to-target conversion lives in exactly one place.
+   *
+   * @param regionBox  Optional good-vote region.  Honoured only when the
+   *                   computed target is ``'good'``.
+   */
+  submitToggleVote(
+    id: number,
+    clickedDirection: 'good' | 'bad',
+    regionBox?: readonly number[] | null,
+  ): Observable<MediaVoteResponse> {
+    const target = this.toggleTargetFor(id, clickedDirection);
+    this.applyOptimisticState(id, target);
+    return this.mediasApi.vote(id, target, target === 'good' ? regionBox : null).pipe(
+      tap((resp) => this.reconcileVoteResponse(id, resp)),
+    );
+  }
+
+  /**
+   * Optimistically apply an absolute target state without going through the
+   * toggle rule.  Used by {@link submitToggleVote} (above) and by the
+   * Cmd-Z undo / redo flow, where the desired post-call state is known
+   * directly (a polarity to restore, or ``'none'`` to wipe the vote).
+   */
+  applyOptimisticState(id: number, target: VoteState): void {
     const good = new Set(this.goodVotesSubject.value);
     const bad = new Set(this.badVotesSubject.value);
-
-    const isAdd = vote === 'good' ? !good.has(id) : !bad.has(id);
-
-    if (vote === 'good') {
-      if (good.has(id)) {
-        good.delete(id);
-      } else {
-        good.add(id);
-        bad.delete(id);
-      }
-    } else {
-      if (bad.has(id)) {
-        bad.delete(id);
-      } else {
-        bad.add(id);
-        good.delete(id);
-      }
-    }
-
-    // Set an optimistic click time so the item sorts correctly immediately,
-    // rather than appearing with time=-1 and then jumping when the server responds.
     const times = { ...this.clickTimesSubject.value };
-    if (isAdd) {
-      const maxTime = Object.values(times).reduce((m, t) => Math.max(m, t), 0);
-      const optimisticTime = maxTime + 1;
-      times[String(id)] = optimisticTime;
-      this.pendingOptimistic.set(id, { vote, clickTime: optimisticTime });
-    } else {
-      this.pendingOptimistic.delete(id);
+
+    good.delete(id);
+    bad.delete(id);
+
+    let optimisticClickTime: number | null = null;
+    if (target === 'good') {
+      good.add(id);
+    } else if (target === 'bad') {
+      bad.add(id);
     }
+    if (target !== 'none') {
+      // Set an optimistic click time so the item sorts correctly immediately,
+      // rather than appearing with time=-1 and then jumping when the server responds.
+      const maxTime = Object.values(times).reduce((m, t) => Math.max(m, t), 0);
+      optimisticClickTime = maxTime + 1;
+      times[String(id)] = optimisticClickTime;
+    } else {
+      delete times[String(id)];
+    }
+
+    this.pendingOptimistic.set(id, { state: target, clickTime: optimisticClickTime });
 
     // Emit all changes together so Angular sees a single consistent state.
+    this.goodVotesSubject.next(good);
+    this.badVotesSubject.next(bad);
+    this.clickTimesSubject.next(times);
+  }
+
+  /**
+   * Apply the absolute state the server confirmed in its vote response,
+   * regardless of what the optimistic prediction was.  Pending optimism is
+   * cleared deterministically here — even if our prediction was wrong, the
+   * server's reply replaces it so the desync cannot persist.
+   */
+  reconcileVoteResponse(id: number, resp: MediaVoteResponse): void {
+    this.pendingOptimistic.delete(id);
+    const good = new Set(this.goodVotesSubject.value);
+    const bad = new Set(this.badVotesSubject.value);
+    const times = { ...this.clickTimesSubject.value };
+
+    good.delete(id);
+    bad.delete(id);
+    if (resp.state === 'good') good.add(id);
+    else if (resp.state === 'bad') bad.add(id);
+
+    if (resp.click_time != null) {
+      times[String(id)] = resp.click_time;
+    } else {
+      delete times[String(id)];
+    }
+
     this.goodVotesSubject.next(good);
     this.badVotesSubject.next(bad);
     this.clickTimesSubject.next(times);
@@ -188,9 +257,9 @@ export class VoteStateService implements OnDestroy {
 
   /**
    * Snapshot the polarity *before* a vote click and push it onto the undo
-   * stack.  Must be called BEFORE applyOptimisticVote (otherwise the snapshot
-   * would already reflect the toggle).  Any pending redo entries are dropped,
-   * matching standard editor undo semantics.
+   * stack.  Must be called BEFORE {@link submitToggleVote} (otherwise the
+   * snapshot would already reflect the toggle).  Any pending redo entries
+   * are dropped, matching standard editor undo semantics.
    */
   recordVote(mediaId: number, clickedDirection: 'good' | 'bad', mediaName: string): void {
     const previousPolarity: 'good' | 'bad' | null = this.goodVotesSubject.value.has(mediaId)
@@ -212,10 +281,10 @@ export class VoteStateService implements OnDestroy {
   }
 
   /**
-   * Reverse the most recent vote.  The inverse POST is:
-   *   - {@code previousPolarity} if non-null (restores prior state, including
-   *     polarity flips since /vote toggles mutual exclusion server-side), or
-   *   - {@code clickedDirection} if previousPolarity was null (toggles off).
+   * Reverse the most recent vote.  The inverse target is:
+   *   - the saved {@code previousPolarity} (restores prior state, including
+   *     polarity flips), or
+   *   - ``'none'`` when previousPolarity was null (un-votes).
    *
    * Side effects that aren't reversible (achievements, label_history append,
    * click_counter monotonicity) are accepted — the user really did make the
@@ -225,24 +294,29 @@ export class VoteStateService implements OnDestroy {
     const entry = this.past.pop();
     if (!entry) return;
     this.future.push(entry);
-    const direction: 'good' | 'bad' = entry.previousPolarity ?? entry.clickedDirection;
-    this.applyOptimisticVote(entry.mediaId, direction);
-    this.mediasApi.vote(entry.mediaId, direction).subscribe({
-      next: () => this.loadVotes(),
+    const target: VoteState = entry.previousPolarity ?? 'none';
+    this.applyOptimisticState(entry.mediaId, target);
+    this.mediasApi.vote(entry.mediaId, target).subscribe({
+      next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
       error: () => this.loadVotes(),
     });
     this.toastSubject.next({ action: 'undo', mediaName: entry.mediaName });
   }
 
-  /** Re-apply the most recently undone vote — POST the original direction. */
+  /** Re-apply the most recently undone vote — POST the toggled-from-prior target. */
   redo(): void {
     const entry = this.future.pop();
     if (!entry) return;
     this.past.push(entry);
     if (this.past.length > UNDO_STACK_MAX) this.past.shift();
-    this.applyOptimisticVote(entry.mediaId, entry.clickedDirection);
-    this.mediasApi.vote(entry.mediaId, entry.clickedDirection).subscribe({
-      next: () => this.loadVotes(),
+    // The redo target is whichever polarity the original click landed on
+    // (clickedDirection unless previousPolarity matched, in which case the
+    // click was an un-vote).
+    const target: VoteState =
+      entry.previousPolarity === entry.clickedDirection ? 'none' : entry.clickedDirection;
+    this.applyOptimisticState(entry.mediaId, target);
+    this.mediasApi.vote(entry.mediaId, target).subscribe({
+      next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
       error: () => this.loadVotes(),
     });
     this.toastSubject.next({ action: 'redo', mediaName: entry.mediaName });
@@ -253,25 +327,20 @@ export class VoteStateService implements OnDestroy {
     const bad = new Set(votes.bad);
     const times = { ...votes.click_times };
 
-    // Preserve optimistic votes that the server hasn't acknowledged yet.
-    // Without this, a stale polling response (or a loadVotes() response that
-    // raced ahead of the vote POST) would remove the item from the grid,
-    // causing it to disappear and reappear (flicker).
+    // Preserve optimistic votes whose POSTs haven't returned yet.  Once a
+    // POST resolves, reconcileVoteResponse() clears the pending entry and
+    // applies the server's authoritative state — so any preserved entry
+    // here is genuinely in-flight, not a permanent prediction-vs-server
+    // desync (the H1 stuck-prediction case is gone).
     for (const [id, opt] of this.pendingOptimistic) {
-      const serverHasIt = opt.vote === 'good' ? good.has(id) : bad.has(id);
-      if (serverHasIt) {
-        // Server caught up — stop preserving this optimistic vote.
-        this.pendingOptimistic.delete(id);
-      } else {
-        // Server hasn't processed the vote yet — keep optimistic state.
-        if (opt.vote === 'good') {
-          good.add(id);
-          bad.delete(id);
-        } else {
-          bad.add(id);
-          good.delete(id);
-        }
+      good.delete(id);
+      bad.delete(id);
+      if (opt.state === 'good') good.add(id);
+      else if (opt.state === 'bad') bad.add(id);
+      if (opt.clickTime != null) {
         times[String(id)] = opt.clickTime;
+      } else {
+        delete times[String(id)];
       }
     }
 

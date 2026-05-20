@@ -67,6 +67,7 @@ from vtscore.state.votes import (  # noqa: F401
     get_learned_scores,
     get_textsort_suggestions,
     set_find_initial_labels,
+    set_vote,
     toggle_vote,
     update_learned_scores,
 )

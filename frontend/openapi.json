@@ -3207,36 +3207,53 @@
       "MediaVoteRequest": {
         "properties": {
           "region_box": {
-            "description": "Optional 4-element ``[x0, y0, x1, y1]`` in normalised image coordinates ``[0, 1]``. Only valid on good votes.",
+            "description": "Optional 4-element ``[x0, y0, x1, y1]`` in normalised image coordinates ``[0, 1]``. Only valid when ``target`` is ``good``.",
             "items": {
               "type": "number"
             },
             "nullable": true,
             "type": "array"
           },
-          "vote": {
-            "description": "``good`` or ``bad``.",
+          "target": {
+            "description": "Absolute target state: ``good``, ``bad``, or ``none`` (un-vote). Idempotent.",
             "enum": [
               "good",
-              "bad"
+              "bad",
+              "none"
             ],
             "type": "string"
           }
         },
         "required": [
-          "vote"
+          "target"
         ],
         "type": "object"
       },
       "MediaVoteResponse": {
         "additionalProperties": false,
         "properties": {
+          "click_time": {
+            "description": "Click-time ordinal of the new label, or ``null`` when the target is ``none`` or the call was a no-op.",
+            "nullable": true,
+            "type": "integer"
+          },
           "ok": {
             "type": "boolean"
+          },
+          "state": {
+            "description": "The media's vote state after the call.",
+            "enum": [
+              "good",
+              "bad",
+              "none"
+            ],
+            "type": "string"
           }
         },
         "required": [
-          "ok"
+          "click_time",
+          "ok",
+          "state"
         ],
         "type": "object"
       },
@@ -9403,7 +9420,7 @@
         }
       ],
       "post": {
-        "description": "Voting behaviour (toggle semantics):\n\n- If ``vote == \"good\"`` and the media is already in ``good_votes``, the\n  vote is *removed* (toggled off).\n- If ``vote == \"good\"`` and the media is not yet in ``good_votes``, it is\n  added to ``good_votes`` (removed from ``bad_votes`` if present) and the\n  event is appended to ``label_history``.\n- The same toggle logic applies symmetrically for ``vote == \"bad\"``.\n\nYes-votes may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised image\ncoords in ``[0, 1]``) to designate the good region. No-votes that\ninclude ``region_box`` are rejected \u2014 by design no-votes are\nimage-level always (patch-embedder v2).",
+        "description": "``target`` is one of:\n\n- ``\"good\"`` \u2014 set to good (overrides ``bad`` if present).\n- ``\"bad\"`` \u2014 set to bad (overrides ``good`` if present).\n- ``\"none\"`` \u2014 un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1 \u2014 two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box`` \u2014 by\ndesign no-votes are image-level always (patch-embedder v2).\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9426,7 +9443,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "region_box is malformed, or a bad-vote carries a region_box."
+            "description": "region_box is malformed, or a non-good target carries a region_box."
           },
           "404": {
             "description": "Media not found."
@@ -9438,7 +9455,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Record or toggle a good/bad vote for a single media item.",
+        "summary": "Set a single media's vote to an **absolute target state**.",
         "tags": [
           "medias"
         ]

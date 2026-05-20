@@ -130,20 +130,33 @@ class MediaBatchResponseSchema(_MediaBatchEntrySchema):
 class MediaVoteRequestSchema(Schema):
     """Body for ``POST /api/medias/<id>/vote``.
 
+    The endpoint uses **absolute-target** semantics: ``target`` is the
+    state the caller wants the media to be in after the call.  Repeats
+    are idempotent — sending ``target="good"`` on a media that's already
+    good does nothing, does not append to ``label_history``, and does
+    not credit achievements.  This closes the H1 counter-inflation race
+    where two stale-view tabs each thought they were toggling the same
+    media and the server alternated ADD/REMOVE on every click.
+
     ``region_box`` is a 4-tuple of normalised image coords (``[x0, y0,
     x1, y1]`` in ``[0, 1]``). Per the patch-embedder v2 design, only
-    good votes may carry a region; the handler rejects bad votes with a
-    region_box.
+    good votes may carry a region; the handler rejects ``"bad"`` /
+    ``"none"`` targets that carry a region_box.
 
     Unknown fields are silently dropped so the frontend can attach
     advisory keys (e.g. ``confidence``, ``note``) without breaking the
     schema check.
     """
 
-    vote = fields.String(
+    target = fields.String(
         required=True,
-        validate=validate.OneOf(["good", "bad"]),
-        metadata={"description": "``good`` or ``bad``."},
+        validate=validate.OneOf(["good", "bad", "none"]),
+        metadata={
+            "description": (
+                "Absolute target state: ``good``, ``bad``, or ``none`` "
+                "(un-vote). Idempotent."
+            ),
+        },
     )
     region_box = fields.List(
         fields.Float(),
@@ -151,7 +164,7 @@ class MediaVoteRequestSchema(Schema):
         metadata={
             "description": (
                 "Optional 4-element ``[x0, y0, x1, y1]`` in normalised image "
-                "coordinates ``[0, 1]``. Only valid on good votes."
+                "coordinates ``[0, 1]``. Only valid when ``target`` is ``good``."
             ),
         },
     )
@@ -161,9 +174,30 @@ class MediaVoteRequestSchema(Schema):
 
 
 class MediaVoteResponseSchema(Schema):
-    """Response for ``POST /api/medias/<id>/vote`` (success path)."""
+    """Response for ``POST /api/medias/<id>/vote`` (success path).
+
+    Returns the post-call state so the client can reconcile its optimistic
+    view without needing a follow-up ``GET /api/votes``.  ``click_time`` is
+    the ordinal assigned when the target is ``good``/``bad`` and the call
+    actually changed the state; ``null`` on un-vote and on idempotent calls.
+    """
 
     ok = fields.Boolean(required=True)
+    state = fields.String(
+        required=True,
+        validate=validate.OneOf(["good", "bad", "none"]),
+        metadata={"description": "The media's vote state after the call."},
+    )
+    click_time = fields.Integer(
+        required=True,
+        allow_none=True,
+        metadata={
+            "description": (
+                "Click-time ordinal of the new label, or ``null`` when the "
+                "target is ``none`` or the call was a no-op."
+            ),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

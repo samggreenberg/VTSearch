@@ -551,13 +551,13 @@ describe('LabelViewComponent', () => {
     const voteState = TestBed.inject(VoteStateService);
 
     // Simulate leftover votes from a previous session (e.g. old detector)
-    voteState.applyOptimisticVote(1, 'good');
-    voteState.applyOptimisticVote(2, 'good');
-    voteState.applyOptimisticVote(3, 'good');
-    voteState.applyOptimisticVote(4, 'bad');
-    voteState.applyOptimisticVote(5, 'bad');
-    voteState.applyOptimisticVote(6, 'bad');
-    voteState.applyOptimisticVote(7, 'bad');
+    voteState.applyOptimisticState(1, 'good');
+    voteState.applyOptimisticState(2, 'good');
+    voteState.applyOptimisticState(3, 'good');
+    voteState.applyOptimisticState(4, 'bad');
+    voteState.applyOptimisticState(5, 'bad');
+    voteState.applyOptimisticState(6, 'bad');
+    voteState.applyOptimisticState(7, 'bad');
     expect(voteState.goodVotes.size).toBe(3);
     expect(voteState.badVotes.size).toBe(4);
 

@@ -374,17 +374,20 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const m = this.mediaState.getMedia(event.id);
     const name = m?.filename || m?.origin_name || `#${event.id}`;
     this.voteState.recordVote(event.id, event.vote, name);
-    this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({
-      next: () => {
-        this.onMediaVoted(event);
-      },
-    });
+    this.voteState
+      .submitToggleVote(event.id, event.vote)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.onMediaVoted(event);
+        },
+      });
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
-    // In find mode: update labels but do NOT re-train or re-sort.
-    // Just update the vote state so the right panel and left panel stripe update.
-    this.voteState.applyOptimisticVote(event.id, event.vote);
+    // In find mode: re-fetch labelset counters but skip a re-sort. The local
+    // vote state has already been reconciled from the POST response inside
+    // submitToggleVote, so a follow-up GET /api/votes only refreshes counts.
     this.voteState.loadVotes();
   }
 

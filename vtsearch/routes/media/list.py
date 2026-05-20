@@ -42,8 +42,8 @@ from vtsearch.state import (
     get_media,
     medias,
     next_media_id,
+    set_vote,
     snapshot_medias,
-    toggle_vote,
 )
 
 medias_bp = Blueprint(
@@ -519,38 +519,47 @@ def media_generic(media_id: int):
 @medias_bp.route("/api/medias/<int:media_id>/vote", methods=["POST"])
 @medias_bp.arguments(MediaVoteRequestSchema)
 @medias_bp.response(200, MediaVoteResponseSchema)
-@medias_bp.alt_response(400, description="region_box is malformed, or a bad-vote carries a region_box.")
+@medias_bp.alt_response(400, description="region_box is malformed, or a non-good target carries a region_box.")
 @medias_bp.alt_response(404, description="Media not found.")
 def vote_media(body: dict, media_id: int):
-    """Record or toggle a good/bad vote for a single media item.
+    """Set a single media's vote to an **absolute target state**.
 
-    Voting behaviour (toggle semantics):
+    ``target`` is one of:
 
-    - If ``vote == "good"`` and the media is already in ``good_votes``, the
-      vote is *removed* (toggled off).
-    - If ``vote == "good"`` and the media is not yet in ``good_votes``, it is
-      added to ``good_votes`` (removed from ``bad_votes`` if present) and the
-      event is appended to ``label_history``.
-    - The same toggle logic applies symmetrically for ``vote == "bad"``.
+    - ``"good"`` — set to good (overrides ``bad`` if present).
+    - ``"bad"`` — set to bad (overrides ``good`` if present).
+    - ``"none"`` — un-vote (remove any existing vote).
 
-    Yes-votes may carry ``"region_box": [x0, y0, x1, y1]`` (normalised image
-    coords in ``[0, 1]``) to designate the good region. No-votes that
-    include ``region_box`` are rejected — by design no-votes are
-    image-level always (patch-embedder v2).
+    Behaviour is **idempotent**: sending the current state is a no-op
+    that does not append to ``label_history``, does not credit
+    achievements, and returns the existing click-time.  This is the
+    fix for logical-bug-audit H1 — two stale-view tabs that race the
+    same media no longer alternate ADD/REMOVE on the server, so the
+    achievement counter no longer inflates beyond the number of real
+    labeling decisions.
+
+    Yes-targets may carry ``"region_box": [x0, y0, x1, y1]`` (normalised
+    image coords in ``[0, 1]``) to designate the good region.
+    ``"bad"`` and ``"none"`` targets must not include ``region_box`` — by
+    design no-votes are image-level always (patch-embedder v2).
+
+    Returns ``{"ok": true, "state": <new state>, "click_time": <int|null>}``
+    so the client can reconcile its optimistic view directly from the
+    response.
     """
     if get_media(media_id) is None:
         abort(404, message="not found")
 
-    vote = body["vote"]
+    target = body["target"]
 
     try:
         region_box = _parse_region_box(body.get("region_box"))
     except ValueError as exc:
         abort(400, message=str(exc))
-    if vote == "bad" and region_box is not None:
-        abort(400, message="no-votes cannot carry a region_box")
+    if target != "good" and region_box is not None:
+        abort(400, message="region_box is only valid on 'good' targets")
 
-    toggle_vote(media_id, vote, region_box=region_box)
+    _old, new_state, click_time = set_vote(media_id, target, region_box=region_box)
 
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
@@ -560,7 +569,7 @@ def vote_media(body: dict, media_id: int):
 
     sync_to_labelset_source()
 
-    return {"ok": True}
+    return {"ok": True, "state": new_state, "click_time": click_time}
 
 
 @medias_bp.route("/api/medias/add-to-pile", methods=["POST"])
