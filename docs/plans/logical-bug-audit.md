@@ -176,6 +176,21 @@ Cross-section interaction agents:
 
 ### C9. Path-template substitution missing post-resolution validation
 
+- **Status:** **Shipped 2026-05-19.**  Both
+  `vtscore/labels/sources/server_json_file/_resolve_filepath()` /
+  `resolve_filepath_for()` and
+  `vtsearch/settings_io/sources/server_json_file/_resolve_filepath()`
+  now call `validate_server_filepath(resolved, base_dir=
+  get_file_access_base_dir())` after expanding templates, so a
+  traversal template like `../labels/{detector_name}.json` is
+  rejected at `load` / `load_full` / `save` time before any file
+  handle is opened.  Regression tests live in
+  `tests/io/test_sync_sources.py`.  Pattern #2 below is now satisfied
+  for every source listed there; no other plugin in the family was
+  found to need the same fix (file exporters route through
+  `validate_filepath_field()` *before* template expansion, and the
+  substituted values cannot reintroduce traversal because
+  `sanitize_template_value()` replaces separators).
 - **Files:**
   - `vtsearch/labels/sources/server_json_file/__init__.py`
     (`load`, `load_full`, `save`)
@@ -654,14 +669,26 @@ summary, and is also recorded here.
   Regression coverage in `tests/datasets/test_load_stage_matrix_cache.py`.
 - **C6 — zip-slip in HTTP archive importer (zip, tar, rar)**
   (2026-05-19). See the finding above for the full landed shape.
+- **C9 — Path-template post-resolution validation** (2026-05-19).
+  `_resolve_filepath()` in both
+  `vtscore/labels/sources/server_json_file/__init__.py` and
+  `vtsearch/settings_io/sources/server_json_file/__init__.py` (plus the
+  labels source's `resolve_filepath_for()` used by the rename flow) now
+  ends in `validate_server_filepath(resolved, base_dir=
+  get_file_access_base_dir())`, so a template like
+  `../labels/{detector_name}.json` is rejected at `load` / `load_full` /
+  `save` time before any file handle is opened. Regression tests live in
+  `tests/io/test_sync_sources.py`.
+- **C11 — `fill_labels_from_sort` sync-failure surfacing** (2026-05-19).
+  See the finding above for the full landed shape.
 
 ### Still open
 
-Every other finding (C1, C3, C5, C7–C12 and the High / Medium / Low
-tiers) remains as written. When the next fix lands, edit the finding
-above with **— shipped** and add a line here. When every critical and
-high is addressed, this doc can be retired into the relevant subsystem
-docs (or deleted, per the `docs/plans/` lifecycle).
+Every other finding (C1, C3, C5, C7, C8, C10, C12 and the High /
+Medium / Low tiers) remains as written. When the next fix lands, edit
+the finding above with **— shipped** and add a line here. When every
+critical and high is addressed, this doc can be retired into the
+relevant subsystem docs (or deleted, per the `docs/plans/` lifecycle).
 
 Specific open items called out by previously-shipped fixes:
 

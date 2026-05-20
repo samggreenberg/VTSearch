@@ -242,6 +242,30 @@ class TestServerFileSettingsSource:
         assert "alice.settings.json" in result
         assert "{username}" not in result
 
+    def test_resolved_template_path_outside_base_dir_rejected(self, monkeypatch):
+        """Regression for ``logical-bug-audit.md`` C9.
+
+        A template containing ``../`` survives per-value sanitization (because
+        no template variable is involved), so the resolved path must also be
+        validated against the file-access base directory before any file
+        operation runs.
+        """
+        from vtsearch.settings_io.sources import get_settings_source
+        from vtsearch.settings_io.sources.server_json_file import _resolve_filepath
+
+        monkeypatch.setattr("vtsearch.auth.get_current_user", lambda: "alice")
+
+        traversal_template = "../../../../etc/{username}.settings.json"
+
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            _resolve_filepath({"filepath": traversal_template})
+
+        src = get_settings_source("server_json_file")
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            src.load({"filepath": traversal_template})
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            src.save({"volume": 0.5}, {"filepath": traversal_template})
+
 
 # ---------------------------------------------------------------------------
 # ServerFileLabelsetSource load/save round-trip
@@ -327,6 +351,40 @@ class TestServerFileLabelsetSource:
         src = get_labelset_source("server_json_file")
         with pytest.raises(ValueError, match="labels"):
             src.load({"filepath": str(filepath)})
+
+    def test_resolved_template_path_outside_base_dir_rejected(self):
+        """Regression for ``logical-bug-audit.md`` C9.
+
+        A template containing ``../`` survives per-value sanitization (because
+        the sanitized detector_name has no separators), so the resolved path
+        must also be validated against the file-access base directory before
+        any file operation runs.
+        """
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.labels.sources import get_labelset_source
+        from vtscore.labels.sources.server_json_file import _resolve_filepath, resolve_filepath_for
+
+        traversal_template = "../../../../etc/{detector_name}.labels.json"
+
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            resolve_filepath_for(
+                {"filepath": traversal_template},
+                detector_id="abc",
+                detector_name="evil",
+            )
+
+        # _resolve_filepath also validates when no template variable is
+        # present (so a bare "../" template is rejected too).
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            _resolve_filepath({"filepath": "../../../../etc/passwd"})
+
+        src = get_labelset_source("server_json_file")
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            src.load({"filepath": "../../../../etc/passwd"})
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            src.load_full({"filepath": "../../../../etc/passwd"})
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            src.save(LabelSet([]), {"filepath": "../../../../etc/passwd"})
 
 
 # ---------------------------------------------------------------------------

@@ -103,7 +103,11 @@ def resolve_filepath_for(
     currently-active one — notably the rename endpoint, which needs to
     resolve both the OLD and NEW paths to detect an orphaned labelset file.
     """
-    from vtscore.security.path_validation import sanitize_template_value
+    from vtscore.security.path_validation import (
+        get_file_access_base_dir,
+        sanitize_template_value,
+        validate_server_filepath,
+    )
 
     filepath = (field_values.get("filepath") or "").strip()
     if not filepath:
@@ -111,7 +115,10 @@ def resolve_filepath_for(
 
     filepath = filepath.replace("{detector_id}", sanitize_template_value(detector_id))
     filepath = filepath.replace("{detector_name}", sanitize_template_value(detector_name))
-    return filepath
+    # The template itself may contain ``../`` even though the substituted
+    # values are sanitised, so re-validate the resolved path before any
+    # caller opens it.
+    return str(validate_server_filepath(filepath, base_dir=get_file_access_base_dir()))
 
 
 def _resolve_filepath(field_values: dict[str, Any]) -> str:
@@ -119,8 +126,12 @@ def _resolve_filepath(field_values: dict[str, Any]) -> str:
 
     Substituted values are sanitized so that an attacker-controlled detector
     name like ``../../etc/passwd`` cannot escape the directory implied by the
-    admin-configured template.
+    admin-configured template.  The fully-resolved path is then run through
+    :func:`validate_server_filepath` so that a template containing ``../``
+    cannot escape either.
     """
+    from vtscore.security.path_validation import get_file_access_base_dir, validate_server_filepath
+
     filepath = (field_values.get("filepath") or "").strip()
     if not filepath:
         raise ValueError("A file path is required.")
@@ -136,7 +147,7 @@ def _resolve_filepath(field_values: dict[str, Any]) -> str:
                 detector_name=ctx.name,
             )
 
-    return filepath
+    return str(validate_server_filepath(filepath, base_dir=get_file_access_base_dir()))
 
 
 LABELSET_SOURCE = ServerFileLabelsetSource()
