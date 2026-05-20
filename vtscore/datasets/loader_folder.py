@@ -368,47 +368,72 @@ def _check_per_file_conflicts(
         for rel_path in rel_paths:
             if rel_path == basename:
                 continue
-            if content_vectors and rel_path in content_vectors and basename in content_vectors:
-                if not _embeddings_equal(content_vectors[rel_path], content_vectors[basename]):
-                    logger.warning(
-                        "content_vectors has conflicting entries for %r and %r; "
-                        "using the relative-path entry.",
-                        rel_path,
-                        basename,
-                    )
-            if content_md5s and rel_path in content_md5s and basename in content_md5s:
-                if content_md5s[rel_path] != content_md5s[basename]:
-                    logger.warning(
-                        "content_md5s has conflicting entries for %r and %r "
-                        "(%r vs %r); using the relative-path entry.",
-                        rel_path,
-                        basename,
-                        content_md5s[rel_path],
-                        content_md5s[basename],
-                    )
-            if custom_metadata_map and rel_path in custom_metadata_map and basename in custom_metadata_map:
-                rp_cm = custom_metadata_map[rel_path] or {}
-                bn_cm = custom_metadata_map[basename] or {}
-                rp_emb = _get_embedding_value(rp_cm)
-                bn_emb = _get_embedding_value(bn_cm)
-                if not _embeddings_equal(rp_emb, bn_emb):
-                    logger.warning(
-                        "custom_metadata_map has conflicting embeddings for %r and %r; "
-                        "using the relative-path entry.",
-                        rel_path,
-                        basename,
-                    )
-                rp_md5 = _get_md5_value(rp_cm)
-                bn_md5 = _get_md5_value(bn_cm)
-                if rp_md5 and bn_md5 and rp_md5 != bn_md5:
-                    logger.warning(
-                        "custom_metadata_map has conflicting md5s for %r and %r "
-                        "(%r vs %r); using the relative-path entry.",
-                        rel_path,
-                        basename,
-                        rp_md5,
-                        bn_md5,
-                    )
+            _warn_if_content_vectors_conflict(rel_path, basename, content_vectors)
+            _warn_if_content_md5s_conflict(rel_path, basename, content_md5s)
+            _warn_if_custom_metadata_conflict(rel_path, basename, custom_metadata_map)
+
+
+def _warn_if_content_vectors_conflict(
+    rel_path: str,
+    basename: str,
+    content_vectors: dict[str, Any] | None,
+) -> None:
+    if not content_vectors or rel_path not in content_vectors or basename not in content_vectors:
+        return
+    if _embeddings_equal(content_vectors[rel_path], content_vectors[basename]):
+        return
+    logger.warning(
+        "content_vectors has conflicting entries for %r and %r; using the relative-path entry.",
+        rel_path,
+        basename,
+    )
+
+
+def _warn_if_content_md5s_conflict(
+    rel_path: str,
+    basename: str,
+    content_md5s: dict[str, str] | None,
+) -> None:
+    if not content_md5s or rel_path not in content_md5s or basename not in content_md5s:
+        return
+    if content_md5s[rel_path] == content_md5s[basename]:
+        return
+    logger.warning(
+        "content_md5s has conflicting entries for %r and %r (%r vs %r); using the relative-path entry.",
+        rel_path,
+        basename,
+        content_md5s[rel_path],
+        content_md5s[basename],
+    )
+
+
+def _warn_if_custom_metadata_conflict(
+    rel_path: str,
+    basename: str,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+) -> None:
+    if not custom_metadata_map or rel_path not in custom_metadata_map or basename not in custom_metadata_map:
+        return
+    rp_cm = custom_metadata_map[rel_path] or {}
+    bn_cm = custom_metadata_map[basename] or {}
+    rp_emb = _get_embedding_value(rp_cm)
+    bn_emb = _get_embedding_value(bn_cm)
+    if not _embeddings_equal(rp_emb, bn_emb):
+        logger.warning(
+            "custom_metadata_map has conflicting embeddings for %r and %r; using the relative-path entry.",
+            rel_path,
+            basename,
+        )
+    rp_md5 = _get_md5_value(rp_cm)
+    bn_md5 = _get_md5_value(bn_cm)
+    if rp_md5 and bn_md5 and rp_md5 != bn_md5:
+        logger.warning(
+            "custom_metadata_map has conflicting md5s for %r and %r (%r vs %r); using the relative-path entry.",
+            rel_path,
+            basename,
+            rp_md5,
+            bn_md5,
+        )
 
 
 def _check_ambiguous_basename_keys(
