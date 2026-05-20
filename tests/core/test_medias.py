@@ -781,8 +781,7 @@ class TestAddToPile:
             (
                 el
                 for el in ls.elements
-                if (el.origin or {}).get("importer") == "add_to_pile"
-                and el.origin_name == "fresh.wav"
+                if (el.origin or {}).get("importer") == "add_to_pile" and el.origin_name == "fresh.wav"
             ),
             None,
         )
