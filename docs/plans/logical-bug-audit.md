@@ -88,9 +88,27 @@ Cross-section interaction agents:
 ### State / concurrency
 
 - ~~**`record_vote()` called after releasing `_state_lock`**~~
-- **H1. Vote-progress invalidation / `record_vote` race** when the same
-  media is rapid-toggled across two tabs — counter inflates while
-  in-memory shows one vote.
+- ~~**H1. Vote-progress invalidation / `record_vote` race**~~ — fixed by
+  replacing the toggle contract on `POST /api/medias/<id>/vote` with an
+  absolute-target contract.  Body takes `target: "good" | "bad" | "none"`
+  instead of `vote: "good" | "bad"`; handler delegates to a new
+  `vtscore.state.votes.set_vote(media_id, target, region_box)` that
+  no-ops on idempotent re-applies (no `label_history` append, no
+  achievement credit, no click-time bump, no progress-cache churn), so
+  two stale-view tabs racing the same target collapse into a single
+  transition on the server instead of alternating ADD/REMOVE.  Progress
+  cache now invalidates on **any** training-set membership change for
+  the media (was: polarity flips only — left un-vote cached models
+  stale).  Response shape grew `state` + `click_time`; the Angular
+  `VoteStateService` was rewritten around a single `submitToggleVote()`
+  entry point that computes the target from local state and clears
+  `pendingOptimistic` deterministically on every POST return, closing
+  the persistent prediction-vs-server desync half of the bug.  Covered
+  by new regressions across `tests/core/test_votes.py`,
+  `tests/api/test_error_recovery.py`, `tests/core/test_achievements.py`,
+  `tests/api/test_api_contracts.py`, `tests/detectors/test_patch_embedder.py`,
+  and `frontend/src/app/services/vote-state.service.spec.ts`.  See
+  Open follow-ups for the parallel labelset-element vote endpoint.
 
 ### Detector / training
 
@@ -547,3 +565,20 @@ Cross-cutting open items that don't fit any single finding above:
   `medias` mutation (or a `MediasDict` subclass that does so
   transparently) would neutralise the whole category and let the
   matrix accessor compare a single int instead of two id lists.
+
+- **H1 follow-up: labelset element vote endpoint still toggles.**
+  `POST /api/detectors/<name>/labels/<element_id>/vote` (and the
+  underlying `apply_element_vote_in_data` in
+  `vtscore/detectors/labelset_elements.py`) still takes
+  `vote: "good" | "bad"` with toggle-on-same-direction semantics — a
+  stale-view tab voting against an already-good labelset element
+  removes the element from the on-disk labelset, same kind of
+  inflation race the media-vote H1 fix eliminated.  Migrating that
+  endpoint to absolute-target (`target: "good" | "bad" | "remove"`)
+  would let the in-memory `set_vote()` mirror run idempotently too,
+  closing the same class of race on the labelset side.  Deferred
+  because the labelset element CRUD is a separate user surface
+  (`vt-labels-list` modal, not the centre-pane click flow that H1
+  was scoped to).  The on-disk labelset write is idempotent already
+  via `_write_detector`; the race is on the in-memory mirror and
+  the `num_training` registry counter.

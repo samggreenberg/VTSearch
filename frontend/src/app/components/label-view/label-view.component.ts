@@ -871,11 +871,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
     this.voteState.recordVote(event.id, event.vote, this.mediaDisplayName(event.id));
-    this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({
-      next: () => {
-        this.onMediaVoted(event);
-      },
-    });
+    this.voteState
+      .submitToggleVote(event.id, event.vote)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.onMediaVoted(event);
+        },
+      });
   }
 
   private mediaDisplayName(id: number): string {
@@ -884,7 +887,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
-    this.voteState.applyOptimisticVote(event.id, event.vote);
+    // Local vote state is already reconciled from the POST response inside
+    // submitToggleVote; loadVotes() only refreshes derived counters.
     this.voteState.loadVotes();
     this.autoSelectNext(event.id);
     if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {

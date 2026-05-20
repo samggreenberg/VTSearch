@@ -21,40 +21,40 @@ class TestClickTimeTracking:
     """Verify that voting via the API assigns monotonically-increasing click times."""
 
     def test_vote_assigns_click_time(self, client):
-        resp = client.post("/api/medias/1/vote", json={"vote": "good"})
+        resp = client.post("/api/medias/1/vote", json={"target": "good"})
         assert resp.status_code == 200
         assert 1 in vote_click_times
         assert vote_click_times[1] == 1
 
     def test_sequential_votes_increment(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
-        client.post("/api/medias/3/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
+        client.post("/api/medias/3/vote", json={"target": "good"})
         assert vote_click_times[1] == 1
         assert vote_click_times[2] == 2
         assert vote_click_times[3] == 3
 
     def test_unvote_removes_click_time(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert 1 in vote_click_times
-        # Toggle off
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        # Un-vote via absolute target=none
+        client.post("/api/medias/1/vote", json={"target": "none"})
         assert 1 not in vote_click_times
 
     def test_revote_gets_new_click_time(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert vote_click_times[1] == 1
-        # Toggle off (does not increment counter)
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        # Un-vote (does not increment counter)
+        client.post("/api/medias/1/vote", json={"target": "none"})
         # Vote again — should get a new, higher click time
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert vote_click_times[1] == 2
 
     def test_switch_vote_gets_new_click_time(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert vote_click_times[1] == 1
         # Switch from good to bad
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert vote_click_times[1] == 2
         assert 1 in app_module.bad_votes
         assert 1 not in app_module.good_votes
@@ -71,8 +71,8 @@ class TestVotesEndpointEnriched:
     """The /api/votes endpoint should include click_times and learned_scores."""
 
     def test_votes_response_includes_click_times(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         resp = client.get("/api/votes")
         data = resp.get_json()
         assert "click_times" in data
@@ -119,7 +119,7 @@ class TestClearVotesResetsState:
     """Clearing votes should also clear click times and learned scores."""
 
     def test_clear_votes_clears_click_times(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert len(vote_click_times) == 1
         _state.clear_votes()
         assert len(vote_click_times) == 0

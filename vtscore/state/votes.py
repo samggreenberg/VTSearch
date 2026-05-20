@@ -134,88 +134,166 @@ def _record_vote_locked() -> None:
     record_vote(det_ctx.detector_id, media_type=det_ctx.media_type)
 
 
+def _current_label_locked(ctx, media_id: int) -> str:
+    """Return ``"good"`` / ``"bad"`` / ``"none"`` for *media_id* (lock held)."""
+    if media_id in ctx.good_votes:
+        return "good"
+    if media_id in ctx.bad_votes:
+        return "bad"
+    return "none"
+
+
+def _set_vote_locked(
+    media_id: int,
+    target: str,
+    region_box: tuple[float, float, float, float] | None = None,
+) -> tuple[str, str, int | None]:
+    """Set *media_id*'s vote to *target* under an already-held ``_state_lock``.
+
+    Returns ``(old_label, new_label, click_time)`` where ``click_time`` is the
+    ordinal assigned to a newly-labeled media (or ``None`` when *target* is
+    ``"none"`` or the call was idempotent).
+    """
+    from vtscore.detectors.labeling_progress import invalidate_progress_cache_from
+
+    if target not in ("good", "bad", "none"):
+        raise ValueError(f"target must be 'good', 'bad', or 'none' (got {target!r})")
+
+    ctx = get_active_detector_context()
+    old = _current_label_locked(ctx, media_id)
+    if old == target:
+        # Idempotent — no history append, no cache churn, no achievement
+        # credit.  This is the key change that closes the H1 counter-inflation
+        # race: concurrent tabs sending the same target on a media that's
+        # already in that state no longer increment counters.  The one
+        # exception is an explicit ``region_box`` on a ``"good"`` re-vote,
+        # which lets the user replace the recorded annotation without first
+        # un-voting (drawing a new box on an already-good media is an
+        # intentional user action — the stale-tab race the idempotency rule
+        # closes was about counters, not region updates).  An absent
+        # ``region_box`` on an idempotent call leaves the existing one alone.
+        if target == "good" and region_box is not None:
+            ctx.vote_region_boxes[media_id] = region_box
+        existing_click = ctx.vote_click_times.get(media_id) if target != "none" else None
+        return (old, old, existing_click)
+
+    if target == "good":
+        ctx.bad_votes.pop(media_id, None)
+        ctx.good_votes[media_id] = None
+        if region_box is not None:
+            ctx.vote_region_boxes[media_id] = region_box
+        else:
+            ctx.vote_region_boxes.pop(media_id, None)
+        click_time = assign_click_time(media_id)
+        add_label_to_history(media_id, "good")
+        diversity_tree_label(media_id)
+    elif target == "bad":
+        ctx.good_votes.pop(media_id, None)
+        ctx.vote_region_boxes.pop(media_id, None)
+        ctx.bad_votes[media_id] = None
+        click_time = assign_click_time(media_id)
+        add_label_to_history(media_id, "bad")
+        diversity_tree_label(media_id)
+    else:  # target == "none"
+        ctx.good_votes.pop(media_id, None)
+        ctx.bad_votes.pop(media_id, None)
+        ctx.vote_region_boxes.pop(media_id, None)
+        remove_click_time(media_id)
+        add_label_to_history(media_id, "unlabel")
+        diversity_tree_unlabel(media_id)
+        click_time = None
+
+    # Invalidate the progress cache on ANY training-set membership change for
+    # this media.  The old `toggle_vote` only invalidated on polarity flips,
+    # leaving cached steps stale on good→none / bad→none.  Cached models that
+    # included this media are now wrong regardless of whether the new state is
+    # the opposite polarity or "none", so the rule is: invalidate iff the media
+    # was previously labeled.
+    if old != "none":
+        invalidate_progress_cache_from(media_id)
+
+    # Counter increments only on a transition that produces a labeled state.
+    # Un-vote (X→none) and idempotent re-apply (handled above) credit nothing.
+    if target != "none":
+        _record_vote_locked()
+
+    return (old, target, click_time)
+
+
+def set_vote(
+    media_id: int,
+    target: str,
+    region_box: tuple[float, float, float, float] | None = None,
+) -> tuple[str, str, int | None]:
+    """Atomically set a media's vote to an absolute target state.
+
+    *target* is one of ``"good"``, ``"bad"``, or ``"none"``.  Behaviour is
+    **idempotent**: setting the target equal to the current state is a no-op
+    that does not append to ``label_history``, does not increment achievement
+    counters, and does not assign a new click-time.  Achievement credit fires
+    exactly when the media moves from one state to a *different* labeled
+    state (none→good, none→bad, good→bad, bad→good); un-vote and idempotent
+    re-apply credit nothing.  The progress cache is invalidated for *media_id*
+    whenever its prior training-set membership changes (i.e. when ``old`` was
+    ``"good"`` or ``"bad"``).
+
+    Concurrent rapid-toggle from multiple tabs no longer inflates counters,
+    because each client sends an absolute target rather than a "toggle"
+    intent — stale-view duplicates collapse into idempotent no-ops on the
+    server (logical-bug-audit H1).
+
+    Args:
+        media_id: Integer ID of the media to vote on.
+        target: ``"good"``, ``"bad"``, or ``"none"``.
+        region_box: Optional normalised ``(x0, y0, x1, y1)`` good-vote region.
+            Only honoured when *target* is ``"good"`` (patch-embedder v2:
+            no-votes are always image-level).
+
+    Returns:
+        ``(old_label, new_label, click_time)``.  ``click_time`` is the
+        ordinal assigned to the new label, or ``None`` for ``"none"`` /
+        idempotent calls.
+    """
+    with _state_lock:
+        return _set_vote_locked(media_id, target, region_box=region_box)
+
+
 def toggle_vote(
     media_id: int,
     vote: str,
     region_box: tuple[float, float, float, float] | None = None,
 ) -> None:
-    """Atomically toggle a good/bad vote for a media item.
+    """Toggle a good/bad vote, computing the target from the current state.
 
-    Implements the same toggle semantics as the ``/api/medias/<id>/vote``
-    endpoint: if the media already has the requested vote it is removed
-    (unlabelled); otherwise the vote is applied (overriding any existing
-    opposite vote).
-
-    When a vote switches polarity (good->bad or bad->good), the progress
-    cache is partially invalidated: only cached steps from the point where
-    the media first appeared in the training data are discarded.  Earlier
-    steps (whose models never included this media) are preserved.
-
-    This function acquires ``_state_lock`` so that the entire check-then-modify
-    sequence is atomic with respect to concurrent requests.
+    Implemented as a thin wrapper over :func:`set_vote` so all the
+    correctness rules (idempotent semantics, cache invalidation on
+    membership change, achievement-credit gating) are shared.  Kept for
+    in-process callers that want the old "same vote toggles off" affordance
+    (the HTTP ``/api/medias/<id>/vote`` endpoint no longer uses it — see
+    :func:`set_vote`).
 
     Args:
         media_id: Integer ID of the media to vote on.
-        vote: ``"good"`` or ``"bad"``.
-        region_box: Optional normalised ``(x0, y0, x1, y1)`` box that the
-            user drew as part of a yes-vote.  Only honoured when *vote* is
-            ``"good"`` and the vote is being *added* (not toggled off);
-            stored in :attr:`DetectorContext.vote_region_boxes` so label
-            export / detector sync emit it on the resulting LabeledElement.
-            Ignored for no-votes (which are always image-level — see the
-            patch-embedder v2 design).  Patch-embedder v2.
+        vote: ``"good"`` or ``"bad"`` — the clicked direction.  Toggles off
+            when *media_id* is already in that polarity, otherwise sets to
+            *vote* (overriding any opposite vote).
+        region_box: Optional normalised good-vote region; honoured only when
+            the resulting target is ``"good"``.
     """
-    from vtscore.detectors.labeling_progress import invalidate_progress_cache_from
-
-    added = False
     with _state_lock:
         ctx = get_active_detector_context()
-        good_votes = ctx.good_votes
-        bad_votes = ctx.bad_votes
-        vote_region_boxes = ctx.vote_region_boxes
+        current = _current_label_locked(ctx, media_id)
         if vote == "good":
-            if media_id in good_votes:
-                good_votes.pop(media_id, None)
-                vote_region_boxes.pop(media_id, None)
-                remove_click_time(media_id)
-                add_label_to_history(media_id, "unlabel")
-                if media_id not in bad_votes:
-                    diversity_tree_unlabel(media_id)
-            else:
-                was_opposite = media_id in bad_votes
-                bad_votes.pop(media_id, None)
-                good_votes[media_id] = None
-                if region_box is not None:
-                    vote_region_boxes[media_id] = region_box
-                else:
-                    vote_region_boxes.pop(media_id, None)
-                assign_click_time(media_id)
-                add_label_to_history(media_id, "good")
-                diversity_tree_label(media_id)
-                if was_opposite:
-                    invalidate_progress_cache_from(media_id)
-                added = True
+            target = "none" if current == "good" else "good"
+        elif vote == "bad":
+            target = "none" if current == "bad" else "bad"
         else:
-            if media_id in bad_votes:
-                bad_votes.pop(media_id, None)
-                remove_click_time(media_id)
-                add_label_to_history(media_id, "unlabel")
-                if media_id not in good_votes:
-                    diversity_tree_unlabel(media_id)
-            else:
-                was_opposite = media_id in good_votes
-                good_votes.pop(media_id, None)
-                vote_region_boxes.pop(media_id, None)
-                bad_votes[media_id] = None
-                assign_click_time(media_id)
-                add_label_to_history(media_id, "bad")
-                diversity_tree_label(media_id)
-                if was_opposite:
-                    invalidate_progress_cache_from(media_id)
-                added = True
-
-        if added:
-            _record_vote_locked()
+            raise ValueError(f"vote must be 'good' or 'bad' (got {vote!r})")
+        _set_vote_locked(
+            media_id,
+            target,
+            region_box=region_box if target == "good" else None,
+        )
 
 
 def apply_label(

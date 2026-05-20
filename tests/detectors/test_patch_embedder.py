@@ -995,7 +995,7 @@ class TestVoteEndpointRegionBox:
 
         resp = client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
         )
         assert resp.status_code == 200
         assert 1 in good_votes
@@ -1007,7 +1007,7 @@ class TestVoteEndpointRegionBox:
             vote_region_boxes,
         )
 
-        resp = client.post("/api/medias/1/vote", json={"vote": "good"})
+        resp = client.post("/api/medias/1/vote", json={"target": "good"})
         assert resp.status_code == 200
         assert 1 in good_votes
         assert 1 not in vote_region_boxes
@@ -1023,7 +1023,7 @@ class TestVoteEndpointRegionBox:
 
         resp = client.post(
             "/api/medias/1/vote",
-            json={"vote": "bad", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            json={"target": "bad", "region_box": [0.1, 0.2, 0.7, 0.8]},
         )
         assert resp.status_code == 400
         assert 1 not in bad_votes
@@ -1035,7 +1035,7 @@ class TestVoteEndpointRegionBox:
             vote_region_boxes,
         )
 
-        resp = client.post("/api/medias/1/vote", json={"vote": "bad"})
+        resp = client.post("/api/medias/1/vote", json={"target": "bad"})
         assert resp.status_code == 200
         assert 1 in bad_votes
         assert 1 not in vote_region_boxes
@@ -1047,7 +1047,7 @@ class TestVoteEndpointRegionBox:
         # rejected by the handler with a 400 + standard ``message`` envelope.
         resp = client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7]},
         )
         assert resp.status_code == 400
         assert "region_box" in resp.get_json()["message"]
@@ -1057,7 +1057,7 @@ class TestVoteEndpointRegionBox:
         # handler → 400 + standard ``message`` envelope.
         resp = client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 1.5]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 1.5]},
         )
         assert resp.status_code == 400
 
@@ -1066,14 +1066,13 @@ class TestVoteEndpointRegionBox:
         # schema-level 422 with the per-field ``errors`` envelope.
         resp = client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": ["a", "b", "c", "d"]},
+            json={"target": "good", "region_box": ["a", "b", "c", "d"]},
         )
         assert resp.status_code == 422
 
-    def test_toggle_good_off_clears_region_box(self, client):
-        """Voting good twice toggles off the vote; the region_box must go
-        with it so a subsequent fresh yes-vote isn't tagged with a stale
-        annotation."""
+    def test_unvote_clears_region_box(self, client):
+        """target=none removes the vote AND any region_box, so a subsequent
+        fresh yes-vote isn't tagged with a stale annotation."""
         from vtsearch.state import (
             good_votes,
             vote_region_boxes,
@@ -1081,12 +1080,27 @@ class TestVoteEndpointRegionBox:
 
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
         )
         assert 1 in vote_region_boxes
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "none"})
         assert 1 not in good_votes
         assert 1 not in vote_region_boxes
+
+    def test_idempotent_re_vote_preserves_region_box(self, client):
+        """Re-sending target=good without region_box on an already-good media
+        is idempotent — region_box stays unchanged.  This is intentional: an
+        absent ``region_box`` on an idempotent call must not silently wipe a
+        previously-recorded one (H1 idempotency rule)."""
+        from vtsearch.state import vote_region_boxes
+
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+        )
+        assert vote_region_boxes[1] == (0.1, 0.2, 0.7, 0.8)
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        assert vote_region_boxes[1] == (0.1, 0.2, 0.7, 0.8)
 
     def test_switch_good_to_bad_clears_region_box(self, client):
         """A region annotation belongs to a yes-vote; flipping the same
@@ -1099,29 +1113,51 @@ class TestVoteEndpointRegionBox:
 
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
         )
         assert 1 in vote_region_boxes
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert 1 not in good_votes
         assert 1 in bad_votes
         assert 1 not in vote_region_boxes
 
-    def test_replacing_region_box_updates_value(self, client):
-        """Re-voting good with a different box after toggling off the
-        previous yes-vote stores the new box, not the previous one."""
+    def test_replacing_region_box_via_unvote_then_revote(self, client):
+        """Un-voting clears the region_box; re-voting good with a new box
+        stores the new value."""
         from vtsearch.state import vote_region_boxes
 
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.4, 0.4]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.4, 0.4]},
         )
-        # Toggle off, then vote good again with a different box.
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "none"})
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.3, 0.3, 0.9, 0.9]},
+            json={"target": "good", "region_box": [0.3, 0.3, 0.9, 0.9]},
         )
+        assert vote_region_boxes[1] == (0.3, 0.3, 0.9, 0.9)
+
+    def test_idempotent_revote_with_new_region_box_replaces_in_place(self, client):
+        """Drawing a new box on an already-good media replaces the previous
+        annotation without going through un-vote, since the user explicitly
+        sent a new ``region_box``.  An idempotent re-vote *without* a
+        region_box leaves the existing one alone (so a stale-view tab can't
+        wipe a region a different tab just set — H1 idempotency)."""
+        from vtsearch.state import vote_region_boxes
+
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.1, 0.2, 0.4, 0.4]},
+        )
+        # New box on an already-good media → replace in place.
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.3, 0.3, 0.9, 0.9]},
+        )
+        assert vote_region_boxes[1] == (0.3, 0.3, 0.9, 0.9)
+
+        # Idempotent re-vote without a region_box → existing box preserved.
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert vote_region_boxes[1] == (0.3, 0.3, 0.9, 0.9)
 
 
@@ -1134,7 +1170,7 @@ class TestLabelExportRegionBox:
     def test_export_emits_region_box_on_good_vote(self, client):
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
         )
         resp = client.get("/api/labels/export")
         assert resp.status_code == 200
@@ -1144,14 +1180,14 @@ class TestLabelExportRegionBox:
         assert labels[0]["region_box"] == [0.1, 0.2, 0.7, 0.8]
 
     def test_export_omits_region_box_on_plain_good_vote(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         resp = client.get("/api/labels/export")
         labels = resp.get_json()["labels"]
         assert len(labels) == 1
         assert "region_box" not in labels[0]
 
     def test_export_never_emits_region_box_on_bad_vote(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         resp = client.get("/api/labels/export")
         labels = resp.get_json()["labels"]
         assert len(labels) == 1
@@ -1162,10 +1198,10 @@ class TestLabelExportRegionBox:
         """Region-annotated good, plain good, and a bad in the same export."""
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.3, 0.4]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.3, 0.4]},
         )
-        client.post("/api/medias/2/vote", json={"vote": "good"})
-        client.post("/api/medias/3/vote", json={"vote": "bad"})
+        client.post("/api/medias/2/vote", json={"target": "good"})
+        client.post("/api/medias/3/vote", json={"target": "bad"})
         resp = client.get("/api/labels/export")
         labels = resp.get_json()["labels"]
         by_md5 = {e["md5"]: e for e in labels}

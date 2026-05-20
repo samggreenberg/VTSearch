@@ -248,7 +248,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     this.isVoting = true;
     this.voteState.recordVote(this.media.id, vote, this.mediaDisplayName(this.media));
 
-    this.mediasApi.vote(this.media.id, vote, regionBox).subscribe({
+    this.voteState.submitToggleVote(this.media.id, vote, regionBox).subscribe({
       next: () => {
         const animate = this.swipeAnimation && !!this.media && !prefersReducedMotion();
         if (animate) {

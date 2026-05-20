@@ -60,12 +60,25 @@ export class MediasApiService {
     return this.http.get(`/api/medias/${id}/media`, { responseType: 'blob' });
   }
 
+  /**
+   * Set the absolute vote state for a media item.
+   *
+   * ``target`` is the post-call state, not a "click direction" — the server
+   * applies it idempotently (so concurrent stale-view tabs no longer race
+   * the achievement counter, logical-bug-audit H1).  Callers that want the
+   * old "click good toggles good off" behaviour should compute the toggle
+   * locally (e.g. {@link VoteStateService.vote}) before invoking this method.
+   *
+   * Returns the server-confirmed new state and click-time so the optimistic
+   * local view can be reconciled directly from the response without a
+   * follow-up ``GET /api/votes``.
+   */
   vote(
     id: number,
-    label: 'good' | 'bad',
+    target: 'good' | 'bad' | 'none',
     regionBox?: readonly number[] | null,
   ): Observable<MediaVoteResponse> {
-    const body: MediaVoteRequest = { vote: label };
+    const body: MediaVoteRequest = { target };
     if (regionBox && regionBox.length === 4) body.region_box = [...regionBox];
     return apiMediasMediaIdVotePost(this.http, this.config.rootUrl, { media_id: id, body }).pipe(
       map((r) => r.body),

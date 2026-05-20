@@ -462,7 +462,7 @@ class TestVoteOnNonAudioMedia:
         try:
             for i in range(1, 6):
                 medias[i] = make_image_media(i)
-            resp = client.post("/api/medias/1/vote", json={"vote": "good"})
+            resp = client.post("/api/medias/1/vote", json={"target": "good"})
             assert resp.status_code == 200
             resp = client.get("/api/votes")
             data = resp.get_json()
@@ -477,7 +477,7 @@ class TestVoteOnNonAudioMedia:
         try:
             for i in range(1, 6):
                 medias[i] = make_text_media(i)
-            resp = client.post("/api/medias/3/vote", json={"vote": "bad"})
+            resp = client.post("/api/medias/3/vote", json={"target": "bad"})
             assert resp.status_code == 200
             resp = client.get("/api/votes")
             data = resp.get_json()
