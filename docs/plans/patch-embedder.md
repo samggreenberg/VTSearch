@@ -521,11 +521,15 @@ voting" above; closeout summary below.
      `vtsearch/models/labelset_training.py::populate_label_embeddings`
      pool the training vector on-the-fly from `media["patch_grid"]`
      via `box_to_vote_vector` when `region_box` is set, falling back
-     to `media["embedding"]` for legacy datasets, single-vector
-     embedders, and cross-dataset elements resolved via origin.
-     Region-voted labelset elements re-pool every training pass so
-     `region_box` edits propagate without explicit cache
-     invalidation; the image-level cache fast path is unchanged.
+     to `media["embedding"]` for legacy datasets and single-vector
+     embedders.  Cross-dataset elements whose file isn't in the
+     active snap rebuild a patch grid via `patch_forward` on the
+     resolved file and pool the box from it (bug H2 fix); only when
+     the embedder has no patch path do they fall back to a full-file
+     embedding (with a logged warning).  Region-voted labelset
+     elements re-pool every training pass so `region_box` edits
+     propagate without explicit cache invalidation; the image-level
+     cache fast path is unchanged.
    - `LabelSet.from_clips_and_votes` accepts an optional
      `vote_region_boxes` map.  All four call sites
      (`/api/labels/export`, `POST /api/detectors/<name>/labels`,

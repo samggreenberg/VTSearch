@@ -95,11 +95,15 @@ Cross-section interaction agents:
 
 ### Detector / training
 
-- **H2. Cross-dataset region-box loss** —
-  `vtsearch/detectors/labelset_training.py` L122–124. When an element
-  has `region_box` but the file isn't in the active dataset, fallback
-  `_embed_one` embeds the full file. Region-level training intent
-  silently downgrades to image-level.
+- ~~**H2. Cross-dataset region-box loss**~~ — fixed in
+  `vtscore/detectors/labelset_training.py`. `_embed_one` now resolves the
+  origin, runs `patch_forward` on the file when the active embedder
+  supports patch regions, and pools the box via `box_to_vote_vector` so a
+  region vote's training intent survives a dataset switch. Logs a
+  warning and falls back to a full-file embedding only when the embedder
+  has no patch path (single-vector models) or the forward pass produces
+  no output. Covered by `TestRegionAwareTrainingCrossDataset` in
+  `tests/detectors/test_patch_embedder.py`.
 - **H3. Embedder drift on save → reload** —
   `vtsearch/detectors/training.py` L449, L463.
   `train_detector_from_origins()` calls
