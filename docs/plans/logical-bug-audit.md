@@ -139,16 +139,26 @@ Cross-section interaction agents:
   traversal, absolute paths, and the prefix-collision case that the old
   `startswith` check accepted.
 
-### C7. NaN/Infinity threshold leaks through safe-threshold blending
+### C7. NaN/Infinity threshold leaks through safe-threshold blending — **SHIPPED**
 
-- **File:** `vtsearch/training/thresholds.py` ~L282–283, ~L351
-- **Bug:** `calculate_cross_calibration_threshold()` returns
-  `float("inf")` when a valid calibration split is impossible (n_cal
+- **File:** `vtscore/training/thresholds.py` (and matching sentinel in
+  `vtscore/detectors/training.py`).
+- **Bug:** `calculate_cross_calibration_threshold()` returned
+  `float("inf")` when a valid calibration split was impossible (n_cal
   too aggressive on tiny label sets). When `label_weight == 0.0` and
-  `xcal_threshold == inf`, the blend `0.0 * inf + 1.0 * gmm` evaluates
-  to `NaN`. NaN is then stored on `DetectorContext.threshold`, breaks
-  all `score >= threshold` comparisons, and corrupts every result that
-  touches that detector.
+  `xcal_threshold == inf`, the blend `0.0 * inf + 1.0 * gmm` evaluated
+  to `NaN`. NaN then landed on `DetectorContext.threshold`, broke every
+  `score >= threshold` comparison, and corrupted every result that
+  touched that detector.
+- **Fix:** Replaced the `inf` sentinel with a finite
+  `NO_GOOD_THRESHOLD = 2.0` (above the [0, 1] sigmoid range, so
+  `score >= threshold` is still always False) and updated the matching
+  `safe and len(X_list) < 6` short-circuit in `train_and_threshold` to
+  use the same constant. Hardened `calculate_safe_threshold` to detect
+  non-finite inputs on either side (xcal or gmm), fall back to the
+  finite side (or `0.5` if both are non-finite), and assert the final
+  blended value is finite before returning it. Regression tests cover
+  `inf`/`NaN` xcal and the new sentinel.
 
 ### C8. Bulk label paths skip achievement recording entirely
 

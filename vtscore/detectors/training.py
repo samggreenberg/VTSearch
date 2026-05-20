@@ -70,6 +70,7 @@ def train_and_threshold(
         calculate_safe_threshold,
         train_model,
     )
+    from vtscore.training.thresholds import NO_GOOD_THRESHOLD
 
     X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -79,7 +80,7 @@ def train_and_threshold(
     # Below the safe-threshold ramp floor the cross-cal output is blended
     # away (pure GMM), so don't pay for the fold trainings.
     if safe and len(X_list) < 6:
-        threshold = float("inf")
+        threshold = NO_GOOD_THRESHOLD
     else:
         threshold = calculate_cross_calibration_threshold(
             X_list,

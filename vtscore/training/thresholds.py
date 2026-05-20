@@ -13,6 +13,13 @@ from typing import Any
 
 import numpy as np
 
+# Sentinel threshold meaning "predict nothing as Good". Sigmoid scores are
+# in [0, 1], so any value > 1.0 makes every ``score >= threshold`` check
+# evaluate to False. Kept finite (vs. ``float("inf")``) so it cannot poison
+# downstream blends — ``0.0 * inf`` evaluates to NaN, which would then be
+# stored on ``DetectorContext.threshold`` and break every comparison.
+NO_GOOD_THRESHOLD = 2.0
+
 
 def calculate_gmm_threshold(scores: list[float]) -> float:
     """Use a Gaussian Mixture Model to find a threshold between two score distributions.
@@ -256,8 +263,8 @@ def calculate_cross_calibration_threshold(
             split (default 0.5).  For example, 0.2 means 80% Train / 20%
             Calibrate.  If the fraction is so extreme that a valid split
             cannot be formed (fewer than 2 training or 1 calibration
-            examples), returns ``float('inf')`` so that nothing is
-            predicted as Good.
+            examples), returns :data:`NO_GOOD_THRESHOLD` so that nothing
+            is predicted as Good.
         hidden_dim: Force a specific hidden-layer width for the fold models.
             When ``None`` (default), each fold model auto-sizes based on its
             own training-set size.  Pass the full-data hidden dim to ensure
@@ -265,7 +272,8 @@ def calculate_cross_calibration_threshold(
 
     Returns:
         A float threshold. Returns 0.5 if fewer than 4 examples are provided
-        (insufficient data for calibration).  Returns ``float('inf')`` if
+        (insufficient data for calibration).  Returns :data:`NO_GOOD_THRESHOLD`
+        (a finite sentinel above the sigmoid range) if
         ``calibration_fraction`` makes a valid split impossible.
     """
     n = len(X_list)
@@ -280,7 +288,7 @@ def calculate_cross_calibration_threshold(
     n_cal = max(1, round(n * calibration_fraction))
     n_train = n - n_cal
     if n_train < 2 or n_cal < 1:
-        return float("inf")
+        return NO_GOOD_THRESHOLD
 
     import torch  # noqa: PLC0415
 
@@ -332,20 +340,37 @@ def calculate_safe_threshold(
         n_labels: Total number of labelled examples (good + bad).
 
     Returns:
-        A blended threshold float.
+        A finite blended threshold float. If either input is non-finite,
+        falls back to the other; if both are non-finite, returns ``0.5``.
+        The result is guaranteed finite so it can be safely stored on
+        ``DetectorContext.threshold`` without breaking ``score >= threshold``
+        comparisons.
     """
     import math  # noqa: PLC0415
 
     gmm_threshold = calculate_gmm_threshold(all_scores)
 
-    # If xcal_threshold is infinite (e.g. due to impossible fold split),
-    # fall back to the GMM threshold entirely.
-    if not math.isfinite(xcal_threshold):
+    # Defend against non-finite inputs from either side: an upstream
+    # ``calculate_cross_calibration_threshold`` can theoretically still
+    # surface inf/NaN, and ``calculate_gmm_threshold`` returns NaN when
+    # the model produced non-finite scores. Without these guards the blend
+    # below would store NaN on ``DetectorContext.threshold`` and silently
+    # break every ``score >= threshold`` comparison downstream.
+    xcal_finite = math.isfinite(xcal_threshold)
+    gmm_finite = math.isfinite(gmm_threshold)
+    if not xcal_finite and not gmm_finite:
+        return 0.5
+    if not xcal_finite:
         return gmm_threshold
+    if not gmm_finite:
+        return xcal_threshold
 
     # Linear ramp: 0 at 6 labels, 1 at 20 labels
     MIN_LABELS = 6
     MAX_LABELS = 20
     label_weight = max(0.0, min(1.0, (n_labels - MIN_LABELS) / (MAX_LABELS - MIN_LABELS)))
 
-    return label_weight * xcal_threshold + (1.0 - label_weight) * gmm_threshold
+    blended = label_weight * xcal_threshold + (1.0 - label_weight) * gmm_threshold
+    if not math.isfinite(blended):
+        return 0.5
+    return blended

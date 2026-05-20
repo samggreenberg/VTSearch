@@ -17,6 +17,7 @@ import pytest
 import app as app_module
 from vtscore.detectors.training import train_and_score
 from vtscore.training.thresholds import (
+    NO_GOOD_THRESHOLD,
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
     calculate_safe_threshold,
@@ -74,6 +75,39 @@ class TestCalculateSafeThreshold:
         xcal = 0.45
         safe = calculate_safe_threshold(xcal, scores, n_labels=20)
         assert safe == pytest.approx(xcal, abs=1e-6)
+
+    def test_infinite_xcal_falls_back_to_gmm_without_nan(self):
+        """Regression: ``inf`` xcal with label_weight=0 used to produce NaN
+        via ``0.0 * inf``. The guard now returns the GMM threshold cleanly."""
+        import math
+
+        scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
+        gmm = calculate_gmm_threshold(scores)
+        safe = calculate_safe_threshold(float("inf"), scores, n_labels=4)
+        assert math.isfinite(safe)
+        assert safe == pytest.approx(gmm, abs=1e-6)
+
+    def test_nan_xcal_falls_back_to_gmm_without_nan(self):
+        """A NaN xcal must not propagate into the detector threshold."""
+        import math
+
+        scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
+        gmm = calculate_gmm_threshold(scores)
+        safe = calculate_safe_threshold(float("nan"), scores, n_labels=13)
+        assert math.isfinite(safe)
+        assert safe == pytest.approx(gmm, abs=1e-6)
+
+    def test_no_good_sentinel_blends_to_gmm_below_floor(self):
+        """The finite ``NO_GOOD_THRESHOLD`` sentinel returned by
+        ``calculate_cross_calibration_threshold`` must blend cleanly to
+        pure GMM at n_labels < 6 (label_weight=0)."""
+        import math
+
+        scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
+        gmm = calculate_gmm_threshold(scores)
+        safe = calculate_safe_threshold(NO_GOOD_THRESHOLD, scores, n_labels=4)
+        assert math.isfinite(safe)
+        assert safe == pytest.approx(gmm, abs=1e-6)
 
 
 class TestTrainAndScoreWithSafeThresholds:
@@ -299,12 +333,18 @@ class TestCalibrationFractionCrossCalibration:
         t = calculate_cross_calibration_threshold(X, y, dim, calibration_fraction=0.8)
         assert 0.0 <= t <= 1.0
 
-    def test_extreme_fraction_returns_inf(self):
-        """When fraction is so extreme that a valid split is impossible, return inf."""
+    def test_extreme_fraction_returns_no_good_sentinel(self):
+        """When fraction is so extreme that a valid split is impossible, return a
+        finite sentinel above the sigmoid range (so nothing is predicted as Good)
+        without poisoning ``calculate_safe_threshold`` blends with NaN."""
+        import math
+
         # With n=4 and calibration_fraction=0.99, n_cal=4, n_train=0 → can't split
         X, y, dim = self._make_data(n=4)
         t = calculate_cross_calibration_threshold(X, y, dim, calibration_fraction=0.99)
-        assert t == float("inf")
+        assert t == NO_GOOD_THRESHOLD
+        assert math.isfinite(t)
+        assert t > 1.0
 
     def test_extreme_fraction_near_zero_returns_inf(self):
         """With fraction near 0, n_cal rounds to 1, n_train = n-1 ≥ 2, should still work."""
