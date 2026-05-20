@@ -1071,7 +1071,7 @@ class TestValidatedVoteSnapshot:
         path = _detector_path(det_ctx.name)
         data = _read_detector(path)
         assert data is not None
-        labels_before = data.get("labelset", {}).get("elements", [])
+        labels_before = data.get("labelset", {}).get("labels", [])
         assert len(labels_before) >= 2
 
         # Simulate the race: votes_dataset_id mismatches active dataset, and
@@ -1089,7 +1089,7 @@ class TestValidatedVoteSnapshot:
 
         # The on-disk labelset must be unchanged.
         data_after = _read_detector(path)
-        labels_after = data_after.get("labelset", {}).get("elements", [])
+        labels_after = data_after.get("labelset", {}).get("labels", [])
         assert len(labels_after) == len(labels_before), (
             "sync should have bailed on safe=False, not erased on-disk labels"
         )
