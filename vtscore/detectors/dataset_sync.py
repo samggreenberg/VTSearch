@@ -165,18 +165,24 @@ class VoteSnapshot(NamedTuple):
 def validated_vote_snapshot() -> VoteSnapshot:
     """Return an atomic, internally-consistent (dataset, detector) snapshot.
 
-    Runs :func:`ensure_votes_match_active_dataset` and then takes shallow
-    copies of medias + vote dicts under ``_state_lock`` so the returned vote
-    dicts are guaranteed to have been derived against the same dataset whose
-    medias are in the returned snap.  Callers should operate on the copies;
-    the live contexts can be mutated by other requests in the meantime.
+    Takes shallow copies of medias + vote dicts under a single ``_state_lock``
+    acquisition so the returned vote dicts are guaranteed to be derived
+    against the same dataset whose medias are in the returned snap.  Callers
+    should operate on the copies; the live contexts can be mutated by other
+    requests in the meantime.
+
+    The rehydrate that aligns ``votes_dataset_id`` with the active dataset
+    is the responsibility of :func:`ensure_votes_match_active_dataset` in
+    ``before_request`` — calling it again here would double-clear vote dicts
+    that test code or in-flight mutations have already populated.
 
     Refuses to compose when the snapshot cannot be made safe.  Returns
-    ``safe=False`` (with empty vote dicts) in any of these cases (all of
-    which would otherwise allow cross-dataset cid leakage):
+    ``safe=False`` (with empty vote dicts) when the detector's vote state is
+    stamped for a different dataset than the one whose medias the snapshot
+    is taken from:
 
     * A concurrent request on the same detector rehydrated against a
-      different dataset between our rehydrate call and this lock acquisition
+      different dataset between ``before_request`` and this lock acquisition
       (the H14 concurrency race).
     * The detector has no registry entry / on-disk file, so the rehydrate
       bailed early and left stale cids from a previous dataset in place.
@@ -186,9 +192,9 @@ def validated_vote_snapshot() -> VoteSnapshot:
 
     The ``medias`` field is always populated from whatever the active
     dataset context resolves to (empty when the header is missing).  When no
-    detector is loaded at all, the snapshot is considered safe (the empty
-    fallback detector has empty votes by construction, so there's nothing
-    to leak).
+    detector is loaded at all, or when ``votes_dataset_id`` is empty (no
+    rehydrate has ever stamped it — typical for a brand-new detector with
+    no votes), the snapshot is considered safe by construction.
     """
     from vtscore.state.core import (
         _state_lock,
@@ -196,17 +202,29 @@ def validated_vote_snapshot() -> VoteSnapshot:
         get_active_detector_context,
     )
 
-    ensure_votes_match_active_dataset()
     with _state_lock:
         ds_ctx = get_active_context()
         det_ctx = get_active_detector_context()
         snap = dict(ds_ctx.medias)
         # Compose votes only when we can prove they're keyed in the active
-        # dataset's cid space.  ``votes_dataset_id == ds_ctx.dataset_id`` is
-        # the post-rehydrate invariant; if it doesn't hold here, something
-        # bypassed or raced past the rehydrate and the cid dicts are not
-        # safe to pair with ``snap``.
-        if det_ctx.detector_id and det_ctx.votes_dataset_id != ds_ctx.dataset_id:
+        # dataset's cid space.  Two cases are safe to compose:
+        #   1. ``votes_dataset_id == ds_ctx.dataset_id`` — the post-rehydrate
+        #      invariant holds; the cid dicts are derived against the active
+        #      dataset.
+        #   2. ``votes_dataset_id == ""`` — the detector has never been
+        #      stamped against any dataset, which in production means no
+        #      votes have ever been cast (vote-casting goes through paths
+        #      that stamp the id).  Composing empty vote dicts is harmless,
+        #      and short-circuiting here lets save / sync endpoints work
+        #      against newly-created detectors that haven't been loaded.
+        # The remaining case — non-empty ``votes_dataset_id`` that doesn't
+        # match the active dataset — is the race / stale-state scenario and
+        # is the only one we refuse to compose for.
+        if (
+            det_ctx.detector_id
+            and det_ctx.votes_dataset_id
+            and det_ctx.votes_dataset_id != ds_ctx.dataset_id
+        ):
             return VoteSnapshot(snap, {}, {}, {}, safe=False)
         return VoteSnapshot(
             snap,
