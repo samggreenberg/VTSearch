@@ -140,7 +140,14 @@ def _parse_multi_media_specs(raw: Any, output_type: str) -> list[SourceSpec]:
 
 
 def _validate_spec_converter(spec: SourceSpec, output_type: str, get_converter) -> None:
-    """Validate that *spec*'s converter (if any) bridges source→output."""
+    """Validate that *spec*'s converter (if any) bridges source→output.
+
+    Also validates ``spec.params`` against the converter's own
+    :class:`PluginField` schema, so declared ``min`` / ``max`` ranges
+    are enforced before the params reach :meth:`MediaConverter.convert`.
+    """
+    from marshmallow import ValidationError  # noqa: PLC0415
+
     if spec.converter is None:
         if spec.source_type != output_type:
             raise ValueError(
@@ -160,6 +167,10 @@ def _validate_spec_converter(spec: SourceSpec, output_type: str, get_converter) 
             f"Converter {spec.converter!r} produces "
             f"{converter.target_type!r}, but output media_type is {output_type!r}",
         )
+    try:
+        converter.validate_params(spec.params)
+    except ValidationError as exc:
+        raise ValueError(f"Invalid params for converter {spec.converter!r}: {exc.messages}") from exc
 
 
 def _parse_legacy_specs(raw_converters: Any, output_type: str) -> list[SourceSpec]:

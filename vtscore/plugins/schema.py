@@ -23,7 +23,10 @@ password     :class:`fields.String`
 folder       :class:`fields.String`
 server_path  :class:`fields.String`
 number       :class:`fields.Integer` (integer-looking)
-             / :class:`fields.Float`
+             / :class:`fields.Float`, with :class:`validate.Range`
+             attached when :attr:`PluginField.min` / :attr:`max`
+             are declared (out-of-range values are rejected at
+             schema-load time, not silently coerced)
 select       :class:`fields.String` + :class:`validate.OneOf`
              (static options); plain :class:`fields.String` for
              dynamic-options fields
@@ -100,12 +103,28 @@ def _build_checkbox(pf: PluginField, kwargs: dict) -> fields.Field:
 
 def _build_number(pf: PluginField, kwargs: dict) -> fields.Field:
     kwargs.pop("load_default", None)
+    cast = int if pf.is_integer_number() else float
     if pf.default:
         try:
-            kwargs["load_default"] = int(pf.default) if pf.is_integer_number() else float(pf.default)
+            kwargs["load_default"] = cast(pf.default)
         except (TypeError, ValueError):
             # Bad default — let marshmallow raise on missing input.
             kwargs.pop("load_default", None)
+
+    range_kwargs: dict = {}
+    if pf.min:
+        try:
+            range_kwargs["min"] = cast(pf.min)
+        except (TypeError, ValueError):
+            pass
+    if pf.max:
+        try:
+            range_kwargs["max"] = cast(pf.max)
+        except (TypeError, ValueError):
+            pass
+    if range_kwargs:
+        kwargs["validate"] = validate.Range(**range_kwargs)
+
     if pf.is_integer_number():
         return fields.Integer(**kwargs)
     return fields.Float(**kwargs)

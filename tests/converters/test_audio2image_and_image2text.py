@@ -192,6 +192,44 @@ class TestAudio2ImageMediaConverter:
         assert len(results) == 1
         assert results[0]["filename"].endswith("_spec_mel.png")
 
+    def test_validate_params_rejects_out_of_range_n_mels(self):
+        """Regression for H20: a huge ``n_mels`` would build a multi-GB mel
+        filter bank inside librosa.  ``validate_params`` must reject it
+        before the converter is even invoked."""
+        from marshmallow import ValidationError
+
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
+
+        c = Audio2ImageMediaConverter()
+        with pytest.raises(ValidationError) as exc:
+            c.validate_params({"n_mels": 10_000_000})
+        assert "n_mels" in exc.value.messages
+        # Below the declared floor is also rejected.
+        with pytest.raises(ValidationError):
+            c.validate_params({"n_mels": 1})
+        # In-range values are accepted and the schema returns the coerced
+        # dict (with defaults for unspecified fields).
+        loaded = c.validate_params({"n_mels": 128})
+        assert loaded["n_mels"] == 128
+
+    def test_source_spec_parser_rejects_oversized_n_mels(self):
+        """End-to-end: the multi-media source-spec parser must reject a
+        converter ``params`` dict that violates the converter's declared
+        :class:`PluginField` range."""
+        from vtscore.datasets.importers.base import _parse_multi_media_specs
+
+        raw = [
+            {
+                "source_type": "audio",
+                "converter": "audio2image",
+                "params": {"n_mels": 99_999_999},
+            }
+        ]
+        with pytest.raises(ValueError) as exc:
+            _parse_multi_media_specs(raw, output_type="image")
+        assert "audio2image" in str(exc.value)
+        assert "n_mels" in str(exc.value)
+
 
 # ===========================================================================
 # Image2TextMediaConverter

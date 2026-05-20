@@ -92,6 +92,24 @@ class MediaConverter(PluginBase, ABC):
     # Param helpers
     # ------------------------------------------------------------------
 
+    def validate_params(self, params: dict[str, Any] | None) -> dict[str, Any]:
+        """Validate *params* against this converter's :attr:`fields` schema.
+
+        Converters are usually invoked from ``source_specs`` /
+        ``clipper_chain`` dicts that flow through the API as pass-through
+        payloads — they don't go through :func:`validate_plugin_args`
+        like importer/exporter form bodies do.  Call this from any entry
+        point that accepts user-supplied params to enforce declared
+        :class:`PluginField` constraints (in particular numeric
+        :attr:`min` / :attr:`max` ranges) before the params reach the
+        expensive :meth:`convert` body.  Raises
+        :class:`marshmallow.ValidationError` on a bad value.
+        """
+        from vtscore.plugins.schema import get_plugin_arg_schema  # noqa: PLC0415
+
+        schema = get_plugin_arg_schema(self)
+        return schema.load(params or {})
+
     def get_param(self, params: dict[str, Any] | None, key: str) -> Any:
         """Return the value for *key* from *params*, falling back to the
         declared :attr:`PluginField.default` for that key.
