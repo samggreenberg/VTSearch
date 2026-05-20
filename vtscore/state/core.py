@@ -36,6 +36,34 @@ from typing import Any
 _state_lock = threading.RLock()
 
 
+class DatasetNotLoadedError(LookupError):
+    """The request explicitly named a dataset that is not loaded in memory.
+
+    Raised by the request-scoped dataset resolver (and propagated through
+    :func:`get_active_context`) when an ``X-Dataset-Id`` header (or
+    ``?dataset_id=`` query param) was sent but no matching
+    :class:`DatasetContext` is registered. Silent fallback to an empty
+    context produced stale results that the client could not detect —
+    see logical-bug-audit H16.
+    """
+
+    def __init__(self, dataset_id: str) -> None:
+        super().__init__(f"dataset {dataset_id!r} is not loaded")
+        self.dataset_id = dataset_id
+
+
+class DetectorNotLoadedError(LookupError):
+    """The request explicitly named a detector that is not loaded in memory.
+
+    Detector counterpart of :class:`DatasetNotLoadedError`. See
+    logical-bug-audit H16 / H34.
+    """
+
+    def __init__(self, detector_id: str) -> None:
+        super().__init__(f"detector {detector_id!r} is not loaded")
+        self.detector_id = detector_id
+
+
 # ---------------------------------------------------------------------------
 # Pluggable per-request context resolvers
 # ---------------------------------------------------------------------------
