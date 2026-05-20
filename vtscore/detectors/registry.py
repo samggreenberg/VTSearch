@@ -103,6 +103,7 @@ def register_detector(
     text_query: str = "",
     media_example: str = "",
     created_by: str = "default",
+    embedder: str = "",
 ) -> dict[str, Any]:
     """Add a new detector to the registry and persist.
 
@@ -114,6 +115,12 @@ def register_detector(
         text_query: Text-sort query associated with the detector.
         media_example: Optional path to an example media file.
         created_by: Username of the user who created this detector.
+        embedder: Name of the embedder used for this detector's labels.
+            Defaults to ``""`` for newly created detectors that haven't been
+            trained yet; stamped automatically the first time training runs
+            (see :func:`record_detector_embedder`).  Read by the smart
+            preload predictor so the right model is warmed at startup
+            instead of the media type's default.
 
     Returns:
         The newly created entry dict.
@@ -129,6 +136,7 @@ def register_detector(
         "media_example": media_example,
         "created_by": created_by,
         "created_at": time.time(),
+        "embedder": embedder,
     }
     with _lock:
         entries = _ensure_loaded()
@@ -172,6 +180,31 @@ def update_detector(detector_id: str, **fields: Any) -> bool:
                 _save(entries)
                 return True
     return False
+
+
+def record_detector_embedder(detector_id: str, embedder_name: str) -> None:
+    """Persist the embedder a detector's labels are currently embedded with.
+
+    Called from the training paths that stamp ``DetectorContext.embedder``
+    so the smart preload predictor knows which model to warm on the next
+    process start.  No-ops on empty inputs or unknown detector ids; swallows
+    registry write failures because losing the optimization is preferable
+    to crashing a training cycle.
+    """
+    if not detector_id or not embedder_name:
+        return
+    try:
+        with _lock:
+            entries = _ensure_loaded()
+            for entry in entries:
+                if entry["id"] == detector_id:
+                    if entry.get("embedder") == embedder_name:
+                        return
+                    entry["embedder"] = embedder_name
+                    _save(entries)
+                    return
+    except Exception as exc:
+        logger.warning("Failed to persist embedder for detector %s: %s", detector_id, exc)
 
 
 def find_by_name(name: str) -> dict[str, Any] | None:

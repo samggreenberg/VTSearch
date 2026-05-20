@@ -267,8 +267,11 @@ class DetectorRegistryEntrySchema(Schema):
     detector_loaded = fields.Boolean()
     autorun = fields.Boolean()
     last_trained_at = fields.Float(allow_none=True)
-    # Recorded only for loaded detectors. Empty for unloaded entries (the
-    # embedder is inferred from the active dataset at load time).
+    # Stamped the first time a detector trains against a dataset and
+    # persisted on the registry entry, so the smart preload predictor and
+    # the dashboard's cross-embedder check both see it without having to
+    # load the detector.  Loaded contexts override the persisted value
+    # when present.  Empty string for detectors that have never trained.
     embedder = fields.String()
 
     class Meta:

@@ -134,13 +134,19 @@ def predict_embedders_to_preload() -> list[str]:
     Walks the dataset registry and detector registry and returns the unique
     list of embedder names the user is likely to need:
 
-    - For each registered dataset: ``entry["embedder"]`` if set, otherwise
-      the default embedder for ``entry["media_type"]``.
-    - For each registered detector: the default embedder for
-      ``entry["media_type"]``.
+    - For each registered dataset and detector: ``entry["embedder"]`` if set
+      and recognised, otherwise the default embedder for
+      ``entry["media_type"]``.  A set-but-unrecognised ``embedder`` (e.g.
+      the embedder was renamed or removed) also falls back to the media
+      type's default rather than being silently dropped — losing the
+      optimisation entirely on a typo is worse than warming the wrong
+      embedder, which the user can still override.
 
-    Names not matching a registered embedder are filtered out. Order
-    reflects discovery order (datasets first, then detectors), so the
+    Detector entries written before the ``embedder`` field existed have
+    ``entry["embedder"] == ""``, so they fall through to the media type's
+    default — matching the previous behaviour for unmigrated state.
+
+    Order reflects discovery order (datasets first, then detectors), so the
     output is stable across runs.
     """
     from vtscore.datasets.registry import list_datasets
@@ -162,12 +168,17 @@ def predict_embedders_to_preload() -> list[str]:
         opts = embedders_for_type(media_type)
         return opts[0].name if opts else ""
 
+    def _resolve(entry: dict) -> str:
+        emb = (entry.get("embedder") or "").strip()
+        if emb and emb in valid:
+            return emb
+        return _default_for(entry.get("media_type", "") or "")
+
     for entry in list_datasets():
-        emb = entry.get("embedder", "") or ""
-        _add(emb if emb else _default_for(entry.get("media_type", "")))
+        _add(_resolve(entry))
 
     for entry in list_detectors():
-        _add(_default_for(entry.get("media_type", "")))
+        _add(_resolve(entry))
 
     return predictions
 
@@ -235,7 +246,8 @@ def predict_embedder_for_dataset(dataset_id: str) -> str:
 
     Mirrors the per-dataset half of :func:`predict_embedders_to_preload`
     for a single registry entry: returns ``entry["embedder"]`` if set and
-    valid, otherwise the default embedder for ``entry["media_type"]``.
+    recognised, otherwise the default embedder for ``entry["media_type"]``
+    (also the fallback when ``embedder`` is set but unrecognised).
     Returns ``""`` when the dataset is unknown or has no resolvable
     embedder.
     """
