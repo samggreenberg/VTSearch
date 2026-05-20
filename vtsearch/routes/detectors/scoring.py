@@ -91,6 +91,14 @@ def _resolve_or_train_detector(  # noqa: C901
     if snap:
         md5_to_emb = {c["md5"]: c["embedding"] for c in snap.values()}
 
+    # Match origin-resolved label vectors to the snap's embedder space so
+    # the two paths don't produce a mixed-space training set (silently
+    # garbage MLP).  Empty when the snap is empty or untyped, which falls
+    # back to the media type's default embedder.
+    dataset_embedder = ""
+    if snap:
+        dataset_embedder = next(iter(snap.values()), {}).get("embedder", "") or ""
+
     unresolved: list[dict] = []
     for entry in label_entries:
         label_val = entry.get("label", "")
@@ -130,6 +138,7 @@ def _resolve_or_train_detector(  # noqa: C901
             unresolved,
             media_type,
             progress_callback=_origin_progress,
+            embedder_name=dataset_embedder,
         )
         X_list.extend(resolved.embeddings)
         y_list.extend(resolved.labels)

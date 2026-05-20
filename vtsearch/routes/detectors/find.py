@@ -352,7 +352,16 @@ def _collect_cold_training_data(
 
     from vtscore.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
 
-    resolved = resolve_label_embeddings(labels, det_data.get("media_type", "audio"))
+    # Resolve+embed using the target dataset's embedder so the resulting
+    # training vectors share one space with the snap embeddings the MLP
+    # will be scored against.  Empty when the dataset is somehow embedder-
+    # less, which falls back to the media type's default embedder.
+    dataset_embedder = next(iter(temp_medias.values()), {}).get("embedder", "") or "" if temp_medias else ""
+    resolved = resolve_label_embeddings(
+        labels,
+        det_data.get("media_type", "audio"),
+        embedder_name=dataset_embedder,
+    )
     if resolved.has_good_and_bad:
         return resolved.embeddings, resolved.labels
     return [], []

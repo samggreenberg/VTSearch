@@ -452,6 +452,68 @@ class TestResolveLabelEmbeddings:
         assert result.total_count == 1
         assert len(result.missing_entries) == 1
 
+    def test_forwards_embedder_name_to_embed_file(self, tmp_path):
+        """``embedder_name`` must reach ``embed_file`` so training vectors
+        live in the same space as the snap embeddings they'll be mixed with.
+
+        Mixing vectors from two embedders into a single MLP produces
+        garbage (different output dimensions crash; same dim silently
+        corrupts), so the dataset's embedder propagating through to the
+        resolver is part of the H5-secondary fix.
+        """
+        folder = tmp_path / "audio"
+        folder.mkdir()
+        (folder / "clip.wav").write_bytes(b"audio")
+
+        origin = {"importer": "server_folder", "params": {"path": str(folder), "media_type": "audio"}}
+        labels = [
+            {"label": "good", "origin": origin, "origin_name": "clip.wav", "md5": "aaa", "filename": "clip.wav"},
+        ]
+        fake_emb = np.zeros(768, dtype=np.float32)
+        with patch("vtscore.detectors.resolver.embed_file", return_value=fake_emb) as embed_mock:
+            resolve_label_embeddings(labels, "audio", embedder_name="some-specific-embedder")
+
+        # The resolver must forward the embedder name through to embed_file
+        # so the resolved label vector matches the snap's space.
+        embed_mock.assert_called()
+        last_call_args = embed_mock.call_args_list[-1]
+        # embed_file signature: (file_path, media_type, embedder_name)
+        passed_args = list(last_call_args.args) + [last_call_args.kwargs.get("embedder_name")]
+        assert "some-specific-embedder" in passed_args, (
+            f"embed_file was called without the embedder_name: {last_call_args}"
+        )
+
+    def test_forwards_embedder_name_to_clip_path(self, tmp_path):
+        """Clipper-bearing labels must also receive the requested embedder."""
+        folder = tmp_path / "audio"
+        folder.mkdir()
+        (folder / "clip.wav").write_bytes(b"audio")
+
+        origin = {
+            "importer": "server_folder",
+            "params": {
+                "path": str(folder),
+                "media_type": "audio",
+                "clipper": "audio_window",
+                "clip_start": 0.0,
+                "clip_end": 0.1,
+            },
+        }
+        labels = [
+            {"label": "bad", "origin": origin, "origin_name": "clip.wav", "md5": "bbb", "filename": "clip.wav"},
+        ]
+        fake_emb = np.zeros(768, dtype=np.float32)
+        # ``_apply_clip_and_embed`` returns ``(embedding, clip_bytes)`` since
+        # the H10 clip-aware ingest refactor; ``clip_bytes=None`` mirrors the
+        # full-file fallback path.
+        with patch("vtscore.detectors.resolver._apply_clip_and_embed", return_value=(fake_emb, None)) as clip_mock:
+            resolve_label_embeddings(labels, "audio", embedder_name="specific-clip-embedder")
+
+        clip_mock.assert_called()
+        last_call_args = clip_mock.call_args_list[-1]
+        passed_args = list(last_call_args.args) + list(last_call_args.kwargs.values())
+        assert "specific-clip-embedder" in passed_args
+
 
 class TestMultiFindCrossDatasetFallback:
     """Test that multi_find uses the resolver when labels don't match the target dataset."""
