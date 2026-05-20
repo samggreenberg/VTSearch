@@ -160,10 +160,7 @@ Cross-section interaction agents:
   error. The same line window (L600-694) does contain real bugs,
   but they are different from the one H12 names — see H32 / H33 /
   H34.
-- **H13. `vote_media` silent-mistarget on dropped header** —
-  `vtsearch/routes/media/list.py` L524–563. Missing `X-Dataset-Id`
-  falls back to whatever the context proxy resolves to; vote applies
-  to wrong media.
+- ~~**H13. `vote_media` silent-mistarget on dropped header**~~
 - ~~**H14. `export_labels` leaks votes across datasets**~~
 - **H15. File-browser symlink-traversal** — `vtsearch/routes/file_browser.py`
   L84–92. `target.resolve().relative_to(root.resolve())` succeeds for
