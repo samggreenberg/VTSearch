@@ -119,9 +119,8 @@ Cross-section interaction agents:
   warning.
 - ~~**H6. `train_model` produces degenerate single-class model**~~ —
   shipped 2026-05-20. See [Shipped](#shipped).
-- **H7. Vote applied before retrain; retrain failure leaves vote live** —
-  `vtsearch/detectors/workflow.py` L40–105. User sees the vote, model
-  is stale or absent.
+- ~~**H7. Vote applied before retrain; retrain failure leaves vote live**~~ —
+  shipped 2026-05-20. See [Shipped](#shipped).
 
 ### Datasets
 
@@ -633,6 +632,16 @@ and a one-line summary is recorded here.
   registry write itself fails, so the inverse orphan (pkl on disk,
   no entry) is also impossible. Regression:
   `tests/datasets/test_datasets.py::TestLoadFailureCleanup`.
+
+- **H7 — train-first `apply_and_retrain`** (2026-05-20).
+  `apply_and_retrain` in `vtscore/detectors/workflow.py` now resolves
+  entries into `(cid, label)` pairs, builds `proposed_good` /
+  `proposed_bad` dicts merged with the current votes, and runs
+  `train_and_score` on those *before* any `apply_label` /
+  `sync_labels_to_loaded_detector()` call. A failing retrain now
+  leaves `det_ctx.good_votes`, `det_ctx.bad_votes`, `det_ctx.model`,
+  and the persisted labelset all untouched. Regression in
+  `tests/detectors/test_workflow.py::TestTrainingFailureIsTransactional`.
 
 ### Still open
 
