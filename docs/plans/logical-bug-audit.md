@@ -76,14 +76,7 @@ Cross-section interaction agents:
 
 ### ~~C9. Path-template substitution missing post-resolution validation~~
 
-### C10. MD5 / metadata cache collision returns wrong-dataset media on switch
-
-- **File:** `frontend/src/app/services/media-metadata-cache.service.ts`
-  ~L31
-- **Bug:** Cache key is `media_id` only. Media IDs are per-dataset, so
-  after the user switches datasets the cache returns dataset A's
-  filename / md5 / custom_metadata for dataset B's id=1.
-- **Fix sketch:** Key the cache by `${datasetId}:${mediaId}`.
+### ~~C10. MD5 / metadata cache collision returns wrong-dataset media on switch~~
 
 ### ~~C11. `fill_labels_from_sort` silently swallows sync failures~~
 
@@ -560,6 +553,14 @@ and a one-line summary is recorded here.
   ends in `validate_server_filepath(resolved, base_dir=
   get_file_access_base_dir())`. Regression tests in
   `tests/io/test_sync_sources.py`.
+- **C10 — MediaMetadataCacheService dataset-qualified keys** (2026-05-19).
+  Cache entries in
+  `frontend/src/app/services/media-metadata-cache.service.ts` now key on
+  `${datasetId}:${mediaId}` (snapshotted from `ActiveContextService`),
+  and pending IDs are bucketed by the dataset they were queued under so
+  each batch fetch dispatches only while its dataset is active and the
+  `X-Dataset-Id` interceptor header matches what the response will be
+  cached against.
 - **C11 — `fill_labels_from_sort` sync-failure surfacing** (2026-05-19).
   Disk sync now runs before the response and is wrapped in
   `try/except`; failures from `sync_labels_to_loaded_detector()`
@@ -569,11 +570,11 @@ and a one-line summary is recorded here.
 
 ### Still open
 
-Every other finding (C10, C12 and the H / M / L tiers) remains as
-written. When the next fix lands, collapse the finding above to a
-struck-through heading and add a line here. When every critical and
-high is addressed, this doc can be retired into the relevant subsystem
-docs (or deleted, per the `docs/plans/` lifecycle).
+Every other finding (C12 and the H / M / L tiers) remains as written.
+When the next fix lands, collapse the finding above to a struck-through
+heading and add a line here. When every critical and high is addressed,
+this doc can be retired into the relevant subsystem docs (or deleted,
+per the `docs/plans/` lifecycle).
 
 Specific open items called out by previously-shipped fixes:
 
