@@ -111,11 +111,6 @@ Cross-section interaction agents:
   CLAP-trained detector re-trains with whatever the default audio
   embedder is. CLAUDE.md's "re-derive with active embedder"
   invariant becomes "re-derive with **wrong** embedder."
-- **H4. Asymmetric region pooling between good/bad votes** —
-  `vtsearch/detectors/training.py` L171. Good votes use
-  `_training_vec_for_vote(..., region_boxes.get(cid))`; bad votes use
-  the raw embedding unconditionally. Mixed-modality MLP training on
-  the same detector when patch_grid is in play.
 - **H5. Detector embedder not revalidated on dataset switch** —
   `vtsearch/routes/detectors/scoring.py` + `dataset_sync.py`.
   `ensure_votes_match_active_dataset()` rehydrates votes but doesn't
