@@ -211,9 +211,25 @@ Cross-section interaction agents:
 - **H17. Plugin scanner silently shadows duplicate names** —
   `vtsearch/plugins/__init__.py` ~L466. Second plugin with the same
   `name` overwrites the first; no warning, no error.
-- **H18. CSV exporter doesn't escape embedded newlines** —
-  `vtsearch/exporters/server_csv_file/__init__.py` L129–141. Label
-  text containing `\n` breaks row structure; re-import fails.
+- ~~**H18. CSV exporter doesn't escape embedded newlines**~~ —
+  investigation closed (2026-05-20): not a real bug. The audit's
+  path is also stale (exporters moved to `vtscore/exporters/`); the
+  actual file is `vtscore/exporters/server_csv_file/__init__.py`.
+  The code at L120–141 does not hand-roll CSV rows — it dispatches
+  dict vs scalar cells and hands the row to `writer.writerow(row)`
+  (L141), where `writer` is a stdlib `csv.writer` (L36) using the
+  default `QUOTE_MINIMAL`, which always quotes fields containing
+  `\n`, `\r`, or the delimiter. The file is opened with
+  `newline=""` (L39), so no newline translation corrupts the
+  quoted content. The matching importer
+  (`vtscore/labels/importers/server_csv_file/__init__.py` L96)
+  uses `csv.DictReader`, which reads multi-line quoted fields
+  back correctly. Verified via round-trip with `\n` embedded in
+  the `label`, `origin_name`, and `category` fields plus `"` in
+  the label: the exporter wrote a valid quoted CSV and the
+  importer returned the original strings byte-for-byte
+  (`.strip().lower()` on the label only trims leading/trailing
+  whitespace — interior newlines pass through).
 - **H19. Required select fields silently accept empty string** —
   `vtsearch/plugins/schema.py` L119. `required` + `load_default=""`
   lets empty value through marshmallow.
