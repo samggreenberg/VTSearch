@@ -1423,6 +1423,73 @@ class TestRegionAwareTraining:
         populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
         np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
 
+    def test_populate_label_embeddings_invalidates_when_region_box_removed(self):
+        """Logical-bug-audit M4: when a labelset element loses its ``region_box``
+        (e.g. the user flipped good→bad on a previously region-voted media, or
+        un-voted/re-voted without a region), the cache must NOT keep returning
+        the previously-pooled region vector.  The next pass should produce the
+        image-level CLS embedding instead."""
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        cid = 9004
+        media = self._register_synthetic_image(cid)
+        # First pass: element carries a region_box → cached as a pooled vector.
+        elem = LabeledElement(md5=media["md5"], label="good", region_box=(0.0, 0.0, 0.5, 0.5))
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        snap = {cid: media}
+
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
+        eid = stable_element_id(elem)
+        pooled = np.array(det_ctx.label_embeddings[eid], copy=True)
+        # Sanity: the cached vector is the pooled box, not the CLS embedding.
+        assert not np.allclose(pooled, media["embedding"])
+        assert det_ctx.label_embedding_regions[eid] == (0.0, 0.0, 0.5, 0.5)
+
+        # Simulate the bug-triggering edit: same element identity (same eid)
+        # but the user removed the region_box (e.g. flipped to bad, then back
+        # to good without a region; bad votes never carry a region_box).
+        elem.region_box = None
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
+        # The cached vector must now be the image-level CLS embedding, not
+        # the stale top-left pooled vector.
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], media["embedding"])
+        assert det_ctx.label_embedding_regions[eid] is None
+
+    def test_populate_label_embeddings_invalidates_when_region_box_added(self):
+        """Mirror of the M4 fix in the opposite direction: an image-level
+        cached entry must be re-pooled when the element gains a region_box.
+        (This already worked before M4 because the original cache check
+        gated on ``elem.region_box is None``, but the explicit test pins the
+        behaviour now that the cache check also consults the region cache.)"""
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.media.patch_embed import box_to_vote_vector
+        from vtscore.state.core import DetectorContext
+
+        cid = 9005
+        media = self._register_synthetic_image(cid)
+        elem = LabeledElement(md5=media["md5"], label="good")  # no region_box
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        snap = {cid: media}
+
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
+        eid = stable_element_id(elem)
+        assert det_ctx.label_embedding_regions[eid] is None
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], media["embedding"])
+
+        # User adds a region annotation to the element.
+        elem.region_box = (0.5, 0.5, 1.0, 1.0)
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
+        expected = box_to_vote_vector(media["patch_grid"], (0.5, 0.5, 1.0, 1.0))
+        np.testing.assert_allclose(det_ctx.label_embeddings[eid], expected, atol=1e-6)
+        assert det_ctx.label_embedding_regions[eid] == (0.5, 0.5, 1.0, 1.0)
+
 
 class TestRegionAwareTrainingCrossDataset:
     """Cross-dataset region-vote path: when a labelset element carries a

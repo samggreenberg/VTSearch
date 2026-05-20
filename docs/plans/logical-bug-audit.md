@@ -484,9 +484,9 @@ Cross-section interaction agents:
 
 ### Detector
 
-- **M4.** `populate_label_embeddings` cache not invalidated when a
+- ~~**M4.** `populate_label_embeddings` cache not invalidated when a
   `region_box` is removed from an element; stale pooled vector
-  continues to be used.
+  continues to be used.~~
 - **M5.** `labelset_elements.resolve_current_dataset_cid` can return a
   colliding-MD5 cid in cross-dataset labelsets → clicks vote the
   wrong media.
