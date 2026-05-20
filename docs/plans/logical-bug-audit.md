@@ -272,11 +272,20 @@ Cross-section interaction agents:
 
 ### Embedding
 
-- **H22. `predict_embedders_to_preload` mismatched media type** —
-  `vtsearch/embedding/loader.py` L162. Registry filters by
-  `media_type_id`, but dataset metadata may carry a different
-  `media_type` string for a custom embedder; preloads the wrong
-  model.
+- ~~**H22. `predict_embedders_to_preload` mismatched media type**~~ —
+  shipped in commit `92e27a39` (PR #1561, "H22: persist detector
+  embedder for accurate preload prediction"). The detector registry
+  now carries an `embedder` field stamped by
+  `record_detector_embedder()` during training
+  (`vtscore/detectors/workflow.py:174`,
+  `vtscore/detectors/labelset_training.py:281`), and both dataset
+  and detector paths in `predict_embedders_to_preload()`
+  (`vtscore/embedding/loader.py`) go through a shared `_resolve()`
+  that prefers `entry["embedder"]` and falls back to the media
+  type's default only when the field is unset or unrecognised.
+  Legacy detector entries written before the field existed remain on
+  the default-embedder fallback until the next retrain stamps them —
+  documented as expected behaviour in the function's docstring.
 
 ### Security / sync
 
