@@ -123,9 +123,7 @@ Cross-section interaction agents:
 - **H10. Clipped media re-ingest reads whole file for MD5** —
   `vtsearch/datasets/ingest.py` L275. MD5 of the full parent
   ≠ MD5 of the clip, so dedup never re-matches the original clip.
-- **H11. Multi-media import with empty form yields empty dataset** —
-  `vtsearch/datasets/importers/base.py` `effective_source_specs()`
-  returns `[]`; downstream loops silently do nothing.
+- ~~**H11. Multi-media import with empty form yields empty dataset**~~
 
 ### Routes / API
 

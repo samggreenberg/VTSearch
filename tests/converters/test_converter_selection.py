@@ -872,6 +872,28 @@ class TestLegacyEffectiveSourceSpecs:
         specs = imp.effective_source_specs({"media_type": "image", "converters": "video2image,bogus"})
         assert [s.converter for s in specs] == [None, "video2image"]
 
+    def test_legacy_rejects_empty_media_type_and_converters(self):
+        """H11: a legacy importer called with no ``media_type`` and no
+        ``converters`` used to return ``[]`` silently, leaving downstream
+        loops to produce an empty dataset.  It must now raise."""
+        import pytest
+
+        imp = _LegacyTestImporter.make()
+
+        with pytest.raises(ValueError, match="legacy import requires"):
+            imp.effective_source_specs({"media_type": "", "converters": ""})
+
+    def test_legacy_rejects_only_unknown_converters(self):
+        """H11: ``media_type`` empty + every named converter unknown also
+        produces an empty spec list and must raise rather than silently
+        return ``[]``."""
+        import pytest
+
+        imp = _LegacyTestImporter.make()
+
+        with pytest.raises(ValueError, match="legacy import requires"):
+            imp.effective_source_specs({"media_type": "", "converters": "bogus_one,bogus_two"})
+
 
 class TestMultiMediaEffectiveSourceSpecs:
     """multi_media=True importers parse the explicit source_specs form value."""
@@ -916,6 +938,27 @@ class TestMultiMediaEffectiveSourceSpecs:
         specs = IMPORTER.effective_source_specs({"media_type": "image"})
         assert len(specs) == 1
         assert specs[0].converter is None
+
+    def test_empty_list_source_specs_defaults_to_direct_only(self):
+        """H11: an explicit empty ``source_specs=[]`` (e.g. user deleted every
+        row in the multi-media grid) must fall back to the synthesised direct
+        row, not return ``[]`` and silently produce an empty dataset."""
+        from vtscore.datasets.importers.server_folder import IMPORTER
+
+        specs = IMPORTER.effective_source_specs({"media_type": "image", "source_specs": []})
+        assert len(specs) == 1
+        assert specs[0].converter is None
+        assert specs[0].source_type == "image"
+
+    def test_empty_json_string_source_specs_defaults_to_direct_only(self):
+        """H11: an explicit ``source_specs="[]"`` JSON string is treated the
+        same as an empty Python list and falls back to the direct row."""
+        from vtscore.datasets.importers.server_folder import IMPORTER
+
+        specs = IMPORTER.effective_source_specs({"media_type": "image", "source_specs": "[]"})
+        assert len(specs) == 1
+        assert specs[0].converter is None
+        assert specs[0].source_type == "image"
 
     def test_rejects_invalid_converter(self):
         import pytest
