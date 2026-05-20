@@ -108,7 +108,12 @@ class MediaConverter(PluginBase, ABC):
         from vtscore.plugins.schema import get_plugin_arg_schema  # noqa: PLC0415
 
         schema = get_plugin_arg_schema(self)
-        return schema.load(params or {})
+        loaded = schema.load(params or {})
+        # ``Schema.load(<dict>)`` returns a dict (the ``many=True`` overload
+        # returns a list); marshmallow's typing is too permissive to narrow
+        # this automatically.
+        assert isinstance(loaded, dict)
+        return loaded
 
     def get_param(self, params: dict[str, Any] | None, key: str) -> Any:
         """Return the value for *key* from *params*, falling back to the
