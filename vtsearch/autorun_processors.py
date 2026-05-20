@@ -2,7 +2,7 @@
 
 Which processors should automatically run on every newly-loaded media item
 is a user-facing policy concern, not a library concern.  The library
-(``vtscore``, see ``docs/plans/extract-library.md``) keeps the
+(``vtscore``, see ``../vtscore/docs/architecture.md``) keeps the
 ``Processor`` / ``Extractor`` / ``Localizer`` ABCs and the code that
 applies them; the app owns the registry of "which ones are active".
 

@@ -84,7 +84,7 @@ _embed_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_
 # The library remembers the user's per-media-type embedder pick by calling
 # whatever the app installs here.  Default is a no-op so this module doesn't
 # need to import ``vtsearch.settings`` (Phase 2 of
-# ``docs/plans/extract-library.md``).  ``vtsearch/shim/`` registers the
+# ``../docs/architecture.md``).  ``vtsearch/shim/`` registers the
 # real implementation — ``vtsearch.settings.set_last_embedder_for_media_type``
 # — at app startup.
 _last_embedder_persistence_hook: Callable[[str, str], None] | None = None

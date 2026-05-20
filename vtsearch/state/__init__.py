@@ -5,7 +5,7 @@ This package keeps ``from vtsearch.state import medias`` working for app
 code by re-exporting every library name and adding the app-side proxy
 view (``medias``, ``good_votes``, …) from :mod:`vtsearch.shim.state_proxies`.
 
-See ``docs/plans/extract-library.md`` Phase 8 — this file is the
+See ``../../vtscore/docs/architecture.md`` Phase 8 — this file is the
 canonical example of an "app-tier shim that re-exports the library names
 alongside the proxies".
 """

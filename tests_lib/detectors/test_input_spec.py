@@ -8,7 +8,7 @@ exercised separately in tests/cli and tests/io.
 from __future__ import annotations
 
 # Plugin registries are populated eagerly at PluginRegistry construction
-# (Phase 5 of docs/plans/extract-library.md), so no app-side import is
+# (Phase 5 of ../../vtscore/docs/architecture.md), so no app-side import is
 # needed to ensure converters/clippers are discoverable.
 from vtscore.detectors.input_spec import (
     apply_detector_meta,

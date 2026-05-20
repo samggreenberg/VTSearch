@@ -13,13 +13,21 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | [patch-embedder.md](patch-embedder.md) | **V1 + V2 shipped; V3 design only** | Six image embedders (DINOv2 / DINOv3 / EUPE × single+patch) are live; region voting via Shift-drag is live. V3 ("one text embedder + one patch embedder per dataset") is designed but not implemented — work plan still a sketch. |
 | [clipper-chain.md](clipper-chain.md) | **Phase 1 in flight** | Dataset-load pipeline accepts an ordered list of converter/clipper steps via a new `clipper_chain` field. Phase 2 (frontend chooser), Phase 3 (sidecar/registry schema), Phase 4 (`detector_meta` chain + `input_spec` migration) all deferred — see Open follow-ups. |
 | [RCDatasetImporter.md](RCDatasetImporter.md) | **Scaffolds in place; awaiting client code** | ReCaller / DataWrest / PullWrest / Holder plugin scaffolds exist (`hidden_from_picker = True`); the API client stubs (`_rc_fetch_results`, `_dw_get_embedding`, `_pw_fetch_media`, `_holder_*`) still need real implementations. |
-| [extract-library.md](extract-library.md) | **Proposed** | Split VTSearch into a `vtscore` Python library plus the Flask/Angular app, gated on a CI job that runs the test suite without Flask installed. Not started. |
 | [openapi-schema.md](openapi-schema.md) | **Migration complete; one cosmetic follow-up** | flask-smorest plumbing + Swagger UI + per-plugin runtime validation live across every blueprint. Remaining: per-plugin OpenAPI **spec** types for the six plugin-field route bodies (deferred — runtime validation already captures the field types). |
 | [brainstorm.md](brainstorm.md) | **Backlog** | Combined feature + UX backlog (formerly `feature-brainstorm.md` + `ux-brainstorm.md`). Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, UX friction, architecture, experiments. Items graduate into their own plan doc as they mature. |
 | [logical-bug-audit.md](logical-bug-audit.md) | **Discovery only** | Multi-agent audit of the codebase for logical bugs (race conditions, context-propagation gaps, silent miscompute, partial-state failures, zip-slip variants). ~95 findings grouped Critical / High / Medium / Low + nine recurring root-cause patterns. No fixes landed. |
 
 ## Recently completed (removed)
 
+- **extract-library.md** — Split VTSearch into a reusable `vtscore`
+  Python library plus the Flask/Angular `vtsearch` app. All nine phases
+  shipped (Phase 6 audited as a no-op, Phase 9 deferred PyPI publication
+  until a real external consumer asks). The library now lives at
+  `vtscore/` with its own [README](../../vtscore/README.md),
+  [CHANGELOG](../../vtscore/CHANGELOG.md), and full developer
+  documentation under [`vtscore/docs/`](../../vtscore/docs/). The seven
+  seams that were cut between library and app are documented in
+  [`vtscore/docs/architecture.md`](../../vtscore/docs/architecture.md).
 - **c901-refactor-triage.md** and **c901-refactor-triage-2.md** —
   Per-function refactor/skip decisions for the 2026-05 sweep of
   functions with cyclomatic complexity ≥20. Two waves shipped, twelve

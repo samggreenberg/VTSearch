@@ -169,7 +169,7 @@ motion features compared to image-only encoders applied per frame.
 # directly for tunables like ``saved_datasets_dir``, ``detectors_dir``,
 # ``calibrate_count``, etc.  That couples the library to the app's settings
 # layer and makes it impossible to vendor the library as ``vtscore`` (see
-# ``docs/plans/extract-library.md`` — Phase 2).
+# ``docs/architecture.md`` — Phase 2).
 #
 # ``CoreConfig`` is the seam: a frozen value object that bundles every knob
 # library code reads.  Follow-up PRs convert each call site to accept (or
@@ -185,7 +185,7 @@ motion features compared to image-only encoders applied per frame.
 # :func:`register_core_config_builder` — see ``vtsearch/shim`` for the
 # concrete builder that snapshots ``vtsearch.settings``.  This keeps the
 # library import-clean: ``vtscore.config`` itself never imports
-# ``vtsearch.settings`` (Phase 8 of ``docs/plans/extract-library.md``).
+# ``vtsearch.settings`` (Phase 8 of ``docs/architecture.md``).
 # Library-only consumers without an app skip ``from_settings()`` entirely
 # and construct ``CoreConfig`` directly.
 

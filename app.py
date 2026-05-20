@@ -92,7 +92,7 @@ app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-
 # the per-request dataset/detector context from ``flask.g`` without
 # ``vtscore.state.core`` itself having to import Flask.  Also wire the
 # library's "persist this" hooks (currently just last-embedder-per-media-
-# type) to ``vtsearch.settings``.  See ``docs/plans/extract-library.md`` for
+# type) to ``vtsearch.settings``.  See ``vtscore/docs/architecture.md`` for
 # the seam.
 from vtsearch.shim import (  # noqa: E402
     register_app_config_builder,

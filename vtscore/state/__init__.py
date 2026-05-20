@@ -151,7 +151,7 @@ def clear_all() -> None:
 # installed.  ``vtsearch/shim/register_app_persistence_hooks()`` wires
 # each key here to the matching ``vtsearch.settings.set_*`` function at
 # app startup.  Library-only callers (no app) see in-memory mutation
-# only.  See Phase 2 of ``docs/plans/extract-library.md``.
+# only.  See Phase 2 of ``../docs/architecture.md``.
 
 _setting_persisters: dict[str, Callable[[Any], None]] = {}
 

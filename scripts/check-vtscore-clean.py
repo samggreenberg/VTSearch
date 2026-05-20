@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Run ``tests_lib/`` with Flask import blocked.
 
-The ``vtscore`` library (Phase 8 of ``docs/plans/extract-library.md``)
+The ``vtscore`` library (Phase 8 of ``../vtscore/docs/architecture.md``)
 must be importable without Flask installed.  Until the physical
 ``git mv`` to ``vtscore/`` lands, the library code still lives at
 ``vtsearch.<subpackage>`` paths, so we can't simulate "Flask uninstalled"
@@ -38,7 +38,7 @@ class _FlaskBlocker(importlib.abc.MetaPathFinder):
     """Refuse to load Flask-shaped modules.
 
     Raises :class:`ImportError` with a directive pointing to the
-    library-clean rule in ``docs/plans/extract-library.md``.
+    library-clean rule in ``../vtscore/docs/architecture.md``.
     """
 
     def find_spec(self, fullname, path=None, target=None):  # noqa: ARG002
@@ -62,7 +62,7 @@ class _FlaskBlockerLoader(importlib.abc.Loader):
         raise ImportError(
             f"Import of {self._fullname!r} is blocked in vtscore-clean test mode. "
             "Library-candidate code (tests_lib/ targets) must not import Flask. "
-            "See docs/plans/extract-library.md Phase 1/Phase 7 for the seam policy."
+            "See ../vtscore/docs/architecture.md Phase 1/Phase 7 for the seam policy."
         )
 
 

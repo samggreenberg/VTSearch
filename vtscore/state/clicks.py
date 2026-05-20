@@ -2,7 +2,7 @@
 
 Operates on the active :class:`DetectorContext` (resolved per call) so the
 library has no implicit dependency on the app-side proxy view.  See Phase 3
-of ``docs/plans/extract-library.md``.
+of ``../docs/architecture.md``.
 """
 
 from __future__ import annotations

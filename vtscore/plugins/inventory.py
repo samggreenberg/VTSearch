@@ -14,7 +14,7 @@ families self-register at module import; app-only families
 (``settings_io/*``) are injected by the application layer via
 :mod:`vtsearch.shim` so this module stays free of cross-boundary imports
 ahead of the ``vtscore`` library split (see
-``docs/plans/extract-library.md`` Phase 5).
+``../docs/architecture.md`` Phase 5).
 """
 
 from __future__ import annotations

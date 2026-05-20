@@ -240,7 +240,7 @@ def _dispatch(config: dict[str, Any]) -> None:
             # Apply the settings path first so detector-dir lookups resolve
             # to the same place the pipeline run will use.  Routed through
             # CoreConfig so this module stays settings-import-free
-            # (see Phase 2 of docs/plans/extract-library.md).
+            # (see Phase 2 of docs/architecture.md).
             from vtscore.config import CoreConfig  # noqa: PLC0415
 
             CoreConfig.from_settings(settings_path=settings_path)

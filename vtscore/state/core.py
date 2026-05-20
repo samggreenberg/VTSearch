@@ -19,7 +19,7 @@ live here as proxy objects, but they belong to the app layer — the
 library never imports them.  They now live in
 :mod:`vtsearch.shim.state_proxies` and are re-exported from
 :mod:`vtsearch.state` so existing app-tier imports continue to work.
-See Phase 3 of ``docs/plans/extract-library.md``.
+See Phase 3 of ``../docs/architecture.md``.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ _state_lock = threading.RLock()
 # stashes it on ``g``.  The proxy objects then need to read it back.
 #
 # To keep this module Flask-free (so it can move into ``vtscore`` later —
-# see ``docs/plans/extract-library.md``), the read side is exposed as a
+# see ``../docs/architecture.md``), the read side is exposed as a
 # **pluggable resolver**: a callable that returns the current request's
 # DatasetContext / DetectorContext, or ``None`` if there is no request.
 #
