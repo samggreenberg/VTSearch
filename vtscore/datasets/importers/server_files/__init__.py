@@ -339,12 +339,19 @@ class ServerFilesDatasetImporter(DatasetImporter):
         name_to_source: dict[str, Path],
         origin: dict[str, Any],
     ) -> None:
-        """Point each media at its real source path instead of the symlink."""
+        """Point each media at its real source path instead of the symlink.
+
+        Each media gets a fresh copy of *origin* so a later mutation of one
+        media's ``origin.params`` cannot leak across siblings.
+        """
         for media in medias.values():
             src = name_to_source.get(media.get("origin_name", "")) or name_to_source.get(media.get("filename", ""))
             if src is None:
                 continue
-            media["origin"] = origin
+            media["origin"] = {
+                "importer": origin.get("importer", ""),
+                "params": dict(origin.get("params", {})),
+            }
             media["origin_name"] = str(src)
             media["media_path"] = str(src)
 
