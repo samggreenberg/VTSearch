@@ -142,10 +142,21 @@ Cross-section interaction agents:
 
 ### Routes / API
 
-- **H12. `add_media_to_pile` race** — `vtsearch/routes/media/list.py`
-  L611–615. Snapshot in dataset A, `apply_label` in
-  (concurrently-switched) dataset B. Labels applied to wrong
-  dataset.
+- ~~**H12. `add_media_to_pile` race**~~ — investigation closed
+  (2026-05-20): not a real race in the current architecture. The
+  audit's framing assumes a global "active dataset" pointer that
+  could be switched mid-handler between `snapshot_medias()` and
+  `apply_label()`, but `before_request` in `app.py` pins both
+  `g._dataset_context` and `g._detector_context` for the duration
+  of each request (resolver in `vtsearch/shim/__init__.py:19-39`),
+  and `flask.g` is request-local — so the two calls inside one
+  `add_media_to_pile` invocation always resolve to the same
+  contexts. Note also that `apply_label` writes to the *detector*
+  context's `good_votes` / `bad_votes`, not to a dataset, so the
+  audit's "labels applied to wrong dataset" framing is a category
+  error. The same line window (L600-694) does contain real bugs,
+  but they are different from the one H12 names — see H32 / H33 /
+  H34.
 - **H13. `vote_media` silent-mistarget on dropped header** —
   `vtsearch/routes/media/list.py` L524–563. Missing `X-Dataset-Id`
   falls back to whatever the context proxy resolves to; vote applies
@@ -163,6 +174,38 @@ Cross-section interaction agents:
   returns None, `g._dataset_context` is never set, the proxy silently
   resolves to the empty context. Client sees stale data with no
   error.
+- **H32. `add_media_to_pile` TOCTOU between md5 check and insertion** —
+  `vtsearch/routes/media/list.py` L607–608 vs. L687–690. The md5
+  lookup (`snap = snapshot_medias()` + `build_media_lookup(snap)`)
+  runs outside `_state_lock`; the new-media insertion happens under
+  the lock ~80 lines later. Two concurrent uploads of the same file
+  can both miss the existing-cid hit, both embed, and both insert,
+  producing duplicate medias with identical md5. Fix sketch:
+  re-check `md5_lookup` (or recompute it from `medias`) under
+  `_state_lock` immediately before assigning `new_id` and writing
+  `medias[new_id]`, and dispatch to the existing-cid branch if a
+  match appears in the recheck.
+- **H33. `add_media_to_pile` label not synced to disk** —
+  `vtsearch/routes/media/list.py` L614 and L692. `vote_media`
+  follows `toggle_vote` with `sync_labels_to_loaded_detector()` +
+  `sync_to_labelset_source()` (L555–561) so the change reaches the
+  detector's on-disk labelset and any configured `LabelsetSource`.
+  `add_media_to_pile` calls neither after `apply_label`. The
+  in-memory `good_votes` / `bad_votes` are updated, but the labelset
+  file is not — so the next time `ensure_votes_match_active_dataset`
+  rehydrates the detector from disk (e.g. on the next dataset /
+  detector switch handled by `before_request` in `app.py:247-257`),
+  the just-applied label silently disappears.
+- **H34. Missing `X-Detector-Id` → silent detector fallback** —
+  `vtscore/state/core.py` `get_active_detector_context()` falls
+  through to the thread-local (then `_empty_detector_context`) when
+  `g._detector_context` is unset. Any route that mutates votes
+  without requiring the header — `add_media_to_pile`, `vote_media`,
+  bulk-label endpoints — silently writes to whatever the thread-local
+  resolves to, which on a Flask threaded-server worker can be the
+  detector left over from a previous request on the same thread.
+  Detector-side analog of H13; the fix is the same shape (reject the
+  request when the header is absent for any vote-mutating endpoint).
 
 ### Plugins / converters / exporters
 
