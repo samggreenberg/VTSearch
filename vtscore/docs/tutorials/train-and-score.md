@@ -269,13 +269,32 @@ ctx = DetectorContext(
 )
 register_detector_context(ctx)
 
-# This reads the JSON, resolves every origin to a file, embeds each file
-# with CLAP, builds (X, y), trains the MLP, and stores model + threshold
-# on the context.
-train_detector_from_origins(ctx)
+# Build (good_origins, bad_origins) from the saved JSON's labelset, then
+# resolve every origin to a file, embed each file *with the same embedder
+# the detector was trained with* (here: "audio_clap"), and train. Passing
+# ctx.embedder is critical — using "" would silently fall back to whatever
+# the media type's default embedder is, mixing model outputs.
+good_origins = [
+    {"origin": e.origin, "origin_name": e.origin_name,
+     "filename": e.filename, "md5": e.md5}
+    for e in saved_labelset.labels if e.label == "good"
+]
+bad_origins = [
+    {"origin": e.origin, "origin_name": e.origin_name,
+     "filename": e.filename, "md5": e.md5}
+    for e in saved_labelset.labels if e.label == "bad"
+]
+weights, threshold = train_detector_from_origins(
+    good_origins,
+    bad_origins,
+    inclusion=0,
+    media_type="audio",
+    embedder_name=ctx.embedder,
+)
+ctx.threshold = threshold
+# weights is a state_dict-shaped dict; load it onto a model and attach.
 
-print(f"Restored detector: threshold={ctx.threshold:.3f}, "
-      f"model layers={len(list(ctx.model.children()))}")
+print(f"Restored detector: threshold={ctx.threshold:.3f}")
 ```
 
 The library walked the origins, called the `server_folder`

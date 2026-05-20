@@ -609,12 +609,21 @@ def collect_media_origins(medias: dict) -> list[tuple[int, Origin]]:
     votes to a detector JSON."""
 
 def train_detector_from_origins(
-    ctx: DetectorContext,
-    *,
-    config: CoreConfig | None = None,
-) -> None:
-    """Load-time retrainer: resolves every LabeledElement in ctx.labelset to a
-    file → embedding, builds (X, y), trains, stores the model on ctx."""
+    good_origins: list[dict],
+    bad_origins: list[dict],
+    inclusion: int,
+    media_type: str,
+    embedder_name: str,
+    calibrate_count: int = 2,
+    calibration_fraction: float = 0.5,
+) -> tuple[dict[str, list] | None, float]:
+    """Load-time retrainer: resolves each origin entry to a file, embeds it
+    with *embedder_name*, builds (X, y), and trains the MLP. Returns
+    (weights_dict, threshold), or (None, 0.5) on insufficient data.
+
+    embedder_name is required — pass the embedder the detector was
+    originally trained with so re-derived vectors don't drift onto the
+    media type's default."""
 ```
 
 ### Origin resolution

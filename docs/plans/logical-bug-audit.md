@@ -104,13 +104,8 @@ Cross-section interaction agents:
   has no patch path (single-vector models) or the forward pass produces
   no output. Covered by `TestRegionAwareTrainingCrossDataset` in
   `tests/detectors/test_patch_embedder.py`.
-- **H3. Embedder drift on save → reload** —
-  `vtsearch/detectors/training.py` L449, L463.
-  `train_detector_from_origins()` calls
-  `embed_file(file_path, media_type)` with no `embedder_name`, so a
-  CLAP-trained detector re-trains with whatever the default audio
-  embedder is. CLAUDE.md's "re-derive with active embedder"
-  invariant becomes "re-derive with **wrong** embedder."
+- ~~**H3. Embedder drift on save → reload**~~ — shipped 2026-05-20.
+  See [Shipped](#shipped).
 - **H5. Detector embedder not revalidated on dataset switch** —
   `vtsearch/routes/detectors/scoring.py` + `dataset_sync.py`.
   `ensure_votes_match_active_dataset()` rehydrates votes but doesn't
@@ -620,6 +615,25 @@ and a one-line summary is recorded here.
   near 0 (all-bad) or 1 (all-good), not 0.5 — but the substantive
   "uninformative loss, no raise" claim was correct. Regression:
   `tests_lib/detectors/test_mlp_training.py::TestSingleClassGuard`.
+
+- **H3 — Embedder drift on save → reload** (2026-05-20).
+  `train_detector_from_origins()` in
+  `vtscore/detectors/training.py` now takes a required `embedder_name`
+  argument and threads it through to `embed_file(file_path, media_type,
+  embedder_name)` at both call sites. Callers must pass the embedder the
+  detector was originally trained with (typically
+  `detector_ctx.embedder`); the previous behaviour silently fell back to
+  `embedders_for_type(media_type)[0]` (the media type's default), so a
+  CLAP-trained detector could re-train on whatever the current default
+  audio embedder happens to be. VTSearch's own load path goes through
+  `vtscore/detectors/labelset_training.py` and was already correct, so
+  this fix primarily protects third-party `vtscore` consumers who follow
+  the documented integration path. Public docs updated in lockstep:
+  `vtscore/docs/packages/detectors.md`, `vtscore/docs/concepts.md`,
+  `vtscore/docs/quickstart.md`, `vtscore/docs/integration.md`,
+  `vtscore/docs/tutorials/train-and-score.md`, and
+  `docs/vtscore-api.md`. Regression:
+  `tests/detectors/test_training_pipeline.py::TestTrainDetectorFromOrigins::test_embedder_name_is_forwarded`.
 
 - **C12 — Orphaned dataset registry entry on activation failure**
   (2026-05-19). `_register_and_migrate` now returns

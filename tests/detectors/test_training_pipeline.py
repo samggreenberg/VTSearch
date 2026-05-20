@@ -225,6 +225,7 @@ class TestTrainDetectorFromOrigins:
             [],
             inclusion=0,
             media_type="audio",
+            embedder_name="clap",
         )
         assert weights is None
         assert threshold == 0.5
@@ -235,6 +236,7 @@ class TestTrainDetectorFromOrigins:
             [],
             inclusion=0,
             media_type="audio",
+            embedder_name="clap",
         )
         assert weights is None
         assert threshold == 0.5
@@ -245,6 +247,7 @@ class TestTrainDetectorFromOrigins:
             self._origins(["bad_1", "bad_2"]),
             inclusion=0,
             media_type="audio",
+            embedder_name="clap",
         )
         assert weights is None
 
@@ -254,6 +257,7 @@ class TestTrainDetectorFromOrigins:
             self._origins(["bad_1", "bad_2", "bad_3"]),
             inclusion=0,
             media_type="audio",
+            embedder_name="clap",
         )
         assert weights is not None
         # weights is a dict of {layer_name: nested_list_of_floats}.
@@ -277,6 +281,7 @@ class TestTrainDetectorFromOrigins:
             bad,
             inclusion=0,
             media_type="audio",
+            embedder_name="clap",
         )
         assert weights is not None
 
@@ -296,6 +301,48 @@ class TestTrainDetectorFromOrigins:
             [{"origin": {"importer": "x", "params": {}}, "origin_name": "b", "md5": ""}],
             inclusion=0,
             media_type="audio",
+            embedder_name="clap",
         )
         assert weights is None
         assert threshold == 0.5
+
+    def test_embedder_name_is_forwarded(self, monkeypatch):
+        """The ``embedder_name`` argument must reach ``embed_file`` unchanged.
+
+        Regression test for H3 (embedder drift on save → reload): the load-
+        time retrainer used to call ``embed_file(file_path, media_type)``
+        with no embedder, so a CLAP-trained detector re-derived from saved
+        origins would silently re-embed audio with whatever the media
+        type's default embedder happened to be.
+        """
+        seen_embedders: list[str] = []
+
+        @contextmanager
+        def _fake_ctx(origin, origin_name="", filename=""):
+            yield ("PATH:" + origin_name) if origin_name else None
+
+        def _fake_embed(path, media_type, embedder_name=""):
+            seen_embedders.append(embedder_name)
+            if path is None:
+                return None
+            # One-hot-ish vector keyed by class so the MLP has something to learn.
+            base = np.full(8, 1.0 if "good" in path else -1.0, dtype=np.float32)
+            return base
+
+        import vtscore.detectors.resolver as resolver_mod
+
+        monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_ctx)
+        monkeypatch.setattr(resolver_mod, "embed_file", _fake_embed)
+
+        weights, _ = train_detector_from_origins(
+            self._origins(["good_1", "good_2", "good_3"]),
+            self._origins(["bad_1", "bad_2", "bad_3"]),
+            inclusion=0,
+            media_type="audio",
+            embedder_name="clap",
+        )
+        assert weights is not None
+        assert seen_embedders, "embed_file should have been called"
+        assert set(seen_embedders) == {"clap"}, (
+            f"every embed_file call must receive embedder_name='clap'; got {seen_embedders}"
+        )
