@@ -1,10 +1,14 @@
 # `vtscore` Public API Sketch
 
-> **Status:** Phase 0 deliverable for [`docs/plans/extract-library.md`](plans/extract-library.md).
-> Phase 8 (physical move) has shipped, so every path below now lives at its final
-> `vtscore.*` home. The contract this document captures — the set of symbols an external
-> `vtscore` consumer is expected to import, and the one-line semantics each one
-> guarantees — is what the refactor preserved.
+> **Status:** Canonical public-API inventory. Originally produced as a
+> docstring-only contract sketch when the library was carved out of
+> VTSearch. Every path below lives at its final `vtscore.*` home. The
+> contract this document captures — the set of symbols an external
+> `vtscore` consumer is expected to import, and the one-line semantics
+> each one guarantees — is what the refactor preserved.
+>
+> For developer-facing documentation (quickstart, architecture, per-package
+> guides, plugin authoring), see [`../vtscore/docs/`](../vtscore/docs/).
 
 ## Methodology
 
@@ -1279,28 +1283,3 @@ decides when X happens, what gets persisted, and where it shows up."**
    `vtscore.concurrency.progress.set_thread_progress` so the two surfaces are
    consistent.
 
-
----
-
-## Refactor progress (Phases 0–2 shipped)
-
-Live status of the seams the plan calls out. Cross-referenced with [`docs/plans/extract-library.md`](plans/extract-library.md):
-
-| Module / name                                       | Coupling                       | Phase | Status |
-|-----------------------------------------------------|--------------------------------|-------|--------|
-| `state.core._request_*_context()`                   | `flask.g`                      | 1     | ✅ shipped — pluggable resolver hook (`register_dataset_context_resolver`, `register_detector_context_resolver`); Flask wiring lives in `vtsearch/shim/`. |
-| `detectors.workflow.apply_and_retrain`              | `flask.g`                      | 1     | ✅ shipped — `override_detector_context()` context manager from `state.core` takes the top tier of the resolution chain. Phase 3 will additionally thread `DatasetContext` / `DetectorContext` as explicit args. |
-| `cli.main` / `cli.autodetect`                       | `vtsearch.settings`            | 2     | ✅ shipped — builds `CoreConfig.from_settings(settings_path=…)` once at the top; `autorun_detectors` becomes `config.autorun_detectors`. |
-| `cli_pipeline`                                      | `vtsearch.settings`            | 2     | ✅ shipped — same pattern. |
-| `datasets.load_pipeline`                            | `vtsearch.settings`            | 2     | ✅ shipped — `ConcurrencyGate` caps read through `CoreConfig`; the `set_last_embedder_for_media_type` write becomes the app-installed `register_last_embedder_persistence_hook`. |
-| `datasets.registry.get_saved_datasets_dir`          | `vtsearch.settings`            | 2     | ✅ shipped — routes through `CoreConfig.from_settings()`. |
-| `detectors.store.get_detectors_dir`                 | `vtsearch.settings`            | 2     | ✅ shipped — routes through `CoreConfig.from_settings()`. |
-| `detectors.labeling_progress`                       | `vtsearch.settings`            | 2     | ✅ shipped — routes through `CoreConfig.from_settings()`. |
-| `state/__init__` (inclusion, calibrate_*, etc.)     | `vtsearch.settings`            | 2     | ✅ shipped — reads via `CoreConfig`; writes via generic `register_setting_persister(key, fn)` hook wired by the shim. |
-| `config.CoreConfig.from_settings()` bridge          | `vtsearch.settings`            | 8     | open — relocates to an app-side shim (`vtsearch/shim/`) at the physical Phase 8 move. |
-| `labels.sync.sync_to/from_labelset_source`          | global state                   | 3     | open — add explicit `DetectorContext` param. |
-| Module-level proxies (`medias`, `good_votes`, …)    | global state                   | 3     | open — proxies move to the app side; library exports the `*Context` classes. |
-| `autorun_extractors` / `autorun_localizers`         | module globals in `state/core` | 3     | open — accepted as app-passed argument; the library keeps the `Processor` ABCs + execution code. |
-| Hardcoded `data/` paths (if any)                    | filesystem                     | 4     | open — route every `data/` reference through `CoreConfig.data_dir`. |
-
-The contract for the refactor: every name listed above keeps the same call signature and semantics. Phases 1–4 introduce the seams (parameters, resolvers, config objects) without breaking the surface.

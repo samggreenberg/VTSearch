@@ -20,7 +20,7 @@ def get_detectors_dir() -> Path:
 
     Reads from ``CoreConfig.from_settings()`` rather than ``vtsearch.settings``
     directly so this module stays library-clean (see Phase 2 of
-    ``docs/plans/extract-library.md``).  The classmethod still consults the
+    ``../docs/architecture.md``).  The classmethod still consults the
     app's settings layer today; after Phase 8 it moves to an app-side shim
     and library callers pass a ``CoreConfig`` explicitly.
     """

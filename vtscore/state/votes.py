@@ -8,7 +8,7 @@ active :class:`DatasetContext` for the diversity tree side-effects).  They
 resolve the context themselves via :func:`get_active_detector_context` /
 :func:`get_active_context` — no module-level proxy names are imported, so
 the library has no implicit dependency on the app-side proxy view.  See
-Phase 3 of ``docs/plans/extract-library.md``.
+Phase 3 of ``../docs/architecture.md``.
 """
 
 from __future__ import annotations

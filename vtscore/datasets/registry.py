@@ -30,7 +30,7 @@ def get_saved_datasets_dir() -> Path:
 
     Routed through ``CoreConfig.from_settings()`` rather than reading
     ``vtsearch.settings`` directly so this module stays library-clean
-    (see Phase 2 of ``docs/plans/extract-library.md``).
+    (see Phase 2 of ``../docs/architecture.md``).
     """
     from vtscore.config import CoreConfig  # noqa: PLC0415
 

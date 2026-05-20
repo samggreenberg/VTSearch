@@ -2,7 +2,7 @@
 and the Flask request lifecycle.
 
 The library is being split into a Flask-free ``vtscore`` and a Flask-
-wrapping ``vtsearch`` app — see ``docs/plans/extract-library.md``.  Any
+wrapping ``vtsearch`` app — see ``../../vtscore/docs/architecture.md``.  Any
 piece of code that wants to read or override the per-request
 ``DatasetContext`` / ``DetectorContext`` via ``flask.g`` belongs here
 so the core package can stay import-clean.
@@ -61,7 +61,7 @@ def register_app_persistence_hooks() -> None:
 
     The library exposes a few "let the app persist this" hook points so it
     doesn't import settings directly (see Phase 2 of
-    ``docs/plans/extract-library.md``).  This function installs the Flask
+    ``../../vtscore/docs/architecture.md``).  This function installs the Flask
     app's settings as the backing store for each hook.
     """
     from vtsearch import settings
@@ -82,7 +82,7 @@ def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
     The app-side implementation of :meth:`CoreConfig.from_settings`.  Lives
     here so the library file ``vtsearch/config.py`` never imports
     ``vtsearch.settings`` — see Phase 8 of
-    ``docs/plans/extract-library.md``.
+    ``../../vtscore/docs/architecture.md``.
 
     When *settings_path* is given, the server-tier settings file path is
     redirected to that location before reading.  The CLI uses this to
@@ -129,7 +129,7 @@ def register_app_plugin_families() -> None:
     :mod:`vtsearch.settings_io`, which is app-tier (it round-trips
     ``vtsearch.settings`` to disk).  Registering them here keeps
     ``vtscore.plugins.inventory`` free of any ``vtsearch.settings_io``
-    import — see ``docs/plans/extract-library.md`` Phase 5.
+    import — see ``../../vtscore/docs/architecture.md`` Phase 5.
 
     Called once at Flask app startup, before the argparse parser is built
     so ``--list-settings-importers`` and friends get their shortcut flags.

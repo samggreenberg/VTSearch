@@ -3,7 +3,7 @@
 Operates on the active :class:`DatasetContext` (for the tree itself) and the
 active :class:`DetectorContext` (for the labels that get replayed into it).
 Functions resolve the contexts themselves — no module-level proxy names are
-imported.  See Phase 3 of ``docs/plans/extract-library.md``.
+imported.  See Phase 3 of ``../docs/architecture.md``.
 """
 
 from __future__ import annotations

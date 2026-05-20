@@ -14,7 +14,7 @@
 # Each group is a folder under tests/ AND tests_lib/. Marker assignment is
 # automatic: any file at tests[_lib]/<group>/test_*.py gets marked <group>
 # by the respective conftest.  tests_lib/ holds Flask-free library tests
-# (Phase 7 of docs/plans/extract-library.md).
+# (Phase 7 of vtscore/docs/architecture.md).
 #
 # Extra pytest args can follow a '--':
 #   ./run-tests.sh core -- -x --tb=short

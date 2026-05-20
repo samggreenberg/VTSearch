@@ -62,7 +62,8 @@ deployments. Runs locally or in Docker.
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring index — splits into **[EXTENDING-plugins.md](EXTENDING-plugins.md)** (importers/exporters/sources), **[EXTENDING-media.md](EXTENDING-media.md)** (media types/embedders/clippers/converters), **[EXTENDING-processors.md](EXTENDING-processors.md)** (detectors/localizers/extractors). EXTENDING.md itself holds auth, dependencies, and checklists. |
 | [demos.md](demos.md) | Available demo datasets |
-| [plans/README.md](plans/README.md) | Index of open design plans (codebase reorg, multi-media import, patch embedders, extract-library, etc.) |
+| [plans/README.md](plans/README.md) | Index of open design plans (codebase reorg, multi-media import, patch embedders, etc.) |
+| [../vtscore/docs/README.md](../vtscore/docs/README.md) | Developer documentation for the `vtscore` library (the Flask-free reusable core extracted from VTSearch) |
 | [design/cli-detector-converter.md](design/cli-detector-converter.md) | CLI autodetect with converters/clippers (**Design proposal**, not yet implemented) |
 
 ---

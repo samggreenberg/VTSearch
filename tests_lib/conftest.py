@@ -7,7 +7,7 @@ seams (context reset, embedding stubs, progress reset, …) and
 deliberately omit the app-tier ones (``client``, ``isolated_settings``,
 ``_set_login_provider``, autorun-processor reset, etc.).
 
-Phase 7 of ``docs/plans/extract-library.md``.
+Phase 7 of ``../vtscore/docs/architecture.md``.
 """
 
 from __future__ import annotations

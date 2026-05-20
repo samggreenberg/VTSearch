@@ -14,9 +14,10 @@ _No changes yet._
 
 ## [0.1.0] — Initial release
 
-The library was carved out of the `vtsearch` monolith over phases 0–8 of
-[`docs/plans/extract-library.md`](../docs/plans/extract-library.md). The
-0.1.0 release captures that work as the first publishable snapshot.
+The library was carved out of the `vtsearch` monolith and shipped as a
+separate package. The 0.1.0 release captures that work as the first
+publishable snapshot. See [`docs/architecture.md`](docs/architecture.md)
+for the seven seams the refactor cut between vtscore and vtsearch.
 
 ### Added
 
