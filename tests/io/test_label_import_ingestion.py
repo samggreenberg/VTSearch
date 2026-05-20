@@ -297,6 +297,7 @@ class TestClippedReingest:
         def _fake_embed_via_tempfile(*_args, **_kwargs):
             return fake_embedding
 
+        existing: dict = {}
         # Patch the embed sink so _apply_clip_and_embed completes without a
         # real audio embedder; the clip-to-bytes step still runs against the
         # real WAV file.
@@ -305,9 +306,12 @@ class TestClippedReingest:
             patch("vtscore.detectors.resolver.resolve_file_context", _fake_resolve_ctx),
             patch("vtscore.detectors.resolver._embed_via_tempfile", _fake_embed_via_tempfile),
         ):
-            ingested = _ingest_via_resolver(origin, entries, {}, lambda *a, **k: None)
+            ingested = _ingest_via_resolver(origin, entries, existing, lambda *a, **k: None)
 
         assert ingested == 1
+        media = next(iter(existing.values()))
+        assert media["md5"] == expected_clip_md5, "stored MD5 must be the clip's, not the parent's"
+        assert media["md5"] != parent_md5
 
     def test_two_clips_of_same_parent_get_distinct_md5s(self, tmp_path):
         """Re-ingesting two audio clips of the same parent yields two distinct MD5s.
@@ -339,8 +343,11 @@ class TestClippedReingest:
                 },
             }
 
-        entries_a = [{"origin": _origin(0.0, 2.0, 0), "origin_name": "test.wav", "md5": "", "label": "good"}]
-        entries_b = [{"origin": _origin(2.0, 4.0, 1), "origin_name": "test.wav", "md5": "", "label": "bad"}]
+        # Use unequal-length clips so the slices differ regardless of phase
+        # alignment (a 440 Hz sine sliced [0,2] and [2,4] is byte-identical
+        # because the wave is integer-cycle-aligned).
+        entries_a = [{"origin": _origin(0.0, 1.0, 0), "origin_name": "test.wav", "md5": "", "label": "good"}]
+        entries_b = [{"origin": _origin(1.0, 3.0, 1), "origin_name": "test.wav", "md5": "", "label": "bad"}]
 
         fake_embedding = rng.standard_normal(512).astype(np.float32)
 

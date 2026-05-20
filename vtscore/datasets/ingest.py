@@ -257,9 +257,7 @@ def _ingest_via_source(
             if not media_type_id:
                 source.cleanup()
                 return -1
-            resolved = _resolve_clip_content_and_embedding(
-                file_path, media_type_id, origin_dict, embedder_name
-            )
+            resolved = _resolve_clip_content_and_embedding(file_path, media_type_id, origin_dict, embedder_name)
             if resolved is None:
                 source.cleanup()
                 return -1  # Signal caller to use legacy full-import path
@@ -338,9 +336,7 @@ def _ingest_via_resolver(
             # Clip-aware: produces the clip embedding and the clip's bytes
             # so the stored ``media_bytes`` / ``md5`` / ``file_size`` all
             # describe the clip, not the parent.
-            resolved = _resolve_clip_content_and_embedding(
-                file_path, media_type_id, origin_dict, embedder_name
-            )
+            resolved = _resolve_clip_content_and_embedding(file_path, media_type_id, origin_dict, embedder_name)
             if resolved is None:
                 continue
             embedding, file_bytes, md5 = resolved
