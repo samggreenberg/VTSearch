@@ -1121,21 +1121,43 @@ class TestVoteEndpointRegionBox:
         assert 1 in bad_votes
         assert 1 not in vote_region_boxes
 
-    def test_replacing_region_box_updates_value(self, client):
-        """Re-voting good with a different box after toggling off the
-        previous yes-vote stores the new box, not the previous one."""
+    def test_replacing_region_box_via_unvote_then_revote(self, client):
+        """Un-voting clears the region_box; re-voting good with a new box
+        stores the new value."""
         from vtsearch.state import vote_region_boxes
 
         client.post(
             "/api/medias/1/vote",
             json={"target": "good", "region_box": [0.1, 0.2, 0.4, 0.4]},
         )
-        # Toggle off, then vote good again with a different box.
-        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/1/vote", json={"target": "none"})
         client.post(
             "/api/medias/1/vote",
             json={"target": "good", "region_box": [0.3, 0.3, 0.9, 0.9]},
         )
+        assert vote_region_boxes[1] == (0.3, 0.3, 0.9, 0.9)
+
+    def test_idempotent_revote_with_new_region_box_replaces_in_place(self, client):
+        """Drawing a new box on an already-good media replaces the previous
+        annotation without going through un-vote, since the user explicitly
+        sent a new ``region_box``.  An idempotent re-vote *without* a
+        region_box leaves the existing one alone (so a stale-view tab can't
+        wipe a region a different tab just set — H1 idempotency)."""
+        from vtsearch.state import vote_region_boxes
+
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.1, 0.2, 0.4, 0.4]},
+        )
+        # New box on an already-good media → replace in place.
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.3, 0.3, 0.9, 0.9]},
+        )
+        assert vote_region_boxes[1] == (0.3, 0.3, 0.9, 0.9)
+
+        # Idempotent re-vote without a region_box → existing box preserved.
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert vote_region_boxes[1] == (0.3, 0.3, 0.9, 0.9)
 
 

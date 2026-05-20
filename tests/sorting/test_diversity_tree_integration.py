@@ -241,14 +241,14 @@ class TestVoteUpdatesTree:
         assert resp.status_code == 200
         assert cid in tree.labeled_ids
 
-    def test_toggle_unlabels_tree(self, client):
+    def test_unvote_unlabels_tree(self, client):
         tree = _build_tree()
         cid = 1
         # Vote good
         client.post(f"/api/medias/{cid}/vote", json={"target": "good"})
         assert cid in tree.labeled_ids
-        # Toggle good off (unlabel)
-        client.post(f"/api/medias/{cid}/vote", json={"target": "good"})
+        # Un-vote (absolute target=none)
+        client.post(f"/api/medias/{cid}/vote", json={"target": "none"})
         assert cid not in tree.labeled_ids
 
     def test_switch_vote_keeps_labeled(self, client):

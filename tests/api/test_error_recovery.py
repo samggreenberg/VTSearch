@@ -601,7 +601,8 @@ class TestVoteEdgeCases:
         """Extra fields in vote request should not cause errors."""
         resp = client.post(
             "/api/medias/1/vote",
-            json={"target": "good",
+            json={
+                "target": "good",
                 "confidence": 0.95,
                 "note": "very relevant",
             },

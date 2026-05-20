@@ -54,6 +54,7 @@ class TestVoteClip:
         assert 1 in app_module.good_votes
         # Idempotent: a single label_history entry, not two.
         from vtsearch.state import label_history
+
         assert sum(1 for entry in label_history if entry[0] == 1) == 1
 
     def test_idempotent_re_vote_bad(self, client):
@@ -63,6 +64,7 @@ class TestVoteClip:
         assert r2.status_code == 200
         assert 1 in app_module.bad_votes
         from vtsearch.state import label_history
+
         assert sum(1 for entry in label_history if entry[0] == 1) == 1
 
     def test_switch_from_good_to_bad(self, client):

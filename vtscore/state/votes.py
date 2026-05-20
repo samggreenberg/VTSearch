@@ -162,10 +162,18 @@ def _set_vote_locked(
     ctx = get_active_detector_context()
     old = _current_label_locked(ctx, media_id)
     if old == target:
-        # Idempotent — preserve everything (no history append, no cache churn,
-        # no achievement credit).  This is the key change that closes the H1
-        # counter-inflation race: concurrent tabs sending the same target on a
-        # media that's already in that state no longer increment counters.
+        # Idempotent — no history append, no cache churn, no achievement
+        # credit.  This is the key change that closes the H1 counter-inflation
+        # race: concurrent tabs sending the same target on a media that's
+        # already in that state no longer increment counters.  The one
+        # exception is an explicit ``region_box`` on a ``"good"`` re-vote,
+        # which lets the user replace the recorded annotation without first
+        # un-voting (drawing a new box on an already-good media is an
+        # intentional user action — the stale-tab race the idempotency rule
+        # closes was about counters, not region updates).  An absent
+        # ``region_box`` on an idempotent call leaves the existing one alone.
+        if target == "good" and region_box is not None:
+            ctx.vote_region_boxes[media_id] = region_box
         existing_click = ctx.vote_click_times.get(media_id) if target != "none" else None
         return (old, old, existing_click)
 

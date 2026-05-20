@@ -152,10 +152,7 @@ class MediaVoteRequestSchema(Schema):
         required=True,
         validate=validate.OneOf(["good", "bad", "none"]),
         metadata={
-            "description": (
-                "Absolute target state: ``good``, ``bad``, or ``none`` "
-                "(un-vote). Idempotent."
-            ),
+            "description": ("Absolute target state: ``good``, ``bad``, or ``none`` (un-vote). Idempotent."),
         },
     )
     region_box = fields.List(
@@ -193,8 +190,7 @@ class MediaVoteResponseSchema(Schema):
         allow_none=True,
         metadata={
             "description": (
-                "Click-time ordinal of the new label, or ``null`` when the "
-                "target is ``none`` or the call was a no-op."
+                "Click-time ordinal of the new label, or ``null`` when the target is ``none`` or the call was a no-op."
             ),
         },
     )
