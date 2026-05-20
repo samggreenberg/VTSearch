@@ -167,17 +167,19 @@ Cross-section interaction agents:
   also closes the "header points to an unloaded id" half of H34 by the
   same mechanism. The "header absent → thread-local leak" half of H34
   remains open.
-- **H32. `add_media_to_pile` TOCTOU between md5 check and insertion** —
-  `vtsearch/routes/media/list.py` L607–608 vs. L687–690. The md5
-  lookup (`snap = snapshot_medias()` + `build_media_lookup(snap)`)
-  runs outside `_state_lock`; the new-media insertion happens under
-  the lock ~80 lines later. Two concurrent uploads of the same file
-  can both miss the existing-cid hit, both embed, and both insert,
-  producing duplicate medias with identical md5. Fix sketch:
-  re-check `md5_lookup` (or recompute it from `medias`) under
-  `_state_lock` immediately before assigning `new_id` and writing
-  `medias[new_id]`, and dispatch to the existing-cid branch if a
-  match appears in the recheck.
+- ~~**H32. `add_media_to_pile` TOCTOU between md5 check and insertion**~~ —
+  fixed in `vtsearch/routes/media/list.py`. After the initial
+  outside-the-lock MD5 lookup (fast path for an existing match) and
+  the unlocked embed step, the route now re-runs
+  `build_media_lookup(medias)` under `_state_lock` immediately before
+  assigning `new_id` (L700-718). On collision it routes into the
+  existing-cid branch (`is_new=False`); otherwise it inserts. Two
+  concurrent uploads of identical bytes therefore produce exactly one
+  new media, with the loser voting the winner's id. Covered by
+  `TestAddToPile.test_concurrent_uploads_same_md5_no_duplicate` in
+  `tests/core/test_medias.py`, which uses a `threading.Barrier(2)`
+  patched into the embedder to deterministically hold both requests
+  inside the unlocked window.
 - ~~**H33. `add_media_to_pile` label not synced to disk**~~ — fixed
   in `vtsearch/routes/media/list.py`. Both branches of
   `add_media_to_pile` (existing-MD5 match and new-media insertion)
