@@ -39,15 +39,11 @@ class TestSubPackageNameCollision:
 
         pkg_a = tmp_path / "collision_pkg_a"
         pkg_a.mkdir()
-        (pkg_a / "__init__.py").write_text(
-            importer_src.format(display="First", desc="First registration")
-        )
+        (pkg_a / "__init__.py").write_text(importer_src.format(display="First", desc="First registration"))
 
         pkg_b = tmp_path / "collision_pkg_b"
         pkg_b.mkdir()
-        (pkg_b / "__init__.py").write_text(
-            importer_src.format(display="Second", desc="Should be skipped")
-        )
+        (pkg_b / "__init__.py").write_text(importer_src.format(display="Second", desc="Should be skipped"))
 
         import importlib
 
@@ -77,11 +73,7 @@ class TestSubPackageNameCollision:
 
             # The second registration emits a collision warning that
             # names the offending module.
-            collision_warnings = [
-                str(w.message)
-                for w in caught
-                if "already registered" in str(w.message)
-            ]
+            collision_warnings = [str(w.message) for w in caught if "already registered" in str(w.message)]
             assert collision_warnings, "expected a collision warning"
             assert any("zz_collision_b" in msg for msg in collision_warnings)
         finally:
@@ -102,12 +94,8 @@ class TestFlatModuleNameCollision:
         pkg_root = tmp_path / "_collision_flat_pkg"
         pkg_root.mkdir()
         (pkg_root / "__init__.py").write_text("")
-        (pkg_root / "alpha.py").write_text(
-            'class _S:\n    name = "shared_name"\n    label = "alpha"\n\nFAKE = _S()\n'
-        )
-        (pkg_root / "beta.py").write_text(
-            'class _S:\n    name = "shared_name"\n    label = "beta"\n\nFAKE = _S()\n'
-        )
+        (pkg_root / "alpha.py").write_text('class _S:\n    name = "shared_name"\n    label = "alpha"\n\nFAKE = _S()\n')
+        (pkg_root / "beta.py").write_text('class _S:\n    name = "shared_name"\n    label = "beta"\n\nFAKE = _S()\n')
 
         sys.path.insert(0, str(tmp_path))
         try:
@@ -125,11 +113,7 @@ class TestFlatModuleNameCollision:
             assert plugin is not None
             assert plugin.label == "alpha"
 
-            collision_warnings = [
-                str(w.message)
-                for w in caught
-                if "already registered" in str(w.message)
-            ]
+            collision_warnings = [str(w.message) for w in caught if "already registered" in str(w.message)]
             assert collision_warnings, "expected a collision warning"
             assert any("beta" in msg for msg in collision_warnings)
         finally:
