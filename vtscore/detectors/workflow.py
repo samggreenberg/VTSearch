@@ -26,14 +26,24 @@ def apply_and_retrain(  # noqa: C901
     :func:`vtscore.state.core.override_detector_context`), regardless of
     whether the caller is inside a Flask request or a background thread.
 
+    Train-first ordering: the candidate vote set (existing votes + newly
+    resolved entries) is fed to :func:`train_and_score` *before* any vote is
+    written to ``det_ctx`` or persisted to disk.  If training raises, the
+    detector's in-memory votes, persisted labelset, and active model are all
+    left untouched — so a failed retrain can never leave a vote live with a
+    stale model behind it (audit finding H7).
+
     Returns ``(resolved_count, trained_bool)``.
     """
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
     from vtsearch.state import (
         apply_label,
+        bad_votes,
         build_media_lookup,
+        good_votes,
         resolve_media_ids,
         snapshot_medias,
+        vote_region_boxes,
     )
     from vtscore.state.core import override_detector_context
 
@@ -44,6 +54,9 @@ def apply_and_retrain(  # noqa: C901
 
         origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
 
+        # 1) Resolve every entry into concrete (cid, label) pairs without
+        #    touching any state yet.
+        resolved_pairs: list[tuple[int, str]] = []
         resolved = 0
         for entry in new_entries:
             label = entry.get("label", "")
@@ -51,23 +64,29 @@ def apply_and_retrain(  # noqa: C901
                 continue
             cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
             for cid in cids:
-                apply_label(cid, label)
+                resolved_pairs.append((cid, label))
             if cids:
                 resolved += 1
 
-        # Persist the updated votes back to the detector file so the
-        # labelset reflects any newly-resolved medias.
-        sync_labels_to_loaded_detector()
+        # 2) Build the *proposed* vote dicts (current + new resolutions)
+        #    for a dry-run training pass.  Same-side dedup is automatic
+        #    via dict; new opposite-side labels supersede the old ones.
+        proposed_good = dict(good_votes)
+        proposed_bad = dict(bad_votes)
+        for cid, label in resolved_pairs:
+            if label == "good":
+                proposed_bad.pop(cid, None)
+                proposed_good[cid] = None
+            else:
+                proposed_good.pop(cid, None)
+                proposed_bad[cid] = None
 
-        # Retrain MLP if we have at least one good and one bad vote.
-        from vtsearch.state import (
-            bad_votes,
-            good_votes,
-            vote_region_boxes,
-        )
-
-        trained = False
-        if good_votes and bad_votes:
+        # 3) Try retraining on the proposed votes first.  If this raises,
+        #    nothing has been mutated yet — the detector stays in its
+        #    prior consistent state and the exception propagates.
+        new_model = None
+        new_threshold = 0.5
+        if proposed_good and proposed_bad:
             from vtscore.detectors.training import train_and_score
             from vtsearch.state import (
                 get_calibrate_count,
@@ -76,10 +95,10 @@ def apply_and_retrain(  # noqa: C901
                 get_safe_thresholds,
             )
 
-            _, threshold, model = train_and_score(
+            _, new_threshold, new_model = train_and_score(
                 snap,
-                dict(good_votes),
-                dict(bad_votes),
+                proposed_good,
+                proposed_bad,
                 get_inclusion(),
                 safe_thresholds=get_safe_thresholds(),
                 calibrate_count=get_calibrate_count(),
@@ -87,19 +106,26 @@ def apply_and_retrain(  # noqa: C901
                 vote_region_boxes=dict(vote_region_boxes),
                 det_ctx=det_ctx,
             )
-            if model is not None:
-                det_ctx.model = model
-                det_ctx.threshold = threshold
-                # Cache voted media items with embeddings.
-                training = {}
-                for cid in list(good_votes) + list(bad_votes):
-                    if cid in snap:
-                        training[cid] = snap[cid]
-                det_ctx.training_medias = training
-                if snap:
-                    first = next(iter(snap.values()), {})
-                    det_ctx.embedder = first.get("embedder", "")
-                    det_ctx.media_type = first.get("type", "")
-                trained = True
+
+        # 4) Training succeeded (or was skipped because we don't yet
+        #    have both classes).  Commit the votes and persist.
+        for cid, label in resolved_pairs:
+            apply_label(cid, label)
+
+        sync_labels_to_loaded_detector()
+
+        trained = False
+        if new_model is not None:
+            det_ctx.model = new_model
+            det_ctx.threshold = new_threshold
+            training = {}
+            for cid in list(good_votes) + list(bad_votes):
+                if cid in snap:
+                    training[cid] = snap[cid]
+            det_ctx.training_medias = training
+            first = next(iter(snap.values()), {})
+            det_ctx.embedder = first.get("embedder", "")
+            det_ctx.media_type = first.get("type", "")
+            trained = True
 
         return resolved, trained
