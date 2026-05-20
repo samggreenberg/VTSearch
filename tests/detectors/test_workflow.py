@@ -190,3 +190,71 @@ class TestTrainingFailureIsTransactional:
             apply_and_retrain("test-det", det_ctx, entries, "Test")
 
         assert calls == []  # sync_labels_to_loaded_detector never ran
+
+
+class TestPersistenceFailureIsTransactional:
+    """Audit H30: when ``_write_detector``'s ``os.replace`` raises inside
+    ``sync_labels_to_loaded_detector``, the freshly-applied votes must be
+    rolled back so the in-memory state stays aligned with disk.  Before the
+    fix the votes (and region boxes / label history) were committed before
+    the persistence call, so a failed save left them "live" while the
+    on-disk labelset never reflected them.
+    """
+
+    def test_sync_failure_rolls_back_in_memory_votes(self, det_ctx, monkeypatch):
+        # ``workflow.apply_and_retrain`` does ``from vtscore.detectors.label_sync
+        # import sync_labels_to_loaded_detector`` inside its body, so patching
+        # the symbol on the ``label_sync`` module is what the function picks up.
+        import vtscore.detectors.label_sync as label_sync
+
+        def _boom() -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(label_sync, "sync_labels_to_loaded_detector", _boom)
+
+        entries = [_audio_entry(1, "good"), _audio_entry(2, "bad")]
+
+        with pytest.raises(OSError, match="disk full"):
+            apply_and_retrain("test-det", det_ctx, entries, "Test")
+
+        # In-memory votes must be rolled back to their pre-call state
+        # (empty here, since the fixture starts fresh).
+        assert dict(det_ctx.good_votes) == {}
+        assert dict(det_ctx.bad_votes) == {}
+        assert dict(det_ctx.vote_region_boxes) == {}
+        # Model installation happens *after* the sync, so it should also
+        # remain untouched on rollback.
+        assert det_ctx.model is None
+        assert det_ctx.training_medias == {}
+
+    def test_sync_failure_preserves_prior_votes(self, det_ctx, monkeypatch):
+        """A pre-existing vote on the context must survive the rollback —
+        the snapshot restores the state at apply_and_retrain entry, not an
+        unconditional clear.
+        """
+        # Seed a vote on the context before the call.  Use the context
+        # override so apply_label routes to ``det_ctx``.
+        from vtscore.state.core import override_detector_context
+        from vtsearch.state import apply_label
+
+        with override_detector_context(det_ctx):
+            apply_label(3, "good")
+        assert 3 in det_ctx.good_votes
+
+        import vtscore.detectors.label_sync as label_sync
+
+        def _boom() -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(label_sync, "sync_labels_to_loaded_detector", _boom)
+
+        entries = [_audio_entry(1, "good"), _audio_entry(2, "bad")]
+
+        with pytest.raises(OSError, match="disk full"):
+            apply_and_retrain("test-det", det_ctx, entries, "Test")
+
+        # The pre-existing vote must be intact; the newly-attempted ones
+        # must be gone.
+        assert 3 in det_ctx.good_votes
+        assert 1 not in det_ctx.good_votes
+        assert 2 not in det_ctx.bad_votes

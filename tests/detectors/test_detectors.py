@@ -1295,6 +1295,38 @@ class TestSeedVotesFromExamples:
         assert data["seeded"] == 0
         assert data["skipped"] == 1
 
+    def test_seed_disk_sync_failure_surfaces_as_500(self, client, monkeypatch):
+        """H30 regression: ``os.replace`` failures inside the detector store
+        write must surface as a clear 500 instead of bubbling as a generic
+        unhandled exception.  Mirrors the C11 guard in
+        ``fill_labels_from_sort``.
+        """
+        import json as _json
+
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        fname = self._create_example_file(media["media_bytes"], "seed_h30.wav")
+
+        from vtscore.detectors import label_sync
+
+        def _boom() -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(label_sync, "sync_labels_to_loaded_detector", _boom)
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+        assert res.status_code == 500
+        body = _json.dumps(res.get_json() or {})
+        assert "disk full" in body or "persist seeded votes" in body
+
     def test_seed_unmatched_inserts_new_media(self, client):
         """A media example not in the dataset should be embedded and inserted as a new media."""
         from vtsearch.state import (

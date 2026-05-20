@@ -12,6 +12,8 @@ These tests complement the existing functional tests by focusing on the
 
 from __future__ import annotations
 
+import json
+
 from vtsearch.state import (
     good_votes,
     bad_votes,
@@ -122,6 +124,24 @@ class TestVotesContract:
         data = resp.get_json()
         assert data["state"] == "none"
         assert data["click_time"] is None
+
+    def test_disk_sync_failure_surfaces_as_500(self, client, monkeypatch):
+        """H30 regression: an ``os.replace``-style failure inside
+        ``sync_labels_to_loaded_detector`` must surface as a 500 with a
+        clear message, not bubble as an opaque uncaught exception.
+        """
+        from vtscore.detectors import label_sync
+
+        def _boom() -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(label_sync, "sync_labels_to_loaded_detector", _boom)
+
+        resp = client.post("/api/medias/1/vote", json={"target": "good"})
+        assert resp.status_code == 500
+        data = resp.get_json() or {}
+        blob = json.dumps(data)
+        assert "disk full" in blob or "persist vote" in blob
 
 
 class TestSortContract:
