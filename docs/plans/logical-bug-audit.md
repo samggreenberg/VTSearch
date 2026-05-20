@@ -133,10 +133,7 @@ Cross-section interaction agents:
 
 ### Datasets
 
-- **H8. Origin dict shared by reference across medias** —
-  `vtsearch/datasets/load_pipeline.py` L699–705. `_tag_origins()`
-  stamps the same dict object; later mutations of `origin.params`
-  propagate to siblings. Each media must hold its own copy.
+- ~~**H8. Origin dict shared by reference across medias**~~
 - ~~**H9. Single-item split has 0 test samples**~~
 - **H10. Clipped media re-ingest reads whole file for MD5** —
   `vtsearch/datasets/ingest.py` L275. MD5 of the full parent

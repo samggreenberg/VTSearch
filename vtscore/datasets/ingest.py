@@ -391,10 +391,15 @@ def ingest_missing_medias(  # noqa: C901
             # If the importer fails (e.g. folder not found), skip this origin
             continue
 
-        # Set origin on temp medias that don't have one
+        # Set origin on temp medias that don't have one.  Each media gets a
+        # fresh copy so a later mutation of one media's ``origin.params``
+        # cannot leak across siblings (and across pickle round-trips).
         for media in temp_medias.values():
             if media.get("origin") is None:
-                media["origin"] = origin_dict
+                media["origin"] = {
+                    "importer": origin_dict.get("importer", ""),
+                    "params": dict(origin_dict.get("params", {})),
+                }
             if not media.get("origin_name"):
                 media["origin_name"] = media.get("filename", "")
 

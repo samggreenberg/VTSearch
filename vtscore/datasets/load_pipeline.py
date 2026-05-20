@@ -706,10 +706,20 @@ def _run_importer(load_fn, ctx: DatasetContext, stepped) -> None:
 
 
 def _tag_origins(media_dict: dict, origin: dict) -> None:
-    """Stamp *origin* onto medias that don't already carry one."""
+    """Stamp *origin* onto medias that don't already carry one.
+
+    Each media gets its own fresh copy of the origin dict (including a
+    fresh ``params``).  Sharing one dict by reference across siblings
+    means any later mutation of ``media["origin"]["params"]`` on one
+    media silently corrupts every other media stamped by the same load —
+    and that aliasing also survives pickle round-trips via backreferences.
+    """
     for media in media_dict.values():
         if media.get("origin") is None:
-            media["origin"] = origin
+            media["origin"] = {
+                "importer": origin.get("importer", ""),
+                "params": dict(origin.get("params", {})),
+            }
         if not media.get("origin_name"):
             media["origin_name"] = media.get("filename", "")
 

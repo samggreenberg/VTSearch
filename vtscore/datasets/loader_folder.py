@@ -359,7 +359,20 @@ def _build_folder_media_data(
 
     Type-specific fields (and ``media_bytes`` for full mode) are merged
     by the caller after this base is constructed.
+
+    The *origin* dict is copied per-media so siblings never share the
+    same nested ``params`` dict — a later mutation on one media would
+    otherwise propagate to every other media built from the same call,
+    and that aliasing also survives pickle round-trips via backrefs.
     """
+    media_origin: dict[str, Any] | None
+    if origin is None:
+        media_origin = None
+    else:
+        media_origin = {
+            "importer": origin.get("importer", ""),
+            "params": dict(origin.get("params", {})),
+        }
     return {
         "id": media_id,
         "type": type_id,
@@ -369,7 +382,7 @@ def _build_folder_media_data(
         "embedding": embedding,
         "filename": rel_path,
         "category": "custom",
-        "origin": origin,
+        "origin": media_origin,
         "origin_name": rel_path,
         "media_bytes": None,
         "media_string": None,
