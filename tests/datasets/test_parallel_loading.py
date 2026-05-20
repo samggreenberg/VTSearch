@@ -998,3 +998,108 @@ class TestBuildDiversityTreeForContext:
         ctx = DatasetContext("test_empty")
         build_diversity_tree_for_context(ctx)
         assert ctx.diversity_tree is None
+
+
+class TestBackgroundLoadThreadContext:
+    """Regression for C3: background load tasks must pin the in-flight
+    DatasetContext to the worker thread so importer / clipper / dedup /
+    diversity-tree helpers that resolve via ``get_active_context()`` see
+    the dataset being built, not the empty fallback context.
+    """
+
+    def test_load_fn_sees_in_flight_dataset_context(self):
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.state.core import (
+            _empty_dataset_context,
+            get_active_context,
+            get_thread_dataset_context,
+        )
+
+        from vtscore.state.core import DatasetContext
+
+        observed: dict[str, DatasetContext | None] = {}
+        ran = threading.Event()
+
+        def capture_load(target_medias):
+            observed["thread_ctx"] = get_thread_dataset_context()
+            observed["active_ctx"] = get_active_context()
+            # Mutating the active context from the load_fn must land on
+            # the in-flight context, not on the empty fallback.
+            get_active_context().medias[1] = {"id": 1}
+            ran.set()
+
+        task_id = _run_origin_load_in_background(
+            capture_load,
+            {"importer": "ctx_probe", "params": {}},
+            name="ctx-probe",
+        )
+
+        try:
+            assert ran.wait(timeout=10), "load_fn never ran"
+            deadline = time.time() + 10
+            while loading_tasks.has_active_tasks() and time.time() < deadline:
+                time.sleep(0.05)
+
+            thread_ctx = observed["thread_ctx"]
+            active_ctx = observed["active_ctx"]
+
+            assert thread_ctx is not None, (
+                "Background task did not set a thread-local dataset context; "
+                "importer-level get_active_context() would land on the empty fallback."
+            )
+            assert active_ctx is not None
+            assert active_ctx is not _empty_dataset_context, (
+                "get_active_context() resolved to _empty_dataset_context inside the background load — C3 regression."
+            )
+            assert thread_ctx is active_ctx, "Thread-local context and active context disagreed inside the load."
+            # Mutation through the active context proxy must have hit the
+            # in-flight context, not the empty fallback.
+            assert 1 in active_ctx.medias
+            assert 1 not in _empty_dataset_context.medias
+        finally:
+            loading_tasks.remove_task(task_id)
+
+    def test_thread_context_cleared_after_task(self):
+        """The worker thread's dataset-context thread-local must be cleared
+        when the task finishes so a reused thread does not leak the prior
+        context to unrelated work.  Patch ``set_thread_dataset_context`` so
+        we can observe both the in-task pin and the post-task clear without
+        racing the daemon worker's thread-local from another thread.
+        """
+        import vtscore.state.core as state_core
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+
+        original_setter = state_core.set_thread_dataset_context
+        calls: list[object] = []
+
+        def recording_setter(ctx):
+            calls.append(ctx)
+            original_setter(ctx)
+
+        ran = threading.Event()
+
+        def load_fn(target_medias):
+            ran.set()
+
+        with mock.patch.object(state_core, "set_thread_dataset_context", recording_setter):
+            task_id = _run_origin_load_in_background(
+                load_fn,
+                {"importer": "ctx_cleanup", "params": {}},
+                name="ctx-cleanup",
+            )
+            try:
+                assert ran.wait(timeout=10)
+                deadline = time.time() + 10
+                while loading_tasks.has_active_tasks() and time.time() < deadline:
+                    time.sleep(0.05)
+            finally:
+                loading_tasks.remove_task(task_id)
+
+        # The task should have both pinned a real context and cleared it.
+        non_none_pins = [c for c in calls if c is not None]
+        none_clears = [c for c in calls if c is None]
+        assert non_none_pins, "Background task never pinned a dataset context"
+        assert none_clears, (
+            "Background task never cleared its thread-local dataset context — "
+            "a reused worker thread would leak the prior dataset to unrelated work."
+        )

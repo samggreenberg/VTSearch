@@ -107,6 +107,18 @@ Cross-section interaction agents:
 
 ### C3. Dataset background load tasks don't set thread-local dataset context
 
+- **Status:** Shipped 2026-05-19 — `_run_origin_load_in_background.task()`
+  now pins the freshly-created `DatasetContext` to its worker thread via
+  `set_thread_dataset_context(ctx)` immediately after creation, and
+  clears the thread-local in the task's `finally` (before
+  `loading_tasks.mark_finished`, so callers waiting on
+  `has_active_tasks() == False` see fully-cleaned-up worker state).
+  Regression covered by `TestBackgroundLoadThreadContext` in
+  `tests/datasets/test_parallel_loading.py`.
+  The warmup and staging spawn sites originally listed alongside the
+  importer site do not register a dataset context (warmup uses the
+  passed `media_dict` directly; staging writes to a temp dict via the
+  combine flow), so no `set_thread_dataset_context` call belongs there.
 - **File:** `vtsearch/datasets/load_pipeline.py` ~L822, ~L947, ~L1141
   (warmup, importer, staging spawn sites)
 - **Bug:** `task()` closures set thread user but never call
@@ -710,6 +722,16 @@ summary, and is also recorded here.
   `job.dataset_id` / `job.detector_id` before invoking the target, and
   clears all three thread-locals (user + dataset + detector) in a
   `finally`. Covered by `tests_lib/integration/test_async_jobs.py::TestThreadContextPropagation`.
+- **C3 — Dataset background load thread-local context** (2026-05-19).
+  `_run_origin_load_in_background.task()` in
+  `vtscore/datasets/load_pipeline.py` now pins the freshly-created
+  `DatasetContext` to its worker thread via
+  `set_thread_dataset_context(ctx)` immediately after creation, and
+  clears the thread-local in the task's `finally` (before
+  `loading_tasks.mark_finished`, so callers waiting on
+  `has_active_tasks() == False` see fully-cleaned-up worker state).
+  Regression in
+  `tests/datasets/test_parallel_loading.py::TestBackgroundLoadThreadContext`.
 - **C4 — embedding-matrix cache after clip/dedup** (2026-05-19).
   `_apply_clipper_stage`, `_collapse_duplicates_stage`, and the
   registry's reload-from-pickle dedup now all call
@@ -737,7 +759,7 @@ summary, and is also recorded here.
 
 ### Still open
 
-Every other finding (C3, C5, C7, C10, C12 and the High / Medium /
+Every other finding (C5, C7, C10, C12 and the High / Medium /
 Low tiers) remains as written. When the next fix lands, edit the
 finding above with **— shipped** and add a line here. When every
 critical and high is addressed, this doc can be retired into the
