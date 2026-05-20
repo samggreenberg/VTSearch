@@ -244,10 +244,17 @@ class IngestMissingRequestSchema(Schema):
 
 
 class IngestMissingResponseSchema(Schema):
-    """Response for ``POST /api/label-importers/ingest-missing``."""
+    """Response for ``POST /api/label-importers/ingest-missing``.
+
+    ``failed`` lists per-entry failures from the label-application
+    pass — see logical-bug-audit H31.  A single entry that raises during
+    ``apply_label`` no longer aborts the rest of the batch.
+    """
 
     ingested = fields.Integer(required=True)
     applied = fields.Integer(required=True)
+    failed_count = fields.Integer(required=True)
+    failed = fields.List(fields.Dict(), required=True)
     message = fields.String(required=True)
 
 
@@ -259,6 +266,11 @@ class RunLabelImporterResponseSchema(Schema):
     importer, so we declare it here for cross-reference. Currently
     *not* attached to the route via ``@response`` — kept for the
     eventual unified plugin-field migration.
+
+    ``failed`` carries per-entry application failures (logical-bug-audit
+    H31).  ``missing`` still tracks entries whose media couldn't be
+    located or ingested; ``failed`` is the new field for entries whose
+    ``apply_label`` call raised.
     """
 
     applied = fields.Integer(required=True)
@@ -266,6 +278,8 @@ class RunLabelImporterResponseSchema(Schema):
     missing_count = fields.Integer(required=True)
     missing = fields.List(fields.Dict(), required=True)
     ingested = fields.Integer(required=True)
+    failed_count = fields.Integer(required=True)
+    failed = fields.List(fields.Dict(), required=True)
     message = fields.String(required=True)
 
 

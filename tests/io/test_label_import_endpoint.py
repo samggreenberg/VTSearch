@@ -11,6 +11,7 @@ Covers:
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 
 import app as app_module
@@ -607,3 +608,168 @@ class TestLabelImportMissingElements:
         assert result["missing_count"] == 1
         assert result["missing"][0]["md5"] == "totally_unknown_md5"
         assert "could not be resolved" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# Partial-failure handling — logical-bug-audit H31
+#
+# A single entry that raises during ``apply_label`` must not abort the
+# rest of the import. The handler isolates each entry, reports the
+# failures in a ``failed`` list, and still runs the downstream sync
+# block for the entries that *did* land.
+# ---------------------------------------------------------------------------
+
+
+class TestPartialFailure:
+    def test_failing_entry_does_not_abort_remaining(self, client, tmp_path):
+        """One bad entry in the middle of the batch must not block later entries.
+
+        Patches ``apply_label`` to raise on a specific media id; the
+        importer should still apply the other labels and report the
+        failed entry in ``failed``.
+        """
+        md5_1 = app_module.medias[1]["md5"]
+        md5_2 = app_module.medias[2]["md5"]
+        md5_3 = app_module.medias[3]["md5"]
+
+        # Save & clear vote state so we can assert it precisely.
+        saved_good = dict(app_module.good_votes)
+        saved_bad = dict(app_module.bad_votes)
+        app_module.good_votes.clear()
+        app_module.bad_votes.clear()
+        try:
+            payload = json.dumps(
+                {
+                    "labels": [
+                        {"md5": md5_1, "label": "good"},
+                        {"md5": md5_2, "label": "good"},
+                        {"md5": md5_3, "label": "good"},
+                    ]
+                }
+            )
+            p = tmp_path / "labels.json"
+            p.write_text(payload)
+
+            real_apply_label = __import__("vtsearch.routes.labels.importers", fromlist=["apply_label"])
+
+            def flaky_apply(cid, label, **kwargs):
+                if cid == 2:
+                    raise RuntimeError("simulated downstream failure")
+                # Re-enter the real apply_label from vtscore so the
+                # other ids still land.
+                from vtscore.state.votes import apply_label as inner
+
+                inner(cid, label, **kwargs)
+
+            with patch.object(real_apply_label, "apply_label", side_effect=flaky_apply):
+                res = client.post(
+                    "/api/label-importers/import/server_json_file",
+                    json={"filepath": str(p)},
+                )
+
+            assert res.status_code == 200
+            result = res.get_json()
+            # Two of three landed; one is in `failed`.
+            assert result["applied"] == 2
+            assert result["failed_count"] == 1
+            assert len(result["failed"]) == 1
+            assert result["failed"][0]["entry"]["md5"] == md5_2
+            assert "simulated downstream failure" in result["failed"][0]["error"]
+            # The successful entries' votes actually landed.
+            assert 1 in app_module.good_votes
+            assert 3 in app_module.good_votes
+            assert 2 not in app_module.good_votes
+            # Message advertises the failure.
+            assert "failed to apply" in result["message"]
+        finally:
+            app_module.good_votes.clear()
+            app_module.bad_votes.clear()
+            app_module.good_votes.update(saved_good)
+            app_module.bad_votes.update(saved_bad)
+
+    def test_clean_import_reports_zero_failed(self, client, tmp_path):
+        """The new ``failed``/``failed_count`` fields are always present in the response,
+        and read as 0 / [] on a clean import.
+        """
+        md5 = app_module.medias[1]["md5"]
+        payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]})
+        p = tmp_path / "labels.json"
+        p.write_text(payload)
+        res = client.post(
+            "/api/label-importers/import/server_json_file",
+            json={"filepath": str(p)},
+        )
+        assert res.status_code == 200
+        result = res.get_json()
+        assert result["applied"] == 1
+        assert result["failed_count"] == 0
+        assert result["failed"] == []
+
+    def test_failing_entry_still_triggers_sync_for_landed_entries(self, client, tmp_path):
+        """When at least one entry lands, the downstream sync block must run.
+
+        Before the H31 fix, an exception from ``apply_label`` aborted the
+        handler before ``sync_labels_to_loaded_detector`` was called,
+        leaving the loaded detector's ``num_training`` stale relative to
+        the votes that *did* land.
+        """
+        sync_calls = {"count": 0}
+
+        from vtsearch.routes.labels import importers as importers_module
+
+        # Real sync_labels_to_loaded_detector is imported inside the handler
+        # via ``from vtscore.detectors.label_sync import ...``. Stub it at
+        # the source module so the lazy import picks up our spy.
+        from vtscore.detectors import label_sync as label_sync_module
+
+        original = label_sync_module.sync_labels_to_loaded_detector
+
+        def spy():
+            sync_calls["count"] += 1
+
+        md5_1 = app_module.medias[1]["md5"]
+        md5_2 = app_module.medias[2]["md5"]
+
+        saved_good = dict(app_module.good_votes)
+        saved_bad = dict(app_module.bad_votes)
+        app_module.good_votes.clear()
+        app_module.bad_votes.clear()
+        try:
+            payload = json.dumps(
+                {
+                    "labels": [
+                        {"md5": md5_1, "label": "good"},
+                        {"md5": md5_2, "label": "good"},
+                    ]
+                }
+            )
+            p = tmp_path / "labels.json"
+            p.write_text(payload)
+
+            def flaky_apply(cid, label, **kwargs):
+                if cid == 2:
+                    raise RuntimeError("boom")
+                from vtscore.state.votes import apply_label as inner
+
+                inner(cid, label, **kwargs)
+
+            label_sync_module.sync_labels_to_loaded_detector = spy
+            try:
+                with patch.object(importers_module, "apply_label", side_effect=flaky_apply):
+                    res = client.post(
+                        "/api/label-importers/import/server_json_file",
+                        json={"filepath": str(p)},
+                    )
+            finally:
+                label_sync_module.sync_labels_to_loaded_detector = original
+
+            assert res.status_code == 200
+            assert res.get_json()["applied"] == 1
+            assert res.get_json()["failed_count"] == 1
+            # Sync ran exactly once even though one entry failed mid-loop.
+            assert sync_calls["count"] == 1
+        finally:
+            app_module.good_votes.clear()
+            app_module.bad_votes.clear()
+            app_module.good_votes.update(saved_good)
+            app_module.bad_votes.update(saved_bad)

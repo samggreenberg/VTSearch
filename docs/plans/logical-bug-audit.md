@@ -399,10 +399,14 @@ Cross-section interaction agents:
   `tests/detectors/test_workflow.py::TestPersistenceFailureIsTransactional`,
   `tests/api/test_api_contracts.py::TestVotesContract::test_disk_sync_failure_surfaces_as_500`,
   and `tests/detectors/test_detectors.py::TestSeedVotesFromExamples::test_seed_disk_sync_failure_surfaces_as_500`.
-- **H31. Partial label-import has no rollback** —
-  `vtsearch/routes/labels/importers.py` L143. Failure mid-loop leaves
-  a half-applied labelset; user has to manually figure out which
-  ones landed.
+- ~~**H31. Partial label-import has no rollback**~~ — fixed by
+  isolating each entry inside `_apply_labels` with a per-entry
+  try/except and surfacing the per-entry failures in the response
+  (`failed` / `failed_count`).  Downstream syncs
+  (`sync_labels_to_loaded_detector`, `sync_to_labelset_source`,
+  `record_detector_import`) still fire on partial success so the
+  in-memory detector and the labelset source stay consistent with what
+  actually landed.
 
 ---
 
