@@ -776,11 +776,7 @@ class TestConcurrentWrites:
         from vtsearch.settings import mutate_user
 
         # Seed.
-        mutate_user(
-            lambda c: c.update(
-                {"theme": "light", "achievement_state": {"counters": {"votes_cast": 0}}}
-            )
-        )
+        mutate_user(lambda c: c.update({"theme": "light", "achievement_state": {"counters": {"votes_cast": 0}}}))
 
         # Simulate another process bumping votes_cast and changing theme
         # on disk while we hold a stale in-memory cache.

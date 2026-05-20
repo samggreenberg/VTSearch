@@ -32,12 +32,9 @@ from typing import TYPE_CHECKING, Any
 from pydantic import ValidationError
 
 try:
-    import fcntl  # POSIX-only; falls back to in-process locking on Windows.
-
-    _HAS_FCNTL = True
+    import fcntl as _fcntl  # POSIX-only; falls back to in-process locking on Windows.
 except ImportError:  # pragma: no cover - Windows
-    fcntl = None  # type: ignore[assignment]
-    _HAS_FCNTL = False
+    _fcntl = None
 
 from vtscore.config import DATA_DIR
 from vtsearch.settings_models import (
@@ -295,11 +292,12 @@ def _file_lock(path: Path):
     in_proc = _path_lock_for(path)
     in_proc.acquire()
     fd: int | None = None
-    if _HAS_FCNTL:
+    fcntl_mod = _fcntl  # snapshot so the narrowed binding survives the yield
+    if fcntl_mod is not None:
         lock_path = path.with_name(path.name + ".lock")
         try:
             fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT, 0o600)
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            fcntl_mod.flock(fd, fcntl_mod.LOCK_EX)
         except OSError as exc:
             logger.warning("Could not acquire file lock on %s: %s", lock_path, exc)
             if fd is not None:
@@ -309,9 +307,9 @@ def _file_lock(path: Path):
     try:
         yield
     finally:
-        if fd is not None:
+        if fd is not None and fcntl_mod is not None:
             try:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                fcntl_mod.flock(fd, fcntl_mod.LOCK_UN)
             finally:
                 with contextlib.suppress(OSError):
                     os.close(fd)
