@@ -12,9 +12,17 @@ silently writes corrupt entries back to the on-disk labelset.
 The on-disk labelset is the canonical source of truth (dataset-agnostic — its
 elements are keyed by origin / md5).  This module re-derives the cid dicts
 from that labelset whenever the active dataset has changed.
+
+The companion helper :func:`validated_vote_snapshot` extends that defense to
+read/write paths: it atomically copies the active dataset's medias and the
+active detector's vote dicts under a single ``_state_lock`` acquisition, so
+a concurrent rehydrate on the same detector against a different dataset
+can't slip in between the (request-boundary) rehydrate and the composition.
 """
 
 from __future__ import annotations
+
+from typing import Any, NamedTuple
 
 
 def _detector_file_mtime(path) -> float:
@@ -126,3 +134,97 @@ def ensure_votes_match_active_dataset() -> None:
         det_ctx.cached_labelset = LabelSet.from_dict(data.get("labelset") or {})
         det_ctx.cached_labelset_mtime = refreshed_mtime
         det_ctx.cached_labelset_media_type = data.get("media_type", "") or ""
+
+
+class VoteSnapshot(NamedTuple):
+    """Atomic, internally-consistent (dataset, detector) state snapshot.
+
+    Holds shallow copies of the active dataset's ``medias`` and the active
+    detector's cid-keyed vote dicts, all captured under a single
+    ``_state_lock`` acquisition.  Composing the four fields is safe because
+    they were taken together — subsequent mutations to the live contexts
+    cannot leak into a held snapshot.
+
+    ``safe`` reports whether the vote dicts could be proved to be keyed in
+    the snapshot's medias' cid space.  When ``safe`` is False, ``good_votes``
+    / ``bad_votes`` / ``vote_region_boxes`` are returned empty (so read paths
+    that just compose with ``medias`` degrade to an empty result instead of
+    leaking cross-dataset cids).  Write paths that would replace on-disk
+    state must check ``safe`` and skip the write — otherwise an empty
+    composition would erase legitimate labels for the active dataset.
+    """
+
+    medias: dict[int, dict[str, Any]]
+    good_votes: dict[int, None]
+    bad_votes: dict[int, None]
+    vote_region_boxes: dict[int, tuple[float, float, float, float]]
+    safe: bool
+
+
+def validated_vote_snapshot() -> VoteSnapshot:
+    """Return an atomic, internally-consistent (dataset, detector) snapshot.
+
+    Takes shallow copies of medias + vote dicts under a single ``_state_lock``
+    acquisition so the returned vote dicts are guaranteed to be derived
+    against the same dataset whose medias are in the returned snap.  Callers
+    should operate on the copies; the live contexts can be mutated by other
+    requests in the meantime.
+
+    The rehydrate that aligns ``votes_dataset_id`` with the active dataset
+    is the responsibility of :func:`ensure_votes_match_active_dataset` in
+    ``before_request`` — calling it again here would double-clear vote dicts
+    that test code or in-flight mutations have already populated.
+
+    Refuses to compose when the snapshot cannot be made safe.  Returns
+    ``safe=False`` (with empty vote dicts) when the detector's vote state is
+    stamped for a different dataset than the one whose medias the snapshot
+    is taken from:
+
+    * A concurrent request on the same detector rehydrated against a
+      different dataset between ``before_request`` and this lock acquisition
+      (the H14 concurrency race).
+    * The detector has no registry entry / on-disk file, so the rehydrate
+      bailed early and left stale cids from a previous dataset in place.
+    * The active dataset has empty id (no ``X-Dataset-Id`` header on the
+      request, or an id that refers to an unloaded dataset) while the
+      detector's vote state was previously stamped for a real dataset.
+
+    The ``medias`` field is always populated from whatever the active
+    dataset context resolves to (empty when the header is missing).  When no
+    detector is loaded at all, or when ``votes_dataset_id`` is empty (no
+    rehydrate has ever stamped it — typical for a brand-new detector with
+    no votes), the snapshot is considered safe by construction.
+    """
+    from vtscore.state.core import (
+        _state_lock,
+        get_active_context,
+        get_active_detector_context,
+    )
+
+    with _state_lock:
+        ds_ctx = get_active_context()
+        det_ctx = get_active_detector_context()
+        snap = dict(ds_ctx.medias)
+        # Compose votes only when we can prove they're keyed in the active
+        # dataset's cid space.  Two cases are safe to compose:
+        #   1. ``votes_dataset_id == ds_ctx.dataset_id`` — the post-rehydrate
+        #      invariant holds; the cid dicts are derived against the active
+        #      dataset.
+        #   2. ``votes_dataset_id == ""`` — the detector has never been
+        #      stamped against any dataset, which in production means no
+        #      votes have ever been cast (vote-casting goes through paths
+        #      that stamp the id).  Composing empty vote dicts is harmless,
+        #      and short-circuiting here lets save / sync endpoints work
+        #      against newly-created detectors that haven't been loaded.
+        # The remaining case — non-empty ``votes_dataset_id`` that doesn't
+        # match the active dataset — is the race / stale-state scenario and
+        # is the only one we refuse to compose for.
+        if det_ctx.detector_id and det_ctx.votes_dataset_id and det_ctx.votes_dataset_id != ds_ctx.dataset_id:
+            return VoteSnapshot(snap, {}, {}, {}, safe=False)
+        return VoteSnapshot(
+            snap,
+            dict(det_ctx.good_votes),
+            dict(det_ctx.bad_votes),
+            dict(det_ctx.vote_region_boxes),
+            safe=True,
+        )

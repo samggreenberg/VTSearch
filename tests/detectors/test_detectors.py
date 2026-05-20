@@ -933,6 +933,169 @@ class TestLoadModelEndpoint:
         assert a_bad not in bad_votes, "bad cid from dataset A leaked into dataset B's id-space"
 
 
+class TestValidatedVoteSnapshot:
+    """``validated_vote_snapshot`` must atomically pair medias + votes (H14).
+
+    The H14 audit finding identified that ``good_votes`` / ``bad_votes`` are
+    detector-scoped while ``medias`` is dataset-scoped, and composing them
+    without an atomic snapshot allows a concurrent rehydrate on the same
+    detector against a different dataset to slip in between the
+    ``before_request`` rehydrate and the route body, leaking cross-dataset
+    cids into the export and corrupting on-disk writes.
+
+    The helper :func:`vtscore.detectors.dataset_sync.validated_vote_snapshot`
+    captures both contexts under a single ``_state_lock`` acquisition and
+    refuses to compose (``safe=False``) when ``votes_dataset_id`` doesn't
+    match the active dataset.
+    """
+
+    def _setup_detector_with_votes(self, client):
+        """Create a detector, load it, cast one good + one bad vote.
+
+        Returns ``(detector_id, good_cid, bad_cid)``.
+        """
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+        ids = list(medias.keys())
+        if len(ids) < 2:
+            pytest.skip("Need at least 2 medias")
+        good_cid, bad_cid = ids[0], ids[1]
+
+        client.post(
+            "/api/detectors",
+            json={"name": "SnapshotTest", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "SnapshotTest", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
+
+        client.post(f"/api/medias/{good_cid}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{bad_cid}/vote", json={"vote": "bad"})
+        return detector_id, good_cid, bad_cid
+
+    def test_snapshot_safe_when_aligned(self, client):
+        """Happy path: votes_dataset_id matches active dataset → safe=True with full votes."""
+        from vtscore.detectors.dataset_sync import validated_vote_snapshot
+
+        _, good_cid, bad_cid = self._setup_detector_with_votes(client)
+
+        snap = validated_vote_snapshot()
+        assert snap.safe is True
+        assert good_cid in snap.good_votes
+        assert bad_cid in snap.bad_votes
+        assert good_cid in snap.medias
+        assert bad_cid in snap.medias
+
+    def test_snapshot_unsafe_on_dataset_mismatch(self, client):
+        """votes_dataset_id != active dataset_id → safe=False with empty vote dicts.
+
+        Simulates the H14 race: another thread re-keyed the detector against
+        a different dataset between ``ensure_votes_match_active_dataset()``
+        and the snapshot copy.  Patches the rehydrate to a no-op so the
+        forced mismatch survives the snapshot's own rehydrate call.
+        """
+        from vtscore.detectors import dataset_sync as _ds_sync
+        from vtscore.detectors.dataset_sync import validated_vote_snapshot
+        from vtscore.state.core import get_active_detector_context
+
+        self._setup_detector_with_votes(client)
+
+        det_ctx = get_active_detector_context()
+        original = _ds_sync.ensure_votes_match_active_dataset
+        _ds_sync.ensure_votes_match_active_dataset = lambda: None
+        try:
+            det_ctx.votes_dataset_id = "some_other_dataset_id"
+            snap = validated_vote_snapshot()
+        finally:
+            _ds_sync.ensure_votes_match_active_dataset = original
+
+        assert snap.safe is False
+        assert snap.good_votes == {}
+        assert snap.bad_votes == {}
+        assert snap.vote_region_boxes == {}
+        # ``medias`` is always populated from the live active dataset.
+        assert snap.medias, "medias should still be populated on safe=False"
+
+    def test_export_returns_empty_on_safe_false(self, client):
+        """/api/labels/export must not leak cross-dataset cids when snapshot is unsafe."""
+        from vtscore.state.core import get_active_detector_context
+
+        self._setup_detector_with_votes(client)
+
+        # Sanity: with aligned state we get the labels back.
+        resp = client.get("/api/labels/export")
+        assert resp.status_code == 200
+        assert len(resp.get_json()["labels"]) >= 2
+
+        # Now corrupt votes_dataset_id and re-export.  The route's
+        # ``ensure_votes_match_active_dataset`` will try to rehydrate but the
+        # detector file has been written to disk, so it'll match the active
+        # dataset again — verify by going around the rehydrate's mtime cache.
+        # Simplest: directly corrupt the detector's vote dicts to simulate a
+        # post-rehydrate mismatch (e.g. another thread re-flipped them).
+        det_ctx = get_active_detector_context()
+        # Force a state where votes_dataset_id can't match (the race outcome).
+        # We monkey-patch ensure_votes_match_active_dataset to be a no-op so
+        # the corruption survives the before_request hook.
+        from vtscore.detectors import dataset_sync as _ds_sync
+
+        original = _ds_sync.ensure_votes_match_active_dataset
+        _ds_sync.ensure_votes_match_active_dataset = lambda: None
+        try:
+            det_ctx.votes_dataset_id = "stale_dataset_id"
+            resp = client.get("/api/labels/export")
+            assert resp.status_code == 200
+            # safe=False degrades the vote dicts to empty, so no labels
+            # are composed — no cross-dataset cid leakage.
+            assert resp.get_json()["labels"] == []
+        finally:
+            _ds_sync.ensure_votes_match_active_dataset = original
+
+    def test_sync_labels_to_disk_skips_on_safe_false(self, client):
+        """``sync_labels_to_loaded_detector`` must not erase on-disk labels under race."""
+        from vtscore.detectors import dataset_sync as _ds_sync
+        from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
+        from vtscore.detectors.store import _detector_path, _read_detector
+        from vtscore.state.core import get_active_detector_context
+
+        _, good_cid, bad_cid = self._setup_detector_with_votes(client)
+
+        # After the votes were cast, the detector JSON on disk has 2 entries.
+        # Find the on-disk path and confirm.
+        det_ctx = get_active_detector_context()
+        path = _detector_path(det_ctx.name)
+        data = _read_detector(path)
+        assert data is not None
+        labels_before = data.get("labelset", {}).get("labels", [])
+        assert len(labels_before) >= 2
+
+        # Simulate the race: votes_dataset_id mismatches active dataset, and
+        # the rehydrate hook is bypassed (so the mismatch survives).  Without
+        # the safe=False guard, ``_merge_labelsets_across_datasets`` would
+        # drop the active dataset's existing entries and replace them with an
+        # empty composition — erasing labels from disk.
+        original = _ds_sync.ensure_votes_match_active_dataset
+        _ds_sync.ensure_votes_match_active_dataset = lambda: None
+        try:
+            det_ctx.votes_dataset_id = "stale_dataset_id"
+            sync_labels_to_loaded_detector()
+        finally:
+            _ds_sync.ensure_votes_match_active_dataset = original
+
+        # The on-disk labelset must be unchanged.
+        data_after = _read_detector(path)
+        assert data_after is not None
+        labels_after = data_after.get("labelset", {}).get("labels", [])
+        assert len(labels_after) == len(labels_before), (
+            "sync should have bailed on safe=False, not erased on-disk labels"
+        )
+
+
 class TestVoteSyncsToLoadedModel:
     """Voting while a detector is loaded should auto-update the model's labelset."""
 

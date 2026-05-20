@@ -146,10 +146,7 @@ Cross-section interaction agents:
   `vtsearch/routes/media/list.py` L524–563. Missing `X-Dataset-Id`
   falls back to whatever the context proxy resolves to; vote applies
   to wrong media.
-- **H14. `export_labels` leaks votes across datasets** —
-  `vtsearch/routes/labels/vote.py` L146–162. `good_votes` / `bad_votes`
-  are detector-scoped, not dataset-scoped. Re-using a detector across
-  datasets bleeds votes into the export of the wrong dataset.
+- ~~**H14. `export_labels` leaks votes across datasets**~~
 - **H15. File-browser symlink-traversal** — `vtsearch/routes/file_browser.py`
   L84–92. `target.resolve().relative_to(root.resolve())` succeeds for
   `/data/link → /etc`. If the configured root contains a symlink,

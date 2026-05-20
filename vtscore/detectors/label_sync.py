@@ -123,17 +123,26 @@ def sync_labels_to_loaded_detector() -> None:
     entry, path, data, det_ctx = state
 
     from vtscore.datasets.labelset import media_element_key
+    from vtscore.detectors.dataset_sync import validated_vote_snapshot
     from vtscore.detectors.registry import update_detector
     from vtscore.detectors.store import _write_detector
-    from vtsearch.state import bad_votes, good_votes, snapshot_medias, vote_region_boxes
 
-    snap = snapshot_medias()
+    vote_snap = validated_vote_snapshot()
+    if not vote_snap.safe:
+        # Vote dicts can't be proved keyed in the active dataset's cid space
+        # (concurrent dataset switch on the same detector, missing
+        # ``X-Dataset-Id`` header, or no registry entry).  Writing now with
+        # an empty composition would erase the active dataset's on-disk
+        # labels — drop this sync; the next vote will trigger another that
+        # runs against a consistent snapshot.
+        return
+    snap = vote_snap.medias
     current_ls = LabelSet.from_clips_and_votes(
         snap,
-        good_votes,
-        bad_votes,
+        vote_snap.good_votes,
+        vote_snap.bad_votes,
         expand_dupes=False,
-        vote_region_boxes=dict(vote_region_boxes),
+        vote_region_boxes=vote_snap.vote_region_boxes,
     )
     existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 

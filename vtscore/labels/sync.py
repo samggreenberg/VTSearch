@@ -222,9 +222,9 @@ def _push_to_labelset_source() -> None:
     field_values = cfg.get("field_values", {})
 
     from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.dataset_sync import validated_vote_snapshot
     from vtscore.detectors.input_spec import build_detector_meta
     from vtscore.detectors.store import _detector_path, _read_detector
-    from vtscore.state.core import get_active_context
 
     # Read the detector JSON so the exported labelset can carry its
     # input_spec / media_type alongside the in-memory threshold.  Anything
@@ -240,12 +240,21 @@ def _push_to_labelset_source() -> None:
         if _syncing:
             return
         try:
-            ds_ctx = get_active_context()
+            # Atomic snapshot so the votes we serialise are guaranteed to be
+            # keyed in the same dataset's cid space as the medias they're
+            # composed with — even under concurrent dataset-switch requests
+            # on the same detector.  ``safe=False`` means we couldn't prove
+            # consistency; pushing an empty labelset would clobber whatever
+            # the external source has, so we skip this push and let the next
+            # vote re-trigger the debounced timer.
+            vote_snap = validated_vote_snapshot()
+            if not vote_snap.safe:
+                return
             labelset = LabelSet.from_clips_and_votes(
-                dict(ds_ctx.medias),
-                dict(ctx.good_votes),
-                dict(ctx.bad_votes),
-                vote_region_boxes=dict(ctx.vote_region_boxes),
+                vote_snap.medias,
+                vote_snap.good_votes,
+                vote_snap.bad_votes,
+                vote_region_boxes=vote_snap.vote_region_boxes,
                 detector_meta=detector_meta or None,
             )
             source.save(labelset, field_values)

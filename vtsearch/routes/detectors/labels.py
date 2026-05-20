@@ -106,6 +106,7 @@ _DEFAULT_MIMETYPE_BY_TYPE = {
 @detectors_labels_bp.route("/api/detectors/<name>/labels", methods=["POST"])
 @detectors_labels_bp.response(200, DetectorSaveLabelsResponseSchema)
 @detectors_labels_bp.alt_response(404, description="Detector not found.")
+@detectors_labels_bp.alt_response(409, description="Detector vote state is not aligned with the active dataset.")
 def save_detector_labels(name: str):
     """Save the current votes as the detector's labelset.
 
@@ -118,21 +119,23 @@ def save_detector_labels(name: str):
         abort(404, message=f"Detector '{name}' not found")
 
     from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.dataset_sync import validated_vote_snapshot
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
-    from vtsearch.state import (
-        bad_votes,
-        good_votes,
-        snapshot_medias,
-        vote_region_boxes,
-    )
 
-    medias_snap = snapshot_medias()
+    snap = validated_vote_snapshot()
+    if not snap.safe:
+        # Refuse to overwrite the on-disk labelset with an empty composition
+        # when the (dataset, detector) state can't be proved consistent.
+        # Surfacing 409 lets the frontend retry on a stable request instead
+        # of silently destroying labels.
+        abort(409, message="Cannot save labels: detector vote state is not aligned with the active dataset")
+    medias_snap = snap.medias
     labelset = LabelSet.from_clips_and_votes(
         medias_snap,
-        good_votes,
-        bad_votes,
+        snap.good_votes,
+        snap.bad_votes,
         expand_dupes=False,
-        vote_region_boxes=dict(vote_region_boxes),
+        vote_region_boxes=snap.vote_region_boxes,
     )
     data["labelset"] = labelset.to_dict()
 
