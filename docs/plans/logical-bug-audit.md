@@ -135,9 +135,19 @@ Cross-section interaction agents:
 
 - ~~**H8. Origin dict shared by reference across medias**~~
 - ~~**H9. Single-item split has 0 test samples**~~
-- **H10. Clipped media re-ingest reads whole file for MD5** —
-  `vtsearch/datasets/ingest.py` L275. MD5 of the full parent
-  ≠ MD5 of the clip, so dedup never re-matches the original clip.
+- ~~**H10. Clipped media re-ingest reads whole file for MD5**~~ —
+  fixed (2026-05-20). `vtscore/datasets/ingest.py` (formerly
+  `vtsearch/datasets/ingest.py`) now routes both `_ingest_via_source`
+  and `_ingest_via_resolver` through a new
+  `_resolve_clip_content_and_embedding` helper that pairs the clip
+  embedding with the clip's actual content bytes — so `md5`,
+  `file_size`, and `media_bytes` describe the clip, not the parent.
+  Video metadata-only clips (and other fall-through paths) fall back
+  to the load-pipeline's `MD5(parent_bytes) + boundary_tag` scheme so
+  distinct clips of the same parent still hash uniquely. The clip-bytes
+  return value is plumbed through `_apply_clip_and_embed` /
+  `_replay_chain` / `replay_chain_on_file`; see
+  `tests/io/test_label_import_ingestion.py::TestClippedReingest`.
 - ~~**H11. Multi-media import with empty form yields empty dataset**~~
 
 ### Routes / API

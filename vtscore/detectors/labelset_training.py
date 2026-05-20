@@ -142,7 +142,11 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
             )
 
         if has_clipper:
-            return _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
+            result = _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
+            if result is None:
+                return None
+            embedding, _clip_bytes = result
+            return embedding
         return embed_file(file_path, media_type, embedder_name)
 
 

@@ -145,6 +145,80 @@ def _build_media_data(
     return media_data
 
 
+def _has_clip_params(origin_dict: dict[str, Any]) -> bool:
+    """Return True if the origin carries any clip-aware params."""
+    params = origin_dict.get("params", {})
+    return bool(params.get("clipper") or params.get("clipper_chain"))
+
+
+def _boundary_tag(params: dict[str, Any]) -> str:
+    """Build a stable tag from clip metadata to disambiguate clips that share parent bytes.
+
+    Used for video metadata-only clips (and other fall-through paths where
+    the embedding step couldn't produce distinct content bytes) so each
+    clip still gets a unique MD5 instead of colliding on the parent's hash.
+    Mirrors the encoding in
+    :func:`vtscore.datasets.load_pipeline._fixup_clip_md5_and_embeddings`.
+    """
+    parts: list[str] = []
+    for key in ("clipper", "clipper_chain", "clip_start", "clip_end", "clip_box", "clip_index"):
+        if key in params:
+            parts.append(f"{key}={params[key]}")
+    return "|" + "|".join(parts) if parts else ""
+
+
+def _resolve_clip_content_and_embedding(
+    file_path: Any,
+    media_type_id: str,
+    origin_dict: dict[str, Any],
+    embedder_name: str,
+) -> tuple[Any, bytes, str] | None:
+    """Resolve embedding + ``media_bytes`` + ``md5`` for a (possibly clipped) origin.
+
+    Returns ``(embedding, content_bytes, md5)`` where:
+
+    * ``embedding`` is the clipped embedding when the origin has clip
+      params, otherwise the parent's embedding.
+    * ``content_bytes`` is the clip's bytes (audio / image / text clips)
+      OR the parent's bytes when the clip is metadata-only (e.g. video) or
+      when there are no clip params. The frontend can still play video
+      clips because ``clip_start`` / ``clip_end`` live in the origin.
+    * ``md5`` is the hash of ``content_bytes`` for true clips and
+      non-clipped medias. For metadata-only clips, the MD5 mixes the
+      parent's hash with a clip boundary tag so distinct clips of the same
+      parent don't collide under :func:`collapse_duplicates`.
+
+    Returns ``None`` when embedding fails.
+    """
+    from vtscore.detectors.resolver import _apply_clip_and_embed, embed_file
+
+    if _has_clip_params(origin_dict):
+        result = _apply_clip_and_embed(file_path, media_type_id, origin_dict, embedder_name)
+        if result is None:
+            return None
+        embedding, clip_bytes = result
+        if clip_bytes is not None:
+            return embedding, clip_bytes, hashlib.md5(clip_bytes).hexdigest()
+
+        # Metadata-only clip (video) or fall-through: use parent bytes,
+        # but disambiguate the MD5 via a boundary tag so distinct clips of
+        # the same parent don't collapse together.
+        parent_bytes = file_path.read_bytes()
+        tag = _boundary_tag(origin_dict.get("params", {}))
+        if tag:
+            combined = hashlib.md5(parent_bytes).hexdigest() + tag
+            md5 = hashlib.md5(combined.encode()).hexdigest()
+        else:
+            md5 = hashlib.md5(parent_bytes).hexdigest()
+        return embedding, parent_bytes, md5
+
+    embedding = embed_file(file_path, media_type_id, embedder_name) if media_type_id else None
+    if embedding is None:
+        return None
+    parent_bytes = file_path.read_bytes()
+    return embedding, parent_bytes, hashlib.md5(parent_bytes).hexdigest()
+
+
 def _ingest_via_source(
     origin_dict: dict[str, Any],
     entries: list[dict[str, Any]],
@@ -166,8 +240,6 @@ def _ingest_via_source(
     media_type_id = _media_type_from_origin(origin_dict)
     embedder_name = _embedder_name_for_type(medias, media_type_id) if media_type_id else ""
 
-    from vtscore.detectors.resolver import embed_file
-
     ingested = 0
 
     try:
@@ -179,16 +251,17 @@ def _ingest_via_source(
             if file_path is None:
                 continue
 
-            # Embed the file — if embedding fails, fall back to legacy path
-            # so we don't produce medias without embeddings.
-            embedding = embed_file(file_path, media_type_id, embedder_name) if media_type_id else None
-            if embedding is None:
+            # Resolve embedding + clip-aware bytes/md5 — if any step fails,
+            # fall back to the legacy full-import path so we don't produce
+            # medias with mismatched embedding/MD5/bytes triples.
+            if not media_type_id:
+                source.cleanup()
+                return -1
+            resolved = _resolve_clip_content_and_embedding(file_path, media_type_id, origin_dict, embedder_name)
+            if resolved is None:
                 source.cleanup()
                 return -1  # Signal caller to use legacy full-import path
-
-            # Read file bytes and compute MD5
-            file_bytes = file_path.read_bytes()
-            md5 = hashlib.md5(file_bytes).hexdigest()
+            embedding, file_bytes, md5 = resolved
 
             media_data = _build_media_data(
                 origin_dict=origin_dict,
@@ -244,7 +317,7 @@ def _ingest_via_resolver(
 
     embedder_name = _embedder_name_for_type(medias, media_type_id)
 
-    from vtscore.detectors.resolver import embed_file, resolve_file_context
+    from vtscore.detectors.resolver import resolve_file_context
 
     ingested = 0
 
@@ -260,20 +333,13 @@ def _ingest_via_resolver(
             if file_path is None:
                 continue
 
-            # Use clip-aware embedding when the origin has clip params, so
-            # that re-ingested clipped media gets the correct (clipped)
-            # embedding.
-            if origin_dict.get("params", {}).get("clipper"):
-                from vtscore.detectors.resolver import _apply_clip_and_embed
-
-                embedding = _apply_clip_and_embed(file_path, media_type_id, origin_dict, embedder_name)
-            else:
-                embedding = embed_file(file_path, media_type_id, embedder_name)
-            if embedding is None:
+            # Clip-aware: produces the clip embedding and the clip's bytes
+            # so the stored ``media_bytes`` / ``md5`` / ``file_size`` all
+            # describe the clip, not the parent.
+            resolved = _resolve_clip_content_and_embedding(file_path, media_type_id, origin_dict, embedder_name)
+            if resolved is None:
                 continue
-
-            file_bytes = file_path.read_bytes()
-            md5 = hashlib.md5(file_bytes).hexdigest()
+            embedding, file_bytes, md5 = resolved
 
             media_data = _build_media_data(
                 origin_dict=origin_dict,
