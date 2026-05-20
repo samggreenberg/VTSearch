@@ -231,8 +231,30 @@ save_detector("barks", labelset)
 ctx = DetectorContext(detector_id="barks", name="barks",
                       media_type="audio", embedder="audio_clap")
 register_detector_context(ctx)
-train_detector_from_origins(ctx)
-print(f"Restored detector with threshold {ctx.threshold:.3f}")
+
+# Build (good_origins, bad_origins) from the saved labelset's elements,
+# then re-derive embeddings + retrain. Pass the same embedder the detector
+# was trained with so the re-embedded vectors line up with the saved ones —
+# otherwise the MLP trains on a mix of embedder outputs.
+good_origins = [
+    {"origin": e.origin, "origin_name": e.origin_name,
+     "filename": e.filename, "md5": e.md5}
+    for e in labelset.labels if e.label == "good"
+]
+bad_origins = [
+    {"origin": e.origin, "origin_name": e.origin_name,
+     "filename": e.filename, "md5": e.md5}
+    for e in labelset.labels if e.label == "bad"
+]
+weights, threshold = train_detector_from_origins(
+    good_origins,
+    bad_origins,
+    inclusion=0,
+    media_type="audio",
+    embedder_name=ctx.embedder,
+)
+ctx.threshold = threshold
+print(f"Restored detector with threshold {threshold:.3f}")
 ```
 
 What's on disk after `save_detector`:

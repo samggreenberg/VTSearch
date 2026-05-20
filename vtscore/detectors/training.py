@@ -408,6 +408,7 @@ def train_detector_from_origins(
     bad_origins: list[dict[str, Any]],
     inclusion: int,
     media_type: str,
+    embedder_name: str,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
 ) -> tuple[dict[str, list] | None, float]:
@@ -422,6 +423,13 @@ def train_detector_from_origins(
         bad_origins: Origin dicts for media labelled Bad.
         inclusion: The inclusion value to use for training.
         media_type: Media type string (e.g. ``"audio"``, ``"image"``).
+        embedder_name: Name of the embedder the detector was originally
+            trained with. Passed through to :func:`embed_file` so every
+            re-embedded media is encoded by the same model that produced
+            the saved vectors — otherwise the MLP trains on a mix of
+            embedder outputs and learns garbage. Pass ``""`` only when you
+            genuinely want the media type's default embedder (e.g. a
+            brand-new detector with no recorded embedder yet).
         calibrate_count: Number of k-fold calibration splits.
         calibration_fraction: Fraction reserved for calibration.
 
@@ -447,7 +455,7 @@ def train_detector_from_origins(
         ) as file_path:
             if file_path is None:
                 continue
-            emb = embed_file(file_path, media_type)
+            emb = embed_file(file_path, media_type, embedder_name)
         if emb is None:
             continue
         X_list.append(emb)
@@ -461,7 +469,7 @@ def train_detector_from_origins(
         ) as file_path:
             if file_path is None:
                 continue
-            emb = embed_file(file_path, media_type)
+            emb = embed_file(file_path, media_type, embedder_name)
         if emb is None:
             continue
         X_list.append(emb)

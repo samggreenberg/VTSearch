@@ -222,7 +222,10 @@ Thresholding (`vtscore/training/thresholds.py`):
 The combined pipeline is `vtscore.detectors.training.train_and_threshold`:
 one call gives you `(model, threshold)` from `(X_list, y_list)`. The
 detector lifecycle (load labelset → re-derive embeddings → train) lives
-in `vtscore.detectors.training.train_detector_from_origins`.
+in `vtscore.detectors.training.train_detector_from_origins`; the caller
+must pass `embedder_name` so re-derivation uses the same embedder the
+detector was trained with, not whatever the media type's current default
+happens to be.
 
 ## 7. Context
 

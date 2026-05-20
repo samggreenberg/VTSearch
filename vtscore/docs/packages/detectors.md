@@ -198,7 +198,7 @@ results, threshold, model = train_and_score(
 
 | Function                                                  | Behaviour                                                            |
 |-----------------------------------------------------------|----------------------------------------------------------------------|
-| `train_detector_from_origins(good_origins, bad_origins, inclusion, media_type, ...)` (line 405) | Resolve every entry to a file, embed, train. Returns `(weights_dict, threshold)` or `(None, 0.5)` on insufficient data. |
+| `train_detector_from_origins(good_origins, bad_origins, inclusion, media_type, embedder_name, ...)` (line 405) | Resolve every entry to a file, embed with the named embedder, train. `embedder_name` is required — pass the embedder the detector was originally trained with so re-derived vectors don't drift onto the media type's default. Returns `(weights_dict, threshold)` or `(None, 0.5)` on insufficient data. |
 | `collect_media_origins(media_ids, snap)` (line 373) | Extract `origin / origin_name / filename / md5` for every cid that appears in `snap`. |
 | `serialize_weights(model)` (line 111) | Pickle-safe `state_dict` dump via `tensor.tolist()`. Round-trips through `build_model_from_weights`. |
 | `validate_good_bad_split(y_list)` (line 24) | Precondition; raises `ValueError` when either class is empty. |

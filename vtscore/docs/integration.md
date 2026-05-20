@@ -276,7 +276,17 @@ from vtscore.detectors.training import train_detector_from_origins
 def score_one(dataset_ctx: DatasetContext, detector_ctx: DetectorContext) -> dict:
     set_thread_dataset_context(dataset_ctx)
     set_thread_detector_context(detector_ctx)
-    train_detector_from_origins(detector_ctx)
+    # Re-derive the detector's MLP from its saved origins. Pass
+    # detector_ctx.embedder so the re-embedded vectors match the embedder
+    # the detector was originally trained with — never the media type's
+    # default, which may have changed since save.
+    good_origins, bad_origins = origins_from_labelset(detector_ctx.labelset)
+    train_detector_from_origins(
+        good_origins, bad_origins,
+        inclusion=0,
+        media_type=detector_ctx.media_type,
+        embedder_name=detector_ctx.embedder,
+    )
     # … score the dataset against the detector, return hits
     return {"detector_id": detector_ctx.detector_id, "n_hits": ...}
 
