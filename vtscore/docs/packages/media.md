@@ -361,7 +361,7 @@ text-embedder). See [converters](converters.md).
 ## Implementing a new media type
 
 Sketch — the full walkthrough is in
-[../../docs/EXTENDING-media.md](../../docs/EXTENDING-media.md).
+[../../docs/EXTENDING-media.md](../../../docs/EXTENDING-media.md).
 
 1. Create `vtscore/media/<type>/__init__.py`, `media_type.py`,
    `clipper.py`, and one or more `embedder_<name>.py` modules.
@@ -427,7 +427,7 @@ out-of-tree implementations.
   matrix cache and smart preload.
 - [converters](converters.md) — cross-type bridges (audio →
   spectrogram, OCR, ASR, video → keyframes).
-- [../../docs/EXTENDING-media.md](../../docs/EXTENDING-media.md) — the
+- [../../docs/EXTENDING-media.md](../../../docs/EXTENDING-media.md) — the
   full walkthrough for adding a media type, embedder, or clipper.
-- [../../docs/EXTENDING-processors.md](../../docs/EXTENDING-processors.md) —
+- [../../docs/EXTENDING-processors.md](../../../docs/EXTENDING-processors.md) —
   adding detectors / localizers / extractors.

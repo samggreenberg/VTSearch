@@ -334,7 +334,7 @@ recoverable.
 ## Implementing a new converter
 
 Sketch — the walk-through is in
-[../../docs/EXTENDING-plugins.md#adding-a-media-converter](../../docs/EXTENDING-plugins.md#adding-a-media-converter).
+[../../docs/EXTENDING-plugins.md#adding-a-media-converter](../../../docs/EXTENDING-plugins.md#adding-a-media-converter).
 
 1. Create `vtscore/converters/<source>2<target>.py`.
 2. Subclass `MediaConverter`. Implement `source_type`,
@@ -440,5 +440,5 @@ CONVERTER = Text2EmojiMediaConverter()
 - [plugins](plugins.md) — the `PluginField` / `PluginBase` /
   `PluginRegistry` scaffolding converters share with every other
   plugin family.
-- [../../docs/EXTENDING-plugins.md](../../docs/EXTENDING-plugins.md) —
+- [../../docs/EXTENDING-plugins.md](../../../docs/EXTENDING-plugins.md) —
   the full walkthrough for adding a converter.
