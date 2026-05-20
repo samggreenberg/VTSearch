@@ -243,8 +243,10 @@ def calculate_cross_calibration_threshold(
 
     Algorithm:
         For each of *k* = ``calibrate_count`` rounds:
-        1. Randomly split data into Train (``1 - calibration_fraction``)
-           and Calibrate (``calibration_fraction``).
+        1. Stratified random split into Train (``1 - calibration_fraction``)
+           and Calibrate (``calibration_fraction``).  Stratification guarantees
+           the Train side has at least one of each class, so the per-fold MLP
+           fit always has both-class supervision.
         2. Train a model on Train.
         3. Find optimal threshold on Calibrate.
         Return mean of all *k* thresholds.
@@ -271,8 +273,10 @@ def calculate_cross_calibration_threshold(
             fold models match the final model's architecture.
 
     Returns:
-        A float threshold. Returns 0.5 if fewer than 4 examples are provided
-        (insufficient data for calibration).  Returns :data:`NO_GOOD_THRESHOLD`
+        A float threshold. Returns 0.5 when calibration is not possible:
+        fewer than 4 examples total, or fewer than 2 of either class
+        (stratified splitting needs at least one of each class on both
+        the train and calibrate sides).  Returns :data:`NO_GOOD_THRESHOLD`
         (a finite sentinel above the sigmoid range) if
         ``calibration_fraction`` makes a valid split impossible.
     """
@@ -290,6 +294,17 @@ def calculate_cross_calibration_threshold(
     if n_train < 2 or n_cal < 1:
         return NO_GOOD_THRESHOLD
 
+    # Stratify by class so every fold's train side has both classes — an
+    # unstratified random split could produce a single-class y_train on
+    # small or skewed labelsets, and ``train_model`` (correctly) refuses
+    # to fit BCE on that.  Needs at least two of each class to guarantee
+    # the train side stays mixed; below that we cannot calibrate
+    # reliably and fall back to the neutral 0.5 sentinel.
+    pos_idx = np.where(y_np == 1.0)[0]
+    neg_idx = np.where(y_np == 0.0)[0]
+    if len(pos_idx) < 2 or len(neg_idx) < 2:
+        return 0.5
+
     import torch  # noqa: PLC0415
 
     from vtscore.training.mlp import train_model  # noqa: PLC0415
@@ -297,10 +312,22 @@ def calculate_cross_calibration_threshold(
     calibrate_count = max(1, calibrate_count)
     thresholds: list[float] = []
 
+    # Per-class train counts proportional to ``n_train / n`` but clamped to
+    # ``[1, class_total - 1]`` so the train side keeps at least one of each
+    # class (the H6 invariant) and the cal side is non-empty for at least
+    # one class.
+    def _per_class_n_train(class_total: int) -> int:
+        target = round(class_total * n_train / n)
+        return max(1, min(class_total - 1, target))
+
+    n_train_pos = _per_class_n_train(len(pos_idx))
+    n_train_neg = _per_class_n_train(len(neg_idx))
+
     for _ in range(calibrate_count):
-        indices = _rng.permutation(n)
-        train_idx = indices[:n_train]
-        cal_idx = indices[n_train:]
+        pos_perm = _rng.permutation(pos_idx)
+        neg_perm = _rng.permutation(neg_idx)
+        train_idx = np.concatenate([pos_perm[:n_train_pos], neg_perm[:n_train_neg]])
+        cal_idx = np.concatenate([pos_perm[n_train_pos:], neg_perm[n_train_neg:]])
 
         X_train = torch.tensor(X_np[train_idx], dtype=torch.float32)
         y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)

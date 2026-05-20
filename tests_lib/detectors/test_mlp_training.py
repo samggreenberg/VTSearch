@@ -13,9 +13,7 @@ def _balanced_xy(n_per_class: int = 5, dim: int = 8, seed: int = 0):
     """Build a tiny balanced (X, y) pair suitable for a smoke train."""
     rng = np.random.default_rng(seed)
     X = torch.tensor(rng.standard_normal((2 * n_per_class, dim)).astype(np.float32))
-    y = torch.tensor(
-        [1.0] * n_per_class + [0.0] * n_per_class, dtype=torch.float32
-    ).unsqueeze(1)
+    y = torch.tensor([1.0] * n_per_class + [0.0] * n_per_class, dtype=torch.float32).unsqueeze(1)
     return X, y
 
 
