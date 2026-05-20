@@ -8,12 +8,16 @@ Covers:
 - Non-existent directory handling
 - Multi-user isolation (users cannot browse into other users' folders)
 - No server filesystem path leakage in responses
+- Symlinks that escape the root are hidden from listings
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 
 from vtsearch.auth import (
@@ -198,6 +202,102 @@ class TestBrowseEndpoint:
         # Ensure no absolute path appears anywhere in the JSON values
         raw = resp.get_data(as_text=True)
         assert str(root) not in raw
+
+
+class TestBrowseSymlinks:
+    """Symlinks pointing outside the root must not appear in listings."""
+
+    def test_symlink_to_external_dir_hidden(self, client, tmp_path):
+        """A symlink to an out-of-root directory is omitted from the listing."""
+        root = _make_browse_root(tmp_path)
+        external = tmp_path / "external_target"
+        external.mkdir()
+        (external / "secret.txt").write_text("hidden")
+        try:
+            os.symlink(external, root / "link")
+        except OSError:
+            pytest.skip("Cannot create symlinks in this environment")
+
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
+            resp = client.get("/api/browse")
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        all_names = [d["name"] for d in data["directories"]] + [f["name"] for f in data["files"]]
+        assert "link" not in all_names
+
+    def test_symlink_to_external_file_hidden(self, client, tmp_path):
+        """A symlink to an out-of-root file is omitted (no size/mtime leak)."""
+        root = _make_browse_root(tmp_path)
+        target = tmp_path / "external_file.txt"
+        target.write_text("sensitive content")
+        try:
+            os.symlink(target, root / "shortcut")
+        except OSError:
+            pytest.skip("Cannot create symlinks in this environment")
+
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
+            resp = client.get("/api/browse")
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        file_names = [f["name"] for f in data["files"]]
+        assert "shortcut" not in file_names
+        # Size of the external target must not leak even by coincidence.
+        raw = resp.get_data(as_text=True)
+        assert "sensitive content" not in raw
+
+    def test_intra_root_symlink_still_listed(self, client, tmp_path):
+        """A symlink whose target resolves back inside root is still shown."""
+        root = _make_browse_root(tmp_path)
+        real = root / "real_dir"
+        real.mkdir()
+        (real / "child.txt").write_text("data")
+        try:
+            os.symlink(real, root / "alias")
+        except OSError:
+            pytest.skip("Cannot create symlinks in this environment")
+
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
+            resp = client.get("/api/browse")
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        dir_names = [d["name"] for d in data["directories"]]
+        assert "alias" in dir_names
+        assert "real_dir" in dir_names
+
+    def test_broken_symlink_skipped(self, client, tmp_path):
+        """A symlink to a non-existent target is silently skipped, not 500."""
+        root = _make_browse_root(tmp_path)
+        try:
+            os.symlink(tmp_path / "does_not_exist", root / "dangling")
+        except OSError:
+            pytest.skip("Cannot create symlinks in this environment")
+
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
+            resp = client.get("/api/browse")
+
+        assert resp.status_code == 200
+        all_names = [d["name"] for d in resp.get_json()["directories"]] + [
+            f["name"] for f in resp.get_json()["files"]
+        ]
+        assert "dangling" not in all_names
+
+    def test_symlink_drill_through_blocked(self, client, tmp_path):
+        """Pre-existing guarantee: drilling through an external symlink is rejected."""
+        root = _make_browse_root(tmp_path)
+        external = tmp_path / "external"
+        external.mkdir()
+        try:
+            os.symlink(external, root / "escape")
+        except OSError:
+            pytest.skip("Cannot create symlinks in this environment")
+
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=root):
+            resp = client.get("/api/browse?path=escape")
+
+        assert resp.status_code == 400
 
 
 # ---------------------------------------------------------------------------
