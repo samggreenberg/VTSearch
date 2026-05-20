@@ -657,7 +657,7 @@ class TestStateProgressLockOrder:
         original = getattr(_progress_mod, attr)
 
         def wrapper(*args, **kwargs):
-            captured.append(_state._state_lock._is_owned())
+            captured.append(_state._state_lock._is_owned())  # type: ignore[attr-defined]
             return original(*args, **kwargs)
 
         monkeypatch.setattr(_progress_mod, attr, wrapper)
