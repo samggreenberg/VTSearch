@@ -106,7 +106,7 @@ Cross-section interaction agents:
   the live `medias` dict — training vectors and scored results are
   mapped to the wrong media IDs. Silent ranking corruption.
 
-### C5. `find_label` allows body field to override the request's dataset context
+### C5. `find_label` allows body field to override the request's dataset context — **SHIPPED**
 
 - **File:** `vtsearch/routes/detectors/scoring.py` ~L207–214, ~L336
 - **Bug:** The endpoint mutates `g._dataset_context` from a `dataset_id`
@@ -114,6 +114,11 @@ Cross-section interaction agents:
   headers. Combined with `replace_all=True` further down, a confused or
   malicious client can wipe one detector's votes while the UI thinks
   it's labeling a different one.
+- **Fix shipped:** Removed the body override in `find_label`, dropped
+  `dataset_id` from `FindLabelRequestSchema`, and removed the redundant
+  body field from the frontend caller. The `X-Dataset-Id` header (set
+  by `activeContextInterceptor`) is now the only dataset selector for
+  `/api/find-label`, matching every other route.
 
 ### C6. Zip-slip in HTTP archive importer (zip AND tar) — SHIPPED 2026-05-19
 

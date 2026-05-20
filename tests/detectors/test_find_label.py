@@ -57,6 +57,31 @@ class TestFindLabel:
         finally:
             app_module.medias.update(saved)
 
+    def test_find_label_body_dataset_id_is_rejected(self, client):
+        """Regression for C5: the body must not carry a ``dataset_id`` field.
+
+        The dataset to score against comes exclusively from the
+        ``X-Dataset-Id`` header set by ``before_request``. An extra
+        ``dataset_id`` in the body must fail schema validation rather
+        than silently override ``g._dataset_context`` — which used to
+        let a confused client wipe one detector's votes while the UI
+        thought it was labeling a different dataset.
+        """
+        detector_id = setup_trainable_model_in_registry(
+            "c5-regression",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        resp = client.post(
+            "/api/find-label",
+            json={"detector_id": detector_id, "dataset_id": "spoofed"},
+        )
+        # ``additionalProperties: false`` on the request schema turns
+        # the unknown field into a 422 from flask-smorest.
+        assert resp.status_code == 422, resp.get_json()
+        assert "dataset_id" in resp.get_json()["errors"]["json"]
+
 
 class TestAutoDetect:
     """``POST /api/auto-detect`` iterates detectors flagged for autorun."""

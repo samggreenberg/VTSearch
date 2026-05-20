@@ -202,17 +202,6 @@ def find_label(body: dict):  # noqa: C901
 
     detector_id = body["detector_id"]
 
-    # If the request body specifies a dataset_id, override the request-scoped
-    # context so scoring runs against the correct dataset.
-    dataset_id = body.get("dataset_id") or ""
-    if dataset_id:
-        from flask import g
-        from vtsearch.state import get_context
-
-        ctx = get_context(dataset_id)
-        if ctx is not None:
-            g._dataset_context = ctx
-
     # Clear a leftover cancel flag from a previously-cancelled run so
     # the new operation doesn't trip on it immediately.
     find_progress.reset_cancel()
