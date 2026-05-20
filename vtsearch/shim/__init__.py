@@ -22,21 +22,41 @@ def _flask_dataset_context_resolver() -> Any:
     Returns ``None`` outside a request context (background threads, CLI,
     library callers) so :func:`vtscore.state.core.get_active_context`
     can fall through to its thread-local / empty-context fallback.
+
+    Raises :class:`vtscore.state.core.DatasetNotLoadedError` if the
+    request explicitly named a dataset (``X-Dataset-Id`` header or
+    ``?dataset_id=`` query param) that is not loaded. Without this, the
+    proxy silently resolved to the empty context and the client saw
+    stale data — logical-bug-audit H16.
     """
     from flask import g, has_request_context
 
-    if has_request_context():
-        return getattr(g, "_dataset_context", None)
-    return None
+    if not has_request_context():
+        return None
+    ctx = getattr(g, "_dataset_context", None)
+    if ctx is None:
+        unloaded = getattr(g, "_unloaded_dataset_id", None)
+        if unloaded:
+            from vtscore.state.core import DatasetNotLoadedError
+
+            raise DatasetNotLoadedError(unloaded)
+    return ctx
 
 
 def _flask_detector_context_resolver() -> Any:
     """Counterpart of :func:`_flask_dataset_context_resolver` for detectors."""
     from flask import g, has_request_context
 
-    if has_request_context():
-        return getattr(g, "_detector_context", None)
-    return None
+    if not has_request_context():
+        return None
+    ctx = getattr(g, "_detector_context", None)
+    if ctx is None:
+        unloaded = getattr(g, "_unloaded_detector_id", None)
+        if unloaded:
+            from vtscore.state.core import DetectorNotLoadedError
+
+            raise DetectorNotLoadedError(unloaded)
+    return ctx
 
 
 def register_flask_context_resolvers() -> None:

@@ -37,6 +37,7 @@ from flask import Flask, g
 from werkzeug.exceptions import MethodNotAllowed, NotFound
 
 # Import refactored modules
+from vtscore.state.core import DatasetNotLoadedError, DetectorNotLoadedError  # noqa: E402
 from vtsearch.auth import get_login_provider  # noqa: E402
 from vtscore.embedding import initialize_models, preload_predicted_embedders  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
@@ -214,8 +215,12 @@ def _set_request_context():
     (``medias``, ``good_votes``, etc.) resolve to it for the duration of
     this request — without mutating global "active" state.
 
-    When the headers are absent the proxies fall back to the global active
-    pointers, preserving backward compatibility.
+    When a header is absent the proxies fall back to the thread-local /
+    empty context. When a header is **present but names an unloaded id**,
+    the unloaded id is stashed on ``g`` so the resolver raises
+    ``DatasetNotLoadedError`` / ``DetectorNotLoadedError`` on proxy
+    access (mapped to 409). Routes that never touch the proxies still
+    respond normally — see logical-bug-audit H16.
 
     Any failure here must not 500 every subsequent request — fall back to
     the default (empty) context.
@@ -235,12 +240,22 @@ def _set_request_context():
             ctx = get_context(ds_id)
             if ctx is not None:
                 g._dataset_context = ctx
+            else:
+                # Header refers to a dataset that isn't loaded.  Stash the id
+                # so the resolver raises DatasetNotLoadedError at proxy
+                # access — silent fallback to the empty context hid stale
+                # results from the client (logical-bug-audit H16).  Routes
+                # that never touch the dataset proxies (registry listings,
+                # auth, file browser, etc.) still respond normally.
+                g._unloaded_dataset_id = ds_id
 
         detector_id = request.headers.get("X-Detector-Id") or request.args.get("detector_id")
         if detector_id:
             det_ctx = get_detector_context(detector_id)
             if det_ctx is not None:
                 g._detector_context = det_ctx
+            else:
+                g._unloaded_detector_id = detector_id
     except Exception:
         logging.getLogger(__name__).exception("Request context resolution failed")
 
@@ -253,6 +268,10 @@ def _set_request_context():
         from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
 
         ensure_votes_match_active_dataset()
+    except (DatasetNotLoadedError, DetectorNotLoadedError):
+        # The route handler will hit the same error when it touches the
+        # proxies; the global error handler turns it into a clean 409.
+        pass
     except Exception:
         logging.getLogger(__name__).exception("Vote rehydrate failed")
 
@@ -323,6 +342,40 @@ def _handle_405(exc):
     if not _req.path.startswith("/api/"):
         return exc
     return error_response(exc.name, 405)
+
+
+@app.errorhandler(DatasetNotLoadedError)
+def _handle_dataset_not_loaded(exc):
+    """Return a JSON 409 when ``X-Dataset-Id`` names an unloaded dataset.
+
+    Raised by the Flask resolver when a route handler touches the
+    dataset proxies and the header doesn't resolve to a loaded context.
+    Replaces the silent fallback to the empty context that returned 200
+    with stale data (logical-bug-audit H16). The frontend can
+    distinguish 409 + ``code="dataset_not_loaded"`` from a generic 500
+    and offer a load action.
+    """
+    from vtsearch.routes._shared import error_response
+
+    return error_response(
+        "Dataset is not loaded",
+        409,
+        dataset_id=exc.dataset_id,
+        code="dataset_not_loaded",
+    )
+
+
+@app.errorhandler(DetectorNotLoadedError)
+def _handle_detector_not_loaded(exc):
+    """Detector counterpart of :func:`_handle_dataset_not_loaded` (H16/H34)."""
+    from vtsearch.routes._shared import error_response
+
+    return error_response(
+        "Detector is not loaded",
+        409,
+        detector_id=exc.detector_id,
+        code="detector_not_loaded",
+    )
 
 
 @app.errorhandler(Exception)

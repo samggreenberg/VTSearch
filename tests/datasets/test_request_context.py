@@ -83,8 +83,18 @@ class TestRequestScopedDataset:
         ctx_a = get_thread_dataset_context()
         assert ctx_a is not None and ctx_a.dataset_id == "req_ds_a"
 
-    def test_header_with_unloaded_id_falls_back_to_active(self, client):
-        """If X-Dataset-Id refers to a dataset not in memory, fall back to global active."""
+    def test_header_with_unloaded_id_raises_at_proxy_access(self, client):
+        """If X-Dataset-Id names an unloaded dataset, proxy access raises (H16).
+
+        Previously this fell back silently to the thread-local / empty
+        context, returning stale data with HTTP 200. Now the resolver
+        raises ``DatasetNotLoadedError`` (mapped to 409) the moment a
+        handler touches the dataset proxies.
+        """
+        import pytest
+
+        from vtscore.state.core import DatasetNotLoadedError
+
         _make_dataset("req_fallback", [300])
         set_thread_dataset_context(get_context("req_fallback"))
 
@@ -92,10 +102,34 @@ class TestRequestScopedDataset:
 
         with app.test_request_context(headers={"X-Dataset-Id": "nonexistent"}):
             app.preprocess_request()
-            # Falls back to global active
-            ctx = get_active_context()
-            assert ctx.dataset_id == "req_fallback"
-            assert 300 in medias
+            with pytest.raises(DatasetNotLoadedError) as excinfo:
+                get_active_context()
+            assert excinfo.value.dataset_id == "nonexistent"
+            # Proxy access through the module-level name also raises.
+            with pytest.raises(DatasetNotLoadedError):
+                _ = 300 in medias
+
+    def test_header_with_unloaded_id_returns_409(self, client):
+        """End-to-end: a request with an unloaded X-Dataset-Id gets 409."""
+        _make_dataset("req_e2e_loaded", [400])
+
+        # A route that touches the medias proxy via snapshot_medias().
+        resp = client.get("/api/medias/ids", headers={"X-Dataset-Id": "nope"})
+        assert resp.status_code == 409
+        body = resp.get_json()
+        assert body["code"] == "dataset_not_loaded"
+        assert body["dataset_id"] == "nope"
+
+    def test_unloaded_header_does_not_block_routes_that_skip_proxies(self, client):
+        """Routes that don't touch the dataset proxies still respond 200.
+
+        The registry-listing endpoint operates on the global context store,
+        not on the active ``medias``, so an unloaded ``X-Dataset-Id``
+        header must not break it — clients need this endpoint precisely
+        to discover which datasets *are* loaded.
+        """
+        resp = client.get("/api/datasets/registry", headers={"X-Dataset-Id": "nope"})
+        assert resp.status_code == 200
 
     def test_no_header_uses_global_active(self, client):
         """Without the header, behaviour is identical to before (global active)."""
@@ -149,8 +183,14 @@ class TestRequestScopedModel:
         det_a = get_thread_detector_context()
         assert det_a is not None and det_a.detector_id == "req_det_a"
 
-    def test_model_header_with_unloaded_id_falls_back(self, client):
-        """If X-Detector-Id refers to a detector not in memory, fall back to global."""
+    def test_model_header_with_unloaded_id_returns_409(self, client):
+        """If X-Detector-Id names an unloaded detector, the route returns 409 (H34).
+
+        Previously this fell back to the thread-local detector and the
+        client saw votes from a different (or stale) detector under HTTP
+        200. Now the resolver raises ``DetectorNotLoadedError`` (mapped to
+        409) at proxy access.
+        """
         det = _make_detector("req_det_fb")
         det.good_votes[5] = None
         from vtscore.state.core import get_detector_context
@@ -158,9 +198,10 @@ class TestRequestScopedModel:
         set_thread_detector_context(get_detector_context("req_det_fb"))
 
         resp = client.get("/api/votes", headers={"X-Detector-Id": "nonexistent"})
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert 5 in set(data.get("good", []))
+        assert resp.status_code == 409
+        body = resp.get_json()
+        assert body["code"] == "detector_not_loaded"
+        assert body["detector_id"] == "nonexistent"
 
     def test_header_resolves_correct_detector_in_request(self, client):
         """Verify the proxy objects resolve correctly inside a request context."""
