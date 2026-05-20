@@ -372,6 +372,90 @@ describe('VoteStateService', () => {
     });
   });
 
+  describe('submitToggleVoteAndRecord (the H26 fix surface)', () => {
+    it('records the undo entry only after the POST succeeds', () => {
+      service.submitToggleVoteAndRecord(5, 'good', 'foo.wav').subscribe();
+      // Undo stack must be empty while the POST is in flight.
+      expect(service.canUndo()).toBeFalse();
+
+      const req = httpMock.expectOne('/api/medias/5/vote');
+      req.flush({ ok: true, state: 'good', click_time: 1 });
+
+      // After confirmation, the entry should be on the stack.
+      expect(service.canUndo()).toBeTrue();
+    });
+
+    it('does NOT record an undo entry when the POST errors', () => {
+      service.submitToggleVoteAndRecord(5, 'good', 'foo.wav').subscribe({
+        next: () => {},
+        error: () => {},
+      });
+      const req = httpMock.expectOne('/api/medias/5/vote');
+      req.flush(null, { status: 500, statusText: 'Server Error' });
+
+      // The failed POST must not leave a phantom undo entry — Cmd-Z next
+      // would otherwise post a "reversal" of a vote that never happened.
+      expect(service.canUndo()).toBeFalse();
+    });
+
+    it('captures previousPolarity before the optimistic flip', () => {
+      // Media starts as "good"; user clicks bad (a flip).
+      service.applyOptimisticState(5, 'good');
+
+      service.submitToggleVoteAndRecord(5, 'bad', 'foo.wav').subscribe();
+      // submitToggleVote inside has already optimistically flipped 5 to bad.
+      expect(service.badVotes.has(5)).toBeTrue();
+
+      const req = httpMock.expectOne('/api/medias/5/vote');
+      req.flush({ ok: true, state: 'bad', click_time: 2 });
+
+      // Undo should now POST target='good' (the previousPolarity before
+      // the click, NOT the polarity that the optimistic flip put us in).
+      service.undo();
+      const undoReq = httpMock.expectOne('/api/medias/5/vote');
+      expect(undoReq.request.body).toEqual({ target: 'good' });
+      undoReq.flush({ ok: true, state: 'good', click_time: 3 });
+    });
+
+    it('clears the redo stack only when the POST succeeds', () => {
+      // Set up a redo entry the normal way.
+      service.recordVote(1, 'good', 'a');
+      service.applyOptimisticState(1, 'good');
+      service.undo();
+      httpMock
+        .expectOne('/api/medias/1/vote')
+        .flush({ ok: true, state: 'none', click_time: null });
+      expect(service.canRedo()).toBeTrue();
+
+      // A new vote whose POST fails must NOT wipe the redo stack — the
+      // vote never happened, so the redo entry is still legitimate.
+      service.submitToggleVoteAndRecord(2, 'bad', 'b').subscribe({
+        next: () => {},
+        error: () => {},
+      });
+      httpMock
+        .expectOne('/api/medias/2/vote')
+        .flush(null, { status: 500, statusText: 'Server Error' });
+      expect(service.canRedo()).toBeTrue();
+
+      // A new vote whose POST succeeds wipes the redo stack as expected.
+      service.submitToggleVoteAndRecord(3, 'good', 'c').subscribe();
+      httpMock
+        .expectOne('/api/medias/3/vote')
+        .flush({ ok: true, state: 'good', click_time: 5 });
+      expect(service.canRedo()).toBeFalse();
+    });
+
+    it('honours regionBox on a good vote', () => {
+      service
+        .submitToggleVoteAndRecord(5, 'good', 'foo.wav', [0.1, 0.2, 0.3, 0.4])
+        .subscribe();
+      const req = httpMock.expectOne('/api/medias/5/vote');
+      expect(req.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
+      req.flush({ ok: true, state: 'good', click_time: 1 });
+    });
+  });
+
   it('goodVotes$ should emit on load', (done: DoneFn) => {
     const emissions: Set<number>[] = [];
     service.goodVotes$.subscribe((v) => emissions.push(v));

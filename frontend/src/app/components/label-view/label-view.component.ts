@@ -870,9 +870,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
-    this.voteState.recordVote(event.id, event.vote, this.mediaDisplayName(event.id));
     this.voteState
-      .submitToggleVote(event.id, event.vote)
+      .submitToggleVoteAndRecord(event.id, event.vote, this.mediaDisplayName(event.id))
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {

@@ -154,6 +154,41 @@ export class VoteStateService implements OnDestroy {
   }
 
   /**
+   * Like {@link submitToggleVote}, but also records an undo entry on the
+   * past stack — **only after the server confirms the vote**.  Production
+   * callers (centre / find / label views) should use this rather than
+   * pairing {@link submitToggleVote} with a separate {@link recordVote},
+   * because the latter ordering racks an undo entry that may not be
+   * reflected on the server (audit bug H26): a failed POST left a phantom
+   * entry on the stack, and a subsequent Cmd-Z then issued a "reversal" of
+   * a vote that never happened.
+   *
+   * `previousPolarity` is captured here, synchronously, **before** the
+   * optimistic flip — that snapshot is the only piece of state that has to
+   * exist pre-POST.  The undo entry itself is only pushed if the POST
+   * resolves successfully.
+   */
+  submitToggleVoteAndRecord(
+    id: number,
+    clickedDirection: 'good' | 'bad',
+    mediaName: string,
+    regionBox?: readonly number[] | null,
+  ): Observable<MediaVoteResponse> {
+    const previousPolarity: 'good' | 'bad' | null = this.goodVotesSubject.value.has(id)
+      ? 'good'
+      : this.badVotesSubject.value.has(id)
+        ? 'bad'
+        : null;
+    return this.submitToggleVote(id, clickedDirection, regionBox).pipe(
+      tap(() => {
+        this.past.push({ mediaId: id, clickedDirection, previousPolarity, mediaName });
+        if (this.past.length > UNDO_STACK_MAX) this.past.shift();
+        this.future = [];
+      }),
+    );
+  }
+
+  /**
    * Optimistically apply an absolute target state without going through the
    * toggle rule.  Used by {@link submitToggleVote} (above) and by the
    * Cmd-Z undo / redo flow, where the desired post-call state is known
@@ -257,7 +292,12 @@ export class VoteStateService implements OnDestroy {
 
   /**
    * Snapshot the polarity *before* a vote click and push it onto the undo
-   * stack.  Must be called BEFORE {@link submitToggleVote} (otherwise the
+   * stack.  Low-level primitive: pushes unconditionally, with no link to a
+   * POST result.  Production code should call {@link submitToggleVoteAndRecord}
+   * instead, which only records the entry once the server confirms the vote
+   * (audit bug H26).
+   *
+   * Must be called BEFORE the corresponding optimistic flip (otherwise the
    * snapshot would already reflect the toggle).  Any pending redo entries
    * are dropped, matching standard editor undo semantics.
    */
