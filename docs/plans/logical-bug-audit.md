@@ -212,9 +212,23 @@ Cross-section interaction agents:
   importer returned the original strings byte-for-byte
   (`.strip().lower()` on the label only trims leading/trailing
   whitespace — interior newlines pass through).
-- **H19. Required select fields silently accept empty string** —
-  `vtsearch/plugins/schema.py` L119. `required` + `load_default=""`
-  lets empty value through marshmallow.
+- ~~**H19. Required select fields silently accept empty string**~~ —
+  investigation closed (2026-05-20): not a real bug. The audit's
+  framing assumes `_presence_kwargs()` in `vtscore/plugins/schema.py`
+  produces `{"required": True, "load_default": ""}` for a required
+  select, but the function is a mutually-exclusive 3-way branch that
+  never emits both keys (required-with-no-default → `{"required":
+  True}` only; default present → `{"load_default": <default>}`
+  only). More importantly, `_build_select` adds
+  `_non_empty_after_strip` to the validator list for every required
+  select (schema.py:116-117) — empty strings and whitespace-only
+  strings are rejected with `"Field may not be empty."`, and the
+  OneOf at L119 excludes `""` from its allowed set for required
+  fields too (double defence). Empirical check via
+  `schema.load({"choice": ""})` confirms a 422 for required selects
+  with static options, dynamic options, and with a non-empty default
+  alike. The parallel text-field case is already covered by
+  `tests_lib/core/test_plugin_schema.py::test_required_text_rejects_whitespace_only`.
 - ~~**H20. `audio2image` has no upper bound on `n_mels`**~~ — fixed
   systemically in `vtscore/plugins/schema.py:_build_number()`, which
   now attaches `validate.Range` whenever a `PluginField` declares
