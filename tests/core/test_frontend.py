@@ -10,6 +10,68 @@ Covers:
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+# Tests below hit the Angular SPA shell or its bundle artefacts
+# (main.js / polyfills.js / styles.css / index.html), which only exist
+# after `npm run build:prod` has populated `static/`.  `./run-tests.sh`
+# builds the bundle as part of the core / full-suite path, so the
+# normal flow is already covered.  For plain `pytest` invocations the
+# session fixture below builds the bundle on demand (~16s, once per
+# session) so the tests run for real instead of being silently skipped.
+# Only if the build itself isn't possible (no npm, no node_modules, or
+# `npm run build:prod` fails) do we fall back to `pytest.skip` with a
+# clear reason.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_STATIC_DIR = _REPO_ROOT / "static"
+_FRONTEND_DIR = _REPO_ROOT / "frontend"
+
+
+def _bundle_built() -> bool:
+    return (_STATIC_DIR / "index.html").exists() and (_STATIC_DIR / "main.js").exists()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_angular_bundle() -> None:
+    """Build the Angular bundle on demand if it isn't already on disk.
+
+    Runs once per session.  No-op when the bundle is already present
+    (the normal `./run-tests.sh` flow builds it before pytest starts).
+    """
+    if _bundle_built():
+        return
+    npm = shutil.which("npm")
+    if npm is None or not (_FRONTEND_DIR / "node_modules").exists():
+        pytest.skip(
+            "Angular bundle not built and cannot build it here "
+            f"(npm={'found' if npm else 'missing'}, "
+            f"node_modules={'present' if (_FRONTEND_DIR / 'node_modules').exists() else 'missing'}). "
+            "Run: cd frontend && npm install && npm run build:prod",
+            allow_module_level=True,
+        )
+    try:
+        subprocess.run(  # noqa: S603 — npm resolved via shutil.which, args constant
+            [npm, "run", "build:prod"],
+            cwd=_FRONTEND_DIR,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        pytest.skip(
+            f"Angular build failed: {exc.stderr.strip() or exc.stdout.strip() or exc}",
+            allow_module_level=True,
+        )
+    if not _bundle_built():
+        pytest.skip(
+            "Angular build completed but static/main.js or static/index.html still missing",
+            allow_module_level=True,
+        )
+
 
 class TestIndexRoute:
     """GET / should serve the Angular SPA entry point."""

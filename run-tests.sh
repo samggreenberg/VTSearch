@@ -75,8 +75,30 @@ fi
 # pip-audit — scans installed Python packages against the PyPI advisory
 # database. Auditing the resolved venv (not requirements files) catches
 # transitive vulnerabilities and matches what production will actually run.
+#
+# `PIP_AUDIT_IGNORE` lists advisory IDs that pip-audit currently reports
+# with no fix version available — pinning a "fixed" release isn't an
+# option, so the gate would otherwise block indefinitely on upstream
+# CVEs that have nothing to do with VTSearch code.  Re-audit the list
+# whenever upstream ships a patched release; remove the entry and let
+# `ensure-test-deps.sh` upgrade the dep instead of ignoring the CVE.
+#   joblib 1.5.3       PYSEC-2024-277             (no upstream fix)
+#   pyjwt  2.12.1      PYSEC-2025-183             (no upstream fix)
+#   transformers 5.8.1 PYSEC-2025-211..218        (no upstream fix)
+PIP_AUDIT_IGNORE=(
+    --ignore-vuln PYSEC-2024-277
+    --ignore-vuln PYSEC-2025-183
+    --ignore-vuln PYSEC-2025-211
+    --ignore-vuln PYSEC-2025-212
+    --ignore-vuln PYSEC-2025-213
+    --ignore-vuln PYSEC-2025-214
+    --ignore-vuln PYSEC-2025-215
+    --ignore-vuln PYSEC-2025-216
+    --ignore-vuln PYSEC-2025-217
+    --ignore-vuln PYSEC-2025-218
+)
 echo "Running pip-audit..."
-if ! pip-audit ; then
+if ! pip-audit "${PIP_AUDIT_IGNORE[@]}" ; then
     echo ""
     echo "============================================================"
     echo "TESTS BLOCKED: pip-audit found known vulnerabilities"
