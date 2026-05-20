@@ -299,10 +299,20 @@ Cross-section interaction agents:
   `setActivePair()` runs before the load is verified; interceptor
   immediately tags subsequent requests with a context that may not
   be loaded → cascade of 404s.
-- **H26. `recordVote` runs before the HTTP vote returns** —
-  `frontend/src/app/components/center-panel/center-panel.component.ts`
-  L249–251. Undo stack contains a vote that may have never reached
-  the server; Cmd-Z then posts a "reversal" of nothing.
+- ~~**H26. `recordVote` runs before the HTTP vote returns**~~ — fixed
+  by gating the undo-stack push on the POST's success.  A new
+  `VoteStateService.submitToggleVoteAndRecord(id, vote, mediaName,
+  regionBox?)` captures `previousPolarity` synchronously (before the
+  optimistic flip), then calls `submitToggleVote(...)` and pushes the
+  undo entry inside the resulting Observable's `tap` — so an entry
+  only lands on `past` after the server confirms.  On error the `tap`
+  doesn't run, leaving the undo / redo stacks untouched.  The three
+  callers (`center-panel`, `find-view`, `label-view`) were migrated to
+  the new helper; `recordVote` stays public as a low-level primitive
+  (used by the spec) with a docstring pointing future callers at the
+  wrapper.  Regressions in `vote-state.service.spec.ts` cover (a) the
+  no-entry-on-error path, (b) `previousPolarity` capture before the
+  flip, and (c) redo-stack preservation on a failed POST.
 - **H27. Binary media endpoints bypass the `activeContextInterceptor`** —
   `frontend/src/app/services/medias-api.service.ts` L41–60. Raw
   `HttpClient.get()` for `/api/medias/.../audio|video|image` lacks
