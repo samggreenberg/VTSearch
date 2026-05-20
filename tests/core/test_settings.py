@@ -669,3 +669,154 @@ class TestSettingsModule:
         settings_mod.set_last_embedder_for_media_type("image", "siglip")
         settings_mod.reset()
         assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"
+
+
+class TestConcurrentWrites:
+    """Cross-process safety for per-user settings writes.
+
+    H28 fix: each setter does a read-modify-write under a cross-process
+    file lock, so a stale in-process cache can no longer clobber
+    concurrent updates to other top-level keys.
+    """
+
+    def test_concurrent_write_preserves_other_processes_key(self, isolated_settings):
+        # Populate our cache with a known value.
+        settings_mod.set_volume(0.5)
+
+        # Simulate another process writing a DIFFERENT key directly to
+        # disk after our cache was populated.
+        user_path = isolated_settings._user
+        existing = json.loads(user_path.read_text())
+        existing["theme"] = "dark"
+        user_path.write_text(json.dumps(existing))
+
+        # Our next write should re-read disk first and merge.
+        settings_mod.set_inclusion(3)
+
+        raw = json.loads(user_path.read_text())
+        assert raw["volume"] == 0.5
+        assert raw["theme"] == "dark"  # would be lost without the RMW fix
+        assert raw["inclusion"] == 3
+
+    def test_atomic_write_uses_unique_tmp_filenames(self, isolated_settings):
+        """Tmp files must include PID + uuid so two writers can't truncate
+        each other's in-flight temp file."""
+        import re
+
+        settings_mod.set_volume(0.5)
+        # ``_atomic_write`` removes the tmp via rename, but the filename
+        # shape is what we care about. Confirm by inspecting the helper.
+        from vtsearch.settings import _atomic_write
+
+        # Drive it once and check the tmp name pattern used by inspecting
+        # the directory contents during a captured write.
+        captured: list[str] = []
+        real_replace = __import__("os").replace
+
+        def spy_replace(src, dst):
+            captured.append(str(src))
+            real_replace(src, dst)
+
+        import os as _os
+
+        _os.replace = spy_replace
+        try:
+            _atomic_write(isolated_settings._user, {"volume": 0.5})
+        finally:
+            _os.replace = real_replace
+
+        assert captured, "expected at least one tmp file rename"
+        tmp_name = captured[-1].rsplit("/", 1)[-1]
+        # user_settings.json.<pid>.<uuid32>.tmp
+        assert re.match(r"^user_settings\.json\.\d+\.[0-9a-f]{32}\.tmp$", tmp_name), tmp_name
+
+    def test_concurrent_threads_no_deadlock(self, isolated_settings):
+        """Two threads concurrently setting different keys must both complete.
+
+        Catches lock-ordering regressions (settings_lock vs file_lock).
+        """
+        import threading
+
+        errors: list[Exception] = []
+        ready = threading.Event()
+        ready_count = [0]
+        ready_lock = threading.Lock()
+
+        def writer(fn, value):
+            try:
+                with ready_lock:
+                    ready_count[0] += 1
+                    if ready_count[0] == 2:
+                        ready.set()
+                ready.wait(timeout=5)
+                fn(value)
+            except Exception as exc:  # pragma: no cover - reported below
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=writer, args=(settings_mod.set_volume, 0.5)),
+            threading.Thread(target=writer, args=(settings_mod.set_inclusion, 3)),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert not errors, f"writers raised: {errors}"
+        for t in threads:
+            assert not t.is_alive(), "thread hung (likely deadlock)"
+
+        assert settings_mod.get_volume() == pytest.approx(0.5)
+        assert settings_mod.get_inclusion() == 3
+
+    def test_mutate_user_rmw_preserves_concurrent_writes(self, isolated_settings):
+        """``mutate_user`` re-reads disk before applying its mutator, so
+        nested-dict updates (e.g. achievement counters) merge with
+        whatever a sibling process wrote since our cache was populated."""
+        from vtsearch.settings import mutate_user
+
+        # Seed.
+        mutate_user(lambda c: c.update({"theme": "light", "achievement_state": {"counters": {"votes_cast": 0}}}))
+
+        # Simulate another process bumping votes_cast and changing theme
+        # on disk while we hold a stale in-memory cache.
+        user_path = isolated_settings._user
+        disk = json.loads(user_path.read_text())
+        disk["theme"] = "dark"
+        disk["achievement_state"]["counters"]["votes_cast"] = 100
+        user_path.write_text(json.dumps(disk))
+
+        # Our increment should read the disk value (100), bump to 101,
+        # and preserve the disk's theme update.
+        def _bump(cache):
+            cache["achievement_state"]["counters"]["votes_cast"] += 1
+
+        mutate_user(_bump)
+
+        final = json.loads(user_path.read_text())
+        assert final["theme"] == "dark"
+        assert final["achievement_state"]["counters"]["votes_cast"] == 101
+
+    def test_add_autorun_detector_rmw(self, isolated_settings):
+        """Concurrent ``add_autorun_detector`` calls must not lose entries.
+
+        Simulates the cross-process race: our cache says ``[]`` but disk
+        has ``["other-detector"]`` because a sibling process added it.
+        """
+        # Force-load the server cache (so add_autorun_detector below
+        # doesn't trigger a fresh load).
+        settings_mod.add_autorun_detector("ours-pre")
+
+        # Sibling process directly adds an entry on disk.
+        server_path = isolated_settings._server
+        disk = json.loads(server_path.read_text())
+        disk["autorun_detectors"] = list(disk.get("autorun_detectors", [])) + ["sibling"]
+        server_path.write_text(json.dumps(disk))
+
+        # We add another — should merge with disk, not clobber.
+        settings_mod.add_autorun_detector("ours-post")
+
+        final = json.loads(server_path.read_text())
+        assert "sibling" in final["autorun_detectors"]
+        assert "ours-pre" in final["autorun_detectors"]
+        assert "ours-post" in final["autorun_detectors"]

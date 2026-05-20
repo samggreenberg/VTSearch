@@ -20,14 +20,21 @@ the sync source is per-user and triggers only on per-user writes.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import threading
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
+
+try:
+    import fcntl as _fcntl  # POSIX-only; falls back to in-process locking on Windows.
+except ImportError:  # pragma: no cover - Windows
+    _fcntl = None
 
 from vtscore.config import DATA_DIR
 from vtsearch.settings_models import (
@@ -222,14 +229,91 @@ def _load_path(path: Path) -> dict[str, Any]:
 
 
 def _atomic_write(path: Path, data: dict[str, Any]) -> None:
-    """Write *data* to *path* via a temp-file + rename."""
+    """Write *data* to *path* via a per-writer temp file + rename.
+
+    The temp filename embeds PID + a UUID so two processes writing to the
+    same target can't truncate each other's in-flight temp file. The
+    final ``os.replace`` is atomic on POSIX, so a concurrent reader
+    always sees either the pre- or post-write content, never a partial
+    write.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(json.dumps(data, indent=2) + "\n")
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(json.dumps(data, indent=2) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise
+
+
+# Per-path in-process locks. Used in two ways:
+# 1. As a fallback when ``fcntl`` is unavailable (Windows).
+# 2. Held in addition to the cross-process flock so that, within a single
+#    process, multiple threads serialise on the same path without
+#    repeatedly re-entering the kernel.
+_path_locks: dict[str, threading.Lock] = {}
+_path_locks_guard = threading.Lock()
+
+
+def _path_lock_for(path: Path) -> threading.Lock:
+    key = str(path.resolve()) if path.exists() else str(path)
+    with _path_locks_guard:
+        lock = _path_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _path_locks[key] = lock
+        return lock
+
+
+@contextlib.contextmanager
+def _file_lock(path: Path):
+    """Acquire an exclusive cross-process lock for *path*.
+
+    The lock is taken on a sibling ``<path>.lock`` file rather than on
+    the data file itself, because ``_atomic_write`` replaces the data
+    file's inode via ``os.replace`` — any fd held against the old inode
+    would be useless. The sibling lock file's inode is stable.
+
+    The lock is released automatically if the process exits (POSIX
+    flock semantics), so there are no zombie locks after crashes.
+
+    On Windows (``fcntl`` unavailable) the in-process lock alone is
+    used; cross-process protection degrades silently. VTSearch is
+    deployed on Linux containers, so this only affects the rare
+    Windows-dev case where multiple processes shouldn't be writing
+    the same settings file anyway.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    in_proc = _path_lock_for(path)
+    in_proc.acquire()
+    fd: int | None = None
+    fcntl_mod = _fcntl  # snapshot so the narrowed binding survives the yield
+    if fcntl_mod is not None:
+        lock_path = path.with_name(path.name + ".lock")
+        try:
+            fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT, 0o600)
+            fcntl_mod.flock(fd, fcntl_mod.LOCK_EX)
+        except OSError as exc:
+            logger.warning("Could not acquire file lock on %s: %s", lock_path, exc)
+            if fd is not None:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+                fd = None
+    try:
+        yield
+    finally:
+        if fd is not None and fcntl_mod is not None:
+            try:
+                fcntl_mod.flock(fd, fcntl_mod.LOCK_UN)
+            finally:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+        in_proc.release()
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +332,15 @@ def _ensure_server_loaded() -> dict[str, Any]:
 
 
 def _ensure_user_loaded(username: str) -> dict[str, Any]:
-    """Load *username*'s per-user cache on first access."""
+    """Load *username*'s per-user cache on first access.
+
+    Sync-from-source is triggered the first time a user's cache is
+    populated each process lifetime — but **outside** the in-process
+    settings lock, because the setters it invokes acquire
+    ``_file_lock`` first and would otherwise invert the canonical lock
+    order with another thread that's reading the same user's cache.
+    """
+    needs_sync = False
     with _settings_lock:
         cache = _user_caches.get(username)
         if cache is None:
@@ -260,9 +352,14 @@ def _ensure_user_loaded(username: str) -> dict[str, Any]:
             if cache is None:
                 cache = _load_path(_user_settings_path(username))
                 _user_caches[username] = cache
-            # Lazy sync-from-source on first load for this user this process.
-            _maybe_sync_from_source_locked(username)
-        return _user_caches[username]
+        if username not in _synced_users:
+            _synced_users.add(username)
+            needs_sync = True
+
+    if needs_sync:
+        _maybe_sync_from_source(username)
+
+    return _user_caches[username]
 
 
 def _maybe_migrate_legacy_settings_locked() -> None:
@@ -322,20 +419,71 @@ def _maybe_migrate_legacy_settings_locked() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _save_server() -> None:
-    """Write the server-tier cache to disk."""
-    assert _server_cache is not None
-    _atomic_write(_server_settings_path(), _server_cache)
+def _mutate_server_locked(mutator) -> None:
+    """Apply *mutator* to a fresh-from-disk server cache, atomically.
+
+    Acquires the cross-process file lock, re-reads ``data/settings.json``
+    so any changes a sibling process made since this process loaded are
+    picked up, runs ``mutator(cache)`` to mutate the dict in place, then
+    atomically writes the result back. This is the only correct way to
+    mutate a multi-writer settings file from a Python process.
+
+    The legacy migration is left to ``_ensure_server_loaded`` and never
+    fires from inside the lock — by the time any setter runs the cache
+    has been loaded at least once.
+    """
+    global _server_cache
+    path = _server_settings_path()
+    with _file_lock(path):
+        with _settings_lock:
+            fresh = _load_path(path)
+            mutator(fresh)
+            _server_cache = fresh
+            _atomic_write(path, fresh)
 
 
-def _save_user(username: str) -> None:
-    """Write *username*'s cache to disk and (if configured) sync to source."""
-    cache = _user_caches.get(username)
-    if cache is None:
-        return
-    _atomic_write(_user_settings_path(username), cache)
-    if username not in _syncing:
-        _sync_to_source(username, cache)
+def _mutate_user_locked(username: str, mutator) -> dict[str, Any] | None:
+    """Apply *mutator* to a fresh-from-disk per-user cache, atomically.
+
+    Returns a snapshot of the cache after the mutation, intended for
+    ``_sync_to_source`` which is invoked **outside** the file lock so a
+    slow sync target (NFS, webhook) can't block other settings writes.
+    Returns ``None`` if the cache should not be synced (i.e. we are
+    currently importing from the source).
+    """
+    path = _user_settings_path(username)
+    with _file_lock(path):
+        with _settings_lock:
+            fresh = _load_path(path)
+            mutator(fresh)
+            _user_caches[username] = fresh
+            _atomic_write(path, fresh)
+            if username in _syncing:
+                return None
+            return dict(fresh)
+
+
+def mutate_user(mutator) -> None:
+    """Atomically read-modify-write the current user's settings file.
+
+    The on-disk file is locked across processes, re-read fresh,
+    *mutator(cache)* runs to mutate the loaded dict in place, and the
+    result is written back atomically. Use this whenever you need to
+    update a nested structure (counters, list appends, dict merges) —
+    a plain ``set_*`` call only round-trips the top-level key correctly
+    if you replace it wholesale, but ``mutate_user`` is correct for
+    any in-place change.
+
+    Triggers ``_sync_to_source`` after the lock is released (so a slow
+    sync target can't block other settings writes).
+    """
+    from vtsearch.auth import get_current_user
+
+    username = get_current_user()
+    _ensure_user_loaded(username)
+    sync_data = _mutate_user_locked(username, mutator)
+    if sync_data is not None:
+        _sync_to_source(username, sync_data)
 
 
 # ---------------------------------------------------------------------------
@@ -358,18 +506,25 @@ def _read_value(key: str) -> Any:
 
 
 def _write_value(key: str, value: Any) -> None:
-    """Persist *value* for *key*, routing to the correct tier."""
+    """Persist *value* for *key*, routing to the correct tier.
+
+    Each call is a single read-modify-write under the cross-process
+    file lock: the on-disk file is re-read, *key* is replaced, the
+    merged dict is written back, then the in-memory cache is refreshed
+    to match. This means two processes setting *different* keys on the
+    same user no longer clobber each other.
+    """
     if key in _SERVER_KEYS:
-        cache = _ensure_server_loaded()
-        cache[key] = value
-        _save_server()
+        _ensure_server_loaded()  # one-shot legacy migration
+        _mutate_server_locked(lambda c: c.__setitem__(key, value))
         return
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
-    cache = _ensure_user_loaded(username)
-    cache[key] = value
-    _save_user(username)
+    _ensure_user_loaded(username)  # one-shot lazy sync-from-source
+    sync_data = _mutate_user_locked(username, lambda c: c.__setitem__(key, value))
+    if sync_data is not None:
+        _sync_to_source(username, sync_data)
 
 
 # ---------------------------------------------------------------------------
@@ -403,19 +558,25 @@ def get_user_settings() -> dict[str, Any]:
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
+    # ``_ensure_user_loaded`` may trigger sync-from-source which calls
+    # setters that acquire ``_file_lock``. Calling it outside
+    # ``_settings_lock`` keeps the canonical lock order
+    # (file_lock → settings_lock) and avoids an AB-BA deadlock with
+    # concurrent writers.
+    _ensure_user_loaded(username)
     with _settings_lock:
-        user = _ensure_user_loaded(username)
-        result = dict(_USER_DEFAULTS)
-        result.update(user)
-        result["view_mode_left"] = get_view_mode_left()
-        result["view_mode_right"] = get_view_mode_right()
-        result["grid_icon_size_left"] = get_grid_icon_size_left()
-        result["grid_icon_size_right"] = get_grid_icon_size_right()
-        result["focus_mode_left"] = get_focus_mode_left()
-        result["focus_mode_right"] = get_focus_mode_right()
-        result["panel_pct_left"] = get_panel_pct_left()
-        result["panel_pct_right"] = get_panel_pct_right()
-        return result
+        user_copy = dict(_user_caches.get(username, {}))
+    result = dict(_USER_DEFAULTS)
+    result.update(user_copy)
+    result["view_mode_left"] = get_view_mode_left()
+    result["view_mode_right"] = get_view_mode_right()
+    result["grid_icon_size_left"] = get_grid_icon_size_left()
+    result["grid_icon_size_right"] = get_grid_icon_size_right()
+    result["focus_mode_left"] = get_focus_mode_left()
+    result["focus_mode_right"] = get_focus_mode_right()
+    result["panel_pct_left"] = get_panel_pct_left()
+    result["panel_pct_right"] = get_panel_pct_right()
+    return result
 
 
 def get_all() -> dict[str, Any]:
@@ -428,22 +589,24 @@ def get_all() -> dict[str, Any]:
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
+    _ensure_server_loaded()
+    _ensure_user_loaded(username)
     with _settings_lock:
-        server = _ensure_server_loaded()
-        user = _ensure_user_loaded(username)
-        result = dict(_DEFAULTS)
-        result.update(server)
-        result.update(user)
-        # Always return expanded per-media-type view/focus/panel dicts.
-        result["view_mode_left"] = get_view_mode_left()
-        result["view_mode_right"] = get_view_mode_right()
-        result["grid_icon_size_left"] = get_grid_icon_size_left()
-        result["grid_icon_size_right"] = get_grid_icon_size_right()
-        result["focus_mode_left"] = get_focus_mode_left()
-        result["focus_mode_right"] = get_focus_mode_right()
-        result["panel_pct_left"] = get_panel_pct_left()
-        result["panel_pct_right"] = get_panel_pct_right()
-        return result
+        server_copy = dict(_server_cache or {})
+        user_copy = dict(_user_caches.get(username, {}))
+    result = dict(_DEFAULTS)
+    result.update(server_copy)
+    result.update(user_copy)
+    # Always return expanded per-media-type view/focus/panel dicts.
+    result["view_mode_left"] = get_view_mode_left()
+    result["view_mode_right"] = get_view_mode_right()
+    result["grid_icon_size_left"] = get_grid_icon_size_left()
+    result["grid_icon_size_right"] = get_grid_icon_size_right()
+    result["focus_mode_left"] = get_focus_mode_left()
+    result["focus_mode_right"] = get_focus_mode_right()
+    result["panel_pct_left"] = get_panel_pct_left()
+    result["panel_pct_right"] = get_panel_pct_right()
+    return result
 
 
 # -------------------------------------------------------------------
@@ -485,9 +648,13 @@ def _make_scalar_accessors(model: type, key: str):
             return model.model_fields[key].get_default(call_default_factory=True)
 
     def setter(value):
+        # Lock acquisition is delegated to ``_write_value`` →
+        # ``_mutate_*_locked``, which takes ``_file_lock`` first and
+        # then ``_settings_lock``. Acquiring ``_settings_lock`` here
+        # would invert the order and risk an AB-BA deadlock with paths
+        # that enter ``_mutate_*_locked`` directly.
         coerced = _validate_field(model, key, value)
-        with _settings_lock:
-            _write_value(key, coerced)
+        _write_value(key, coerced)
 
     getter.__name__ = f"get_{key}"
     setter.__name__ = f"set_{key}"
@@ -631,8 +798,9 @@ def _make_per_side_setting(  # noqa: C901
                 raise ValueError(f"Invalid media type: {tid!r}")
             coerced[tid] = _validate_entry(v, key, tid)
 
-        with _settings_lock:
-            _write_value(key, coerced)
+        # Locks are taken inside ``_write_value`` in the canonical
+        # order (file_lock → settings_lock); see ``_make_scalar_accessors.setter``.
+        _write_value(key, coerced)
 
     def get_left():
         return _get_dict(f"{key_base}_left")
@@ -721,30 +889,44 @@ def get_autorun_detectors() -> list[str]:
 
 def set_autorun_detectors(value: list[str]) -> None:
     """Set and persist the full list of autorun detector names."""
-    with _settings_lock:
-        cache = _ensure_server_loaded()
-        cache["autorun_detectors"] = list(dict.fromkeys(value))  # dedupe, preserve order
-        _save_server()
+    _ensure_server_loaded()
+    deduped = list(dict.fromkeys(value))  # dedupe, preserve order
+    _mutate_server_locked(lambda c: c.__setitem__("autorun_detectors", deduped))
 
 
 def add_autorun_detector(name: str) -> None:
-    """Add a detector name to the autorun list (idempotent)."""
-    with _settings_lock:
-        current = get_autorun_detectors()
+    """Add a detector name to the autorun list (idempotent).
+
+    Single read-modify-write under the file lock: two processes adding
+    different names concurrently can no longer clobber each other's
+    addition.
+    """
+    _ensure_server_loaded()
+
+    def _add(cache: dict[str, Any]) -> None:
+        current = list(cache.get("autorun_detectors", []))
         if name not in current:
             current.append(name)
-            set_autorun_detectors(current)
+            cache["autorun_detectors"] = current
+
+    _mutate_server_locked(_add)
 
 
 def remove_autorun_detector(name: str) -> bool:
     """Remove a detector name from the autorun list. Returns True if found."""
-    with _settings_lock:
-        current = get_autorun_detectors()
+    _ensure_server_loaded()
+    found = False
+
+    def _remove(cache: dict[str, Any]) -> None:
+        nonlocal found
+        current = list(cache.get("autorun_detectors", []))
         if name in current:
             current.remove(name)
-            set_autorun_detectors(current)
-            return True
-        return False
+            cache["autorun_detectors"] = current
+            found = True
+
+    _mutate_server_locked(_remove)
+    return found
 
 
 def is_autorun_detector(name: str) -> bool:
@@ -766,10 +948,9 @@ def _get_dir(key: str) -> Path:
 
 def _set_dir(key: str, value: str | Path) -> None:
     """Persist a server-tier directory path setting."""
-    with _settings_lock:
-        cache = _ensure_server_loaded()
-        cache[key] = str(value)
-        _save_server()
+    _ensure_server_loaded()
+    coerced = str(value)
+    _mutate_server_locked(lambda c: c.__setitem__(key, coerced))
 
 
 def get_saved_datasets_dir() -> Path:
@@ -846,8 +1027,10 @@ def get_settings_source_config() -> dict[str, Any] | None:
     """
     from vtsearch.auth import get_current_user
 
+    username = get_current_user()
+    _ensure_user_loaded(username)
     with _settings_lock:
-        cache = _ensure_user_loaded(get_current_user())
+        cache = _user_caches.get(username, {})
         cfg = cache.get("settings_source")
     if isinstance(cfg, dict) and cfg.get("source_name"):
         return cfg
@@ -859,13 +1042,17 @@ def set_settings_source_config(config: dict[str, Any] | None) -> None:
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
-    with _settings_lock:
-        cache = _ensure_user_loaded(username)
+    _ensure_user_loaded(username)
+
+    def _apply(cache: dict[str, Any]) -> None:
         if config is None:
             cache.pop("settings_source", None)
         else:
             cache["settings_source"] = config
-        _save_user(username)
+
+    sync_data = _mutate_user_locked(username, _apply)
+    if sync_data is not None:
+        _sync_to_source(username, sync_data)
 
 
 # Map of setting key → setter function (generated dynamically).
@@ -912,7 +1099,7 @@ def sync_from_settings_source() -> dict[str, Any] | None:
     Triggered:
 
     - Lazily on first per-user cache load each process lifetime (see
-      :func:`_maybe_sync_from_source_locked`).
+      :func:`_maybe_sync_from_source`).
     - Manually via ``POST /api/settings-sources/sync``.
     """
     cfg = get_settings_source_config()
@@ -938,30 +1125,32 @@ def sync_from_settings_source() -> dict[str, Any] | None:
         return None
 
     username = get_current_user()
+    # The setters invoked by ``_apply_settings`` acquire ``_file_lock``
+    # and then ``_settings_lock``. Holding ``_settings_lock`` here would
+    # invert the canonical order — take the lock only to mutate
+    # ``_syncing``, then drop it for the actual apply.
     with _settings_lock:
         _syncing.add(username)
-        try:
-            _apply_settings(imported)
-        finally:
+    try:
+        _apply_settings(imported)
+    finally:
+        with _settings_lock:
             _syncing.discard(username)
 
     return imported
 
 
-def _maybe_sync_from_source_locked(username: str) -> None:
-    """Once-per-process lazy sync-from-source for *username*.
+def _maybe_sync_from_source(username: str) -> None:
+    """Lazy sync-from-source for *username*.
 
-    Called from :func:`_ensure_user_loaded` with the settings lock held.
-    Safe to call repeatedly: noops after the first successful run for the
-    user. Errors are logged and swallowed so a misconfigured source never
-    blocks ordinary settings access.
+    Called once per process per username from :func:`_ensure_user_loaded`
+    **after** releasing ``_settings_lock``; the caller is responsible
+    for the ``_synced_users.add`` claim. Errors are logged and swallowed
+    so a misconfigured source never blocks ordinary settings access.
     """
-    if username in _synced_users:
-        return
-    _synced_users.add(username)
-
-    cache = _user_caches.get(username) or {}
-    cfg = cache.get("settings_source")
+    with _settings_lock:
+        cache_snapshot = dict(_user_caches.get(username) or {})
+    cfg = cache_snapshot.get("settings_source")
     if not isinstance(cfg, dict) or not cfg.get("source_name"):
         return
 
@@ -981,17 +1170,21 @@ def _maybe_sync_from_source_locked(username: str) -> None:
     if not imported:
         return
 
-    _syncing.add(username)
+    with _settings_lock:
+        _syncing.add(username)
     try:
         _apply_settings(imported)
     finally:
-        _syncing.discard(username)
+        with _settings_lock:
+            _syncing.discard(username)
 
 
 def _sync_to_source(username: str, data: dict[str, Any]) -> None:
     """Push *username*'s current settings to their active source (if any).
 
-    Called from :func:`_save_user` after the per-user file is written.
+    Called from :func:`_write_value` / :func:`mutate_user` after the
+    per-user file is written, **outside** the cross-process file lock
+    so a slow sync target can't block other settings writes.
     Strips the ``settings_source`` key itself to avoid circular config.
     """
     cfg = data.get("settings_source")

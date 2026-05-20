@@ -321,13 +321,46 @@ Cross-section interaction agents:
 
 ### Multi-process / settings
 
-- **H28. Per-user cache is process-local; concurrent worker writes lose
-  updates** — `vtsearch/settings.py` `_user_caches` + `_synced_users`.
-  Two gunicorn workers each sync independently, then race the
-  per-user write.
+- ~~**H28. Per-user cache is process-local; concurrent worker writes lose
+  updates**~~ — fixed in `vtsearch/settings.py`. Every per-user (and
+  server-tier) write now goes through `_mutate_*_locked`, which holds a
+  cross-process `fcntl.flock` on a sibling `.lock` file, re-reads the
+  on-disk JSON, applies the mutator in place, and atomic-writes with
+  a per-writer `<file>.<pid>.<uuid>.tmp` name. The legacy "mutate cache
+  then save whole dict" pattern was removed (including from
+  `vtsearch/achievements.py`, which now uses the new public
+  `settings.mutate_user(mutator)` RMW helper for nested-dict updates).
+  Canonical lock order is `file_lock → settings_lock` everywhere — the
+  outer `with _settings_lock:` was removed from setter wrappers and
+  from read paths that previously held it across `_ensure_user_loaded`
+  (which can transitively trigger setter writes via sync-from-source).
+  Covered by `TestConcurrentWrites` in `tests/core/test_settings.py`
+  (RMW key-preservation, unique tmp filename pattern, two-thread
+  no-deadlock, `mutate_user` nested-dict RMW, `add_autorun_detector`
+  cross-process merge).
+
+  **Open follow-ups:**
+  - `_synced_users` is still process-local, so on a fresh container
+    every worker independently runs sync-from-source for each user
+    once. With the RMW fix this is no longer corrupting (just
+    duplicate I/O against the source) but worth de-duplicating with
+    an mtime-marker if it shows up in profiles.
+  - The legacy-settings migration in `_maybe_migrate_legacy_settings_locked`
+    still calls `_atomic_write` without the cross-process lock. It is a
+    one-shot startup step so the race window is small, but for full
+    correctness it should also use `_mutate_server_locked`.
+  - Windows has no `fcntl`, so the cross-process lock silently degrades
+    to the in-process lock only. Not a regression (the codebase ships
+    Linux-only Docker images), but worth a note if a contributor ever
+    wants to test on Windows.
 - **H29. `_save_user` holds `_settings_lock` across sync I/O** —
   `vtsearch/settings.py` ~L331–338. Slow source (NFS, webhook) blocks
-  all other settings reads/writes globally.
+  all other settings reads/writes globally. (Per-user side is
+  incidentally addressed by H28's fix — `_sync_to_source` now runs
+  outside the file lock and outside `_settings_lock`. Server-tier
+  paths through `_atomic_write` no longer hold `_settings_lock` across
+  file I/O either, but a dedicated audit of every remaining sink is
+  still warranted.)
 
 ### Error flow
 
