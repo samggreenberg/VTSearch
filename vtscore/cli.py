@@ -374,6 +374,30 @@ def _load_pickle_whole(dataset_path: str) -> Iterator[dict[int, dict[str, Any]]]
     yield medias
 
 
+def _renumber_chunks(
+    chunks: Iterator[dict[int, dict[str, Any]]],
+) -> Iterator[dict[int, dict[str, Any]]]:
+    """Re-issue media IDs across a chunk stream so they are globally unique.
+
+    Every chunked importer (and every chunked pickle/folder loader) emits
+    chunks whose IDs restart at 1 — the in-process consumer
+    :func:`vtscore.datasets.load_pipeline.consume_chunks_into` renumbers
+    them as it drains. The CLI pipeline scores each chunk independently
+    and merges the per-chunk hit lists, so without renumbering the hits
+    in the merged export carry colliding ``id`` values across chunks.
+    Wrap the source generator with this helper at the CLI boundary to
+    give every media a unique id.
+    """
+    next_id = 1
+    for chunk in chunks:
+        renumbered: dict[int, dict[str, Any]] = {}
+        for media in chunk.values():
+            media["id"] = next_id
+            renumbered[next_id] = media
+            next_id += 1
+        yield renumbered
+
+
 def _load_pickle_chunked(dataset_path: str, chunk_size: int) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield chunks of medias loaded from a pickle file."""
     from vtscore.datasets.loader import load_dataset_from_pickle_chunked
@@ -382,7 +406,7 @@ def _load_pickle_chunked(dataset_path: str, chunk_size: int) -> Iterator[dict[in
     if not dataset_file.exists():
         raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
 
-    yield from load_dataset_from_pickle_chunked(dataset_file, chunk_size, thin=True)
+    yield from _renumber_chunks(load_dataset_from_pickle_chunked(dataset_file, chunk_size, thin=True))
 
 
 def _load_importer_whole(importer_name: str, field_values: dict[str, Any]) -> Iterator[dict[int, dict[str, Any]]]:
@@ -416,7 +440,7 @@ def _load_importer_chunked(
         raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
 
     importer.validate_cli_field_values(field_values)
-    yield from importer.run_chunked_cli(field_values, chunk_size, thin=True)
+    yield from _renumber_chunks(importer.run_chunked_cli(field_values, chunk_size, thin=True))
 
 
 def _validate_dry_run_source(sd: dict[str, Any]) -> None:

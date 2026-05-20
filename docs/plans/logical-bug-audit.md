@@ -497,8 +497,24 @@ Cross-section interaction agents:
   immediately repopulates state so the loss of cross-clear atomicity is
   acceptable).  Lock-order invariant documented in the
   `vtscore/detectors/labeling_progress.py` module docstring.
-- **M2.** `combine_datasets.run_chunked` re-issues IDs starting at 1 on every
-  call → cid collision when consumed twice.
+- ~~**M2.** `combine_datasets.run_chunked` re-issues IDs starting at 1 on every
+  call → cid collision when consumed twice.~~ — fixed in
+  `vtscore/cli.py`. Investigation showed this is not unique to
+  `combine_datasets`: every chunked importer/loader emits IDs `1..N`
+  per yielded chunk (the convention paired with
+  `consume_chunks_into`'s renumbering in the in-process loader). The
+  HTTP/UI path is safe — `vtscore/datasets/load_pipeline.py:1057-1073`
+  already renumbers. The CLI path (`_run_live_pipeline`) scored each
+  chunk independently and merged the per-chunk hit lists, so the
+  exported JSON's `id` fields collided across chunks (the CSV
+  exporter doesn't include `id`, so was unaffected). Fix: added
+  `_renumber_chunks()` at the CLI boundary and wrapped both
+  `_load_pickle_chunked` and `_load_importer_chunked` with it, giving
+  every media a globally unique id in the CLI flow regardless of
+  which chunked importer fed it. Covered by
+  `tests_lib/cli/test_chunk_renumber.py` (unit) and
+  `tests/cli/test_chunked_id_renumber.py` (end-to-end via pickle and
+  combine_datasets, including the JSON exporter).
 - ~~**M3.** `importers/base.py` L407–410 — skipped records leave `next_id`
   unincremented, ID collisions on first-record-skip.~~
 
