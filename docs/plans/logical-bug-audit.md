@@ -178,17 +178,19 @@ Cross-section interaction agents:
   `_state_lock` immediately before assigning `new_id` and writing
   `medias[new_id]`, and dispatch to the existing-cid branch if a
   match appears in the recheck.
-- **H33. `add_media_to_pile` label not synced to disk** —
-  `vtsearch/routes/media/list.py` L614 and L692. `vote_media`
-  follows `toggle_vote` with `sync_labels_to_loaded_detector()` +
-  `sync_to_labelset_source()` (L555–561) so the change reaches the
-  detector's on-disk labelset and any configured `LabelsetSource`.
-  `add_media_to_pile` calls neither after `apply_label`. The
-  in-memory `good_votes` / `bad_votes` are updated, but the labelset
-  file is not — so the next time `ensure_votes_match_active_dataset`
-  rehydrates the detector from disk (e.g. on the next dataset /
-  detector switch handled by `before_request` in `app.py:247-257`),
-  the just-applied label silently disappears.
+- ~~**H33. `add_media_to_pile` label not synced to disk**~~ — fixed
+  in `vtsearch/routes/media/list.py`. Both branches of
+  `add_media_to_pile` (existing-MD5 match and new-media insertion)
+  now call `_sync_pile_label_to_storage()` after `apply_label`,
+  which mirrors `vote_media`'s tail by invoking
+  `sync_labels_to_loaded_detector()` + `sync_to_labelset_source()`.
+  The label reaches the detector's on-disk labelset and any
+  configured `LabelsetSource`, so a subsequent
+  `ensure_votes_match_active_dataset` rehydration restores it
+  instead of silently dropping it. Covered by
+  `TestAddToPile.test_existing_media_label_synced_to_disk`,
+  `test_new_media_label_synced_to_disk`, and
+  `test_label_survives_rehydration` in `tests/core/test_medias.py`.
 - **H34. Missing `X-Detector-Id` → silent detector fallback** —
   `vtscore/state/core.py` `get_active_detector_context()` falls
   through to the thread-local (then `_empty_detector_context`) when

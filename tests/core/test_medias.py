@@ -706,3 +706,120 @@ class TestAddToPile:
         inserted_id = next(iter(media_ids))
         assert app_module.medias[inserted_id]["md5"] == hashlib.md5(wav_bytes).hexdigest()
         assert inserted_id in app_module.good_votes
+
+    def _setup_loaded_detector(self, client, name="H33Detector"):
+        """Create a detector, register it, load it, and return its registry id."""
+        from tests import load_detector_and_wait
+
+        client.post(
+            "/api/detectors",
+            json={"name": name, "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": name, "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        load_detector_and_wait(client, mid)
+        return mid, name
+
+    def test_existing_media_label_synced_to_disk(self, client):
+        """H33 regression — MD5-match branch.
+
+        Without :func:`_sync_pile_label_to_storage` the vote applied to the
+        existing media never reaches the detector's JSON file, so the next
+        rehydration (dataset/detector switch, mtime advance) silently drops
+        it.  Assert the labelset on disk contains an entry keyed by the
+        matched media's origin with the right label.
+        """
+        from vtscore.datasets.labelset import LabelSet, element_key, media_element_key
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        media = app_module.medias[1]
+        _, name = self._setup_loaded_detector(client)
+
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "good", "file": (io.BytesIO(media["media_bytes"]), "match.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+
+        data = _read_detector(_detector_path(name))
+        assert data is not None, "detector JSON not written"
+        ls = LabelSet.from_dict(data.get("labelset") or {})
+        target_key = media_element_key(media)
+        match = next((el for el in ls.elements if element_key(el) == target_key), None)
+        assert match is not None, "matched-media label was not persisted to disk"
+        assert match.label == "good"
+
+    def test_new_media_label_synced_to_disk(self, client):
+        """H33 regression — new-media branch.
+
+        Newly inserted media items are session-only (not in the dataset
+        pickle), so the only durable record of an add-to-pile vote on them
+        is the detector's on-disk labelset.  Assert the labelset contains
+        an ``add_to_pile`` origin entry with the right label.
+        """
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        wav_bytes = app_module.generate_wav(33333, 0.2)
+        _, name = self._setup_loaded_detector(client)
+
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "bad", "file": (io.BytesIO(wav_bytes), "fresh.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 201
+
+        data = _read_detector(_detector_path(name))
+        assert data is not None, "detector JSON not written"
+        ls = LabelSet.from_dict(data.get("labelset") or {})
+        match = next(
+            (
+                el
+                for el in ls.elements
+                if (el.origin or {}).get("importer") == "add_to_pile" and el.origin_name == "fresh.wav"
+            ),
+            None,
+        )
+        assert match is not None, "add-to-pile origin entry missing from on-disk labelset"
+        assert match.label == "bad"
+
+    def test_label_survives_rehydration(self, client):
+        """H33 regression — end-to-end symptom.
+
+        ``ensure_votes_match_active_dataset`` rehydrates from the detector
+        file when the (dataset, detector) pair changes or the file's mtime
+        advances.  Before the fix, ``add_media_to_pile`` only mutated
+        in-memory dicts, so a forced rehydrate dropped the just-applied
+        vote.  Force a rehydration by clearing the cached labelset and
+        re-running the hook; the vote must come back from disk.
+        """
+        from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.state.core import get_active_detector_context
+
+        media = app_module.medias[2]
+        self._setup_loaded_detector(client)
+
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "good", "file": (io.BytesIO(media["media_bytes"]), "rehydrate.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        assert 2 in app_module.good_votes
+
+        # Invalidate the detector context's caches and drop the in-memory
+        # votes so the rehydrate hook must round-trip through the file.
+        det_ctx = get_active_detector_context()
+        det_ctx.good_votes.clear()
+        det_ctx.bad_votes.clear()
+        det_ctx.cached_labelset = None
+        det_ctx.cached_labelset_mtime = 0.0
+        det_ctx.votes_dataset_id = ""
+
+        ensure_votes_match_active_dataset()
+        assert 2 in app_module.good_votes, "label vanished on rehydration — H33 regressed"
