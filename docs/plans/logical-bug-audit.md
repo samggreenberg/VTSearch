@@ -156,11 +156,10 @@ Cross-section interaction agents:
   L84–92. `target.resolve().relative_to(root.resolve())` succeeds for
   `/data/link → /etc`. If the configured root contains a symlink,
   listings escape.
-- **H16. Header refers to unloaded dataset → silent fallback** —
-  `app.py` `before_request`. `ctx = get_context("nonexistent_id")`
-  returns None, `g._dataset_context` is never set, the proxy silently
-  resolves to the empty context. Client sees stale data with no
-  error.
+- ~~**H16. Header refers to unloaded dataset → silent fallback**~~ —
+  also closes the "header points to an unloaded id" half of H34 by the
+  same mechanism. The "header absent → thread-local leak" half of H34
+  remains open.
 - **H32. `add_media_to_pile` TOCTOU between md5 check and insertion** —
   `vtsearch/routes/media/list.py` L607–608 vs. L687–690. The md5
   lookup (`snap = snapshot_medias()` + `build_media_lookup(snap)`)
@@ -186,7 +185,9 @@ Cross-section interaction agents:
 - **H34. Missing `X-Detector-Id` → silent detector fallback** —
   `vtscore/state/core.py` `get_active_detector_context()` falls
   through to the thread-local (then `_empty_detector_context`) when
-  `g._detector_context` is unset. Any route that mutates votes
+  `g._detector_context` is unset. The H16 fix closed the sub-case
+  where the header is *present* but names an unloaded id (now 409);
+  the *header-absent* case remains open. Any route that mutates votes
   without requiring the header — `add_media_to_pile`, `vote_media`,
   bulk-label endpoints — silently writes to whatever the thread-local
   resolves to, which on a Flask threaded-server worker can be the
