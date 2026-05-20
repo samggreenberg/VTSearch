@@ -328,8 +328,8 @@ class TestReplayChainOnFile:
             }
         ]
         with caplog.at_level(logging.WARNING, logger="vtscore.datasets.clipper_chain"):
-            embedding = replay_chain_on_file(source, steps)
-        assert embedding is None
+            result = replay_chain_on_file(source, steps)
+        assert result is None
         assert called["n"] == 0
         assert any("clipper_chain" in r.message for r in caplog.records)
 
@@ -368,8 +368,11 @@ class TestReplayChainOnFile:
             }
         ]
         with caplog.at_level(logging.WARNING, logger="vtscore.datasets.clipper_chain"):
-            embedding = replay_chain_on_file(source, steps)
+            result = replay_chain_on_file(source, steps)
+        assert result is not None
+        embedding, content = result
         assert embedding is not None
+        assert content == b"Charlie."
         assert captured == ["Charlie."]
         assert any("drift" in r.message for r in caplog.records)
 

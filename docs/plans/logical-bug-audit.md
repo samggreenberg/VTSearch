@@ -534,8 +534,14 @@ Cross-section interaction agents:
   `np.array(None)` produces an object-dtype row.
 - ~~**M9.** `loader_folder._has_override` doesn't warn when both `rel_path`
   and `file_name` override entries exist with different embeddings.~~
-- **M10.** `clipper_chain._run_clipper_step` assumes deterministic output count
-  across calls — no validation.
+- **M10.** ~~`clipper_chain._run_clipper_step` assumes deterministic output count
+  across calls — no validation.~~ **Shipped.** `_run_clipper_step` /
+  `_run_converter_step` now stamp `n_out`, `clip_index`, and a short
+  `content_hash` on every trail entry. `_select_chain_output` prefers
+  content matching over positional, logs warnings on output-count
+  drift / no-match / ambiguous match, and returns `None` instead of
+  silently picking `outputs[0]` (was a regression vs. the legacy
+  `_clip_text_to_bytes` resolver path).
 - **M11.** Stale media in `cli._score_medias_with_detectors` when some
   embeddings are `None` (zip truncates silently).
 - **M12.** `loader_pickle._build_pickle_full_media` has no null-check before
