@@ -1528,8 +1528,7 @@ class TestEmptyLoadBackstop:
             )
 
         assert list_datasets() == [], (
-            "an empty load must not register a dataset — the dashboard would otherwise "
-            "show a green row with 0 items"
+            "an empty load must not register a dataset — the dashboard would otherwise show a green row with 0 items"
         )
         progress = get_progress()
         assert progress["error"] == "Import produced no medias.", (
