@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import gc
 import hashlib
+import logging
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
@@ -21,6 +23,8 @@ from vtscore.datasets.loader import (
     _streaming_md5,
 )
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
+
+logger = logging.getLogger(__name__)
 
 
 def _scan_files(folder: Path, pattern: str, recursive: bool) -> list[Path]:
@@ -240,15 +244,17 @@ def _resolve_folder_load_inputs(
     skip_embedding: bool,
     recursive: bool,
     content_vectors: dict[str, Any] | None,
+    content_md5s: dict[str, str] | None,
     custom_metadata_map: dict[str, dict[str, Any]] | None,
     on_progress: ProgressCallback,
 ) -> tuple[Any, Any, list[Path], int]:
     """Shared front-matter for the folder loaders.
 
-    Resolves the media type + embedder, scans the folder, and eagerly
-    loads model weights when needed.  Returns
-    ``(mt, emb, media_files, total_files)``.  Raises ``ValueError`` for
-    unknown media types, unknown embedder names, or empty folders.
+    Resolves the media type + embedder, scans the folder, validates the
+    override maps against the scanned file list, and eagerly loads model
+    weights when needed.  Returns ``(mt, emb, media_files, total_files)``.
+    Raises ``ValueError`` for unknown media types, unknown embedder names,
+    empty folders, or ambiguous basename keys in any override map.
     """
     mt, emb = _resolve_folder_embedder(media_type, embedder_name, skip_embedding)
 
@@ -258,6 +264,14 @@ def _resolve_folder_load_inputs(
 
     if not media_files:
         raise ValueError(f"No {media_type} files found in folder")
+
+    _validate_override_keys(
+        media_files,
+        folder_path,
+        content_vectors,
+        content_md5s,
+        custom_metadata_map,
+    )
 
     if not skip_embedding and emb is not None:
         _eager_load_embedder_models(
@@ -270,6 +284,184 @@ def _resolve_folder_load_inputs(
         )
 
     return mt, emb, media_files, len(media_files)
+
+
+def _embeddings_equal(a: Any, b: Any) -> bool:
+    """Return True if two override-map values represent the same embedding.
+
+    Numpy arrays compare via ``np.array_equal`` (shape + element equality,
+    no NaN-vs-NaN special case).  Anything else uses ``==``; a falsy
+    result or a ``ValueError`` from the comparison means "different".
+    """
+    if a is None and b is None:
+        return True
+    if a is None or b is None:
+        return False
+    try:
+        import numpy as np  # noqa: PLC0415
+
+        return bool(np.array_equal(a, b))
+    except Exception:
+        try:
+            return bool(a == b)
+        except Exception:
+            return False
+
+
+def _validate_override_keys(
+    media_files: list[Path],
+    folder_path: Path,
+    content_vectors: dict[str, Any] | None,
+    content_md5s: dict[str, str] | None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+) -> None:
+    """Audit the override maps for ambiguity before the loader uses them.
+
+    Two failure modes are covered:
+
+    1. **Per-file rel_path vs basename conflict.**  If a file's relative
+       path *and* its basename are both present as keys in the same
+       override map with **different** values, the resolution chain
+       silently picks the rel_path entry.  Log a warning so the caller
+       knows their data is inconsistent.
+
+    2. **Ambiguous basename key spanning multiple files.**  When several
+       files share a basename (typical for recursive imports with files
+       like ``class_a/foo.wav`` and ``class_b/foo.wav``) *and* that
+       basename appears in an override map *without* a rel_path entry
+       for every affected file, the basename fallback would silently
+       assign the same vector/md5/metadata to all of them.  That is
+       genuinely wrong data, so raise ``ValueError``.
+
+    The validation only warns when there is at least one true conflict;
+    it does not flag redundant keys that resolve to the same value, and
+    it does not flag unused keys (e.g. an NPZ that ships more entries
+    than the folder contains).
+    """
+    rel_paths_by_basename: dict[str, list[str]] = defaultdict(list)
+    for file_path in media_files:
+        rel_path = file_path.relative_to(folder_path).as_posix()
+        rel_paths_by_basename[file_path.name].append(rel_path)
+
+    _check_per_file_conflicts(
+        rel_paths_by_basename,
+        content_vectors,
+        content_md5s,
+        custom_metadata_map,
+    )
+    _check_ambiguous_basename_keys(
+        rel_paths_by_basename,
+        content_vectors,
+        content_md5s,
+        custom_metadata_map,
+    )
+
+
+def _check_per_file_conflicts(
+    rel_paths_by_basename: dict[str, list[str]],
+    content_vectors: dict[str, Any] | None,
+    content_md5s: dict[str, str] | None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+) -> None:
+    """Log a warning when a file's rel_path and basename keys disagree."""
+    for basename, rel_paths in rel_paths_by_basename.items():
+        for rel_path in rel_paths:
+            if rel_path == basename:
+                continue
+            _warn_if_content_vectors_conflict(rel_path, basename, content_vectors)
+            _warn_if_content_md5s_conflict(rel_path, basename, content_md5s)
+            _warn_if_custom_metadata_conflict(rel_path, basename, custom_metadata_map)
+
+
+def _warn_if_content_vectors_conflict(
+    rel_path: str,
+    basename: str,
+    content_vectors: dict[str, Any] | None,
+) -> None:
+    if not content_vectors or rel_path not in content_vectors or basename not in content_vectors:
+        return
+    if _embeddings_equal(content_vectors[rel_path], content_vectors[basename]):
+        return
+    logger.warning(
+        "content_vectors has conflicting entries for %r and %r; using the relative-path entry.",
+        rel_path,
+        basename,
+    )
+
+
+def _warn_if_content_md5s_conflict(
+    rel_path: str,
+    basename: str,
+    content_md5s: dict[str, str] | None,
+) -> None:
+    if not content_md5s or rel_path not in content_md5s or basename not in content_md5s:
+        return
+    if content_md5s[rel_path] == content_md5s[basename]:
+        return
+    logger.warning(
+        "content_md5s has conflicting entries for %r and %r (%r vs %r); using the relative-path entry.",
+        rel_path,
+        basename,
+        content_md5s[rel_path],
+        content_md5s[basename],
+    )
+
+
+def _warn_if_custom_metadata_conflict(
+    rel_path: str,
+    basename: str,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+) -> None:
+    if not custom_metadata_map or rel_path not in custom_metadata_map or basename not in custom_metadata_map:
+        return
+    rp_cm = custom_metadata_map[rel_path] or {}
+    bn_cm = custom_metadata_map[basename] or {}
+    rp_emb = _get_embedding_value(rp_cm)
+    bn_emb = _get_embedding_value(bn_cm)
+    if not _embeddings_equal(rp_emb, bn_emb):
+        logger.warning(
+            "custom_metadata_map has conflicting embeddings for %r and %r; using the relative-path entry.",
+            rel_path,
+            basename,
+        )
+    rp_md5 = _get_md5_value(rp_cm)
+    bn_md5 = _get_md5_value(bn_cm)
+    if rp_md5 and bn_md5 and rp_md5 != bn_md5:
+        logger.warning(
+            "custom_metadata_map has conflicting md5s for %r and %r (%r vs %r); using the relative-path entry.",
+            rel_path,
+            basename,
+            rp_md5,
+            bn_md5,
+        )
+
+
+def _check_ambiguous_basename_keys(
+    rel_paths_by_basename: dict[str, list[str]],
+    content_vectors: dict[str, Any] | None,
+    content_md5s: dict[str, str] | None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+) -> None:
+    """Raise when a basename override would silently fan out to multiple files."""
+    for basename, rel_paths in rel_paths_by_basename.items():
+        if len(rel_paths) < 2:
+            continue
+        for label, override_map in (
+            ("content_vectors", content_vectors),
+            ("content_md5s", content_md5s),
+            ("custom_metadata_map", custom_metadata_map),
+        ):
+            if not override_map or basename not in override_map:
+                continue
+            unresolved = [rp for rp in rel_paths if rp != basename and rp not in override_map]
+            if not unresolved:
+                continue
+            raise ValueError(
+                f"{label} has a bare-basename key {basename!r} that would be applied to "
+                f"multiple files via the basename fallback ({', '.join(sorted(unresolved))}). "
+                "Use the full relative path for each file (e.g. 'subdir/file.ext') "
+                "to disambiguate."
+            )
 
 
 def _lookup_file_custom_metadata(
@@ -603,10 +795,16 @@ def load_dataset_from_folder(
             embedding ``numpy.ndarray``.  Keys may be relative paths
             (``"subdir/file.wav"``) or basenames (``"file.wav"``); relative
             paths are checked first for an exact match, then basenames as a
-            fallback.
+            fallback.  When a bare basename would match more than one file
+            in the folder (without a disambiguating relative-path entry for
+            every match) the load fails with ``ValueError``; when both a
+            relative-path entry and a basename entry exist for the same
+            file with different values, the loader logs a warning and
+            keeps the relative-path entry.
         content_md5s: Optional mapping of filename to a pre-computed MD5 hex
             digest string.  Keys follow the same lookup logic as
-            ``content_vectors`` (relative path first, then basename).
+            ``content_vectors`` (relative path first, then basename), and
+            the same ambiguity checks apply.
         origin: Optional serialised
             :class:`~vtscore.datasets.origin.Origin` dict to attach to each
             media (as ``media["origin"]``).  When ``None`` no origin is set
@@ -620,13 +818,14 @@ def load_dataset_from_folder(
             is used.
         custom_metadata_map: Optional mapping of filename to a metadata dict.
             Keys follow the same lookup logic as ``content_vectors`` (relative
-            path first, then basename).  When a metadata dict contains a
-            non-empty ``"md5"`` key, that value is used as the media's MD5
-            instead of computing it from the file contents.  When it contains
-            an ``"embedding"`` key, that value is used as the media's
-            embedding vector (highest priority, above ``content_vectors``
-            and the embedding model).  The metadata dict is also attached
-            to the media as ``custom_metadata``.
+            path first, then basename), and the same ambiguity checks apply.
+            When a metadata dict contains a non-empty ``"md5"`` key, that
+            value is used as the media's MD5 instead of computing it from
+            the file contents.  When it contains an ``"embedding"`` key,
+            that value is used as the media's embedding vector (highest
+            priority, above ``content_vectors`` and the embedding model).
+            The metadata dict is also attached to the media as
+            ``custom_metadata``.
         skip_embedding: When ``True``, skip embedder resolution and model
             loading entirely.  Files with pre-computed vectors in
             ``content_vectors`` use those; files without are included with
@@ -634,8 +833,10 @@ def load_dataset_from_folder(
             downloaded or computed externally.
 
     Raises:
-        ValueError: If ``media_type`` is not recognised, or if no matching
-            files are found in ``folder_path``.
+        ValueError: If ``media_type`` is not recognised, if no matching
+            files are found in ``folder_path``, or if an override map has
+            a bare-basename key that would silently fan out to multiple
+            files in the folder.
     """
     if on_progress is None:
         on_progress = _default_progress()
@@ -649,6 +850,7 @@ def load_dataset_from_folder(
         skip_embedding,
         recursive,
         content_vectors,
+        content_md5s,
         custom_metadata_map,
         on_progress,
     )
@@ -789,8 +991,10 @@ def load_dataset_from_folder_chunked(
         Each yielded dict contains at most *chunk_size* medias.
 
     Raises:
-        ValueError: If ``media_type`` is not recognised, or if no matching
-            files are found in ``folder_path``.
+        ValueError: If ``media_type`` is not recognised, if no matching
+            files are found in ``folder_path``, or if an override map has
+            a bare-basename key that would silently fan out to multiple
+            files in the folder.
     """
     if on_progress is None:
         on_progress = _default_progress()
@@ -804,6 +1008,7 @@ def load_dataset_from_folder_chunked(
         skip_embedding,
         recursive,
         content_vectors,
+        content_md5s,
         custom_metadata_map,
         on_progress,
     )

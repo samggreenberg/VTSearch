@@ -501,8 +501,8 @@ Cross-section interaction agents:
 
 - **M8.** Thin-mode pickle loader treats `embedding: None` as present, then
   `np.array(None)` produces an object-dtype row.
-- **M9.** `loader_folder._has_override` doesn't warn when both `rel_path`
-  and `file_name` override entries exist with different embeddings.
+- ~~**M9.** `loader_folder._has_override` doesn't warn when both `rel_path`
+  and `file_name` override entries exist with different embeddings.~~
 - **M10.** `clipper_chain._run_clipper_step` assumes deterministic output count
   across calls — no validation.
 - **M11.** Stale media in `cli._score_medias_with_detectors` when some
