@@ -249,14 +249,18 @@ Cross-section interaction agents:
   `validate_server_filepath()` a required step in
   `SyncSource._resolve_filepath()`.
 
-### C10. MD5 / metadata cache collision returns wrong-dataset media on switch
+### C10. MD5 / metadata cache collision returns wrong-dataset media on switch — **SHIPPED 2026-05-19**
 
 - **File:** `frontend/src/app/services/media-metadata-cache.service.ts`
   ~L31
 - **Bug:** Cache key is `media_id` only. Media IDs are per-dataset, so
   after the user switches datasets the cache returns dataset A's
   filename / md5 / custom_metadata for dataset B's id=1.
-- **Fix sketch:** Key the cache by `${datasetId}:${mediaId}`.
+- **Fix:** Cache entries are keyed by `${datasetId}:${mediaId}` and
+  pending IDs are bucketed by the dataset they were queued under, so
+  each batch fetch runs while its dataset is active and the
+  `X-Dataset-Id` interceptor header matches what the response will be
+  cached against.
 
 ### C11. `fill_labels_from_sort` silently swallows sync failures — **SHIPPED 2026-05-19**
 
@@ -754,12 +758,20 @@ summary, and is also recorded here.
   `../labels/{detector_name}.json` is rejected at `load` / `load_full` /
   `save` time before any file handle is opened. Regression tests live in
   `tests/io/test_sync_sources.py`.
+- **C10 — MediaMetadataCacheService dataset-qualified keys** (2026-05-19).
+  Cache entries in
+  `frontend/src/app/services/media-metadata-cache.service.ts` now key on
+  `${datasetId}:${mediaId}` (snapshotted from `ActiveContextService`),
+  and pending IDs are bucketed by the dataset they were queued under so
+  each batch fetch dispatches only while its dataset is active and the
+  `X-Dataset-Id` interceptor header matches what the response will be
+  cached against.
 - **C11 — `fill_labels_from_sort` sync-failure surfacing** (2026-05-19).
   See the finding above for the full landed shape.
 
 ### Still open
 
-Every other finding (C5, C7, C10, C12 and the High / Medium /
+Every other finding (C5, C7, C12 and the High / Medium /
 Low tiers) remains as written. When the next fix lands, edit the
 finding above with **— shipped** and add a line here. When every
 critical and high is addressed, this doc can be retired into the
