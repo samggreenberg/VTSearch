@@ -1119,8 +1119,8 @@ class TestValidatedVoteSnapshot:
         detector_id = res.get_json()["detector"]["id"]
         _load_detector_and_wait(client, detector_id)
 
-        client.post(f"/api/medias/{good_cid}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{bad_cid}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{good_cid}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{bad_cid}/vote", json={"target": "bad"})
         return detector_id, good_cid, bad_cid
 
     def test_snapshot_safe_when_aligned(self, client):
