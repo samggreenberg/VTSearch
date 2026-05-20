@@ -36,13 +36,17 @@ def _assert_isolated(*medias: dict[str, Any]) -> None:
 class TestTagOriginsIsolation:
     def test_each_media_gets_distinct_origin_and_params(self):
         origin = {"importer": "server_folder", "params": {"path": "/data", "media_type": "audio"}}
-        medias = {1: {"filename": "a.wav"}, 2: {"filename": "b.wav"}, 3: {"filename": "c.wav"}}
+        medias: dict[int, dict[str, Any]] = {
+            1: {"filename": "a.wav"},
+            2: {"filename": "b.wav"},
+            3: {"filename": "c.wav"},
+        }
         _tag_origins(medias, origin)
         _assert_isolated(medias[1], medias[2], medias[3])
 
     def test_mutating_one_origin_params_does_not_leak_to_siblings(self):
         origin = {"importer": "server_folder", "params": {"path": "/data"}}
-        medias = {1: {"filename": "a.wav"}, 2: {"filename": "b.wav"}}
+        medias: dict[int, dict[str, Any]] = {1: {"filename": "a.wav"}, 2: {"filename": "b.wav"}}
         _tag_origins(medias, origin)
 
         medias[1]["origin"]["params"]["extra"] = "only-on-1"
@@ -53,7 +57,7 @@ class TestTagOriginsIsolation:
 
     def test_origin_values_are_preserved(self):
         origin = {"importer": "server_folder", "params": {"path": "/data", "media_type": "audio"}}
-        medias = {1: {"filename": "a.wav"}}
+        medias: dict[int, dict[str, Any]] = {1: {"filename": "a.wav"}}
         _tag_origins(medias, origin)
         assert medias[1]["origin"] == origin
         # ...but it must not be the same object.
@@ -62,7 +66,10 @@ class TestTagOriginsIsolation:
 
     def test_origin_name_falls_back_to_filename(self):
         origin = {"importer": "x", "params": {}}
-        medias = {1: {"filename": "a.wav"}, 2: {"filename": "b.wav", "origin_name": "kept"}}
+        medias: dict[int, dict[str, Any]] = {
+            1: {"filename": "a.wav"},
+            2: {"filename": "b.wav", "origin_name": "kept"},
+        }
         _tag_origins(medias, origin)
         assert medias[1]["origin_name"] == "a.wav"
         assert medias[2]["origin_name"] == "kept"
@@ -70,7 +77,10 @@ class TestTagOriginsIsolation:
     def test_skips_medias_that_already_carry_an_origin(self):
         pre_existing = {"importer": "other", "params": {"k": "v"}}
         origin = {"importer": "new", "params": {"k": "w"}}
-        medias = {1: {"filename": "a.wav", "origin": pre_existing}, 2: {"filename": "b.wav"}}
+        medias: dict[int, dict[str, Any]] = {
+            1: {"filename": "a.wav", "origin": pre_existing},
+            2: {"filename": "b.wav"},
+        }
         _tag_origins(medias, origin)
         assert medias[1]["origin"] is pre_existing  # untouched
         assert medias[2]["origin"]["importer"] == "new"
@@ -78,7 +88,7 @@ class TestTagOriginsIsolation:
 
     def test_isolation_survives_pickle_roundtrip(self):
         origin = {"importer": "server_folder", "params": {"path": "/data"}}
-        medias = {1: {"filename": "a.wav"}, 2: {"filename": "b.wav"}}
+        medias: dict[int, dict[str, Any]] = {1: {"filename": "a.wav"}, 2: {"filename": "b.wav"}}
         _tag_origins(medias, origin)
 
         revived = pickle.loads(pickle.dumps(medias))
@@ -132,7 +142,7 @@ class TestRewriteOriginsIsolation:
         origin = {"importer": "server_files", "params": {"path": "/list.txt"}}
         src_a = tmp_path / "a.wav"
         src_b = tmp_path / "b.wav"
-        medias = {
+        medias: dict[int, dict[str, Any]] = {
             1: {"origin_name": "a.wav", "filename": "a.wav"},
             2: {"origin_name": "b.wav", "filename": "b.wav"},
         }
@@ -149,7 +159,7 @@ class TestRewriteOriginsIsolation:
 
     def test_skips_medias_with_no_matching_source(self, tmp_path):
         origin = {"importer": "server_files", "params": {"path": "/list.txt"}}
-        medias = {
+        medias: dict[int, dict[str, Any]] = {
             1: {"origin_name": "a.wav", "filename": "a.wav", "origin": {"existing": True}},
         }
         # name_to_source has no entry for "a.wav" → media must be left alone.
