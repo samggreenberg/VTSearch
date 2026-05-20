@@ -7559,6 +7559,9 @@
           "404": {
             "description": "Detector not found."
           },
+          "409": {
+            "description": "Detector vote state is not aligned with the active dataset."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
