@@ -1,15 +1,39 @@
 """Dataset splitting utilities for evaluation."""
 
 import hashlib
+import logging
 import random
 from collections import defaultdict
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def _category_seed(seed: int, category: str) -> int:
     """Derive a per-category seed so each category is shuffled independently."""
     h = hashlib.sha256(f"{seed}:{category}".encode()).digest()
     return int.from_bytes(h[:8], "big")
+
+
+def _split_one_category(ids: list[int], test_fraction: float, seed: int, category: str) -> tuple[list[int], list[int]]:
+    """Shuffle one category's ids and return (test_ids, simulate_ids).
+
+    Single-item categories cannot be split; the lone item is returned as
+    simulate and ``test_ids`` is empty (callers are expected to flag this
+    so the user is not left wondering why a category is absent from test).
+    """
+    ids = sorted(ids)  # deterministic order before shuffle
+    rng = random.Random(_category_seed(seed, category))
+    rng.shuffle(ids)
+
+    n_test = round(len(ids) * test_fraction)
+    # Ensure at least 1 in each split when the category is large enough
+    if n_test == 0 and len(ids) >= 2:
+        n_test = 1
+    if n_test == len(ids) and len(ids) >= 2:
+        n_test = len(ids) - 1
+
+    return ids[:n_test], ids[n_test:]
 
 
 def split_dataset(
@@ -27,6 +51,12 @@ def split_dataset(
     categories.
 
     Clip IDs are preserved (not renumbered) in both output dicts.
+
+    Single-item categories cannot be both trained on and tested on; the
+    lone item is placed in the simulation set and the category contributes
+    nothing to the test set.  When this happens, a single summary
+    ``logger.warning`` lists the affected categories so callers do not
+    silently end up with categories that are absent from the test set.
 
     Args:
         medias: Mapping of media ID to media data dict.  Every media must have a
@@ -56,27 +86,27 @@ def split_dataset(
 
     simulate_clips: dict[int, dict[str, Any]] = {}
     test_clips: dict[int, dict[str, Any]] = {}
+    single_item_categories: list[str] = []
 
     for category in sorted(by_category):
         ids = by_category[category]
-        ids.sort()  # deterministic order before shuffle
+        if len(ids) == 1:
+            single_item_categories.append(category)
 
-        rng = random.Random(_category_seed(seed, category))
-        rng.shuffle(ids)
-
-        n_test = round(len(ids) * test_fraction)
-        # Ensure at least 1 in each split when the category is large enough
-        if n_test == 0 and len(ids) >= 2:
-            n_test = 1
-        if n_test == len(ids) and len(ids) >= 2:
-            n_test = len(ids) - 1
-
-        test_ids = ids[:n_test]
-        simulate_ids = ids[n_test:]
+        test_ids, simulate_ids = _split_one_category(ids, test_fraction, seed, category)
 
         for cid in test_ids:
             test_clips[cid] = medias[cid]
         for cid in simulate_ids:
             simulate_clips[cid] = medias[cid]
+
+    if single_item_categories:
+        noun = "category" if len(single_item_categories) == 1 else "categories"
+        logger.warning(
+            "split_dataset: %d %s had only 1 item and contribute nothing to the test set (item placed in simulate): %s",
+            len(single_item_categories),
+            noun,
+            ", ".join(single_item_categories),
+        )
 
     return simulate_clips, test_clips

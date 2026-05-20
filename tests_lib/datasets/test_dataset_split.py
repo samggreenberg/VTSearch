@@ -1,5 +1,7 @@
 """Tests for dataset split-by-fraction functionality."""
 
+import logging
+
 import numpy as np
 import pytest
 
@@ -79,14 +81,43 @@ class TestSplitDataset:
         for cid, media in test.items():
             assert media is medias[cid]
 
-    def test_single_clip_category_goes_to_simulate(self):
+    def test_single_clip_category_goes_to_simulate(self, caplog):
         medias = _make_clips({"rare": 1, "common": 20})
-        sim, test = split_dataset(medias, test_fraction=0.2, seed=42)
+        with caplog.at_level(logging.WARNING, logger="vtscore.datasets.split"):
+            sim, test = split_dataset(medias, test_fraction=0.2, seed=42)
 
         # Category with 1 media: round(1 * 0.2) = 0, so it goes to simulate
         rare_in_sim = [c for c in sim.values() if c["category"] == "rare"]
         rare_in_test = [c for c in test.values() if c["category"] == "rare"]
-        assert len(rare_in_sim) + len(rare_in_test) == 1
+        assert len(rare_in_sim) == 1
+        assert len(rare_in_test) == 0
+
+        # And the caller is warned that "rare" contributes nothing to test.
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert "rare" in warnings[0].getMessage()
+        assert "common" not in warnings[0].getMessage()
+
+    def test_multiple_single_clip_categories_warn_once(self, caplog):
+        medias = _make_clips({"a": 1, "b": 1, "c": 10})
+        with caplog.at_level(logging.WARNING, logger="vtscore.datasets.split"):
+            split_dataset(medias, test_fraction=0.2, seed=42)
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        # The trailing ", "-joined list of category names is what we care
+        # about; checking the whole message would false-match on "c" in
+        # "categories".
+        listed = warnings[0].getMessage().rsplit(": ", 1)[-1].split(", ")
+        assert set(listed) == {"a", "b"}
+
+    def test_no_warning_when_all_categories_have_at_least_two(self, caplog):
+        medias = _make_clips({"cat": 10, "dog": 10})
+        with caplog.at_level(logging.WARNING, logger="vtscore.datasets.split"):
+            split_dataset(medias, test_fraction=0.2, seed=42)
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert warnings == []
 
     def test_two_clip_category_splits(self):
         medias = _make_clips({"small": 2, "big": 20})

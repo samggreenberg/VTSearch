@@ -123,10 +123,7 @@ Cross-section interaction agents:
   `vtsearch/datasets/load_pipeline.py` L699–705. `_tag_origins()`
   stamps the same dict object; later mutations of `origin.params`
   propagate to siblings. Each media must hold its own copy.
-- **H9. Single-item split has 0 test samples** —
-  `vtsearch/datasets/split.py` L67–72. When a category has exactly 1
-  item, the docstring promises 1 test sample but the function leaves
-  test empty. Eval over that category silently skips.
+- ~~**H9. Single-item split has 0 test samples**~~
 - **H10. Clipped media re-ingest reads whole file for MD5** —
   `vtsearch/datasets/ingest.py` L275. MD5 of the full parent
   ≠ MD5 of the clip, so dedup never re-matches the original clip.
@@ -656,6 +653,25 @@ and a one-line summary is recorded here.
   leaves `det_ctx.good_votes`, `det_ctx.bad_votes`, `det_ctx.model`,
   and the persisted labelset all untouched. Regression in
   `tests/detectors/test_workflow.py::TestTrainingFailureIsTransactional`.
+
+- **H9 — Single-item split silent-skip** (2026-05-20). Closer
+  inspection found the audit overstated the bug: the docstring does
+  not actually promise a 1-test-sample floor for `N=1` categories
+  (`test_fraction ∈ (0, 1)` makes that unreachable), and `split_dataset`
+  has no production callers today — it's exported from
+  `vtscore/datasets/__init__.py` and used only by
+  `tests_lib/datasets/test_dataset_split.py` and a docs example, so
+  the "eval silently skips" consequence is currently latent rather
+  than active. The real defect — that a single-item category drops
+  out of the test set with zero signal to the caller — was fixed in
+  `vtscore/datasets/split.py` by collecting affected categories during
+  the per-category loop and emitting a single summary
+  `logger.warning(...)` listing them. Behaviour is otherwise unchanged
+  (lone item still lands in `simulate_clips`). The existing test
+  `test_single_clip_category_goes_to_simulate` was tightened to assert
+  the exact split (`len(rare_in_sim) == 1, len(rare_in_test) == 0`)
+  and the warning content; two new regression tests cover the
+  multi-single-category and no-warning-for-healthy-input paths.
 
 ### Still open
 
