@@ -504,8 +504,15 @@ def _clip_to_bytes(file_path: Path, media_type: str, params: dict[str, Any]) -> 
     return None
 
 
-def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> np.ndarray | None:
-    """Replay a clipper chain on *file_path*.  Returns None when nothing applies or the replay fails."""
+def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> tuple[np.ndarray, bytes | None] | None:
+    """Replay a clipper chain on *file_path*.
+
+    Returns ``(embedding, clip_bytes)`` on success, or ``None`` when
+    nothing applies or the replay fails. ``clip_bytes`` is the content
+    bytes of the final clip (post-chain) — what the embedder consumed,
+    or ``None`` when the chain ends in a metadata-only clipper (e.g.
+    video) whose output bytes equal the parent's bytes.
+    """
     from vtscore.datasets.clipper_chain import parse_trail, replay_chain_on_file
 
     steps = parse_trail(chain_raw)
@@ -523,7 +530,7 @@ def _apply_clip_and_embed(
     media_type: str,
     origin: dict[str, Any],
     embedder_name: str = "",
-) -> np.ndarray | None:
+) -> tuple[np.ndarray, bytes | None] | None:
     """Apply clip params from *origin* to a resolved file and embed the result.
 
     If the origin contains clip parameters (``clip_start``/``clip_end`` for
@@ -531,30 +538,52 @@ def _apply_clip_and_embed(
     clipped first and the clipped content is embedded.  Falls back to
     :func:`embed_file` when no clip params apply (e.g. video, or an
     unrecognised clipper) or when the clip step raises.
+
+    Returns ``(embedding, clip_bytes)`` where ``clip_bytes`` is the bytes
+    that were actually embedded — i.e. the sliced/cropped content for
+    audio / image / text clippers (and for chain replays). ``clip_bytes``
+    is ``None`` when the function fell through to embedding the full
+    parent file (no clipper, clip step failed, or a media type whose
+    clipper is metadata-only such as video). The caller can use the
+    presence/absence of ``clip_bytes`` to decide whether to MD5-hash the
+    clip or fall back to a parent-bytes + boundary-tag scheme. Returns
+    ``None`` when embedding fails entirely.
     """
     params = origin.get("params", {})
 
     chain_raw = params.get("clipper_chain")
     if chain_raw:
-        embedding = _replay_chain(file_path, chain_raw, embedder_name)
-        if embedding is not None:
-            return embedding
+        result = _replay_chain(file_path, chain_raw, embedder_name)
+        if result is not None:
+            return result
         # Fall through to legacy/full-file embed.
 
     if not params.get("clipper"):
-        return embed_file(file_path, media_type, embedder_name)
+        embedding = embed_file(file_path, media_type, embedder_name)
+        if embedding is None:
+            return None
+        return embedding, None
 
     try:
         clipped = _clip_to_bytes(file_path, media_type, params)
     except Exception:
         log.debug("_apply_clip_and_embed: %s clip failed, falling back", media_type, exc_info=True)
-        return embed_file(file_path, media_type, embedder_name)
+        embedding = embed_file(file_path, media_type, embedder_name)
+        if embedding is None:
+            return None
+        return embedding, None
 
     if clipped is None:
-        return embed_file(file_path, media_type, embedder_name)
+        embedding = embed_file(file_path, media_type, embedder_name)
+        if embedding is None:
+            return None
+        return embedding, None
 
     data, suffix = clipped
-    return _embed_via_tempfile(data, suffix, media_type, embedder_name)
+    embedding = _embed_via_tempfile(data, suffix, media_type, embedder_name)
+    if embedding is None:
+        return None
+    return embedding, data
 
 
 @dataclass
@@ -608,7 +637,11 @@ def _embed_resolved_label(file_path: Path, media_type: str, origin: dict[str, An
     """Embed a resolved file, switching to clip-aware embedding when the origin demands it."""
     params = origin.get("params", {}) if origin is not None else {}
     if origin is not None and (params.get("clipper") or params.get("clipper_chain")):
-        return _apply_clip_and_embed(file_path, media_type, origin)
+        result = _apply_clip_and_embed(file_path, media_type, origin)
+        if result is None:
+            return None
+        embedding, _clip_bytes = result
+        return embedding
     return embed_file(file_path, media_type)
 
 

@@ -276,8 +276,12 @@ class TestReplayChainOnFile:
                 "out_index": 1,
             }
         ]
-        embedding = replay_chain_on_file(source, steps)
+        result = replay_chain_on_file(source, steps)
+        assert result is not None
+        embedding, content = result
         assert embedding is not None
+        # The clip bytes returned match the picked sentence.
+        assert content == b"Bravo."
         # The captured tempfile must contain just the picked sentence.
         assert len(captured) == 1
         assert captured[0][0] == "Bravo."

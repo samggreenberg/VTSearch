@@ -400,12 +400,20 @@ def replay_chain_on_file(  # noqa: C901
     file_path: Path,
     steps: list[ChainStep],
     embedder_name: str = "",
-) -> Any:
+) -> tuple[Any, bytes | None] | None:
     """Re-run a chain against a source file and embed the final clip.
 
     Used by the resolver replay path to reproduce the exact sub-clip the
-    label originally referenced. Returns the embedding (np.ndarray) or
-    ``None`` if any step produced no output.
+    label originally referenced. Returns ``(embedding, content_bytes)``
+    where ``content_bytes`` is the final clip's bytes (after the last
+    chain step), or ``None`` if any step produced no output or the embed
+    failed.
+
+    ``content_bytes`` is ``None`` when the final chain step is a *video*
+    clipper, because video clippers are metadata-only (they record
+    ``clip_start`` / ``clip_end`` but do not slice the underlying bytes,
+    so the clip's bytes equal the parent's bytes — caller should switch
+    to a boundary-tag MD5 scheme for those clips).
 
     The chain must start with a step whose input type matches the source
     file's media type (the resolver infers this from the trail's first
@@ -460,7 +468,17 @@ def replay_chain_on_file(  # noqa: C901
             content = media.get("media_bytes") or b""
         os.write(fd, content)
         os.close(fd)
-        return embed_file(Path(tmp), current_type, embedder_name)
+        embedding = embed_file(Path(tmp), current_type, embedder_name)
+        if embedding is None:
+            return None
+        # Video clippers are metadata-only — the clip's bytes equal the
+        # parent's, so a caller hashing ``content`` would collide across
+        # distinct clips of the same parent.  Signal metadata-only by
+        # returning ``None`` for content_bytes; the caller falls back to
+        # parent-bytes + boundary-tag MD5.
+        if current_type == "video":
+            return embedding, None
+        return embedding, content
     finally:
         try:
             os.unlink(tmp)
