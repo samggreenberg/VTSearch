@@ -159,10 +159,32 @@ Cross-section interaction agents:
   H34.
 - ~~**H13. `vote_media` silent-mistarget on dropped header**~~
 - ~~**H14. `export_labels` leaks votes across datasets**~~
-- **H15. File-browser symlink-traversal** — `vtsearch/routes/file_browser.py`
-  L84–92. `target.resolve().relative_to(root.resolve())` succeeds for
-  `/data/link → /etc`. If the configured root contains a symlink,
-  listings escape.
+- ~~**H15. File-browser symlink metadata leak**~~ — investigation
+  revised and fixed (2026-05-20). The audit's literal claim was
+  incorrect: the `target.resolve().relative_to(root)` check at
+  `vtsearch/routes/file_browser.py:90` does block drill-through into
+  symlinked-out directories (resolve canonicalises through the link,
+  and `relative_to` then raises). The real bug was in the listing
+  loop at L105–118: `entry.is_dir()` / `entry.is_file()` / `stat()`
+  all follow symlinks by default, so an in-root symlink pointing
+  outside the root showed up as an ordinary entry and leaked the
+  external target's existence, name, `size_bytes`, and `modified_at`.
+  In multi-user mode this violated the data-dir isolation contract
+  asserted by `TestMultiUserBrowseIsolation`. Fix: in the listing
+  loop, call `entry.resolve(strict=True).relative_to(root)` on
+  symlinks and skip any that escape root or are broken — intra-root
+  symlinks remain visible. Covered by `TestBrowseSymlinks` in
+  `tests/api/test_file_browser.py`
+  (`test_symlink_to_external_dir_hidden`,
+  `test_symlink_to_external_file_hidden`,
+  `test_intra_root_symlink_still_listed`,
+  `test_broken_symlink_skipped`,
+  `test_symlink_drill_through_blocked`). Note: a separate
+  symlink-follow content escape exists in
+  `vtscore/security/path_validation.py:rglob_follow_symlinks`
+  (importers walk with `followlinks=True` and per-file paths
+  outside the validated root are not re-checked) — that's a
+  different code path, not covered by this fix.
 - ~~**H16. Header refers to unloaded dataset → silent fallback**~~ —
   also closes the "header points to an unloaded id" half of H34 by the
   same mechanism. The "header absent → thread-local leak" half of H34

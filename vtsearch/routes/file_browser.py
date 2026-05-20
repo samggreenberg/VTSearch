@@ -105,6 +105,15 @@ def browse(query: dict):  # noqa: C901
     for entry in entries:
         if entry.name.startswith("."):
             continue
+        # is_dir() / is_file() / stat() follow symlinks by default, so an
+        # in-root symlink pointing outside root would otherwise be listed
+        # like an ordinary entry and leak the target's name/size/mtime.
+        # Resolve symlinks up front and skip any that escape root.
+        if entry.is_symlink():
+            try:
+                entry.resolve(strict=True).relative_to(root)
+            except (OSError, ValueError):
+                continue
         rel = str(entry.relative_to(root))
         if entry.is_dir():
             directories.append({"name": entry.name, "path": rel, "modified_at": format_mtime(entry)})
