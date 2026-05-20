@@ -606,3 +606,103 @@ class TestAddToPile:
             assert "No dataset" in resp.get_json()["message"]
         finally:
             app_module.medias.update(saved)
+
+    def test_concurrent_uploads_same_md5_no_duplicate(self):
+        """H32 regression: two concurrent uploads of identical bytes must
+        not produce duplicate medias.
+
+        The first MD5 lookup happens outside ``_state_lock`` and embedding
+        takes the full unlocked window with it. Without a re-check inside
+        the lock, two parallel requests both miss the existing-cid hit and
+        both insert — yielding two medias with identical md5/embedding.
+        The fix re-checks ``md5_lookup`` under ``_state_lock`` immediately
+        before the insert and routes the loser into the existing-cid
+        branch.
+        """
+        import threading
+        from unittest.mock import patch
+
+        from vtscore.media import embedders_for_type
+        from vtscore.state.core import (
+            get_active_context,
+            get_active_detector_context,
+            set_thread_dataset_context,
+            set_thread_detector_context,
+        )
+
+        audio_embedder = embedders_for_type("audio")[0]
+
+        wav_bytes = app_module.generate_wav(77777, 0.25)
+        initial_count = len(app_module.medias)
+
+        # Capture the test thread's contexts so the worker threads resolve
+        # the same DatasetContext/DetectorContext when ``before_request``
+        # falls through to the thread-local (no X-Dataset-Id header in
+        # these requests).
+        ds_ctx = get_active_context()
+        det_ctx = get_active_detector_context()
+
+        # Embedding must block both threads simultaneously inside the
+        # unlocked window so the race is reproduced deterministically.
+        barrier = threading.Barrier(2)
+        original_embed = audio_embedder.embed_media
+
+        def _blocking_embed(media_dict):
+            barrier.wait(timeout=5)
+            return original_embed(media_dict)
+
+        results: list[tuple[int, dict]] = []
+        errors: list[BaseException] = []
+        lock = threading.Lock()
+
+        def _do_post():
+            try:
+                set_thread_dataset_context(ds_ctx)
+                set_thread_detector_context(det_ctx)
+                # Each worker thread uses its own test client. The fixture
+                # ``client`` is opened in the main thread, and Flask's test
+                # client preserves request contexts on its own ExitStack —
+                # invoking it from worker threads pushes contexts onto the
+                # workers' ContextVars and breaks the main-thread teardown.
+                with app_module.app.test_client() as c:
+                    r = c.post(
+                        "/api/medias/add-to-pile",
+                        data={"label": "good", "file": (io.BytesIO(wav_bytes), "race.wav")},
+                        content_type="multipart/form-data",
+                    )
+                with lock:
+                    results.append((r.status_code, r.get_json()))
+            except BaseException as exc:  # noqa: BLE001
+                with lock:
+                    errors.append(exc)
+
+        with patch.object(audio_embedder, "embed_media", side_effect=_blocking_embed):
+            t1 = threading.Thread(target=_do_post)
+            t2 = threading.Thread(target=_do_post)
+            t1.start()
+            t2.start()
+            t1.join(timeout=15)
+            t2.join(timeout=15)
+
+        assert not errors, f"worker threads raised: {errors}"
+        assert len(results) == 2
+
+        # Exactly one new media inserted (the regression: was 2 before fix).
+        assert len(app_module.medias) == initial_count + 1, (
+            f"H32: duplicate insert — medias grew by {len(app_module.medias) - initial_count}, expected 1"
+        )
+
+        # Both requests succeed and report the same media id.
+        media_ids = {r[1]["media_id"] for r in results}
+        assert len(media_ids) == 1, f"requests reported different ids: {media_ids}"
+
+        # One winner (201, is_new=True), one loser (200, is_new=False).
+        statuses = sorted(r[0] for r in results)
+        assert statuses == [200, 201]
+        is_new_flags = sorted(r[1]["is_new"] for r in results)
+        assert is_new_flags == [False, True]
+
+        # The single inserted media carries the uploaded bytes' md5.
+        inserted_id = next(iter(media_ids))
+        assert app_module.medias[inserted_id]["md5"] == hashlib.md5(wav_bytes).hexdigest()
+        assert inserted_id in app_module.good_votes

@@ -612,15 +612,19 @@ def add_media_to_pile():  # noqa: C901
 
     file_md5 = hashlib.md5(file_bytes).hexdigest()
 
-    # Check if a media with this MD5 already exists
+    # First-pass MD5 lookup (outside _state_lock). When this hits we can
+    # skip the expensive embedding step and vote the existing media right
+    # away. When it misses we still have to re-check under the lock just
+    # before insertion (see below) because embedding holds no lock and a
+    # concurrent upload of the same bytes could land between the two.
     snap = snapshot_medias()
     _, md5_lookup, _ = build_media_lookup(snap)
     existing_cids = md5_lookup.get(file_md5, [])
 
     if existing_cids:
-        # MD5 match — vote the existing media(s).
         for cid in existing_cids:
             apply_label(cid, label)
+        _sync_pile_label_to_storage()
         return {"ok": True, "media_id": existing_cids[0], "is_new": False}
 
     # No match — embed and insert as new media.
@@ -693,11 +697,48 @@ def add_media_to_pile():  # noqa: C901
     if thumb is not None:
         new_media["thumbnail_bytes"] = thumb
 
+    # Re-check the MD5 lookup under _state_lock immediately before inserting.
+    # Embedding above ran without the lock (it can take seconds), so a
+    # concurrent request uploading the same bytes may have inserted a media
+    # with this MD5 in the meantime. Without this re-check, both requests
+    # would each insert a fresh media — producing duplicates with identical
+    # md5/embedding/bytes. (logical-bug-audit.md H32.)
     with _state_lock:
-        new_id = next_media_id(medias)
-        new_media["id"] = new_id
-        medias[new_id] = new_media
+        _, md5_lookup_now, _ = build_media_lookup(medias)
+        collided_cids = md5_lookup_now.get(file_md5, [])
+        if collided_cids:
+            target_cids: list[int] = list(collided_cids)
+            target_id = collided_cids[0]
+            is_new = False
+        else:
+            target_id = next_media_id(medias)
+            new_media["id"] = target_id
+            medias[target_id] = new_media
+            target_cids = [target_id]
+            is_new = True
 
-    apply_label(new_id, label)
+    for cid in target_cids:
+        apply_label(cid, label)
+    _sync_pile_label_to_storage()
 
-    return {"ok": True, "media_id": new_id, "is_new": True}, 201
+    if is_new:
+        return {"ok": True, "media_id": target_id, "is_new": True}, 201
+    return {"ok": True, "media_id": target_id, "is_new": False}
+
+
+def _sync_pile_label_to_storage() -> None:
+    """Persist a newly-applied add-to-pile label to the detector's storage.
+
+    Mirrors the tail of :func:`vote_media` so the in-memory good/bad-votes
+    update also reaches the detector's on-disk labelset and any configured
+    :class:`LabelsetSource`. Without this, the label vanishes the next time
+    ``ensure_votes_match_active_dataset`` rehydrates the detector from disk.
+    (logical-bug-audit.md H33.)
+    """
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector  # noqa: PLC0415
+
+    sync_labels_to_loaded_detector()
+
+    from vtscore.labels.sync import sync_to_labelset_source  # noqa: PLC0415
+
+    sync_to_labelset_source()
