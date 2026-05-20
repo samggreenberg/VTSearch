@@ -311,7 +311,7 @@ class TestNonexistentResources:
         assert resp.status_code == 404
 
     def test_vote_nonexistent_media(self, client):
-        resp = client.post("/api/medias/99999/vote", json={"vote": "good"})
+        resp = client.post("/api/medias/99999/vote", json={"target": "good"})
         assert resp.status_code == 404
 
     def test_delete_nonexistent_model(self, client):
@@ -601,29 +601,31 @@ class TestVoteEdgeCases:
         """Extra fields in vote request should not cause errors."""
         resp = client.post(
             "/api/medias/1/vote",
-            json={
-                "vote": "good",
+            json={"target": "good",
                 "confidence": 0.95,
                 "note": "very relevant",
             },
         )
         assert resp.status_code == 200
 
-    def test_rapid_toggle_votes(self, client):
-        """Rapidly toggling a vote should leave consistent state."""
+    def test_rapid_idempotent_re_votes_are_no_ops(self, client):
+        """H1 regression: rapidly POSTing the same absolute target must not
+        flip-flop the vote (the pre-fix toggle semantics did exactly that)."""
         for _ in range(10):
-            client.post("/api/medias/1/vote", json={"vote": "good"})
-        # After 10 toggles (even number), vote should be off
+            resp = client.post("/api/medias/1/vote", json={"target": "good"})
+            assert resp.status_code == 200
+            assert resp.get_json()["state"] == "good"
         resp = client.get("/api/votes")
         data = resp.get_json()
-        assert 1 not in data["good"]
+        # Ten POSTs of target=good leave the media in good, not toggled off.
+        assert 1 in data["good"]
 
     def test_vote_all_medias(self, client):
         """Voting on every media should work without errors."""
         num = len(medias)
         for i in range(1, num + 1):
-            vote = "good" if i % 2 == 0 else "bad"
-            resp = client.post(f"/api/medias/{i}/vote", json={"vote": vote})
+            target = "good" if i % 2 == 0 else "bad"
+            resp = client.post(f"/api/medias/{i}/vote", json={"target": target})
             assert resp.status_code == 200
 
         resp = client.get("/api/votes")

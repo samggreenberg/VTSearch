@@ -612,7 +612,7 @@ class TestActionHooks:
         # Find any media id from the test fixture.
         listing = client.get("/api/medias/ids").get_json()
         media_id = listing[0]["id"]
-        resp = client.post(f"/api/medias/{media_id}/vote", json={"vote": "good"})
+        resp = client.post(f"/api/medias/{media_id}/vote", json={"target": "good"})
         assert resp.status_code == 200
         state = achievements.get_full_state()
         assert _by_id(state, "votes_cast")["counter"] == 1
@@ -620,7 +620,19 @@ class TestActionHooks:
     def test_unvote_does_not_decrement(self, client):
         listing = client.get("/api/medias/ids").get_json()
         media_id = listing[0]["id"]
-        client.post(f"/api/medias/{media_id}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{media_id}/vote", json={"vote": "good"})  # toggle off
+        client.post(f"/api/medias/{media_id}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{media_id}/vote", json={"target": "none"})  # un-vote
         # Counter should be 1: only the add counts, not the remove.
+        assert _by_id(achievements.get_full_state(), "votes_cast")["counter"] == 1
+
+    def test_idempotent_re_vote_does_not_increment(self, client):
+        """H1 fix: sending target=good on an already-good media is idempotent
+        and must not credit a second vote.  This is the achievement-counter
+        side of the inflation race — two stale-view tabs each POSTing the
+        same target collapse into one increment on the server."""
+        listing = client.get("/api/medias/ids").get_json()
+        media_id = listing[0]["id"]
+        client.post(f"/api/medias/{media_id}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{media_id}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{media_id}/vote", json={"target": "good"})
         assert _by_id(achievements.get_full_state(), "votes_cast")["counter"] == 1

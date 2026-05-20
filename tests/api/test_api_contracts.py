@@ -98,10 +98,30 @@ class TestVotesContract:
         assert isinstance(data["learned_scores"], dict)
 
     def test_vote_response_shape(self, client):
-        resp = client.post("/api/medias/1/vote", json={"vote": "good"})
+        resp = client.post("/api/medias/1/vote", json={"target": "good"})
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["ok"] is True
+        # H1 contract: server returns the new absolute state and click-time
+        # so the client can reconcile its optimistic view directly.
+        assert data["state"] == "good"
+        assert isinstance(data["click_time"], int)
+
+    def test_vote_response_state_on_idempotent_call(self, client):
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        # Second call with the same target is idempotent — server still
+        # returns state="good" so the client knows it landed.
+        resp = client.post("/api/medias/1/vote", json={"target": "good"})
+        data = resp.get_json()
+        assert data["state"] == "good"
+        assert isinstance(data["click_time"], int)
+
+    def test_vote_response_state_on_unvote(self, client):
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        resp = client.post("/api/medias/1/vote", json={"target": "none"})
+        data = resp.get_json()
+        assert data["state"] == "none"
+        assert data["click_time"] is None
 
 
 class TestSortContract:
@@ -455,9 +475,9 @@ class TestLabelingStatusContract:
     def test_with_votes_returns_indicator_fields(self, client):
         """With sufficient votes, response should have labeling status indicators."""
         for i in range(1, 4):
-            client.post(f"/api/medias/{i}/vote", json={"vote": "good"})
+            client.post(f"/api/medias/{i}/vote", json={"target": "good"})
         for i in range(4, 7):
-            client.post(f"/api/medias/{i}/vote", json={"vote": "bad"})
+            client.post(f"/api/medias/{i}/vote", json={"target": "bad"})
         resp = client.get("/api/labeling-status")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -550,12 +570,11 @@ class TestErrorResponseFormat:
         assert "message" in data
 
     def test_400_vote_error_is_json(self, client):
-        # The media-vote blueprint now uses flask-smorest's standard
-        # error envelope: a ``vote`` value that fails the OneOf check
-        # surfaces as 422 with a per-field ``errors`` dict, not the
-        # legacy ``{"error": str}`` shape. Keeping the test name for
-        # grep continuity.
-        resp = client.post("/api/medias/1/vote", json={"vote": "invalid"})
+        # The media-vote blueprint uses flask-smorest's standard error
+        # envelope: a ``target`` value that fails the OneOf check surfaces
+        # as 422 with a per-field ``errors`` dict. (H1 renamed the field
+        # from ``vote`` to ``target`` to flag the absolute-state contract.)
+        resp = client.post("/api/medias/1/vote", json={"target": "invalid"})
         assert resp.status_code == 422
         data = resp.get_json()
         assert "errors" in data

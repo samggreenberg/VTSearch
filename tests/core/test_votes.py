@@ -17,61 +17,93 @@ from vtsearch.state import (
 
 class TestVoteClip:
     def test_vote_good(self, client):
-        resp = client.post("/api/medias/1/vote", json={"vote": "good"})
+        resp = client.post("/api/medias/1/vote", json={"target": "good"})
         assert resp.status_code == 200
         assert resp.get_json()["ok"] is True
         assert 1 in app_module.good_votes
 
     def test_vote_bad(self, client):
-        resp = client.post("/api/medias/1/vote", json={"vote": "bad"})
+        resp = client.post("/api/medias/1/vote", json={"target": "bad"})
         assert resp.status_code == 200
         assert 1 in app_module.bad_votes
 
-    def test_toggle_good_off(self, client):
-        """Voting good twice should toggle it off."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+    def test_unvote_good(self, client):
+        """target=none removes a good vote."""
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert 1 in app_module.good_votes
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "none"})
         assert 1 not in app_module.good_votes
 
-    def test_toggle_bad_off(self, client):
-        """Voting bad twice should toggle it off."""
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+    def test_unvote_bad(self, client):
+        """target=none removes a bad vote."""
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert 1 in app_module.bad_votes
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "none"})
         assert 1 not in app_module.bad_votes
 
+    def test_idempotent_re_vote_good(self, client):
+        """Re-sending target=good on a good media is a no-op (H1 fix).
+
+        Two stale-view tabs that both POST target=good no longer alternate
+        ADD/REMOVE on the server — the second call is idempotent.
+        """
+        r1 = client.post("/api/medias/1/vote", json={"target": "good"})
+        assert r1.status_code == 200
+        r2 = client.post("/api/medias/1/vote", json={"target": "good"})
+        assert r2.status_code == 200
+        assert 1 in app_module.good_votes
+        # Idempotent: a single label_history entry, not two.
+        from vtsearch.state import label_history
+        assert sum(1 for entry in label_history if entry[0] == 1) == 1
+
+    def test_idempotent_re_vote_bad(self, client):
+        r1 = client.post("/api/medias/1/vote", json={"target": "bad"})
+        assert r1.status_code == 200
+        r2 = client.post("/api/medias/1/vote", json={"target": "bad"})
+        assert r2.status_code == 200
+        assert 1 in app_module.bad_votes
+        from vtsearch.state import label_history
+        assert sum(1 for entry in label_history if entry[0] == 1) == 1
+
     def test_switch_from_good_to_bad(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert 1 not in app_module.good_votes
         assert 1 in app_module.bad_votes
 
     def test_switch_from_bad_to_good(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert 1 not in app_module.bad_votes
         assert 1 in app_module.good_votes
 
-    def test_invalid_vote_value(self, client):
-        # Marshmallow OneOf validator on ``vote`` rejects non-{good,bad}
+    def test_invalid_target_value(self, client):
+        # Marshmallow OneOf validator on ``target`` rejects non-{good,bad,none}
         # values with the flask-smorest 422 envelope.
-        resp = client.post("/api/medias/1/vote", json={"vote": "meh"})
+        resp = client.post("/api/medias/1/vote", json={"target": "meh"})
         assert resp.status_code == 422
-        assert "vote" in resp.get_json()["errors"]["json"]
+        assert "target" in resp.get_json()["errors"]["json"]
 
-    def test_missing_vote_field(self, client):
+    def test_missing_target_field(self, client):
         # Required-field validation runs in MediaVoteRequestSchema → 422.
         resp = client.post("/api/medias/1/vote", json={"wrong": "field"})
         assert resp.status_code == 422
 
+    def test_legacy_vote_field_rejected(self, client):
+        # The pre-H1 ``vote`` field is no longer accepted — the schema requires
+        # ``target`` with absolute-state semantics so the toggle race cannot
+        # be re-introduced by a client that hasn't been updated.
+        resp = client.post("/api/medias/1/vote", json={"vote": "good"})
+        assert resp.status_code == 422
+        assert "target" in resp.get_json()["errors"]["json"]
+
     def test_vote_nonexistent_clip(self, client):
-        resp = client.post("/api/medias/9999/vote", json={"vote": "good"})
+        resp = client.post("/api/medias/9999/vote", json={"target": "good"})
         assert resp.status_code == 404
 
     def test_multiple_clips_independent_votes(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         assert 1 in app_module.good_votes
         assert 2 in app_module.bad_votes
         assert 1 not in app_module.bad_votes
@@ -109,8 +141,8 @@ class TestGetVotes:
         assert data["bad"] == [2]
 
     def test_votes_after_voting_via_api(self, client):
-        client.post("/api/medias/3/vote", json={"vote": "good"})
-        client.post("/api/medias/5/vote", json={"vote": "bad"})
+        client.post("/api/medias/3/vote", json={"target": "good"})
+        client.post("/api/medias/5/vote", json={"target": "bad"})
         resp = client.get("/api/votes")
         data = resp.get_json()
         assert 3 in data["good"]
@@ -120,8 +152,8 @@ class TestGetVotes:
 class TestClearVotes:
     def test_clear_votes_empties_good_and_bad(self, client):
         """POST /api/votes/clear should remove all votes."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         assert 1 in app_module.good_votes
         assert 2 in app_module.bad_votes
 
@@ -134,15 +166,15 @@ class TestClearVotes:
     def test_clear_votes_preserves_medias(self, client):
         """Clearing votes should not affect loaded medias."""
         num_before = len(medias)
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         resp = client.post("/api/votes/clear")
         assert resp.status_code == 200
         assert len(medias) == num_before
 
     def test_get_votes_empty_after_clear(self, client):
         """GET /api/votes should return empty lists after clear."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         client.post("/api/votes/clear")
         resp = client.get("/api/votes")
         data = resp.get_json()
@@ -152,37 +184,45 @@ class TestClearVotes:
 
 class TestLabelHistory:
     def test_vote_adds_history_entry(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert len(label_history) == 1
         assert label_history[0][0] == 1
         assert label_history[0][1] == "good"
 
-    def test_toggle_off_adds_unlabel_history(self, client):
-        """Toggling off a vote should record an 'unlabel' event."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+    def test_unvote_good_adds_unlabel_history(self, client):
+        """target=none on a good media should record an 'unlabel' event."""
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/1/vote", json={"target": "none"})
         assert len(label_history) == 2
         assert label_history[1][1] == "unlabel"
 
-    def test_toggle_off_bad_adds_unlabel_history(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+    def test_unvote_bad_adds_unlabel_history(self, client):
+        client.post("/api/medias/1/vote", json={"target": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "none"})
         assert len(label_history) == 2
         assert label_history[1][1] == "unlabel"
+
+    def test_idempotent_re_vote_does_not_grow_history(self, client):
+        """Re-sending the current state appends nothing to label_history (H1)."""
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        assert len(label_history) == 1
+        assert label_history[0][1] == "good"
 
     def test_switch_vote_adds_new_label_history(self, client):
         """Switching good->bad should add a 'bad' entry, not 'unlabel'."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(label_history) == 2
         assert label_history[0][1] == "good"
         assert label_history[1][1] == "bad"
 
-    def test_toggle_off_then_revote(self, client):
-        """Toggle off then revote should produce 3 history entries."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/1/vote", json={"vote": "good"})  # toggle off
-        client.post("/api/medias/1/vote", json={"vote": "bad"})  # revote bad
+    def test_unvote_then_revote(self, client):
+        """Un-vote then re-vote should produce 3 history entries."""
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/1/vote", json={"target": "none"})  # un-vote
+        client.post("/api/medias/1/vote", json={"target": "bad"})  # revote bad
         assert len(label_history) == 3
         assert label_history[0][1] == "good"
         assert label_history[1][1] == "unlabel"
@@ -195,15 +235,15 @@ class TestProgressCacheWithLabelChanges:
     """Verify the progress cache stays consistent when labels are changed."""
 
     def test_cache_removes_clip_on_unlabel(self, client):
-        """After toggling off, the progress cache should not include the media."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        """After un-voting, the progress cache should not include the media."""
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert 1 in _cache_good_ids
         assert 2 in _cache_bad_ids
 
-        # Toggle off media 1
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        # Un-vote media 1
+        client.post("/api/medias/1/vote", json={"target": "none"})
         _ensure_cache(medias, label_history, 0)
         assert 1 not in _cache_good_ids
         assert 1 not in _cache_bad_ids
@@ -211,48 +251,48 @@ class TestProgressCacheWithLabelChanges:
 
     def test_cache_handles_switch_vote(self, client):
         """Switching good->bad should update cache running sets correctly."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert 1 in _cache_good_ids
 
         # Switch media 1 from good to bad
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert 1 not in _cache_good_ids
         assert 1 in _cache_bad_ids
 
-    def test_cache_toggle_off_then_revote(self, client):
-        """Toggle off then revote should leave cache in correct state."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
-        # Toggle off media 1
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+    def test_cache_unvote_then_revote(self, client):
+        """Un-vote then re-vote should leave cache in correct state."""
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
+        # Un-vote media 1
+        client.post("/api/medias/1/vote", json={"target": "none"})
         # Revote as bad
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert 1 in _cache_bad_ids
         assert 1 not in _cache_good_ids
 
-    def test_learned_sort_after_toggle_off(self, client):
-        """Learned sort should work after toggling off a vote."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+    def test_learned_sort_after_unvote(self, client):
+        """Learned sort should work after un-voting a media."""
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
 
-        # Toggle off good vote, add a different good vote
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/3/vote", json={"vote": "good"})
+        # Un-vote the existing good, add a different good vote
+        client.post("/api/medias/1/vote", json={"target": "none"})
+        client.post("/api/medias/3/vote", json={"target": "good"})
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
 
-    def test_learned_sort_returns_400_after_toggling_all_good(self, client):
-        """If all good votes are toggled off, learned sort should return 400."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
-        # Toggle off the only good vote
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+    def test_learned_sort_returns_400_after_unvoting_all_good(self, client):
+        """If all good votes are removed, learned sort should return 400."""
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
+        # Un-vote the only good vote
+        client.post("/api/medias/1/vote", json={"target": "none"})
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
 
@@ -260,16 +300,16 @@ class TestProgressCacheWithLabelChanges:
         """labeling-status endpoint should not crash after label changes."""
         # Vote enough medias to get past the minimum threshold
         for i in range(1, 6):
-            client.post(f"/api/medias/{i}/vote", json={"vote": "good"})
+            client.post(f"/api/medias/{i}/vote", json={"target": "good"})
         for i in range(6, 11):
-            client.post(f"/api/medias/{i}/vote", json={"vote": "bad"})
+            client.post(f"/api/medias/{i}/vote", json={"target": "bad"})
 
         resp = client.get("/api/labeling-status")
         assert resp.status_code == 200
 
-        # Now toggle off a good vote and switch a bad vote
-        client.post("/api/medias/1/vote", json={"vote": "good"})  # toggle off
-        client.post("/api/medias/6/vote", json={"vote": "good"})  # switch bad->good
+        # Now un-vote a good and switch a bad vote
+        client.post("/api/medias/1/vote", json={"target": "none"})  # un-vote
+        client.post("/api/medias/6/vote", json={"target": "good"})  # switch bad->good
 
         resp = client.get("/api/labeling-status")
         assert resp.status_code == 200
@@ -289,85 +329,101 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         """Switching good→bad should keep steps before the media first appeared."""
         # Steps: 0=(3,good), 1=(4,bad), 2=(1,good), 3=(2,bad)
         # Media 1 first appears at step 2.
-        client.post("/api/medias/3/vote", json={"vote": "good"})
-        client.post("/api/medias/4/vote", json={"vote": "bad"})
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/3/vote", json={"target": "good"})
+        client.post("/api/medias/4/vote", json={"target": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 4
 
         # Switch media 1 from good to bad — steps 0-1 preserved, 2-3 discarded
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_cached_steps) == 2, "Steps before media 1's first appearance should be kept"
 
     def test_bad_to_good_truncates_from_first_appearance(self, client):
         """Switching bad→good should keep steps before the media first appeared."""
-        client.post("/api/medias/3/vote", json={"vote": "good"})
-        client.post("/api/medias/4/vote", json={"vote": "bad"})
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
-        client.post("/api/medias/2/vote", json={"vote": "good"})
+        client.post("/api/medias/3/vote", json={"target": "good"})
+        client.post("/api/medias/4/vote", json={"target": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
+        client.post("/api/medias/2/vote", json={"target": "good"})
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 4
 
         # Switch media 1 from bad to good — steps 0-1 preserved, 2-3 discarded
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert len(_cached_steps) == 2, "Steps before media 1's first appearance should be kept"
 
     def test_first_vote_switch_clears_entire_cache(self, client):
         """If the switched media was in the very first step, full clear occurs."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 2
 
         # Switch media 1 (present from step 0) — full clear
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_cached_steps) == 0, "Cache should be fully cleared when media was in step 0"
 
-    def test_toggle_off_does_not_clear_cache(self, client):
-        """Toggling a vote OFF (unlabeling) should NOT clear the progress cache."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+    def test_unvote_invalidates_cache_from_first_appearance(self, client):
+        """Un-voting (X→none) now invalidates the progress cache from the
+        media's first appearance — same rule as polarity flips (H1 cache-
+        invalidation fix).  Previously cache was retained, leaving cached
+        models trained against a label the user has since withdrawn.
+        """
+        # Steps: 0=(3,good), 1=(4,bad), 2=(1,good)
+        client.post("/api/medias/3/vote", json={"target": "good"})
+        client.post("/api/medias/4/vote", json={"target": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 3
+
+        # Un-vote media 1 (first appears at step 2) — keep 2 earlier steps.
+        client.post("/api/medias/1/vote", json={"target": "none"})
+        assert len(_cached_steps) == 2
+
+    def test_unvote_clears_cache_when_media_was_in_first_step(self, client):
+        """If the un-voted media was in step 0, the full cache is cleared."""
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 2
 
-        # Toggle off media 1 (good→unlabel) — cache should NOT be cleared
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        assert len(_cached_steps) > 0, "Cache should not be cleared on simple toggle-off"
+        client.post("/api/medias/1/vote", json={"target": "none"})
+        assert len(_cached_steps) == 0, "Cache should be fully cleared when media was in step 0"
 
     def test_new_vote_does_not_clear_cache(self, client):
         """Adding a brand-new vote (no prior label) should NOT clear the cache."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 2
 
         # Add a new good vote on media 3 (no prior label)
-        client.post("/api/medias/3/vote", json={"vote": "good"})
+        client.post("/api/medias/3/vote", json={"target": "good"})
         assert len(_cached_steps) == 2, "Cache should not be cleared when adding a new vote"
 
     def test_live_models_cleared_on_switch(self, client):
         """Live models from learned-sort should also be cleared on a vote switch."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
         assert len(_live_models) > 0
 
         # Switch media 1 from good to bad — live models should be cleared
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_live_models) == 0, "Live models should be cleared on vote switch"
 
     def test_running_ids_restored_after_truncation(self, client):
         """After partial truncation, _cache_good_ids/_cache_bad_ids match the last kept step."""
-        client.post("/api/medias/3/vote", json={"vote": "good"})
-        client.post("/api/medias/4/vote", json={"vote": "bad"})
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/3/vote", json={"target": "good"})
+        client.post("/api/medias/4/vote", json={"target": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
 
         # Switch media 1 — truncates to 2 steps (steps 0-1)
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_cached_steps) == 2
         # Running ID sets should match step 1's state: good={3}, bad={4}
         assert 3 in _cache_good_ids
@@ -377,15 +433,15 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
 
     def test_cache_rebuilds_correctly_after_partial_truncation(self, client):
         """After partial invalidation, _ensure_cache replays from the truncation point."""
-        client.post("/api/medias/3/vote", json={"vote": "good"})
-        client.post("/api/medias/4/vote", json={"vote": "bad"})
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/3/vote", json={"target": "good"})
+        client.post("/api/medias/4/vote", json={"target": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 4
 
         # Switch media 1 from good to bad — truncates to 2 steps
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_cached_steps) == 2
 
         # Rebuild cache — should replay from step 2 onward
@@ -398,23 +454,23 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
     def test_labeling_progress_works_after_switch(self, client):
         """The /api/labeling-progress endpoint should work after a vote switch."""
         for i in range(1, 6):
-            client.post(f"/api/medias/{i}/vote", json={"vote": "good"})
+            client.post(f"/api/medias/{i}/vote", json={"target": "good"})
         for i in range(6, 11):
-            client.post(f"/api/medias/{i}/vote", json={"vote": "bad"})
+            client.post(f"/api/medias/{i}/vote", json={"target": "bad"})
 
         resp = client.post("/api/labeling-progress")
         assert resp.status_code == 200
 
         # Switch a vote
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
 
         resp = client.post("/api/labeling-progress")
         assert resp.status_code == 200
 
     def test_invalidate_noop_when_media_not_in_cache(self, client):
         """invalidate_progress_cache_from should be a no-op for unknown media."""
-        client.post("/api/medias/1/vote", json={"vote": "good"})
-        client.post("/api/medias/2/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 2
 

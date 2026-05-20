@@ -230,14 +230,14 @@ class TestVoteUpdatesTree:
     def test_good_vote_labels_tree(self, client):
         tree = _build_tree()
         cid = 1
-        resp = client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
+        resp = client.post(f"/api/medias/{cid}/vote", json={"target": "good"})
         assert resp.status_code == 200
         assert cid in tree.labeled_ids
 
     def test_bad_vote_labels_tree(self, client):
         tree = _build_tree()
         cid = 2
-        resp = client.post(f"/api/medias/{cid}/vote", json={"vote": "bad"})
+        resp = client.post(f"/api/medias/{cid}/vote", json={"target": "bad"})
         assert resp.status_code == 200
         assert cid in tree.labeled_ids
 
@@ -245,20 +245,20 @@ class TestVoteUpdatesTree:
         tree = _build_tree()
         cid = 1
         # Vote good
-        client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{cid}/vote", json={"target": "good"})
         assert cid in tree.labeled_ids
         # Toggle good off (unlabel)
-        client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{cid}/vote", json={"target": "good"})
         assert cid not in tree.labeled_ids
 
     def test_switch_vote_keeps_labeled(self, client):
         """Switching from good to bad should keep the media labeled."""
         tree = _build_tree()
         cid = 3
-        client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{cid}/vote", json={"target": "good"})
         assert cid in tree.labeled_ids
         # Switch to bad
-        client.post(f"/api/medias/{cid}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{cid}/vote", json={"target": "bad"})
         assert cid in tree.labeled_ids
 
 
@@ -318,7 +318,7 @@ class TestSpanLevelProgression:
             sample = diversity_tree_next_sample()
             if sample is None:
                 break
-            resp = client.post(f"/api/medias/{sample}/vote", json={"vote": "good"})
+            resp = client.post(f"/api/medias/{sample}/vote", json={"target": "good"})
             assert resp.status_code == 200
 
         # After voting on diverse medias, the level should have advanced past 1
@@ -444,9 +444,9 @@ class TestDiversityLevelOverTime:
         cids = sorted(tree.vector_to_leaf.keys())[:6]
         for i, cid in enumerate(cids):
             if i % 2 == 0:
-                client.post(f"/api/medias/{cid}/vote", json={"vote": "good"})
+                client.post(f"/api/medias/{cid}/vote", json={"target": "good"})
             else:
-                client.post(f"/api/medias/{cid}/vote", json={"vote": "bad"})
+                client.post(f"/api/medias/{cid}/vote", json={"target": "bad"})
 
         # Record the diversity level before the switch
         resp = client.post("/api/labeling-progress")
@@ -457,7 +457,7 @@ class TestDiversityLevelOverTime:
 
         # Switch the last bad vote to good (polarity switch triggers cache invalidation)
         switch_cid = cids[1]  # was voted bad
-        client.post(f"/api/medias/{switch_cid}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{switch_cid}/vote", json={"target": "good"})
 
         # Fetch diversity history again — no entry should be below the pre-switch peak
         resp = client.post("/api/labeling-progress")

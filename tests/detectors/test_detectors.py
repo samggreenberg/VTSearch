@@ -466,14 +466,14 @@ class TestSaveLabels:
 
         # Cast a good vote on the first media
         first_id = next(iter(medias))
-        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
 
         # Cast a bad vote on the second media
         media_ids = list(medias.keys())
         if len(media_ids) < 2:
             pytest.skip("Need at least 2 medias")
         second_id = media_ids[1]
-        client.post(f"/api/medias/{second_id}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{second_id}/vote", json={"target": "bad"})
 
         client.post(
             "/api/detectors",
@@ -598,7 +598,7 @@ class TestSaveLabels:
             ],
         }
         try:
-            client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+            client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
             client.post("/api/detectors", json={"name": "DupeTest", "media_type": "audio", "text_query": "test"})
 
             res = client.post("/api/detectors/DupeTest/labels")
@@ -638,8 +638,8 @@ class TestLabelVoteIsolation:
         client.post("/api/detectors", json={"name": "Model B", "media_type": "audio", "text_query": "b"})
 
         # Simulate labeling with Model A: vote on ids[0] and ids[1]
-        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"target": "bad"})
         client.post("/api/detectors/Model%20A/labels")  # save 2 labels
 
         # Now clear votes (as the Label button should do) and import Model B's labels
@@ -669,13 +669,13 @@ class TestLabelVoteIsolation:
 
         # Create model and label 2 items
         client.post("/api/detectors", json={"name": "Target", "media_type": "audio", "text_query": "t"})
-        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"target": "bad"})
         client.post("/api/detectors/Target/labels")
 
         # Add extra votes that DON'T belong to the model (simulating stale state)
-        client.post(f"/api/medias/{ids[2]}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{ids[3]}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{ids[2]}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{ids[3]}/vote", json={"target": "bad"})
         assert len(good_votes) == 2  # ids[0] + ids[2]
         assert len(bad_votes) == 2  # ids[1] + ids[3]
 
@@ -812,8 +812,8 @@ class TestLoadModelEndpoint:
 
         # Load model A and cast some votes.
         _load_detector_and_wait(client, mid_a)
-        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"target": "bad"})
         assert ids[0] in good_votes
         assert ids[1] in bad_votes
 
@@ -845,7 +845,7 @@ class TestLoadModelEndpoint:
         )
         mid = res.get_json()["detector"]["id"]
         _load_detector_and_wait(client, mid)
-        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"target": "good"})
         # Labels auto-sync on vote, so the detector file now has 1 label.
 
         # Unload to clear votes, then reload — label should be restored.
@@ -900,8 +900,8 @@ class TestLoadModelEndpoint:
 
         # Vote in dataset A.  Persists to good_votes/bad_votes and to the
         # detector's on-disk labelset via sync_labels_to_loaded_detector.
-        client.post(f"/api/medias/{a_good}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{a_bad}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{a_good}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{a_bad}/vote", json={"target": "bad"})
         assert a_good in good_votes
         assert a_bad in bad_votes
 
@@ -960,7 +960,7 @@ class TestVoteSyncsToLoadedModel:
 
         # Cast a vote
         first_id = next(iter(medias))
-        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
 
         # Check that the model's labelset was updated
         model_data = client.get("/api/detectors/AutoSync").get_json()
@@ -994,12 +994,12 @@ class TestVoteSyncsToLoadedModel:
 
         first_id = next(iter(medias))
         # Vote good
-        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
         model_data = client.get("/api/detectors/ToggleSync").get_json()
         assert len(model_data["labelset"]["labels"]) == 1
 
-        # Toggle off (vote good again)
-        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        # Un-vote (absolute target=none)
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "none"})
         model_data = client.get("/api/detectors/ToggleSync").get_json()
         assert len(model_data["labelset"]["labels"]) == 0
 
@@ -1016,7 +1016,7 @@ class TestVoteSyncsToLoadedModel:
         )
 
         first_id = next(iter(medias))
-        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
 
         # Model should still have empty labelset
         model_data = client.get("/api/detectors/NoSync").get_json()
@@ -1255,7 +1255,7 @@ class TestSeedVotesFromExamples:
         # Make sure we don't vote bad on the newly inserted item
         new_id = max(medias.keys())
         target_id = first_id if first_id != new_id else list(medias.keys())[1]
-        client.post(f"/api/medias/{target_id}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{target_id}/vote", json={"target": "bad"})
         assert len(bad_votes) >= 1
 
         # Learned sort should work — it accesses the embedding from the inserted media
