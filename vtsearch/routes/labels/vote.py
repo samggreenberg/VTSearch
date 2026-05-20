@@ -313,9 +313,7 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
     good_hits = [
         build_media_hit(e["id"], snap_medias.get(e["id"], {}), e["score"], label="good") for e in good_candidates
     ]
-    bad_hits = [
-        build_media_hit(e["id"], snap_medias.get(e["id"], {}), e["score"], label="bad") for e in bad_candidates
-    ]
+    bad_hits = [build_media_hit(e["id"], snap_medias.get(e["id"], {}), e["score"], label="bad") for e in bad_candidates]
 
     media_type = "unknown"
     for media in snap_medias.values():

@@ -106,9 +106,7 @@ _DEFAULT_MIMETYPE_BY_TYPE = {
 @detectors_labels_bp.route("/api/detectors/<name>/labels", methods=["POST"])
 @detectors_labels_bp.response(200, DetectorSaveLabelsResponseSchema)
 @detectors_labels_bp.alt_response(404, description="Detector not found.")
-@detectors_labels_bp.alt_response(
-    409, description="Detector vote state is not aligned with the active dataset."
-)
+@detectors_labels_bp.alt_response(409, description="Detector vote state is not aligned with the active dataset.")
 def save_detector_labels(name: str):
     """Save the current votes as the detector's labelset.
 

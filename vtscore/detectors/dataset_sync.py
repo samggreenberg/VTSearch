@@ -14,11 +14,10 @@ elements are keyed by origin / md5).  This module re-derives the cid dicts
 from that labelset whenever the active dataset has changed.
 
 The companion helper :func:`validated_vote_snapshot` extends that defense to
-read/write paths: it runs the rehydrate and then atomically copies the active
-dataset's medias and the active detector's vote dicts under a single
-``_state_lock`` acquisition, so a concurrent rehydrate on the same detector
-against a different dataset can't slip in between the rehydrate and the
-composition.
+read/write paths: it atomically copies the active dataset's medias and the
+active detector's vote dicts under a single ``_state_lock`` acquisition, so
+a concurrent rehydrate on the same detector against a different dataset
+can't slip in between the (request-boundary) rehydrate and the composition.
 """
 
 from __future__ import annotations
@@ -220,11 +219,7 @@ def validated_vote_snapshot() -> VoteSnapshot:
         # The remaining case — non-empty ``votes_dataset_id`` that doesn't
         # match the active dataset — is the race / stale-state scenario and
         # is the only one we refuse to compose for.
-        if (
-            det_ctx.detector_id
-            and det_ctx.votes_dataset_id
-            and det_ctx.votes_dataset_id != ds_ctx.dataset_id
-        ):
+        if det_ctx.detector_id and det_ctx.votes_dataset_id and det_ctx.votes_dataset_id != ds_ctx.dataset_id:
             return VoteSnapshot(snap, {}, {}, {}, safe=False)
         return VoteSnapshot(
             snap,
