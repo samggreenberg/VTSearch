@@ -2677,6 +2677,16 @@
           "applied": {
             "type": "integer"
           },
+          "failed": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "failed_count": {
+            "type": "integer"
+          },
           "ingested": {
             "type": "integer"
           },
@@ -2686,6 +2696,8 @@
         },
         "required": [
           "applied",
+          "failed",
+          "failed_count",
           "ingested",
           "message"
         ],

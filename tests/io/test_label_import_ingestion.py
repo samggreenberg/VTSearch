@@ -7,6 +7,8 @@ Covers:
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 
 # ---------------------------------------------------------------------------
 # API – POST /api/label-importers/ingest-missing
@@ -58,6 +60,51 @@ class TestIngestMissingEndpoint:
         assert res.status_code == 200
         result = res.get_json()
         assert result["ingested"] == 0
+
+    def test_partial_failure_is_reported_not_500(self, client):
+        """``ingest-missing`` shares the H31 partial-failure semantics with the
+        importer route: a single bad entry must not abort the whole batch,
+        and the response carries a ``failed`` list instead of bubbling a 500.
+        """
+        import app as app_module
+
+        md5_1 = app_module.medias[1]["md5"]
+        md5_2 = app_module.medias[2]["md5"]
+        entries = [
+            {"md5": md5_1, "label": "good"},
+            {"md5": md5_2, "label": "good"},
+        ]
+
+        from vtsearch.routes.labels import importers as importers_module
+
+        def flaky_apply(cid, label, **kwargs):
+            if cid == 2:
+                raise RuntimeError("simulated failure")
+            from vtscore.state.votes import apply_label as inner
+
+            inner(cid, label, **kwargs)
+
+        saved_good = dict(app_module.good_votes)
+        saved_bad = dict(app_module.bad_votes)
+        app_module.good_votes.clear()
+        app_module.bad_votes.clear()
+        try:
+            with patch.object(importers_module, "apply_label", side_effect=flaky_apply):
+                res = client.post(
+                    "/api/label-importers/ingest-missing",
+                    json={"entries": entries},
+                )
+            assert res.status_code == 200
+            result = res.get_json()
+            assert result["applied"] == 1
+            assert result["failed_count"] == 1
+            assert len(result["failed"]) == 1
+            assert result["failed"][0]["entry"]["md5"] == md5_2
+        finally:
+            app_module.good_votes.clear()
+            app_module.bad_votes.clear()
+            app_module.good_votes.update(saved_good)
+            app_module.bad_votes.update(saved_bad)
 
 
 # ---------------------------------------------------------------------------

@@ -137,8 +137,14 @@ export class LabelImporterModalComponent implements OnInit {
           // Show unresolved elements as a warning but don't prompt — the
           // backend already tried to auto-resolve them.
           this.error = `${res.missing_count} element(s) could not be resolved from their original sources.`;
+        } else if (res.failed_count > 0) {
+          // Per-entry application failures (logical-bug-audit H31) — the
+          // import partially landed and the user should know which entries
+          // need to be retried.
+          this.error = `${res.failed_count} element(s) failed to apply. The remaining labels were applied successfully.`;
         }
-        setTimeout(() => this.close(), res.missing_count > 0 ? 3000 : 1500);
+        const hasIssue = res.missing_count > 0 || res.failed_count > 0;
+        setTimeout(() => this.close(), hasIssue ? 3000 : 1500);
       },
       error: (err) => {
         this.submitting = false;
