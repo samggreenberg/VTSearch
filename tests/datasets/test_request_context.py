@@ -96,6 +96,8 @@ class TestRequestScopedDataset:
         from vtscore.state.core import DatasetNotLoadedError
 
         _make_dataset("req_fallback", [300])
+        # Thread-local set to a *real* dataset — the resolver must still
+        # raise because the request explicitly named an unloaded id.
         set_thread_dataset_context(get_context("req_fallback"))
 
         from app import app
@@ -357,3 +359,130 @@ class TestQueryParamContext:
             app.preprocess_request()
             assert get_active_context().dataset_id == "qp_hdr"
             assert 3000 in medias
+
+
+# ---------------------------------------------------------------------------
+# Tests: Request-missing sentinel (audit fix H13)
+# ---------------------------------------------------------------------------
+
+
+class TestRequestMissingSentinel:
+    """When a Flask request can't identify a dataset/detector (header
+    dropped *and* no thread-local pin), the proxy chain returns a frozen
+    sentinel — reads see an empty context but every mutation raises
+    ``RequestMissingContextError``.  This prevents silent-mistarget bugs
+    where a vote (or label, pile-add, …) accumulates on the global empty
+    context because the client dropped the header (H13).
+
+    The unloaded-id case is covered separately by H16 via
+    ``DatasetNotLoadedError`` / ``DetectorNotLoadedError`` raised at proxy
+    access (see ``TestRequestScopedDataset.test_header_with_unloaded_id_*``).
+    """
+
+    def test_no_header_and_no_thread_local_returns_dataset_sentinel(self, client):
+        """Inside a request with no header and no thread-local context,
+        ``get_active_context()`` returns the dataset sentinel."""
+        from vtscore.state.core import is_request_missing_dataset_context, set_thread_dataset_context
+
+        # Drop the test fixture's thread-local default — we want the
+        # "production-like" path where the request thread has nothing
+        # cached.
+        set_thread_dataset_context(None)
+
+        from app import app
+
+        with app.test_request_context():
+            app.preprocess_request()
+            ctx = get_active_context()
+            assert is_request_missing_dataset_context(ctx)
+            # Reads work — empty container, not a crash.
+            assert len(medias) == 0
+
+    def test_no_header_and_no_thread_local_returns_detector_sentinel(self, client):
+        """Symmetric to the dataset case: the detector sentinel is returned
+        when the request didn't identify a detector and nothing is pinned
+        on the thread."""
+        from vtscore.state.core import is_request_missing_detector_context, set_thread_detector_context
+
+        set_thread_detector_context(None)
+
+        from app import app
+
+        with app.test_request_context():
+            app.preprocess_request()
+            ctx = get_active_detector_context()
+            assert is_request_missing_detector_context(ctx)
+            assert len(good_votes) == 0
+            assert len(bad_votes) == 0
+
+    def test_dataset_sentinel_mutation_raises(self, client):
+        """Writing into the sentinel's medias dict raises
+        ``RequestMissingContextError``."""
+        import pytest
+
+        from vtscore.state.core import RequestMissingContextError, set_thread_dataset_context
+
+        set_thread_dataset_context(None)
+
+        from app import app
+
+        with app.test_request_context():
+            app.preprocess_request()
+            ctx = get_active_context()
+            with pytest.raises(RequestMissingContextError):
+                ctx.medias[42] = {"id": 42, "type": "audio"}
+            with pytest.raises(RequestMissingContextError):
+                ctx.diversity_tree = object()
+
+    def test_detector_sentinel_mutation_raises(self, client):
+        """Writing into the sentinel's vote dicts raises
+        ``RequestMissingContextError`` — closes the H14-style empty-detector
+        pollution path where votes accumulated on the global fallback."""
+        import pytest
+
+        from vtscore.state.core import RequestMissingContextError, set_thread_detector_context
+
+        set_thread_detector_context(None)
+
+        from app import app
+
+        with app.test_request_context():
+            app.preprocess_request()
+            ctx = get_active_detector_context()
+            with pytest.raises(RequestMissingContextError):
+                ctx.good_votes[1] = None
+            with pytest.raises(RequestMissingContextError):
+                ctx.bad_votes[1] = None
+            with pytest.raises(RequestMissingContextError):
+                ctx.label_history.append((1, "good", 0.0))
+            with pytest.raises(RequestMissingContextError):
+                ctx.click_counter = 5
+
+    def test_vote_endpoint_returns_4xx_without_dataset_header(self, client):
+        """``POST /api/medias/<id>/vote`` does not silently 200 when the
+        request didn't identify a dataset/detector and nothing's pinned
+        on the thread.
+
+        The route looks up ``get_media(id)`` first — that resolves to the
+        sentinel's empty ``medias`` and returns ``None``, so the route's
+        own ``abort(404, "not found")`` actually fires before any
+        mutation happens.  This test pins the safe-fail contract so a
+        future refactor that bypasses the lookup still fails loudly via
+        the sentinel's frozen vote dicts.
+
+        (The unloaded-id case is covered separately by H16 via
+        ``DatasetNotLoadedError`` → 409.)
+        """
+        from vtscore.state.core import set_thread_dataset_context, set_thread_detector_context
+
+        set_thread_dataset_context(None)
+        set_thread_detector_context(None)
+
+        # Absolute-target vote API (H1) — body is {"target": ...}, not
+        # {"vote": ...}.
+        resp = client.post("/api/medias/42/vote", json={"target": "good"})
+        # Either the get_media-is-None branch (404) or the
+        # RequestMissingContextError errorhandler (400) — both are
+        # acceptable safe-fail behaviour.  What matters is that we did
+        # not silently apply the vote (which would be 200).
+        assert resp.status_code in (400, 404)

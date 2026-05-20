@@ -59,6 +59,29 @@ def _flask_detector_context_resolver() -> Any:
     return ctx
 
 
+def _flask_in_request_handler_predicate() -> bool:
+    """Return True while a Flask route handler is actively running.
+
+    ``has_request_context()`` alone is too coarse: Flask's test client
+    preserves the popped request context inside ``with app.test_client()
+    as c:`` blocks so the caller can inspect ``session`` / ``g`` after
+    the response. Inside that preserved window we are no longer "in a
+    request" — code that mutates state (e.g. a test's
+    ``app_module.medias.update(saved)`` restore in ``finally``) should
+    write to the real context, not refuse via the request-missing
+    sentinel.
+
+    The ``before_request`` hook in ``app.py`` sets
+    ``g._vts_in_request_handler = True``; ``teardown_request`` clears it
+    back to ``False`` before the test client's preserved window opens.
+    """
+    from flask import g, has_request_context
+
+    if not has_request_context():
+        return False
+    return bool(getattr(g, "_vts_in_request_handler", False))
+
+
 def register_flask_context_resolvers() -> None:
     """Install Flask-aware request-context resolvers on ``vtscore.state.core``.
 
@@ -66,14 +89,23 @@ def register_flask_context_resolvers() -> None:
     ``good_votes`` proxies and the ``get_active_*_context()`` helpers
     pick up whatever the ``before_request`` hook stashes on ``g`` for
     the duration of each request.
+
+    Also installs :func:`flask.has_request_context` as the request-context
+    predicate so :func:`vtscore.state.core.get_active_context` returns the
+    frozen request-missing sentinel (rather than the global empty
+    context) when a request arrives without an ``X-Dataset-Id`` /
+    ``X-Detector-Id`` header — see ``docs/plans/logical-bug-audit.md``
+    H13 / H16.
     """
     from vtscore.state.core import (
         register_dataset_context_resolver,
         register_detector_context_resolver,
+        register_request_context_predicate,
     )
 
     register_dataset_context_resolver(_flask_dataset_context_resolver)
     register_detector_context_resolver(_flask_detector_context_resolver)
+    register_request_context_predicate(_flask_in_request_handler_predicate)
 
 
 def register_app_persistence_hooks() -> None:

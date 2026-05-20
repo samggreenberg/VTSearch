@@ -231,6 +231,12 @@ def _set_request_context():
         get_detector_context,
     )
 
+    # Pin a marker so the request-missing-context predicate can distinguish
+    # "actively inside a route handler" from "Flask test client is still
+    # preserving the popped request context for inspection". Cleared in
+    # teardown_request below.
+    g._vts_in_request_handler = True
+
     try:
         # Headers (Angular HttpClient interceptor) take priority, with query
         # params as fallback for browser-native requests (<img src>,
@@ -279,6 +285,17 @@ def _set_request_context():
 # ---------------------------------------------------------------------------
 # Prevent browser caching of API responses
 # ---------------------------------------------------------------------------
+
+
+@app.teardown_request
+def _clear_in_request_handler_marker(exc):  # noqa: ARG001
+    """Clear the in-handler marker so the request-missing predicate
+    doesn't fire while Flask's test client is preserving a popped
+    request context after the response."""
+    from flask import g, has_request_context
+
+    if has_request_context():
+        g._vts_in_request_handler = False
 
 
 @app.after_request
@@ -376,6 +393,29 @@ def _handle_detector_not_loaded(exc):
         detector_id=exc.detector_id,
         code="detector_not_loaded",
     )
+
+
+from vtscore.state.core import RequestMissingContextError as _RequestMissingContextError
+
+
+@app.errorhandler(_RequestMissingContextError)
+def _handle_request_missing_context(exc):
+    """Convert ``RequestMissingContextError`` into a clean 400.
+
+    Raised by the frozen ``_RequestMissingDatasetContext`` /
+    ``_RequestMissingDetectorContext`` sentinels when a mutation endpoint
+    was hit without an ``X-Dataset-Id`` / ``X-Detector-Id`` header and no
+    thread-local pinned context exists. The unloaded-id case is handled
+    separately by :func:`_handle_dataset_not_loaded` /
+    :func:`_handle_detector_not_loaded` (409 with a specific code). See
+    ``docs/plans/logical-bug-audit.md`` H13.
+    """
+    from flask import request as _req
+    from vtsearch.routes._shared import error_response
+
+    if not _req.path.startswith("/api/"):
+        raise exc
+    return error_response(str(exc), 400)
 
 
 @app.errorhandler(Exception)

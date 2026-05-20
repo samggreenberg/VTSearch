@@ -65,6 +65,148 @@ class DetectorNotLoadedError(LookupError):
 
 
 # ---------------------------------------------------------------------------
+# Request-missing sentinel — frozen empty context returned when a Flask
+# request didn't identify a dataset/detector (missing header or unloaded id).
+# Reads see an empty context (so non-mutating endpoints continue working);
+# any mutation raises ``RequestMissingContextError`` immediately so the
+# silent-mistarget failure modes flagged by H13/H16 fail loudly instead.
+# ---------------------------------------------------------------------------
+
+
+class RequestMissingContextError(RuntimeError):
+    """Raised when code tries to mutate the request-missing context sentinel.
+
+    The sentinel is what :func:`get_active_context` /
+    :func:`get_active_detector_context` return inside a Flask request when
+    the client didn't identify a dataset/detector — either the
+    ``X-Dataset-Id`` / ``X-Detector-Id`` header was missing, or it named an
+    unloaded id.  Reads against the sentinel see an empty context (so
+    listing/dashboard endpoints keep working); writes hit this exception so
+    votes / labels / pile additions cannot silently land on the wrong
+    target.
+    """
+
+
+def _frozen_mutation_error(kind: str) -> RequestMissingContextError:
+    return RequestMissingContextError(
+        f"Refusing to mutate the request-missing {kind} context. "
+        f"This Flask request did not identify a {kind} (missing "
+        f"X-{kind.capitalize()}-Id header / query param, or it named an "
+        f"unloaded id). Mutation endpoints must identify the {kind} "
+        f"explicitly."
+    )
+
+
+class _FrozenDict(dict):  # type: ignore[type-arg]
+    """A ``dict`` that allows reads but raises on every mutation."""
+
+    __slots__ = ("_kind",)
+
+    def __init__(self, kind: str) -> None:
+        super().__init__()
+        # Bypass our own __setattr__ — dict subclasses don't get one by
+        # default, but be explicit so adding one later doesn't break this.
+        object.__setattr__(self, "_kind", kind)
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def __delitem__(self, key: Any) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def update(self, *a: Any, **k: Any) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def setdefault(self, *a: Any, **k: Any) -> Any:
+        raise _frozen_mutation_error(self._kind)
+
+    def pop(self, *a: Any, **k: Any) -> Any:
+        raise _frozen_mutation_error(self._kind)
+
+    def popitem(self) -> Any:
+        raise _frozen_mutation_error(self._kind)
+
+    def clear(self) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+
+class _FrozenList(list):  # type: ignore[type-arg]
+    """A ``list`` that allows reads but raises on every mutation."""
+
+    __slots__ = ("_kind",)
+
+    def __init__(self, kind: str) -> None:
+        super().__init__()
+        object.__setattr__(self, "_kind", kind)
+
+    def append(self, *a: Any, **k: Any) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def extend(self, *a: Any, **k: Any) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def insert(self, *a: Any, **k: Any) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def remove(self, *a: Any, **k: Any) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def pop(self, *a: Any, **k: Any) -> Any:
+        raise _frozen_mutation_error(self._kind)
+
+    def clear(self) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def __setitem__(self, *a: Any, **k: Any) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def __delitem__(self, *a: Any, **k: Any) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def __iadd__(self, *a: Any, **k: Any) -> Any:
+        raise _frozen_mutation_error(self._kind)
+
+    def __imul__(self, *a: Any, **k: Any) -> Any:
+        raise _frozen_mutation_error(self._kind)
+
+    def sort(self, *a: Any, **k: Any) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+    def reverse(self) -> None:
+        raise _frozen_mutation_error(self._kind)
+
+
+# ---------------------------------------------------------------------------
+# Flask-request predicate hook
+# ---------------------------------------------------------------------------
+# Returns True when execution is inside a Flask request that should be
+# refused if no explicit dataset/detector was identified.  The vtscore
+# library stays Flask-free; the Flask shim registers
+# ``flask.has_request_context`` here at app startup.  Outside Flask
+# (CLI, library callers, background threads), the default ``lambda: False``
+# stays in place so :func:`get_active_context` keeps falling back to the
+# empty context as before.
+def _default_request_context_predicate() -> bool:
+    return False
+
+
+_request_context_predicate: Callable[[], bool] = _default_request_context_predicate
+
+
+def register_request_context_predicate(fn: Callable[[], bool]) -> None:
+    """Install the predicate used to decide whether to return the
+    request-missing sentinel instead of the empty fallback context.
+
+    The Flask shim wires this to :func:`flask.has_request_context` at
+    startup so that a Flask request without an identified dataset/detector
+    sees the frozen sentinel (which fails loudly on mutation) rather than
+    silently landing on the empty global fallback.
+    """
+    global _request_context_predicate
+    _request_context_predicate = fn
+
+
+# ---------------------------------------------------------------------------
 # Pluggable per-request context resolvers
 # ---------------------------------------------------------------------------
 # In the Flask app, the ``before_request`` hook resolves an
@@ -271,6 +413,42 @@ _thread_local = threading.local()
 _empty_dataset_context = DatasetContext("")
 
 
+class _RequestMissingDatasetContext(DatasetContext):
+    """Sentinel returned inside a Flask request when no dataset was identified.
+
+    Behaves as an empty :class:`DatasetContext` for reads, but every
+    container is a :class:`_FrozenDict` / :class:`_FrozenList` that raises
+    :class:`RequestMissingContextError` on any mutation, and the context
+    itself refuses attribute assignment.  This converts the "header was
+    dropped and we silently fell back to the empty global context"
+    failure mode (audit bugs H13 / H16) into a loud error at the actual
+    write site.
+    """
+
+    __slots__ = ()
+
+    def __init__(self) -> None:
+        # Use object.__setattr__ to bypass our own write guard while
+        # initialising the slot values.
+        object.__setattr__(self, "dataset_id", "__request_missing__")
+        object.__setattr__(self, "medias", _FrozenDict("dataset"))
+        object.__setattr__(self, "diversity_tree", None)
+        object.__setattr__(self, "dataset_display_name", None)
+        object.__setattr__(self, "_emb_matrix_ids", None)
+        object.__setattr__(self, "_emb_matrix", None)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise _frozen_mutation_error("dataset")
+
+
+_request_missing_dataset_context = _RequestMissingDatasetContext()
+
+
+def is_request_missing_dataset_context(ctx: Any) -> bool:
+    """Return True iff *ctx* is the request-missing dataset sentinel."""
+    return ctx is _request_missing_dataset_context
+
+
 def get_active_context() -> DatasetContext:
     """Return the ``DatasetContext`` for the current execution context.
 
@@ -278,7 +456,12 @@ def get_active_context() -> DatasetContext:
     1. Request-scoped context (set by ``before_request`` from ``X-Dataset-Id`` header)
     2. Thread-local context (set by ``set_thread_dataset_context`` — for
        background threads and tests)
-    3. Empty fallback context
+    3. Request-missing sentinel — when inside a Flask request that didn't
+       identify a dataset (registered via
+       :func:`register_request_context_predicate`).  Reads see an empty
+       context; writes raise :class:`RequestMissingContextError`.
+    4. Empty fallback context — for CLI / library callers outside any
+       Flask request.
     """
     # 1. Per-request override (Flask shim or whatever the host app registered)
     req_ctx = _dataset_context_resolver()
@@ -288,6 +471,11 @@ def get_active_context() -> DatasetContext:
     ctx = getattr(_thread_local, "dataset_context", None)
     if ctx is not None:
         return ctx
+    # 3. Inside a Flask request with no header and no thread-local → fail
+    #    loudly on mutation instead of silently writing into the global
+    #    empty context.
+    if _request_context_predicate():
+        return _request_missing_dataset_context
     return _empty_dataset_context
 
 
@@ -356,6 +544,63 @@ _detector_contexts: dict[str, DetectorContext] = {}
 _empty_detector_context = DetectorContext("")
 
 
+class _RequestMissingDetectorContext(DetectorContext):
+    """Sentinel returned inside a Flask request when no detector was identified.
+
+    Counterpart of :class:`_RequestMissingDatasetContext`: every container
+    is frozen and the context refuses attribute assignment.  Without this
+    sentinel, vote-mutation endpoints called without ``X-Detector-Id``
+    would silently accumulate votes on the global
+    ``_empty_detector_context`` (audit bug H13 / H14).
+    """
+
+    __slots__ = ()
+
+    def __init__(self) -> None:
+        object.__setattr__(self, "detector_id", "__request_missing__")
+        object.__setattr__(self, "name", "")
+        object.__setattr__(self, "media_type", "")
+        object.__setattr__(self, "embedder", "")
+        object.__setattr__(self, "good_votes", _FrozenDict("detector"))
+        object.__setattr__(self, "bad_votes", _FrozenDict("detector"))
+        object.__setattr__(self, "label_history", _FrozenList("detector"))
+        object.__setattr__(self, "vote_click_times", _FrozenDict("detector"))
+        object.__setattr__(self, "vote_region_boxes", _FrozenDict("detector"))
+        object.__setattr__(self, "click_counter", 0)
+        object.__setattr__(self, "last_learned_scores", _FrozenDict("detector"))
+        object.__setattr__(self, "textsort_suggestions", _FrozenList("detector"))
+        object.__setattr__(self, "find_initial_labels", _FrozenDict("detector"))
+        object.__setattr__(self, "inclusion", None)
+        object.__setattr__(self, "training_medias", _FrozenDict("detector"))
+        object.__setattr__(self, "label_embeddings", _FrozenDict("detector"))
+        object.__setattr__(self, "model", None)
+        object.__setattr__(self, "threshold", 0.5)
+        object.__setattr__(self, "labelset_good_count", 0)
+        object.__setattr__(self, "labelset_bad_count", 0)
+        object.__setattr__(self, "votes_dataset_id", "")
+        object.__setattr__(self, "cached_labelset", None)
+        object.__setattr__(self, "cached_labelset_mtime", 0.0)
+        object.__setattr__(self, "cached_labelset_media_type", "")
+        object.__setattr__(self, "labelset_source", None)
+        object.__setattr__(self, "calibration_cache", None)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise _frozen_mutation_error("detector")
+
+
+_request_missing_detector_context = _RequestMissingDetectorContext()
+
+
+def is_request_missing_detector_context(ctx: Any) -> bool:
+    """Return True iff *ctx* is the request-missing detector sentinel."""
+    return ctx is _request_missing_detector_context
+
+
+def is_request_missing_context(ctx: Any) -> bool:
+    """Return True iff *ctx* is either request-missing sentinel."""
+    return ctx is _request_missing_dataset_context or ctx is _request_missing_detector_context
+
+
 def get_active_detector_context() -> DetectorContext:
     """Return the ``DetectorContext`` for the current execution context.
 
@@ -363,7 +608,10 @@ def get_active_detector_context() -> DetectorContext:
     1. Forced override (``override_detector_context`` context manager)
     2. Request-scoped context (set by ``before_request`` from ``X-Detector-Id`` header)
     3. Thread-local context (set by ``set_thread_detector_context``)
-    4. Empty fallback context
+    4. Request-missing sentinel — inside a Flask request with no header
+       and no thread-local; mutations raise
+       :class:`RequestMissingContextError`.
+    5. Empty fallback context — for CLI / library callers outside Flask.
     """
     # 1. Forced override (set by override_detector_context context manager)
     forced = getattr(_thread_local, "forced_detector_context", None)
@@ -377,6 +625,10 @@ def get_active_detector_context() -> DetectorContext:
     ctx = getattr(_thread_local, "detector_context", None)
     if ctx is not None:
         return ctx
+    # 4. Inside a Flask request with no header and no thread-local → fail
+    #    loudly on mutation instead of polluting _empty_detector_context.
+    if _request_context_predicate():
+        return _request_missing_detector_context
     return _empty_detector_context
 
 
