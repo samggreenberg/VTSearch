@@ -371,6 +371,199 @@ class TestConcurrentSettingsAccess:
         assert not errors
 
 
+class TestSlowSettingsIODoesNotBlockOthers:
+    """H29 regression: a slow settings I/O sink must not stall unrelated
+    settings reads/writes.
+
+    H28's fix moved ``_sync_to_source`` outside the file lock, and the
+    H29 completion follow-up moved ``_atomic_write`` outside
+    ``_settings_lock`` (it still runs under the per-file
+    cross-process ``_file_lock``). Combined, this means:
+
+    * A hung NFS/webhook ``source.save`` can't stall any settings access.
+    * A slow local fsync only stalls writes to the *same* user's file
+      (via the per-file lock); other users' writes and any reads
+      proceed.
+    """
+
+    def test_slow_sync_to_source_does_not_block_reader(
+        self, monkeypatch, isolated_settings
+    ):
+        """One thread inside _sync_to_source must NOT freeze a reader."""
+        # Plant a placeholder source config first so the setter under
+        # test actually invokes _sync_to_source — only then install the
+        # slow stub so the placeholder write itself stays fast.
+        _settings_mod.set_settings_source_config(
+            {"source_name": "_h29_unused", "field_values": {}}
+        )
+
+        in_sync = threading.Event()
+        unblock = threading.Event()
+
+        def slow_sync(username, data):
+            in_sync.set()
+            # Generous upper bound so the suite never hangs if something
+            # unexpected goes wrong; the test releases this in <1s.
+            unblock.wait(timeout=30)
+
+        monkeypatch.setattr(_settings_mod, "_sync_to_source", slow_sync)
+
+        errors: list[BaseException] = []
+        reader_done = threading.Event()
+
+        def slow_setter():
+            try:
+                _settings_mod.set_volume(0.42)
+            except BaseException as exc:  # pragma: no cover - surfaced via errors
+                errors.append(exc)
+
+        def reader():
+            try:
+                _settings_mod.get_theme()
+                _settings_mod.get_volume()
+                reader_done.set()
+            except BaseException as exc:  # pragma: no cover - surfaced via errors
+                errors.append(exc)
+
+        setter_thread = threading.Thread(target=slow_setter)
+        setter_thread.start()
+        assert in_sync.wait(timeout=5), "_sync_to_source was never called"
+
+        reader_thread = threading.Thread(target=reader)
+        reader_thread.start()
+        assert reader_done.wait(timeout=5), (
+            "Reader thread was blocked by the slow source — H29 has regressed"
+        )
+
+        unblock.set()
+        setter_thread.join(timeout=5)
+        reader_thread.join(timeout=5)
+        assert not setter_thread.is_alive()
+        assert not reader_thread.is_alive()
+        assert not errors, f"Threads raised: {errors!r}"
+
+    def test_slow_atomic_write_does_not_block_other_users(
+        self, monkeypatch, isolated_settings, tmp_path
+    ):
+        """While user A's local fsync hangs, user B's set_volume must complete.
+
+        ``_atomic_write`` runs under the per-file cross-process lock only
+        (not under ``_settings_lock`` after the H29 follow-up), and each
+        user has its own ``.lock`` file, so user B's setter is unaffected.
+        """
+        from vtsearch.auth import set_thread_user
+
+        # Per-user files under tmp_path/<user>/user_settings.json so the
+        # two users are truly isolated on disk.
+        _settings_mod.set_user_data_dir_override(tmp_path)
+
+        in_write_for_user_a = threading.Event()
+        unblock = threading.Event()
+        real_atomic_write = _settings_mod._atomic_write
+
+        def selective_atomic_write(path, data):
+            if "user_a" in str(path):
+                in_write_for_user_a.set()
+                unblock.wait(timeout=30)
+            real_atomic_write(path, data)
+
+        monkeypatch.setattr(_settings_mod, "_atomic_write", selective_atomic_write)
+
+        errors: list[BaseException] = []
+        user_b_done = threading.Event()
+
+        def user_a_setter():
+            try:
+                set_thread_user("user_a")
+                _settings_mod.set_volume(0.1)
+            except BaseException as exc:  # pragma: no cover
+                errors.append(exc)
+            finally:
+                set_thread_user(None)
+
+        def user_b_setter():
+            try:
+                set_thread_user("user_b")
+                _settings_mod.set_volume(0.9)
+                user_b_done.set()
+            except BaseException as exc:  # pragma: no cover
+                errors.append(exc)
+            finally:
+                set_thread_user(None)
+
+        ta = threading.Thread(target=user_a_setter)
+        ta.start()
+        assert in_write_for_user_a.wait(timeout=5), (
+            "user_a's _atomic_write was never reached"
+        )
+
+        tb = threading.Thread(target=user_b_setter)
+        tb.start()
+        assert user_b_done.wait(timeout=5), (
+            "user_b's set_volume was blocked by user_a's hung fsync — H29 has regressed"
+        )
+
+        unblock.set()
+        ta.join(timeout=5)
+        tb.join(timeout=5)
+        _settings_mod.set_user_data_dir_override(None)
+        assert not ta.is_alive()
+        assert not tb.is_alive()
+        assert not errors, f"Threads raised: {errors!r}"
+
+    def test_slow_atomic_write_does_not_block_settings_reads(
+        self, monkeypatch, isolated_settings
+    ):
+        """A hung local fsync for the current user must NOT block other
+        threads doing settings *reads* — those only need ``_settings_lock``,
+        which is no longer held across file I/O.
+        """
+        in_write = threading.Event()
+        unblock = threading.Event()
+        real_atomic_write = _settings_mod._atomic_write
+
+        def slow_atomic_write(path, data):
+            in_write.set()
+            unblock.wait(timeout=30)
+            real_atomic_write(path, data)
+
+        monkeypatch.setattr(_settings_mod, "_atomic_write", slow_atomic_write)
+
+        errors: list[BaseException] = []
+        reader_done = threading.Event()
+
+        def slow_setter():
+            try:
+                _settings_mod.set_volume(0.42)
+            except BaseException as exc:  # pragma: no cover
+                errors.append(exc)
+
+        def reader():
+            try:
+                _settings_mod.get_theme()
+                _settings_mod.get_volume()
+                reader_done.set()
+            except BaseException as exc:  # pragma: no cover
+                errors.append(exc)
+
+        setter_thread = threading.Thread(target=slow_setter)
+        setter_thread.start()
+        assert in_write.wait(timeout=5), "_atomic_write was never reached"
+
+        reader_thread = threading.Thread(target=reader)
+        reader_thread.start()
+        assert reader_done.wait(timeout=5), (
+            "Reader thread was blocked by the slow local fsync — H29 has regressed"
+        )
+
+        unblock.set()
+        setter_thread.join(timeout=5)
+        reader_thread.join(timeout=5)
+        assert not setter_thread.is_alive()
+        assert not reader_thread.is_alive()
+        assert not errors, f"Threads raised: {errors!r}"
+
+
 class TestProgressLock:
     """Verify that _progress_lock exists and is an RLock."""
 

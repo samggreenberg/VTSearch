@@ -431,15 +431,21 @@ def _mutate_server_locked(mutator) -> None:
     The legacy migration is left to ``_ensure_server_loaded`` and never
     fires from inside the lock — by the time any setter runs the cache
     has been loaded at least once.
+
+    File I/O (``_load_path``, ``_atomic_write``) runs under the
+    cross-process file lock only; ``_settings_lock`` is acquired briefly
+    at the end just to swap the in-memory cache, so a slow local fsync
+    (NFS, full disk, hung disk controller) can't stall unrelated
+    settings reads — see H29 in ``docs/plans/logical-bug-audit.md``.
     """
     global _server_cache
     path = _server_settings_path()
     with _file_lock(path):
+        fresh = _load_path(path)
+        mutator(fresh)
+        _atomic_write(path, fresh)
         with _settings_lock:
-            fresh = _load_path(path)
-            mutator(fresh)
             _server_cache = fresh
-            _atomic_write(path, fresh)
 
 
 def _mutate_user_locked(username: str, mutator) -> dict[str, Any] | None:
@@ -450,14 +456,19 @@ def _mutate_user_locked(username: str, mutator) -> dict[str, Any] | None:
     slow sync target (NFS, webhook) can't block other settings writes.
     Returns ``None`` if the cache should not be synced (i.e. we are
     currently importing from the source).
+
+    Like :func:`_mutate_server_locked`, file I/O runs under the
+    cross-process file lock only; ``_settings_lock`` is acquired briefly
+    at the end just to swap the in-memory cache and read the ``_syncing``
+    flag.
     """
     path = _user_settings_path(username)
     with _file_lock(path):
+        fresh = _load_path(path)
+        mutator(fresh)
+        _atomic_write(path, fresh)
         with _settings_lock:
-            fresh = _load_path(path)
-            mutator(fresh)
             _user_caches[username] = fresh
-            _atomic_write(path, fresh)
             if username in _syncing:
                 return None
             return dict(fresh)

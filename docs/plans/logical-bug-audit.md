@@ -363,14 +363,24 @@ Cross-section interaction agents:
     to the in-process lock only. Not a regression (the codebase ships
     Linux-only Docker images), but worth a note if a contributor ever
     wants to test on Windows.
-- **H29. `_save_user` holds `_settings_lock` across sync I/O** —
-  `vtsearch/settings.py` ~L331–338. Slow source (NFS, webhook) blocks
-  all other settings reads/writes globally. (Per-user side is
-  incidentally addressed by H28's fix — `_sync_to_source` now runs
-  outside the file lock and outside `_settings_lock`. Server-tier
-  paths through `_atomic_write` no longer hold `_settings_lock` across
-  file I/O either, but a dedicated audit of every remaining sink is
-  still warranted.)
+- ~~**H29. `_save_user` holds `_settings_lock` across sync I/O**~~ —
+  was at `vtsearch/settings.py` ~L331–338. H28's fix already moved
+  `_sync_to_source` outside both the file lock and `_settings_lock`,
+  which neutralised the worst case (a hung NFS/webhook source could
+  no longer freeze every settings read/write process-wide). The H29
+  follow-up closes the remaining surface: `_atomic_write` and
+  `_load_path` inside `_mutate_server_locked` / `_mutate_user_locked`
+  now run under the cross-process `_file_lock` only, and
+  `_settings_lock` is acquired briefly at the end just to swap the
+  in-memory cache.  A slow local fsync (NFS data dir, full disk,
+  hung disk controller) therefore no longer blocks unrelated
+  settings reads, and only blocks writes to the *same* user's file
+  via the per-file lock — different users' writes proceed in
+  parallel.  Regression tests:
+  `tests/integration/test_thread_safety.py::TestSlowSettingsIODoesNotBlockOthers`
+  (slow `_sync_to_source` doesn't block a reader; slow
+  `_atomic_write` for user A doesn't block user B's write; slow
+  `_atomic_write` doesn't block settings reads).
 
 ### Error flow
 
