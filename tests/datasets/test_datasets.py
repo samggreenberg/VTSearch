@@ -1484,6 +1484,59 @@ class TestLoadFailureCleanup:
         assert leftover == [], f"pkl files must be cleaned up when registry write fails, found: {leftover}"
 
 
+class TestEmptyLoadBackstop:
+    """H11 — an importer that completes without raising but produces zero
+    medias must surface as a load error, not as a silent green dashboard
+    row with 0 items.  The backstop lives in
+    ``_run_origin_load_in_background`` and mirrors the existing guard in
+    ``_stage_importer_in_background``.
+    """
+
+    @staticmethod
+    def _sync_thread_factory(captured):
+        from unittest import mock as _mock
+
+        def fake_thread(target, daemon=True, name=None):
+            captured["fn"] = target
+            t = _mock.MagicMock()
+            t.start = lambda: target()
+            return t
+
+        return fake_thread
+
+    def test_zero_media_load_raises_and_leaves_no_registry_entry(self, isolated_settings):
+        """A load_fn that returns without populating medias must surface as
+        an error and must not register a dataset."""
+        from unittest import mock
+
+        from vtscore.concurrency.progress import get_progress
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.registry import list_datasets
+
+        def empty_load(target_medias):
+            # Importer "succeeds" but produces nothing.
+            return
+
+        captured: dict = {}
+        with mock.patch(
+            "vtscore.datasets.load_pipeline.threading.Thread",
+            side_effect=self._sync_thread_factory(captured),
+        ):
+            _run_origin_load_in_background(
+                empty_load,
+                {"importer": "test_empty", "params": {}},
+            )
+
+        assert list_datasets() == [], (
+            "an empty load must not register a dataset — the dashboard would otherwise "
+            "show a green row with 0 items"
+        )
+        progress = get_progress()
+        assert progress["error"] == "Import produced no medias.", (
+            f"empty load should report the standard 'no medias' error, got {progress['error']!r}"
+        )
+
+
 class TestCancelIngest:
     """Tests for the POST /api/dataset/cancel endpoint."""
 

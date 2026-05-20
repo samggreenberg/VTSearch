@@ -970,6 +970,14 @@ def _run_origin_load_in_background(
             _run_importer(load_fn, ctx, stepped)
             tracker.check_cancelled()
 
+            # Backstop: an importer that completes without raising but
+            # produces zero medias would otherwise sail through clipping,
+            # dedup, and registry steps and surface as a green dashboard
+            # row with 0 items.  Fail loudly instead, mirroring the
+            # staging-flow guard at ``_stage_importer_in_background``.
+            if not ctx.medias:
+                raise ValueError("Import produced no medias.")
+
             # Post-load stages are CPU/GPU-bound and touch embeddings —
             # gate them on the embed semaphore.  Calling swap here
             # unconditionally is also the safety net for minimalist

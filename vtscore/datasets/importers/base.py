@@ -105,15 +105,17 @@ def _parse_multi_media_specs(raw: Any, output_type: str) -> list[SourceSpec]:
     """Parse and validate the explicit ``source_specs`` form value.
 
     Used by importers with ``multi_media=True``.  Falls back to a single
-    pass-through spec when no value is submitted so a flipped importer
-    still loads cleanly before the frontend ships the new UI.
+    pass-through spec when no value is submitted (or when the submitted
+    value parses to an empty list) so a flipped importer still loads
+    cleanly before the frontend ships the new UI, and an empty
+    spec-grid does not silently produce a zero-media dataset.
     """
     from vtscore.converters import get_converter  # noqa: PLC0415
     from vtscore.media import get_by_folder_name  # noqa: PLC0415
 
     specs_raw: list[dict[str, Any]]
     if raw is None or raw == "":
-        specs_raw = [{"source_type": output_type, "converter": None, "params": {}}]
+        specs_raw = []
     elif isinstance(raw, str):
         try:
             specs_raw = json.loads(raw)
@@ -124,6 +126,9 @@ def _parse_multi_media_specs(raw: Any, output_type: str) -> list[SourceSpec]:
 
     if not output_type:
         raise ValueError("multi_media import requires a 'media_type' (output) field")
+
+    if not specs_raw:
+        specs_raw = [{"source_type": output_type, "converter": None, "params": {}}]
 
     specs: list[SourceSpec] = []
     for item in specs_raw:
@@ -180,6 +185,8 @@ def _parse_legacy_specs(raw_converters: Any, output_type: str) -> list[SourceSpe
             # Match the runner's behaviour: silently skip unknown converters.
             continue
         legacy_specs.append(SourceSpec(source_type=converter.source_type, converter=name, params={}))
+    if not legacy_specs:
+        raise ValueError("legacy import requires a 'media_type' or at least one known converter")
     return legacy_specs
 
 
