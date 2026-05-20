@@ -22,17 +22,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from vtsearch.auth import get_current_user
-from vtsearch.settings import _ensure_user_loaded, _save_user, _settings_lock
-
-
-def _load_state_dict() -> dict[str, Any]:
-    """Return the current user's settings cache dict (lock held by caller)."""
-    return _ensure_user_loaded(get_current_user())
-
-
-def _persist_state() -> None:
-    """Persist the current user's settings cache (lock held by caller)."""
-    _save_user(get_current_user())
+from vtsearch.settings import _ensure_user_loaded, _settings_lock, mutate_user
 
 
 logger = logging.getLogger(__name__)
@@ -189,8 +179,9 @@ _DOC_BY_ID: dict[str, dict[str, str]] = {d["id"]: d for d in DOCS}
 def _ensure_state(settings: dict[str, Any]) -> dict[str, Any]:
     """Return the mutable ``achievement_state`` sub-dict inside *settings*.
 
-    Initializes missing keys in place so callers don't have to.  Must be
-    called while holding ``_settings_lock``.
+    Initializes missing keys in place so callers don't have to. Must be
+    called from inside a ``mutate_user`` mutator so the mutations are
+    written back to disk under the cross-process settings lock.
     """
     state = settings.get("achievement_state")
     if not isinstance(state, dict):
@@ -260,9 +251,8 @@ def record_vote(
     date_str = dt.strftime("%Y-%m-%d")
     hour = dt.hour
 
-    with _settings_lock:
-        s = _load_state_dict()
-        state = _ensure_state(s)
+    def _apply(cache: dict[str, Any]) -> None:
+        state = _ensure_state(cache)
         counters = state["counters"]
 
         counters["votes_cast"] += 1
@@ -299,44 +289,47 @@ def record_vote(
         if current > counters["vote_streak"]:
             counters["vote_streak"] = current
 
-        _persist_state()
+    mutate_user(_apply)
 
 
 def record_dataset_load(importer_name: str) -> None:
     """Record one dataset load (skipping demos/synthetic)."""
     if importer_name in EXCLUDED_DATASET_IMPORTERS:
         return
-    with _settings_lock:
-        s = _load_state_dict()
-        state = _ensure_state(s)
+
+    def _apply(cache: dict[str, Any]) -> None:
+        state = _ensure_state(cache)
         state["counters"]["datasets_loaded"] += 1
-        _persist_state()
+
+    mutate_user(_apply)
 
 
 def record_detector_import(detector_id: str) -> None:
     """Record one detector receiving imported labels.  Dedupes by detector_id."""
     if not detector_id:
         return
-    with _settings_lock:
-        s = _load_state_dict()
-        state = _ensure_state(s)
+
+    def _apply(cache: dict[str, Any]) -> None:
+        state = _ensure_state(cache)
         imported = state["imported_detector_ids"]
         if detector_id in imported:
             return
         imported.append(detector_id)
         state["counters"]["detectors_imported"] += 1
-        _persist_state()
+
+    mutate_user(_apply)
 
 
 def record_find(n_scored: int) -> None:
     """Record *n_scored* media items processed by a Find operation."""
     if n_scored <= 0:
         return
-    with _settings_lock:
-        s = _load_state_dict()
-        state = _ensure_state(s)
+
+    def _apply(cache: dict[str, Any]) -> None:
+        state = _ensure_state(cache)
         state["counters"]["find_media"] += int(n_scored)
-        _persist_state()
+
+    mutate_user(_apply)
 
 
 def record_doc_phrase(phrase: str) -> dict[str, Any]:
@@ -364,26 +357,25 @@ def record_doc_phrase(phrase: str) -> dict[str, Any]:
         return {"matched": False, "doc_id": None, "doc_name": None, "already_read": False}
 
     doc = _DOC_BY_ID[matched_id]
-    with _settings_lock:
-        s = _load_state_dict()
-        state = _ensure_state(s)
+    already_read = False
+
+    def _apply(cache: dict[str, Any]) -> None:
+        nonlocal already_read
+        state = _ensure_state(cache)
         read_ids = state["docs_read_ids"]
         if matched_id in read_ids:
-            return {
-                "matched": True,
-                "doc_id": matched_id,
-                "doc_name": doc["name"],
-                "already_read": True,
-            }
+            already_read = True
+            return
         read_ids.append(matched_id)
         state["counters"]["docs_read"] = len(read_ids)
-        _persist_state()
+
+    mutate_user(_apply)
 
     return {
         "matched": True,
         "doc_id": matched_id,
         "doc_name": doc["name"],
-        "already_read": False,
+        "already_read": already_read,
     }
 
 
@@ -425,8 +417,15 @@ def get_full_state() -> dict[str, Any]:
             ],
         }
     """
+    username = get_current_user()
+    _ensure_user_loaded(username)
     with _settings_lock:
-        s = _load_state_dict()
+        # Snapshot the cache once so the read-side view is consistent
+        # while we walk the achievement table. We don't mutate here, so
+        # there's no need to take the cross-process file lock.
+        from vtsearch.settings import _user_caches
+
+        s = dict(_user_caches.get(username, {}))
         state = _ensure_state(s)
         achievements: list[dict[str, Any]] = []
         pending: list[dict[str, Any]] = []
@@ -478,12 +477,17 @@ def acknowledge(category_id: str, tier_idx: int) -> bool:
         return False
     if tier_idx < 0 or tier_idx >= len(TIER_NAMES):
         return False
-    with _settings_lock:
-        s = _load_state_dict()
-        state = _ensure_state(s)
+
+    advanced = False
+
+    def _apply(cache: dict[str, Any]) -> None:
+        nonlocal advanced
+        state = _ensure_state(cache)
         prev = int(state["announced"].get(category_id, -1))
         if tier_idx <= prev:
-            return False
+            return
         state["announced"][category_id] = tier_idx
-        _persist_state()
-        return True
+        advanced = True
+
+    mutate_user(_apply)
+    return advanced
