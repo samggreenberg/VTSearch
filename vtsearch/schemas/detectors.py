@@ -420,13 +420,15 @@ class _FindLabelResultSchema(Schema):
 class FindLabelRequestSchema(Schema):
     """Body for ``POST /api/find-label``.
 
-    ``dataset_id`` is optional and overrides the request-scoped dataset
-    context when present, so a single Find run can target a dataset that
-    isn't the active one in the frontend.
+    The dataset to score against comes from the request-scoped context
+    set by ``before_request`` from the ``X-Dataset-Id`` header (or the
+    ``dataset_id`` query param for browser-native requests). The body
+    intentionally does not carry a dataset selector — letting the body
+    override the header allowed a confused client to score one dataset
+    while ``replace_all=True`` wiped a different detector's votes.
     """
 
     detector_id = fields.String(required=True, validate=validate.Length(min=1))
-    dataset_id = fields.String(load_default="")
 
 
 class FindLabelResponseSchema(Schema):

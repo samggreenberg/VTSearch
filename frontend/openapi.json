@@ -2446,10 +2446,6 @@
       "FindLabelRequest": {
         "additionalProperties": false,
         "properties": {
-          "dataset_id": {
-            "default": "",
-            "type": "string"
-          },
           "detector_id": {
             "minLength": 1,
             "type": "string"
