@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import { BehaviorSubject, Observable, Subject, timer } from 'rxjs';
-import { switchMap, takeUntil, tap } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY, Observable, Subject, timer } from 'rxjs';
+import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import { VotesResponse } from '../models/api.models';
 import { MediasApiService } from './medias-api.service';
@@ -233,7 +233,14 @@ export class VoteStateService implements OnDestroy {
       .pipe(
         takeUntil(this.stopPolling$),
         takeUntil(this.destroy$),
-        switchMap(() => this.sortingApi.getVotes()),
+        // catchError inside switchMap scopes errors to a single tick — a
+        // transient /api/votes failure (502, offline blip, stale
+        // X-Dataset-Id after a context switch) would otherwise tear the
+        // whole chain down, freeze votes indefinitely, and leave `polling`
+        // stuck at true so startPolling() can't re-arm. Emit EMPTY rather
+        // than a stub VotesResponse so applyVotes() doesn't clobber
+        // optimistic state on a failed tick.
+        switchMap(() => this.sortingApi.getVotes().pipe(catchError(() => EMPTY))),
       )
       .subscribe((votes) => this.applyVotes(votes));
   }

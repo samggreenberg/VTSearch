@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject, timer, Subscription, pairwise } from 'rxjs';
-import { takeUntil, switchMap, filter, take } from 'rxjs/operators';
+import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
+import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -439,7 +439,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.statusPolling$ = timer(0, 2000)
       .pipe(
         takeUntil(this.destroy$),
-        switchMap(() => this.sortingApi.getLabelingStatus()),
+        // catchError inside switchMap keeps the polling alive across
+        // transient /api/labeling-status failures; without it, one bad
+        // tick terminates the timer and the labeling-status panel
+        // freezes for the rest of the view's lifetime.
+        switchMap(() => this.sortingApi.getLabelingStatus().pipe(catchError(() => EMPTY))),
       )
       .subscribe({
         next: (status) => {
