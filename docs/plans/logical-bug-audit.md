@@ -450,8 +450,8 @@ Cross-section interaction agents:
   progress lock ordering creates a narrow but real deadlock window.
 - **M2.** `combine_datasets.run_chunked` re-issues IDs starting at 1 on every
   call → cid collision when consumed twice.
-- **M3.** `importers/base.py` L407–410 — skipped records leave `next_id`
-  unincremented, ID collisions on first-record-skip.
+- ~~**M3.** `importers/base.py` L407–410 — skipped records leave `next_id`
+  unincremented, ID collisions on first-record-skip.~~
 
 ### Detector
 
