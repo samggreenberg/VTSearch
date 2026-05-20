@@ -496,7 +496,11 @@ def train_model(
     epochs: int = config.TRAIN_EPOCHS,
     patience: int = config.TRAIN_PATIENCE,
 ) -> torch.nn.Module:
-    """Train in-place; returns the same model. Early-stops on patience."""
+    """Train in-place; returns the same model. Early-stops on patience.
+
+    Raises ``ValueError`` if ``y`` does not contain at least one positive
+    (``y==1``) and one negative (``y==0``) example — BCE has no
+    discriminative signal on single-class data."""
 ```
 
 ### Thresholds

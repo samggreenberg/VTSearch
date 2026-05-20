@@ -151,11 +151,26 @@ def train_model(
     Returns:
         A trained ``nn.Sequential`` model in eval mode.
         The model outputs raw logits — apply ``torch.sigmoid`` at inference.
+
+    Raises:
+        ValueError: If ``y_train`` does not contain at least one positive
+            (``y == 1``) and one negative (``y == 0``) example.  BCE has no
+            discriminative signal on single-class data — the model would
+            saturate to a single constant for every input — so we refuse
+            up front instead of returning a useless model.
     """
     import torch  # noqa: PLC0415
     import torch.nn as nn  # noqa: PLC0415
 
     from vtscore.embedding.loader import ensure_torch_configured, get_torch_device
+
+    num_true = int(y_train.sum().item())
+    num_false = len(y_train) - num_true
+    if num_true == 0 or num_false == 0:
+        raise ValueError(
+            "train_model requires at least one positive (y=1) and one negative "
+            f"(y=0) example; got {num_true} positives and {num_false} negatives"
+        )
 
     ensure_torch_configured()
     device = get_torch_device()
@@ -177,17 +192,9 @@ def train_model(
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 
-    # Calculate class weights based on inclusion
-    num_true = y_train.sum().item()
-    num_false = len(y_train) - num_true
-
-    # Base weights for balanced classes
-    if num_true > 0 and num_false > 0:
-        weight_true = num_false / num_true
-        weight_false = 1.0
-    else:
-        weight_true = 1.0
-        weight_false = 1.0
+    # Balanced class weights — the single-class case was rejected above.
+    weight_true = num_false / num_true
+    weight_false = 1.0
 
     # Adjust weights based on inclusion
     if inclusion_value >= 0:
