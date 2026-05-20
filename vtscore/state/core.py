@@ -672,8 +672,8 @@ def register_detector_context(ctx: DetectorContext) -> None:
 
     with _state_lock:
         _detector_contexts[ctx.detector_id] = ctx
-    # clear_progress_cache acquires its own lock; call outside _state_lock
-    # to avoid lock-ordering concerns.
+    # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
+    # two locks never establish a cross-module ordering (audit M1).
     clear_progress_cache()
 
 
@@ -690,6 +690,8 @@ def unregister_detector_context(detector_id: str) -> DetectorContext | None:
         tl_ctx = getattr(_thread_local, "detector_context", None)
         if tl_ctx is not None and tl_ctx.detector_id == detector_id:
             _thread_local.detector_context = None
+    # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
+    # two locks never establish a cross-module ordering (audit M1).
     clear_progress_cache()
     return ctx
 
