@@ -43,7 +43,9 @@ def clear_votes() -> None:
         ctx.click_counter = 0
         ctx.last_learned_scores.clear()
         ctx.find_initial_labels.clear()
-        clear_progress_cache()
+    # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
+    # two locks never establish a cross-module ordering (audit M1).
+    clear_progress_cache()
 
 
 def add_label_to_history(media_id: int, label: str) -> None:
@@ -153,9 +155,12 @@ def _set_vote_locked(
     Returns ``(old_label, new_label, click_time)`` where ``click_time`` is the
     ordinal assigned to a newly-labeled media (or ``None`` when *target* is
     ``"none"`` or the call was idempotent).
-    """
-    from vtscore.detectors.labeling_progress import invalidate_progress_cache_from
 
+    Does **not** acquire ``_progress_lock``.  The public wrappers
+    (:func:`set_vote`, :func:`toggle_vote`) decide whether to invalidate the
+    progress cache *after* releasing ``_state_lock`` based on the returned
+    ``old_label`` — see the lock-ordering note on those wrappers (audit M1).
+    """
     if target not in ("good", "bad", "none"):
         raise ValueError(f"target must be 'good', 'bad', or 'none' (got {target!r})")
 
@@ -203,21 +208,26 @@ def _set_vote_locked(
         diversity_tree_unlabel(media_id)
         click_time = None
 
-    # Invalidate the progress cache on ANY training-set membership change for
-    # this media.  The old `toggle_vote` only invalidated on polarity flips,
-    # leaving cached steps stale on good→none / bad→none.  Cached models that
-    # included this media are now wrong regardless of whether the new state is
-    # the opposite polarity or "none", so the rule is: invalidate iff the media
-    # was previously labeled.
-    if old != "none":
-        invalidate_progress_cache_from(media_id)
-
     # Counter increments only on a transition that produces a labeled state.
     # Un-vote (X→none) and idempotent re-apply (handled above) credit nothing.
     if target != "none":
         _record_vote_locked()
 
     return (old, target, click_time)
+
+
+def _needs_progress_invalidate(old_label: str, new_label: str) -> bool:
+    """Whether an ``old_label → new_label`` transition requires a progress-cache invalidate.
+
+    Cached models that included this media are stale on ANY training-set
+    membership change for it.  The old ``toggle_vote`` only invalidated on
+    polarity flips, which left the cache stale on good→none / bad→none.  The
+    rule is now: invalidate iff the media was previously labeled *and* the
+    new label is different (idempotent re-applies — including a re-vote with
+    a new region box — do not invalidate, matching the pre-M1 behaviour
+    where the idempotent path returned early before the invalidate site).
+    """
+    return old_label != "none" and old_label != new_label
 
 
 def set_vote(
@@ -255,7 +265,16 @@ def set_vote(
         idempotent calls.
     """
     with _state_lock:
-        return _set_vote_locked(media_id, target, region_box=region_box)
+        result = _set_vote_locked(media_id, target, region_box=region_box)
+    # Progress-cache invalidation runs *after* ``_state_lock`` is released so
+    # we never establish a ``_state_lock → _progress_lock`` ordering across
+    # the two modules (audit M1).
+    old_label, new_label, _click_time = result
+    if _needs_progress_invalidate(old_label, new_label):
+        from vtscore.detectors.labeling_progress import invalidate_progress_cache_from
+
+        invalidate_progress_cache_from(media_id)
+    return result
 
 
 def toggle_vote(
@@ -289,11 +308,16 @@ def toggle_vote(
             target = "none" if current == "bad" else "bad"
         else:
             raise ValueError(f"vote must be 'good' or 'bad' (got {vote!r})")
-        _set_vote_locked(
+        old, new, _click_time = _set_vote_locked(
             media_id,
             target,
             region_box=region_box if target == "good" else None,
         )
+    # See the lock-ordering note on :func:`set_vote`.
+    if _needs_progress_invalidate(old, new):
+        from vtscore.detectors.labeling_progress import invalidate_progress_cache_from
+
+        invalidate_progress_cache_from(media_id)
 
 
 def apply_label(

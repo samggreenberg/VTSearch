@@ -632,3 +632,149 @@ class TestPluginRegistryLock:
 
         assert not errors
         assert call_count == 1, f"_discover called {call_count} times, expected 1"
+
+
+class TestStateProgressLockOrder:
+    """Regression for audit M1: never hold ``_state_lock`` while acquiring ``_progress_lock``.
+
+    The canonical lock order is ``_state_lock`` first, ``_progress_lock`` strictly
+    outside it.  Every state→progress callsite (``set_vote``, ``toggle_vote``,
+    ``clear_votes``, ``clear_medias``, ``set_inclusion``, ``register_detector_context``,
+    ``unregister_detector_context``) must release ``_state_lock`` before calling
+    into ``vtscore.detectors.labeling_progress``.  Otherwise a contributor adding
+    code that takes the locks in the reverse order opens a deadlock window.
+    """
+
+    def _patch_capture(self, monkeypatch, attr: str) -> list[bool]:
+        """Wrap ``labeling_progress.<attr>`` to record whether ``_state_lock`` was held.
+
+        Returns the list that captures one ``_is_owned()`` reading per call.
+        ``RLock._is_owned`` is a stable CPython attribute used by the
+        ``threading`` module itself, so depending on it for an invariant test
+        is acceptable here.
+        """
+        captured: list[bool] = []
+        original = getattr(_progress_mod, attr)
+
+        def wrapper(*args, **kwargs):
+            captured.append(_state._state_lock._is_owned())  # type: ignore[attr-defined]
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(_progress_mod, attr, wrapper)
+        return captured
+
+    def test_set_vote_releases_state_lock_before_progress_invalidate(self, monkeypatch):
+        held = self._patch_capture(monkeypatch, "invalidate_progress_cache_from")
+        from vtsearch.state import set_vote
+
+        # First vote: none→good, no invalidation (old == "none").
+        set_vote(1, "good")
+        # Second vote: good→bad, triggers invalidation (old == "good").
+        set_vote(1, "bad")
+        assert held, "invalidate_progress_cache_from was never called on good→bad"
+        assert held == [False] * len(held), f"_state_lock held during progress invalidate: {held}"
+
+    def test_toggle_vote_releases_state_lock_before_progress_invalidate(self, monkeypatch):
+        held = self._patch_capture(monkeypatch, "invalidate_progress_cache_from")
+        from vtsearch.state import toggle_vote
+
+        # First toggle: none→good (no invalidate).
+        toggle_vote(2, "good")
+        # Second toggle: good→none (triggers invalidate).
+        toggle_vote(2, "good")
+        assert held, "invalidate_progress_cache_from was never called on toggle-off"
+        assert held == [False] * len(held), f"_state_lock held during progress invalidate: {held}"
+
+    def test_clear_votes_releases_state_lock_before_progress_clear(self, monkeypatch):
+        held = self._patch_capture(monkeypatch, "clear_progress_cache")
+        from vtsearch.state import clear_votes
+
+        clear_votes()
+        assert held, "clear_progress_cache was never called from clear_votes"
+        assert held == [False] * len(held), f"_state_lock held during clear_progress_cache: {held}"
+
+    def test_clear_medias_releases_state_lock_before_progress_clear(self, monkeypatch):
+        held = self._patch_capture(monkeypatch, "clear_progress_cache")
+        from vtsearch.state import clear_medias
+
+        clear_medias()
+        assert held, "clear_progress_cache was never called from clear_medias"
+        assert held == [False] * len(held), f"_state_lock held during clear_progress_cache: {held}"
+
+    def test_set_inclusion_releases_state_lock_before_progress_clear(self, monkeypatch, isolated_settings):
+        held = self._patch_capture(monkeypatch, "clear_progress_cache")
+        import vtsearch.state as _vstate
+
+        # Two distinct values to force the change-detection branch that triggers a clear.
+        current = _vstate.get_inclusion()
+        new_value = (current + 1) % 11  # inclusion is in [-10, 10]; bump within range
+        _vstate.set_inclusion(new_value)
+        assert held, "clear_progress_cache was never called from set_inclusion"
+        assert held == [False] * len(held), f"_state_lock held during clear_progress_cache: {held}"
+
+    def test_vote_mutation_does_not_block_when_progress_lock_held(self):
+        """Concurrent ``set_vote`` mutations must not deadlock when ``_progress_lock`` is held.
+
+        With the pre-fix code, ``_set_vote_locked`` acquired ``_progress_lock``
+        while still holding ``_state_lock``.  A second thread doing any
+        ``_state_lock``-only mutation would then block — even though there's
+        no reason it should — because the first thread is parked waiting for
+        ``_progress_lock``.  After the fix, the first thread releases
+        ``_state_lock`` before attempting ``_progress_lock``, so the second
+        ``_state_lock``-only mutation proceeds independently.
+        """
+        from vtsearch.state import set_vote, good_votes
+
+        # Set media 3's initial vote so the next ``set_vote(3, "bad")`` will trigger
+        # progress-cache invalidation (old != "none").
+        set_vote(3, "good")
+        assert 3 in good_votes
+
+        unblock = threading.Event()
+
+        # Hold _progress_lock from a background thread to simulate a long-running
+        # progress-cache reader.
+        progress_held = threading.Event()
+
+        def holder():
+            with _progress_mod._progress_lock:
+                progress_held.set()
+                unblock.wait(timeout=10)
+
+        bg = threading.Thread(target=holder)
+        bg.start()
+        assert progress_held.wait(timeout=5), "background thread never acquired _progress_lock"
+
+        # In a separate thread, call set_vote(3, "bad") which will:
+        #   1. acquire _state_lock, mutate, release _state_lock
+        #   2. try to acquire _progress_lock (blocked because holder has it)
+        invalidating_done = threading.Event()
+
+        def invalidator():
+            set_vote(3, "bad")
+            invalidating_done.set()
+
+        inv = threading.Thread(target=invalidator)
+        inv.start()
+
+        # While the invalidator is parked waiting on _progress_lock, an unrelated
+        # _state_lock-only mutation must still complete promptly.
+        other_done = threading.Event()
+
+        def other():
+            set_vote(4, "good")
+            other_done.set()
+
+        other_thread = threading.Thread(target=other)
+        other_thread.start()
+        assert other_done.wait(timeout=5), (
+            "concurrent set_vote was blocked — invalidator is holding _state_lock while waiting "
+            "on _progress_lock (M1 regression)"
+        )
+        other_thread.join(timeout=5)
+
+        # Release _progress_lock; invalidator should finish.
+        unblock.set()
+        assert invalidating_done.wait(timeout=5), "invalidator did not complete after _progress_lock released"
+        inv.join(timeout=5)
+        bg.join(timeout=5)

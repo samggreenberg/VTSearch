@@ -475,8 +475,28 @@ Cross-section interaction agents:
 
 ### State / concurrency
 
-- **M1.** Lock held during cross-lock callbacks in `toggle_vote` — state ↔
-  progress lock ordering creates a narrow but real deadlock window.
+- ~~**M1.** Lock held during cross-lock callbacks in `toggle_vote` — state ↔
+  progress lock ordering creates a narrow but real deadlock window.~~ —
+  investigated and closed (2026-05-20).  The literal deadlock the audit
+  named was no longer reachable in the current code (post-H1 refactor:
+  nothing inside `_progress_lock` calls back into `_state_lock`-acquiring
+  code, and route callers of progress functions do not hold `_state_lock`
+  when entering the progress module).  But the design was fragile —
+  four sites (`vtscore/state/votes.py:_set_vote_locked` + `clear_votes`,
+  `vtscore/state/__init__.py:clear_medias` + `set_inclusion`) held
+  `_state_lock` while calling into the progress module, while two others
+  (`register_detector_context` / `unregister_detector_context`) explicitly
+  released it first.  Standardised all six sites on release-first: the
+  progress-cache calls now run strictly outside `_state_lock` everywhere,
+  so the canonical order is one-directional and adding a new state→progress
+  callsite is harder to get wrong.  `_set_vote_locked` no longer touches
+  `_progress_lock`; `set_vote` / `toggle_vote` invalidate the progress
+  cache after releasing `_state_lock`.  `clear_all` no longer wraps both
+  inner clears in a single `_state_lock`, since each inner now releases
+  before calling `clear_progress_cache` (the sole caller, dataset-load,
+  immediately repopulates state so the loss of cross-clear atomicity is
+  acceptable).  Lock-order invariant documented in the
+  `vtscore/detectors/labeling_progress.py` module docstring.
 - **M2.** `combine_datasets.run_chunked` re-issues IDs starting at 1 on every
   call → cid collision when consumed twice.
 - ~~**M3.** `importers/base.py` L407–410 — skipped records leave `next_id`

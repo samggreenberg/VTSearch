@@ -133,15 +133,23 @@ def clear_medias() -> None:
         ctx._emb_matrix = None
         ctx.diversity_tree = None
         ctx.dataset_display_name = None
-        clear_progress_cache()
+    # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
+    # two locks never establish a cross-module ordering (audit M1).
+    clear_progress_cache()
     gc.collect()
 
 
 def clear_all() -> None:
-    """Clear all medias, votes, and label history."""
-    with _state_lock:
-        clear_medias()
-        clear_votes()
+    """Clear all medias, votes, and label history.
+
+    Each clear acquires ``_state_lock`` independently — the two operations
+    are *not* atomic with respect to each other so the progress cache can
+    be cleared (under ``_progress_lock``) outside ``_state_lock`` (audit
+    M1).  The sole caller is dataset-load, which immediately rebuilds
+    state, so the transient mid-clear view is acceptable.
+    """
+    clear_medias()
+    clear_votes()
 
 
 # ---------------------------------------------------------------------------
@@ -187,12 +195,18 @@ def get_inclusion() -> int:
 def set_inclusion(value: int) -> None:
     """Set the global inclusion value and persist it via the registered hook."""
     with _state_lock:
-        if value != _core._get_inclusion():
-            from vtscore.detectors.labeling_progress import clear_progress_cache
-
-            clear_progress_cache()
+        changed = value != _core._get_inclusion()
         _core._set_inclusion(value)
         _persist_setting("inclusion", value)
+    # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
+    # two locks never establish a cross-module ordering (audit M1).
+    # ``_ensure_cache`` self-heals if a concurrent reader observes the new
+    # inclusion before this clear runs — it re-clears whenever
+    # ``_cache_inclusion`` differs from the current value.
+    if changed:
+        from vtscore.detectors.labeling_progress import clear_progress_cache
+
+        clear_progress_cache()
 
 
 def get_dataset_display_name() -> str | None:

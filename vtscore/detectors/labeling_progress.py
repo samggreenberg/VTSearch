@@ -9,6 +9,19 @@ infrastructure for tracking and cancelling long-running operations
 (``ProgressTracker`` and the dataset/sort/eval/find singletons).  The
 two modules used to share the ``progress.py`` name; this one was
 renamed to make the distinction obvious.
+
+Lock ordering (audit M1)
+------------------------
+``_progress_lock`` is acquired strictly *outside* ``vtscore.state.core._state_lock``.
+Every callsite that needs to invalidate or clear the cache after a
+state-lock'd mutation must release ``_state_lock`` before invoking a
+function in this module.  Conversely, code inside ``_progress_lock`` must
+not call into anything that acquires ``_state_lock`` — including helpers
+on ``DatasetContext`` / ``DetectorContext`` that take the state lock,
+and any of the resolve-context-then-mutate functions in
+:mod:`vtscore.state.votes` / :mod:`vtscore.state.diversity`.  Holding
+both locks in the opposite order would establish a cross-module cycle
+and could deadlock.
 """
 
 from __future__ import annotations
