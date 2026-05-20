@@ -60,9 +60,19 @@ def _resolve_or_train_detector(  # noqa: C901
     origin importer.  Returns ``(None, _, diag)`` when training is not
     possible.
     """
+    from vtscore.detectors.dataset_sync import (
+        first_media_embedder,
+        invalidate_model_on_embedder_switch,
+    )
     from vtscore.state.core import get_detector_context
 
     det_ctx = get_detector_context(detector_id)
+    if det_ctx is not None:
+        # Defence-in-depth — ``ensure_votes_match_active_dataset`` normally
+        # invalidates this on the request boundary, but non-Flask callers
+        # (background threads, library-tier code) don't run it.  Drop the
+        # cache here so we don't score with a stale-embedder MLP.
+        invalidate_model_on_embedder_switch(det_ctx, first_media_embedder(snap or {}))
     if det_ctx is not None and det_ctx.model is not None:
         return det_ctx.model, det_ctx.threshold, None
 

@@ -932,6 +932,151 @@ class TestLoadModelEndpoint:
         assert a_good not in good_votes, "good cid from dataset A leaked into dataset B's id-space"
         assert a_bad not in bad_votes, "bad cid from dataset A leaked into dataset B's id-space"
 
+    def test_dataset_switch_invalidates_cached_mlp_on_embedder_change(self, client):
+        """Switching to a dataset with a different embedder must drop the cached MLP.
+
+        The detector's MLP is dimensionally and semantically tied to the
+        embedder its training vectors came from.  Scoring a CLAP-trained MLP
+        against SigLIP image vectors yields either a tensor-shape error or
+        silent garbage when the two embedders happen to share a dimensionality.
+        H5 — corruption potential because the garbage scores flow into
+        ``apply_labels_bulk_with_click_time`` and ``sync_to_labelset_source``.
+        """
+        import hashlib
+
+        import numpy as np
+
+        from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.state.core import get_active_detector_context
+        from vtsearch.state import (
+            DatasetContext,
+            medias,
+            register_context,
+            set_thread_dataset_context,
+        )
+
+        if not medias:
+            pytest.skip("No medias loaded")
+        ids = list(medias.keys())
+        if len(ids) < 2:
+            pytest.skip("Need at least 2 medias")
+
+        client.post(
+            "/api/detectors",
+            json={"name": "EmbSwitch", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "EmbSwitch", "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, mid)
+
+        # Plant a fake MLP + embedder stamp on the loaded detector — we don't
+        # need an actually-trained model to verify invalidation, just a
+        # non-None ``.model`` and a stamped ``.embedder``.
+        det_ctx = get_active_detector_context()
+        sentinel_mlp = object()
+        det_ctx.model = sentinel_mlp
+        det_ctx.threshold = 0.7
+        det_ctx.embedder = "clap"
+        det_ctx.calibration_cache = ("fp", 0.7)
+        det_ctx.label_embeddings["eid"] = np.zeros(8, dtype=np.float32)
+
+        # Build dataset B with a DIFFERENT embedder.
+        ctx_b = DatasetContext("ds_b_for_embedder_switch_test")
+        for cid in ids[:2]:
+            ctx_b.medias[cid] = {
+                "id": cid,
+                "type": "image",
+                "embedder": "siglip",  # ← key: different from "clap" above
+                "md5": hashlib.md5(f"ds_b_{cid}".encode()).hexdigest(),
+                "embedding": np.zeros(512, dtype=np.float32),
+                "media_bytes": b"fake-b",
+                "filename": f"ds_b_{cid}.jpg",
+                "category": "test",
+                "origin": {"importer": "test_b", "params": {"id": cid}},
+                "origin_name": f"ds_b_{cid}.jpg",
+            }
+        register_context(ctx_b)
+        set_thread_dataset_context(ctx_b)
+
+        # Simulate the before_request hook firing for a request whose active
+        # dataset is now B.
+        ensure_votes_match_active_dataset()
+
+        assert det_ctx.model is None, "stale CLAP MLP must be cleared on switch to a SigLIP dataset"
+        assert det_ctx.threshold == 0.5, "threshold should reset to its sentinel default"
+        assert det_ctx.calibration_cache is None
+        assert det_ctx.label_embeddings == {}
+        assert det_ctx.embedder == "", "stale embedder stamp must be cleared so the next train re-stamps"
+
+    def test_dataset_switch_preserves_cached_mlp_when_embedder_unchanged(self, client):
+        """Switching datasets with the SAME embedder must keep the cached MLP.
+
+        We only want to invalidate when we're confident the MLP would be
+        applied to incompatible vectors — same-embedder switches are safe.
+        """
+        import hashlib
+
+        import numpy as np
+
+        from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.state.core import get_active_detector_context
+        from vtsearch.state import (
+            DatasetContext,
+            medias,
+            register_context,
+            set_thread_dataset_context,
+        )
+
+        if not medias:
+            pytest.skip("No medias loaded")
+        ids = list(medias.keys())
+        if len(ids) < 2:
+            pytest.skip("Need at least 2 medias")
+
+        client.post(
+            "/api/detectors",
+            json={"name": "EmbSame", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "EmbSame", "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, mid)
+
+        det_ctx = get_active_detector_context()
+        sentinel_mlp = object()
+        det_ctx.model = sentinel_mlp
+        det_ctx.threshold = 0.7
+        det_ctx.embedder = "clap"
+
+        # Dataset B uses the SAME embedder ("clap").
+        ctx_b = DatasetContext("ds_b_same_embedder")
+        for cid in ids[:2]:
+            ctx_b.medias[cid] = {
+                "id": cid,
+                "type": "audio",
+                "embedder": "clap",
+                "md5": hashlib.md5(f"ds_b_same_{cid}".encode()).hexdigest(),
+                "embedding": np.zeros(512, dtype=np.float32),
+                "media_bytes": b"fake-b",
+                "filename": f"ds_b_same_{cid}.wav",
+                "category": "test",
+                "origin": {"importer": "test_b", "params": {"id": cid}},
+                "origin_name": f"ds_b_same_{cid}.wav",
+            }
+        register_context(ctx_b)
+        set_thread_dataset_context(ctx_b)
+
+        ensure_votes_match_active_dataset()
+
+        assert det_ctx.model is sentinel_mlp, "MLP must survive same-embedder dataset switch"
+        assert det_ctx.threshold == 0.7
+        assert det_ctx.embedder == "clap"
+
 
 class TestValidatedVoteSnapshot:
     """``validated_vote_snapshot`` must atomically pair medias + votes (H14).

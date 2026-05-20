@@ -425,7 +425,7 @@ active dataset, and apply matching votes silently
 
 Returns the number of labels restored.
 
-### `dataset_sync.ensure_votes_match_active_dataset()` (line 28)
+### `dataset_sync.ensure_votes_match_active_dataset()`
 
 Rehydrate per-dataset detector state on dataset switch. No-op unless
 the dataset id or labelset file mtime has changed since the detector
@@ -433,6 +433,32 @@ last saw it. When triggered, clears `good_votes` / `bad_votes` /
 `label_history` / etc., replays `restore_labels_from_detector`, and
 caches the parsed labelset + mtime so subsequent requests within the
 same `(dataset_id, file_mtime)` tuple are no-ops.
+
+Also calls `invalidate_model_on_embedder_switch` on every request as
+its first step (cheap O(1) check) so a stale MLP can't survive a
+dataset swap to a different embedder.
+
+### `dataset_sync.invalidate_model_on_embedder_switch(det_ctx, new_embedder)`
+
+Drop a cached MLP whose `det_ctx.embedder` stamp doesn't match
+*new_embedder*. The MLP is dimensionally and semantically tied to its
+embedder: scoring a CLAP-trained MLP against SigLIP vectors yields
+either a tensor-shape error or — when the two embedders share a
+dimensionality — silent garbage. Clears `model`, `threshold`,
+`calibration_cache`, `label_embeddings`, and the stamp itself; the
+next training pass re-stamps via `populate_label_embeddings` /
+`apply_and_retrain`. No-op when either stamp is empty (the invariant
+fires only on a confident mismatch). Used by
+`ensure_votes_match_active_dataset` (per-request invalidation) and
+`scoring._resolve_or_train_detector` / `find._score_dataset`
+(defence-in-depth at each cached-MLP read site).
+
+### `dataset_sync.first_media_embedder(medias)`
+
+Return the embedder name of the first media in *medias*, or `""` when
+the dict is empty or the field is missing. Convenience accessor used
+by the invalidator and the scoring routes — every media in a single
+dataset shares an embedder, so the first entry is representative.
 
 ### `media_seeding.seed_good_votes_from_examples(examples)` (line 10)
 

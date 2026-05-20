@@ -122,12 +122,7 @@ Cross-section interaction agents:
   no output. Covered by `TestRegionAwareTrainingCrossDataset` in
   `tests/detectors/test_patch_embedder.py`.
 - ~~**H3. Embedder drift on save → reload**~~
-- **H5. Detector embedder not revalidated on dataset switch** —
-  `vtsearch/routes/detectors/scoring.py` + `dataset_sync.py`.
-  `ensure_votes_match_active_dataset()` rehydrates votes but doesn't
-  check the new dataset's embedder against the detector's training
-  embedder. An MLP trained on CLAP can score SigLIP vectors with no
-  warning.
+- ~~**H5. Detector embedder not revalidated on dataset switch**~~
 - ~~**H6. `train_model` produces degenerate single-class model**~~
 - ~~**H7. Vote applied before retrain; retrain failure leaves vote live**~~
 

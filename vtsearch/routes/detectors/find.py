@@ -188,31 +188,38 @@ def _resolve_find_detectors(detector_ids: list[str]) -> list[dict]:
 
 
 def _build_detector_config(d: dict) -> dict:
-    """Pick the live-MLP path or the cold-detector path for *d*.
+    """Build a per-detector config carrying both the live-MLP and cold paths.
 
-    Aborts with 400 when the detector has no usable labels in either form.
+    A Find call can span multiple datasets that use different embedders, so
+    we resolve both paths up front and let :func:`_score_dataset` pick per
+    dataset based on whether the live MLP's embedder matches that
+    dataset's vectors.  When the live MLP doesn't match, the cold path
+    retrains on the dataset's own vectors.
+
+    Aborts with 400 when neither path is usable for *d*.
     """
     from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
     from vtscore.state.core import get_detector_context  # noqa: PLC0415
 
-    det_ctx = get_detector_context(d["id"])
-    if det_ctx is not None and det_ctx.model is not None:
-        return {
-            "name": d["name"],
-            "detector_id": d["id"],
-            "live_mlp": det_ctx.model,
-            "threshold": det_ctx.threshold,
-        }
+    config: dict = {
+        "name": d["name"],
+        "detector_id": d["id"],
+    }
 
     det_data = _read_detector(_detector_path(d["name"]))
     if det_data and det_data.get("labelset", {}).get("labels"):
-        return {
-            "name": d["name"],
-            "detector_id": d["id"],
-            "detector_data": det_data,
-        }
+        config["detector_data"] = det_data
 
-    _abort_find(400, f"Detector '{d['name']}' has no labels for detection")
+    det_ctx = get_detector_context(d["id"])
+    if det_ctx is not None and det_ctx.model is not None:
+        config["live_mlp"] = det_ctx.model
+        config["live_embedder"] = det_ctx.embedder
+        config["threshold"] = det_ctx.threshold
+
+    if "detector_data" not in config and "live_mlp" not in config:
+        _abort_find(400, f"Detector '{d['name']}' has no labels for detection")
+
+    return config
 
 
 def _build_detector_configs(detectors: list[dict]) -> list[dict]:
@@ -303,6 +310,19 @@ def _record_verdicts(
             "verdict": fallback_verdict,
             "score": 0,
         }
+
+
+def _live_mlp_matches_dataset(dc: dict, ds_embedder: str) -> bool:
+    """Return ``False`` when *dc*'s live MLP is bound to a different embedder.
+
+    Returns ``True`` (treat as a match) when either stamp is unknown — the
+    invariant only fires on a confident mismatch, mirroring
+    :func:`vtscore.detectors.dataset_sync.invalidate_model_on_embedder_switch`.
+    """
+    live_embedder = dc.get("live_embedder", "") or ""
+    if not live_embedder or not ds_embedder:
+        return True
+    return live_embedder == ds_embedder
 
 
 def _score_with_live_mlp(dc: dict, X_all, all_ids: list[int], media_results: dict[int, dict]) -> None:
@@ -418,7 +438,9 @@ def _score_dataset(
     if not temp_medias:
         return [], [], scored_units, 0, ""
 
-    detected_media_type = next(iter(temp_medias.values()), {}).get("type", "")
+    first_media = next(iter(temp_medias.values()), {})
+    detected_media_type = first_media.get("type", "")
+    ds_embedder = first_media.get("embedder", "") or ""
 
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
@@ -443,10 +465,15 @@ def _score_dataset(
             total_steps=_FIND_STEPS,
         )
 
-        if "live_mlp" in dc:
+        if "live_mlp" in dc and _live_mlp_matches_dataset(dc, ds_embedder):
             _score_with_live_mlp(dc, X_all, all_ids, media_results)
         elif "detector_data" in dc:
             _score_with_cold_detector(dc, temp_medias, X_all, all_ids, media_results)
+        else:
+            # Live MLP exists but is bound to a different embedder, and no
+            # cold-path labelset is available — surface as N/A rather than
+            # scoring with a mismatched MLP.
+            _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
 
         scored_units += len(all_ids)
         update_find_progress(

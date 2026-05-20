@@ -18,6 +18,14 @@ read/write paths: it atomically copies the active dataset's medias and the
 active detector's vote dicts under a single ``_state_lock`` acquisition, so
 a concurrent rehydrate on the same detector against a different dataset
 can't slip in between the (request-boundary) rehydrate and the composition.
+
+This module also invalidates the detector's cached MLP when the active
+dataset's embedder differs from the embedder its training vectors came
+from.  An MLP is dimensionally and semantically tied to its embedder, so
+scoring an MLP trained on (say) CLAP audio vectors against SigLIP image
+vectors yields either a tensor-shape error or — when the two embedders
+happen to share a dimensionality — silent garbage that then gets written
+back to the on-disk labelset via ``sync_to_labelset_source``.
 """
 
 from __future__ import annotations
@@ -31,6 +39,60 @@ def _detector_file_mtime(path) -> float:
         return path.stat().st_mtime
     except OSError:
         return 0.0
+
+
+def first_media_embedder(medias) -> str:
+    """Return the embedder name of *medias*' first entry, or ``""``.
+
+    Accepts either a ``DatasetContext.medias`` dict or a snap (the same
+    shape).  Every media in a single dataset shares an embedder, so the
+    first entry is representative.  Returns ``""`` when the collection is
+    empty or the embedder field is missing.
+    """
+    for media in medias.values():
+        return media.get("embedder", "") or ""
+    return ""
+
+
+def invalidate_model_on_embedder_switch(det_ctx, new_embedder: str) -> bool:
+    """Drop a cached MLP whose embedder no longer matches *new_embedder*.
+
+    The detector's MLP is tied to the embedder its training vectors came
+    from.  When the active dataset uses a different embedder, scoring the
+    cached MLP against that dataset's vectors is unsafe: best case the
+    forward pass raises on a dim mismatch; worst case the two embedders
+    share a dimensionality and the MLP returns silent garbage that flows
+    into ``apply_labels_bulk_with_click_time`` and ``sync_to_labelset_source``,
+    corrupting the on-disk labelset.
+
+    No-op when either ``det_ctx.embedder`` or *new_embedder* is unknown —
+    both must be present for a confident mismatch.
+
+    Acquires ``_state_lock`` for the duration of the clear so concurrent
+    readers can't see partial state (the lock is an ``RLock`` so callers
+    that already hold it pay nothing).
+
+    Returns ``True`` iff the cache was actually cleared.
+    """
+    from vtscore.state.core import _state_lock
+
+    with _state_lock:
+        if det_ctx.model is None:
+            return False
+        if not det_ctx.embedder or not new_embedder:
+            return False
+        if det_ctx.embedder == new_embedder:
+            return False
+
+        det_ctx.model = None
+        det_ctx.threshold = 0.5
+        det_ctx.calibration_cache = None
+        det_ctx.label_embeddings.clear()
+        # Clear the stamp so the next training pass re-stamps it via
+        # populate_label_embeddings / apply_and_retrain rather than carrying
+        # the stale value forward.
+        det_ctx.embedder = ""
+        return True
 
 
 def ensure_votes_match_active_dataset() -> None:
@@ -68,6 +130,15 @@ def ensure_votes_match_active_dataset() -> None:
         # No active dataset; preserve whatever the detector last saw so a
         # request that happens to omit the dataset header doesn't wipe state.
         return
+
+    # Invalidate the cached MLP if the active dataset's embedder no longer
+    # matches the embedder its training vectors came from.  Runs on every
+    # request — cheap O(1) check (one dict read + string compare) and
+    # independent of the vote-rehydrate fast-path below, since the MLP can
+    # need invalidation even when ``votes_dataset_id`` already matches
+    # (e.g. a dataset was re-loaded with a different embedder under the
+    # same id).  The helper acquires ``_state_lock`` itself.
+    invalidate_model_on_embedder_switch(det_ctx, first_media_embedder(ds_ctx.medias))
 
     from vtscore.detectors.registry import get_detector
     from vtscore.detectors.store import _detector_path, _read_detector
