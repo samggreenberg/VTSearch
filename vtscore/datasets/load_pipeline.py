@@ -110,6 +110,7 @@ from vtscore.datasets.registry import (
     get_saved_datasets_dir,
     register_dataset as _reg_register,
     add_loaded_id as _reg_add_loaded,
+    unregister_dataset as _reg_unregister,
 )
 from vtsearch.state import (
     DatasetContext,
@@ -594,20 +595,27 @@ def _auto_register_dataset(
         traceback.print_exc()
         return None
 
-    entry = _reg_register(
-        name=name,
-        media_type=media_type,
-        num_items=num_items,
-        num_dupes=num_dupes,
-        pkl_path=pkl_path,
-        origin=origin_str,
-        source=source,
-        clipper=clipper,
-        embedder=embedder,
-        created_by=created_by,
-        file_type_counts=file_type_counts,
-        ingest_started_at=ingest_started_at,
-    )
+    try:
+        entry = _reg_register(
+            name=name,
+            media_type=media_type,
+            num_items=num_items,
+            num_dupes=num_dupes,
+            pkl_path=pkl_path,
+            origin=origin_str,
+            source=source,
+            clipper=clipper,
+            embedder=embedder,
+            created_by=created_by,
+            file_type_counts=file_type_counts,
+            ingest_started_at=ingest_started_at,
+        )
+    except Exception:
+        # Registry write failed — clean up the orphaned pkl so we don't
+        # leave a stale file behind with nothing pointing at it.
+        traceback.print_exc()
+        Path(pkl_path).unlink(missing_ok=True)
+        return None
     _reg_add_loaded(entry["id"])
     return entry
 
@@ -777,10 +785,18 @@ def _register_and_migrate(
     embedder: str,
     created_by: str,
     ingest_started_at: float,
-) -> str:
+) -> tuple[str, str | None]:
     """Save to registry, migrate the context from task_id to its real id.
 
-    Returns the (possibly migrated) context_id.
+    Returns ``(context_id, registry_entry_id)`` — *context_id* is the
+    (possibly migrated) context id, and *registry_entry_id* is the id of
+    the newly created registry entry (or ``None`` if registration was
+    skipped).  Callers should retain *registry_entry_id* so a later
+    failure in the surrounding pipeline can roll the entry back.
+
+    If the registry entry is created successfully but the subsequent
+    in-memory migration steps raise, the entry is rolled back before the
+    exception propagates so we never leave an orphan on disk.
     """
     tracker.update("loading", "Saving to registry…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
     entry = _auto_register_dataset(
@@ -795,13 +811,23 @@ def _register_and_migrate(
         ingest_started_at=ingest_started_at,
     )
     if entry is None:
-        return task_id
-    _migrate_context_id(task_id, entry["id"])
-    ctx.dataset_display_name = entry.get("name", name)
-    # Associate the loading task with the real dataset ID so the
-    # finished-task tick is attributed to the right dashboard row.
-    loading_tasks.set_dataset_id(task_id, entry["id"])
-    return entry["id"]
+        return task_id, None
+    entry_id = entry["id"]
+    try:
+        _migrate_context_id(task_id, entry_id)
+        ctx.dataset_display_name = entry.get("name", name)
+        # Associate the loading task with the real dataset ID so the
+        # finished-task tick is attributed to the right dashboard row.
+        loading_tasks.set_dataset_id(task_id, entry_id)
+    except Exception:
+        # Migration failed after the registry entry was written — roll
+        # it back so the dashboard doesn't show a half-built dataset.
+        try:
+            _reg_unregister(entry_id)
+        except Exception:
+            traceback.print_exc()
+        raise
+    return entry_id, entry_id
 
 
 def _warmup_embedder_async(media_dict: dict) -> None:
@@ -829,8 +855,19 @@ def _warmup_embedder_async(media_dict: dict) -> None:
     threading.Thread(target=_run, name="warmup-embedder", daemon=True).start()
 
 
-def _handle_load_failure(exc: BaseException, context_id: str, tracker) -> None:
-    """Unregister the context and write the failure into *tracker*."""
+def _handle_load_failure(
+    exc: BaseException,
+    context_id: str,
+    tracker,
+    registry_entry_id: str | None = None,
+) -> None:
+    """Unregister the context and write the failure into *tracker*.
+
+    If *registry_entry_id* is set, the on-disk registry entry (and its
+    backing pkl) is also removed — this prevents an orphaned dashboard
+    row when a load fails after :func:`_register_and_migrate` has
+    already written the entry.
+    """
     from vtscore.state.core import unregister_context  # noqa: PLC0415
 
     if isinstance(exc, CancelledError):
@@ -845,6 +882,11 @@ def _handle_load_failure(exc: BaseException, context_id: str, tracker) -> None:
         error = str(exc) or repr(exc) or "Unknown error during dataset loading"
 
     unregister_context(context_id)
+    if registry_entry_id:
+        try:
+            _reg_unregister(registry_entry_id)
+        except Exception:
+            traceback.print_exc()
     gc.collect()
     tracker.update("idle", "", 0, 0, error=error, step=None, total_steps=None)
 
@@ -915,6 +957,7 @@ def _run_origin_load_in_background(
         # on ``_empty_dataset_context`` and are silently lost.
         set_thread_dataset_context(ctx)
         context_id = task_id
+        registry_entry_id: str | None = None
         controller = _LoadGateController(tracker)
         stepped = _make_stepped_progress(controller, tracker)
 
@@ -946,7 +989,7 @@ def _run_origin_load_in_background(
             _collapse_duplicates_stage(ctx, tracker)
             _build_diversity_tree_stage(ctx, tracker)
             tracker.check_cancelled()
-            context_id = _register_and_migrate(
+            context_id, registry_entry_id = _register_and_migrate(
                 ctx, tracker, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
             )
             # Embedder warm-up is fire-and-forget so the dashboard row goes
@@ -958,7 +1001,7 @@ def _run_origin_load_in_background(
 
             record_dataset_load(str(origin.get("importer", "")))
         except Exception as exc:
-            _handle_load_failure(exc, context_id, tracker)
+            _handle_load_failure(exc, context_id, tracker, registry_entry_id=registry_entry_id)
         finally:
             controller.release()
             clear_thread_progress()

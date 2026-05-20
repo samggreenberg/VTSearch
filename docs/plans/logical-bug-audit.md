@@ -80,14 +80,7 @@ Cross-section interaction agents:
 
 ### ~~C11. `fill_labels_from_sort` silently swallows sync failures~~
 
-### C12. Orphaned dataset registry entry on activation failure
-
-- **File:** `vtsearch/datasets/load_pipeline.py` ~L596–610, ~L825–842
-- **Bug:** If the importer/pickle save succeeds (registry entry
-  created) but a later stage (diversity tree, post-embed clip fix-up)
-  throws, the registry entry remains while the `DatasetContext` is
-  unregistered. The dataset shows up in the UI list but can't be
-  loaded — and the next "load" hits the half-built path again.
+### ~~C12. Orphaned dataset registry entry on activation failure~~
 
 ---
 
@@ -568,9 +561,22 @@ and a one-line summary is recorded here.
   back (full transactional rollback deferred to pattern #8).
   Regression: `tests/io/test_export_options.py::TestFillFromSortConfirm::test_disk_sync_failure_surfaces_as_500`.
 
+- **C12 — Orphaned dataset registry entry on activation failure**
+  (2026-05-19). `_register_and_migrate` now returns
+  `(context_id, registry_entry_id)` and self-rolls-back the entry if
+  its in-place context migration raises after the entry has been
+  written. `task()` in `_run_origin_load_in_background` threads
+  `registry_entry_id` into `_handle_load_failure`, which now also
+  calls `unregister_dataset` (deletes the pkl + clears
+  `_loaded_ids`). `_auto_register_dataset` wraps `register_dataset`
+  in `try/except` that deletes the freshly-written pkl when the
+  registry write itself fails, so the inverse orphan (pkl on disk,
+  no entry) is also impossible. Regression:
+  `tests/datasets/test_datasets.py::TestLoadFailureCleanup`.
+
 ### Still open
 
-Every other finding (C12 and the H / M / L tiers) remains as written.
+Every other finding (the H / M / L tiers) remains as written.
 When the next fix lands, collapse the finding above to a struck-through
 heading and add a line here. When every critical and high is addressed,
 this doc can be retired into the relevant subsystem docs (or deleted,

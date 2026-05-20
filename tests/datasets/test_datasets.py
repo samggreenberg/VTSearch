@@ -1362,6 +1362,128 @@ class TestLoadProgressRaceCondition:
         assert settings_mod.get_last_embedder_per_media_type() == {}
 
 
+class TestLoadFailureCleanup:
+    """C12 — a failure anywhere in the load pipeline must not leave an
+    orphan registry entry behind.
+
+    Before the fix, ``_register_and_migrate`` wrote the registry entry +
+    pkl, and if any later step (the in-place context migration, the
+    achievement record, etc.) raised, ``_handle_load_failure`` only
+    unregistered the in-memory context — leaving a half-built dashboard
+    row pointing at a pkl with no in-memory context to back it.
+    """
+
+    @staticmethod
+    def _sync_thread_factory(captured):
+        from unittest import mock as _mock
+
+        def fake_thread(target, daemon=True, name=None):
+            captured["fn"] = target
+            t = _mock.MagicMock()
+            t.start = lambda: target()
+            return t
+
+        return fake_thread
+
+    @staticmethod
+    def _fake_load(target_medias):
+        import numpy as np
+
+        target_medias[1] = {
+            "id": 1,
+            "type": "audio",
+            "duration": 1.0,
+            "file_size": 100,
+            "md5": "test-md5-c12",
+            "embedder": "",
+            "embedding": np.zeros(8, dtype=np.float32),
+            "filename": "fake.wav",
+            "category": "unknown",
+            "origin": None,
+            "origin_name": "fake.wav",
+            "media_bytes": None,
+            "media_string": None,
+            "media_path": None,
+        }
+
+    def test_post_register_failure_rolls_back_registry_entry(self, isolated_settings):
+        """A failure after the registry entry is created must remove it."""
+        from unittest import mock
+
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.registry import list_datasets
+
+        captured: dict = {}
+        with (
+            mock.patch(
+                "vtscore.datasets.load_pipeline.threading.Thread",
+                side_effect=self._sync_thread_factory(captured),
+            ),
+            mock.patch(
+                "vtsearch.achievements.record_dataset_load",
+                side_effect=RuntimeError("simulated post-register failure"),
+            ),
+        ):
+            _run_origin_load_in_background(
+                self._fake_load,
+                {"importer": "test", "params": {}},
+            )
+
+        assert list_datasets() == [], (
+            "registry entry must be rolled back when a post-register step fails — "
+            "otherwise the dashboard shows a phantom dataset row backed by a half-built pkl"
+        )
+
+    def test_successful_load_keeps_registry_entry(self, isolated_settings):
+        """The cleanup must NOT fire on the happy path."""
+        from unittest import mock
+
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.registry import list_datasets, unregister_dataset
+
+        captured: dict = {}
+        with mock.patch(
+            "vtscore.datasets.load_pipeline.threading.Thread",
+            side_effect=self._sync_thread_factory(captured),
+        ):
+            _run_origin_load_in_background(
+                self._fake_load,
+                {"importer": "test", "params": {}},
+            )
+
+        entries = list_datasets()
+        try:
+            assert len(entries) == 1, "successful load should leave exactly one registry entry"
+        finally:
+            for e in entries:
+                unregister_dataset(e["id"])
+
+    def test_registry_write_failure_cleans_up_pkl(self, isolated_settings, tmp_path):
+        """If ``register_dataset`` itself raises after the pkl is written, the
+        orphaned pkl must be deleted rather than left on disk forever."""
+        from pathlib import Path
+        from unittest import mock
+
+        from vtsearch import settings as settings_mod
+        from vtscore.datasets.load_pipeline import _auto_register_dataset
+
+        ds_dir = tmp_path / "saved_for_c12"
+        settings_mod.set_saved_datasets_dir(str(ds_dir))
+
+        medias = {}
+        self._fake_load(medias)
+
+        with mock.patch(
+            "vtscore.datasets.load_pipeline._reg_register",
+            side_effect=RuntimeError("simulated registry write failure"),
+        ):
+            entry = _auto_register_dataset(medias, name="orphan-test")
+
+        assert entry is None
+        leftover = list(Path(ds_dir).glob("ds_*.pkl")) if ds_dir.exists() else []
+        assert leftover == [], f"pkl files must be cleaned up when registry write fails, found: {leftover}"
+
+
 class TestCancelIngest:
     """Tests for the POST /api/dataset/cancel endpoint."""
 
