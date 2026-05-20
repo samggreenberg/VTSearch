@@ -95,13 +95,16 @@ def list_registered_detectors():
         entry["detector_loaded"] = did in loaded_ids
         # Expose the loaded detector's recorded embedder so the frontend
         # can detect a cross-embedder switch and trigger a label re-embed
-        # via /api/detectors/registry/load. Unloaded detectors have no
-        # embedder yet (it's inferred from the dataset on load).
+        # via /api/detectors/registry/load.  Loaded contexts always win
+        # because they reflect the live cache state; for unloaded
+        # detectors fall back to the registry's persisted embedder (which
+        # is stamped the first time training runs against a dataset).
         if entry["detector_loaded"]:
             ctx = get_detector_context(did)
-            entry["embedder"] = ctx.embedder if ctx is not None else ""
+            ctx_emb = ctx.embedder if ctx is not None else ""
+            entry["embedder"] = ctx_emb or entry.get("embedder", "") or ""
         else:
-            entry["embedder"] = ""
+            entry["embedder"] = entry.get("embedder", "") or ""
     return {"detectors": entries}
 
 

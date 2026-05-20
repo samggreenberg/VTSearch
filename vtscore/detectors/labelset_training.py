@@ -271,9 +271,14 @@ def populate_label_embeddings(
             on_progress(elem.origin_name or elem.filename or eid, idx + 1, total)
 
     # Stamp the embedder the cache is now built against so the next call can
-    # detect a switch and invalidate.
+    # detect a switch and invalidate.  Also persist to the detector registry
+    # so the smart preload predictor warms the right model next session
+    # instead of the media type's default.
     if embedder_name:
         det_ctx.embedder = embedder_name
+        from vtscore.detectors.registry import record_detector_embedder
+
+        record_detector_embedder(det_ctx.detector_id, embedder_name)
     return cached
 
 

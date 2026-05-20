@@ -230,6 +230,8 @@ class TestPredictEmbeddersToPreload:
             assert predict_embedders_to_preload() == ["clap", "siglip"]
 
     def test_detectors_contribute_default_embedder(self):
+        # Legacy detector entry without an ``embedder`` field falls back to
+        # the media type's default.
         fake_default = MagicMock()
         fake_default.name = "e5"
         with (
@@ -239,15 +241,51 @@ class TestPredictEmbeddersToPreload:
         ):
             assert predict_embedders_to_preload() == ["e5"]
 
-    def test_unregistered_embedder_name_filtered_out(self):
-        # entry["embedder"] = "ghost" is not in the embedder registry → dropped.
+    def test_detector_with_explicit_embedder_is_preloaded(self):
+        # Detector entries can record the embedder their labels are
+        # embedded against; preload should warm that one, not the media
+        # type's default.
+        with (
+            patch("vtscore.datasets.registry.list_datasets", return_value=[]),
+            patch(
+                "vtscore.detectors.registry.list_detectors",
+                return_value=[{"media_type": "image", "embedder": "face"}],
+            ),
+        ):
+            assert predict_embedders_to_preload() == ["face"]
+
+    def test_detector_with_unrecognised_embedder_falls_back_to_default(self):
+        # When the recorded embedder is no longer registered (renamed,
+        # removed, typo) fall back to the media type's default rather than
+        # silently skipping — losing the optimisation entirely is worse
+        # than warming the wrong embedder.
+        fake_default = MagicMock()
+        fake_default.name = "siglip"
+        with (
+            patch("vtscore.datasets.registry.list_datasets", return_value=[]),
+            patch(
+                "vtscore.detectors.registry.list_detectors",
+                return_value=[{"media_type": "image", "embedder": "ghost"}],
+            ),
+            patch("vtscore.media.embedders_for_type", return_value=[fake_default]),
+        ):
+            assert predict_embedders_to_preload() == ["siglip"]
+
+    def test_dataset_with_unrecognised_embedder_falls_back_to_default(self):
+        # Same hardening on the dataset side: a set-but-invalid embedder
+        # name (e.g. embedder removed between sessions) shouldn't silently
+        # drop the preload — fall back to the media type's default.
+        fake_default = MagicMock()
+        fake_default.name = "clap"
         with (
             patch(
-                "vtscore.datasets.registry.list_datasets", return_value=[{"media_type": "audio", "embedder": "ghost"}]
+                "vtscore.datasets.registry.list_datasets",
+                return_value=[{"media_type": "audio", "embedder": "ghost"}],
             ),
             patch("vtscore.detectors.registry.list_detectors", return_value=[]),
+            patch("vtscore.media.embedders_for_type", return_value=[fake_default]),
         ):
-            assert predict_embedders_to_preload() == []
+            assert predict_embedders_to_preload() == ["clap"]
 
 
 class TestInterceptWeightLoadingProgress:

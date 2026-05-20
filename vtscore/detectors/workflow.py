@@ -126,6 +126,9 @@ def apply_and_retrain(  # noqa: C901
             first = next(iter(snap.values()), {})
             det_ctx.embedder = first.get("embedder", "")
             det_ctx.media_type = first.get("type", "")
+            from vtscore.detectors.registry import record_detector_embedder
+
+            record_detector_embedder(det_ctx.detector_id, det_ctx.embedder)
             trained = True
 
         return resolved, trained
