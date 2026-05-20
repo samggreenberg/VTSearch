@@ -386,16 +386,12 @@ class TestSlowSettingsIODoesNotBlockOthers:
       proceed.
     """
 
-    def test_slow_sync_to_source_does_not_block_reader(
-        self, monkeypatch, isolated_settings
-    ):
+    def test_slow_sync_to_source_does_not_block_reader(self, monkeypatch, isolated_settings):
         """One thread inside _sync_to_source must NOT freeze a reader."""
         # Plant a placeholder source config first so the setter under
         # test actually invokes _sync_to_source — only then install the
         # slow stub so the placeholder write itself stays fast.
-        _settings_mod.set_settings_source_config(
-            {"source_name": "_h29_unused", "field_values": {}}
-        )
+        _settings_mod.set_settings_source_config({"source_name": "_h29_unused", "field_values": {}})
 
         in_sync = threading.Event()
         unblock = threading.Event()
@@ -431,9 +427,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
 
         reader_thread = threading.Thread(target=reader)
         reader_thread.start()
-        assert reader_done.wait(timeout=5), (
-            "Reader thread was blocked by the slow source — H29 has regressed"
-        )
+        assert reader_done.wait(timeout=5), "Reader thread was blocked by the slow source — H29 has regressed"
 
         unblock.set()
         setter_thread.join(timeout=5)
@@ -442,9 +436,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
         assert not reader_thread.is_alive()
         assert not errors, f"Threads raised: {errors!r}"
 
-    def test_slow_atomic_write_does_not_block_other_users(
-        self, monkeypatch, isolated_settings, tmp_path
-    ):
+    def test_slow_atomic_write_does_not_block_other_users(self, monkeypatch, isolated_settings, tmp_path):
         """While user A's local fsync hangs, user B's set_volume must complete.
 
         ``_atomic_write`` runs under the per-file cross-process lock only
@@ -493,15 +485,11 @@ class TestSlowSettingsIODoesNotBlockOthers:
 
         ta = threading.Thread(target=user_a_setter)
         ta.start()
-        assert in_write_for_user_a.wait(timeout=5), (
-            "user_a's _atomic_write was never reached"
-        )
+        assert in_write_for_user_a.wait(timeout=5), "user_a's _atomic_write was never reached"
 
         tb = threading.Thread(target=user_b_setter)
         tb.start()
-        assert user_b_done.wait(timeout=5), (
-            "user_b's set_volume was blocked by user_a's hung fsync — H29 has regressed"
-        )
+        assert user_b_done.wait(timeout=5), "user_b's set_volume was blocked by user_a's hung fsync — H29 has regressed"
 
         unblock.set()
         ta.join(timeout=5)
@@ -511,9 +499,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
         assert not tb.is_alive()
         assert not errors, f"Threads raised: {errors!r}"
 
-    def test_slow_atomic_write_does_not_block_settings_reads(
-        self, monkeypatch, isolated_settings
-    ):
+    def test_slow_atomic_write_does_not_block_settings_reads(self, monkeypatch, isolated_settings):
         """A hung local fsync for the current user must NOT block other
         threads doing settings *reads* — those only need ``_settings_lock``,
         which is no longer held across file I/O.
@@ -552,9 +538,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
 
         reader_thread = threading.Thread(target=reader)
         reader_thread.start()
-        assert reader_done.wait(timeout=5), (
-            "Reader thread was blocked by the slow local fsync — H29 has regressed"
-        )
+        assert reader_done.wait(timeout=5), "Reader thread was blocked by the slow local fsync — H29 has regressed"
 
         unblock.set()
         setter_thread.join(timeout=5)
