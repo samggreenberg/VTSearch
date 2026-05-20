@@ -139,3 +139,54 @@ class TestVoteApplicationIsContextScoped:
         assert not other_ctx.good_votes
         assert not other_ctx.bad_votes
         assert other_ctx.model is None
+
+
+class TestTrainingFailureIsTransactional:
+    """Audit H7: if ``train_and_score`` raises, no votes may be applied and
+    no labelset write may happen.  The detector must be left in its prior
+    consistent state so the user doesn't see a live vote pointing at a
+    stale (or absent) model.
+    """
+
+    def test_train_failure_does_not_apply_votes(self, det_ctx, monkeypatch):
+        boom = RuntimeError("simulated training failure")
+
+        def explode(*args, **kwargs):
+            raise boom
+
+        monkeypatch.setattr("vtscore.detectors.training.train_and_score", explode)
+
+        entries = [_audio_entry(1, "good"), _audio_entry(2, "bad")]
+        with pytest.raises(RuntimeError, match="simulated training failure"):
+            apply_and_retrain("test-det", det_ctx, entries, "Test")
+
+        # No vote should have been applied to the in-memory context,
+        # because training was attempted *before* the commit step.
+        assert not det_ctx.good_votes
+        assert not det_ctx.bad_votes
+        assert det_ctx.model is None
+        assert det_ctx.training_medias == {}
+
+    def test_train_failure_does_not_persist_labelset(self, det_ctx, monkeypatch):
+        # ``sync_labels_to_loaded_detector`` is the disk-write step.  A
+        # train-first workflow must never reach it when training raises.
+        calls = []
+
+        def fake_sync():
+            calls.append("called")
+
+        monkeypatch.setattr(
+            "vtscore.detectors.label_sync.sync_labels_to_loaded_detector",
+            fake_sync,
+        )
+
+        def explode(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr("vtscore.detectors.training.train_and_score", explode)
+
+        entries = [_audio_entry(1, "good"), _audio_entry(2, "bad")]
+        with pytest.raises(RuntimeError):
+            apply_and_retrain("test-det", det_ctx, entries, "Test")
+
+        assert calls == []  # sync_labels_to_loaded_detector never ran
