@@ -293,11 +293,7 @@ Cross-section interaction agents:
 
 ### Frontend
 
-- **H24. Vote-state polling chain dies on a single error** —
-  `frontend/src/app/services/vote-state.service.ts` L153–169.
-  `switchMap(() => sortingApi.getVotes())` terminates the whole
-  observable on error; `polling` flag never resets; votes freeze
-  indefinitely.
+- ~~**H24. Vote-state polling chain dies on a single error**~~
 - **H25. Active dataset pair is set before load completes** —
   `frontend/src/app/services/context-switch.service.ts` L132–134.
   `setActivePair()` runs before the load is verified; interceptor

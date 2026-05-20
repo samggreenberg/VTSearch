@@ -77,6 +77,33 @@ describe('VoteStateService', () => {
     discardPeriodicTasks();
   }));
 
+  // Regression for logical-bug-audit H24: a single /api/votes failure
+  // (502 from a proxy, stale X-Dataset-Id after a context switch, etc.)
+  // used to terminate the entire polling chain and leave `polling` stuck
+  // at true, freezing vote state for the rest of the session.
+  it('polling survives a transient /api/votes error and keeps polling', fakeAsync(() => {
+    service.startPolling(1000);
+
+    // First tick: server is unreachable. Pre-fix this would tear the
+    // whole observable down.
+    httpMock.expectOne('/api/votes').flush(null, { status: 502, statusText: 'Bad Gateway' });
+
+    // Local state must NOT be clobbered to empty on a failed tick.
+    // (Without the EMPTY shortcut, an empty stub VotesResponse here
+    // would silently erase optimistic votes.)
+    service.applyOptimisticState(99, 'good');
+    expect(service.goodVotes.has(99)).toBeTrue();
+
+    // Second tick: server is back. The chain must still be alive.
+    tick(1000);
+    httpMock.expectOne('/api/votes').flush(mockVotes);
+    expect(service.goodVotes.has(1)).toBeTrue();
+    expect(service.goodVotes.has(2)).toBeTrue();
+
+    service.stopPolling();
+    discardPeriodicTasks();
+  }));
+
   it('clear should reset all state', () => {
     service.loadVotes();
     httpMock.expectOne('/api/votes').flush(mockVotes);
