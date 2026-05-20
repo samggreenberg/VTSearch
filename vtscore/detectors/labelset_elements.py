@@ -48,6 +48,15 @@ def resolve_current_dataset_cid(elem: LabeledElement) -> int | None:
 
     Matches by origin+name first, then by MD5.  Only consults the dataset
     snapshot — does not trigger origin-file resolution.
+
+    Returning a single cid (``cids[0]``) from the union returned by
+    :func:`~vtscore.state.media_lookup.resolve_media_ids` is safe because
+    every Flask-driven dataset load runs
+    :func:`~vtscore.state.media_lookup.collapse_duplicates`, which guarantees
+    each MD5 maps to at most one cid in the active medias dict — so the union
+    never yields multiple md5-matched cids.  If a future code path inserts
+    media post-dedup without re-running it, this contract breaks; the
+    invariant is covered by ``test_collapse_duplicates_yields_unique_md5_lookup``.
     """
     from vtsearch.state import (
         build_media_lookup,
