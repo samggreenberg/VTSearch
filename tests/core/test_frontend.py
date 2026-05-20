@@ -10,7 +10,27 @@ Covers:
 
 from __future__ import annotations
 
+from pathlib import Path
 
+import pytest
+
+# Tests that hit the Angular SPA shell or any of the bundle artefacts
+# (main.js / polyfills.js / styles.css / index.html) only work after
+# `npm run build:prod` has populated `static/`.  `./run-tests.sh` builds
+# the bundle as part of the core/full-suite path, but plain `pytest` or
+# a fresh container without `frontend/node_modules` will skip the build
+# — in that case the bundle-dependent tests should skip rather than
+# fail.  Favicon / logo / `/api/version` tests don't need the bundle
+# and stay enabled.
+_STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
+_BUNDLE_BUILT = (_STATIC_DIR / "index.html").exists() and (_STATIC_DIR / "main.js").exists()
+requires_bundle = pytest.mark.skipif(
+    not _BUNDLE_BUILT,
+    reason="Angular bundle not built (run: cd frontend && npm run build:prod)",
+)
+
+
+@requires_bundle
 class TestIndexRoute:
     """GET / should serve the Angular SPA entry point."""
 
@@ -39,6 +59,7 @@ class TestIndexRoute:
         assert b"<app-root>" in resp.data
 
 
+@requires_bundle
 class TestAngularRoutes:
     """Angular client-side routes should return the SPA index."""
 
@@ -56,25 +77,30 @@ class TestAngularRoutes:
 class TestStaticFiles:
     """Static assets should be accessible under /static/."""
 
+    @requires_bundle
     def test_main_js_accessible(self, client):
         resp = client.get("/static/main.js")
         assert resp.status_code == 200
         assert "javascript" in resp.content_type
 
+    @requires_bundle
     def test_polyfills_js_accessible(self, client):
         resp = client.get("/static/polyfills.js")
         assert resp.status_code == 200
         assert "javascript" in resp.content_type
 
+    @requires_bundle
     def test_styles_css_accessible(self, client):
         resp = client.get("/static/styles.css")
         assert resp.status_code == 200
         assert "css" in resp.content_type
 
+    @requires_bundle
     def test_main_js_is_nonempty(self, client):
         resp = client.get("/static/main.js")
         assert len(resp.data) > 1000
 
+    @requires_bundle
     def test_styles_css_is_nonempty(self, client):
         resp = client.get("/static/styles.css")
         assert len(resp.data) > 1000
@@ -91,16 +117,19 @@ class TestRootStaticFiles:
     polyfills.js, and styles.css at the root.
     """
 
+    @requires_bundle
     def test_main_js_at_root(self, client):
         resp = client.get("/main.js")
         assert resp.status_code == 200
         assert "javascript" in resp.content_type
 
+    @requires_bundle
     def test_polyfills_js_at_root(self, client):
         resp = client.get("/polyfills.js")
         assert resp.status_code == 200
         assert "javascript" in resp.content_type
 
+    @requires_bundle
     def test_styles_css_at_root(self, client):
         resp = client.get("/styles.css")
         assert resp.status_code == 200
@@ -110,6 +139,7 @@ class TestRootStaticFiles:
         resp = client.get("/logo.png")
         assert resp.status_code == 200
 
+    @requires_bundle
     def test_unknown_path_returns_spa(self, client):
         """Unknown paths should return the Angular SPA for client-side routing."""
         resp = client.get("/some/unknown/route")
@@ -140,6 +170,7 @@ class TestFavicon:
         resp = client.get("/favicon-angry.ico")
         assert resp.status_code == 404
 
+    @requires_bundle
     def test_favicon_empty_variant_returns_spa_fallback(self, client):
         resp = client.get("/favicon-.ico")
         # Empty variant doesn't match the favicon-<variant>.ico route,
@@ -166,6 +197,7 @@ class TestLogo:
             assert "svg" in resp.content_type
 
 
+@requires_bundle
 class TestFrontendContentIntegrity:
     """Verify the Angular SPA content contains expected structure."""
 
