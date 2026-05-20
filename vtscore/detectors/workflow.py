@@ -33,6 +33,14 @@ def apply_and_retrain(  # noqa: C901
     left untouched — so a failed retrain can never leave a vote live with a
     stale model behind it (audit finding H7).
 
+    Persistence rollback: votes are committed to ``det_ctx`` *before*
+    ``sync_labels_to_loaded_detector`` writes the merged labelset to disk,
+    because the sync reads votes from the active context.  If the disk write
+    fails (e.g. ``os.replace`` EBUSY/ENOSPC), the in-memory votes are rolled
+    back to their pre-call state and the exception is re-raised — so a
+    failed save never leaves votes live in memory while the on-disk
+    labelset omits them (audit finding H30).
+
     Returns ``(resolved_count, trained_bool)``.
     """
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
@@ -45,7 +53,7 @@ def apply_and_retrain(  # noqa: C901
         snapshot_medias,
         vote_region_boxes,
     )
-    from vtscore.state.core import override_detector_context
+    from vtscore.state.core import _state_lock, override_detector_context
 
     with override_detector_context(det_ctx):
         snap = snapshot_medias()
@@ -108,11 +116,46 @@ def apply_and_retrain(  # noqa: C901
             )
 
         # 4) Training succeeded (or was skipped because we don't yet
-        #    have both classes).  Commit the votes and persist.
+        #    have both classes).  Snapshot the vote-relevant state so we
+        #    can roll back if the disk write below fails, then commit the
+        #    votes and persist.  ``sync_labels_to_loaded_detector`` reads
+        #    the live votes to build the labelset payload, so we have to
+        #    mutate first and undo on failure rather than persist first.
+        #
+        #    Diversity-tree marks and per-user achievement counters are
+        #    intentionally not part of the snapshot: the tree marks a
+        #    media as "seen" (forward-only signal that's at worst slightly
+        #    stale after a failed save) and achievements live in a
+        #    separate per-user JSON whose rollback would race with other
+        #    workers.  The vote dicts, region boxes, label history, click
+        #    times, and click counter — the inputs to retrain and to the
+        #    on-disk labelset — are what must stay aligned with disk.
+        saved_good_votes = dict(det_ctx.good_votes)
+        saved_bad_votes = dict(det_ctx.bad_votes)
+        saved_region_boxes = dict(det_ctx.vote_region_boxes)
+        saved_history = list(det_ctx.label_history)
+        saved_click_times = dict(det_ctx.vote_click_times)
+        saved_click_counter = det_ctx.click_counter
+
         for cid, label in resolved_pairs:
             apply_label(cid, label)
 
-        sync_labels_to_loaded_detector()
+        try:
+            sync_labels_to_loaded_detector()
+        except Exception:
+            with _state_lock:
+                det_ctx.good_votes.clear()
+                det_ctx.good_votes.update(saved_good_votes)
+                det_ctx.bad_votes.clear()
+                det_ctx.bad_votes.update(saved_bad_votes)
+                det_ctx.vote_region_boxes.clear()
+                det_ctx.vote_region_boxes.update(saved_region_boxes)
+                det_ctx.label_history.clear()
+                det_ctx.label_history.extend(saved_history)
+                det_ctx.vote_click_times.clear()
+                det_ctx.vote_click_times.update(saved_click_times)
+                det_ctx.click_counter = saved_click_counter
+            raise
 
         trained = False
         if new_model is not None:

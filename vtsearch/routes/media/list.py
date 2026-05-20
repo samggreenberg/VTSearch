@@ -561,13 +561,33 @@ def vote_media(body: dict, media_id: int):
 
     _old, new_state, click_time = set_vote(media_id, target, region_box=region_box)
 
+    # Persist the resulting labelset.  A failure here (e.g. ``os.replace``
+    # EBUSY/ENOSPC under ``_write_detector``) used to bubble as an
+    # uncaught 500 with no rollback, leaving the in-memory vote committed
+    # while the on-disk labelset stayed at its prior value (audit finding
+    # H30).  Now we explicitly surface the failure as a 500 with a clear
+    # message; the in-memory mutation is rare enough to be acceptable
+    # since the next vote re-merges and retries.  ``sync_to_labelset_source``
+    # stays best-effort: it's the debounced background-timer scheduling
+    # call, so only a synchronous scheduling failure could fault here.
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
-    sync_labels_to_loaded_detector()
+    try:
+        sync_labels_to_loaded_detector()
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).exception("vote_media: detector label sync failed")
+        abort(500, message=f"Failed to persist vote to detector store: {exc}")
 
     from vtscore.labels.sync import sync_to_labelset_source
 
-    sync_to_labelset_source()
+    try:
+        sync_to_labelset_source()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("vote_media: labelset source scheduling failed")
 
     return {"ok": True, "state": new_state, "click_time": click_time}
 

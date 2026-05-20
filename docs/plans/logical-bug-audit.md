@@ -374,9 +374,20 @@ Cross-section interaction agents:
 
 ### Error flow
 
-- **H30. Detector save's `os.replace` failure leaves in-memory state
-  "saved"** — `vtsearch/detectors/store.py` L52–59. Next save doesn't
-  realize prior persistence failed.
+- ~~**H30. Detector save's `os.replace` failure leaves in-memory state
+  "saved"**~~ — fixed by surfacing persistence failures at the previously-
+  unprotected call sites (`POST /api/medias/<id>/vote`,
+  `POST /api/votes/seed-from-examples`) with the same try/except + abort
+  500 pattern that already guards `fill_labels_from_sort` (C11), and by
+  making `vtscore.detectors.workflow.apply_and_retrain` snapshot the
+  detector context's vote dicts / region boxes / label history / click
+  state before the sync and restore them when `_write_detector` raises.
+  A failed save now never leaves votes live in memory while the on-disk
+  labelset omits them; the next save no longer inherits ghost state from
+  a prior failed write.  Regression tests:
+  `tests/detectors/test_workflow.py::TestPersistenceFailureIsTransactional`,
+  `tests/api/test_api_contracts.py::TestVotesContract::test_disk_sync_failure_surfaces_as_500`,
+  and `tests/detectors/test_detectors.py::TestSeedVotesFromExamples::test_seed_disk_sync_failure_surfaces_as_500`.
 - **H31. Partial label-import has no rollback** —
   `vtsearch/routes/labels/importers.py` L143. Failure mid-loop leaves
   a half-applied labelset; user has to manually figure out which

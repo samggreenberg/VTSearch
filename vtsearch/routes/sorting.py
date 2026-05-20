@@ -617,13 +617,26 @@ def seed_votes_from_examples(body: dict):
     skipped = len(examples) - seeded
 
     if seeded > 0:
+        # Surface persistence failures explicitly instead of letting them
+        # bubble as an uncaught 500 — same C11/H30 pattern as
+        # ``fill_labels_from_sort`` and ``vote_media``.  Without this, an
+        # ``os.replace`` failure inside ``_write_detector`` would leave the
+        # in-memory good votes committed while the on-disk labelset stayed
+        # untouched, with no signal to the client beyond a generic 500.
         from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
-        sync_labels_to_loaded_detector()
+        try:
+            sync_labels_to_loaded_detector()
+        except Exception as exc:
+            logging.getLogger(__name__).exception("seed_votes_from_examples: detector label sync failed")
+            abort(500, message=f"Failed to persist seeded votes to detector store: {exc}")
 
         from vtscore.labels.sync import sync_to_labelset_source
 
-        sync_to_labelset_source()
+        try:
+            sync_to_labelset_source()
+        except Exception:
+            logging.getLogger(__name__).exception("seed_votes_from_examples: labelset source scheduling failed")
 
     return {"seeded": seeded, "skipped": skipped}
 
