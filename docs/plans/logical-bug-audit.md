@@ -117,11 +117,8 @@ Cross-section interaction agents:
   check the new dataset's embedder against the detector's training
   embedder. An MLP trained on CLAP can score SigLIP vectors with no
   warning.
-- **H6. `train_model` produces degenerate single-class model** —
-  `vtsearch/training/mlp.py` L180–189. If all `y` are 0 or all 1,
-  weights default to 1.0 each and the model trains on an
-  uninformative loss → returns ~0.5 for everything instead of
-  raising.
+- ~~**H6. `train_model` produces degenerate single-class model**~~ —
+  shipped 2026-05-20. See [Shipped](#shipped).
 - **H7. Vote applied before retrain; retrain failure leaves vote live** —
   `vtsearch/detectors/workflow.py` L40–105. User sees the vote, model
   is stale or absent.
@@ -559,6 +556,27 @@ and a one-line summary is recorded here.
   surface as 500. Known limitation: in-memory labels are not rolled
   back (full transactional rollback deferred to pattern #8).
   Regression: `tests/io/test_export_options.py::TestFillFromSortConfirm::test_disk_sync_failure_surfaces_as_500`.
+- **H6 — `train_model` single-class guard** (2026-05-20). Added an
+  up-front `ValueError` at the top of `train_model` in
+  `vtscore/training/mlp.py` when `y_train` is all-positive or
+  all-negative, and dropped the dead `else` branch that previously set
+  both class weights to `1.0` and silently trained a degenerate model
+  (BCE has no discriminative signal on single-class data — the model
+  would saturate to a single constant for every input). The audit
+  premise that "all callers already gate to ≥1 good + ≥1 bad" was
+  *almost* right — the outermost wrappers do, but
+  `calculate_cross_calibration_threshold` in
+  `vtscore/training/thresholds.py` re-split y with an unstratified
+  `np.random.permutation`, so a single fold could land all-one-class.
+  Fixed alongside the guard by switching cross-cal to a stratified
+  split (positive / negative indices shuffled separately, per-class
+  train count clamped to `[1, class_total - 1]`) so every fold's
+  train side keeps both classes; below 2 of either class the function
+  now returns the neutral 0.5 sentinel. Audit text "returns ~0.5 for
+  everything" was slightly off in mechanism — actual output saturated
+  near 0 (all-bad) or 1 (all-good), not 0.5 — but the substantive
+  "uninformative loss, no raise" claim was correct. Regression:
+  `tests_lib/detectors/test_mlp_training.py::TestSingleClassGuard`.
 
 - **C12 — Orphaned dataset registry entry on activation failure**
   (2026-05-19). `_register_and_migrate` now returns
