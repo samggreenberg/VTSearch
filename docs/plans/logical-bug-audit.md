@@ -1,8 +1,7 @@
 # Logical-Bug Audit — 2026-05
 
 **Status:** In progress — most findings still open; resolved items
-are listed under [Open follow-ups → Shipped](#shipped) at the
-bottom and marked inline as struck-through headings.
+are marked inline as struck-through headings.
 
 **Scope:** Multi-agent audit (10 per-subsystem + 5 cross-section
 interaction passes) of the entire VTSearch codebase, focused on
@@ -19,8 +18,8 @@ by `ruff` / `pyright` / `tsc`).
   each tier.
 - Each open finding has a stable ID (`C#` Critical, `H#` High,
   `M#` Medium, `L#` Low) so it can be referenced from other docs / PRs.
-- Shipped findings are reduced to a struck-through heading; the full
-  fix summary lives in [Open follow-ups → Shipped](#shipped).
+- Shipped findings are reduced to a struck-through heading. The full
+  fix summary is the PR that landed it — git log, not this doc.
 - The "Recurring patterns" section at the bottom is the actionable
   starting point — most findings collapse into a small number of root
   causes; fixing the pattern usually fixes many findings at once.
@@ -104,18 +103,15 @@ Cross-section interaction agents:
   has no patch path (single-vector models) or the forward pass produces
   no output. Covered by `TestRegionAwareTrainingCrossDataset` in
   `tests/detectors/test_patch_embedder.py`.
-- ~~**H3. Embedder drift on save → reload**~~ — shipped 2026-05-20.
-  See [Shipped](#shipped).
+- ~~**H3. Embedder drift on save → reload**~~
 - **H5. Detector embedder not revalidated on dataset switch** —
   `vtsearch/routes/detectors/scoring.py` + `dataset_sync.py`.
   `ensure_votes_match_active_dataset()` rehydrates votes but doesn't
   check the new dataset's embedder against the detector's training
   embedder. An MLP trained on CLAP can score SigLIP vectors with no
   warning.
-- ~~**H6. `train_model` produces degenerate single-class model**~~ —
-  shipped 2026-05-20. See [Shipped](#shipped).
-- ~~**H7. Vote applied before retrain; retrain failure leaves vote live**~~ —
-  shipped 2026-05-20. See [Shipped](#shipped).
+- ~~**H6. `train_model` produces degenerate single-class model**~~
+- ~~**H7. Vote applied before retrain; retrain failure leaves vote live**~~
 
 ### Datasets
 
@@ -123,10 +119,7 @@ Cross-section interaction agents:
   `vtsearch/datasets/load_pipeline.py` L699–705. `_tag_origins()`
   stamps the same dict object; later mutations of `origin.params`
   propagate to siblings. Each media must hold its own copy.
-- **H9. Single-item split has 0 test samples** —
-  `vtsearch/datasets/split.py` L67–72. When a category has exactly 1
-  item, the docstring promises 1 test sample but the function leaves
-  test empty. Eval over that category silently skips.
+- ~~**H9. Single-item split has 0 test samples**~~
 - **H10. Clipped media re-ingest reads whole file for MD5** —
   `vtsearch/datasets/ingest.py` L275. MD5 of the full parent
   ≠ MD5 of the clip, so dedup never re-matches the original clip.
@@ -489,8 +482,7 @@ one PR is far more effective than one-off fixes.
 
 1. **C1, C2, C3** — gate hand-off + thread-local context
    propagation. One small helper (pattern #1) unblocks 3+ bug
-   classes. (C1 verified safe and C2 shipped on 2026-05-19; C3
-   still open.)
+   classes.
 2. **C4** + pattern #4 — embedding-matrix cache invalidation via a
    `media_revision` counter.
 3. **C7** — clamp `xcal_threshold` to a finite sentinel and assert
@@ -508,164 +500,7 @@ one PR is far more effective than one-off fixes.
 
 ## Open follow-ups
 
-This plan started as discovery-only. As individual fixes land, the
-corresponding finding above is collapsed to a struck-through heading
-and a one-line summary is recorded here.
-
-### Shipped
-
-- **C1 — Download gate safety net verified** (2026-05-19, branch
-  `claude/fix-logical-bug-audit-c1-DV5Lc`). After closer inspection
-  the bug as described is not real: the audit looked at
-  `_LoadGateController` in isolation and missed two safety nets in
-  the caller (`_run_origin_load_in_background.task()`) — an
-  unconditional `controller.swap_to_embed()` after the importer
-  returns, plus a `try/finally` that calls `controller.release()` on
-  every exit path. Together they cover minimalist importers exactly
-  as the audit's "fix sketch" recommended. Inline comment at the
-  unconditional swap site expanded to call out the invariant, and a
-  regression test
-  (`tests/datasets/test_parallel_loading.py::TestLoadingGates::test_minimalist_importer_releases_both_gates`)
-  was added so a future refactor can't silently remove either safety
-  net.
-
-- **C2 — JobManager thread-local context propagation** (2026-05-19).
-  `JobManager._run` in `vtscore/concurrency/async_jobs.py` now sets
-  `set_thread_dataset_context` / `set_thread_detector_context` from
-  `job.dataset_id` / `job.detector_id` before invoking the target, and
-  clears all three thread-locals (user + dataset + detector) in a
-  `finally`. Covered by `tests_lib/integration/test_async_jobs.py::TestThreadContextPropagation`.
-- **C3 — Dataset background load thread-local context** (2026-05-19).
-  `_run_origin_load_in_background.task()` in
-  `vtscore/datasets/load_pipeline.py` now pins the freshly-created
-  `DatasetContext` to its worker thread via
-  `set_thread_dataset_context(ctx)` immediately after creation, and
-  clears the thread-local in the task's `finally` (before
-  `loading_tasks.mark_finished`, so callers waiting on
-  `has_active_tasks() == False` see fully-cleaned-up worker state).
-  Regression in
-  `tests/datasets/test_parallel_loading.py::TestBackgroundLoadThreadContext`.
-- **C4 — embedding-matrix cache after clip/dedup** (2026-05-19).
-  `_apply_clipper_stage`, `_collapse_duplicates_stage`, and the
-  registry's reload-from-pickle dedup now all call
-  `invalidate_embedding_matrix(ctx)` after mutating the medias dict.
-  Regression coverage in `tests/datasets/test_load_stage_matrix_cache.py`.
-- **C5 — `find_label` body-field dataset override** (2026-05-19).
-  Removed the body override in `find_label`, dropped `dataset_id` from
-  `FindLabelRequestSchema`, and removed the redundant body field from
-  the frontend caller. The `X-Dataset-Id` header is now the only
-  dataset selector for `/api/find-label`.
-- **C6 — zip-slip in HTTP archive importer (zip, tar, rar)**
-  (2026-05-19). Added `_reject_traversal(extract_dir_resolved,
-  member_name)` validating member names before extract on all three
-  archive code paths; regression tests in
-  `tests_lib/io/test_importers.py::TestExtractArchive`.
-- **C7 — NaN/Infinity threshold sentinel** (2026-05-19). Replaced the
-  `inf` sentinel with finite `NO_GOOD_THRESHOLD = 2.0`, hardened
-  `calculate_safe_threshold` to detect non-finite inputs and fall back
-  to the finite side (or `0.5` if both non-finite), and asserted
-  finite output. Regression tests cover `inf`/`NaN` xcal and the new
-  sentinel.
-- **C8 — Bulk label paths skip achievement recording entirely**
-  (2026-05-19). Centralised achievement credit inside `_state_lock`
-  in `vtscore/state/votes.py`; also fixed the related High finding
-  ("`record_vote()` called after releasing `_state_lock`") in the
-  same change.
-- **C9 — Path-template post-resolution validation** (2026-05-19).
-  `_resolve_filepath()` in both
-  `vtscore/labels/sources/server_json_file/__init__.py` and
-  `vtsearch/settings_io/sources/server_json_file/__init__.py` (plus the
-  labels source's `resolve_filepath_for()` used by the rename flow) now
-  ends in `validate_server_filepath(resolved, base_dir=
-  get_file_access_base_dir())`. Regression tests in
-  `tests/io/test_sync_sources.py`.
-- **C10 — MediaMetadataCacheService dataset-qualified keys** (2026-05-19).
-  Cache entries in
-  `frontend/src/app/services/media-metadata-cache.service.ts` now key on
-  `${datasetId}:${mediaId}` (snapshotted from `ActiveContextService`),
-  and pending IDs are bucketed by the dataset they were queued under so
-  each batch fetch dispatches only while its dataset is active and the
-  `X-Dataset-Id` interceptor header matches what the response will be
-  cached against.
-- **C11 — `fill_labels_from_sort` sync-failure surfacing** (2026-05-19).
-  Disk sync now runs before the response and is wrapped in
-  `try/except`; failures from `sync_labels_to_loaded_detector()`
-  surface as 500. Known limitation: in-memory labels are not rolled
-  back (full transactional rollback deferred to pattern #8).
-  Regression: `tests/io/test_export_options.py::TestFillFromSortConfirm::test_disk_sync_failure_surfaces_as_500`.
-- **H6 — `train_model` single-class guard** (2026-05-20). Added an
-  up-front `ValueError` at the top of `train_model` in
-  `vtscore/training/mlp.py` when `y_train` is all-positive or
-  all-negative, and dropped the dead `else` branch that previously set
-  both class weights to `1.0` and silently trained a degenerate model
-  (BCE has no discriminative signal on single-class data — the model
-  would saturate to a single constant for every input). The audit
-  premise that "all callers already gate to ≥1 good + ≥1 bad" was
-  *almost* right — the outermost wrappers do, but
-  `calculate_cross_calibration_threshold` in
-  `vtscore/training/thresholds.py` re-split y with an unstratified
-  `np.random.permutation`, so a single fold could land all-one-class.
-  Fixed alongside the guard by switching cross-cal to a stratified
-  split (positive / negative indices shuffled separately, per-class
-  train count clamped to `[1, class_total - 1]`) so every fold's
-  train side keeps both classes; below 2 of either class the function
-  now returns the neutral 0.5 sentinel. Audit text "returns ~0.5 for
-  everything" was slightly off in mechanism — actual output saturated
-  near 0 (all-bad) or 1 (all-good), not 0.5 — but the substantive
-  "uninformative loss, no raise" claim was correct. Regression:
-  `tests_lib/detectors/test_mlp_training.py::TestSingleClassGuard`.
-
-- **H3 — Embedder drift on save → reload** (2026-05-20).
-  `train_detector_from_origins()` in
-  `vtscore/detectors/training.py` now takes a required `embedder_name`
-  argument and threads it through to `embed_file(file_path, media_type,
-  embedder_name)` at both call sites. Callers must pass the embedder the
-  detector was originally trained with (typically
-  `detector_ctx.embedder`); the previous behaviour silently fell back to
-  `embedders_for_type(media_type)[0]` (the media type's default), so a
-  CLAP-trained detector could re-train on whatever the current default
-  audio embedder happens to be. VTSearch's own load path goes through
-  `vtscore/detectors/labelset_training.py` and was already correct, so
-  this fix primarily protects third-party `vtscore` consumers who follow
-  the documented integration path. Public docs updated in lockstep:
-  `vtscore/docs/packages/detectors.md`, `vtscore/docs/concepts.md`,
-  `vtscore/docs/quickstart.md`, `vtscore/docs/integration.md`,
-  `vtscore/docs/tutorials/train-and-score.md`, and
-  `docs/vtscore-api.md`. Regression:
-  `tests/detectors/test_training_pipeline.py::TestTrainDetectorFromOrigins::test_embedder_name_is_forwarded`.
-
-- **C12 — Orphaned dataset registry entry on activation failure**
-  (2026-05-19). `_register_and_migrate` now returns
-  `(context_id, registry_entry_id)` and self-rolls-back the entry if
-  its in-place context migration raises after the entry has been
-  written. `task()` in `_run_origin_load_in_background` threads
-  `registry_entry_id` into `_handle_load_failure`, which now also
-  calls `unregister_dataset` (deletes the pkl + clears
-  `_loaded_ids`). `_auto_register_dataset` wraps `register_dataset`
-  in `try/except` that deletes the freshly-written pkl when the
-  registry write itself fails, so the inverse orphan (pkl on disk,
-  no entry) is also impossible. Regression:
-  `tests/datasets/test_datasets.py::TestLoadFailureCleanup`.
-
-- **H7 — train-first `apply_and_retrain`** (2026-05-20).
-  `apply_and_retrain` in `vtscore/detectors/workflow.py` now resolves
-  entries into `(cid, label)` pairs, builds `proposed_good` /
-  `proposed_bad` dicts merged with the current votes, and runs
-  `train_and_score` on those *before* any `apply_label` /
-  `sync_labels_to_loaded_detector()` call. A failing retrain now
-  leaves `det_ctx.good_votes`, `det_ctx.bad_votes`, `det_ctx.model`,
-  and the persisted labelset all untouched. Regression in
-  `tests/detectors/test_workflow.py::TestTrainingFailureIsTransactional`.
-
-### Still open
-
-Every other finding (the H / M / L tiers) remains as written.
-When the next fix lands, collapse the finding above to a struck-through
-heading and add a line here. When every critical and high is addressed,
-this doc can be retired into the relevant subsystem docs (or deleted,
-per the `docs/plans/` lifecycle).
-
-Specific open items called out by previously-shipped fixes:
+Cross-cutting open items that don't fit any single finding above:
 
 - **Pattern #4 (media_revision counter)** is still unimplemented.
   The C4 stage-level invalidation closes the known clip/dedup hole,
