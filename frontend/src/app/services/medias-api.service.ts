@@ -33,31 +33,8 @@ export class MediasApiService {
     return apiMediasBatchPost(this.http, this.config.rootUrl, { body: { ids } }).pipe(map((r) => r.body));
   }
 
-  /** Binary stream — stays on plain HttpClient because ng-openapi-gen
-   *  doesn't model binary response bodies usefully (the generated function
-   *  declares the success body as ``Error`` because the spec only carries
-   *  error responses for these routes). */
-  getAudio(id: number): Observable<Blob> {
-    return this.http.get(`/api/medias/${id}/audio`, { responseType: 'blob' });
-  }
-
-  /** Binary stream — see {@link getAudio}. */
-  getVideo(id: number): Observable<Blob> {
-    return this.http.get(`/api/medias/${id}/video`, { responseType: 'blob' });
-  }
-
-  /** Binary stream — see {@link getAudio}. */
-  getImage(id: number): Observable<Blob> {
-    return this.http.get(`/api/medias/${id}/image`, { responseType: 'blob' });
-  }
-
   getText(id: number): Observable<MediaParagraphResponse> {
     return apiMediasMediaIdTextGet(this.http, this.config.rootUrl, { media_id: id }).pipe(map((r) => r.body));
-  }
-
-  /** Binary stream — see {@link getAudio}. */
-  getMedia(id: number): Observable<Blob> {
-    return this.http.get(`/api/medias/${id}/media`, { responseType: 'blob' });
   }
 
   /**
