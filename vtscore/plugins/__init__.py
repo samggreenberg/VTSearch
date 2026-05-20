@@ -463,6 +463,13 @@ class PluginRegistry(Generic[T]):
                 mod = importlib.import_module(full_name)
             plugin = getattr(mod, self._sentinel, None)
             if plugin is not None:
+                if plugin.name in self._items:
+                    warnings.warn(
+                        f"{self._label} module {module_name!r} declares name "
+                        f"{plugin.name!r} which is already registered; skipped",
+                        stacklevel=2,
+                    )
+                    return
                 self._items[plugin.name] = plugin
         except Exception as exc:  # pragma: no cover
             # Clean up partially-registered module on failure.
