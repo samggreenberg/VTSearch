@@ -842,7 +842,7 @@ if __name__ == "__main__":
         else:
             parser.error("--autodetect requires either --dataset <file.pkl> or --importer <name>")
 
-    elif args.local or not args.autodetect:
+    else:
         # Activate the chosen login provider before starting the server.
         login_choice = getattr(args, "login", None)
         if login_choice == "trivial":

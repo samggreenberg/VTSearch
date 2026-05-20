@@ -263,11 +263,13 @@ Cross-section interaction agents:
 
 ### CLI / app entry
 
-- **H21. Successful `--autodetect` falls through to Flask startup** —
-  `app.py` ~L636, ~L792. `_run_pipeline()` returns `None`, no
-  `sys.exit(0)`, the `elif args.local or not args.autodetect:`
-  branch evaluates true and starts the server. Breaks any CI / cron /
-  one-shot orchestration.
+- ~~**H21. Successful `--autodetect` falls through to Flask startup**~~
+  — Not a bug. The audit misread `elif args.local or not args.autodetect:`
+  as an independent `if`; it is an `elif` paired with `if args.autodetect:`
+  above it, so the two branches are mutually exclusive and Flask never
+  starts after a successful autodetect. Simplified the redundant `elif`
+  condition to a plain `else:` in `app.py` since reaching it already
+  implies `not args.autodetect`.
 
 ### Embedding
 
