@@ -339,11 +339,30 @@ Cross-section interaction agents:
 ### Frontend
 
 - ~~**H24. Vote-state polling chain dies on a single error**~~
-- **H25. Active dataset pair is set before load completes** —
-  `frontend/src/app/services/context-switch.service.ts` L132–134.
-  `setActivePair()` runs before the load is verified; interceptor
-  immediately tags subsequent requests with a context that may not
-  be loaded → cascade of 404s.
+- ~~**H25. Active dataset pair is set before load completes**~~ —
+  shipped in commit `9470cf1a` (PR #1563, "Fix H25: split
+  ActiveContextService into intent + active layers").
+  `ActiveContextService` now exposes two layers:
+  **intent** (what the user just picked, flips immediately for UI
+  affordances like the pulldown highlight) and **active** (the loaded
+  pair — what `activeContextInterceptor` reads when attaching
+  `X-Dataset-Id` / `X-Detector-Id`).  `ContextSwitchService.flipAndLoad`
+  calls `setIntent()` on entry
+  (`frontend/src/app/services/context-switch.service.ts:147`) and
+  only promotes to `setActive()` inside `finishIfCurrent()` (L297)
+  after any required dataset / detector load endpoint has resolved
+  *and* the corresponding `loadingTasks` SSE channel has gone idle.
+  The latest-wins request-id check on the same line guards against a
+  stale switch racing past a newer one.  `setActivePair()` keeps its
+  atomic-both-layers semantics so cleanup paths
+  (`ActiveContextWatcherService` clearing a removed half,
+  `ActiveContextService.clear()`) work unchanged.  Regression tests:
+  `frontend/src/app/services/context-switch.service.spec.ts` cover
+  (a) intent flips immediately while active stays pinned mid-load,
+  (b) active promotion only after both the HTTP load and the
+  loading-tasks idle signal arrive, (c) cancel-and-replace via
+  request-id mismatch when a second switch starts before the first
+  finishes.
 - ~~**H26. `recordVote` runs before the HTTP vote returns**~~ — fixed
   by gating the undo-stack push on the POST's success.  A new
   `VoteStateService.submitToggleVoteAndRecord(id, vote, mediaName,
