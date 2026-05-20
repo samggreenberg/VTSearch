@@ -313,11 +313,19 @@ Cross-section interaction agents:
   wrapper.  Regressions in `vote-state.service.spec.ts` cover (a) the
   no-entry-on-error path, (b) `previousPolarity` capture before the
   flip, and (c) redo-stack preservation on a failed POST.
-- **H27. Binary media endpoints bypass the `activeContextInterceptor`** —
-  `frontend/src/app/services/medias-api.service.ts` L41–60. Raw
-  `HttpClient.get()` for `/api/medias/.../audio|video|image` lacks
-  `X-Dataset-Id`; correct dataset is inferred by interceptor only for
-  typed-client calls.
+- ~~**H27. Binary media endpoints bypass the `activeContextInterceptor`**~~
+  — Not a bug. Functional `HttpInterceptorFn`s registered via
+  `provideHttpClient(withInterceptors([...]))` apply to **every**
+  `HttpClient` call — typed-client wrappers and raw `this.http.get(...)`
+  share the same client and the same interceptor chain. The real
+  bypass surface is native `<img src>` / `<audio src>` / `<video src>` /
+  `<iframe>` / `fetch()`, which don't go through `HttpClient` at all;
+  those are already handled by `ActiveContextService.mediaUrl()`
+  appending `?dataset_id=…&detector_id=…` query params, with the
+  backend reading them as a fallback (`app.py` L238, L252). Also
+  removed the four dead `getAudio/getVideo/getImage/getMedia` methods
+  on `MediasApiService` — they had no callers; every binary-stream
+  consumer goes through `mediaUrl()`.
 
 ### Multi-process / settings
 
