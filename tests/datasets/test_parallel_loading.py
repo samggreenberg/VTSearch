@@ -747,6 +747,61 @@ class TestLoadingGates:
         finally:
             settings_mod.set_max_concurrent_dataset_downloads(original)
 
+    def test_minimalist_importer_releases_both_gates(self):
+        """C1 regression: an importer that never fires ``status="embedding"``
+        must still release both gates after the task finishes.
+
+        The callback-driven download→embed swap in
+        ``_make_stepped_progress`` only triggers when an importer
+        signals per-file embedding.  Minimalist importers that don't
+        emit progress at all rely on the unconditional
+        ``controller.swap_to_embed()`` after ``_run_importer`` returns
+        plus the ``finally: controller.release()`` block to keep the
+        gates from leaking.  If either safety net is removed, the
+        download gate would stay held forever and every subsequent
+        dataset load would block.
+        """
+        from vtscore.datasets.load_pipeline import (
+            _download_gate,
+            _embed_gate,
+            _run_origin_load_in_background,
+        )
+
+        started = threading.Event()
+
+        def minimalist_load(medias):
+            # Return immediately without firing any progress callback —
+            # the callback-driven swap in stepped() never triggers.
+            started.set()
+
+        task_id = _run_origin_load_in_background(
+            minimalist_load,
+            {"importer": "minimalist", "params": {}},
+            name="Minimalist",
+        )
+
+        assert started.wait(timeout=10), "Minimalist importer never started"
+
+        # The task's ``finally`` block calls ``controller.release()`` after
+        # the post-load stages finish.  Poll the gates (rather than
+        # ``has_active_tasks``) because a successful task leaves its
+        # progress status at "loading"; gate release is the true signal
+        # that the task has exited.
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            if _download_gate.active == 0 and _embed_gate.active == 0:
+                break
+            time.sleep(0.05)
+
+        assert _download_gate.active == 0, (
+            "Download gate leaked after a minimalist importer — the "
+            "unconditional swap_to_embed() after the importer, or the "
+            "finally-release in the task body, has regressed (audit C1)."
+        )
+        assert _embed_gate.active == 0, "Embed gate leaked after minimalist importer"
+
+        loading_tasks.remove_task(task_id)
+
     def test_download_and_embed_can_overlap(self):
         """When the importer signals the embedding phase, the download gate
         is released so a second dataset can start downloading in parallel

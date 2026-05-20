@@ -920,8 +920,16 @@ def _run_origin_load_in_background(
             tracker.check_cancelled()
 
             # Post-load stages are CPU/GPU-bound and touch embeddings —
-            # gate them on the embed semaphore.  No-op if the importer
-            # already swapped mid-load.
+            # gate them on the embed semaphore.  Calling swap here
+            # unconditionally is also the safety net for minimalist
+            # importers that complete without firing an ``"embedding"``
+            # status: ``_make_stepped_progress``'s callback-driven swap
+            # never fires for them, so without this call the download
+            # gate would stay held through every post-load stage.  The
+            # ``finally: controller.release()`` below is a second-line
+            # backstop that releases whichever gate is held on any
+            # error path.  No-op if the importer already swapped
+            # mid-load.
             controller.swap_to_embed()
 
             apply_custom_metadata_md5(ctx.medias)
