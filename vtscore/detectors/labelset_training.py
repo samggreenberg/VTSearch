@@ -81,8 +81,7 @@ def _patch_pooled_from_file(
         output = embedder.patch_forward(media_from_path(file_path))
     except Exception:
         log.warning(
-            "labelset_training: patch_forward(%s) raised; region vote will fall "
-            "back to image-level embedding",
+            "labelset_training: patch_forward(%s) raised; region vote will fall back to image-level embedding",
             file_path,
             exc_info=True,
         )

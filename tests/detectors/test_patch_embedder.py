@@ -1496,9 +1496,7 @@ class TestRegionAwareTrainingCrossDataset:
             region_box=region_box,
         )
 
-    def test_cross_dataset_region_vote_uses_pooled_vector_when_embedder_supports_patches(
-        self, monkeypatch, tmp_path
-    ):
+    def test_cross_dataset_region_vote_uses_pooled_vector_when_embedder_supports_patches(self, monkeypatch, tmp_path):
         """An element with ``region_box`` whose file isn't in the active
         snap pools via ``patch_forward`` + ``box_to_vote_vector`` instead of
         falling back to the full-image embedding."""
@@ -1524,9 +1522,7 @@ class TestRegionAwareTrainingCrossDataset:
         expected = box_to_vote_vector(grid, box)
         np.testing.assert_allclose(det_ctx.label_embeddings[eid], expected, atol=1e-6)
 
-    def test_cross_dataset_region_vote_box_change_reflects_in_pooled_vector(
-        self, monkeypatch, tmp_path
-    ):
+    def test_cross_dataset_region_vote_box_change_reflects_in_pooled_vector(self, monkeypatch, tmp_path):
         """Two boxes selecting disjoint quadrants of the same patch grid
         must produce two visibly different cached vectors — proves the
         region intent really threads through the cross-dataset path."""
@@ -1584,13 +1580,11 @@ class TestRegionAwareTrainingCrossDataset:
 
         eid = stable_element_id(elem)
         np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
-        assert any(
-            "region_box" in r.message and "patch regions" in r.message for r in caplog.records
-        ), f"Expected a region-downgrade warning; got: {[r.message for r in caplog.records]}"
+        assert any("region_box" in r.message and "patch regions" in r.message for r in caplog.records), (
+            f"Expected a region-downgrade warning; got: {[r.message for r in caplog.records]}"
+        )
 
-    def test_cross_dataset_region_vote_returns_none_when_embedder_patch_forward_fails(
-        self, monkeypatch, tmp_path
-    ):
+    def test_cross_dataset_region_vote_returns_none_when_embedder_patch_forward_fails(self, monkeypatch, tmp_path):
         """``patch_forward`` returning ``None`` (failed decode, etc.)
         downgrades to the image-level fallback rather than skipping the
         element entirely — keeping the vote in the training set."""
