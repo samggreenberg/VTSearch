@@ -1386,3 +1386,273 @@ class TestRegionAwareTraining:
         det_ctx.label_embeddings[eid] = sentinel
         populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
         np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
+
+
+class TestRegionAwareTrainingCrossDataset:
+    """Cross-dataset region-vote path: when a labelset element carries a
+    ``region_box`` and its source file is not in the active dataset's snap,
+    ``_embed_one`` should resolve the file, run ``patch_forward`` on it,
+    and pool the box via :func:`box_to_vote_vector` — so the user's region
+    intent isn't silently downgraded to a full-image embedding (bug H2).
+
+    Falls back (with a warning) to the image-level embedding only when the
+    chosen embedder can't produce a patch grid.
+    """
+
+    def _make_grid(self, h: int = 4, w: int = 4, d: int = 16) -> np.ndarray:
+        """Axis-aligned unit-vector grid: cell (r, c) holds e_{r*w + c}.
+
+        Lets the test assert exactly which cells got pooled by inspecting
+        the resulting vector's argmax pattern.
+        """
+        n = h * w
+        flat = np.zeros((n, d), dtype=np.float32)
+        for i in range(n):
+            flat[i, i] = 1.0
+        return flat.reshape(h, w, d)
+
+    def _patch_capable_stub(self, grid: np.ndarray):
+        """A stub embedder whose ``patch_forward`` returns *grid*."""
+        from vtscore.media.patch_embed import PatchEmbedOutput
+
+        cls = np.zeros(grid.shape[-1], dtype=np.float32)
+        cls[-1] = 1.0  # arbitrary unit vector, distinct from any cell
+
+        class _PatchStub:
+            name = "patch-stub"
+            supports_patch_regions = True
+
+            def patch_forward(self, _media):
+                saliency = np.ones(grid.shape[:2], dtype=np.float32)
+                saliency /= saliency.sum()
+                return PatchEmbedOutput(cls_vec=cls, patch_grid=grid, patch_saliency=saliency)
+
+        return _PatchStub(), cls
+
+    def _single_vector_stub(self, dim: int = 16):
+        """Stub embedder that does NOT support patch regions; ``embed_media``
+        returns a sentinel vector so the fallback can be detected."""
+        sentinel = np.zeros(dim, dtype=np.float32)
+        sentinel[0] = 1.0
+
+        class _SingleStub:
+            name = "single-stub"
+            supports_patch_regions = False
+
+            def embed_media(self, _media):
+                return sentinel
+
+        return _SingleStub(), sentinel
+
+    def _wire_resolution(
+        self,
+        monkeypatch,
+        tmp_path,
+        embedder,
+        filename: str = "missing.png",
+    ):
+        """Make ``resolve_file_context`` yield a real-looking path and route
+        ``get_embedder`` / ``embedders_for_type`` / ``embed_file`` to *embedder*.
+
+        Returns the resolved path so the test can assert it was used.
+        """
+        from contextlib import contextmanager
+        from pathlib import Path
+
+        import vtscore.detectors.resolver as resolver_mod
+        import vtscore.media as media_mod
+
+        fake = Path(tmp_path) / filename
+        fake.write_bytes(b"")  # exists on disk so resolvers don't second-guess
+
+        @contextmanager
+        def _fake_ctx(_origin, _origin_name="", _filename=""):
+            yield fake
+
+        monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_ctx)
+        monkeypatch.setattr(media_mod, "get_embedder", lambda _name: embedder)
+        monkeypatch.setattr(media_mod, "embedders_for_type", lambda _mt: [embedder])
+
+        # Image-level fallback inside ``embed_file`` re-looks-up the
+        # embedder; stub it directly so the fallback path produces the
+        # single-stub sentinel rather than a real model load.
+        def _fake_embed_file(_path, _media_type, _embedder_name=""):
+            return embedder.embed_media({"media_path": str(fake)})
+
+        monkeypatch.setattr(resolver_mod, "embed_file", _fake_embed_file)
+        return fake
+
+    def _cross_dataset_elem(self, *, region_box, md5="ff" * 16, origin_name="missing.png"):
+        """Build an element whose md5 won't match any active media so the
+        in-dataset path skips and we hit ``_embed_one``."""
+        from vtscore.datasets.labelset import LabeledElement
+
+        return LabeledElement(
+            md5=md5,
+            label="good",
+            origin={"importer": "server_folder", "params": {"folder": "/nowhere"}},
+            origin_name=origin_name,
+            filename=origin_name,
+            region_box=region_box,
+        )
+
+    def test_cross_dataset_region_vote_uses_pooled_vector_when_embedder_supports_patches(
+        self, monkeypatch, tmp_path
+    ):
+        """An element with ``region_box`` whose file isn't in the active
+        snap pools via ``patch_forward`` + ``box_to_vote_vector`` instead of
+        falling back to the full-image embedding."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.media.patch_embed import box_to_vote_vector
+        from vtscore.state.core import DetectorContext
+
+        grid = self._make_grid()
+        stub, _cls = self._patch_capable_stub(grid)
+        self._wire_resolution(monkeypatch, tmp_path, stub)
+
+        box = (0.0, 0.0, 0.5, 0.5)
+        elem = self._cross_dataset_elem(region_box=box)
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        # Empty snap → in-dataset path skipped; ``_embed_one`` is invoked.
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+
+        eid = stable_element_id(elem)
+        assert eid in det_ctx.label_embeddings
+        expected = box_to_vote_vector(grid, box)
+        np.testing.assert_allclose(det_ctx.label_embeddings[eid], expected, atol=1e-6)
+
+    def test_cross_dataset_region_vote_box_change_reflects_in_pooled_vector(
+        self, monkeypatch, tmp_path
+    ):
+        """Two boxes selecting disjoint quadrants of the same patch grid
+        must produce two visibly different cached vectors — proves the
+        region intent really threads through the cross-dataset path."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.media.patch_embed import box_to_vote_vector
+        from vtscore.state.core import DetectorContext
+
+        grid = self._make_grid()
+        stub, _ = self._patch_capable_stub(grid)
+        self._wire_resolution(monkeypatch, tmp_path, stub)
+
+        top_left = (0.0, 0.0, 0.5, 0.5)
+        bot_right = (0.5, 0.5, 1.0, 1.0)
+
+        elem = self._cross_dataset_elem(region_box=top_left)
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+        eid = stable_element_id(elem)
+        first = np.array(det_ctx.label_embeddings[eid], copy=True)
+
+        elem.region_box = bot_right
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+        second = det_ctx.label_embeddings[eid]
+
+        np.testing.assert_allclose(second, box_to_vote_vector(grid, bot_right), atol=1e-6)
+        assert not np.allclose(first, second), "Region edit must repool, not reuse the cached vector"
+
+    def test_cross_dataset_region_vote_falls_back_with_warning_for_single_vector_embedder(
+        self, monkeypatch, tmp_path, caplog
+    ):
+        """Legacy single-vector embedders can't produce a patch grid.  The
+        element still trains (we don't drop the vote), but the cached
+        embedding is the full-image vector and a warning surfaces the
+        silent downgrade."""
+        import logging
+
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        stub, sentinel = self._single_vector_stub()
+        self._wire_resolution(monkeypatch, tmp_path, stub)
+
+        elem = self._cross_dataset_elem(region_box=(0.0, 0.0, 0.5, 0.5))
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+
+        with caplog.at_level(logging.WARNING, logger="vtscore.detectors.labelset_training"):
+            populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+
+        eid = stable_element_id(elem)
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
+        assert any(
+            "region_box" in r.message and "patch regions" in r.message for r in caplog.records
+        ), f"Expected a region-downgrade warning; got: {[r.message for r in caplog.records]}"
+
+    def test_cross_dataset_region_vote_returns_none_when_embedder_patch_forward_fails(
+        self, monkeypatch, tmp_path
+    ):
+        """``patch_forward`` returning ``None`` (failed decode, etc.)
+        downgrades to the image-level fallback rather than skipping the
+        element entirely — keeping the vote in the training set."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        sentinel = np.zeros(16, dtype=np.float32)
+        sentinel[5] = 1.0
+
+        class _FlakyPatchStub:
+            name = "flaky-patch-stub"
+            supports_patch_regions = True
+
+            def patch_forward(self, _media):
+                return None  # simulates a failed forward pass
+
+            def embed_media(self, _media):
+                return sentinel
+
+        self._wire_resolution(monkeypatch, tmp_path, _FlakyPatchStub())
+
+        elem = self._cross_dataset_elem(region_box=(0.0, 0.0, 0.5, 0.5))
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+
+        eid = stable_element_id(elem)
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
+
+    def test_cross_dataset_no_region_box_unchanged(self, monkeypatch, tmp_path):
+        """Image-level cross-dataset elements (no ``region_box``) must hit
+        the existing ``embed_file`` path — patch_forward should not even
+        be called.  Guards against the new path firing spuriously."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        sentinel = np.zeros(16, dtype=np.float32)
+        sentinel[7] = 1.0
+        patch_calls = []
+
+        class _ObservingPatchStub:
+            name = "observing-patch-stub"
+            supports_patch_regions = True
+
+            def patch_forward(self, media):
+                patch_calls.append(media)
+                raise AssertionError("patch_forward must not be called for image-level votes")
+
+            def embed_media(self, _media):
+                return sentinel
+
+        self._wire_resolution(monkeypatch, tmp_path, _ObservingPatchStub())
+
+        elem = self._cross_dataset_elem(region_box=None)
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+
+        eid = stable_element_id(elem)
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
+        assert patch_calls == []
