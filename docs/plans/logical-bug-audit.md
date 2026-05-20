@@ -570,14 +570,20 @@ and a one-line summary is recorded here.
   all-negative, and dropped the dead `else` branch that previously set
   both class weights to `1.0` and silently trained a degenerate model
   (BCE has no discriminative signal on single-class data — the model
-  would saturate to a single constant for every input). Every existing
-  caller already pre-filtered to ≥1 good + ≥1 bad, so the guard is a
-  no-op on the live code paths and only fires on hypothetical future
-  misuse / external `vtscore` consumers who don't know about the
-  implicit contract. Audit text "returns ~0.5 for everything" was
-  slightly off in mechanism — actual output saturated near 0 (all-bad)
-  or 1 (all-good), not 0.5 — but the substantive "uninformative loss,
-  no raise" claim was correct. Regression:
+  would saturate to a single constant for every input). The audit
+  premise that "all callers already gate to ≥1 good + ≥1 bad" was
+  *almost* right — the outermost wrappers do, but
+  `calculate_cross_calibration_threshold` in
+  `vtscore/training/thresholds.py` re-split y with an unstratified
+  `np.random.permutation`, so a single fold could land all-one-class.
+  Fixed alongside the guard by switching cross-cal to a stratified
+  split (positive / negative indices shuffled separately, per-class
+  train count clamped to `[1, class_total - 1]`) so every fold's
+  train side keeps both classes; below 2 of either class the function
+  now returns the neutral 0.5 sentinel. Audit text "returns ~0.5 for
+  everything" was slightly off in mechanism — actual output saturated
+  near 0 (all-bad) or 1 (all-good), not 0.5 — but the substantive
+  "uninformative loss, no raise" claim was correct. Regression:
   `tests_lib/detectors/test_mlp_training.py::TestSingleClassGuard`.
 
 ### Still open
