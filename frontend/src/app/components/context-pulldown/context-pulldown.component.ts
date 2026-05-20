@@ -110,7 +110,12 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       this.maybeAutoSelectNewDataset();
     });
     this.datasetState.detectors$.pipe(takeUntil(this.destroy$)).subscribe(() => this.rebuildRows());
-    this.activeContext.pair$.pipe(takeUntil(this.destroy$)).subscribe(() => this.rebuildRows());
+    // Read intent (not active) so the pulldown highlight updates the
+    // moment the user picks a row, rather than waiting for any
+    // dataset/detector load to finish.
+    this.activeContext.intentPair$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.rebuildRows());
     this.datasetState.error$.pipe(takeUntil(this.destroy$)).subscribe((err) => {
       this.registryError = err;
     });
@@ -231,9 +236,9 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       return;
     }
     if (this.isDataset) {
-      this.contextSwitch.switchTo(row.id, this.activeContext.modelId);
+      this.contextSwitch.switchTo(row.id, this.activeContext.intentModelId);
     } else {
-      this.contextSwitch.switchTo(this.activeContext.datasetId, row.id);
+      this.contextSwitch.switchTo(this.activeContext.intentDatasetId, row.id);
     }
     this.close();
   }
@@ -246,8 +251,8 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       this.knownIdsAtAddStart = new Set(this.datasetState.datasets.map((d) => d.id));
       this.newThingFlows.openImporter();
     } else {
-      const other = this.activeContext.datasetId
-        ? this.datasetState.datasets.find((d) => d.id === this.activeContext.datasetId)
+      const other = this.activeContext.intentDatasetId
+        ? this.datasetState.datasets.find((d) => d.id === this.activeContext.intentDatasetId)
         : null;
       this.newThingFlows.openNewDetector({ defaultMediaType: other?.media_type || '' });
     }
@@ -367,7 +372,9 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   private findActiveIndex(): number {
-    const id = this.isDataset ? this.activeContext.datasetId : this.activeContext.modelId;
+    const id = this.isDataset
+      ? this.activeContext.intentDatasetId
+      : this.activeContext.intentModelId;
     return this.rows.findIndex((r) => r.id === id);
   }
 
@@ -393,17 +400,20 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
   private switchToNewItem(id: string): void {
     if (this.isDataset) {
-      this.contextSwitch.switchTo(id, this.activeContext.modelId);
+      this.contextSwitch.switchTo(id, this.activeContext.intentModelId);
     } else {
-      this.contextSwitch.switchTo(this.activeContext.datasetId, id);
+      this.contextSwitch.switchTo(this.activeContext.intentDatasetId, id);
     }
   }
 
   private rebuildRows(): void {
     const datasets = this.datasetState.datasets;
     const detectors = this.datasetState.detectors;
-    const activeDsId = this.activeContext.datasetId;
-    const activeDetId = this.activeContext.modelId;
+    // Highlight rows by intent (what the user picked), not by what's
+    // currently loaded — picking a row should feel instant even when
+    // a dataset/detector load is still running behind the scenes.
+    const activeDsId = this.activeContext.intentDatasetId;
+    const activeDetId = this.activeContext.intentModelId;
     const activeDataset = activeDsId ? datasets.find((d) => d.id === activeDsId) : null;
     const activeDetector = activeDetId ? detectors.find((d) => d.id === activeDetId) : null;
 

@@ -22,10 +22,17 @@ interface ActiveSwitch {
 }
 
 /**
- * Drives a pulldown-initiated active-pair change end-to-end: sets the
- * pair atomically on `ActiveContextService`, kicks off any dataset /
- * detector loads that are needed, and exposes a `switching$` observable
- * so view code (and the top-bar pulldowns) can render a loading state.
+ * Drives a pulldown-initiated active-pair change end-to-end: tags the
+ * user's intent on `ActiveContextService` immediately, kicks off any
+ * dataset / detector loads that are needed, and promotes the pair to
+ * *active* (what the HTTP interceptor reads) only once those loads have
+ * settled. Exposes a `switching$` observable so view code (and the
+ * top-bar pulldowns) can render a loading state.
+ *
+ * The intent/active split (see `ActiveContextService`) is what fixes
+ * H25: without it, the interceptor would tag outgoing requests with
+ * the new ids the moment the pulldown was clicked, causing a cascade
+ * of 409 `dataset_not_loaded` until the load finished.
  *
  * Cancel-and-replace semantics: rapidly clicking a different row tags
  * each invocation with a monotonic request id. When a prep step
@@ -86,11 +93,13 @@ export class ContextSwitchService {
   }
 
   /**
-   * Called by `activeContextGuard`. Atomically flips the active pair
-   * and kicks off any dataset / detector loads, returning an Observable
-   * that completes when all loads finish (or immediately if nothing was
-   * needed). The guard holds the route activation until this completes
-   * so the view doesn't render against half-loaded state.
+   * Called by `activeContextGuard`. Tags the user's intent, kicks off
+   * any dataset / detector loads, and returns an Observable that
+   * completes when all loads finish (or immediately if nothing was
+   * needed). At completion the pair is promoted to *active* so the HTTP
+   * interceptor starts tagging requests with the new ids. The guard
+   * holds the route activation until this completes so the view never
+   * renders against a half-loaded backend.
    */
   applyActivePair(datasetId: string, detectorId: string): Observable<void> {
     return this.flipAndLoad(datasetId, detectorId);
@@ -129,9 +138,13 @@ export class ContextSwitchService {
     };
     this.active = current;
 
-    // Flip the pair atomically so the HTTP interceptor immediately
-    // routes against the new ids.
-    this.activeContext.setActivePair(datasetId, detectorId);
+    // Tag the user's intent so UI affordances (pulldown highlight) update
+    // immediately. The active pair — what the HTTP interceptor reads —
+    // stays pinned to the currently-loaded backend state and is promoted
+    // in `finishIfCurrent` once any required load completes. This avoids
+    // the H25 race where the interceptor would otherwise tag requests
+    // with an id the backend hasn't loaded yet.
+    this.activeContext.setIntent(datasetId, detectorId);
 
     const datasets = this.datasetState.datasets;
     const detectors = this.datasetState.detectors;
@@ -278,6 +291,10 @@ export class ContextSwitchService {
   private finishIfCurrent(current: ActiveSwitch): void {
     if (this.active !== current || current.cancelled) return;
     if (current.requestId !== this.activeContext.currentRequestId) return;
+    // Loads have settled — promote intent to active now so the HTTP
+    // interceptor starts tagging requests with the new ids (and not
+    // before, per H25).
+    this.activeContext.setActive(current.datasetId, current.detectorId);
     this.switchingSubject.next(false);
     this.datasetState.setLoading(false);
     this.active = null;
