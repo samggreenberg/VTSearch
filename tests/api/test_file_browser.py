@@ -279,9 +279,7 @@ class TestBrowseSymlinks:
             resp = client.get("/api/browse")
 
         assert resp.status_code == 200
-        all_names = [d["name"] for d in resp.get_json()["directories"]] + [
-            f["name"] for f in resp.get_json()["files"]
-        ]
+        all_names = [d["name"] for d in resp.get_json()["directories"]] + [f["name"] for f in resp.get_json()["files"]]
         assert "dangling" not in all_names
 
     def test_symlink_drill_through_blocked(self, client, tmp_path):
