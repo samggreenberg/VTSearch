@@ -247,8 +247,7 @@ def _compute_step_stability(
         scores_unl = torch.sigmoid(model(X_unlabeled)).squeeze(1).cpu().tolist()
 
     predictions: dict[int, int] = {
-        cid: 1 if score >= threshold else 0
-        for cid, score in zip(unlabeled_ids, scores_unl, strict=True)
+        cid: 1 if score >= threshold else 0 for cid, score in zip(unlabeled_ids, scores_unl, strict=True)
     }
 
     stability: Optional[dict[str, Any]] = None
