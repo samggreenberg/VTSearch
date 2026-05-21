@@ -253,6 +253,10 @@ export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, Aft
   get absolutePath(): string {
     if (!this.rootPath) return '';
     if (!this.currentPath) return this.rootPath;
+    // When the root is the filesystem root ("/"), joining with "/" would
+    // produce a leading "//". Treat "/" as a special case so the absolute
+    // path stays well-formed.
+    if (this.rootPath === '/') return '/' + this.currentPath;
     return this.rootPath + '/' + this.currentPath;
   }
 

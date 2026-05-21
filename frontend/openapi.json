@@ -567,6 +567,11 @@
       "BrowseMediaFilesResponse": {
         "additionalProperties": false,
         "properties": {
+          "default_path": {
+            "default": "",
+            "description": "Suggested initial relative sub-path for this source \u2014 for example the server user's home directory when ``source=server_fs``. Empty for sources where the root is already the right starting point.",
+            "type": "string"
+          },
           "directories": {
             "items": {
               "$ref": "#/components/schemas/BrowseDirectoryEntry"
@@ -5423,7 +5428,7 @@
         "operationId": "browse_media_files",
         "parameters": [
           {
-            "description": "One of ``demo:<name>`` or ``folder``.",
+            "description": "One of ``demo:<name>``, ``folder``, or ``server_fs``.",
             "in": "query",
             "name": "source",
             "required": false,

@@ -88,6 +88,30 @@
 .server-folder-browser { gap: 12px; }
 .sf-browse-section { gap: 6px; }
 
+.sf-selected-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--bg-subtle, #f3f6fa);
+  border: 1px solid var(--border, #d8e0ea);
+  border-radius: 6px;
+  font-size: .9rem;
+  flex-wrap: wrap;
+
+  .sf-selected-label {
+    color: var(--text-muted, #555);
+    font-weight: 600;
+  }
+
+  .sf-selected-value {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    word-break: break-all;
+    color: var(--text, #222);
+  }
+}
+
 // Embedder licence warning shown under the picker when the chosen
 // embedder reports a license_notice (today: real-EUPE under FAIR
 // Noncommercial). Subtle yellow chip, no acceptance click — users

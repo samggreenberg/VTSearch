@@ -767,14 +767,33 @@
       </div>
 
       <div class="sf-browse-section">
-        <label class="form-label">Select Folder</label>
+        <label class="form-label" for="sf-path-input">Folder to import</label>
+        <input
+          id="sf-path-input"
+          type="text"
+          class="form-input"
+          placeholder="/absolute/server/path/to/folder"
+          [(ngModel)]="sfPathInputValue"
+          (keydown.enter)="sfApplyPathInput(); $event.preventDefault()"
+          (blur)="sfApplyPathInput()"
+        />
+        <p class="info-text">
+          Type or paste any folder path on the server, or browse below.
+          Press <kbd>Enter</kbd> to jump the browser to a typed path.
+        </p>
         <vt-folder-browser
           [browse]="sfBrowseFn"
           [showFiles]="false"
-          [showPathFooter]="true"
-          emptyMessage="No subdirectories. This folder will be imported."
+          [initialPath]="sfPickerInitialPath"
+          emptyMessage="(No subfolders here.)"
           (pathChange)="sfOnPathChange($event)"
         ></vt-folder-browser>
+        @if (sfAbsolutePath) {
+          <div class="sf-selected-banner">
+            <span class="sf-selected-label">Selected folder:</span>
+            <code class="sf-selected-value">{{ sfAbsolutePath }}</code>
+          </div>
+        }
       </div>
 
       <div class="form-group">
