@@ -219,6 +219,74 @@ class TestBulkClipReembedMD5UnchangedByRefactor:
             assert clip["md5"] == hashlib.md5(clip["media_bytes"]).hexdigest()
 
 
+class TestSingleOutputClipperMD5Recompute:
+    """Single-output clippers that rewrite ``media_bytes`` (e.g.
+    ImageBboxClipper, ImageObjectClipper with one detection) must have
+    their MD5 rehashed from the final bytes, not inherited from the
+    parent — otherwise dedup would collapse distinct crops.
+
+    ``needs_recompute=False`` (single output, no converter) but
+    ``embedding is None`` (importer skipped embedding because a clipper
+    was specified) — the historical bug case.
+    """
+
+    def test_md5_recomputed_when_embedding_is_none_even_without_recompute_flag(self):
+        from vtscore.datasets.load_pipeline import _fixup_clip_md5_and_embeddings
+
+        parent_bytes = b"parent-image-bytes"
+        crop_bytes = b"crop-from-parent-bytes"
+        parent_md5 = hashlib.md5(parent_bytes).hexdigest()
+        expected_crop_md5 = hashlib.md5(crop_bytes).hexdigest()
+
+        # Simulates the state a single-output crop clipper leaves behind:
+        # media_bytes replaced with the crop, but md5 still carries the
+        # parent's hash via ``dict(media)``; embedding is None because the
+        # importer skipped embedding when a clipper was requested.
+        clip = {
+            "id": 1,
+            "type": "image",
+            "media_bytes": crop_bytes,
+            "md5": parent_md5,
+            "embedding": None,
+            "filename": "img.png",
+            "origin_name": "img.png",
+        }
+
+        emb = _fake_bulk_embedder()
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            _fixup_clip_md5_and_embeddings([clip], needs_recompute=[False], media_type="image")
+
+        assert clip["md5"] == expected_crop_md5, (
+            f"expected MD5 to be rehashed from crop bytes ({expected_crop_md5}), got {clip['md5']}"
+        )
+        assert clip["md5"] != parent_md5
+
+    def test_md5_recomputed_for_text_string_clips(self):
+        from vtscore.datasets.load_pipeline import _fixup_clip_md5_and_embeddings
+
+        parent_text = "the full document text"
+        clip_text = "first sentence only"
+        parent_md5 = hashlib.md5(parent_text.encode("utf-8")).hexdigest()
+        expected_clip_md5 = hashlib.md5(clip_text.encode("utf-8")).hexdigest()
+
+        clip = {
+            "id": 1,
+            "type": "text",
+            "media_string": clip_text,
+            "md5": parent_md5,
+            "embedding": None,
+            "filename": "doc.txt",
+            "origin_name": "doc.txt",
+        }
+
+        emb = _fake_bulk_embedder()
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            _fixup_clip_md5_and_embeddings([clip], needs_recompute=[False], media_type="text")
+
+        assert clip["md5"] == expected_clip_md5
+        assert clip["md5"] != parent_md5
+
+
 class TestBulkClipReembedNoTempfile:
     """The pre-refactor path wrote each clip to ``tempfile.mkstemp`` and
     called ``embed_file`` from ``vtscore.detectors.resolver`` one clip

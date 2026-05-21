@@ -394,7 +394,12 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
     - the clip has no embedding at all (import phase was skipped because a
       clipper was going to re-embed anyway).
 
-    Without the MD5 fix, all clips from the same parent would share the
+    For any clip reaching this fixup with new content bytes (audio/image/
+    text), the MD5 is always rehashed from those final bytes — including
+    single-output clippers that copy the parent dict via ``dict(media)``
+    and would otherwise carry the parent's stale MD5 forward.
+
+    Without the MD5 fix, clips from the same parent would share the
     parent's MD5 (causing ``collapse_duplicates`` to merge them).
 
     Embeddings are batched through ``embed_media_bulk`` in a single call
@@ -418,18 +423,22 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
         if content_bytes is None and not metadata_only:
             continue
 
-        if recompute:
-            if content_bytes is not None:
-                clip["md5"] = hashlib.md5(content_bytes).hexdigest()
-            else:
-                # Metadata-only clips (e.g. video): bytes unchanged but
-                # boundaries differ — create a unique MD5 by hashing the
-                # parent bytes + clip boundaries so dedup doesn't collapse
-                # distinct clips.
-                parent_bytes = clip.get("media_bytes", b"")
-                boundary_tag = f"|clip_start={clip.get('clip_start')}|clip_end={clip.get('clip_end')}"
-                combined = hashlib.md5(parent_bytes).hexdigest() + boundary_tag
-                clip["md5"] = hashlib.md5(combined.encode()).hexdigest()
+        # Always recompute MD5 from the final clip bytes whenever we're
+        # also recomputing the embedding. Any single-output clipper that
+        # rewrites media_bytes (e.g. ImageObjectClipper with one detection,
+        # ImageBboxClipper) would otherwise inherit the parent's MD5 via
+        # ``dict(media)`` and cause dedup to merge distinct crops.
+        if content_bytes is not None:
+            clip["md5"] = hashlib.md5(content_bytes).hexdigest()
+        elif recompute:
+            # Metadata-only clips (e.g. video): bytes unchanged but
+            # boundaries differ — create a unique MD5 by hashing the
+            # parent bytes + clip boundaries so dedup doesn't collapse
+            # distinct clips.
+            parent_bytes = clip.get("media_bytes", b"")
+            boundary_tag = f"|clip_start={clip.get('clip_start')}|clip_end={clip.get('clip_end')}"
+            combined = hashlib.md5(parent_bytes).hexdigest() + boundary_tag
+            clip["md5"] = hashlib.md5(combined.encode()).hexdigest()
         embed_indices.append(clip_idx)
         embed_inputs.append(_build_clip_embed_input(clip, media_type))
 
