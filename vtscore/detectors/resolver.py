@@ -633,19 +633,36 @@ def _log_resolve_failure(
     )
 
 
-def _embed_resolved_label(file_path: Path, media_type: str, origin: dict[str, Any] | None) -> np.ndarray | None:
-    """Embed a resolved file, switching to clip-aware embedding when the origin demands it."""
+def _embed_resolved_label(
+    file_path: Path,
+    media_type: str,
+    origin: dict[str, Any] | None,
+    embedder_name: str = "",
+) -> np.ndarray | None:
+    """Embed a resolved file, switching to clip-aware embedding when the origin demands it.
+
+    When *embedder_name* is given, the resolved file is embedded with that
+    specific embedder (matching by name) so the resulting vector lives in
+    the same space as the snap embeddings it will be mixed with for
+    training.  An empty *embedder_name* falls back to the media type's
+    default embedder.
+    """
     params = origin.get("params", {}) if origin is not None else {}
     if origin is not None and (params.get("clipper") or params.get("clipper_chain")):
-        result = _apply_clip_and_embed(file_path, media_type, origin)
+        result = _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
         if result is None:
             return None
         embedding, _clip_bytes = result
         return embedding
-    return embed_file(file_path, media_type)
+    return embed_file(file_path, media_type, embedder_name)
 
 
-def _resolve_one_label(entry: dict[str, Any], media_type: str, index: int) -> _LabelOutcome:
+def _resolve_one_label(
+    entry: dict[str, Any],
+    media_type: str,
+    index: int,
+    embedder_name: str = "",
+) -> _LabelOutcome:
     """Resolve a single label entry to an embedding.  Logs success / failure inline."""
     label_val = entry.get("label", "")
     if label_val not in ("good", "bad"):
@@ -661,7 +678,7 @@ def _resolve_one_label(entry: dict[str, Any], media_type: str, index: int) -> _L
             _log_resolve_failure(index, entry, status, origin, origin_name, filename)
             return _LabelOutcome(status=status)
 
-        embedding = _embed_resolved_label(file_path, media_type, origin)
+        embedding = _embed_resolved_label(file_path, media_type, origin, embedder_name)
         if embedding is None:
             log.info(
                 "  label[%d] FAILED (embed): file resolved to %s but embedding returned None for media_type=%r",
@@ -725,17 +742,28 @@ def resolve_label_embeddings(
     labels: list[dict[str, Any]],
     media_type: str,
     progress_callback: Any | None = None,
+    *,
+    embedder_name: str = "",
 ) -> ResolvedLabels:
     """Resolve label entries to embeddings by following their origin trails.
 
     For each label entry, attempts to:
     1. Resolve the original media file from its origin info
-    2. Embed it using the appropriate embedder for *media_type*
+    2. Embed it using *embedder_name* (or the media type's default embedder
+       when empty)
     3. Collect the embedding and label value
 
     Args:
         labels: List of label dicts (with origin, origin_name, filename, label keys).
         media_type: The media type for embedding (e.g. "audio", "image").
+        progress_callback: Optional ``(current, total)`` reporter.
+        embedder_name: Name of the embedder to use for resolved files.
+            Callers that will mix these vectors with a dataset's stored
+            embeddings (e.g. find-label training) must pass the dataset's
+            embedder so all training vectors share one space — mixing
+            output from two embedders into a single MLP produces garbage.
+            Empty ``""`` falls back to the media type's first registered
+            embedder.
 
     Returns:
         A :class:`ResolvedLabels` with resolved embeddings, stats, and missing entries.
@@ -745,13 +773,14 @@ def resolve_label_embeddings(
     total = len(labels)
 
     log.info(
-        "resolve_label_embeddings: starting resolution of %d label entries for media_type=%r",
+        "resolve_label_embeddings: starting resolution of %d label entries for media_type=%r embedder=%r",
         total,
         media_type,
+        embedder_name or "<default>",
     )
 
     for i, entry in enumerate(labels):
-        outcome = _resolve_one_label(entry, media_type, i)
+        outcome = _resolve_one_label(entry, media_type, i, embedder_name)
         if progress_callback is not None:
             progress_callback(current=i + 1, total=total)
 

@@ -270,10 +270,20 @@ def _set_request_context():
     # labelset against the active dataset's medias.  Media ids are dataset-
     # specific, so without this the left-pane shows stale cids from the
     # previous dataset as if they were votes in the current one.
+    #
+    # Also drop the detector's cached MLP / per-label embedding cache when
+    # the active dataset's embedder differs from the one the MLP was
+    # trained on — scoring with a cross-space MLP either crashes (different
+    # dim) or silently produces garbage labels (same dim).  See H5 in
+    # docs/plans/logical-bug-audit.md.
     try:
-        from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.detectors.dataset_sync import (
+            ensure_detector_model_matches_active_embedder,
+            ensure_votes_match_active_dataset,
+        )
 
         ensure_votes_match_active_dataset()
+        ensure_detector_model_matches_active_embedder()
     except (DatasetNotLoadedError, DetectorNotLoadedError):
         # The route handler will hit the same error when it touches the
         # proxies; the global error handler turns it into a clean 409.

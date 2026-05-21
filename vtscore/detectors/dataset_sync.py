@@ -136,6 +136,97 @@ def ensure_votes_match_active_dataset() -> None:
         det_ctx.cached_labelset_media_type = data.get("media_type", "") or ""
 
 
+def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -> bool:
+    """Drop *det_ctx*'s cached MLP when *new_embedder* differs.
+
+    ``DetectorContext.model`` is trained against a specific embedding space —
+    ``det_ctx.embedder`` records which.  Scoring with a cross-space MLP
+    either crashes (different dim → ``nn.Linear`` size-mismatch) or
+    silently produces garbage labels (same dim, different space).  When
+    the dataset about to be scored uses a different embedder than the one
+    the cached MLP was trained on, clear the embedder-tagged scoring
+    caches (``model``, ``threshold``, ``last_learned_scores``,
+    ``training_medias``, ``calibration_cache``) so the next scoring /
+    learned-sort call rebuilds against *new_embedder*.
+
+    Deliberately leaves ``label_embeddings`` and ``embedder`` alone:
+
+    * The per-label embedding cache is invalidated lazily by
+      :func:`~vtscore.detectors.labelset_training._maybe_clear_cache_on_embedder_switch`
+      inside :func:`~vtscore.detectors.labelset_training.populate_label_embeddings`,
+      which is the only consumer.  Clearing it here would just shift the
+      reset and risk surprising any caller that reads the cache directly.
+    * ``det_ctx.embedder`` is the "what was the last training pass aligned
+      with" marker.  Leaving it stamped as the old value lets the load
+      endpoint's :func:`~vtsearch.routes.detectors.registry._maybe_start_label_reembed`
+      still detect the mismatch and schedule its progress-tracked
+      re-embed task.  The marker is restamped to *new_embedder* by the
+      next training pass (via
+      :func:`~vtscore.detectors.registry.record_detector_embedder`
+      in :func:`~vtscore.detectors.labelset_training.populate_label_embeddings`
+      and the workflow path).
+
+    Returns ``True`` when invalidation happened, ``False`` otherwise.
+    Idempotent: a second call without intervening training simply finds
+    ``model`` already cleared and returns ``False``.
+    """
+    from vtscore.state.core import _state_lock
+
+    if det_ctx is None or not det_ctx.embedder or not new_embedder:
+        return False
+    if new_embedder == det_ctx.embedder:
+        return False
+    if det_ctx.model is None:
+        # Already invalidated by an earlier request in this dataset
+        # transition; nothing to clear.
+        return False
+    with _state_lock:
+        if det_ctx.model is None or new_embedder == det_ctx.embedder:
+            return False
+        det_ctx.model = None
+        det_ctx.threshold = 0.5
+        det_ctx.last_learned_scores.clear()
+        det_ctx.training_medias.clear()
+        det_ctx.calibration_cache = None
+    return True
+
+
+def _embedder_of_active_dataset() -> str:
+    """Return the embedder name recorded on the active dataset's medias, or ``""``."""
+    from vtscore.state.core import get_active_context
+
+    ds_ctx = get_active_context()
+    if not ds_ctx.dataset_id or not ds_ctx.medias:
+        return ""
+    first = next(iter(ds_ctx.medias.values()), {})
+    return first.get("embedder", "") or ""
+
+
+def ensure_detector_model_matches_active_embedder() -> None:
+    """Active-context wrapper for :func:`invalidate_detector_model_on_embedder_mismatch`.
+
+    Called from ``before_request`` so a dataset switch can't leave the
+    active detector pointing at an MLP trained against the old embedder
+    (silent garbage scores at best, ``nn.Linear`` size-mismatch crash at
+    worst).  Vote-rehydrate in :func:`ensure_votes_match_active_dataset`
+    handles cid-keyed votes; this handles the embedder-specific caches
+    that the on-disk labelset doesn't carry.
+
+    The scoring fast-paths
+    (:func:`vtsearch.routes.detectors.scoring._resolve_or_train_detector`
+    and the find dispatcher) defensively repeat the check per-detector,
+    since autorun / multi-dataset Find iterate detectors that aren't the
+    active one.
+    """
+    from vtscore.state.core import get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    if not det_ctx.detector_id:
+        return
+    new_embedder = _embedder_of_active_dataset()
+    invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder)
+
+
 class VoteSnapshot(NamedTuple):
     """Atomic, internally-consistent (dataset, detector) state snapshot.
 

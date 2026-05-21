@@ -60,9 +60,17 @@ def _resolve_or_train_detector(  # noqa: C901
     origin importer.  Returns ``(None, _, diag)`` when training is not
     possible.
     """
+    from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
     from vtscore.state.core import get_detector_context
 
     det_ctx = get_detector_context(detector_id)
+    if det_ctx is not None:
+        # Defense against H5: scoring autorun detectors iterates contexts
+        # that aren't the active one, so the before_request hook can't
+        # have invalidated their stale MLPs.  Drop them here so the next
+        # branch trains fresh against *snap*'s embedder.
+        snap_embedder = next(iter(snap.values()), {}).get("embedder", "") or "" if snap else ""
+        invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
     if det_ctx is not None and det_ctx.model is not None:
         return det_ctx.model, det_ctx.threshold, None
 
@@ -90,6 +98,14 @@ def _resolve_or_train_detector(  # noqa: C901
     md5_to_emb = {}
     if snap:
         md5_to_emb = {c["md5"]: c["embedding"] for c in snap.values()}
+
+    # Match origin-resolved label vectors to the snap's embedder space so
+    # the two paths don't produce a mixed-space training set (silently
+    # garbage MLP).  Empty when the snap is empty or untyped, which falls
+    # back to the media type's default embedder.
+    dataset_embedder = ""
+    if snap:
+        dataset_embedder = next(iter(snap.values()), {}).get("embedder", "") or ""
 
     unresolved: list[dict] = []
     for entry in label_entries:
@@ -130,6 +146,7 @@ def _resolve_or_train_detector(  # noqa: C901
             unresolved,
             media_type,
             progress_callback=_origin_progress,
+            embedder_name=dataset_embedder,
         )
         X_list.extend(resolved.embeddings)
         y_list.extend(resolved.labels)
