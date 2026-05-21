@@ -207,6 +207,7 @@ def set_inclusion(value: int) -> None:
         from vtscore.detectors.labeling_progress import clear_progress_cache
 
         clear_progress_cache()
+        _core.invalidate_loaded_detector_models()
 
 
 def get_dataset_display_name() -> str | None:
@@ -230,7 +231,10 @@ def get_calibrate_count() -> int:
 
 def set_calibrate_count(value: int) -> None:
     """Set the calibrate count.  Persistence delegated to the registered hook."""
+    changed = value != get_calibrate_count()
     _persist_setting("calibrate_count", value)
+    if changed:
+        _core.invalidate_loaded_detector_models()
 
 
 def get_calibration_fraction() -> float:
@@ -242,7 +246,10 @@ def get_calibration_fraction() -> float:
 
 def set_calibration_fraction(value: float) -> None:
     """Set the calibration fraction.  Persistence delegated to the registered hook."""
+    changed = value != get_calibration_fraction()
     _persist_setting("calibration_fraction", value)
+    if changed:
+        _core.invalidate_loaded_detector_models()
 
 
 def get_safe_thresholds() -> bool:
@@ -254,4 +261,7 @@ def get_safe_thresholds() -> bool:
 
 def set_safe_thresholds(value: bool) -> None:
     """Set the safe-thresholds flag.  Persistence delegated to the registered hook."""
+    changed = value != get_safe_thresholds()
     _persist_setting("safe_thresholds", value)
+    if changed:
+        _core.invalidate_loaded_detector_models()

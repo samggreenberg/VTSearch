@@ -578,9 +578,28 @@ Cross-section interaction agents:
   (`vtscore/detectors/resolver.py:_resolve_converter`) while the
   dataset stores the converted-output md5 — track under detector
   findings if it bites.
-- **M7.** `safe_thresholds` is read at *training* time and baked into the
-  detector JSON; per-user threshold preference cannot change after
-  save.
+- ~~**M7. `safe_thresholds` read at training time, cached on DetectorContext, never refreshed**~~
+  — partial close. The audit's "baked into the detector JSON" claim was
+  wrong: the threshold is never serialised (see the "No Persisted Vectors
+  or MLPs" rule in `CLAUDE.md`) — every detector JSON write site lists
+  only `name` / `text_query` / `media_example` / `media_type` / `examples`
+  / `created_at` / `labelset` / `input_spec`. But a narrower staleness
+  was real: the in-memory `DetectorContext.model` / `threshold` cached on
+  detector load were not invalidated when the user changed
+  `safe_thresholds` / `inclusion` / `calibrate_count` /
+  `calibration_fraction`, so `/api/find-label`, `/api/find`, and
+  `/api/auto-detect` (the three consumers that short-circuit on the
+  cached MLP) kept scoring with the prior setting. Sort / vote paths
+  retrained every call and so were already correct. Fixed by a new
+  `vtscore.state.core.invalidate_loaded_detector_models()` that walks
+  every loaded `DetectorContext` and clears `model` + `threshold`; the
+  setters for all four training-relevant settings in
+  `vtscore/state/__init__.py` call it on actual change. The
+  `/api/settings PUT` route now dispatches those three keys through
+  `vtsearch.state` (matching the existing `inclusion` path) so both the
+  dedicated endpoints (`/api/safe-thresholds` etc.) and the bulk
+  settings endpoint trigger invalidation. Regression test:
+  `tests/sorting/test_safe_thresholds.py::TestTrainingSettingsInvalidateLoadedDetector`.
 
 ### Datasets / loaders
 
