@@ -225,6 +225,10 @@ def _resolve_browse_root(source: str) -> Path | None:
 
     * ``demo:<name>`` — the ``required_folder`` of the named demo dataset.
     * ``folder`` — the configured ``saved_datasets_dir``.
+    * ``server_fs`` — the whole server filesystem (single-user mode) or the
+      current user's data directory (multi-user mode). Matches the actual
+      runtime scope of the ``server_folder``/``server_files`` importers,
+      which accept any absolute path readable by the server process.
 
     Returns ``None`` if the source is unrecognised or the directory does not
     exist.
@@ -246,7 +250,38 @@ def _resolve_browse_root(source: str) -> Path | None:
         ds_dir.mkdir(parents=True, exist_ok=True)
         return ds_dir.resolve()
 
+    if source == "server_fs":
+        from vtscore.security.path_validation import get_file_access_base_dir
+
+        base = get_file_access_base_dir()
+        if base is None:
+            return Path("/")
+        return base.resolve()
+
     return None
+
+
+def _default_browse_path(source: str, root: Path) -> str:
+    """Pick a sensible initial relative path for *source* under *root*.
+
+    For ``server_fs`` in single-user mode (root == ``/``) we start the
+    picker at the server user's home directory if it exists — saves the
+    user three or four clicks to drill down from ``/``. Falls back to the
+    root itself otherwise.
+    """
+    if source != "server_fs":
+        return ""
+    try:
+        home = Path.home().resolve()
+    except (RuntimeError, OSError):
+        return ""
+    try:
+        rel = home.relative_to(root)
+    except ValueError:
+        return ""
+    if not home.is_dir():
+        return ""
+    return str(rel) if str(rel) != "." else ""
 
 
 @datasets_ui_bp.route("/api/browse-media-files")
@@ -309,7 +344,12 @@ def browse_media_files(query: dict):
                 }
             )
 
-    return {"directories": directories, "files": files, "root_path": str(root)}
+    return {
+        "directories": directories,
+        "files": files,
+        "root_path": str(root),
+        "default_path": _default_browse_path(source, root),
+    }
 
 
 @datasets_ui_bp.route("/api/dataset/detect-media-type")

@@ -193,7 +193,7 @@ class BrowseMediaFilesQuerySchema(Schema):
 
     source = fields.String(
         load_default="",
-        metadata={"description": "One of ``demo:<name>`` or ``folder``."},
+        metadata={"description": "One of ``demo:<name>``, ``folder``, or ``server_fs``."},
     )
     path = fields.String(
         load_default="",
@@ -215,6 +215,17 @@ class BrowseMediaFilesResponseSchema(Schema):
     directories = fields.List(fields.Nested(BrowseDirectoryEntrySchema), required=True)
     files = fields.List(fields.Nested(BrowseFileEntrySchema), required=True)
     root_path = fields.String(required=True)
+    default_path = fields.String(
+        load_default="",
+        dump_default="",
+        metadata={
+            "description": (
+                "Suggested initial relative sub-path for this source — for example "
+                "the server user's home directory when ``source=server_fs``. Empty "
+                "for sources where the root is already the right starting point."
+            )
+        },
+    )
 
 
 class BrowseMediaFilesSelectRequestSchema(Schema):

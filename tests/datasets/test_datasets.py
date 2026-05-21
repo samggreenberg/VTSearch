@@ -128,6 +128,34 @@ class TestDatasetEndpoints:
             file_names2 = [f["name"] for f in data2["files"]]
             assert "sound.wav" in file_names2
 
+    def test_browse_media_files_server_fs_lists_filesystem(self, client, tmp_path):
+        """``source=server_fs`` should let the picker walk the whole filesystem.
+
+        The single-user mode root is ``/`` so any directory readable by the
+        server process should be listable via its absolute path stripped of
+        the leading slash.
+        """
+        sub = tmp_path / "subdir"
+        sub.mkdir()
+        (sub / "track.wav").write_bytes(b"RIFF" + b"\x00" * 64)
+
+        # tmp_path is absolute (e.g. /tmp/pytest-of-user/.../test_x0).
+        # Strip the leading "/" to get the relative path under "/".
+        rel = str(tmp_path).lstrip("/")
+        resp = client.get(f"/api/browse-media-files?source=server_fs&path={rel}")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["root_path"] == "/"
+        dir_names = [d["name"] for d in data["directories"]]
+        file_names = [f["name"] for f in data["files"]]
+        assert "subdir" in dir_names
+        # No media files at this level.
+        assert "track.wav" not in file_names
+
+        # default_path is reported on every server_fs response. It points
+        # at the server user's home dir when it exists.
+        assert "default_path" in data
+
     def test_select_browsed_file_copies_to_example_media(self, client, tmp_path):
         """POST /api/browse-media-files/select copies the file to example_media."""
         from unittest.mock import patch
