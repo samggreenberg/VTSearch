@@ -7,6 +7,18 @@
 #   docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 # -----------------------------------------------------------------
 
+# ---------- frontend build stage ----------
+# Builds the Angular SPA inside the image so callers never have to run
+# `npm run build:prod` on the host. Output lands at /static because
+# frontend/angular.json sets outputPath to "../static" relative to the
+# frontend/ workdir. The final stage COPYs /static into /app/static.
+FROM node:20-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build:prod
+
 FROM python:3.10-slim AS base
 
 # System packages needed by opencv, librosa, and other native deps
@@ -35,6 +47,11 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 
 # ---------- application layer ----------
 COPY . .
+
+# Overlay the freshly-built Angular bundle from the frontend stage so
+# the image is never served with a stale checked-in static/ snapshot.
+RUN rm -rf /app/static
+COPY --from=frontend /static/ /app/static/
 
 # Bake the version into the image. The host computes it from git
 # (e.g. `TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ`)
