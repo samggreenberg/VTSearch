@@ -126,11 +126,18 @@ class TestDropNoneEmbeddingsStage:
     def test_drops_medias_with_none_embedding(self):
         ctx = DatasetContext("test_drop_none")
         ctx.medias[1] = {"id": 1, "embedding": np.ones(4, dtype=np.float32)}
-        ctx.medias[2] = {"id": 2, "embedding": None}  # embedder failed silently
+        ctx.medias[2] = {"id": 2, "embedding": np.full(4, 2.0, dtype=np.float32)}
         ctx.medias[3] = {"id": 3, "embedding": np.full(4, 3.0, dtype=np.float32)}
-        ctx.medias[4] = {"id": 4, "embedding": None}
+        ctx.medias[4] = {"id": 4, "embedding": np.full(4, 4.0, dtype=np.float32)}
 
+        # Cache must exist before the drop so we can verify invalidation.
+        # The matrix builder itself now raises on None embeddings (M11
+        # root guard), so we build the cache against valid embeddings
+        # first and only then simulate the silent re-embed failure.
         _populate_matrix(ctx)
+
+        ctx.medias[2]["embedding"] = None
+        ctx.medias[4]["embedding"] = None
 
         _drop_none_embeddings_stage(ctx, _make_tracker())
 
