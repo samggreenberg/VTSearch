@@ -483,3 +483,178 @@ class TestDiversityLevelOverTime:
         data = resp.get_json()
         assert "diversity_level" in data["span"]
         assert isinstance(data["span"]["diversity_level"], (int, float))
+
+
+# ---------------------------------------------------------------------------
+# Audit M14 — `/api/dataset/clear` must not leave a stale diversity tree
+# ---------------------------------------------------------------------------
+
+
+class TestClearDatasetClearsTree:
+    """Regression for audit finding M14.
+
+    After ``/api/dataset/clear`` the active dataset's diversity tree must
+    not return media IDs that no longer exist in ``medias``.  In current
+    code ``clear_medias`` nulls ``ctx.diversity_tree`` and the unregister
+    path makes the cleared context unreachable; the tests here pin that
+    behavior so a future refactor cannot reintroduce the stale-ID bug.
+    """
+
+    def test_next_sample_returns_none_after_clear(self, client):
+        """POST /api/dataset/clear → GET /api/diversity-tree/next returns id=None."""
+        _build_tree()
+        # Sanity: tree exists and returns an id.
+        pre = client.post("/api/diversity-tree/next", json={})
+        assert pre.status_code == 200
+        assert pre.get_json()["id"] is not None
+
+        saved = dict(medias)
+        try:
+            resp = client.post("/api/dataset/clear")
+            assert resp.status_code == 200
+
+            resp = client.post("/api/diversity-tree/next", json={})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["id"] is None
+            assert data["diversity_level"] == 0
+            # No tree != exhausted (matches `test_returns_null_when_no_tree`).
+            assert data["exhausted"] is False
+        finally:
+            medias.update(saved)
+
+    def test_clear_medias_nulls_diversity_tree(self):
+        """``clear_medias`` releases the tree so a stale reference can't survive."""
+        from vtsearch.state import clear_medias
+
+        _build_tree()
+        assert get_diversity_tree() is not None
+        saved = dict(medias)
+        try:
+            clear_medias()
+            assert get_diversity_tree() is None
+        finally:
+            medias.update(saved)
+
+
+# ---------------------------------------------------------------------------
+# R1 — `/api/votes/clear` must reset the diversity tree's `seen` state
+# ---------------------------------------------------------------------------
+
+
+class TestClearVotesResetsTree:
+    """``clear_votes`` must reset ``ctx.diversity_tree.seen`` /``_labeled``.
+
+    Without the reset, ``next_sample`` keeps skipping nodes that the
+    just-cleared votes had marked seen and the diversity-level UI stays
+    elevated despite zero labels.
+    """
+
+    def test_clear_votes_resets_seen_set(self, client):
+        tree = _build_tree()
+        # Vote on multiple medias so several nodes become seen.
+        for cid in list(tree.vector_to_leaf)[:3]:
+            resp = client.post(f"/api/medias/{cid}/vote", json={"target": "good"})
+            assert resp.status_code == 200
+        assert tree.diversity_level() > 0
+        assert len(tree.seen) > 0
+        assert len(tree.labeled_ids) > 0
+
+        resp = client.post("/api/votes/clear")
+        assert resp.status_code == 200
+
+        assert tree.diversity_level() == 0
+        assert tree.seen == set()
+        assert tree.labeled_ids == set()
+
+    def test_next_sample_starts_over_after_clear_votes(self, client):
+        """After clearing votes, the very first un-seen node is the root again."""
+        tree = _build_tree()
+        # Pick `next_sample`'s first suggestion and label it via the API so
+        # tree.seen picks it up.  Then clear and verify next_sample once
+        # more returns a valid (now un-seen) media id.
+        first = diversity_tree_next_sample()
+        assert first is not None
+        resp = client.post(f"/api/medias/{first}/vote", json={"target": "good"})
+        assert resp.status_code == 200
+        assert first in tree.labeled_ids
+
+        resp = client.post("/api/votes/clear")
+        assert resp.status_code == 200
+
+        # With zero seen nodes the BFS walk starts from the root again and
+        # may pick the same id; the important part is that we get a real
+        # in-medias id rather than None.
+        nxt = diversity_tree_next_sample()
+        assert nxt is not None
+        assert nxt in medias
+
+
+# ---------------------------------------------------------------------------
+# R2 — Detector swap on the same dataset must re-derive the tree's seen set
+# ---------------------------------------------------------------------------
+
+
+class TestDetectorSwapResyncsTree:
+    """``ensure_votes_match_active_dataset`` must replay the new detector's
+    votes onto the dataset's diversity tree.
+
+    Restored labels are applied with ``silent=True`` (see
+    ``label_restoration.py``), which skips the per-vote tree update.
+    Without the bulk re-sync, the tree would keep reflecting the previous
+    detector's seen state.
+    """
+
+    def test_resync_diversity_tree_to_detector_resets_then_replays(self):
+        from vtscore.state import (
+            DetectorContext,
+            get_active_context,
+            resync_diversity_tree_to_detector,
+        )
+
+        tree = _build_tree()
+        ids = list(tree.vector_to_leaf)
+        # Mark a couple of ids as seen via the per-vote helper.
+        for cid in ids[:2]:
+            diversity_tree_label(cid)
+        assert len(tree.seen) > 0
+        prev_seen = set(tree.seen)
+
+        # Build a detector context that "votes" only on a different id so
+        # the replay should produce a different seen set.
+        det = DetectorContext("test-det")
+        if len(ids) > 2:
+            det.good_votes[ids[2]] = None
+
+        resync_diversity_tree_to_detector(get_active_context(), det)
+
+        # The previous seen set must be gone, replaced by the leaves of the
+        # newly-labeled id (and its ancestors).
+        assert tree.labeled_ids == set(det.good_votes) | set(det.bad_votes)
+        if len(ids) > 2:
+            assert ids[2] in tree.labeled_ids
+            assert tree.lookup(ids[2]) in tree.seen
+            # The previously-seen leaves should no longer be marked seen
+            # unless they happen to share an ancestor with ids[2].  The
+            # leaf-level guarantee is the one that matters for
+            # `next_sample`'s correctness.
+            for old_cid in ids[:2]:
+                assert old_cid not in tree.labeled_ids
+        else:
+            # Tiny test corpus — at minimum, the reset half must have run.
+            assert prev_seen  # was non-empty
+            assert tree.labeled_ids == set()
+
+    def test_resync_is_noop_when_no_tree(self):
+        """``resync_diversity_tree_to_detector`` tolerates a missing tree."""
+        from vtscore.state import (
+            DatasetContext,
+            DetectorContext,
+            resync_diversity_tree_to_detector,
+        )
+
+        ds = DatasetContext("no-tree")
+        det = DetectorContext("d")
+        det.good_votes[1] = None
+        # Must not raise.
+        resync_diversity_tree_to_detector(ds, det)

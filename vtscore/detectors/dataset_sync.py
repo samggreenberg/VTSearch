@@ -107,9 +107,12 @@ def ensure_votes_match_active_dataset() -> None:
             det_ctx.cached_labelset = None
             det_ctx.cached_labelset_mtime = 0.0
             det_ctx.cached_labelset_media_type = ""
+            if ds_ctx.diversity_tree is not None:
+                ds_ctx.diversity_tree.reset_seen()
         return
 
     from vtscore.datasets.labelset import LabelSet
+    from vtscore.state.diversity import resync_diversity_tree_to_detector
 
     with _state_lock:
         # Re-check inside the lock — another request may have rehydrated us.
@@ -134,6 +137,15 @@ def ensure_votes_match_active_dataset() -> None:
         det_ctx.cached_labelset = LabelSet.from_dict(data.get("labelset") or {})
         det_ctx.cached_labelset_mtime = refreshed_mtime
         det_ctx.cached_labelset_media_type = data.get("media_type", "") or ""
+        # The dataset's diversity tree was either built for a previous
+        # detector on this dataset (so its ``seen`` set reflects that
+        # detector's votes) or built before any votes existed.  Re-derive
+        # it against the freshly-restored votes so ``next_sample`` /
+        # ``diversity_level`` track the now-active detector.  Restored
+        # labels above are applied with ``silent=True`` (see
+        # ``label_restoration.py``) and therefore skip the per-vote tree
+        # update — this is where the equivalent bulk update lands.
+        resync_diversity_tree_to_detector(ds_ctx, det_ctx)
 
 
 def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -> bool:

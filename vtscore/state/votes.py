@@ -27,8 +27,11 @@ def clear_votes() -> None:
 
     Removes all entries from ``good_votes``, ``bad_votes``, and
     ``label_history`` in place on the active detector context. Does not affect
-    any dataset's ``medias`` dict.  Also clears the progress model cache and
-    click-time / score tracking.
+    any dataset's ``medias`` dict.  Also clears the progress model cache,
+    click-time / score tracking, and the active dataset's diversity tree
+    ``seen`` state — otherwise ``diversity_tree_next_sample`` would keep
+    skipping nodes that the just-cleared votes had marked seen, and the
+    UI's diversity-level chip would stay elevated despite zero labels.
     """
     from vtscore.detectors.labeling_progress import clear_progress_cache
 
@@ -43,6 +46,9 @@ def clear_votes() -> None:
         ctx.click_counter = 0
         ctx.last_learned_scores.clear()
         ctx.find_initial_labels.clear()
+        ds_tree = get_active_context().diversity_tree
+        if ds_tree is not None:
+            ds_tree.reset_seen()
     # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
     # two locks never establish a cross-module ordering (audit M1).
     clear_progress_cache()

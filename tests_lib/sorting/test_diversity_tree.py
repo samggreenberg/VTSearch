@@ -261,6 +261,48 @@ class TestUnlabeling:
 
 
 # ---------------------------------------------------------------------------
+# Bulk reset (used when votes are cleared or detector swaps)
+# ---------------------------------------------------------------------------
+
+
+class TestResetSeen:
+    def test_reset_seen_clears_everything(self):
+        vecs = _make_clustered_vectors([30, 30], dim=32)
+        tree = DiversityTree(vecs, k=2, min_node_size=10)
+        tree.label(1)
+        tree.label(31)
+        assert len(tree.seen) > 0
+        assert len(tree.labeled_ids) == 2
+
+        tree.reset_seen()
+        assert tree.seen == set()
+        assert tree.labeled_ids == set()
+        assert tree.diversity_level() == 0
+
+    def test_reset_then_relabel_picks_up_new_state(self):
+        """After reset, label calls reproduce the seen set from scratch."""
+        vecs = _make_clustered_vectors([30, 30], dim=32)
+        tree = DiversityTree(vecs, k=2, min_node_size=10)
+        tree.label(1)
+        leaf1 = tree.lookup(1)
+        assert leaf1 in tree.seen
+
+        tree.reset_seen()
+        # Label a different vector — only its leaf+ancestors should be seen.
+        tree.label(31)
+        leaf31 = tree.lookup(31)
+        assert leaf31 in tree.seen
+        if leaf1 != leaf31:
+            assert leaf1 not in tree.seen
+
+    def test_reset_on_empty_tree_is_noop(self):
+        tree = DiversityTree({}, k=2)
+        tree.reset_seen()  # must not raise
+        assert tree.seen == set()
+        assert tree.labeled_ids == set()
+
+
+# ---------------------------------------------------------------------------
 # Diversity level
 # ---------------------------------------------------------------------------
 

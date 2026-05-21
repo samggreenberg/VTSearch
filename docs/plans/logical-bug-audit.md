@@ -662,8 +662,25 @@ Cross-section interaction agents:
   matches the frontend's existing `learnedScores[id] ?? -1` fallback.
   Regression test in `tests/api/test_api_contracts.py` parses the
   response with a `parse_constant` that rejects `NaN`/`Infinity`.
-- **M14.** `diversity_tree_next_sample` references stale media IDs after
-  `/api/dataset/clear`.
+- ~~**M14.** `diversity_tree_next_sample` references stale media IDs after
+  `/api/dataset/clear`.~~ — investigated and closed.  The literal scenario
+  the audit named is no longer reachable: `clear_medias` (called via
+  `clear_dataset → clear_all`) sets `ctx.diversity_tree = None`, and the
+  active-dataset path of `/api/dataset/clear` unregisters the context so
+  subsequent requests either raise `DatasetNotLoadedError` (H16) or hit the
+  request-missing sentinel (whose tree is `None`).  A regression test pins
+  the behavior.  Two adjacent bugs surfaced during the investigation and
+  were fixed in the same PR: `clear_votes()` did not reset the dataset's
+  diversity-tree `seen` / `_labeled` sets, so `/api/votes/clear` left
+  `diversity_tree_next_sample` skipping previously-voted nodes and the
+  diversity-level chip stuck above zero; and
+  `ensure_votes_match_active_dataset` rehydrated detector votes via
+  `apply_label(silent=True)` (which skips the per-vote tree update)
+  without replaying onto the tree, so swapping detectors on the same
+  dataset left the tree reflecting the previous detector's seen state.
+  Both now reset the tree under `_state_lock` via a new
+  `DiversityTree.reset_seen()` / `resync_diversity_tree_to_detector`
+  helper pair that also dedupes the replay loop in `build_diversity_tree`.
 
 ### Settings / sync
 
