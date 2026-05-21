@@ -99,6 +99,38 @@ class TestVotesContract:
         data = resp.get_json()
         assert isinstance(data["learned_scores"], dict)
 
+    def test_learned_scores_response_is_strict_json(self, client):
+        """Logical-bug audit M13: even if ``last_learned_scores`` somehow holds
+        a non-finite float, the ``/api/votes`` response must still parse under
+        strict JSON (``json.loads`` with ``parse_constant`` raising).  Python's
+        ``json.dumps`` emits the literal token ``NaN`` for ``float('nan')`` by
+        default, which browser ``JSON.parse`` rejects — so without the route's
+        ``finite_or`` guard this returns invalid JSON to every Angular client.
+        """
+        from vtsearch.state import last_learned_scores
+
+        last_learned_scores[1] = float("nan")
+        last_learned_scores[2] = float("inf")
+        last_learned_scores[3] = float("-inf")
+        last_learned_scores[4] = 0.42
+
+        resp = client.get("/api/votes")
+        assert resp.status_code == 200
+
+        # ``parse_constant`` is invoked for ``NaN``, ``Infinity``, and
+        # ``-Infinity`` — fail loudly so a regression at the route handler
+        # surfaces here instead of as a browser-side parse error in prod.
+        def _reject_constant(c):
+            raise AssertionError(f"non-strict JSON token in /api/votes response: {c!r}")
+
+        data = json.loads(resp.data.decode("utf-8"), parse_constant=_reject_constant)
+
+        # Non-finite inputs round-trip as the sentinel (-1.0); finite ones pass through.
+        assert data["learned_scores"]["1"] == -1.0
+        assert data["learned_scores"]["2"] == -1.0
+        assert data["learned_scores"]["3"] == -1.0
+        assert data["learned_scores"]["4"] == 0.42
+
     def test_vote_response_shape(self, client):
         resp = client.post("/api/medias/1/vote", json={"target": "good"})
         assert resp.status_code == 200

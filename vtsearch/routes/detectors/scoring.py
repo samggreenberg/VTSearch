@@ -24,6 +24,7 @@ from vtsearch.schemas.detectors import (
     FindLabelRequestSchema,
     FindLabelResponseSchema,
 )
+from vtscore.utils.scores import sigmoid_to_finite_scores
 from vtsearch.state import snapshot_medias
 
 logger = logging.getLogger(__name__)
@@ -308,7 +309,7 @@ def find_label(body: dict):  # noqa: C901
         for start in range(0, n_total, batch_size):
             end = min(start + batch_size, n_total)
             batch_logits = mlp(X_all[start:end])
-            scores.extend(torch.sigmoid(batch_logits).squeeze(1).cpu().tolist())
+            scores.extend(sigmoid_to_finite_scores(batch_logits))
             update_find_progress(
                 "running",
                 f"Scoring {n_total} items…",
@@ -441,7 +442,7 @@ def _score_detector_for_auto_detect(
 
         with torch.no_grad():
             X_in = X_all.to(next(mlp.parameters()).device)
-            scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
+            scores = sigmoid_to_finite_scores(mlp(X_in))
 
         positive_hits = []
         negative_hits = []

@@ -17,6 +17,7 @@ from vtscore import cli_progress
 
 from vtscore.datasets.loader import apply_custom_metadata_md5, load_dataset_from_pickle
 from vtscore.utils.hits import build_media_hit
+from vtscore.utils.scores import sigmoid_to_finite_scores
 
 
 def _list_importer_names() -> list[str]:
@@ -230,7 +231,7 @@ def _score_medias_with_detectors(
         threshold = info["threshold"]
         with torch.no_grad():
             X_in = X_all.to(next(mlp.parameters()).device)
-            scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
+            scores = sigmoid_to_finite_scores(mlp(X_in))
 
         positive_hits: list[dict[str, Any]] = []
         negative_hits: list[dict[str, Any]] = []

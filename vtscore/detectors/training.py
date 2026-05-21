@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from vtscore.utils.scores import sigmoid_to_finite_scores
+
 if TYPE_CHECKING:
     import torch.nn as nn
 
@@ -103,7 +105,7 @@ def train_and_threshold(
         X_all = torch.from_numpy(all_embs)
         with torch.no_grad():
             X_all = X_all.to(next(model.parameters()).device)
-            all_scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().tolist()
+            all_scores = sigmoid_to_finite_scores(model(X_all))
         threshold = calculate_safe_threshold(threshold, all_scores, len(y_list))
 
     return model, threshold
@@ -230,7 +232,12 @@ def _score_all_media(
 
     with torch.no_grad():
         X_all = X_all.to(next(model.parameters()).device)
-        flat_scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().numpy()
+        # ``sigmoid_to_finite_scores`` replaces NaN/±Inf with the
+        # ``NON_FINITE_SCORE_SENTINEL`` (-1.0) so a destabilised MLP cannot
+        # leak non-finite floats into the JSON response. The downstream
+        # ``s > scores[mi]`` max-pool then incidentally drops sentinels in
+        # favour of any real score for the same media.
+        flat_scores = sigmoid_to_finite_scores(model(X_all))
 
     scores: list[float] = [-1.0] * len(all_ids)
     best_region: list[int] = [0] * len(all_ids)

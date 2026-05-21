@@ -19,6 +19,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.progress import find_progress, update_find_progress
 from vtscore.detectors.training import train_and_threshold
+from vtscore.utils.scores import sigmoid_to_finite_scores
 from vtsearch.schemas.detectors import (
     FindCancelResponseSchema,
     FindCheckLabelsRequestSchema,
@@ -338,8 +339,7 @@ def _score_with_live_mlp(dc: dict, X_all, all_ids: list[int], media_results: dic
         mlp = dc["live_mlp"]
         with torch.no_grad():
             X_in = X_all.to(next(mlp.parameters()).device)
-            raw_logits = mlp(X_in)
-            scores = torch.sigmoid(raw_logits).squeeze(1).cpu().tolist()
+            scores = sigmoid_to_finite_scores(mlp(X_in))
         _record_verdicts(media_results, dc["name"], all_ids, scores, dc.get("threshold", 0.5), None)
     except Exception:
         _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "Error")
@@ -412,7 +412,7 @@ def _score_with_cold_detector(
         mlp, threshold = train_and_threshold(X_list, y_list)
         with torch.no_grad():
             X_in = X_all.to(next(mlp.parameters()).device)
-            scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
+            scores = sigmoid_to_finite_scores(mlp(X_in))
         _record_verdicts(media_results, dc["name"], all_ids, scores, threshold, None)
     except Exception:
         _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "Error")
