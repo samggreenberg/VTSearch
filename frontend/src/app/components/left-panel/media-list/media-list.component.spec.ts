@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { MediaListComponent } from './media-list.component';
 import { Media } from '../../../models/api.models';
+import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 
 describe('MediaListComponent', () => {
   let component: MediaListComponent;
@@ -94,5 +95,21 @@ describe('MediaListComponent', () => {
     component.threshold = 0.5;
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.media-threshold-line')).toBeTruthy();
+  });
+
+  // Regression: small datasets used to never prefetch metadata, so the list
+  // displayed ``#284`` placeholders forever — names only filled in when the
+  // user clicked an item. Without virtual scroll active, every row is in the
+  // DOM, so every row is visible and should hydrate eagerly.
+  it('eagerly prefetches metadata for every row when virtual scroll is off', () => {
+    const cache = TestBed.inject(MediaMetadataCacheService);
+    const spy = spyOn(cache, 'ensureLoaded');
+    component.medias = mockMedias;
+    component.ngOnChanges({
+      medias: { currentValue: mockMedias, previousValue: [], firstChange: false, isFirstChange: () => false },
+    });
+    expect(spy).toHaveBeenCalled();
+    const ids = spy.calls.mostRecent().args[0] as number[];
+    expect(ids).toEqual([1, 2, 3]);
   });
 });
