@@ -569,7 +569,7 @@
           for="lf-vectors-input"
           title="Optional .npz archive of pre-computed embedding vectors. Each entry's filename must match an uploaded file (by basename or relative path) for its vector to be reused. Skipped files are embedded normally on the server."
         >
-          Pre-computed embeddings (<code>.npz</code>) — optional
+          Pre-computed embeddings (optional)
         </label>
         <input
           id="lf-vectors-input"
@@ -578,13 +578,6 @@
           accept=".npz"
           (change)="lfOnVectorsFileSelected($event)"
         />
-        <p class="info-text">
-          Supply a NumPy <code>.npz</code> archive holding either
-          <code>filenames</code> + <code>vectors</code> arrays or one key per
-          filename mapping to its vector.  Filenames must match the uploaded
-          files (basenames and relative paths are matched).  Files without a
-          matching entry are embedded normally on the server.
-        </p>
         @if (lfVectorsFile) {
           <p class="info-text">
             Using vectors from <code>{{ lfVectorsFile.name }}</code>
@@ -795,7 +788,7 @@
           for="sf-paths-file"
           title="Optional server path to a paths manifest file (.txt / .list / .npz) listing the media to import. When set, the folder picker above is ignored and the manifest is imported instead."
         >
-          Or paths file (<code>.txt</code> / <code>.list</code> / <code>.npz</code>) — optional
+          Paths file (optional)
         </label>
         <input
           id="sf-paths-file"
@@ -804,13 +797,6 @@
           placeholder="/absolute/server/path/to/paths.txt"
           [(ngModel)]="sfPathsFile"
         />
-        <p class="info-text">
-          As an alternative to picking a folder, supply a server-side
-          manifest file: a UTF-8 text file with one media path per line
-          (<code>#</code> comments allowed), or a NumPy <code>.npz</code>
-          archive holding both paths and pre-computed embedding vectors.
-          When this is set the folder selection above is ignored.
-        </p>
       </div>
 
       <div class="form-group">
@@ -819,7 +805,7 @@
           for="sf-vectors-file"
           title="Optional server path to a .npz archive of pre-computed embedding vectors. Files in the folder whose basename or relative path matches a key reuse the supplied vector instead of running the embedder."
         >
-          Pre-computed embeddings (<code>.npz</code>) — optional
+          Pre-computed embeddings (optional)
         </label>
         <input
           id="sf-vectors-file"
@@ -828,13 +814,6 @@
           placeholder="/absolute/server/path/to/vectors.npz"
           [(ngModel)]="sfVectorsFile"
         />
-        <p class="info-text">
-          Absolute server path to a NumPy <code>.npz</code> archive holding
-          either <code>filenames</code> + <code>vectors</code> arrays or one
-          key per filename mapping to its vector.  Files in the folder whose
-          basename or relative path matches a key reuse the supplied vector
-          and skip the embedder.
-        </p>
       </div>
 
       @if (sfEmbedders.length > 1) {
