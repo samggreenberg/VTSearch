@@ -50,7 +50,7 @@ class SyntheticDatasetImporter(DatasetImporter):
     fields = [
         ImporterField(
             key="media_type",
-            label="Output Media Type",
+            label="Dataset MediaType",
             field_type="select",
             description="What kind of media to generate.",
             options=_SUPPORTED_MEDIA_TYPES,

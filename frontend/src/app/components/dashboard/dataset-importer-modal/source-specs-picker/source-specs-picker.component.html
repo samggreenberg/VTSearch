@@ -1,0 +1,98 @@
+<div class="ssp">
+  <label class="ssp-row ssp-row--native" title="Include files of the dataset's native media type directly, without any conversion.">
+    <input
+      type="checkbox"
+      class="ssp-checkbox"
+      [checked]="isNativeChecked()"
+      (change)="toggleNative($any($event.target).checked)"
+    />
+    <span class="ssp-row-label">
+      <strong>{{ labelFor(nativeType) }}</strong>
+      <span class="ssp-native-tag">native</span>
+    </span>
+  </label>
+
+  @for (st of nonNativeSourceTypes; track st) {
+    <div class="ssp-row">
+      <label
+        class="ssp-row-main"
+        [title]="'Pull in ' + labelFor(st) + ' files and convert them to ' + labelFor(nativeType) + '.'"
+      >
+        <input
+          type="checkbox"
+          class="ssp-checkbox"
+          [checked]="isNonNativeChecked(st)"
+          (change)="toggleNonNative(st, $any($event.target).checked)"
+        />
+        <span class="ssp-row-label">{{ labelFor(st) }}</span>
+      </label>
+
+      @if (hasAdvanced(st)) {
+        <button
+          type="button"
+          class="advanced-toggle ssp-advanced-toggle"
+          (click)="toggleAdvanced(st)"
+          [attr.aria-expanded]="isAdvancedOpen(st)"
+          [title]="convertersFor(st).length > 1 ? 'Choose a converter and tune its options.' : 'Tune converter options.'"
+        >
+          Advanced {{ isAdvancedOpen(st) ? '▾' : '▸' }}
+        </button>
+      }
+
+      @if (isAdvancedOpen(st)) {
+        <div class="ssp-advanced-panel">
+          @if (convertersFor(st).length > 1) {
+            <label class="ssp-advanced-field">
+              <span class="ssp-advanced-field-label">Converter:</span>
+              <select
+                class="form-select ssp-converter-select"
+                [ngModel]="currentConverterName(st)"
+                (ngModelChange)="setConverter(st, $event)"
+              >
+                @for (c of convertersFor(st); track c.name) {
+                  <option [value]="c.name">{{ c.display_name || c.name }}</option>
+                }
+              </select>
+            </label>
+          }
+
+          @if (currentConverter(st); as conv) {
+            @for (f of conv.fields || []; track f.key) {
+              <label class="ssp-advanced-field">
+                <span class="ssp-advanced-field-label">{{ f.label || f.key }}:</span>
+                @if (f.field_type === 'select') {
+                  <select
+                    class="form-select"
+                    [ngModel]="paramValue(st, f.key) ?? f.default ?? ''"
+                    (ngModelChange)="setParam(st, f.key, $event)"
+                  >
+                    @for (opt of f.options || []; track opt) {
+                      <option [value]="opt">{{ opt }}</option>
+                    }
+                  </select>
+                } @else if (f.field_type === 'number') {
+                  <input
+                    type="number"
+                    class="form-input ssp-num-input"
+                    [ngModel]="paramValue(st, f.key) ?? f.default ?? ''"
+                    [attr.min]="$any(f).min ?? null"
+                    [attr.max]="$any(f).max ?? null"
+                    [attr.step]="$any(f).step ?? null"
+                    (ngModelChange)="setParam(st, f.key, $event)"
+                  />
+                } @else {
+                  <input
+                    [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"
+                    class="form-input"
+                    [ngModel]="paramValue(st, f.key) ?? f.default ?? ''"
+                    (ngModelChange)="setParam(st, f.key, $event)"
+                  />
+                }
+              </label>
+            }
+          }
+        </div>
+      }
+    </div>
+  }
+</div>
