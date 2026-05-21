@@ -394,14 +394,17 @@ def _maybe_migrate_legacy_settings_locked() -> None:
         logger.warning("Legacy settings migration to %s failed: %s", user_path, exc)
         return
 
-    # Rewrite the server file with only server-tier keys.
+    # Build the server-tier-only shape first; a failure here must not pop
+    # the in-memory cache, or _server_cache and disk would silently diverge.
+    new_server = {k: v for k, v in _server_cache.items() if k in _SERVER_KEYS}
+    try:
+        _atomic_write(_server_settings_path(), new_server)
+    except Exception as exc:
+        logger.warning("Failed to rewrite server settings after legacy migration: %s", exc)
+        return
     for k in list(_server_cache.keys()):
         if k not in _SERVER_KEYS:
             _server_cache.pop(k, None)
-    try:
-        _atomic_write(_server_settings_path(), _server_cache)
-    except Exception as exc:
-        logger.warning("Failed to rewrite server settings after legacy migration: %s", exc)
 
     # Refresh the default user's cache if it was already materialised
     # (unlikely, since this runs from _ensure_server_loaded, but safe).

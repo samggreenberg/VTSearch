@@ -653,9 +653,23 @@ Cross-section interaction agents:
   crashes; file separate findings if they ever bite.
 - **M16.** Sync to source on first read after `_synced_users` marker can still
   return stale local config if source changes silently.
-- **M17.** Legacy migration `_maybe_migrate_legacy_settings_locked` pops keys
+- ~~**M17.** Legacy migration `_maybe_migrate_legacy_settings_locked` pops keys
   from in-memory cache before per-user disk write; per-user-write
-  failure leaves cache and disk diverged.
+  failure leaves cache and disk diverged.~~ — investigated and partially
+  closed (2026-05-21). The literal ordering claim is **inverted**:
+  `_maybe_migrate_legacy_settings_locked` writes the user file
+  *before* popping `_server_cache`, and returns early on user-write
+  failure, so the divergence described is impossible. A separate,
+  narrower divergence existed in the *server*-file rewrite step: if
+  `_atomic_write(_server_settings_path(), _server_cache)` raised
+  after the in-memory pop, `_server_cache` (legacy keys gone) and
+  the on-disk server file (legacy keys still present) would silently
+  disagree until the next `_mutate_server_locked()` re-read the disk.
+  Fix: compute the server-tier-only candidate first, write it, and only
+  pop the in-memory cache after the disk write returns successfully
+  (early-return on failure mirrors the user-write branch). Failure-path
+  coverage added in `tests/core/test_per_user_settings.py` for both
+  the user-write and server-rewrite branches.
 
 ### Embedding / training
 

@@ -127,6 +127,99 @@ class TestLegacyMigration:
             settings_mod.set_user_data_dir_override(None)
             settings_mod.reset()
 
+    def test_user_write_failure_keeps_cache_and_disk_consistent(self, tmp_path, monkeypatch):
+        """If the per-user write fails, the in-memory cache and on-disk
+        server file must stay aligned (no half-migrated state)."""
+        from vtsearch import settings as settings_mod
+
+        legacy = {
+            "saved_datasets_dir": "/tmp/legacy",
+            "volume": 0.33,
+            "theme": "light",
+        }
+        server_path = tmp_path / "settings.json"
+        server_path.write_text(json.dumps(legacy))
+        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        settings_mod.set_user_data_dir_override(tmp_path / "users")
+        settings_mod.reset()
+
+        real_atomic_write = settings_mod._atomic_write
+        user_settings_path = tmp_path / "users" / "default" / "user_settings.json"
+
+        def failing_atomic_write(path, data):
+            if path == user_settings_path:
+                raise OSError("simulated user-file write failure")
+            return real_atomic_write(path, data)
+
+        monkeypatch.setattr(settings_mod, "_atomic_write", failing_atomic_write)
+        try:
+            # Triggers migration; user-file write raises and is swallowed.
+            settings_mod.get_saved_datasets_dir()
+
+            # Server file on disk is untouched (legacy keys still present).
+            on_disk = json.loads(server_path.read_text())
+            assert on_disk == legacy
+
+            # In-memory server cache matches disk (legacy keys still there).
+            assert settings_mod._server_cache is not None
+            assert settings_mod._server_cache.get("volume") == 0.33
+            assert settings_mod._server_cache.get("theme") == "light"
+
+            # No phantom user file was created.
+            assert not user_settings_path.exists()
+        finally:
+            settings_mod.set_user_data_dir_override(None)
+            settings_mod.reset()
+
+    def test_server_rewrite_failure_keeps_cache_and_disk_consistent(self, tmp_path, monkeypatch):
+        """If the server-file rewrite fails after the user write succeeds,
+        the in-memory ``_server_cache`` must not have legacy keys popped —
+        otherwise it would silently disagree with the on-disk server file."""
+        from vtsearch import settings as settings_mod
+
+        legacy = {
+            "saved_datasets_dir": "/tmp/legacy",
+            "volume": 0.33,
+            "theme": "light",
+        }
+        server_path = tmp_path / "settings.json"
+        server_path.write_text(json.dumps(legacy))
+        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        settings_mod.set_user_data_dir_override(tmp_path / "users")
+        settings_mod.reset()
+
+        real_atomic_write = settings_mod._atomic_write
+        user_settings_path = tmp_path / "users" / "default" / "user_settings.json"
+
+        def failing_atomic_write(path, data):
+            if path == server_path:
+                raise OSError("simulated server-file write failure")
+            return real_atomic_write(path, data)
+
+        monkeypatch.setattr(settings_mod, "_atomic_write", failing_atomic_write)
+        try:
+            # Triggers migration; user write succeeds, server rewrite raises.
+            settings_mod.get_saved_datasets_dir()
+
+            # User file was written successfully.
+            assert user_settings_path.exists()
+            user_data = json.loads(user_settings_path.read_text())
+            assert user_data["volume"] == 0.33
+            assert user_data["theme"] == "light"
+
+            # Server file on disk still has legacy keys (rewrite failed).
+            on_disk = json.loads(server_path.read_text())
+            assert on_disk == legacy
+
+            # Crucially, in-memory cache matches disk — legacy keys NOT popped.
+            assert settings_mod._server_cache is not None
+            assert settings_mod._server_cache.get("volume") == 0.33
+            assert settings_mod._server_cache.get("theme") == "light"
+            assert settings_mod._server_cache.get("saved_datasets_dir") == "/tmp/legacy"
+        finally:
+            settings_mod.set_user_data_dir_override(None)
+            settings_mod.reset()
+
 
 class TestBackgroundThreadPropagation:
     def test_thread_local_user_routes_writes(self, isolated_settings):
