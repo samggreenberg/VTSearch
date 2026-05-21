@@ -170,6 +170,154 @@ class TestThinLoadFromPickle:
         assert medias[1]["media_bytes"] is not None
 
 
+class TestPickleNullEmbedding:
+    """Skip-on-None pickle entries (audit M8 / M12).
+
+    ``np.array(None)`` returns a 0-d ``dtype=object`` array that survives
+    every ``is None`` guard in the codebase, so the pickle loader must
+    drop entries whose ``embedding`` field is missing or ``None`` before
+    they enter the medias dict.  Mirrors the folder loader, which
+    already returns ``None`` for failed embeds.
+    """
+
+    def _wav_pickle(
+        self,
+        tmp_path: Path,
+        *,
+        embedding: Any,
+        embedding_key_present: bool = True,
+        include_bytes: bool = True,
+    ) -> Path:
+        wav_bytes = _make_wav_bytes()
+        media: dict[str, Any] = {
+            "id": 1,
+            "type": "audio",
+            "duration": 0.1,
+            "file_size": len(wav_bytes),
+            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "filename": "test.wav",
+            "category": "test",
+        }
+        if embedding_key_present:
+            media["embedding"] = embedding
+        if include_bytes:
+            media["media_bytes"] = wav_bytes
+        pkl_path = tmp_path / "test.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": {1: media}}, f)
+        return pkl_path
+
+    def test_full_mode_skips_explicit_none_embedding(self, tmp_path, capsys):
+        pkl_path = self._wav_pickle(tmp_path, embedding=None)
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=False)
+        assert medias == {}
+        out = capsys.readouterr().out
+        assert "1 media files missing" in out
+
+    def test_full_mode_skips_missing_embedding_key(self, tmp_path, capsys):
+        pkl_path = self._wav_pickle(tmp_path, embedding=None, embedding_key_present=False)
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=False)
+        assert medias == {}
+        out = capsys.readouterr().out
+        assert "1 media files missing" in out
+
+    def test_thin_mode_skips_explicit_none_embedding(self, tmp_path, capsys):
+        """Regression for M8: prior code only checked key absence, not None."""
+        pkl_path = self._wav_pickle(tmp_path, embedding=None, include_bytes=False)
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=True)
+        assert medias == {}
+        out = capsys.readouterr().out
+        assert "1 media files missing" in out
+
+    def test_thin_mode_skips_missing_embedding_key(self, tmp_path, capsys):
+        pkl_path = self._wav_pickle(
+            tmp_path, embedding=None, embedding_key_present=False, include_bytes=False
+        )
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=True)
+        assert medias == {}
+        out = capsys.readouterr().out
+        assert "1 media files missing" in out
+
+    def test_full_mode_mixed_keeps_good_drops_null(self, tmp_path):
+        wav_bytes = _make_wav_bytes()
+        good = {
+            "id": 1,
+            "type": "audio",
+            "duration": 0.1,
+            "file_size": len(wav_bytes),
+            "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "embedding": np.zeros(512).tolist(),
+            "filename": "good.wav",
+            "category": "test",
+            "media_bytes": wav_bytes,
+        }
+        bad = {
+            "id": 2,
+            "type": "audio",
+            "duration": 0.1,
+            "file_size": len(wav_bytes),
+            "md5": hashlib.md5(wav_bytes + b"x").hexdigest(),
+            "embedding": None,
+            "filename": "bad.wav",
+            "category": "test",
+            "media_bytes": wav_bytes,
+        }
+        pkl_path = tmp_path / "mixed.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": {1: good, 2: bad}}, f)
+
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=False)
+        assert list(medias.keys()) == [1]
+        # No poisoned 0-d object array snuck through.
+        assert medias[1]["embedding"].ndim >= 1
+        assert medias[1]["embedding"].dtype != object
+
+    def test_chunked_loader_skips_null_embedding(self, tmp_path):
+        from vtscore.datasets.loader import load_dataset_from_pickle_chunked
+
+        wav_bytes = _make_wav_bytes()
+        pkl_data = {
+            "medias": {
+                1: {
+                    "id": 1,
+                    "type": "audio",
+                    "duration": 0.1,
+                    "file_size": len(wav_bytes),
+                    "md5": hashlib.md5(wav_bytes).hexdigest(),
+                    "embedding": np.zeros(512).tolist(),
+                    "filename": "a.wav",
+                    "category": "test",
+                    "media_bytes": wav_bytes,
+                },
+                2: {
+                    "id": 2,
+                    "type": "audio",
+                    "duration": 0.1,
+                    "file_size": len(wav_bytes),
+                    "md5": hashlib.md5(wav_bytes + b"x").hexdigest(),
+                    "embedding": None,
+                    "filename": "b.wav",
+                    "category": "test",
+                    "media_bytes": wav_bytes,
+                },
+            }
+        }
+        pkl_path = tmp_path / "chunked.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump(pkl_data, f)
+
+        chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10))
+        loaded = {cid: m for chunk in chunks for cid, m in chunk.items()}
+        assert len(loaded) == 1
+        only = next(iter(loaded.values()))
+        assert only["filename"] == "a.wav"
+
+
 class TestPickleMD5Preservation:
     """Test that load_dataset_from_pickle uses pre-existing MD5 from pickle data."""
 

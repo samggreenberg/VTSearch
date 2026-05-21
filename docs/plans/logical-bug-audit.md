@@ -584,8 +584,11 @@ Cross-section interaction agents:
 
 ### Datasets / loaders
 
-- **M8.** Thin-mode pickle loader treats `embedding: None` as present, then
-  `np.array(None)` produces an object-dtype row.
+- **M8.** ~~Thin-mode pickle loader treats `embedding: None` as present, then
+  `np.array(None)` produces an object-dtype row.~~ **Shipped (with M12).**
+  `_convert_one_pickle_media` now treats missing key and explicit `None`
+  identically for both thin and full modes — entry is skipped and the
+  "missing media" warning fires.
 - ~~**M9.** `loader_folder._has_override` doesn't warn when both `rel_path`
   and `file_name` override entries exist with different embeddings.~~
 - **M10.** ~~`clipper_chain._run_clipper_step` assumes deterministic output count
@@ -596,10 +599,23 @@ Cross-section interaction agents:
   drift / no-match / ambiguous match, and returns `None` instead of
   silently picking `outputs[0]` (was a regression vs. the legacy
   `_clip_text_to_bytes` resolver path).
-- **M11.** Stale media in `cli._score_medias_with_detectors` when some
-  embeddings are `None` (zip truncates silently).
-- **M12.** `loader_pickle._build_pickle_full_media` has no null-check before
-  `np.array(media_info["embedding"])`.
+- **M11.** ~~Stale media in `cli._score_medias_with_detectors` when some
+  embeddings are `None` (zip truncates silently).~~ **Shipped.**
+  `_score_medias_with_detectors` now uses `zip(all_ids, scores,
+  strict=True)` so a partial embedding matrix raises `ValueError`
+  instead of silently dropping hits. With the M12 fix in place this
+  loop should never be partial, but the strict zip guards against
+  future regressions.
+- **M12.** ~~`loader_pickle._build_pickle_full_media` has no null-check before
+  `np.array(media_info["embedding"])`.~~ **Shipped.**
+  `_convert_one_pickle_media` skips any entry whose `embedding` is
+  missing or `None` before the build helpers run — symmetric with the
+  thin-mode path (M8) and with the folder loader's drop-on-no-embed
+  behaviour. The registry load path doesn't re-embed after
+  `load_dataset_from_pickle`, so preserving `None` would have just
+  pushed the crash into the first sort/find call; dropping the
+  poisoned entry keeps the dataset usable and surfaces the loss via
+  the existing `missing_media` warning.
 
 ### Routes / API
 

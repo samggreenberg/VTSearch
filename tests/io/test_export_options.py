@@ -12,6 +12,8 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
+
 import app as app_module
 
 SAMPLE_RESULTS = {
@@ -295,6 +297,43 @@ class TestFillFromSortConfirm:
 
 
 class TestCliScoringNegativeHits:
+    def test_strict_zip_raises_on_id_score_mismatch(self, client, monkeypatch):
+        """M11 regression: ``zip(all_ids, scores, strict=True)``.
+
+        If ``get_embedding_matrix_for_snap`` (or any future variant)
+        returned an id list whose length disagrees with the score
+        vector, the prior plain ``zip`` would silently truncate.  The
+        strict zip now raises ``ValueError`` so the bug is impossible
+        to miss.
+        """
+        import numpy as np
+        import torch
+
+        from vtscore.cli import _score_medias_with_detectors
+        from vtsearch.state import medias
+
+        first_cid = next(iter(medias))
+        emb = np.asarray(medias[first_cid]["embedding"], dtype=np.float32)
+        dim = int(emb.shape[-1])
+
+        # Stub the matrix builder so it claims 2 ids but only 1 row of
+        # embeddings.  ``scores`` ends up length 1, ``all_ids`` length
+        # 2 — exactly the mismatch the strict zip guards against.
+        extra_id = max(medias) + 1
+
+        def _mismatched(_snap):
+            return [first_cid, extra_id], emb.reshape(1, -1)
+
+        monkeypatch.setattr(
+            "vtscore.embedding.matrix.get_embedding_matrix_for_snap",
+            _mismatched,
+        )
+
+        mlp = torch.nn.Linear(dim, 1)
+        detector_mlps = {"det": {"mlp": mlp, "threshold": 0.5}}
+        with pytest.raises(ValueError):
+            _score_medias_with_detectors(medias, detector_mlps)
+
     def test_trainable_model_scoring_returns_negative_hits(self, client):
         """The detector CLI scorer should include negative_hits."""
         import torch
