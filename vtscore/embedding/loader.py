@@ -12,8 +12,15 @@ to work unchanged.
 
 import gc
 import os
+import re
 import sys
 from typing import Any, cast
+
+_TIME_SUFFIX_RE = re.compile(r"\s*\(\d+s\)$")
+
+
+def _strip_time_suffix(msg: str) -> str:
+    return _TIME_SUFFIX_RE.sub("", msg) if msg else msg
 
 from vtscore.config import MODELS_CACHE_DIR, resolve_device
 from vtscore.media.torch_setup import ensure_torch_configured
@@ -95,36 +102,56 @@ def _make_console_progress(original_callback):
     Used during startup preloading so the user sees intermediate status
     messages and download progress bars in the console while models are
     being loaded.
+
+    Consecutive progress events sharing a base message (the same text with
+    any trailing ``(Ns)`` elapsed-time suffix stripped) overwrite the same
+    terminal line, so ``timed_progress`` ticker updates animate in place
+    instead of stacking new lines.  The progress line is terminated with a
+    newline only when a different base message arrives, a phase message
+    arrives, or the caller invokes ``cb.flush()``.
     """
     _last_msg: list[str | None] = [None]
+    _last_base: list[str | None] = [None]
     _on_progress_line: list[bool] = [False]
+
+    def _flush() -> None:
+        if _on_progress_line[0]:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            _on_progress_line[0] = False
+            _last_base[0] = None
+            _last_msg[0] = None
 
     def _callback(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
         original_callback(status, message, current, total)
 
         if total > 0:
-            # Measurable progress (download / weight loading) — overwrite same line
+            base = _strip_time_suffix(message)
+            # If we're already on a progress line for a different task, terminate it.
+            if _on_progress_line[0] and _last_base[0] is not None and _last_base[0] != base:
+                sys.stdout.write("\n")
             pct = min(100, current * 100 // total)
             filled = pct * 30 // 100
             bar = "#" * filled + "." * (30 - filled)
-            line = f"\r    {message} [{bar}] {pct:>3}%"
+            # \033[K clears from cursor to end of line so a shorter message
+            # doesn't leave trailing chars from a longer prior render.
+            line = f"\r    {message} [{bar}] {pct:>3}%\033[K"
             sys.stdout.write(line)
             sys.stdout.flush()
             _on_progress_line[0] = True
-            if current >= total:
-                sys.stdout.write("\n")
-                sys.stdout.flush()
-                _on_progress_line[0] = False
-                _last_msg[0] = None
+            _last_base[0] = base
+            _last_msg[0] = message
         elif message and message != _last_msg[0]:
             # New phase message — print on its own line
             if _on_progress_line[0]:
                 sys.stdout.write("\n")
                 _on_progress_line[0] = False
+                _last_base[0] = None
             sys.stdout.write(f"    {message}\n")
             sys.stdout.flush()
             _last_msg[0] = message
 
+    _callback.flush = _flush  # type: ignore[attr-defined]
     return _callback
 
 
@@ -206,10 +233,12 @@ def preload_predicted_embedders() -> list[str]:
             emb = get_embedder(emb_name)
             print(f"  Preloading {emb_name} embedder...", flush=True)
             original_cb = emb._on_progress
-            emb._on_progress = _make_console_progress(original_cb)
+            console_cb = _make_console_progress(original_cb)
+            emb._on_progress = console_cb
             try:
                 emb.load_models()
             finally:
+                console_cb.flush()  # type: ignore[attr-defined]
                 emb._on_progress = original_cb
             preloaded.append(emb_name)
         except Exception as exc:
