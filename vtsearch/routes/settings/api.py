@@ -81,6 +81,24 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
 }
 
 
+def _apply_disable_achievements(value: bool) -> None:
+    """Persist the toggle and wipe stored counters when flipping it on.
+
+    The user-visible promise is that turning the feature off zeroes the
+    achievement counters and keeps them there. Wiping on the False→True
+    transition (rather than every set) makes the off→on→off cycle
+    deterministic: counters reset on opt-out and start fresh if the user
+    ever opts back in.
+    """
+    prev = bool(settings.get_disable_achievements())
+    coerced = bool(value)
+    settings.set_disable_achievements(coerced)
+    if coerced and not prev:
+        from vtsearch import achievements
+
+        achievements.wipe_state()
+
+
 def _apply_inclusion(value) -> None:
     """``inclusion`` is set via :mod:`vtsearch.state`, not :mod:`settings`."""
     from vtsearch.state import set_inclusion
@@ -135,6 +153,13 @@ def update_settings(body: dict):
         if key in ("saved_datasets_dir", "detectors_dir"):
             setter = settings.set_saved_datasets_dir if key == "saved_datasets_dir" else settings.set_detectors_dir
             _apply_dir(key, value, setter)
+            continue
+
+        if key == "disable_achievements":
+            try:
+                _apply_disable_achievements(value)
+            except (TypeError, ValueError) as exc:
+                abort(400, message=str(exc))
             continue
 
         setter = _SCALAR_SETTERS.get(key)

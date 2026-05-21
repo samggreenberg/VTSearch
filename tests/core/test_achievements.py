@@ -636,3 +636,80 @@ class TestActionHooks:
         client.post(f"/api/medias/{media_id}/vote", json={"target": "good"})
         client.post(f"/api/medias/{media_id}/vote", json={"target": "good"})
         assert _by_id(achievements.get_full_state(), "votes_cast")["counter"] == 1
+
+
+# ---------------------------------------------------------------------------
+# disable_achievements opt-out
+# ---------------------------------------------------------------------------
+
+
+class TestDisableAchievements:
+    def test_record_hooks_are_noops_when_disabled(self):
+        settings_mod.set_disable_achievements(True)
+        achievements.record_vote("det-1", media_type="audio")
+        achievements.record_dataset_load("server_folder")
+        achievements.record_detector_import("det-X")
+        achievements.record_find(500)
+        result = achievements.record_doc_phrase("all aboard the embedding express")
+        assert result["matched"] is False  # disabled blocks credit
+        state = achievements.get_full_state()
+        for a in state["achievements"]:
+            assert a["counter"] == 0
+            assert a["tier_idx"] == -1
+        assert state["pending_announcements"] == []
+        assert all(d["read"] is False for d in state["docs"])
+
+    def test_get_full_state_zeroes_existing_counters_when_disabled(self):
+        # Accrue real progress first.
+        achievements.record_vote("det-1", media_type="audio")
+        achievements.record_dataset_load("server_folder")
+        achievements.record_find(500)
+        # Flip the toggle through the same code path the route uses.
+        settings_mod.set_disable_achievements(True)
+        state = achievements.get_full_state()
+        for a in state["achievements"]:
+            assert a["counter"] == 0
+            assert a["tier_idx"] == -1
+        assert state["pending_announcements"] == []
+
+    def test_wipe_state_clears_stored_counters(self):
+        achievements.record_vote("det-1", media_type="audio")
+        achievements.record_find(123)
+        # Sanity check that something was stored.
+        from vtsearch.auth import get_current_user
+        from vtsearch.settings import _user_caches
+
+        username = get_current_user()
+        assert "achievement_state" in _user_caches.get(username, {})
+
+        achievements.wipe_state()
+        assert "achievement_state" not in _user_caches.get(username, {})
+
+    def test_settings_route_wipes_on_false_to_true_transition(self, client):
+        # Build up some real progress.
+        achievements.record_vote("det-1", media_type="audio")
+        achievements.record_find(50)
+        # Flip via the public PUT endpoint.
+        resp = client.put("/api/settings", json={"disable_achievements": True})
+        assert resp.status_code == 200
+        assert resp.get_json()["disable_achievements"] is True
+
+        # State on disk is gone; the public read returns a zeroed shell.
+        from vtsearch.auth import get_current_user
+        from vtsearch.settings import _user_caches
+
+        username = get_current_user()
+        assert "achievement_state" not in _user_caches.get(username, {})
+
+        state = achievements.get_full_state()
+        for a in state["achievements"]:
+            assert a["counter"] == 0
+
+    def test_re_enabling_does_not_restore_old_counters(self, client):
+        achievements.record_vote("det-1", media_type="audio")
+        client.put("/api/settings", json={"disable_achievements": True})
+        client.put("/api/settings", json={"disable_achievements": False})
+        # Counters should still be zero — the wipe is permanent.
+        state = achievements.get_full_state()
+        for a in state["achievements"]:
+            assert a["counter"] == 0

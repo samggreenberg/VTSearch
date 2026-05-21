@@ -223,6 +223,37 @@ def _current_tier_idx(category_id: str, counter: int) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _is_disabled() -> bool:
+    """Return True when the current user opted out of achievement tracking.
+
+    Recording hooks become no-ops and :func:`get_full_state` returns a
+    zeroed shell when this is set. The check resolves the per-user
+    setting on every call, so toggling the flag takes effect immediately
+    without restarting the process.
+    """
+    try:
+        from vtsearch.settings import get_disable_achievements
+
+        return bool(get_disable_achievements())
+    except Exception:
+        return False
+
+
+def wipe_state() -> None:
+    """Clear the current user's stored ``achievement_state`` entirely.
+
+    Called from the settings route when ``disable_achievements`` flips
+    from False to True so the counters reset to zero (and stay there
+    while the toggle remains on). Idempotent — running it on an already-
+    empty state is a no-op write.
+    """
+
+    def _apply(cache: dict[str, Any]) -> None:
+        cache.pop("achievement_state", None)
+
+    mutate_user(_apply)
+
+
 def record_vote(
     detector_id: str = "",
     media_type: str = "",
@@ -246,54 +277,67 @@ def record_vote(
         now: Override the current unix timestamp (seconds since epoch); only
             used by tests.  Default uses :func:`time.time`.
     """
+    if _is_disabled():
+        return
     ts = time.time() if now is None else float(now)
     dt = datetime.fromtimestamp(ts, tz=timezone.utc)
     date_str = dt.strftime("%Y-%m-%d")
     hour = dt.hour
 
-    def _apply(cache: dict[str, Any]) -> None:
-        state = _ensure_state(cache)
-        counters = state["counters"]
+    mutate_user(lambda cache: _credit_vote(cache, ts, detector_id, media_type, date_str, hour))
 
-        counters["votes_cast"] += 1
 
-        if detector_id:
-            trained = state["trained_detector_ids"]
-            if detector_id not in trained:
-                trained.append(detector_id)
-                counters["detectors_trained"] += 1
+def _credit_vote(  # noqa: C901
+    cache: dict[str, Any],
+    ts: float,
+    detector_id: str,
+    media_type: str,
+    date_str: str,
+    hour: int,
+) -> None:
+    """Apply one vote's credits to *cache* in place. See :func:`record_vote`."""
+    state = _ensure_state(cache)
+    counters = state["counters"]
 
-        if media_type:
-            seen_types = state["media_types_seen"]
-            if media_type not in seen_types:
-                seen_types.append(media_type)
-                counters["media_types_touched"] += 1
+    counters["votes_cast"] += 1
 
-        days_seen = state["days_seen"]
-        if date_str not in days_seen:
-            days_seen.append(date_str)
-            counters["days_active"] += 1
+    if detector_id:
+        trained = state["trained_detector_ids"]
+        if detector_id not in trained:
+            trained.append(detector_id)
+            counters["detectors_trained"] += 1
 
-        hours_seen = state["hours_seen"]
-        if hour not in hours_seen:
-            hours_seen.append(hour)
-            counters["hours_voted"] += 1
+    if media_type:
+        seen_types = state["media_types_seen"]
+        if media_type not in seen_types:
+            seen_types.append(media_type)
+            counters["media_types_touched"] += 1
 
-        last_ts = float(state.get("last_vote_ts") or 0.0)
-        if last_ts <= 0.0 or (ts - last_ts) > STREAK_GAP_SECONDS:
-            current = 1
-        else:
-            current = int(state.get("current_streak") or 0) + 1
-        state["current_streak"] = current
-        state["last_vote_ts"] = ts
-        if current > counters["vote_streak"]:
-            counters["vote_streak"] = current
+    days_seen = state["days_seen"]
+    if date_str not in days_seen:
+        days_seen.append(date_str)
+        counters["days_active"] += 1
 
-    mutate_user(_apply)
+    hours_seen = state["hours_seen"]
+    if hour not in hours_seen:
+        hours_seen.append(hour)
+        counters["hours_voted"] += 1
+
+    last_ts = float(state.get("last_vote_ts") or 0.0)
+    if last_ts <= 0.0 or (ts - last_ts) > STREAK_GAP_SECONDS:
+        current = 1
+    else:
+        current = int(state.get("current_streak") or 0) + 1
+    state["current_streak"] = current
+    state["last_vote_ts"] = ts
+    if current > counters["vote_streak"]:
+        counters["vote_streak"] = current
 
 
 def record_dataset_load(importer_name: str) -> None:
     """Record one dataset load (skipping demos/synthetic)."""
+    if _is_disabled():
+        return
     if importer_name in EXCLUDED_DATASET_IMPORTERS:
         return
 
@@ -306,6 +350,8 @@ def record_dataset_load(importer_name: str) -> None:
 
 def record_detector_import(detector_id: str) -> None:
     """Record one detector receiving imported labels.  Dedupes by detector_id."""
+    if _is_disabled():
+        return
     if not detector_id:
         return
 
@@ -322,6 +368,8 @@ def record_detector_import(detector_id: str) -> None:
 
 def record_find(n_scored: int) -> None:
     """Record *n_scored* media items processed by a Find operation."""
+    if _is_disabled():
+        return
     if n_scored <= 0:
         return
 
@@ -346,6 +394,8 @@ def record_doc_phrase(phrase: str) -> dict[str, Any]:
     - ``doc_id`` / ``doc_name`` (str | None): identifying the matched doc.
     - ``already_read`` (bool): True when the doc was previously credited.
     """
+    if _is_disabled():
+        return {"matched": False, "doc_id": None, "doc_name": None, "already_read": False}
     h = _hash_phrase(phrase)
     matched_id: str | None = None
     for doc_id, doc_hash in _DOC_HASHES.items():
@@ -417,6 +467,27 @@ def get_full_state() -> dict[str, Any]:
             ],
         }
     """
+    if _is_disabled():
+        zeroed: list[dict[str, Any]] = []
+        for a in ACHIEVEMENTS:
+            zeroed.append(
+                {
+                    "id": a["id"],
+                    "name": a["name"],
+                    "description": a["description"],
+                    "icon": a["icon"],
+                    "tiers": list(a["tiers"]),
+                    "counter": 0,
+                    "tier_idx": -1,
+                    "next_threshold": a["tiers"][0],
+                }
+            )
+        return {
+            "tier_names": list(TIER_NAMES),
+            "achievements": zeroed,
+            "pending_announcements": [],
+            "docs": [{"id": d["id"], "name": d["name"], "path": d["path"], "read": False} for d in DOCS],
+        }
     username = get_current_user()
     _ensure_user_loaded(username)
     with _settings_lock:

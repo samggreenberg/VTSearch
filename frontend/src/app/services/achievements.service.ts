@@ -10,6 +10,7 @@ import type { PendingAnnouncement } from '../generated/api-client/models/pending
 import { acknowledgeAchievement } from '../generated/api-client/fn/achievements/acknowledge-achievement';
 import { checkPhrase } from '../generated/api-client/fn/achievements/check-phrase';
 import { getAchievements } from '../generated/api-client/fn/achievements/get-achievements';
+import { SettingsStateService } from './settings-state.service';
 
 const EMPTY_STATE: AchievementState = {
   tier_names: [],
@@ -31,10 +32,25 @@ const EMPTY_STATE: AchievementState = {
 export class AchievementsService {
   private http = inject(HttpClient);
   private config = inject(ApiConfiguration);
+  private settingsState = inject(SettingsStateService);
 
   private readonly state$ = new BehaviorSubject<AchievementState>(EMPTY_STATE);
   private readonly unlock$ = new Subject<PendingAnnouncement>();
   private inFlight = false;
+  private disabled = false;
+
+  constructor() {
+    this.settingsState.settings$.subscribe((s) => {
+      const next = !!s?.disable_achievements;
+      const flipped = next && !this.disabled;
+      this.disabled = next;
+      if (flipped) {
+        // Disabled — drop the cached state so the UI doesn't show
+        // counters/unlocks from before the toggle.
+        this.state$.next(EMPTY_STATE);
+      }
+    });
+  }
 
   /** Stream of state snapshots for UI binding. */
   get state(): Observable<AchievementState> {
@@ -55,6 +71,10 @@ export class AchievementsService {
    * calls so a tight burst of actions doesn't fire N requests.
    */
   refresh(): void {
+    if (this.disabled) {
+      this.state$.next(EMPTY_STATE);
+      return;
+    }
     if (this.inFlight) return;
     this.inFlight = true;
     getAchievements(this.http, this.config.rootUrl)
