@@ -414,8 +414,14 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
             continue
 
         content_bytes = _clip_content_bytes(clip, media_type)
-        if content_bytes is None:
-            if recompute:
+        metadata_only = content_bytes is None and media_type == "video"
+        if content_bytes is None and not metadata_only:
+            continue
+
+        if recompute:
+            if content_bytes is not None:
+                clip["md5"] = hashlib.md5(content_bytes).hexdigest()
+            else:
                 # Metadata-only clips (e.g. video): bytes unchanged but
                 # boundaries differ — create a unique MD5 by hashing the
                 # parent bytes + clip boundaries so dedup doesn't collapse
@@ -424,10 +430,6 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
                 boundary_tag = f"|clip_start={clip.get('clip_start')}|clip_end={clip.get('clip_end')}"
                 combined = hashlib.md5(parent_bytes).hexdigest() + boundary_tag
                 clip["md5"] = hashlib.md5(combined.encode()).hexdigest()
-            continue
-
-        if recompute:
-            clip["md5"] = hashlib.md5(content_bytes).hexdigest()
         embed_indices.append(clip_idx)
         embed_inputs.append(_build_clip_embed_input(clip, media_type))
 
@@ -493,11 +495,16 @@ def _clip_content_bytes(clip: dict, media_type: str) -> bytes | None:
 def _build_clip_embed_input(clip: dict, media_type: str) -> dict:
     """Build the minimal media dict a bulk embedder needs for a clip.
 
-    Hands the embedder the in-memory ``media_bytes`` (audio/image) or
+    Hands the embedder the in-memory ``media_bytes`` (audio/image/video) or
     ``media_string`` (text) so the bulk surface never has to round-trip
     the content through a tempfile.  Preserves ``origin_name`` and
     ``filename`` so embedders that surface diagnostic paths still log
     something useful.
+
+    Video clips additionally carry ``clip_start`` / ``clip_end`` (and
+    ``media_path`` when available) because the underlying parent bytes
+    are shared across every tile — the embedder uses the boundary
+    metadata to sample distinct frame ranges per tile.
     """
     base: dict = {
         "origin_name": clip.get("origin_name", ""),
@@ -507,6 +514,13 @@ def _build_clip_embed_input(clip: dict, media_type: str) -> dict:
         base["media_string"] = clip.get("media_string", "")
     else:
         base["media_bytes"] = clip.get("media_bytes")
+    if media_type == "video":
+        if clip.get("media_path"):
+            base["media_path"] = clip["media_path"]
+        if "clip_start" in clip:
+            base["clip_start"] = clip["clip_start"]
+        if "clip_end" in clip:
+            base["clip_end"] = clip["clip_end"]
     return base
 
 

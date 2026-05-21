@@ -13,7 +13,6 @@ caption says*; pair with image-/text-based detectors for hybrid flows.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
@@ -27,6 +26,7 @@ from vtscore.media.embedder import (
     load_pretrained_local_first,
     timed_progress,
 )
+from vtscore.media.video._frame_sampling import sample_video_frames
 
 # ImageNet normalisation — VideoMAE's standard preprocessing pipeline.
 _IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -168,42 +168,14 @@ class VideoVideoMAEEmbedder(MediaEmbedder):
             self.load_models()
         if self._model is None:
             return None
-        file_path = Path(media["media_path"])
+        source_repr = media.get("media_path") or media.get("filename") or "<bytes>"
         try:
-            import cv2  # noqa: PLC0415
             import torch  # noqa: PLC0415
-            from PIL import Image  # noqa: PLC0415
 
-            cap = cv2.VideoCapture(str(file_path))
-            if not cap.isOpened():
-                logging.getLogger(__name__).error("Error opening video %s", file_path)
-                return None
-
-            try:
-                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                if frame_count <= 0:
-                    logging.getLogger(__name__).error("Could not determine frame count for %s", file_path)
-                    return None
-                num_frames = min(_NUM_FRAMES, max(1, frame_count))
-                indices = np.linspace(0, frame_count - 1, num_frames, dtype=int)
-
-                frames = []
-                for idx in indices:
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-                    ret, frame = cap.read()
-                    if ret:
-                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        frames.append(Image.fromarray(frame))
-            finally:
-                cap.release()
-
+            frames = sample_video_frames(media, _NUM_FRAMES)
             if not frames:
-                logging.getLogger(__name__).error("Could not extract frames from %s", file_path)
+                logging.getLogger(__name__).error("Could not extract frames from %s", source_repr)
                 return None
-
-            # VideoMAE v2 expects exactly 16 frames; pad by repeating if fewer.
-            while len(frames) < _NUM_FRAMES:
-                frames.append(frames[-1])
 
             # (T, C, H, W) -> (1, T, C, H, W)
             pixel_values = _preprocess_frames(frames)
@@ -220,7 +192,7 @@ class VideoVideoMAEEmbedder(MediaEmbedder):
                 embedding = pooled.detach().cpu().numpy()
             return embedding[0]
         except Exception:
-            logging.getLogger(__name__).exception("Error embedding %s", file_path)
+            logging.getLogger(__name__).exception("Error embedding %s", source_repr)
             return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
