@@ -361,5 +361,3 @@ class TestLocalUploadVectorsFile:
         body = resp.get_json()
         # flask-smorest error envelope: ``message`` (not ``error``).
         assert "vectors_file" in body["message"].lower()
-
-
