@@ -28,8 +28,12 @@ data/
 tests/
 run-tests.sh
 
-# Frontend source (build output is in static/)
-frontend/
+# Frontend node_modules and build cache — the Dockerfile's frontend
+# build stage runs `npm ci` and `ng build` inside the image, so we want
+# the frontend source in the context but never these generated dirs.
+frontend/node_modules/
+frontend/.angular/
+frontend/dist/
 
 # Docker files (no need to copy into the image)
 docker/
