@@ -175,7 +175,7 @@ class ReCallerDatasetImporter(DatasetImporter):
     fields = [
         ImporterField(
             key="media_type",
-            label="Output Media Type",
+            label="Dataset MediaType",
             field_type="select",
             options=all_folder_names(),
             default="audio",

@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 import time
 import uuid
@@ -229,6 +230,27 @@ class TextFormatter(logging.Formatter):
         return base
 
 
+_VOCAB_TOKEN_WARN_RE = re.compile(r"(bos|eos|pad)_token_id must be `None` or an integer within the vocabulary")
+
+
+class _TransformersVocabTokenFilter(logging.Filter):
+    """Drop transformers' bos/eos/pad token-out-of-vocab warnings.
+
+    CLIP-derived models (CLAP, X-CLIP, plain CLIP) carry CLIP's 49406/49407
+    BOS/EOS tokens against a 32k sentencepiece vocab in a sibling text
+    sub-config. transformers logs a config-validation warning on every load;
+    the mismatch is harmless and there's nothing for the user to fix.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not record.name.startswith("transformers"):
+            return True
+        try:
+            return _VOCAB_TOKEN_WARN_RE.search(record.getMessage()) is None
+        except Exception:
+            return True
+
+
 def setup_logging(
     level: str | None = None,
     fmt: str | None = None,
@@ -255,6 +277,7 @@ def setup_logging(
     handler = logging.StreamHandler(stream or sys.stderr)
     handler.setFormatter(formatter)
     handler.addFilter(ContextFilter())
+    handler.addFilter(_TransformersVocabTokenFilter())
 
     root = logging.getLogger()
     for existing in list(root.handlers):

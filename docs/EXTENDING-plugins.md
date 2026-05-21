@@ -556,7 +556,7 @@ class DXImporter(DatasetImporter):
     name = "dx"
     multi_media = True
     fields = [
-        ImporterField(key="media_type", label="Output Media Type", field_type="select", ...),
+        ImporterField(key="media_type", label="Dataset MediaType", field_type="select", ...),
         ImporterField(key="dataset_id", ..., required=True),
     ]
 

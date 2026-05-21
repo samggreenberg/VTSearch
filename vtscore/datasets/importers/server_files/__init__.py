@@ -200,7 +200,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
     fields = [
         ImporterField(
             key="media_type",
-            label="Output Media Type",
+            label="Dataset MediaType",
             field_type="select",
             description=(
                 "Type of media files the dataset ends up holding.  When source "
