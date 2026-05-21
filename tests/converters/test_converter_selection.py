@@ -1111,18 +1111,22 @@ class TestImportAPISourceSpecs:
 
 
 # ===========================================================================
-# multi_media flag on the local / server_files importers
+# multi_media flag on the local_folder / local_files / server_files importers
 # ===========================================================================
 
 
 class TestMultiMediaImportersFlag:
-    """The unified ``local`` placeholder and the ``server_files`` importer
-    both delegate to / share the same multi-media flow.  Their to_dict()
-    advertises multi_media=True so the frontend renders the source-specs
-    editor for each."""
+    """The lf-* / sf-* importers all delegate to / share the same
+    multi-media flow.  Their to_dict() advertises multi_media=True so
+    the frontend renders the source-specs editor for each."""
 
-    def test_local_advertises_multi_media(self):
-        from vtscore.datasets.importers.local import IMPORTER
+    def test_local_folder_advertises_multi_media(self):
+        from vtscore.datasets.importers.local_folder import IMPORTER
+
+        assert IMPORTER.to_dict().get("multi_media") is True
+
+    def test_local_files_advertises_multi_media(self):
+        from vtscore.datasets.importers.local_files import IMPORTER
 
         assert IMPORTER.to_dict().get("multi_media") is True
 

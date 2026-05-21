@@ -106,7 +106,8 @@ export interface ImporterInfo {
   fields?: ImporterField[];
   ui_mode?: string;
   /** Which view the dataset-importer modal opens for this card.
-   *  ``"form"`` (default), ``"demo"``, ``"server_folder"``, ``"local"``. */
+   *  ``"form"`` (default), ``"demo"``, ``"server_folder"``, ``"local_folder"``,
+   *  or ``"local_files"``. */
   picker_view?: string;
   hidden_from_picker?: boolean;
   /** Picker tab this importer belongs to.  One of ``"services"``,

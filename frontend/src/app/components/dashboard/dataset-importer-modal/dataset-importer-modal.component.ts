@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, HostListener, Input, OnInit, Output, ViewChild } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { of } from 'rxjs';
@@ -97,8 +97,8 @@ export class DatasetImporterModalComponent implements OnInit {
    *  any future ``multi_media=True`` form-style importer). */
   formSourceSpecs: SourceSpec[] = [];
 
-  /** Source-specs editor state for the unified ``local`` view (folder or
-   *  files).  These uploads go through ``/api/dataset/import-local-folder``,
+  /** Source-specs editor state for the local-folder / local-files
+   *  views.  These uploads go through ``/api/dataset/import-local-folder``,
    *  which delegates to server_folder — so the same multi-media flow
    *  applies. */
   lfSourceSpecs: SourceSpec[] = [];
@@ -115,10 +115,8 @@ export class DatasetImporterModalComponent implements OnInit {
   lfClipperParamValues: Record<string, number | string> = {};
   lfSubmitting = false;
   lfError = '';
-  /** Inferred from what the user actually picked.  ``"folder"`` when at
-   *  least one selected file carries a ``webkitRelativePath`` (i.e. the
-   *  user used the "Browse folder" button or dropped a directory);
-   *  ``"files"`` otherwise. */
+  /** ``"folder"`` opens a directory picker (Local Folder card),
+   *  ``"files"`` opens a multi-file picker (Local Files card). */
   lfPickerKind: 'folder' | 'files' = 'folder';
   /** Whether subfolders inside the picked local folder are included. */
   lfRecursive = true;
@@ -158,17 +156,6 @@ export class DatasetImporterModalComponent implements OnInit {
    *  ``(source_type, converter|null, params)`` triple — see
    *  ``docs/plans/multi-media-import.md``. */
   sfSourceSpecs: SourceSpec[] = [];
-  /** Optional server-side path to a ``.npz`` archive of pre-computed
-   *  embedding vectors.  When set, files in the picked folder whose
-   *  name matches a key in the archive reuse the supplied vector
-   *  instead of running the embedding model. */
-  sfVectorsFile = '';
-  /** Optional server-side path to a paths manifest file (``.txt`` /
-   *  ``.list`` / ``.npz``).  When set, the submit routes through the
-   *  ``server_files`` importer instead of ``server_folder`` and the
-   *  folder picker is ignored.  This is the merged-card affordance for
-   *  the manifest workflow that used to be a separate "Files" card. */
-  sfPathsFile = '';
 
   /** Initial sub-path passed to ``<vt-folder-browser>``. Bound to its
    *  ``[initialPath]`` input so we can imperatively navigate the picker
@@ -303,8 +290,10 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Front-of-list order for the picker within each tab.  Importers not
    *  listed here come after these in registry order. */
   private static readonly PICKER_ORDER = [
-    'local',
+    'local_folder',
+    'local_files',
     'server_folder',
+    'server_files',
     'demo',
     'synthetic',
   ];
@@ -411,7 +400,7 @@ export class DatasetImporterModalComponent implements OnInit {
     // populates its own state slice but no longer changes a global
     // ``view`` because the modal renders all tab levels together.
     const pickerView = importer.picker_view || 'form';
-    if (pickerView === 'local') {
+    if (pickerView === 'local_folder' || pickerView === 'local_files') {
       this.openLocalFolderUploader(importer);
       return;
     }
@@ -974,12 +963,10 @@ export class DatasetImporterModalComponent implements OnInit {
 
   openLocalFolderUploader(importer?: ImporterInfo): void {
     const resolved = importer
-      || this.importers.find((i) => i.name === 'local')
+      || this.importers.find((i) => i.name === 'local_folder')
       || null;
     this.selectedImporter = resolved;
-    // Kind defaults to "folder" but is overwritten by lfAcceptFiles
-    // once the user actually picks something.
-    this.lfPickerKind = 'folder';
+    this.lfPickerKind = resolved?.name === 'local_files' ? 'files' : 'folder';
     this.lfFiles = [];
     this.lfDetection = null;
     this.lfVectorsFile = null;
@@ -1006,39 +993,8 @@ export class DatasetImporterModalComponent implements OnInit {
     this.lfResetSourceSpecs();
   }
 
-  /** Hidden ``<input type="file" webkitdirectory>`` used by the "Browse
-   *  folder" button.  Kept off-screen because the on-screen drop-zone
-   *  already owns the user-visible file-input UI. */
-  @ViewChild('lfFolderInput') lfFolderInput?: ElementRef<HTMLInputElement>;
-  /** Hidden ``<input type="file" multiple>`` used by the "Browse files"
-   *  button. */
-  @ViewChild('lfFilesInput') lfFilesInput?: ElementRef<HTMLInputElement>;
-
   lfOnFilesDropped(files: File[]): void {
     this.lfAcceptFiles(files);
-  }
-
-  lfBrowseFolder(): void {
-    const el = this.lfFolderInput?.nativeElement;
-    if (el) {
-      el.value = '';
-      el.click();
-    }
-  }
-
-  lfBrowseFiles(): void {
-    const el = this.lfFilesInput?.nativeElement;
-    if (el) {
-      el.value = '';
-      el.click();
-    }
-  }
-
-  lfOnHiddenInputChange(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) return;
-    this.lfAcceptFiles(Array.from(input.files));
-    input.value = '';
   }
 
   private lfAcceptFiles(files: File[]): void {
@@ -1049,13 +1005,6 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     this.lfFiles = files;
     this.lfError = '';
-    // Folder pick when at least one file carries a webkitRelativePath
-    // with a directory segment (e.g. "subdir/file.wav"); plain file
-    // picks have either no webkitRelativePath or just the basename.
-    this.lfPickerKind = files.some((f) => {
-      const rel = (f as any).webkitRelativePath as string | undefined;
-      return !!rel && rel.indexOf('/') >= 0;
-    }) ? 'folder' : 'files';
     if (!this.lfDatasetNameDirty) {
       this.lfDatasetName = this.lfDerivedDatasetName();
     }
@@ -1266,8 +1215,6 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfRecursive = this.readRecursiveDefault(this.selectedImporter);
     this.sfDatasetName = '';
     this.sfDatasetNameDirty = false;
-    this.sfVectorsFile = '';
-    this.sfPathsFile = '';
     this.sfPickerInitialPath = '';
     this.sfDefaultPathConsumed = false;
     this.sfPathInputValue = '';
@@ -1776,17 +1723,11 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfSubmitting = true;
     this.sfBrowseError = '';
 
-    const sfPaths = (this.sfPathsFile || '').trim();
-    const useManifest = sfPaths.length > 0;
     const params: Record<string, unknown> = {
+      path: this.sfAbsolutePath,
       media_type: this.sfMediaType,
+      recursive: this.sfRecursive,
     };
-    if (useManifest) {
-      params['paths_file'] = sfPaths;
-    } else {
-      params['path'] = this.sfAbsolutePath;
-      params['recursive'] = this.sfRecursive;
-    }
     const sfName = (this.sfDatasetName || '').trim();
     if (sfName) {
       params['dataset_name'] = sfName;
@@ -1803,13 +1744,8 @@ export class DatasetImporterModalComponent implements OnInit {
     if (this.sfSourceSpecs.length > 0) {
       params['source_specs'] = this.sfSourceSpecs;
     }
-    const sfVecPath = (this.sfVectorsFile || '').trim();
-    if (sfVecPath) {
-      params['vectors_file'] = sfVecPath;
-    }
 
-    const importerName = useManifest ? 'server_files' : 'server_folder';
-    this.datasetsApi.runImporter(importerName, params).subscribe({
+    this.datasetsApi.runImporter('server_folder', params).subscribe({
       next: () => {
         this.sfSubmitting = false;
         this.importStarted.emit();

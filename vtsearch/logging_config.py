@@ -230,9 +230,7 @@ class TextFormatter(logging.Formatter):
         return base
 
 
-_VOCAB_TOKEN_WARN_RE = re.compile(
-    r"(bos|eos|pad)_token_id must be `None` or an integer within the vocabulary"
-)
+_VOCAB_TOKEN_WARN_RE = re.compile(r"(bos|eos|pad)_token_id must be `None` or an integer within the vocabulary")
 
 
 class _TransformersVocabTokenFilter(logging.Filter):
@@ -291,7 +289,6 @@ def setup_logging(
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
     logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
     logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
-
 
 
 def new_request_id() -> str:

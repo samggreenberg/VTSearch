@@ -204,7 +204,7 @@ def _load_and_train_detectors(
                 f"Detector '{det_name}': could not train MLP "
                 f"(resolved {cached} of {total} label origins, need ≥1 good and ≥1 bad). "
                 "The original media may not be reachable from the CLI — for example, "
-                "labels collected through the local importer have no resolve_file() path."
+                "labels collected through the local_folder importer have no resolve_file() path."
             )
         out[det_name] = {"mlp": det_ctx.model, "threshold": det_ctx.threshold}
     return out

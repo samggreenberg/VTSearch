@@ -1,9 +1,8 @@
 """Helpers for reading pre-computed embedding vectors from ``.npz`` files.
 
-The ``server_files`` importer and the unified browser-side ``local`` upload
-flow both accept an ``.npz`` archive of pre-computed embeddings instead of
-(or alongside) raw media files, so users who have already embedded their
-data don't have to re-embed it.
+The ``server_files`` and ``local_files`` importers accept an ``.npz`` archive
+of pre-computed embeddings instead of (or alongside) raw media files, so
+users who have already embedded their data don't have to re-embed it.
 
 Two NPZ layouts are supported:
 
