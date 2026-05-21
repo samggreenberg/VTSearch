@@ -756,13 +756,39 @@ class TestTimedProgress:
         # Should have the initial message plus at least one timed update
         timed_calls = [c for c in calls if "(" in c[1]]
         assert len(timed_calls) >= 1
-        # Check format: "Importing torch… (1s)" or "Importing torch… (2s)"
-        assert any("(1s)" in c[1] or "(2s)" in c[1] for c in timed_calls)
+        # Check format: "Importing torch… (1s)" / "(2s)" — possibly extended with
+        # ", N modules" when sys.modules grew during the block.
+        assert any("(1s" in c[1] or "(2s" in c[1] for c in timed_calls)
         # All calls should preserve status, current, total
         for c in calls:
             assert c[0] == "loading"
             assert c[2] == 1
             assert c[3] == 2
+
+    def test_elapsed_suffix_includes_module_count_when_imports_happen(self):
+        """If sys.modules grows during the block, the ticker suffix should
+        include the count so the user sees a concrete 'still working' signal."""
+        import sys
+        import time
+
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append(message)
+
+        with timed_progress(cb, "loading", "Importing thing…", 0, 0):
+            # Simulate new modules being registered (cheaper than a real import).
+            for i in range(5):
+                sys.modules[f"_vtsearch_test_fake_mod_{i}"] = object()
+            time.sleep(1.5)
+
+        # Clean up the fake modules we injected.
+        for i in range(5):
+            sys.modules.pop(f"_vtsearch_test_fake_mod_{i}", None)
+
+        timed_calls = [c for c in calls if "(" in c]
+        assert len(timed_calls) >= 1
+        assert any("modules" in c for c in timed_calls)
 
     def test_ticker_stops_after_block_exits(self):
         """The background ticker thread should stop once the with block exits."""

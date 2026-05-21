@@ -16,7 +16,7 @@ import re
 import sys
 from typing import Any, cast
 
-_TIME_SUFFIX_RE = re.compile(r"\s*\(\d+s\)$")
+_TIME_SUFFIX_RE = re.compile(r"\s*\(\d+s(?:,\s*\d+\s+modules)?\)$")
 
 
 def _strip_time_suffix(msg: str) -> str:
