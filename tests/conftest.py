@@ -398,21 +398,46 @@ def isolated_settings(tmp_path, monkeypatch):
     det_reg_mod.reset_for_tests()
 
 
-def _active_id_for_tests(getter) -> str | None:
-    """Return the active context's id from the thread-local, or ``None``.
+def _active_id_for_tests(thread_local_getter, registry_getter) -> str | None:
+    """Return the active context's id, but only if it's still registered.
 
-    Skips the request-missing sentinel and the empty fallback (their
-    ids are not registered, so injecting them would just cause 409
-    "not loaded" downstream).
+    Reads the *thread-local* context directly rather than going through
+    ``get_active_*_context()``. The high-level resolver also checks
+    ``g._*_context`` first — but Flask's test client preserves the
+    previous request's request context inside ``with app.test_client() as c:``
+    blocks (so tests can inspect ``session`` / ``g`` after the response).
+    That means a request just after another request would read the
+    *previous* request's ``g._detector_context`` (always
+    ``_test_default_det`` in tests) instead of whatever thread-local
+    update the test code just made, e.g. via
+    ``set_thread_detector_context(get_detector_context(<new id>))``
+    after loading a fresh detector. Reading thread-local directly
+    sidesteps that staleness.
+
+    Skips:
+
+    - ``None`` contexts and ones whose id is an empty string or a
+      ``__sentinel__`` marker.
+    - Ids whose entry has been removed from the registry — e.g. a
+      previous request unloaded the detector but the test thread's
+      thread-local still points to the now-orphaned object. Injecting
+      a stale id would cause ``before_request`` to stash
+      ``_unloaded_detector_id`` and turn every proxy access into a
+      409, which is exactly the silent-mistarget surface H34 is
+      trying to avoid in *production* — but in the test wrapper we
+      want a clean "no header sent" so the route hits the proper
+      no-active-context path instead.
     """
     try:
-        ctx = getter()
+        ctx = thread_local_getter()
     except Exception:
         return None
     if ctx is None:
         return None
     cid = getattr(ctx, "dataset_id", None) or getattr(ctx, "detector_id", None)
-    if not cid or cid.startswith("__") or cid == "":
+    if not cid or cid.startswith("__"):
+        return None
+    if registry_getter(cid) is None:
         return None
     return cid
 
@@ -441,11 +466,11 @@ def _install_active_context_headers(c):
             headers = kwargs.get("headers")
             hdrs = Headers(headers) if headers is not None else Headers()
             if "X-Dataset-Id" not in hdrs:
-                ds_id = _active_id_for_tests(_core.get_active_context)
+                ds_id = _active_id_for_tests(_core.get_thread_dataset_context, _core.get_context)
                 if ds_id:
                     hdrs.add("X-Dataset-Id", ds_id)
             if "X-Detector-Id" not in hdrs:
-                det_id = _active_id_for_tests(_core.get_active_detector_context)
+                det_id = _active_id_for_tests(_core.get_thread_detector_context, _core.get_detector_context)
                 if det_id:
                     hdrs.add("X-Detector-Id", det_id)
             kwargs["headers"] = hdrs

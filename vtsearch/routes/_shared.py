@@ -53,10 +53,7 @@ def require_detector_header(fn: Callable) -> Callable:
         if not _has_context_id("X-Detector-Id", "detector_id"):
             abort(
                 400,
-                message=(
-                    "X-Detector-Id header (or ?detector_id= query param) is "
-                    "required for this endpoint."
-                ),
+                message=("X-Detector-Id header (or ?detector_id= query param) is required for this endpoint."),
             )
         return fn(*args, **kwargs)
 
@@ -78,10 +75,7 @@ def require_dataset_header(fn: Callable) -> Callable:
         if not _has_context_id("X-Dataset-Id", "dataset_id"):
             abort(
                 400,
-                message=(
-                    "X-Dataset-Id header (or ?dataset_id= query param) is "
-                    "required for this endpoint."
-                ),
+                message=("X-Dataset-Id header (or ?dataset_id= query param) is required for this endpoint."),
             )
         return fn(*args, **kwargs)
 
