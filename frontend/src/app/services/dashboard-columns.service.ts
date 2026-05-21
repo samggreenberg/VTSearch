@@ -21,8 +21,12 @@ export type DetectorColumn =
   | 'detector_loaded'
   | 'actions';
 
+// `name` is pinned at the far left and `actions` at the far right; both are
+// rendered explicitly by the Dashboard template, so they are excluded from the
+// reorderable middle-column defaults. (Leaving `name` in here produced a
+// duplicate Name header and shifted every body cell one column to the right,
+// leaving the Actions column with no body cells.)
 const DATASET_COLUMNS_DEFAULT: DatasetColumn[] = [
-  'name',
   'media_type',
   'num_items',
   'created_at',
@@ -32,7 +36,6 @@ const DATASET_COLUMNS_DEFAULT: DatasetColumn[] = [
 ];
 
 const DETECTOR_COLUMNS_DEFAULT: DetectorColumn[] = [
-  'name',
   'media_type',
   'num_training',
   'autodetect',
