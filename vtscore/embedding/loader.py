@@ -22,6 +22,7 @@ _TIME_SUFFIX_RE = re.compile(r"\s*\(\d+s\)$")
 def _strip_time_suffix(msg: str) -> str:
     return _TIME_SUFFIX_RE.sub("", msg) if msg else msg
 
+
 from vtscore.config import MODELS_CACHE_DIR, resolve_device
 from vtscore.media.torch_setup import ensure_torch_configured
 
