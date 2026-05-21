@@ -75,18 +75,36 @@ class TestMakeConsoleProgress:
         assert "]" in captured.out
 
     def test_progress_bar_completes_with_newline(self, capsys):
-        """When current >= total, a newline should be emitted."""
+        """A completed bar should be terminated with a newline when flushed
+        or when a different message arrives — but not auto-finalized at 100%
+        (so timed_progress ticker updates can keep overwriting in place).
+        """
         cb = _make_console_progress(lambda *a, **kw: None)
 
         cb("loading", "model.safetensors", 0, 100)
         cb("loading", "model.safetensors", 100, 100)
+        cb.flush()
 
         captured = capsys.readouterr()
-        # The completed bar should end with a newline
         assert "100%" in captured.out
-        # Should end in a newline (not just a \r)
+        # After flush, output should end with a newline
         lines = captured.out.split("\n")
-        assert len(lines) >= 2  # at least one \n was written after completion
+        assert len(lines) >= 2
+
+    def test_ticker_updates_overwrite_same_line(self, capsys):
+        """Successive messages sharing a base (timed_progress (Ns) suffix)
+        should render on the same console line, not stack."""
+        cb = _make_console_progress(lambda *a, **kw: None)
+
+        cb("loading", "Importing transformers…", 2, 2)
+        cb("loading", "Importing transformers… (1s)", 2, 2)
+        cb("loading", "Importing transformers… (2s)", 2, 2)
+
+        captured = capsys.readouterr()
+        # No newline should have been auto-emitted between the ticker updates;
+        # all three renders share one logical line, separated by \r overwrites.
+        assert "\n" not in captured.out
+        assert "(2s)" in captured.out
 
     def test_progress_bar_percentage_capped_at_100(self, capsys):
         """Overshoot (current > total) should cap at 100%."""
@@ -738,13 +756,41 @@ class TestTimedProgress:
         # Should have the initial message plus at least one timed update
         timed_calls = [c for c in calls if "(" in c[1]]
         assert len(timed_calls) >= 1
-        # Check format: "Importing torch… (1s)" or "Importing torch… (2s)"
-        assert any("(1s)" in c[1] or "(2s)" in c[1] for c in timed_calls)
+        # Check format: "Importing torch… (1s)" / "(2s)" — possibly extended with
+        # ", N modules" when sys.modules grew during the block.
+        assert any("(1s" in c[1] or "(2s" in c[1] for c in timed_calls)
         # All calls should preserve status, current, total
         for c in calls:
             assert c[0] == "loading"
             assert c[2] == 1
             assert c[3] == 2
+
+    def test_elapsed_suffix_includes_module_count_when_imports_happen(self):
+        """If sys.modules grows during the block, the ticker suffix should
+        include the count so the user sees a concrete 'still working' signal."""
+        import sys
+        import time
+        import types
+
+        calls = []
+
+        def cb(status, message, current, total):
+            calls.append(message)
+
+        fake_names = [f"_vtsearch_test_fake_mod_{i}" for i in range(5)]
+        try:
+            with timed_progress(cb, "loading", "Importing thing…", 0, 0):
+                # Simulate new modules being registered (cheaper than a real import).
+                for name in fake_names:
+                    sys.modules[name] = types.ModuleType(name)
+                time.sleep(1.5)
+        finally:
+            for name in fake_names:
+                sys.modules.pop(name, None)
+
+        timed_calls = [c for c in calls if "(" in c]
+        assert len(timed_calls) >= 1
+        assert any("modules" in c for c in timed_calls)
 
     def test_ticker_stops_after_block_exits(self):
         """The background ticker thread should stop once the with block exits."""

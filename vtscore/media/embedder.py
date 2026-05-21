@@ -111,21 +111,30 @@ def timed_progress(
 
     Wraps a long-running blocking operation (typically a heavy ``import``)
     so that the progress callback is updated every second with an elapsed-
-    time suffix, e.g. ``"Importing torch… (3s)"``.  This prevents the UI
-    from appearing frozen during operations that cannot report incremental
-    progress themselves.
+    time suffix, e.g. ``"Importing torch… (3s, 247 modules)"``.  This
+    prevents the UI from appearing frozen during operations that cannot
+    report incremental progress themselves.  The module-count delta
+    against ``sys.modules`` at entry gives the user a concrete "still
+    making progress" signal when a fresh import is grinding through
+    hundreds of submodules — a static elapsed counter doesn't distinguish
+    a busy import from a stuck network call.
 
     The initial progress update is sent immediately (without a time suffix).
-    After the first second the background ticker appends ``(1s)``, ``(2s)``,
-    etc. until the ``with`` block exits.
+    After the first second the background ticker appends the elapsed-time
+    and module-count suffix until the ``with`` block exits.
     """
+    import sys  # noqa: PLC0415
+
     stop = threading.Event()
+    baseline_modules = len(sys.modules)
 
     def _ticker() -> None:
         start = time.monotonic()
         while not stop.wait(timeout=1.0):
             elapsed = int(time.monotonic() - start)
-            on_progress(status, f"{message} ({elapsed}s)", current, total)
+            loaded = len(sys.modules) - baseline_modules
+            suffix = f"({elapsed}s, {loaded} modules)" if loaded > 0 else f"({elapsed}s)"
+            on_progress(status, f"{message} {suffix}", current, total)
 
     on_progress(status, message, current, total)
     t = threading.Thread(target=_ticker, daemon=True)
