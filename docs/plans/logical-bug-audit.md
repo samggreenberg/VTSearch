@@ -767,8 +767,22 @@ Cross-section interaction agents:
   codebase (`vtscore/eval/metrics.py:53,60`,
   `vtscore/eval/label_curve.py:390`) carry their own empty-input guards
   too, so no related real bugs to fix.
-- **M20.** XCLIP single-frame video: `linspace(0, 0, 1)` + padding gives 8
-  identical frames → degenerate embedding.
+- ~~**M20.** XCLIP single-frame video: `linspace(0, 0, 1)` + padding gives 8
+  identical frames → degenerate embedding.~~
+  *Closed as not-a-bug.* X-CLIP, LanguageBind, and VideoMAE all require a
+  fixed-length frame stack; padding to that length is the only correct
+  behaviour for a video with fewer source frames, and a 1-frame video
+  genuinely has no temporal variation to encode. The resulting embedding is
+  finite, well-defined, and represents the visual content of the frame.
+  Investigation surfaced a *real* nearby bug — silent partial-read failures
+  inside the same loop (some `cap.read()` calls return `ret=False`, get
+  dropped, and the pad step biases the embedding toward the readable
+  portion of the file). Fixed by adding a partial-read warning to
+  `vtscore/media/video/_frame_sampling.sample_video_frames` (the shared
+  helper introduced by the tile-embedding fix in
+  commit `0a11d8bd`) so the failure is visible in logs instead of silent.
+  The originally-flagged "embedders ignore `clip_start`/`clip_end`"
+  concern was resolved separately by that same tile-embedding fix.
 - **M21.** Empty paragraph clip survives to dataset with `None` embedding;
   embedding-matrix builder later misbehaves.
 

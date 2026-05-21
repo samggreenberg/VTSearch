@@ -12,11 +12,14 @@ two-source convention so re-embedding works from in-memory dataset bytes.
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional
+
+_logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -109,6 +112,20 @@ def sample_video_frames(media: dict, num_frames: int) -> list[Any]:
 
     if not frames:
         return []
+    # Partial-read failure: cap.read() returned False for some of the
+    # requested indices (corrupted middle frames, VFR videos where
+    # CAP_PROP_POS_FRAMES doesn't actually seek, codec quirks). The
+    # remaining pad step will repeat the last successful frame, which
+    # biases the embedding toward the readable portion of the file —
+    # warn so the failure is visible in logs instead of silent.
+    if len(frames) < len(indices):
+        _logger.warning(
+            "Partial frame-read failure for %s: %d/%d requested indices succeeded; "
+            "padding with the last readable frame will bias the embedding.",
+            path,
+            len(frames),
+            len(indices),
+        )
     while len(frames) < num_frames:
         frames.append(frames[-1])
     return frames
