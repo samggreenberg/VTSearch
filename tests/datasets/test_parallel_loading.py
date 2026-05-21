@@ -1021,11 +1021,16 @@ class TestBackgroundLoadThreadContext:
         ran = threading.Event()
 
         def capture_load(target_medias):
+            import numpy as np  # noqa: PLC0415
+
             observed["thread_ctx"] = get_thread_dataset_context()
             observed["active_ctx"] = get_active_context()
             # Mutating the active context from the load_fn must land on
-            # the in-flight context, not on the empty fallback.
-            get_active_context().medias[1] = {"id": 1}
+            # the in-flight context, not on the empty fallback.  Give the
+            # stub media a real embedding so the load pipeline's
+            # ``_drop_none_embeddings_stage`` (M11 finalize) doesn't
+            # remove it before we can assert on it.
+            get_active_context().medias[1] = {"id": 1, "embedding": np.ones(4, dtype=np.float32)}
             ran.set()
 
         task_id = _run_origin_load_in_background(

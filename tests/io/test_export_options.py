@@ -408,7 +408,9 @@ class TestCliScoringNegativeHits:
         """
         from vtscore.cli import _score_medias_with_detectors
         from vtscore.detectors.training import train_and_threshold
-        from vtsearch.state import medias, snapshot_medias
+        from vtscore.embedding.matrix import invalidate_embedding_matrix
+        from vtscore.state.core import get_active_context
+        from vtsearch.state import snapshot_medias
 
         snap = snapshot_medias()
         good_ids = [1, 2, 3]
@@ -417,9 +419,15 @@ class TestCliScoringNegativeHits:
         y = [1.0] * len(good_ids) + [0.0] * len(bad_ids)
         mlp, threshold = train_and_threshold(X, y, snap=snap)
 
-        broken = dict(snap)
-        # Pick any cid not in the training set, blank out its embedding.
-        victim_cid = next(cid for cid in broken if cid not in good_ids + bad_ids)
+        # Build a broken snap that doesn't share the active ctx's key set
+        # — that forces the fresh-build path in
+        # ``get_embedding_matrix_for_snap`` where the M11 guard lives.
+        # (The cached-matrix fast path would return the still-valid
+        # matrix built from the active ctx, masking the bug.)
+        broken: dict[int, dict] = {}
+        for cid in list(snap.keys())[:5]:
+            broken[10_000 + cid] = dict(snap[cid])
+        victim_cid = next(iter(broken))
         broken[victim_cid] = dict(broken[victim_cid])
         broken[victim_cid]["embedding"] = None
 
@@ -429,7 +437,8 @@ class TestCliScoringNegativeHits:
 
         # Untouched global state stays scorable — the broken dict was a
         # local snapshot, ``medias`` is intact.
-        det_results = _score_medias_with_detectors(medias, detector_mlps)
+        invalidate_embedding_matrix(get_active_context())
+        det_results = _score_medias_with_detectors(snapshot_medias(), detector_mlps)
         assert det_results
 
 
