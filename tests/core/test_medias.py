@@ -664,11 +664,19 @@ class TestAddToPile:
                 # client preserves request contexts on its own ExitStack —
                 # invoking it from worker threads pushes contexts onto the
                 # workers' ContextVars and breaks the main-thread teardown.
+                # The conftest ``client`` fixture auto-injects context
+                # headers; freshly-built test clients don't, so we attach
+                # them explicitly here (H34 — vote/pile-add now requires
+                # ``X-Dataset-Id`` / ``X-Detector-Id``).
                 with app_module.app.test_client() as c:
                     r = c.post(
                         "/api/medias/add-to-pile",
                         data={"label": "good", "file": (io.BytesIO(wav_bytes), "race.wav")},
                         content_type="multipart/form-data",
+                        headers={
+                            "X-Dataset-Id": ds_ctx.dataset_id,
+                            "X-Detector-Id": det_ctx.detector_id,
+                        },
                     )
                 with lock:
                     results.append((r.status_code, r.get_json()))

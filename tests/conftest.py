@@ -398,10 +398,89 @@ def isolated_settings(tmp_path, monkeypatch):
     det_reg_mod.reset_for_tests()
 
 
+def _active_id_for_tests(thread_local_getter, registry_getter) -> str | None:
+    """Return the active context's id, but only if it's still registered.
+
+    Reads the *thread-local* context directly rather than going through
+    ``get_active_*_context()``. The high-level resolver also consults
+    Flask's per-request ``g._*_context`` — which only returns a sensible
+    value while a request handler is actively running (the resolver
+    gates on ``g._vts_in_request_handler``). Between requests in a
+    ``with app.test_client() as c:`` block, ``g`` exists but is no
+    longer "active". Either path would work here, but going straight
+    to the thread-local avoids paying the cost of a noop g lookup on
+    every test request.
+
+    Skips:
+
+    - ``None`` contexts and ones whose id is an empty string or a
+      ``__sentinel__`` marker.
+    - Ids whose entry has been removed from the registry — e.g. a
+      previous request unloaded the detector but the test thread's
+      thread-local still points to the now-orphaned object. Injecting
+      a stale id would cause ``before_request`` to stash
+      ``_unloaded_detector_id`` and turn every proxy access into a
+      409, which is exactly the silent-mistarget surface H34 is
+      trying to avoid in *production* — but in the test wrapper we
+      want a clean "no header sent" so the route hits the proper
+      no-active-context path instead.
+    """
+    try:
+        ctx = thread_local_getter()
+    except Exception:
+        return None
+    if ctx is None:
+        return None
+    cid = getattr(ctx, "dataset_id", None) or getattr(ctx, "detector_id", None)
+    if not cid or cid.startswith("__"):
+        return None
+    if registry_getter(cid) is None:
+        return None
+    return cid
+
+
+def _install_active_context_headers(c):
+    """Make the test client behave like Angular's ``activeContextInterceptor``.
+
+    Production routes that mutate vote / dataset state require ``X-Dataset-Id``
+    and ``X-Detector-Id`` headers (logical-bug-audit H34). In production those
+    headers are attached transparently by ``activeContextInterceptor`` in the
+    Angular frontend. The Flask test client has no such interceptor, so this
+    wrapper inspects the thread-local active context on each ``client.open()``
+    call and fills in the headers when they're not already provided. Tests
+    that need to exercise the header-absent code path can pass
+    ``headers={"X-Dataset-Id": ""}`` / ``"X-Detector-Id": ""`` to suppress
+    auto-injection for that key while still preserving the empty-string value
+    (which fails the ``bool(...)`` check the decorators apply).
+    """
+    from werkzeug.datastructures import Headers
+
+    original_open = c.open
+
+    def _open(*args, **kwargs):
+        path = args[0] if args else kwargs.get("path", "")
+        if isinstance(path, str) and path.startswith("/api/"):
+            headers = kwargs.get("headers")
+            hdrs = Headers(headers) if headers is not None else Headers()
+            if "X-Dataset-Id" not in hdrs:
+                ds_id = _active_id_for_tests(_core.get_thread_dataset_context, _core.get_context)
+                if ds_id:
+                    hdrs.add("X-Dataset-Id", ds_id)
+            if "X-Detector-Id" not in hdrs:
+                det_id = _active_id_for_tests(_core.get_thread_detector_context, _core.get_detector_context)
+                if det_id:
+                    hdrs.add("X-Detector-Id", det_id)
+            kwargs["headers"] = hdrs
+        return original_open(*args, **kwargs)
+
+    c.open = _open
+
+
 @pytest.fixture
 def client():
     app_module.app.config["TESTING"] = True
     with app_module.app.test_client() as c:
+        _install_active_context_headers(c)
         yield c
 
 

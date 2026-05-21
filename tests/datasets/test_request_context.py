@@ -5,6 +5,8 @@ Phase 1 of the "active" state simplification: the frontend can send
 dataset/model a request operates on, without mutating global "active" state.
 """
 
+import io
+
 import numpy as np
 
 from vtsearch.state import bad_votes, good_votes, medias
@@ -486,3 +488,136 @@ class TestRequestMissingSentinel:
         # acceptable safe-fail behaviour.  What matters is that we did
         # not silently apply the vote (which would be 200).
         assert resp.status_code in (400, 404)
+
+
+# ---------------------------------------------------------------------------
+# Tests: H34 — vote-mutating endpoints require explicit context headers
+# ---------------------------------------------------------------------------
+
+
+class TestVoteMutatingEndpointsRequireHeaders:
+    """logical-bug-audit H34: every endpoint that writes vote / pile state
+    rejects with 400 when the ``X-Dataset-Id`` / ``X-Detector-Id`` header
+    (or its ``?dataset_id=`` / ``?detector_id=`` query-param fallback) is
+    absent — even when a thread-local context is pinned. This rules out
+    silent-mistarget bugs on Flask threaded-server workers where a stale
+    thread-local from a previous request could otherwise absorb the
+    write.
+
+    Tests bypass the conftest test-client wrapper (which auto-injects
+    the headers from thread-local to mimic Angular's
+    ``activeContextInterceptor``) by passing an explicit empty-string
+    value for each header — the wrapper only fills in keys that are
+    absent from the request, and an empty string still fails the
+    decorator's ``bool(...)`` check.
+    """
+
+    DROP_HEADERS = {"X-Dataset-Id": "", "X-Detector-Id": ""}
+
+    def test_vote_media_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/medias/42/vote",
+            json={"target": "good"},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+        assert "X-Dataset-Id" in resp.get_data(as_text=True) or "X-Detector-Id" in resp.get_data(as_text=True)
+
+    def test_add_media_to_pile_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "good", "file": (io.BytesIO(b"x"), "x.wav")},
+            content_type="multipart/form-data",
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_clear_votes_rejects_without_detector_header(self, client):
+        # /api/votes/clear only needs the detector header (it doesn't touch
+        # the dataset). Pass an empty detector header explicitly to suppress
+        # auto-injection while leaving the dataset header free.
+        resp = client.post(
+            "/api/votes/clear",
+            headers={"X-Detector-Id": ""},
+        )
+        assert resp.status_code == 400
+        assert "X-Detector-Id" in resp.get_data(as_text=True)
+
+    def test_seed_votes_from_examples_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": []},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_import_labels_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/labels/import",
+            json={"labels": []},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_fill_from_sort_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/labels/fill-from-sort",
+            json={"sort_results": [{"id": 1, "score": 0.9}], "threshold": 0.5},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_ingest_missing_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/label-importers/ingest-missing",
+            json={"entries": [{"label": "good", "md5": "x" * 32}]},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_find_label_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/find-label",
+            json={"detector_id": "anything"},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_thread_local_does_not_bypass_header_requirement(self, client):
+        """Even with the test fixture's default thread-local pin, the
+        explicit empty-string headers still cause a 400 — the decorator
+        runs *before* any context resolution, so a leaked thread-local
+        on a Flask worker can never substitute for the absent header.
+        This is the precise H34 surface: the route mustn't trust whatever
+        ``get_active_detector_context()`` happens to resolve to.
+        """
+        # Thread-local is _test_default / _test_default_det at this point
+        # (set by ``reset_state``). Without explicit empty-string headers,
+        # the wrapper would auto-inject and the request would succeed.
+        resp = client.post(
+            "/api/medias/42/vote",
+            json={"target": "good"},
+            headers={"X-Detector-Id": ""},
+        )
+        assert resp.status_code == 400
+        assert "X-Detector-Id" in resp.get_data(as_text=True)
+
+    def test_query_param_fallback_satisfies_the_check(self, client):
+        """``?detector_id=`` / ``?dataset_id=`` query params count as
+        identification for the header-required gate (matches the
+        browser-native fallback path documented for ``<img src>`` etc.).
+        """
+        # Use an empty header to suppress wrapper auto-injection but
+        # supply a query-param value. The route's pre-handler decorator
+        # accepts it; the routing then hits a different failure path
+        # (404 / 409 / etc.), not the 400 the decorator would produce.
+        resp = client.post(
+            "/api/medias/99999/vote?detector_id=any-id-here",
+            json={"target": "good"},
+            headers={"X-Detector-Id": ""},
+        )
+        # The decorator passes (header-or-query satisfied); the route
+        # itself returns 404 because media 99999 isn't loaded. Either
+        # way, the response is NOT the decorator's specific 400 message.
+        body = resp.get_data(as_text=True)
+        assert resp.status_code != 400 or ("X-Detector-Id header" not in body and "X-Dataset-Id header" not in body)

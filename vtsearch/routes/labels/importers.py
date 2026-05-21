@@ -53,6 +53,8 @@ logger = logging.getLogger(__name__)
 from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.routes._shared import (
     get_plugin_or_404,
+    require_dataset_header,
+    require_detector_header,
     run_plugin_or_error,
     validate_filepath_field,
     validate_plugin_args,
@@ -145,6 +147,8 @@ def get_label_importers():
 
 
 @label_importers_bp.route("/api/label-importers/import/<importer_name>", methods=["POST"])
+@require_dataset_header
+@require_detector_header
 def run_label_import(importer_name: str):  # noqa: C901
     """Run the named label importer and apply the resulting labels.
 
@@ -249,6 +253,8 @@ def run_label_import(importer_name: str):  # noqa: C901
 @label_importers_bp.route("/api/label-importers/ingest-missing", methods=["POST"])
 @label_importers_bp.arguments(IngestMissingRequestSchema)
 @label_importers_bp.response(200, IngestMissingResponseSchema)
+@require_dataset_header
+@require_detector_header
 def ingest_missing(body: dict):
     """Re-ingest missing medias from their origins, then apply their labels."""
     entries = body["entries"]

@@ -35,6 +35,7 @@ from vtsearch.schemas.media import (
     MediaVoteRequestSchema,
     MediaVoteResponseSchema,
 )
+from vtsearch.routes._shared import require_dataset_header, require_detector_header
 from vtsearch.state import (
     _state_lock,
     apply_label,
@@ -521,6 +522,8 @@ def media_generic(media_id: int):
 @medias_bp.response(200, MediaVoteResponseSchema)
 @medias_bp.alt_response(400, description="region_box is malformed, or a non-good target carries a region_box.")
 @medias_bp.alt_response(404, description="Media not found.")
+@require_dataset_header
+@require_detector_header
 def vote_media(body: dict, media_id: int):
     """Set a single media's vote to an **absolute target state**.
 
@@ -606,6 +609,8 @@ def vote_media(body: dict, media_id: int):
         "invalid label), no dataset loaded, or no embedder available."
     ),
 )
+@require_dataset_header
+@require_detector_header
 def add_media_to_pile():  # noqa: C901
     """Upload a media file and add it directly to the Good or Bad pile.
 

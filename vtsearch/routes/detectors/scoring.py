@@ -18,6 +18,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.memory_budget import cap_workers_by_memory
 from vtscore.concurrency.progress import find_progress, update_find_progress
+from vtsearch.routes._shared import require_dataset_header, require_detector_header
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
@@ -199,6 +200,8 @@ def _resolve_or_train_detector(  # noqa: C901
 @detector_scoring_bp.response(200, FindLabelResponseSchema)
 @detector_scoring_bp.alt_response(400, description="No medias loaded, or the detector has no labels for scoring.")
 @detector_scoring_bp.alt_response(404, description="Detector not found.")
+@require_dataset_header
+@require_detector_header
 def find_label(body: dict):  # noqa: C901
     """Score all loaded medias with a detector and apply labels based on threshold.
 

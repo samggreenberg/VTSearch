@@ -23,6 +23,18 @@ def _flask_dataset_context_resolver() -> Any:
     library callers) so :func:`vtscore.state.core.get_active_context`
     can fall through to its thread-local / empty-context fallback.
 
+    Also returns ``None`` when Flask's test client is still preserving
+    the *previous* request's context for inspection (``with
+    app.test_client() as c:`` blocks pop-and-keep the request context
+    so the caller can read ``session`` / ``g`` after the response).
+    Inside that window we are no longer in the active handler — falling
+    back to the thread-local matches what the next real request would
+    see (and what production code, which never has a preserved context,
+    always saw). The ``before_request`` hook sets
+    ``g._vts_in_request_handler = True``; ``teardown_request`` clears
+    it back to ``False`` before the test client's preserved window
+    opens.
+
     Raises :class:`vtscore.state.core.DatasetNotLoadedError` if the
     request explicitly named a dataset (``X-Dataset-Id`` header or
     ``?dataset_id=`` query param) that is not loaded. Without this, the
@@ -32,6 +44,8 @@ def _flask_dataset_context_resolver() -> Any:
     from flask import g, has_request_context
 
     if not has_request_context():
+        return None
+    if not getattr(g, "_vts_in_request_handler", False):
         return None
     ctx = getattr(g, "_dataset_context", None)
     if ctx is None:
@@ -48,6 +62,8 @@ def _flask_detector_context_resolver() -> Any:
     from flask import g, has_request_context
 
     if not has_request_context():
+        return None
+    if not getattr(g, "_vts_in_request_handler", False):
         return None
     ctx = getattr(g, "_detector_context", None)
     if ctx is None:
