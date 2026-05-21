@@ -137,7 +137,28 @@ app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-
 
 from flask_smorest import Api  # noqa: E402
 
+from vtsearch.openapi_postprocess import assign_operation_ids  # noqa: E402
+
 api = Api(app)
+
+
+# flask-smorest / apispec doesn't populate ``operationId`` on its own, so
+# ng-openapi-gen ends up synthesising client method names from path+method
+# (``apiDetectorsRegistryDatasetIdRenamePut`` etc.). Wrap ``spec.to_dict``
+# so both the live ``/api/openapi.json`` endpoint and ``dump_openapi.py``
+# see operations tagged with their Flask view function name. The patch is
+# safe to apply now because ``to_dict`` is only called lazily — blueprints
+# registered later in this module are picked up automatically.
+_apispec_to_dict = api.spec.to_dict
+
+
+def _to_dict_with_operation_ids() -> dict:
+    spec = _apispec_to_dict()
+    assign_operation_ids(app, spec)
+    return spec
+
+
+api.spec.to_dict = _to_dict_with_operation_ids
 
 
 # ---------------------------------------------------------------------------
