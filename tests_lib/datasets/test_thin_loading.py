@@ -233,9 +233,7 @@ class TestPickleNullEmbedding:
         assert "1 media files missing" in out
 
     def test_thin_mode_skips_missing_embedding_key(self, tmp_path, capsys):
-        pkl_path = self._wav_pickle(
-            tmp_path, embedding=None, embedding_key_present=False, include_bytes=False
-        )
+        pkl_path = self._wav_pickle(tmp_path, embedding=None, embedding_key_present=False, include_bytes=False)
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, medias, thin=True)
         assert medias == {}
