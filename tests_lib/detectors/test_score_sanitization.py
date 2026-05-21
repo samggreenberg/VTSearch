@@ -12,6 +12,7 @@ and at the consumers (``train_and_score``, ``labelset_train_and_score``).
 from __future__ import annotations
 
 import math
+from typing import cast
 
 import numpy as np
 import pytest
@@ -114,7 +115,10 @@ class TestScoreAllMediaNaNSafety:
             }
         model = _NaNProducingModel(input_dim=8).eval()
 
-        all_ids, scores, _best = _score_all_media(model, clips)
+        # ``_score_all_media`` is typed as ``nn.Sequential``, but its body only
+        # calls the model and reads ``.parameters()`` — both ``nn.Module`` APIs.
+        # ``cast`` quiets pyright without changing runtime behaviour.
+        all_ids, scores, _best = _score_all_media(cast(nn.Sequential, model), clips)
 
         assert all_ids == [1, 2, 3]
         assert all(math.isfinite(s) for s in scores), scores
@@ -173,7 +177,7 @@ class TestLabelsetTrainAndScoreNaNSafety:
             label="bad",
             md5="b" * 32,
         )
-        labelset = LabelSet(detector_name="test-det", elements=[good_elem, bad_elem])
+        labelset = LabelSet(elements=[good_elem, bad_elem])
         det_ctx.label_embeddings[stable_element_id(good_elem)] = rng.standard_normal(dim).astype(np.float32)
         det_ctx.label_embeddings[stable_element_id(bad_elem)] = rng.standard_normal(dim).astype(np.float32)
 
