@@ -531,18 +531,32 @@ Cross-section interaction agents:
 - ~~**M4.** `populate_label_embeddings` cache not invalidated when a
   `region_box` is removed from an element; stale pooled vector
   continues to be used.~~
-- **M5.** `labelset_elements.resolve_current_dataset_cid` can return a
+- ~~**M5.** `labelset_elements.resolve_current_dataset_cid` can return a
   colliding-MD5 cid in cross-dataset labelsets → clicks vote the
-  wrong media.
+  wrong media.~~ — closed as not-a-bug on `dev`. The function returns
+  `cids[0]` from the origin+name ∪ md5 union, which is only ambiguous
+  when two cids in the active dataset share an MD5. Both Flask
+  dataset-load paths (`vtscore/datasets/load_pipeline.py` and
+  `vtsearch/routes/datasets/registry.py`) run `collapse_duplicates`,
+  which collapses same-MD5 medias into a single `dupe_set`
+  representative — so the md5 lookup never yields more than one cid.
+  Cross-dataset MD5 match is the intended semantic (same content →
+  same logical media), not a miscompute. Docstring on
+  `resolve_current_dataset_cid` records the invariant and points at
+  the regression test
+  (`tests/datasets/test_duplicates.py::test_collapse_duplicates_yields_unique_md5_lookup`).
+  Related but distinct issues are left as their own items: M4 (region
+  box cache invalidation, since closed upstream) and the
+  `vote_detector_label` handler dropping `region_box` when mirroring
+  into in-memory votes (`vtsearch/routes/detectors/labels.py:601`).
 - ~~**M6.** `restore_labels_from_detector` resolves by MD5 only on the
   second pass; dedup-collapsed cids can land votes on the wrong cid
   after reload.~~ — investigated and closed as not a real bug. Pass 1
   already consults `md5_lookup` via `resolve_media_ids`
   (`vtscore/state/media_lookup.py:62`), and the dedup-collapse reload
   path lands on the correct rep cid in every case (deduped,
-  un-deduped, cross-dataset). The genuine "wrong cid" concern is
-  captured by **M5** (`resolve_current_dataset_cid` returns
-  `cids[0]` non-deterministically on md5 ties); a separately
+  un-deduped, cross-dataset). The forward-pointer to **M5** in the
+  original M6 note is now also closed (see M5 above); a separately
   worrying latent issue is that pass 2 recomputes the *parent*
   file's md5 for `converter` origins
   (`vtscore/detectors/resolver.py:_resolve_converter`) while the
