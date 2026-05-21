@@ -405,12 +405,16 @@ class DatasetStageFileResponseSchema(Schema):
 
     ``count`` and ``media_type`` are derived from a cheap pickle peek and
     fall back to ``0`` / ``"unknown"`` when the file can't be inspected.
+    ``error`` carries the reason peek failed (empty string on success), so
+    the UI can distinguish "valid pickle with 0 medias" from "couldn't
+    parse this file".
     """
 
     path = fields.String(required=True)
     name = fields.String(required=True)
     count = fields.Integer(required=True)
     media_type = fields.String(required=True)
+    error = fields.String(load_default="", dump_default="")
 
 
 class DatasetStagingStartedResponseSchema(Schema):

@@ -113,7 +113,11 @@ def stage_file():
     file.save(staging_path)
 
     # Peek the pkl's dict structure cheaply — embeddings and inline media
-    # bytes are skipped, so this stays light even on multi-GB uploads.
+    # bytes are skipped, so this stays light even on multi-GB uploads. The
+    # response always returns 200 (so the client keeps the staged path and
+    # can clean it up); peek failures are surfaced via the ``error`` field
+    # instead of swallowed silently.
+    error = ""
     try:
         with open(staging_path, "rb") as f:
             peeked = peek_pickle_dataset_summary(f)
@@ -130,12 +134,19 @@ def stage_file():
             if isinstance(first, dict):
                 media_type = first.get("type", "audio") or "unknown"
         del peeked, media_dict
-    except Exception:
+    except Exception as e:
         count = 0
         media_type = "unknown"
+        error = f"{type(e).__name__}: {e}"
 
     name = file.filename or "Uploaded dataset"
-    return {"path": str(staging_path), "name": name, "count": count, "media_type": media_type}
+    return {
+        "path": str(staging_path),
+        "name": name,
+        "count": count,
+        "media_type": media_type,
+        "error": error,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -1193,6 +1193,10 @@
           "count": {
             "type": "integer"
           },
+          "error": {
+            "default": "",
+            "type": "string"
+          },
           "media_type": {
             "type": "string"
           },

@@ -83,6 +83,7 @@ class _PeekUnpickler(pickle._Unpickler):
         stack: list[Any]
 
         def read(self, n: int) -> bytes: ...
+        def readline(self) -> bytes: ...
         def append(self, value: Any) -> None: ...
         def pop_mark(self) -> list[Any]: ...
 
@@ -104,6 +105,13 @@ class _PeekUnpickler(pickle._Unpickler):
 
     dispatch[pickle.BINFLOAT[0]] = load_binfloat
 
+    def load_float(self) -> None:
+        # Protocol 0 ASCII float: decimal text terminated by newline.
+        self.readline()
+        self.append(None)
+
+    dispatch[pickle.FLOAT[0]] = load_float
+
     def load_binbytes(self) -> None:
         (size,) = struct.unpack("<I", self.read(4))
         self.read(size)
@@ -124,6 +132,16 @@ class _PeekUnpickler(pickle._Unpickler):
         self.append(b"")
 
     dispatch[pickle.SHORT_BINBYTES[0]] = load_short_binbytes
+
+    def load_bytearray8(self) -> None:
+        # Protocol 5 has a dedicated bytearray opcode that bypasses BINBYTES;
+        # without this override, inline bytearray media bytes would be fully
+        # materialised even at the highest protocol.
+        (size,) = struct.unpack("<Q", self.read(8))
+        self.read(size)
+        self.append(bytearray())
+
+    dispatch[pickle.BYTEARRAY8[0]] = load_bytearray8
 
     def load_append(self) -> None:
         # Discard the value instead of appending to the list below it.

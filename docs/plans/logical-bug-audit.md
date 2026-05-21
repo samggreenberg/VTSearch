@@ -776,8 +776,21 @@ Cross-section interaction agents:
 
 ### Embedding / training
 
-- **M18.** `_PeekUnpickler` doesn't override `FLOAT` / `SETITEMS` opcodes →
-  falls back to slow real unpickle for older protocols.
+- ~~**M18. `_PeekUnpickler` missing opcode overrides**~~ — fixed in
+  `vtscore/security/pickle.py`. `FLOAT` (protocol 0 ASCII float) now reads
+  the line and pushes `None` instead of paying the `float(readline())`
+  parse cost, and `BYTEARRAY8` (protocol 5's dedicated bytearray opcode,
+  not in the original audit entry but the same family of leak — and a
+  worse one, since it bypasses `BINBYTES` at the highest protocol) now
+  drains the bytes and pushes an empty `bytearray`. `SETITEMS` was
+  reviewed and left alone: by the time it runs, its values have already
+  been emptied by the existing APPEND/APPENDS/BINBYTES overrides, and
+  the peek needs the dict structure intact for `len(media_dict)` /
+  `first["type"]` in the staging route. As a side-fix, the staging
+  endpoint stopped silently swallowing peek failures — the response
+  schema grew an `error` field carrying the exception message so the UI
+  can distinguish "valid pickle with 0 medias" from "couldn't parse
+  this file".
 - ~~**M19.** `embed_text_enriched` crashes (`np.mean` on empty) when text encoder
   fails and all wrappers return None.~~ — investigated and closed as not a
   real bug (2026-05-21).  `vtscore/media/embedder.py:727-750` explicitly
@@ -976,6 +989,24 @@ Cross-cutting open items that don't fit any single finding above:
   `medias` mutation (or a `MediasDict` subclass that does so
   transparently) would neutralise the whole category and let the
   matrix accessor compare a single int instead of two id lists.
+
+- **M18 follow-ups: pickle peek hardening.** Two adjacent leaks
+  surfaced while closing M18 but were left out of scope:
+  (1) `_codecs.encode` is not on the `_PICKLE_SAFE_CLASSES` allowlist,
+  so protocol-0/1/2 pickles containing inline `bytes` (which pickle
+  serialises as `_codecs.encode(s, 'latin-1')`) fail outright in both
+  `_PeekUnpickler` and `RestrictedUnpickler` / `safe_pickle_load`.
+  The staging route now surfaces this as an `error` field (no longer
+  silent), but a user trying to load an externally-produced legacy
+  pickle still gets a hard reject. Add `_codecs.encode` to the
+  allowlist (low risk — it's a codec dispatcher, not RCE) if we want
+  to support those uploads.
+  (2) `BINUNICODE` / `BINUNICODE8` are not overridden, so a pickle
+  with a multi-MB inline `media_string` (a long document) is still
+  fully materialised during peek. A blanket override doesn't work
+  because the peek needs short unicode strings (dict keys, `"type"`
+  value); a size-bounded handler (e.g. truncate over N bytes) would
+  cap the worst case.
 
 - **H1 follow-up: labelset element vote endpoint still toggles.**
   `POST /api/detectors/<name>/labels/<element_id>/vote` (and the
