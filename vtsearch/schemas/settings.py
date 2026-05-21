@@ -57,6 +57,7 @@ class AppSettingsSchema(Schema):
     autopilot_hard_reds = fields.Integer()
     autopilot_resort_interval = fields.Integer()
     autopilot_goal_diversity = fields.Integer()
+    disable_achievements = fields.Boolean()
 
     # Per-user, per-media-type
     view_mode_left = _PerMediaTypeStringDict()
@@ -124,6 +125,7 @@ class SettingsUpdateSchema(Schema):
     autopilot_hard_reds = fields.Integer()
     autopilot_resort_interval = fields.Integer()
     autopilot_goal_diversity = fields.Integer()
+    disable_achievements = fields.Boolean()
 
     autorun_detectors = fields.List(fields.String())
 

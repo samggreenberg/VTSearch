@@ -165,6 +165,9 @@
           "detectors_dir": {
             "type": "string"
           },
+          "disable_achievements": {
+            "type": "boolean"
+          },
           "enrich_descriptions": {
             "type": "boolean"
           },
@@ -3774,6 +3777,9 @@
           },
           "detectors_dir": {
             "type": "string"
+          },
+          "disable_achievements": {
+            "type": "boolean"
           },
           "enrich_descriptions": {
             "type": "boolean"

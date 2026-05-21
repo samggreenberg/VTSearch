@@ -24,6 +24,7 @@ import { ActiveContextService } from './services/active-context.service';
 import { RecentSessionsService } from './services/recent-sessions.service';
 import { AuthService } from './services/auth.service';
 import { AchievementsService } from './services/achievements.service';
+import { SettingsStateService } from './services/settings-state.service';
 import { ThemeService } from './services/theme.service';
 import { ToastService } from './services/toast.service';
 import { ActiveContextWatcherService } from './services/active-context-watcher.service';
@@ -61,6 +62,7 @@ export class AppComponent {
   menuOpen = false;
   showSettings = false;
   showAchievements = false;
+  achievementsDisabled = false;
   showKeyboardHelp = false;
   gearClosing = false;
   isOnLabelView = false;
@@ -90,12 +92,17 @@ export class AppComponent {
     private recent: RecentSessionsService,
     public auth: AuthService,
     private achievements: AchievementsService,
+    private settingsState: SettingsStateService,
     private themeService: ThemeService,
     private newThingFlows: NewThingFlowsService,
     _toast: ToastService,
     activeContextWatcher: ActiveContextWatcherService,
   ) {
     this.auth.checkStatus();
+    this.settingsState.load();
+    this.settingsState.settings$.subscribe((s) => {
+      this.achievementsDisabled = !!s?.disable_achievements;
+    });
     this.achievements.refresh();
     this.themeService.loadFromSettings();
     activeContextWatcher.start();

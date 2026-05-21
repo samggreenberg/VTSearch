@@ -80,6 +80,7 @@
   <vt-context-pulldown kind="detector" />
   <span class="top-bar-spacer"></span>
   <button
+    *ngIf="!achievementsDisabled"
     class="achievements-btn"
     aria-label="Achievements"
     title="Achievements — your usage milestones and tier progress"
