@@ -27,6 +27,10 @@
   padding: 2px 0;
 }
 
+.ssp-row-main {
+  grid-column: 1;
+}
+
 .ssp-checkbox {
   margin: 0;
   flex-shrink: 0;
@@ -52,6 +56,7 @@
 .ssp-advanced-toggle {
   justify-self: end;
   white-space: nowrap;
+  grid-column: 2;
 }
 
 .ssp-advanced-panel {
