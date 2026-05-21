@@ -726,6 +726,24 @@ def clear_all_detector_contexts() -> None:
         _empty_detector_context.__init__("")  # type: ignore[misc]
 
 
+def invalidate_loaded_detector_models() -> None:
+    """Drop the cached MLP and threshold on every loaded detector context.
+
+    Called by the setters of training-relevant settings (``inclusion``,
+    ``safe_thresholds``, ``calibrate_count``, ``calibration_fraction``) so
+    the next consumer that would otherwise short-circuit on the cached
+    ``det_ctx.model`` / ``det_ctx.threshold`` (``/api/find-label``,
+    ``/api/find``, ``/api/auto-detect``) retrains under the new setting.
+
+    Sort / vote paths already retrain every call, so this is purely about
+    making the cached-MLP consumers honour live setting changes.
+    """
+    with _state_lock:
+        for ctx in _detector_contexts.values():
+            ctx.model = None
+            ctx.threshold = 0.5
+
+
 # ---------------------------------------------------------------------------
 # Scalar state accessors
 # ---------------------------------------------------------------------------

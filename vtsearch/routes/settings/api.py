@@ -27,6 +27,11 @@ from flask_smorest import Blueprint, abort
 
 from vtsearch import settings
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
+from vtsearch.state import (
+    set_calibrate_count as _state_set_calibrate_count,
+    set_calibration_fraction as _state_set_calibration_fraction,
+    set_safe_thresholds as _state_set_safe_thresholds,
+)
 
 settings_bp = Blueprint(
     "settings",
@@ -39,13 +44,21 @@ settings_bp = Blueprint(
 # ``vtsearch.settings`` and enforce range clamping / value validation,
 # so this module's only job is to dispatch — marshmallow already
 # validated the *types*.
+#
+# The training-relevant settings (``safe_thresholds``, ``calibrate_count``,
+# ``calibration_fraction``) route through ``vtsearch.state`` rather than
+# ``vtsearch.settings`` so the state setter's side-effect
+# (``invalidate_loaded_detector_models``) fires and the cached MLP /
+# threshold on every loaded detector context is dropped — otherwise
+# ``/api/find-label`` / ``/api/find`` / ``/api/auto-detect`` would keep
+# scoring with a threshold computed under the prior setting (M7).
 _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "volume": settings.set_volume,
     "theme": settings.set_theme,
     "enrich_descriptions": settings.set_enrich_descriptions,
-    "safe_thresholds": settings.set_safe_thresholds,
-    "calibrate_count": settings.set_calibrate_count,
-    "calibration_fraction": settings.set_calibration_fraction,
+    "safe_thresholds": _state_set_safe_thresholds,
+    "calibrate_count": _state_set_calibrate_count,
+    "calibration_fraction": _state_set_calibration_fraction,
     "audio_playing": settings.set_audio_playing,
     "swipe_animation": settings.set_swipe_animation,
     "show_metadata": settings.set_show_metadata,

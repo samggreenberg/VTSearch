@@ -227,6 +227,85 @@ class TestSafeThresholdsAPI:
         assert "safe_thresholds" in resp.get_json()["errors"]["json"]
 
 
+class TestTrainingSettingsInvalidateLoadedDetector:
+    """Regression for M7: changing a training-relevant setting must drop the
+    cached MLP / threshold on every loaded detector so the next
+    ``/api/find-label`` / ``/api/find`` / ``/api/auto-detect`` retrains
+    under the new setting instead of scoring with a stale threshold.
+    """
+
+    def _loaded_ctx(self):
+        from vtsearch.state import DetectorContext, register_detector_context
+
+        # Sentinel object stands in for a trained MLP — invalidation just
+        # needs to drop the reference, it doesn't introspect the model.
+        ctx = DetectorContext("det-m7", name="m7")
+        ctx.model = object()
+        ctx.threshold = 0.73
+        register_detector_context(ctx)
+        return ctx
+
+    def test_set_safe_thresholds_invalidates_loaded_model(self):
+        from vtsearch.state import get_safe_thresholds, set_safe_thresholds
+
+        ctx = self._loaded_ctx()
+        set_safe_thresholds(not get_safe_thresholds())
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_set_safe_thresholds_unchanged_keeps_model(self):
+        from vtsearch.state import get_safe_thresholds, set_safe_thresholds
+
+        ctx = self._loaded_ctx()
+        # Set to the current value — no-op, must not invalidate.
+        set_safe_thresholds(get_safe_thresholds())
+        assert ctx.model is not None
+        assert ctx.threshold == 0.73
+
+    def test_set_inclusion_invalidates_loaded_model(self):
+        from vtsearch.state import get_inclusion, set_inclusion
+
+        ctx = self._loaded_ctx()
+        set_inclusion(get_inclusion() + 1)
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_set_calibrate_count_invalidates_loaded_model(self):
+        from vtsearch.state import get_calibrate_count, set_calibrate_count
+
+        ctx = self._loaded_ctx()
+        set_calibrate_count(get_calibrate_count() + 1)
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_set_calibration_fraction_invalidates_loaded_model(self):
+        from vtsearch.state import get_calibration_fraction, set_calibration_fraction
+
+        ctx = self._loaded_ctx()
+        new_fraction = 0.25 if get_calibration_fraction() != 0.25 else 0.35
+        set_calibration_fraction(new_fraction)
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_settings_put_safe_thresholds_invalidates_loaded_model(self, client):
+        ctx = self._loaded_ctx()
+        # PUT through /api/settings routes through vtsearch.state setters
+        # so the invalidation hook fires even on this code path (M7 fix).
+        resp = client.put("/api/settings", json={"safe_thresholds": True})
+        assert resp.status_code == 200
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_settings_put_calibrate_count_invalidates_loaded_model(self, client):
+        from vtsearch.state import get_calibrate_count
+
+        ctx = self._loaded_ctx()
+        resp = client.put("/api/settings", json={"calibrate_count": get_calibrate_count() + 1})
+        assert resp.status_code == 200
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+
 class TestSafeThresholdsEval:
     """Test that eval functions accept safe_thresholds parameter."""
 
