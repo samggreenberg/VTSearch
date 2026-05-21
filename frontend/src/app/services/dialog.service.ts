@@ -58,7 +58,7 @@ export class VtDialogService {
    * `question` should name the operation and its target, e.g.
    *   "Delete detector 'cats'?"
    * `detail` should explain what is removed and what is unaffected, e.g.
-   *   "This removes its labelset and training metadata. The dataset is unaffected."
+   *   "(This deletes your labels. The underlying media is unaffected.)"
    * `actionLabel` is the verb on the primary button (default "Delete").
    */
   confirmDestructive(question: string, detail: string, actionLabel = 'Delete'): Promise<boolean> {
