@@ -6,8 +6,8 @@ import { map } from 'rxjs/operators';
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { LabelImporterEntry } from '../generated/api-client/models/label-importer-entry';
 import type { IngestMissingResponse } from '../generated/api-client/models/ingest-missing-response';
-import { apiLabelImportersGet } from '../generated/api-client/fn/label-importers/api-label-importers-get';
-import { apiLabelImportersIngestMissingPost } from '../generated/api-client/fn/label-importers/api-label-importers-ingest-missing-post';
+import { getLabelImporters } from '../generated/api-client/fn/label-importers/get-label-importers';
+import { ingestMissing } from '../generated/api-client/fn/label-importers/ingest-missing';
 
 @Injectable({ providedIn: 'root' })
 export class LabelImportersApiService {
@@ -15,7 +15,7 @@ export class LabelImportersApiService {
   private config = inject(ApiConfiguration);
 
   list(): Observable<LabelImporterEntry[]> {
-    return apiLabelImportersGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return getLabelImporters(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   /** Plugin-field route — request body shape is plugin-dependent and not
@@ -60,7 +60,7 @@ export class LabelImportersApiService {
   }
 
   ingestMissing(entries: Record<string, unknown>[]): Observable<IngestMissingResponse> {
-    return apiLabelImportersIngestMissingPost(this.http, this.config.rootUrl, {
+    return ingestMissing(this.http, this.config.rootUrl, {
       body: { entries },
     }).pipe(map((r) => r.body));
   }

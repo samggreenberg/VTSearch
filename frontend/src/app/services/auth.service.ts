@@ -5,9 +5,9 @@ import { map, tap } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { AuthStatus } from '../generated/api-client/models/auth-status';
-import { apiAuthLoginPost } from '../generated/api-client/fn/auth/api-auth-login-post';
-import { apiAuthLogoutPost } from '../generated/api-client/fn/auth/api-auth-logout-post';
-import { apiAuthStatusGet } from '../generated/api-client/fn/auth/api-auth-status-get';
+import { authLogin } from '../generated/api-client/fn/auth/auth-login';
+import { authLogout } from '../generated/api-client/fn/auth/auth-logout';
+import { authStatus } from '../generated/api-client/fn/auth/auth-status';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 
 @Injectable({ providedIn: 'root' })
@@ -28,7 +28,7 @@ export class AuthService {
     // (we fall back to "no login required") and would otherwise pop up a
     // banner every time the user opens the app while offline.
     const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
-    apiAuthStatusGet(this.http, this.config.rootUrl, undefined, context)
+    authStatus(this.http, this.config.rootUrl, undefined, context)
       .pipe(map((r) => r.body))
       .subscribe({
         next: (status) => {
@@ -58,14 +58,14 @@ export class AuthService {
     // Skip the global error banner: the login form renders its own
     // inline error message, and a duplicate banner would be redundant.
     const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
-    return apiAuthLoginPost(this.http, this.config.rootUrl, { body: { username } }, context).pipe(
+    return authLogin(this.http, this.config.rootUrl, { body: { username } }, context).pipe(
       map((r) => r.body),
       tap((status) => this.statusSubject.next(status)),
     );
   }
 
   logout(): Observable<AuthStatus> {
-    return apiAuthLogoutPost(this.http, this.config.rootUrl).pipe(
+    return authLogout(this.http, this.config.rootUrl).pipe(
       map((r) => r.body),
       tap((status) => this.statusSubject.next(status)),
     );

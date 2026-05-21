@@ -7,9 +7,9 @@ import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { AchievementState } from '../generated/api-client/models/achievement-state';
 import type { CheckPhraseResponse } from '../generated/api-client/models/check-phrase-response';
 import type { PendingAnnouncement } from '../generated/api-client/models/pending-announcement';
-import { apiAchievementsCategoryIdAcknowledgePost } from '../generated/api-client/fn/achievements/api-achievements-category-id-acknowledge-post';
-import { apiAchievementsCheckPhrasePost } from '../generated/api-client/fn/achievements/api-achievements-check-phrase-post';
-import { apiAchievementsGet } from '../generated/api-client/fn/achievements/api-achievements-get';
+import { acknowledgeAchievement } from '../generated/api-client/fn/achievements/acknowledge-achievement';
+import { checkPhrase } from '../generated/api-client/fn/achievements/check-phrase';
+import { getAchievements } from '../generated/api-client/fn/achievements/get-achievements';
 
 const EMPTY_STATE: AchievementState = {
   tier_names: [],
@@ -57,7 +57,7 @@ export class AchievementsService {
   refresh(): void {
     if (this.inFlight) return;
     this.inFlight = true;
-    apiAchievementsGet(this.http, this.config.rootUrl)
+    getAchievements(this.http, this.config.rootUrl)
       .pipe(
         map((r) => r.body),
         catchError(() => of(EMPTY_STATE)),
@@ -76,7 +76,7 @@ export class AchievementsService {
    * Refreshes state afterward to update the panel display.
    */
   acknowledge(categoryId: string, tierIdx: number): void {
-    apiAchievementsCategoryIdAcknowledgePost(this.http, this.config.rootUrl, {
+    acknowledgeAchievement(this.http, this.config.rootUrl, {
       category_id: categoryId,
       body: { tier_idx: tierIdx },
     })
@@ -91,7 +91,7 @@ export class AchievementsService {
    */
   checkPhrase(phrase: string): Observable<CheckPhraseResponse> {
     return new Observable<CheckPhraseResponse>((subscriber) => {
-      apiAchievementsCheckPhrasePost(this.http, this.config.rootUrl, { body: { phrase } })
+      checkPhrase(this.http, this.config.rootUrl, { body: { phrase } })
         .pipe(
           map((r) => r.body),
           catchError(() =>

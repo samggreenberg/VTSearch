@@ -26,32 +26,32 @@ import type { ServerMediaUploadResponse } from '../generated/api-client/models/s
 import type { SortResponse } from '../generated/api-client/models/sort-response';
 import type { TextsortSuggestionsResponse } from '../generated/api-client/models/textsort-suggestions-response';
 import type { VotesResponse } from '../generated/api-client/models/votes-response';
-import { apiDiversityTreeNextGet } from '../generated/api-client/fn/sorting/api-diversity-tree-next-get';
-import { apiInclusionGet } from '../generated/api-client/fn/sorting/api-inclusion-get';
-import { apiInclusionPost } from '../generated/api-client/fn/sorting/api-inclusion-post';
-import { apiLearnedSortCancelJobIdPost } from '../generated/api-client/fn/sorting/api-learned-sort-cancel-job-id-post';
-import { apiLearnedSortPost } from '../generated/api-client/fn/sorting/api-learned-sort-post';
-import { apiLearnedSortResultGet } from '../generated/api-client/fn/sorting/api-learned-sort-result-get';
-import { apiSafeThresholdsGet } from '../generated/api-client/fn/sorting/api-safe-thresholds-get';
-import { apiSafeThresholdsPost } from '../generated/api-client/fn/sorting/api-safe-thresholds-post';
-import { apiSortPost } from '../generated/api-client/fn/sorting/api-sort-post';
-import { apiTextsortSuggestionsGet } from '../generated/api-client/fn/sorting/api-textsort-suggestions-get';
-import { apiTextsortSuggestionsPost } from '../generated/api-client/fn/sorting/api-textsort-suggestions-post';
-import { apiVotesClearPost } from '../generated/api-client/fn/sorting/api-votes-clear-post';
-import { apiVotesGet } from '../generated/api-client/fn/sorting/api-votes-get';
-import { apiLabelsExportGet } from '../generated/api-client/fn/labels/api-labels-export-get';
-import { apiLabelsFillFromSortPost } from '../generated/api-client/fn/labels/api-labels-fill-from-sort-post';
-import { apiLabelsImportPost } from '../generated/api-client/fn/labels/api-labels-import-post';
-import { apiEvalTrainAndScoreCancelJobIdPost } from '../generated/api-client/fn/eval/api-eval-train-and-score-cancel-job-id-post';
-import { apiEvalTrainAndScorePost } from '../generated/api-client/fn/eval/api-eval-train-and-score-post';
-import { apiEvalTrainAndScoreResultGet } from '../generated/api-client/fn/eval/api-eval-train-and-score-result-get';
-import { apiIndicatorScoreHistoryGet } from '../generated/api-client/fn/eval/api-indicator-score-history-get';
-import { apiLabelingStatusGet } from '../generated/api-client/fn/eval/api-labeling-status-get';
-import { apiExampleSortByIdPost } from '../generated/api-client/fn/media-server/api-example-sort-by-id-post';
-import { apiExampleSortOriginPost } from '../generated/api-client/fn/media-server/api-example-sort-origin-post';
-import { apiExampleSortServerPost } from '../generated/api-client/fn/media-server/api-example-sort-server-post';
-import { apiServerMediaFilesFromMediaIdPost } from '../generated/api-client/fn/media-server/api-server-media-files-from-media-id-post';
-import { apiServerMediaFilesGet } from '../generated/api-client/fn/media-server/api-server-media-files-get';
+import { diversityTreeNextGet } from '../generated/api-client/fn/sorting/diversity-tree-next-get';
+import { getInclusionRoute } from '../generated/api-client/fn/sorting/get-inclusion-route';
+import { setInclusionRoute } from '../generated/api-client/fn/sorting/set-inclusion-route';
+import { cancelLearnedSort } from '../generated/api-client/fn/sorting/cancel-learned-sort';
+import { learnedSort } from '../generated/api-client/fn/sorting/learned-sort';
+import { learnedSortResult } from '../generated/api-client/fn/sorting/learned-sort-result';
+import { getSafeThresholdsRoute } from '../generated/api-client/fn/sorting/get-safe-thresholds-route';
+import { setSafeThresholdsRoute } from '../generated/api-client/fn/sorting/set-safe-thresholds-route';
+import { sortClips } from '../generated/api-client/fn/sorting/sort-clips';
+import { getTextsortSuggestionsRoute } from '../generated/api-client/fn/sorting/get-textsort-suggestions-route';
+import { addTextsortSuggestionRoute } from '../generated/api-client/fn/sorting/add-textsort-suggestion-route';
+import { clearVotesRoute } from '../generated/api-client/fn/sorting/clear-votes-route';
+import { getVotes } from '../generated/api-client/fn/sorting/get-votes';
+import { exportLabels } from '../generated/api-client/fn/labels/export-labels';
+import { fillLabelsFromSort } from '../generated/api-client/fn/labels/fill-labels-from-sort';
+import { importLabels } from '../generated/api-client/fn/labels/import-labels';
+import { cancelEvalTrainAndScore } from '../generated/api-client/fn/eval/cancel-eval-train-and-score';
+import { evalTrainAndScore } from '../generated/api-client/fn/eval/eval-train-and-score';
+import { evalTrainAndScoreResult } from '../generated/api-client/fn/eval/eval-train-and-score-result';
+import { indicatorScoreHistory } from '../generated/api-client/fn/eval/indicator-score-history';
+import { labelingStatusIndicator } from '../generated/api-client/fn/eval/labeling-status-indicator';
+import { exampleSortById } from '../generated/api-client/fn/media-server/example-sort-by-id';
+import { exampleSortOrigin } from '../generated/api-client/fn/media-server/example-sort-origin';
+import { exampleSortServer } from '../generated/api-client/fn/media-server/example-sort-server';
+import { serverMediaFileFromMediaId } from '../generated/api-client/fn/media-server/server-media-file-from-media-id';
+import { listServerMediaFiles } from '../generated/api-client/fn/media-server/list-server-media-files';
 
 @Injectable({ providedIn: 'root' })
 export class SortingApiService {
@@ -59,71 +59,71 @@ export class SortingApiService {
   private config = inject(ApiConfiguration);
 
   sort(params: { text: string }): Observable<SortResponse> {
-    return apiSortPost(this.http, this.config.rootUrl, { body: params }).pipe(map((r) => r.body));
+    return sortClips(this.http, this.config.rootUrl, { body: params }).pipe(map((r) => r.body));
   }
 
   /** Kick off a learned-sort training job.  The response will be ``done``
    *  immediately when the cached signature matches; otherwise the caller
    *  must poll {@link getLearnedSortResult} with the returned ``job_id``. */
   learnedSort(): Observable<LearnedSortResponse> {
-    return apiLearnedSortPost(this.http, this.config.rootUrl, { body: {} }).pipe(map((r) => r.body));
+    return learnedSort(this.http, this.config.rootUrl, { body: {} }).pipe(map((r) => r.body));
   }
 
   /** Poll for a learned-sort job's completion. */
   getLearnedSortResult(jobId: string): Observable<LearnedSortResponse> {
-    return apiLearnedSortResultGet(this.http, this.config.rootUrl, { job_id: jobId }).pipe(
+    return learnedSortResult(this.http, this.config.rootUrl, { job_id: jobId }).pipe(
       map((r) => r.body),
     );
   }
 
   /** Cancel an in-flight learned-sort job. */
   cancelLearnedSort(jobId: string): Observable<LearnedSortCancelResponse> {
-    return apiLearnedSortCancelJobIdPost(this.http, this.config.rootUrl, { job_id: jobId }).pipe(
+    return cancelLearnedSort(this.http, this.config.rootUrl, { job_id: jobId }).pipe(
       map((r) => r.body),
     );
   }
 
   getVotes(): Observable<VotesResponse> {
-    return apiVotesGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return getVotes(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   clearVotes(): Observable<OkResponse> {
-    return apiVotesClearPost(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return clearVotesRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   getInclusion(): Observable<InclusionResponse> {
-    return apiInclusionGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return getInclusionRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   setInclusion(value: number): Observable<InclusionResponse> {
-    return apiInclusionPost(this.http, this.config.rootUrl, { body: { inclusion: value } }).pipe(
+    return setInclusionRoute(this.http, this.config.rootUrl, { body: { inclusion: value } }).pipe(
       map((r) => r.body),
     );
   }
 
   getSafeThresholds(): Observable<SafeThresholdsResponse> {
-    return apiSafeThresholdsGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return getSafeThresholdsRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   setSafeThresholds(value: boolean): Observable<SafeThresholdsResponse> {
-    return apiSafeThresholdsPost(this.http, this.config.rootUrl, {
+    return setSafeThresholdsRoute(this.http, this.config.rootUrl, {
       body: { safe_thresholds: value },
     }).pipe(map((r) => r.body));
   }
 
   exportLabels(goodsOnly?: boolean, options?: { enrich?: boolean }): Observable<LabelsExportResponse> {
-    return apiLabelsExportGet(this.http, this.config.rootUrl, {
+    return exportLabels(this.http, this.config.rootUrl, {
       goods_only: goodsOnly || undefined,
       enrich: options?.enrich || undefined,
     }).pipe(map((r) => r.body));
   }
 
   importLabels(data: LabelsImportRequest): Observable<LabelsImportResponse> {
-    return apiLabelsImportPost(this.http, this.config.rootUrl, { body: data }).pipe(map((r) => r.body));
+    return importLabels(this.http, this.config.rootUrl, { body: data }).pipe(map((r) => r.body));
   }
 
   fillFromSort(request: FillFromSortRequest): Observable<FillFromSortResponse> {
-    return apiLabelsFillFromSortPost(this.http, this.config.rootUrl, { body: request }).pipe(
+    return fillLabelsFromSort(this.http, this.config.rootUrl, { body: request }).pipe(
       map((r) => r.body),
     );
   }
@@ -141,14 +141,14 @@ export class SortingApiService {
   }
 
   getServerMediaFiles(): Observable<ServerMediaListResponse> {
-    return apiServerMediaFilesGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return listServerMediaFiles(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   exampleSortServer(params: {
     filename: string;
     crop_params?: Record<string, unknown>;
   }): Observable<ExampleSortResponse> {
-    return apiExampleSortServerPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return exampleSortServer(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
@@ -158,7 +158,7 @@ export class SortingApiService {
     key: string;
     crop_params?: Record<string, unknown>;
   }): Observable<ExampleSortResponse> {
-    return apiExampleSortOriginPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return exampleSortOrigin(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
@@ -170,7 +170,7 @@ export class SortingApiService {
     media_id: number;
     crop_params?: Record<string, unknown>;
   }): Observable<ExampleSortResponse> {
-    return apiExampleSortByIdPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return exampleSortById(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
@@ -181,7 +181,7 @@ export class SortingApiService {
     media_id: number;
     crop_params?: Record<string, unknown>;
   }): Observable<ServerMediaUploadResponse> {
-    return apiServerMediaFilesFromMediaIdPost(this.http, this.config.rootUrl, {
+    return serverMediaFileFromMediaId(this.http, this.config.rootUrl, {
       body: params,
     }).pipe(map((r) => r.body));
   }
@@ -210,11 +210,11 @@ export class SortingApiService {
   }
 
   getTextsortSuggestions(): Observable<TextsortSuggestionsResponse> {
-    return apiTextsortSuggestionsGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return getTextsortSuggestionsRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   addTextsortSuggestion(text: string): Observable<OkResponse> {
-    return apiTextsortSuggestionsPost(this.http, this.config.rootUrl, { body: { text } }).pipe(
+    return addTextsortSuggestionRoute(this.http, this.config.rootUrl, { body: { text } }).pipe(
       map((r) => r.body),
     );
   }
@@ -228,13 +228,13 @@ export class SortingApiService {
   }
 
   getLabelingStatus(): Observable<LabelingStatusResponse> {
-    return apiLabelingStatusGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return labelingStatusIndicator(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   getIndicatorScoreHistory(
     metric: 'smart' | 'stable' | 'diverse',
   ): Observable<IndicatorScoreHistoryResponse> {
-    return apiIndicatorScoreHistoryGet(this.http, this.config.rootUrl, { metric }).pipe(
+    return indicatorScoreHistory(this.http, this.config.rootUrl, { metric }).pipe(
       map((r) => r.body),
     );
   }
@@ -251,27 +251,27 @@ export class SortingApiService {
     if (scores) {
       return this.http.post<DiversityTreeNextResponse>('/api/diversity-tree/next', { scores, threshold });
     }
-    return apiDiversityTreeNextGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return diversityTreeNextGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   /** Kick off an eval train-and-score job.  Like {@link learnedSort}, the
    *  response will be ``done`` immediately on a cache hit; otherwise poll
    *  {@link getEvalTrainAndScoreResult}. */
   trainAndScore(metric: 'smart' | 'stable' | 'diverse'): Observable<EvalTrainAndScoreResponse> {
-    return apiEvalTrainAndScorePost(this.http, this.config.rootUrl, { body: { metric } }).pipe(
+    return evalTrainAndScore(this.http, this.config.rootUrl, { body: { metric } }).pipe(
       map((r) => r.body),
     );
   }
 
   getEvalTrainAndScoreResult(jobId: string): Observable<EvalTrainAndScoreResponse> {
-    return apiEvalTrainAndScoreResultGet(this.http, this.config.rootUrl, { job_id: jobId }).pipe(
+    return evalTrainAndScoreResult(this.http, this.config.rootUrl, { job_id: jobId }).pipe(
       map((r) => r.body),
     );
   }
 
   /** Cancel an in-flight eval train-and-score job. */
   cancelEvalTrainAndScore(jobId: string): Observable<EvalTrainAndScoreCancelResponse> {
-    return apiEvalTrainAndScoreCancelJobIdPost(this.http, this.config.rootUrl, {
+    return cancelEvalTrainAndScore(this.http, this.config.rootUrl, {
       job_id: jobId,
     }).pipe(map((r) => r.body));
   }
