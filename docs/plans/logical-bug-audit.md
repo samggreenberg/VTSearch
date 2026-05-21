@@ -705,8 +705,33 @@ Cross-section interaction agents:
   and the captured ctx references survive an unload-before-fire race
   inside the 200ms debounce window. Both are silent inconsistencies, not
   crashes; file separate findings if they ever bite.
-- **M16.** Sync to source on first read after `_synced_users` marker can still
-  return stale local config if source changes silently.
+- ~~**M16.** Sync to source on first read after `_synced_users` marker can
+  still return stale local config if source changes silently.~~ — fixed
+  alongside two adjacent latent defects in `_ensure_user_loaded`.
+  Replaced the `_synced_users: set[str]` "claim-then-sync" marker with
+  per-user `_UserSyncState` bookkeeping (`last_version`,
+  `last_check_monotonic`, `last_sync_succeeded`, `dirty_keys`) protected
+  by a per-user `_per_user_sync_lock` RLock, so:
+  (a) the TOCTOU race where a concurrent reader saw the marker before
+  the actual sync had populated the cache is gone — the lock now
+  serialises the decide-and-sync slow path,
+  (b) a transient first-sync failure no longer permanently locks the
+  user out of sync (`last_sync_succeeded` stays `False` and the slow
+  path retries past a 1-second rate-limit window),
+  (c) a new `SyncSource.peek_version` hook (default `None`, implemented
+  for `server_json_file` via `st_mtime_ns`) makes an upstream change
+  visible automatically on the next read after the freshness window
+  elapses, instead of requiring manual `POST /api/settings-sources/sync`
+  or process restart.  Auto re-sync respects local `dirty_keys` so a
+  freshly clicked toggle isn't silently overwritten by an upstream
+  value; manual `sync_from_settings_source` ignores dirty markers
+  (explicit user pull) and clears them.  `_sync_to_source` clears
+  dirty markers on a successful export (source now matches local).
+  Regression tests:
+  `tests/io/test_sync_sources.py::TestSyncFromSourceFreshness`
+  (six cases — version-bump detection, first-failure retry, concurrent
+  reader sees post-sync cache, dirty-key skip on auto re-sync, manual
+  sync clears dirty, freshness window avoids repeat probes).
 - ~~**M17.** Legacy migration `_maybe_migrate_legacy_settings_locked` pops keys
   from in-memory cache before per-user disk write; per-user-write
   failure leaves cache and disk diverged.~~ — investigated and partially

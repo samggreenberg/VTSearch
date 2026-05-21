@@ -532,7 +532,8 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
 
     Per-user ``settings_source`` sync runs lazily on each user's first
     settings access (see
-    :func:`vtsearch.settings._maybe_sync_from_source_locked`), not at
+    :func:`vtsearch.settings._run_sync_from_source`) and re-fires
+    whenever the source's ``peek_version`` token changes, not at
     server boot — there is no server-wide user to sync for.
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
