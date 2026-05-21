@@ -396,13 +396,13 @@ describe('DashboardComponent', () => {
     expect(component.importerModalOpen).toBeFalse();
   });
 
-  it('should render welcome banner when no datasets', () => {
+  it('should render empty state when no datasets', () => {
     flushInitialRequests();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    const banner = el.querySelector('.welcome-banner');
-    expect(banner).toBeTruthy();
-    expect(banner?.textContent || '').toContain("Welcome! Load data with '+' to get started.");
+    const empty = el.querySelector('.empty-state');
+    expect(empty).toBeTruthy();
+    expect(empty?.textContent || '').toContain('No datasets yet. Click + to add one.');
   });
 
   it('should render dataset table when datasets exist', () => {
