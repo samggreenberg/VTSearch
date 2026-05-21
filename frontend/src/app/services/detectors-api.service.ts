@@ -52,44 +52,44 @@ import type { LocalizeRequest } from '../generated/api-client/models/localize-re
 import type { LocalizeResponse } from '../generated/api-client/models/localize-response';
 import type { PregenProcessorsAddResponse } from '../generated/api-client/models/pregen-processors-add-response';
 import type { PregenProcessorsListResponse } from '../generated/api-client/models/pregen-processors-list-response';
-import { apiAutoDetectPost } from '../generated/api-client/fn/detector-scoring/api-auto-detect-post';
-import { apiAutoExtractPost } from '../generated/api-client/fn/processors-scoring/api-auto-extract-post';
-import { apiAutoLocalizePost } from '../generated/api-client/fn/processors-scoring/api-auto-localize-post';
-import { apiAutorunExtractorsGet } from '../generated/api-client/fn/processors-crud/api-autorun-extractors-get';
-import { apiAutorunExtractorsNameDelete } from '../generated/api-client/fn/processors-crud/api-autorun-extractors-name-delete';
-import { apiAutorunExtractorsNameRenamePut } from '../generated/api-client/fn/processors-crud/api-autorun-extractors-name-rename-put';
-import { apiAutorunExtractorsPost } from '../generated/api-client/fn/processors-crud/api-autorun-extractors-post';
-import { apiAutorunLocalizersGet } from '../generated/api-client/fn/processors-crud/api-autorun-localizers-get';
-import { apiAutorunLocalizersNameDelete } from '../generated/api-client/fn/processors-crud/api-autorun-localizers-name-delete';
-import { apiAutorunLocalizersNameRenamePut } from '../generated/api-client/fn/processors-crud/api-autorun-localizers-name-rename-put';
-import { apiAutorunLocalizersPost } from '../generated/api-client/fn/processors-crud/api-autorun-localizers-post';
-import { apiDetectorsCancelTaskIdPost } from '../generated/api-client/fn/detectors-registry/api-detectors-cancel-task-id-post';
-import { apiDetectorsCombinePost } from '../generated/api-client/fn/detectors-crud/api-detectors-combine-post';
-import { apiDetectorsGet } from '../generated/api-client/fn/detectors-crud/api-detectors-get';
-import { apiDetectorsNameDelete } from '../generated/api-client/fn/detectors-crud/api-detectors-name-delete';
-import { apiDetectorsNameExamplesPut } from '../generated/api-client/fn/detectors-crud/api-detectors-name-examples-put';
-import { apiDetectorsNameGet } from '../generated/api-client/fn/detectors-crud/api-detectors-name-get';
-import { apiDetectorsNameLabelsDetailGet } from '../generated/api-client/fn/detectors-labels/api-detectors-name-labels-detail-get';
-import { apiDetectorsNameLabelsElementIdVotePost } from '../generated/api-client/fn/detectors-labels/api-detectors-name-labels-element-id-vote-post';
-import { apiDetectorsNameLabelsPost } from '../generated/api-client/fn/detectors-labels/api-detectors-name-labels-post';
-import { apiDetectorsNameRenamePut } from '../generated/api-client/fn/detectors-crud/api-detectors-name-rename-put';
-import { apiDetectorsPost } from '../generated/api-client/fn/detectors-crud/api-detectors-post';
-import { apiDetectorsRegistryDetectorIdAutorunPut } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-autorun-put';
-import { apiDetectorsRegistryDetectorIdDelete } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-delete';
-import { apiDetectorsRegistryDetectorIdLabelsetSourceMoveFilePost } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-labelset-source-move-file-post';
-import { apiDetectorsRegistryDetectorIdRenamePut } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-rename-put';
-import { apiDetectorsRegistryDetectorIdUnloadPost } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-detector-id-unload-post';
-import { apiDetectorsRegistryGet } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-get';
-import { apiDetectorsRegistryLoadPost } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-load-post';
-import { apiDetectorsRegistryPost } from '../generated/api-client/fn/detectors-registry/api-detectors-registry-post';
-import { apiExtractPost } from '../generated/api-client/fn/processors-scoring/api-extract-post';
-import { apiFindCancelPost } from '../generated/api-client/fn/detector-find/api-find-cancel-post';
-import { apiFindCheckLabelsPost } from '../generated/api-client/fn/detector-find/api-find-check-labels-post';
-import { apiFindLabelPost } from '../generated/api-client/fn/detector-scoring/api-find-label-post';
-import { apiFindPost } from '../generated/api-client/fn/detector-find/api-find-post';
-import { apiLocalizePost } from '../generated/api-client/fn/processors-scoring/api-localize-post';
-import { apiPregenProcessorsAddPost } from '../generated/api-client/fn/processors-crud/api-pregen-processors-add-post';
-import { apiPregenProcessorsGet } from '../generated/api-client/fn/processors-crud/api-pregen-processors-get';
+import { autoDetect } from '../generated/api-client/fn/detector-scoring/auto-detect';
+import { autoExtract } from '../generated/api-client/fn/processors-scoring/auto-extract';
+import { autoLocalize } from '../generated/api-client/fn/processors-scoring/auto-localize';
+import { getAutorunExtractorsRoute } from '../generated/api-client/fn/processors-crud/get-autorun-extractors-route';
+import { deleteAutorunExtractorRoute } from '../generated/api-client/fn/processors-crud/delete-autorun-extractor-route';
+import { renameAutorunExtractorRoute } from '../generated/api-client/fn/processors-crud/rename-autorun-extractor-route';
+import { addAutorunExtractorRoute } from '../generated/api-client/fn/processors-crud/add-autorun-extractor-route';
+import { getAutorunLocalizersRoute } from '../generated/api-client/fn/processors-crud/get-autorun-localizers-route';
+import { deleteAutorunLocalizerRoute } from '../generated/api-client/fn/processors-crud/delete-autorun-localizer-route';
+import { renameAutorunLocalizerRoute } from '../generated/api-client/fn/processors-crud/rename-autorun-localizer-route';
+import { addAutorunLocalizerRoute } from '../generated/api-client/fn/processors-crud/add-autorun-localizer-route';
+import { cancelDetectorLoadingTask } from '../generated/api-client/fn/detectors-registry/cancel-detector-loading-task';
+import { combineDetectors } from '../generated/api-client/fn/detectors-crud/combine-detectors';
+import { listDetectors } from '../generated/api-client/fn/detectors-crud/list-detectors';
+import { deleteDetector } from '../generated/api-client/fn/detectors-crud/delete-detector';
+import { setDetectorExamples } from '../generated/api-client/fn/detectors-crud/set-detector-examples';
+import { getDetector } from '../generated/api-client/fn/detectors-crud/get-detector';
+import { getDetectorLabelsDetail } from '../generated/api-client/fn/detectors-labels/get-detector-labels-detail';
+import { voteDetectorLabel } from '../generated/api-client/fn/detectors-labels/vote-detector-label';
+import { saveDetectorLabels } from '../generated/api-client/fn/detectors-labels/save-detector-labels';
+import { renameDetector } from '../generated/api-client/fn/detectors-crud/rename-detector';
+import { createDetector } from '../generated/api-client/fn/detectors-crud/create-detector';
+import { setDetectorAutorun } from '../generated/api-client/fn/detectors-registry/set-detector-autorun';
+import { deleteRegisteredDetector } from '../generated/api-client/fn/detectors-registry/delete-registered-detector';
+import { moveLabelsetSourceFile } from '../generated/api-client/fn/detectors-registry/move-labelset-source-file';
+import { renameRegisteredDetector } from '../generated/api-client/fn/detectors-registry/rename-registered-detector';
+import { unloadDetectorRoute } from '../generated/api-client/fn/detectors-registry/unload-detector-route';
+import { listRegisteredDetectors } from '../generated/api-client/fn/detectors-registry/list-registered-detectors';
+import { loadDetectorRoute } from '../generated/api-client/fn/detectors-registry/load-detector-route';
+import { registerDetectorRoute } from '../generated/api-client/fn/detectors-registry/register-detector-route';
+import { runExtract } from '../generated/api-client/fn/processors-scoring/run-extract';
+import { cancelFind } from '../generated/api-client/fn/detector-find/cancel-find';
+import { findCheckLabels } from '../generated/api-client/fn/detector-find/find-check-labels';
+import { findLabel } from '../generated/api-client/fn/detector-scoring/find-label';
+import { multiFind } from '../generated/api-client/fn/detector-find/multi-find';
+import { runLocalize } from '../generated/api-client/fn/processors-scoring/run-localize';
+import { addPregenProcessors } from '../generated/api-client/fn/processors-crud/add-pregen-processors';
+import { listPregenProcessors } from '../generated/api-client/fn/processors-crud/list-pregen-processors';
 import { ActiveContextService } from './active-context.service';
 import { VtDialogService } from './dialog.service';
 
@@ -112,27 +112,27 @@ export class DetectorsApiService {
   // --- Detector CRUD ---
 
   list(): Observable<DetectorsListResponse> {
-    return apiDetectorsGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return listDetectors(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   create(params: DetectorCreateRequest): Observable<DetectorCreateResponse> {
-    return apiDetectorsPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return createDetector(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
 
   get(name: string): Observable<DetectorDetail> {
-    return apiDetectorsNameGet(this.http, this.config.rootUrl, { name }).pipe(map((r) => r.body));
+    return getDetector(this.http, this.config.rootUrl, { name }).pipe(map((r) => r.body));
   }
 
   delete(name: string): Observable<DetectorDeleteResponse> {
-    return apiDetectorsNameDelete(this.http, this.config.rootUrl, { name }).pipe(
+    return deleteDetector(this.http, this.config.rootUrl, { name }).pipe(
       map((r) => r.body),
     );
   }
 
   rename(name: string, newName: string): Observable<DetectorRenameResponse> {
-    return apiDetectorsNameRenamePut(this.http, this.config.rootUrl, {
+    return renameDetector(this.http, this.config.rootUrl, {
       name,
       body: { new_name: newName },
     }).pipe(map((r) => r.body));
@@ -142,20 +142,20 @@ export class DetectorsApiService {
     name: string,
     examples: DetectorExamplesRequest['examples'],
   ): Observable<DetectorExamplesResponse> {
-    return apiDetectorsNameExamplesPut(this.http, this.config.rootUrl, {
+    return setDetectorExamples(this.http, this.config.rootUrl, {
       name,
       body: { examples },
     }).pipe(map((r) => r.body));
   }
 
   saveLabels(name: string): Observable<DetectorSaveLabelsResponse> {
-    return apiDetectorsNameLabelsPost(this.http, this.config.rootUrl, { name }).pipe(
+    return saveDetectorLabels(this.http, this.config.rootUrl, { name }).pipe(
       map((r) => r.body),
     );
   }
 
   getLabelsDetail(name: string): Observable<DetectorLabelsDetailResponse> {
-    return apiDetectorsNameLabelsDetailGet(this.http, this.config.rootUrl, { name }).pipe(
+    return getDetectorLabelsDetail(this.http, this.config.rootUrl, { name }).pipe(
       map((r) => r.body),
     );
   }
@@ -165,7 +165,7 @@ export class DetectorsApiService {
     elementId: string,
     vote: 'good' | 'bad',
   ): Observable<DetectorLabelVoteResponse> {
-    return apiDetectorsNameLabelsElementIdVotePost(this.http, this.config.rootUrl, {
+    return voteDetectorLabel(this.http, this.config.rootUrl, {
       name,
       element_id: elementId,
       body: { vote },
@@ -193,7 +193,7 @@ export class DetectorsApiService {
     newName: string,
     conflictPolicy: DetectorCombineRequest['conflict_policy'] = 'drop',
   ): Observable<DetectorCombineResponse> {
-    return apiDetectorsCombinePost(this.http, this.config.rootUrl, {
+    return combineDetectors(this.http, this.config.rootUrl, {
       body: { names, new_name: newName, conflict_policy: conflictPolicy },
     }).pipe(map((r) => r.body));
   }
@@ -201,13 +201,13 @@ export class DetectorsApiService {
   // --- Detector Registry ---
 
   getRegistry(): Observable<DetectorRegistryListResponse> {
-    return apiDetectorsRegistryGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return listRegisteredDetectors(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   registerDetector(
     params: DetectorRegistryCreateRequest,
   ): Observable<DetectorRegistryCreateResponse> {
-    return apiDetectorsRegistryPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return registerDetectorRoute(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
@@ -236,7 +236,7 @@ export class DetectorsApiService {
   }
 
   deleteFromRegistry(detectorId: string): Observable<DetectorRegistryDeleteResponse> {
-    return apiDetectorsRegistryDetectorIdDelete(this.http, this.config.rootUrl, {
+    return deleteRegisteredDetector(this.http, this.config.rootUrl, {
       detector_id: detectorId,
     }).pipe(map((r) => r.body));
   }
@@ -245,7 +245,7 @@ export class DetectorsApiService {
     detectorId: string,
     newName: string,
   ): Observable<DetectorRegistryRenameResponse> {
-    return apiDetectorsRegistryDetectorIdRenamePut(this.http, this.config.rootUrl, {
+    return renameRegisteredDetector(this.http, this.config.rootUrl, {
       detector_id: detectorId,
       body: { name: newName },
     }).pipe(map((r) => r.body));
@@ -256,7 +256,7 @@ export class DetectorsApiService {
     oldPath: string,
     newPath: string,
   ): Observable<DetectorLabelsetMoveResponse> {
-    return apiDetectorsRegistryDetectorIdLabelsetSourceMoveFilePost(
+    return moveLabelsetSourceFile(
       this.http,
       this.config.rootUrl,
       {
@@ -294,25 +294,25 @@ export class DetectorsApiService {
   }
 
   loadDetector(detectorId: string | null): Observable<DetectorRegistryLoadResponse> {
-    return apiDetectorsRegistryLoadPost(this.http, this.config.rootUrl, {
+    return loadDetectorRoute(this.http, this.config.rootUrl, {
       body: { detector_id: detectorId },
     }).pipe(map((r) => r.body));
   }
 
   unloadDetector(detectorId: string): Observable<DetectorRegistryUnloadResponse> {
-    return apiDetectorsRegistryDetectorIdUnloadPost(this.http, this.config.rootUrl, {
+    return unloadDetectorRoute(this.http, this.config.rootUrl, {
       detector_id: detectorId,
     }).pipe(map((r) => r.body));
   }
 
   cancelDetectorLoadingTask(taskId: string): Observable<DetectorCancelResponse> {
-    return apiDetectorsCancelTaskIdPost(this.http, this.config.rootUrl, {
+    return cancelDetectorLoadingTask(this.http, this.config.rootUrl, {
       task_id: taskId,
     }).pipe(map((r) => r.body));
   }
 
   setAutorun(detectorId: string, autorun: boolean): Observable<DetectorRegistryAutorunResponse> {
-    return apiDetectorsRegistryDetectorIdAutorunPut(this.http, this.config.rootUrl, {
+    return setDetectorAutorun(this.http, this.config.rootUrl, {
       detector_id: detectorId,
       body: { autorun },
     }).pipe(map((r) => r.body));
@@ -321,25 +321,25 @@ export class DetectorsApiService {
   // --- Extractors ---
 
   getAutorunExtractors(): Observable<AutorunExtractorsListResponse> {
-    return apiAutorunExtractorsGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return getAutorunExtractorsRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   createExtractor(
     params: AutorunExtractorCreateRequest,
   ): Observable<AutorunProcessorCreateResponse> {
-    return apiAutorunExtractorsPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return addAutorunExtractorRoute(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
 
   deleteExtractor(name: string): Observable<AutorunProcessorDeleteResponse> {
-    return apiAutorunExtractorsNameDelete(this.http, this.config.rootUrl, { name }).pipe(
+    return deleteAutorunExtractorRoute(this.http, this.config.rootUrl, { name }).pipe(
       map((r) => r.body),
     );
   }
 
   renameExtractor(name: string, newName: string): Observable<AutorunProcessorRenameResponse> {
-    return apiAutorunExtractorsNameRenamePut(this.http, this.config.rootUrl, {
+    return renameAutorunExtractorRoute(this.http, this.config.rootUrl, {
       name,
       body: { new_name: newName },
     }).pipe(map((r) => r.body));
@@ -348,25 +348,25 @@ export class DetectorsApiService {
   // --- Localizers ---
 
   getAutorunLocalizers(): Observable<AutorunLocalizersListResponse> {
-    return apiAutorunLocalizersGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return getAutorunLocalizersRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   createLocalizer(
     params: AutorunLocalizerCreateRequest,
   ): Observable<AutorunProcessorCreateResponse> {
-    return apiAutorunLocalizersPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return addAutorunLocalizerRoute(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
 
   deleteLocalizer(name: string): Observable<AutorunProcessorDeleteResponse> {
-    return apiAutorunLocalizersNameDelete(this.http, this.config.rootUrl, { name }).pipe(
+    return deleteAutorunLocalizerRoute(this.http, this.config.rootUrl, { name }).pipe(
       map((r) => r.body),
     );
   }
 
   renameLocalizer(name: string, newName: string): Observable<AutorunProcessorRenameResponse> {
-    return apiAutorunLocalizersNameRenamePut(this.http, this.config.rootUrl, {
+    return renameAutorunLocalizerRoute(this.http, this.config.rootUrl, {
       name,
       body: { new_name: newName },
     }).pipe(map((r) => r.body));
@@ -375,61 +375,61 @@ export class DetectorsApiService {
   // --- Scoring ---
 
   autoDetect(params: AutoDetectRequest): Observable<AutoDetectResponse> {
-    return apiAutoDetectPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return autoDetect(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
 
   extract(params: ExtractRequest): Observable<ExtractResponse> {
-    return apiExtractPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return runExtract(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
 
   autoExtract(): Observable<AutoExtractResponse> {
-    return apiAutoExtractPost(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return autoExtract(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   localize(params: LocalizeRequest): Observable<LocalizeResponse> {
-    return apiLocalizePost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return runLocalize(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
 
   autoLocalize(): Observable<AutoLocalizeResponse> {
-    return apiAutoLocalizePost(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return autoLocalize(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   // --- Find ---
 
   findCheckLabels(params: FindCheckLabelsRequest): Observable<FindCheckLabelsResponse> {
-    return apiFindCheckLabelsPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return findCheckLabels(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
 
   find(params: FindRequest): Observable<FindResponse> {
-    return apiFindPost(this.http, this.config.rootUrl, { body: params }).pipe(map((r) => r.body));
+    return multiFind(this.http, this.config.rootUrl, { body: params }).pipe(map((r) => r.body));
   }
 
   findLabel(params: FindLabelRequest): Observable<FindLabelResponse> {
-    return apiFindLabelPost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return findLabel(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
 
   /** Cancel any in-flight find / find-label / auto-detect scoring. */
   cancelFind(): Observable<FindCancelResponse> {
-    return apiFindCancelPost(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return cancelFind(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   // --- Pregen processors ---
 
   getPregenProcessors(): Observable<PregenProcessorsListResponse> {
-    return apiPregenProcessorsGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return listPregenProcessors(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   addPregenProcessors(): Observable<PregenProcessorsAddResponse> {
-    return apiPregenProcessorsAddPost(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return addPregenProcessors(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 }

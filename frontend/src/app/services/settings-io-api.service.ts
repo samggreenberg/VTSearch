@@ -8,9 +8,9 @@ import type { SettingsImporterEntry } from '../generated/api-client/models/setti
 import type { SettingsExporterEntry } from '../generated/api-client/models/settings-exporter-entry';
 import type { RunSettingsExportRequest } from '../generated/api-client/models/run-settings-export-request';
 import type { RunSettingsExportResponse } from '../generated/api-client/models/run-settings-export-response';
-import { apiSettingsImportersGet } from '../generated/api-client/fn/settings-io/api-settings-importers-get';
-import { apiSettingsExportersGet } from '../generated/api-client/fn/settings-io/api-settings-exporters-get';
-import { apiSettingsExportersExportPost } from '../generated/api-client/fn/settings-io/api-settings-exporters-export-post';
+import { getSettingsImporters } from '../generated/api-client/fn/settings-io/get-settings-importers';
+import { getSettingsExporters } from '../generated/api-client/fn/settings-io/get-settings-exporters';
+import { runSettingsExport } from '../generated/api-client/fn/settings-io/run-settings-export';
 
 /** Response shape for the plugin-field import route. The body shape is
  *  plugin-dependent and not described in the OpenAPI spec (the spec
@@ -28,7 +28,7 @@ export class SettingsIoApiService {
   private config = inject(ApiConfiguration);
 
   listImporters(): Observable<SettingsImporterEntry[]> {
-    return apiSettingsImportersGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return getSettingsImporters(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   runImport(
@@ -55,7 +55,7 @@ export class SettingsIoApiService {
   }
 
   listExporters(): Observable<SettingsExporterEntry[]> {
-    return apiSettingsExportersGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return getSettingsExporters(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   runExport(
@@ -66,7 +66,7 @@ export class SettingsIoApiService {
       exporter_name: exporterName,
       field_values: fieldValues as { [key: string]: unknown },
     };
-    return apiSettingsExportersExportPost(this.http, this.config.rootUrl, { body }).pipe(
+    return runSettingsExport(this.http, this.config.rootUrl, { body }).pipe(
       map((r) => r.body),
     );
   }

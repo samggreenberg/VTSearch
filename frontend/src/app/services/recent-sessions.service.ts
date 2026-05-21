@@ -4,8 +4,8 @@ import { BehaviorSubject, Observable, of } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
-import { apiSessionsRecentGet } from '../generated/api-client/fn/sessions/api-sessions-recent-get';
-import { apiSessionsRecentPost } from '../generated/api-client/fn/sessions/api-sessions-recent-post';
+import { listRecentSessions } from '../generated/api-client/fn/sessions/list-recent-sessions';
+import { bumpRecentSession } from '../generated/api-client/fn/sessions/bump-recent-session';
 import type { RecentSession } from '../generated/api-client/models/recent-session';
 
 /**
@@ -33,7 +33,7 @@ export class RecentSessionsService {
   }
 
   refresh(): Observable<RecentSession[]> {
-    return apiSessionsRecentGet(this.http, this.config.rootUrl).pipe(
+    return listRecentSessions(this.http, this.config.rootUrl).pipe(
       map((r) => r.body.sessions ?? []),
       tap((sessions) => this.sessionsSubject.next(sessions)),
       catchError(() => of(this.sessionsSubject.value)),
@@ -42,7 +42,7 @@ export class RecentSessionsService {
 
   bump(datasetId: string, detectorId: string): void {
     if (!datasetId || !detectorId) return;
-    apiSessionsRecentPost(this.http, this.config.rootUrl, {
+    bumpRecentSession(this.http, this.config.rootUrl, {
       body: { dataset_id: datasetId, detector_id: detectorId },
     })
       .pipe(

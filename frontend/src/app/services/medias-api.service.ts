@@ -10,10 +10,10 @@ import type { MediaParagraphResponse } from '../generated/api-client/models/medi
 import type { MediaVoteRequest } from '../generated/api-client/models/media-vote-request';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import type { MediaAddToPileResponse } from '../generated/api-client/models/media-add-to-pile-response';
-import { apiMediasIdsGet } from '../generated/api-client/fn/medias/api-medias-ids-get';
-import { apiMediasBatchPost } from '../generated/api-client/fn/medias/api-medias-batch-post';
-import { apiMediasMediaIdTextGet } from '../generated/api-client/fn/medias/api-medias-media-id-text-get';
-import { apiMediasMediaIdVotePost } from '../generated/api-client/fn/medias/api-medias-media-id-vote-post';
+import { listMediaIds } from '../generated/api-client/fn/medias/list-media-ids';
+import { batchMedias } from '../generated/api-client/fn/medias/batch-medias';
+import { mediaParagraphGet2 } from '../generated/api-client/fn/medias/media-paragraph-get-2';
+import { voteMedia } from '../generated/api-client/fn/medias/vote-media';
 
 @Injectable({ providedIn: 'root' })
 export class MediasApiService {
@@ -26,15 +26,15 @@ export class MediasApiService {
    * metadata is fetched on demand via {@link getMediasBatch}.
    */
   getMediaIds(): Observable<MediaIdsListResponse[]> {
-    return apiMediasIdsGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return listMediaIds(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   getMediasBatch(ids: number[]): Observable<MediaBatchResponse[]> {
-    return apiMediasBatchPost(this.http, this.config.rootUrl, { body: { ids } }).pipe(map((r) => r.body));
+    return batchMedias(this.http, this.config.rootUrl, { body: { ids } }).pipe(map((r) => r.body));
   }
 
   getText(id: number): Observable<MediaParagraphResponse> {
-    return apiMediasMediaIdTextGet(this.http, this.config.rootUrl, { media_id: id }).pipe(map((r) => r.body));
+    return mediaParagraphGet2(this.http, this.config.rootUrl, { media_id: id }).pipe(map((r) => r.body));
   }
 
   /**
@@ -57,7 +57,7 @@ export class MediasApiService {
   ): Observable<MediaVoteResponse> {
     const body: MediaVoteRequest = { target };
     if (regionBox && regionBox.length === 4) body.region_box = [...regionBox];
-    return apiMediasMediaIdVotePost(this.http, this.config.rootUrl, { media_id: id, body }).pipe(
+    return voteMedia(this.http, this.config.rootUrl, { media_id: id, body }).pipe(
       map((r) => r.body),
     );
   }
