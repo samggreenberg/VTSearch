@@ -653,10 +653,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         targets.length === 1
           ? `Delete detector ${names}?`
           : `Delete ${targets.length} detectors: ${names}?`;
-      const detail =
-        targets.length === 1
-          ? 'This removes its labelset and training metadata. The dataset is unaffected.'
-          : 'This removes their labelsets and training metadata. The datasets are unaffected.';
+      const detail = '(This deletes your labels. The underlying media is unaffected.)';
       ok = await this.dialog.confirmDestructive(question, detail);
     } finally {
       this.deletingSelectedDetectorsConfirm = false;
@@ -802,7 +799,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.deletingDetectorId = model.id;
     const ok = await this.dialog.confirmDestructive(
       `Delete detector "${model.name}"?`,
-      'This removes its labelset and training metadata. The dataset is unaffected.',
+      '(This deletes your labels. The underlying media is unaffected.)',
     );
     this.deletingDetectorId = '';
     if (!ok) return;
