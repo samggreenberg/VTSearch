@@ -44,9 +44,7 @@ def _resolve_video_path(media: dict) -> Iterator[Optional[Path]]:
             pass
 
 
-def _frame_index_range(
-    media: dict, frame_count: int, fps: float
-) -> tuple[int, int]:
+def _frame_index_range(media: dict, frame_count: int, fps: float) -> tuple[int, int]:
     """Map ``clip_start``/``clip_end`` to ``[start_frame, end_frame]`` indices.
 
     Falls back to the full video range when boundaries are absent or ``fps``
@@ -54,13 +52,7 @@ def _frame_index_range(
     """
     clip_start = media.get("clip_start")
     clip_end = media.get("clip_end")
-    if (
-        clip_start is None
-        or clip_end is None
-        or not fps
-        or fps <= 0
-        or float(clip_end) <= float(clip_start)
-    ):
+    if clip_start is None or clip_end is None or not fps or fps <= 0 or float(clip_end) <= float(clip_start):
         return 0, frame_count - 1
 
     start_idx = int(round(float(clip_start) * fps))

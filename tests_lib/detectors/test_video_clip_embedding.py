@@ -291,20 +291,22 @@ def _make_tiled_video_clips() -> list[dict]:
     parent_md5 = hashlib.md5(parent_bytes).hexdigest()
     tiles = []
     for idx, (t0, t1) in enumerate([(0.0, 2.0), (2.0, 4.0), (4.0, 6.0)]):
-        tiles.append({
-            "id": 100 + idx,
-            "type": "video",
-            "media_bytes": parent_bytes,
-            "media_path": "/data/parent.mp4",
-            "md5": parent_md5,  # stale; the fixup should rewrite it
-            "duration": 2.0,
-            "clip_index": idx,
-            "clip_start": t0,
-            "clip_end": t1,
-            "filename": "parent.mp4",
-            "origin_name": "parent.mp4",
-            "embedding": None,
-        })
+        tiles.append(
+            {
+                "id": 100 + idx,
+                "type": "video",
+                "media_bytes": parent_bytes,
+                "media_path": "/data/parent.mp4",
+                "md5": parent_md5,  # stale; the fixup should rewrite it
+                "duration": 2.0,
+                "clip_index": idx,
+                "clip_start": t0,
+                "clip_end": t1,
+                "filename": "parent.mp4",
+                "origin_name": "parent.mp4",
+                "embedding": None,
+            }
+        )
     return tiles
 
 
