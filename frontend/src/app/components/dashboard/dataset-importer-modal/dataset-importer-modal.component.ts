@@ -348,10 +348,15 @@ export class DatasetImporterModalComponent implements OnInit {
 
   selectImporterTab(tabId: string): void {
     this.activeImporterTab = tabId;
-    // Clearing the selected importer keeps the inner sub-tab row blank
-    // until the user explicitly clicks one — matching the "no auto-select"
-    // policy that applies at every tab level.
     this.selectedImporter = null;
+    // When the tab has exactly one importer, the inner sub-tab row is
+    // redundant — clicking the outer tab already declared the intent.
+    // Auto-select the lone importer so the user lands directly on its
+    // form instead of having to click a single-option card.
+    const importers = this.importersForActiveTab;
+    if (importers.length === 1 && importers[0]['enabled'] !== false) {
+      this.selectImporter(importers[0]);
+    }
   }
 
   /** Title shown at the top of the modal. */

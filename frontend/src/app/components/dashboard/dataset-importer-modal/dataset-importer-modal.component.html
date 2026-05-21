@@ -15,23 +15,26 @@
     }
 
     @if (activeImporterTab) {
-      <div class="importer-subtab-bar">
-        @if (importersForActiveTab.length === 0) {
+      @if (importersForActiveTab.length === 0) {
+        <div class="importer-subtab-bar">
           <span class="empty-state empty-state--inline">No importers in this category.</span>
+        </div>
+      } @else if (importersForActiveTab.length > 1) {
+        <div class="importer-subtab-bar">
+          @for (imp of importersForActiveTab; track imp.name) {
+            <button
+              class="importer-subtab"
+              [class.active]="selectedImporter?.name === imp.name"
+              [class.disabled]="imp['enabled'] === false"
+              [disabled]="imp['enabled'] === false"
+              (click)="selectImporter(imp)"
+              [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : (imp.description || '')"
+            >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
+          }
+        </div>
+        @if (!selectedImporter) {
+          <p class="tab-bar-hint">Select how to add a {{ activeImporterTabLabel }} dataset.</p>
         }
-        @for (imp of importersForActiveTab; track imp.name) {
-          <button
-            class="importer-subtab"
-            [class.active]="selectedImporter?.name === imp.name"
-            [class.disabled]="imp['enabled'] === false"
-            [disabled]="imp['enabled'] === false"
-            (click)="selectImporter(imp)"
-            [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : (imp.description || '')"
-          >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
-        }
-      </div>
-      @if (!selectedImporter && importersForActiveTab.length > 0) {
-        <p class="tab-bar-hint">Select how to add a {{ activeImporterTabLabel }} dataset.</p>
       }
     }
   </div>
