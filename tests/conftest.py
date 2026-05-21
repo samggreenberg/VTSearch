@@ -398,10 +398,67 @@ def isolated_settings(tmp_path, monkeypatch):
     det_reg_mod.reset_for_tests()
 
 
+def _active_id_for_tests(getter) -> str | None:
+    """Return the active context's id from the thread-local, or ``None``.
+
+    Skips the request-missing sentinel and the empty fallback (their
+    ids are not registered, so injecting them would just cause 409
+    "not loaded" downstream).
+    """
+    try:
+        ctx = getter()
+    except Exception:
+        return None
+    if ctx is None:
+        return None
+    cid = getattr(ctx, "dataset_id", None) or getattr(ctx, "detector_id", None)
+    if not cid or cid.startswith("__") or cid == "":
+        return None
+    return cid
+
+
+def _install_active_context_headers(c):
+    """Make the test client behave like Angular's ``activeContextInterceptor``.
+
+    Production routes that mutate vote / dataset state require ``X-Dataset-Id``
+    and ``X-Detector-Id`` headers (logical-bug-audit H34). In production those
+    headers are attached transparently by ``activeContextInterceptor`` in the
+    Angular frontend. The Flask test client has no such interceptor, so this
+    wrapper inspects the thread-local active context on each ``client.open()``
+    call and fills in the headers when they're not already provided. Tests
+    that need to exercise the header-absent code path can pass
+    ``headers={"X-Dataset-Id": ""}`` / ``"X-Detector-Id": ""`` to suppress
+    auto-injection for that key while still preserving the empty-string value
+    (which fails the ``bool(...)`` check the decorators apply).
+    """
+    from werkzeug.datastructures import Headers
+
+    original_open = c.open
+
+    def _open(*args, **kwargs):
+        path = args[0] if args else kwargs.get("path", "")
+        if isinstance(path, str) and path.startswith("/api/"):
+            headers = kwargs.get("headers")
+            hdrs = Headers(headers) if headers is not None else Headers()
+            if "X-Dataset-Id" not in hdrs:
+                ds_id = _active_id_for_tests(_core.get_active_context)
+                if ds_id:
+                    hdrs.add("X-Dataset-Id", ds_id)
+            if "X-Detector-Id" not in hdrs:
+                det_id = _active_id_for_tests(_core.get_active_detector_context)
+                if det_id:
+                    hdrs.add("X-Detector-Id", det_id)
+            kwargs["headers"] = hdrs
+        return original_open(*args, **kwargs)
+
+    c.open = _open
+
+
 @pytest.fixture
 def client():
     app_module.app.config["TESTING"] = True
     with app_module.app.test_client() as c:
+        _install_active_context_headers(c)
         yield c
 
 

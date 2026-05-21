@@ -225,18 +225,28 @@ Cross-section interaction agents:
   `TestAddToPile.test_existing_media_label_synced_to_disk`,
   `test_new_media_label_synced_to_disk`, and
   `test_label_survives_rehydration` in `tests/core/test_medias.py`.
-- **H34. Missing `X-Detector-Id` → silent detector fallback** —
-  `vtscore/state/core.py` `get_active_detector_context()` falls
-  through to the thread-local (then `_empty_detector_context`) when
-  `g._detector_context` is unset. The H16 fix closed the sub-case
-  where the header is *present* but names an unloaded id (now 409);
-  the *header-absent* case remains open. Any route that mutates votes
-  without requiring the header — `add_media_to_pile`, `vote_media`,
-  bulk-label endpoints — silently writes to whatever the thread-local
-  resolves to, which on a Flask threaded-server worker can be the
-  detector left over from a previous request on the same thread.
-  Detector-side analog of H13; the fix is the same shape (reject the
-  request when the header is absent for any vote-mutating endpoint).
+- ~~**H34. Missing `X-Detector-Id` → silent detector fallback**~~ —
+  fixed in `vtsearch/routes/_shared.py`. Added two stateless route
+  decorators, `require_detector_header` and `require_dataset_header`,
+  that reject 400 when the corresponding header (or its `?detector_id=`
+  / `?dataset_id=` query-param fallback) is absent. Applied to every
+  vote-mutating endpoint: `vote_media` and `add_media_to_pile`
+  (`media/list.py`), `import_labels` and `fill_labels_from_sort`
+  (`labels/vote.py`), `run_label_import` and `ingest_missing`
+  (`labels/importers.py`), `clear_votes_route` (detector only) and
+  `seed_votes_from_examples` (`sorting.py`), and `find_label`
+  (`detectors/scoring.py`). The decorators run *before* the resolver
+  chain so a thread-local leak on a Flask worker can't silently
+  mistarget a vote even if a future code path were to leave a
+  thread-local detector pinned across requests. Pure-read endpoints
+  (registry listings, dashboard, file browser, settings GET) keep the
+  fall-through behaviour so background scripts and the standalone CLI
+  still work without headers. Test plumbing: `tests/conftest.py` now
+  wraps `client.open()` to auto-inject `X-Dataset-Id` /
+  `X-Detector-Id` from the thread-local active context (mimicking
+  Angular's `activeContextInterceptor`), so the existing test corpus
+  keeps working unchanged; tests that need to exercise the
+  header-absent path drop the thread-local first.
 
 ### Plugins / converters / exporters
 

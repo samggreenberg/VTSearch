@@ -26,6 +26,8 @@ from flask_smorest import Blueprint, abort
 from vtsearch.routes._shared import (
     format_exception_detail,
     get_embedder_for_medias,
+    require_dataset_header,
+    require_detector_header,
 )
 
 from vtscore.config import DATA_DIR
@@ -582,6 +584,7 @@ def get_votes():
 
 @sorting_bp.route("/api/votes/clear", methods=["POST"])
 @sorting_bp.response(200, OkResponseSchema)
+@require_detector_header
 def clear_votes_route():
     """Clear all votes without clearing medias.
 
@@ -597,6 +600,8 @@ def clear_votes_route():
 @sorting_bp.route("/api/votes/seed-from-examples", methods=["POST"])
 @sorting_bp.arguments(SeedFromExamplesRequestSchema)
 @sorting_bp.response(200, SeedFromExamplesResponseSchema)
+@require_dataset_header
+@require_detector_header
 def seed_votes_from_examples(body: dict):
     """Seed good votes from a model's media examples.
 

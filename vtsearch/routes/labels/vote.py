@@ -19,6 +19,7 @@ from vtsearch.schemas.labels import (
     LabelsImportResponseSchema,
 )
 from vtscore.detectors.dataset_sync import validated_vote_snapshot
+from vtsearch.routes._shared import require_dataset_header, require_detector_header
 from vtsearch.state import (
     apply_label,
     apply_label_with_click_time,
@@ -183,6 +184,8 @@ def export_labels(query: dict):
 @labels_bp.route("/api/labels/import", methods=["POST"])
 @labels_bp.arguments(LabelsImportRequestSchema)
 @labels_bp.response(200, LabelsImportResponseSchema)
+@require_dataset_header
+@require_detector_header
 def import_labels(body: dict):
     """Import labels from JSON, matching medias by origin+origin_name (MD5 fallback)."""
     labels = body["labels"]
@@ -226,6 +229,8 @@ def import_labels(body: dict):
 @labels_bp.route("/api/labels/fill-from-sort", methods=["POST"])
 @labels_bp.arguments(FillFromSortRequestSchema)
 @labels_bp.response(200, FillFromSortResponseSchema)
+@require_dataset_header
+@require_detector_header
 def fill_labels_from_sort(body: dict):  # noqa: C901
     """Fill labels from the current sort results.
 
