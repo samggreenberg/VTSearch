@@ -170,9 +170,9 @@ class TextMediaType(MediaType):
         ng_desc = "Early-1990s Usenet posts across technical and political topics."
         ag_desc = "Short news summaries across world, sports, business, tech."
         imdb_desc = "Long-form movie reviews with positive/negative sentiment labels."
-        wiki_desc = "Wikipedia abstracts across 14 DBpedia ontology topics — a bigger, cleaner cousin of 20 Newsgroups."
-        arxiv_desc = "arXiv paper titles + abstracts spanning CS, math, physics, biology, and astrophysics."
-        reuters_desc = "Reuters-21578 financial newswire — the historical baseline for text classification."
+        wiki_desc = "Wikipedia abstracts across 14 DBpedia ontology topics."
+        arxiv_desc = "arXiv titles + abstracts across CS, math, and the sciences."
+        reuters_desc = "Reuters-21578 financial newswire — a classic text benchmark."
         return [
             DemoDataset(
                 id="20newsgroups_s",
