@@ -334,7 +334,7 @@ class TestRunChunked:
                 )
             )
 
-    def test_run_chunked_cleans_up_staging_dir(self, tmp_path):
+    def test_run_chunked_cleans_up_staging_dir(self, tmp_path, monkeypatch):
         from helpers import make_raw_wav_bytes
 
         src = tmp_path / "only.wav"
@@ -342,10 +342,17 @@ class TestRunChunked:
         listing = tmp_path / "list.txt"
         listing.write_text(f"{src}\n")
 
-        # Snapshot existing tmp prefixes so we can detect a leak.
+        # Redirect the importer's ``tempfile.mkdtemp`` into a private dir
+        # under this test's ``tmp_path`` so the leak check is isolated
+        # from parallel xdist workers (run-tests.sh uses ``-n auto``),
+        # which would otherwise also create ``server_files_*`` dirs in
+        # the shared system tempdir.
         import tempfile as _tempfile
 
-        tmp_root = Path(_tempfile.gettempdir())
+        tmp_root = tmp_path / "stage_root"
+        tmp_root.mkdir()
+        monkeypatch.setattr(_tempfile, "tempdir", str(tmp_root))
+
         before = {p.name for p in tmp_root.iterdir() if p.name.startswith("server_files_")}
 
         imp = ServerFilesDatasetImporter()
