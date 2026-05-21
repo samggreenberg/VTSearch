@@ -294,6 +294,138 @@ class TestReplayChainOnFile:
         source.write_text("anything", encoding="utf-8")
         assert replay_chain_on_file(source, []) is None
 
+    def test_replay_fails_closed_when_out_index_out_of_range(self, tmp_path, monkeypatch, caplog):
+        """If the source file produces fewer outputs than recorded, replay
+        must NOT silently embed outputs[0] — it must return None so the
+        resolver records an embed failure rather than training on the
+        wrong sub-clip's embedding."""
+        import logging
+
+        from vtscore.datasets.clipper_chain import replay_chain_on_file
+        from vtscore.detectors import resolver as resolver_module
+
+        called = {"n": 0}
+
+        def fake_embed_file(path, media_type, embedder_name=""):
+            called["n"] += 1
+            return np.zeros(8, dtype=np.float32)
+
+        monkeypatch.setattr(resolver_module, "embed_file", fake_embed_file)
+
+        # Source has only 2 sentences ...
+        source = tmp_path / "doc.txt"
+        source.write_text("Alpha. Bravo.", encoding="utf-8")
+
+        # ... but the trail recorded out_index=5 with no disambiguators.
+        # (Mimics an older trail predating the new clip_index/content_hash
+        # fields, where the source file has since been edited shorter.)
+        steps = [
+            {
+                "kind": "clipper",
+                "name": "text_sentence",
+                "params": {},
+                "out_index": 5,
+            }
+        ]
+        with caplog.at_level(logging.WARNING, logger="vtscore.datasets.clipper_chain"):
+            result = replay_chain_on_file(source, steps)
+        assert result is None
+        assert called["n"] == 0
+        assert any("clipper_chain" in r.message for r in caplog.records)
+
+    def test_replay_detects_n_out_drift_via_content_hash(self, tmp_path, monkeypatch, caplog):
+        """When n_out drifts, the selector should fall back to content
+        matching and pick the correctly-recorded sub-clip, not the one
+        at the recorded positional index."""
+        import logging
+
+        from vtscore.datasets.clipper_chain import replay_chain_on_file
+        from vtscore.detectors import resolver as resolver_module
+
+        captured: list[str] = []
+
+        def fake_embed_file(path, media_type, embedder_name=""):
+            captured.append(path.read_bytes().decode("utf-8", errors="replace"))
+            return np.zeros(8, dtype=np.float32)
+
+        monkeypatch.setattr(resolver_module, "embed_file", fake_embed_file)
+
+        # Replay produces 3 sentences. Trail recorded n_out=4 with
+        # content_hash matching "Charlie." — i.e. the original load had
+        # one extra sentence (now removed) but Charlie still exists.
+        source = tmp_path / "doc.txt"
+        source.write_text("Alpha. Bravo. Charlie.", encoding="utf-8")
+
+        target_hash = hashlib.md5(b"Charlie.").hexdigest()[:12]
+        steps = [
+            {
+                "kind": "clipper",
+                "name": "text_sentence",
+                "params": {},
+                "out_index": 3,
+                "n_out": 4,
+                "content_hash": target_hash,
+            }
+        ]
+        with caplog.at_level(logging.WARNING, logger="vtscore.datasets.clipper_chain"):
+            result = replay_chain_on_file(source, steps)
+        assert result is not None
+        embedding, content = result
+        assert embedding is not None
+        assert content == b"Charlie."
+        assert captured == ["Charlie."]
+        assert any("drift" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Trail enrichment (n_out / clip_index / content_hash)
+# ---------------------------------------------------------------------------
+
+
+class TestTrailEnrichment:
+    def test_clipper_trail_records_n_out_and_clip_index_and_hash(self):
+        """Each clipper trail entry carries n_out, clip_index (when the
+        clipper stamps it), and a short content_hash."""
+        from vtscore.datasets.clipper_chain import _run_clipper_step
+
+        media = _make_text_media(1, "First. Second. Third.")
+        outputs, trail = _run_clipper_step(
+            media,
+            {"kind": "clipper", "name": "text_sentence", "params": {}},
+        )
+        assert len(outputs) == 3
+        assert len(trail) == 3
+        for idx, entry in enumerate(trail):
+            assert entry["out_index"] == idx
+            assert entry["n_out"] == 3
+            assert entry["clip_index"] == str(idx)
+            assert "content_hash" in entry
+            assert len(entry["content_hash"]) == 12
+
+    def test_select_chain_output_returns_none_on_ambiguous_match(self):
+        """If multiple replay outputs match the recorded disambiguators,
+        the selector refuses to guess and returns None."""
+        from vtscore.datasets.clipper_chain import _content_hash, _select_chain_output
+
+        # Two outputs with identical payload naturally produce the same
+        # content_hash. The recorded entry's only disambiguator is that
+        # hash → both outputs match → genuine ambiguity → None.
+        outputs = [
+            {"media_string": "duplicate sentence."},
+            {"media_string": "duplicate sentence."},
+        ]
+        h = _content_hash(outputs[0])
+        # n_out drift forces the selector past the indexed pick into the
+        # content-matching loop, where both outputs match the recorded hash.
+        entry = {
+            "kind": "clipper",
+            "name": "text_sentence",
+            "out_index": 0,
+            "n_out": 3,
+            "content_hash": h,
+        }
+        assert _select_chain_output(outputs, entry) is None
+
 
 # ---------------------------------------------------------------------------
 # Integration with _apply_clipper (load-pipeline entry point)
