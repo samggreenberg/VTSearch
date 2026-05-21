@@ -15,6 +15,11 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "Installing VTSearch CPU dependencies..."
 
+# Bail out early if the active Python is too old.  pyproject.toml requires
+# >=3.10, but pip only enforces it partway through resolution, after a slow
+# and confusing failure path.  Check up front instead.
+source "$SCRIPT_DIR/_check-python.sh"
+
 # Ensure pip/setuptools/wheel are recent enough to resolve modern wheel-only
 # packages.  Stale pips (e.g. 21.x) have a weaker resolver and will fall back
 # to building ancient sdists from source, which then fails for lack of
