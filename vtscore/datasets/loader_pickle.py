@@ -188,16 +188,24 @@ def _convert_one_pickle_media(
     """Convert one pickle media entry to the app's media format.
 
     Returns ``(media_data, missing)``.  ``media_data`` is ``None`` when
-    the entry is unusable (thin without embedding, full without bytes);
-    ``missing`` is ``True`` only when an external file reference failed
-    to resolve (used to bump the "missing media" warning counter).
+    the entry is unusable (no usable embedding, or full mode without
+    bytes); ``missing`` is ``True`` when the entry was skipped because
+    its embedding or external-file reference could not be resolved
+    (used to bump the "missing media" warning counter).
     """
     media_type = media_info.get("type", "audio")
     extra_fields = extra_fields_map.get(media_type, [])
 
+    # Treat missing key and explicit ``None`` identically: both mean
+    # "no usable embedding".  Without this check ``np.array(None)``
+    # would silently produce a 0-d ``dtype=object`` array that survives
+    # the ``is None`` guards scattered across the codebase and later
+    # poisons every embedding-matrix consumer with a confusing
+    # ``TypeError: float() argument must be a real number, not 'NoneType'``.
+    if media_info.get("embedding") is None:
+        return None, True
+
     if thin:
-        if "embedding" not in media_info:
-            return None, True
         media_path = _resolve_thin_media_path(media_type, media_info, data, dir_keys)
         return _build_pickle_thin_media(new_id, media_info, media_type, media_path, extra_fields), False
 
@@ -238,8 +246,11 @@ def load_dataset_from_pickle(
 
     If media bytes are not stored inline in the pickle, the function attempts to
     load them from the companion directory entry in the pickle. Medias for which
-    no bytes can be resolved are silently skipped (a warning is printed to
-    stdout after loading).
+    no bytes can be resolved — or whose ``embedding`` field is missing or
+    ``None`` — are silently skipped (a warning is printed to stdout after
+    loading).  Skipping ``None`` embeddings is important: ``np.array(None)``
+    yields a 0-d ``dtype=object`` array that downstream consumers cannot
+    distinguish from a real vector until they crash.
 
     The ``medias`` dict is cleared before loading begins.
 
