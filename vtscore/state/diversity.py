@@ -13,10 +13,39 @@ from typing import Any
 
 from vtscore.state.core import (
     DatasetContext,
+    DetectorContext,
     _state_lock,
     get_active_context,
     get_active_detector_context,
 )
+
+
+def resync_diversity_tree_to_detector(
+    ds_ctx: DatasetContext,
+    det_ctx: DetectorContext,
+) -> None:
+    """Rebuild *ds_ctx*'s diversity-tree seen state from *det_ctx*'s votes.
+
+    Clears the tree's ``seen`` / ``_labeled`` sets and replays every cid in
+    ``det_ctx.good_votes`` / ``det_ctx.bad_votes`` whose leaf is known to the
+    tree.  Used when the labeled set is replaced wholesale — votes are
+    cleared, or the active detector is swapped on the same dataset — so the
+    tree continues to reflect the *current* detector's labels instead of
+    whatever it last observed.
+
+    Callers must already hold ``_state_lock``.  No-op when the dataset has
+    no diversity tree.
+    """
+    tree = ds_ctx.diversity_tree
+    if tree is None:
+        return
+    tree.reset_seen()
+    for cid in det_ctx.good_votes:
+        if cid in tree.vector_to_leaf:
+            tree.label(cid)
+    for cid in det_ctx.bad_votes:
+        if cid in tree.vector_to_leaf:
+            tree.label(cid)
 
 
 def build_diversity_tree(
@@ -54,13 +83,7 @@ def build_diversity_tree(
         ds_ctx.diversity_tree = tree
 
         # Replay existing labels so the tree reflects the current vote state.
-        det_ctx = get_active_detector_context()
-        for cid in det_ctx.good_votes:
-            if cid in tree.vector_to_leaf:
-                tree.label(cid)
-        for cid in det_ctx.bad_votes:
-            if cid in tree.vector_to_leaf:
-                tree.label(cid)
+        resync_diversity_tree_to_detector(ds_ctx, get_active_detector_context())
 
 
 def build_diversity_tree_for_context(

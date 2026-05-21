@@ -64,6 +64,7 @@ from vtscore.state import (  # noqa: F401
     register_setting_persister,
     remove_click_time,
     resolve_media_ids,
+    resync_diversity_tree_to_detector,
     set_calibrate_count,
     set_calibration_fraction,
     set_dataset_display_name,
