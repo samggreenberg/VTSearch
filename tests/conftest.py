@@ -402,17 +402,14 @@ def _active_id_for_tests(thread_local_getter, registry_getter) -> str | None:
     """Return the active context's id, but only if it's still registered.
 
     Reads the *thread-local* context directly rather than going through
-    ``get_active_*_context()``. The high-level resolver also checks
-    ``g._*_context`` first — but Flask's test client preserves the
-    previous request's request context inside ``with app.test_client() as c:``
-    blocks (so tests can inspect ``session`` / ``g`` after the response).
-    That means a request just after another request would read the
-    *previous* request's ``g._detector_context`` (always
-    ``_test_default_det`` in tests) instead of whatever thread-local
-    update the test code just made, e.g. via
-    ``set_thread_detector_context(get_detector_context(<new id>))``
-    after loading a fresh detector. Reading thread-local directly
-    sidesteps that staleness.
+    ``get_active_*_context()``. The high-level resolver also consults
+    Flask's per-request ``g._*_context`` — which only returns a sensible
+    value while a request handler is actively running (the resolver
+    gates on ``g._vts_in_request_handler``). Between requests in a
+    ``with app.test_client() as c:`` block, ``g`` exists but is no
+    longer "active". Either path would work here, but going straight
+    to the thread-local avoids paying the cost of a noop g lookup on
+    every test request.
 
     Skips:
 
