@@ -234,7 +234,7 @@ def _score_all_media(
 
     scores: list[float] = [-1.0] * len(all_ids)
     best_region: list[int] = [0] * len(all_ids)
-    for s, mi, ri in zip(flat_scores, media_index_per_row, region_index_per_row):
+    for s, mi, ri in zip(flat_scores, media_index_per_row, region_index_per_row, strict=True):
         if s > scores[mi]:
             scores[mi] = float(s)
             best_region[mi] = ri
@@ -256,7 +256,7 @@ def _format_results(
     region's box.
     """
     paired = sorted(
-        zip(all_ids, scores, best_region),
+        zip(all_ids, scores, best_region, strict=True),
         key=lambda t: t[1],
         reverse=True,
     )

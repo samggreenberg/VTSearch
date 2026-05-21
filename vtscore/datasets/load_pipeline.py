@@ -752,6 +752,43 @@ def _apply_clipper_stage(
     invalidate_embedding_matrix(ctx)
 
 
+def _drop_none_embeddings_stage(ctx: DatasetContext, tracker) -> None:
+    """Drop any media that finished the clipper stage without an embedding.
+
+    ``_fixup_clip_md5_and_embeddings`` is best-effort: when its bulk
+    re-embed call fails (no embedder, vector ``None``, exception) the
+    clip is left in ``ctx.medias`` with ``embedding=None``.  Letting
+    those through poisons every downstream consumer — the matrix builder
+    in ``vtscore/embedding/matrix.py`` raises (M11 fix); sort/score
+    aggregations get wrong-length lists.  Drop them here so the rest of
+    the load pipeline (dedup, diversity tree, registry) sees a clean
+    dict, and surface the count to the progress tracker so the user
+    knows N is lower than the importer reported.
+    """
+    none_ids = [cid for cid, media in ctx.medias.items() if media.get("embedding") is None]
+    if not none_ids:
+        return
+
+    for cid in none_ids:
+        del ctx.medias[cid]
+
+    import logging  # noqa: PLC0415
+
+    logging.getLogger(__name__).warning(
+        "Dropped %d media item(s) with embedding=None (importer or re-embed step failed)",
+        len(none_ids),
+    )
+    tracker.update(
+        "loading",
+        f"Dropped {len(none_ids)} item(s) with failed embedding…",
+        current=0,
+        total=0,
+        step=_TOTAL_LOAD_STEPS,
+        total_steps=_TOTAL_LOAD_STEPS,
+    )
+    invalidate_embedding_matrix(ctx)
+
+
 def _collapse_duplicates_stage(ctx: DatasetContext, tracker) -> None:
     def _progress(current: int, total: int) -> None:
         tracker.check_cancelled()
@@ -1004,6 +1041,7 @@ def _run_origin_load_in_background(
             apply_custom_metadata_md5(ctx.medias)
             _tag_origins(ctx.medias, origin)
             _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
+            _drop_none_embeddings_stage(ctx, tracker)
             _collapse_duplicates_stage(ctx, tracker)
             _build_diversity_tree_stage(ctx, tracker)
             tracker.check_cancelled()

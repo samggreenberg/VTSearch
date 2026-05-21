@@ -12,11 +12,19 @@ Cache invalidation is keyed on ``sorted(ctx.medias.keys())``: when that
 list differs from the cached one, the matrix is rebuilt.  Callers that
 mutate ``ctx.medias`` don't need to do anything — the next access will
 detect the new key set and rebuild.
+
+Any media whose ``embedding`` is ``None`` causes the builder to raise
+``ValueError`` instead of silently filling the row with NaN — the bug
+described as M11 in ``docs/plans/logical-bug-audit.md``.  On numpy 2.x
+``matrix[i] = None`` quietly stores ``nan`` and the resulting score
+propagates through every downstream consumer (always-False threshold
+compares, NaN-poisoned sort, JSON ``NaN`` in the response).  Raising
+turns that into a loud, locatable failure naming the offending cid.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -24,6 +32,17 @@ from vtscore.state.core import _state_lock
 
 if TYPE_CHECKING:
     from vtscore.state.core import DatasetContext
+
+
+def _require_embedding(cid: int, media: dict[str, Any]) -> Any:
+    emb = media.get("embedding")
+    if emb is None:
+        raise ValueError(
+            f"media {cid!r} has no embedding (embedding=None); "
+            "scoring/sorting require every media to have a vector. "
+            "This usually means an importer or re-embed step silently failed."
+        )
+    return emb
 
 
 def get_embedding_matrix(ctx: "DatasetContext") -> tuple[list[int], np.ndarray]:
@@ -34,7 +53,7 @@ def get_embedding_matrix(ctx: "DatasetContext") -> tuple[list[int], np.ndarray]:
     for a zero-copy view.
 
     Returns ``([], np.empty((0, 0), dtype=np.float32))`` when the dataset is
-    empty.
+    empty.  Raises ``ValueError`` if any media has ``embedding=None``.
     """
     with _state_lock:
         sorted_ids = sorted(ctx.medias.keys())
@@ -49,11 +68,11 @@ def get_embedding_matrix(ctx: "DatasetContext") -> tuple[list[int], np.ndarray]:
             return [], ctx._emb_matrix
 
         medias = ctx.medias
-        first_emb = np.asarray(medias[sorted_ids[0]]["embedding"], dtype=np.float32)
+        first_emb = np.asarray(_require_embedding(sorted_ids[0], medias[sorted_ids[0]]), dtype=np.float32)
         dim = int(first_emb.shape[-1])
         matrix = np.empty((len(sorted_ids), dim), dtype=np.float32)
         for i, cid in enumerate(sorted_ids):
-            matrix[i] = medias[cid]["embedding"]
+            matrix[i] = _require_embedding(cid, medias[cid])
 
         ctx._emb_matrix_ids = sorted_ids
         ctx._emb_matrix = matrix
@@ -75,7 +94,8 @@ def get_embedding_matrix_for_snap(
     When *snap*'s key set matches the active :class:`DatasetContext`'s
     medias, the cached matrix is reused.  Otherwise (a different snapshot
     or a temp dict from cross-dataset Find) the matrix is built fresh
-    without populating the cache.
+    without populating the cache.  Raises ``ValueError`` if any entry in
+    *snap* has ``embedding=None``.
     """
     from vtscore.state.core import get_active_context
 
@@ -96,9 +116,9 @@ def get_embedding_matrix_for_snap(
         return get_embedding_matrix(ctx)
 
     # Temp dict / cross-dataset case: build fresh, don't cache.
-    first_emb = np.asarray(snap[sorted_ids[0]]["embedding"], dtype=np.float32)
+    first_emb = np.asarray(_require_embedding(sorted_ids[0], snap[sorted_ids[0]]), dtype=np.float32)
     dim = int(first_emb.shape[-1])
     matrix = np.empty((len(sorted_ids), dim), dtype=np.float32)
     for i, cid in enumerate(sorted_ids):
-        matrix[i] = snap[cid]["embedding"]
+        matrix[i] = _require_embedding(cid, snap[cid])
     return sorted_ids, matrix

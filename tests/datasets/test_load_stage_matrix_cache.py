@@ -27,6 +27,7 @@ from vtscore.concurrency.progress import LoadingTasksTracker
 from vtscore.datasets.load_pipeline import (
     _apply_clipper_stage,
     _collapse_duplicates_stage,
+    _drop_none_embeddings_stage,
 )
 from vtscore.embedding.matrix import get_embedding_matrix
 from vtscore.state.core import DatasetContext
@@ -106,3 +107,53 @@ class TestApplyClipperStageInvalidatesMatrix:
 
         # No mutation happened; cache survives.
         assert ctx._emb_matrix is cached_matrix
+
+
+class TestDropNoneEmbeddingsStage:
+    """Regression for M11 finalize step.
+
+    Audit M11 was framed as "stale media when some embeddings are None"
+    via silent zip truncation; the real symptom under numpy 2.x is that
+    a None embedding becomes a NaN row, propagates through the MLP, and
+    forces an always-False threshold compare so the media silently lands
+    in negative_hits with a NaN score (and ``NaN`` in the JSON response).
+    The drop stage in ``_run_origin_load_in_background`` ensures None
+    embeddings never reach the matrix builder, dedup, diversity tree,
+    or registry — and surfaces the dropped count to the user via the
+    progress tracker so the load row reflects the real N.
+    """
+
+    def test_drops_medias_with_none_embedding(self):
+        ctx = DatasetContext("test_drop_none")
+        ctx.medias[1] = {"id": 1, "embedding": np.ones(4, dtype=np.float32)}
+        ctx.medias[2] = {"id": 2, "embedding": None}  # embedder failed silently
+        ctx.medias[3] = {"id": 3, "embedding": np.full(4, 3.0, dtype=np.float32)}
+        ctx.medias[4] = {"id": 4, "embedding": None}
+
+        _populate_matrix(ctx)
+
+        _drop_none_embeddings_stage(ctx, _make_tracker())
+
+        assert set(ctx.medias.keys()) == {1, 3}
+        # Cache must be invalidated since the id set changed.
+        assert ctx._emb_matrix is None
+        assert ctx._emb_matrix_ids is None
+
+    def test_no_op_when_all_embeddings_present(self):
+        ctx = DatasetContext("test_drop_none_noop")
+        ctx.medias[1] = {"id": 1, "embedding": np.ones(4, dtype=np.float32)}
+        ctx.medias[2] = {"id": 2, "embedding": np.full(4, 2.0, dtype=np.float32)}
+
+        cached_matrix = _populate_matrix(ctx)
+
+        _drop_none_embeddings_stage(ctx, _make_tracker())
+
+        # No mutation: cache must NOT be invalidated.
+        assert set(ctx.medias.keys()) == {1, 2}
+        assert ctx._emb_matrix is cached_matrix
+
+    def test_empty_medias_ok(self):
+        ctx = DatasetContext("test_drop_none_empty")
+        # Should not raise.
+        _drop_none_embeddings_stage(ctx, _make_tracker())
+        assert ctx.medias == {}
