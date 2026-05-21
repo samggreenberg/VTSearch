@@ -611,8 +611,27 @@ Cross-section interaction agents:
 
 ### Settings / sync
 
-- **M15.** Pending labelset sync stores `dataset_ctx = None` without checking;
-  later `_run_pending_sync` triggers `AttributeError`.
+- ~~**M15.** Pending labelset sync stores `dataset_ctx = None` without
+  checking; later `_run_pending_sync` triggers `AttributeError`.~~ —
+  investigated and closed as not a real bug.
+  `sync_to_labelset_source` captures `dataset_ctx = get_active_context()`
+  (`vtscore/labels/sync.py:97`), and `get_active_context()` /
+  `get_active_detector_context()` are invariantly non-None: their
+  resolution chain (`vtscore/state/core.py:461`, `:614`) falls back to a
+  `_request_missing_*` sentinel inside a Flask request and to
+  `_empty_*_context` outside one. The dead `is None` halves at
+  `vtscore/labels/sync.py:89` and `:207` are what tipped the audit toward
+  this finding, but the `not detector_ctx.labelset_source` half already
+  screens out both sentinels (their `labelset_source` is `None`). When
+  the timer fires, `validated_vote_snapshot` reads `medias` /
+  `dataset_id` off whatever ctx-shaped object was captured, so no
+  `AttributeError` can fire. Two adjacent real-but-milder concerns were
+  noted during the investigation and left open: a misconfigured request
+  with `X-Detector-Id` but no `X-Dataset-Id` silently no-ops the sync
+  (captured sentinel → `validated_vote_snapshot` returns `safe=False`),
+  and the captured ctx references survive an unload-before-fire race
+  inside the 200ms debounce window. Both are silent inconsistencies, not
+  crashes; file separate findings if they ever bite.
 - **M16.** Sync to source on first read after `_synced_users` marker can still
   return stale local config if source changes silently.
 - **M17.** Legacy migration `_maybe_migrate_legacy_settings_locked` pops keys
