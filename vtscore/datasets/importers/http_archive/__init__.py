@@ -203,7 +203,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         ),
         ImporterField(
             key="media_type",
-            label="Output Media Type",
+            label="Dataset MediaType",
             field_type="select",
             description="Type of media files contained in the archive.",
             default="audio",
