@@ -278,8 +278,98 @@ class TestMaliciousPickleInLoader:
             data=data,
             content_type="multipart/form-data",
         )
-        # The endpoint catches exceptions and returns count=0 for unparseable files
+        # Endpoint stays 200 so the client keeps the staged path for cleanup,
+        # but the peek failure is surfaced via the ``error`` field instead of
+        # silently returning count=0 with no explanation.
         assert resp.status_code == 200
         body = resp.get_json()
         assert body["count"] == 0
         assert body["media_type"] == "unknown"
+        assert "Forbidden pickle class" in body["error"]
+
+
+# ---------------------------------------------------------------------------
+# _PeekUnpickler — strips heavy leaf values across pickle protocols
+# ---------------------------------------------------------------------------
+
+
+class TestPeekUnpicklerStripsAcrossProtocols:
+    """``peek_pickle_dataset_summary`` must extract ``count`` and the first
+    entry's ``"type"`` field without materialising embedding lists or inline
+    media-byte blobs — at every supported pickle protocol.
+
+    Regression cover for audit M18 (FLOAT opcode, protocol 0) and the
+    sibling BYTEARRAY8 opcode (protocol 5).
+    """
+
+    @pytest.mark.parametrize("protocol", [0, 1, 2, 3, 4, 5])
+    def test_embedding_lists_stripped(self, protocol):
+        """Float-list embeddings must come back empty regardless of protocol."""
+        from vtscore.security.pickle import peek_pickle_dataset_summary
+
+        data = {
+            "medias": {
+                i: {
+                    "type": "audio",
+                    "embedding": [float(j) * 1.0001 for j in range(64)],
+                    "filename": f"m_{i}.wav",
+                }
+                for i in range(8)
+            }
+        }
+        raw = pickle.dumps(data, protocol=protocol)
+        peeked = peek_pickle_dataset_summary(io.BytesIO(raw))
+        media_dict = peeked["medias"]
+        assert len(media_dict) == 8
+        first = next(iter(media_dict.values()))
+        assert first["type"] == "audio"
+        # The whole point of the peek: embedding contents are dropped, not
+        # materialised into millions of Python floats.
+        assert len(first["embedding"]) == 0
+
+    def test_bytearray_stripped_at_highest_protocol(self):
+        """Protocol 5's dedicated BYTEARRAY8 opcode must be overridden so
+        inline ``bytearray`` audio doesn't survive into the peek result.
+        Before the fix, the default handler materialised the full bytearray
+        and kept it alive as a dict value; after the fix it's emptied
+        immediately like every other inline-media leaf."""
+        from vtscore.security.pickle import peek_pickle_dataset_summary
+
+        big = bytearray(b"X" * 1_000_000)
+        data = {"medias": {0: {"type": "audio", "audio": big}}}
+        raw = pickle.dumps(data, protocol=5)
+        peeked = peek_pickle_dataset_summary(io.BytesIO(raw))
+
+        assert peeked["medias"][0]["type"] == "audio"
+        assert peeked["medias"][0]["audio"] == bytearray()
+        assert len(peeked["medias"][0]["audio"]) == 0
+
+    def test_protocol_0_floats_stripped_quickly(self):
+        """Protocol 0 ASCII floats fall through to the default handler if
+        FLOAT isn't overridden — they're still dropped by APPEND, but the
+        parse cost is wasted. This pins the peek to a generous time bound
+        on a moderately float-heavy payload."""
+        import time
+
+        from vtscore.security.pickle import peek_pickle_dataset_summary
+
+        data = {
+            "medias": {
+                i: {
+                    "type": "audio",
+                    "embedding": [float(j) * 1.0001 for j in range(512)],
+                }
+                for i in range(200)
+            }
+        }
+        raw = pickle.dumps(data, protocol=0)
+        t0 = time.perf_counter()
+        peeked = peek_pickle_dataset_summary(io.BytesIO(raw))
+        elapsed = time.perf_counter() - t0
+
+        assert len(peeked["medias"]) == 200
+        assert len(next(iter(peeked["medias"].values()))["embedding"]) == 0
+        # ~100k floats. Generous bound — actual measured ~110 ms; the goal
+        # is to catch a regression to the unoverridden default that would
+        # blow this up by a meaningful factor.
+        assert elapsed < 2.0, f"protocol-0 peek took {elapsed:.2f}s"
