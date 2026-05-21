@@ -563,8 +563,19 @@ Cross-section interaction agents:
 
 - **M18.** `_PeekUnpickler` doesn't override `FLOAT` / `SETITEMS` opcodes →
   falls back to slow real unpickle for older protocols.
-- **M19.** `embed_text_enriched` crashes (`np.mean` on empty) when text encoder
-  fails and all wrappers return None.
+- ~~**M19.** `embed_text_enriched` crashes (`np.mean` on empty) when text encoder
+  fails and all wrappers return None.~~ — investigated and closed as not a
+  real bug (2026-05-21).  `vtscore/media/embedder.py:727-750` explicitly
+  guards the empty-list case with `if not embeddings: return
+  self.embed_text(text)` immediately before the `np.mean` call, so the
+  crash described is unreachable.  Git archaeology confirms the guard has
+  been in place since the function was introduced in PR #334 (commit
+  `b2c7bb4a`, 2026-02-28) — the audit's claim was a false positive.
+  `tests/sorting/test_enrich_descriptions.py::test_enriched_falls_back_when_all_fail`
+  already exercises this path.  All other `np.mean` call sites in the
+  codebase (`vtscore/eval/metrics.py:53,60`,
+  `vtscore/eval/label_curve.py:390`) carry their own empty-input guards
+  too, so no related real bugs to fix.
 - **M20.** XCLIP single-frame video: `linspace(0, 0, 1)` + padding gives 8
   identical frames → degenerate embedding.
 - **M21.** Empty paragraph clip survives to dataset with `None` embedding;
