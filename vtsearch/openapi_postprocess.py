@@ -32,9 +32,7 @@ def _flask_to_openapi_path(rule: str) -> str:
     return _FLASK_PARAM_RE.sub(r"{\1}", rule)
 
 
-def _map_spec_ops_to_view_names(
-    app: Flask, paths: dict[str, Any]
-) -> dict[tuple[str, str], str]:
+def _map_spec_ops_to_view_names(app: Flask, paths: dict[str, Any]) -> dict[tuple[str, str], str]:
     """Return ``{(openapi_path, method_lower): view_func.__name__}``."""
     op_to_view: dict[tuple[str, str], str] = {}
     for rule in app.url_map.iter_rules():
@@ -52,9 +50,7 @@ def _map_spec_ops_to_view_names(
     return op_to_view
 
 
-def _operation_ids_for_view(
-    name: str, op_keys: list[tuple[str, str]]
-) -> dict[tuple[str, str], str]:
+def _operation_ids_for_view(name: str, op_keys: list[tuple[str, str]]) -> dict[tuple[str, str], str]:
     """Assign deterministic operationIds for a set of ops sharing a view.
 
     Single-operation views keep the bare ``name``. Collisions get a
@@ -76,9 +72,7 @@ def _operation_ids_for_view(
             assigned[(op_path, op_method)] = f"{name}_{op_method}"
         else:
             per_method_index[op_method] += 1
-            assigned[(op_path, op_method)] = (
-                f"{name}_{op_method}_{per_method_index[op_method]}"
-            )
+            assigned[(op_path, op_method)] = f"{name}_{op_method}_{per_method_index[op_method]}"
     return assigned
 
 
