@@ -26,9 +26,7 @@
         }
       </ul>
     } @else if (datasets.length === 0 && orphanLoadingTasks.length === 0 && !loading) {
-      <div class="welcome-banner">
-        <p class="welcome-banner-text">Welcome! Load data with '+' to get started.</p>
-      </div>
+      <p class="empty-state">No datasets yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
         <table class="dash-table" [class.table-fixed]="datasetCols.tableFixed">
