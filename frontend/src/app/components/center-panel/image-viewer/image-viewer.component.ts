@@ -55,6 +55,13 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   zoom = 1;
   rotation = 0;
   zoomLabel = '1×';
+  // Track the id of the media we last reset for. The `media` input reference
+  // changes whenever `MediaMetadataCacheService` hydrates richer metadata for
+  // the same id; re-running ngOnChanges for those enrichments would clobber
+  // `imageReady=true` back to false and — since `imageSrc` is the same string
+  // — Angular wouldn't re-fire the `<img>` load event, leaving the canvas
+  // permanently hidden behind `visibility: hidden`.
+  private lastMediaId: number | null = null;
 
   // Region voting state (v2 of the patch-embedder plan, UI only — see docs/plans/patch-embedder.md).
   regionBox: RegionBox | null = null;
@@ -91,7 +98,8 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['media'] && this.media) {
+    if (changes['media'] && this.media && this.media.id !== this.lastMediaId) {
+      this.lastMediaId = this.media.id;
       this.imageReady = false;
       this.imageSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/image`);
       this.resetView();
