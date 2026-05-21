@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
@@ -18,6 +17,9 @@ from vtscore.media.embedder import (
     load_pretrained_local_first,
     timed_progress,
 )
+from vtscore.media.video._frame_sampling import sample_video_frames
+
+_NUM_FRAMES = 8
 
 
 class VideoXClipEmbedder(MediaEmbedder):
@@ -103,42 +105,14 @@ class VideoXClipEmbedder(MediaEmbedder):
             self.load_models()
         if self._model is None or self._processor is None:
             return None
-        file_path = Path(media["media_path"])
+        source_repr = media.get("media_path") or media.get("filename") or "<bytes>"
         try:
-            import cv2  # noqa: PLC0415
             import torch  # noqa: PLC0415
-            from PIL import Image  # noqa: PLC0415
 
-            cap = cv2.VideoCapture(str(file_path))
-            if not cap.isOpened():
-                print(f"Error opening video {file_path}")
-                return None
-
-            try:
-                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                if frame_count <= 0:
-                    print(f"Error: could not determine frame count for {file_path}")
-                    return None
-                num_frames = min(8, max(1, frame_count))
-                indices = np.linspace(0, frame_count - 1, num_frames, dtype=int)
-
-                frames = []
-                for idx in indices:
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-                    ret, frame = cap.read()
-                    if ret:
-                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        frames.append(Image.fromarray(frame))
-            finally:
-                cap.release()
-
+            frames = sample_video_frames(media, _NUM_FRAMES)
             if not frames:
-                print(f"Error: could not extract frames from {file_path}")
+                logging.getLogger(__name__).error("Could not extract frames from %s", source_repr)
                 return None
-
-            # X-CLIP expects exactly 8 frames; pad by repeating if we have fewer
-            while len(frames) < 8:
-                frames.append(frames[-1])
 
             inputs = self._processor(images=[list(frames)], return_tensors="pt")
             device = next(self._model.parameters()).device
@@ -148,7 +122,7 @@ class VideoXClipEmbedder(MediaEmbedder):
                 embedding = _extract_tensor(outputs).detach().cpu().numpy()
             return embedding[0]
         except Exception:
-            logging.getLogger(__name__).exception("Error embedding %s", file_path)
+            logging.getLogger(__name__).exception("Error embedding %s", source_repr)
             return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
