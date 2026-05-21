@@ -53,3 +53,18 @@ class SyncSource(PluginBase, Generic[LoadT, SaveT]):
             NotImplementedError: If the subclass has not implemented this.
         """
         raise NotImplementedError(f"{type(self).__name__}.save() is not implemented")
+
+    def peek_version(self, field_values: dict[str, Any]) -> Any | None:
+        """Return an opaque token representing the source's current version.
+
+        Used to cheaply detect whether the source has changed since the
+        last successful :meth:`load`.  The caller compares the returned
+        token against a previously-stashed value; if they differ, a full
+        load is due.
+
+        Subclasses should override with a cheap freshness probe (e.g.
+        ``st_mtime_ns`` for a local file, ``ETag`` for an HTTP source).
+        The default returns ``None``, which means *"I can't cheaply
+        check"* — the caller falls back to explicit manual sync.
+        """
+        return None

@@ -63,6 +63,24 @@ class ServerFileSettingsSource(SettingsSource):
             os.fsync(f.fileno())
         os.replace(tmp, filepath)
 
+    def peek_version(self, field_values: dict[str, Any]) -> int | None:
+        """Return the source file's ``st_mtime_ns`` as a freshness token.
+
+        A change in the returned value signals the file has been
+        rewritten since the last sync.  Returns ``None`` if the file
+        doesn't exist (or the path can't be resolved / statted) — the
+        settings layer interprets that as "skip the auto re-sync until
+        the file appears."
+        """
+        try:
+            path = Path(_resolve_filepath(field_values))
+        except Exception:
+            return None
+        try:
+            return path.stat().st_mtime_ns
+        except OSError:
+            return None
+
 
 def _resolve_filepath(field_values: dict[str, Any]) -> str:
     """Resolve the filepath, expanding the ``{username}`` template.

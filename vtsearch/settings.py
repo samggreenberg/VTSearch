@@ -25,7 +25,9 @@ import json
 import logging
 import os
 import threading
+import time
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -176,20 +178,83 @@ _server_cache: dict[str, Any] | None = None
 # Per-user caches keyed by username.
 _user_caches: dict[str, dict[str, Any]] = {}
 
-# Set of usernames whose sync-from-source has run this process lifetime;
-# guards lazy startup-equivalent sync per user.
-_synced_users: set[str] = set()
+
+@dataclass
+class _UserSyncState:
+    """Per-user sync-from-source bookkeeping.
+
+    - ``last_version``: opaque token from :meth:`SettingsSource.peek_version`
+      stashed at the last successful sync.  Compared on every read to
+      decide whether a re-sync is due.  ``None`` if the source can't
+      cheaply check freshness.
+    - ``last_check_monotonic``: :func:`time.monotonic` of the last peek.
+      Used to rate-limit ``peek_version`` calls so a hot read path doesn't
+      stat the source file on every ``get_volume()``.
+    - ``last_sync_succeeded``: ``False`` means the user has never been
+      successfully synced this process lifetime (or the last attempt
+      failed).  A transient source failure no longer permanently locks
+      the user out of sync — the slow-path retries (rate-limited) until
+      it succeeds.
+    - ``dirty_keys``: keys the user has set locally since the last
+      successful :func:`_sync_to_source`.  An auto re-sync (from a
+      version-bump on the source) skips these keys so a freshly clicked
+      local toggle isn't silently overwritten by an upstream value.
+      Cleared whenever ``_sync_to_source`` succeeds (because the source
+      then matches local) or when a manual :func:`sync_from_settings_source`
+      runs (explicit user pull).
+    """
+
+    last_version: Any = None
+    last_check_monotonic: float = 0.0
+    last_sync_succeeded: bool = False
+    dirty_keys: set[str] = field(default_factory=set)
+
+
+# Per-user sync bookkeeping.  Replaces the old ``_synced_users: set[str]``,
+# which couldn't distinguish "never synced" from "synced ages ago" or
+# "tried once and failed."
+_sync_state: dict[str, _UserSyncState] = {}
 
 # One-shot legacy-migration guard.
 _legacy_migrated: bool = False
 
-# Reentrant lock covering both tiers' caches and the syncing flag.
+# Reentrant lock covering both tiers' caches, the syncing flag, and
+# ``_sync_state``.  Not held while running the actual sync I/O.
 _settings_lock = threading.RLock()
+
+# Per-user reentrant locks wrapping the sync-from-source critical
+# section.  Acquiring this means "I'm responsible for this user's
+# sync-from-source pass right now"; another thread for the same user
+# blocks until we're done and then sees the freshly-applied cache.
+# Reentrant so a setter called from inside ``_apply_settings`` (which
+# routes back through ``_ensure_user_loaded``) doesn't self-deadlock.
+_user_sync_locks: dict[str, threading.RLock] = {}
+_user_sync_locks_guard = threading.Lock()
+
+# Rate-limit window for the ``peek_version`` freshness probe.  Settings
+# reads happen in hot paths (``before_request``, every accessor); we
+# don't want to stat the source file on every one.  The first read in a
+# window does the probe; subsequent reads inside the window short-circuit
+# back to the local cache.
+_FRESHNESS_CHECK_INTERVAL = 1.0
 
 # Set of usernames currently being imported from their settings_source.
 # A per-user save that fires while the user is in this set skips
-# ``_sync_to_source`` so the import isn't immediately re-exported.
+# ``_sync_to_source`` so the import isn't immediately re-exported.  Also
+# acts as a recursion guard for ``_ensure_user_loaded``: a setter called
+# from inside ``_apply_settings`` re-enters the function but must skip
+# the sync path.
 _syncing: set[str] = set()
+
+
+def _per_user_sync_lock(username: str) -> threading.RLock:
+    """Return (creating if needed) the sync RLock for *username*."""
+    with _user_sync_locks_guard:
+        lock = _user_sync_locks.get(username)
+        if lock is None:
+            lock = threading.RLock()
+            _user_sync_locks[username] = lock
+        return lock
 
 
 # ---------------------------------------------------------------------------
@@ -332,15 +397,21 @@ def _ensure_server_loaded() -> dict[str, Any]:
 
 
 def _ensure_user_loaded(username: str) -> dict[str, Any]:
-    """Load *username*'s per-user cache on first access.
+    """Load *username*'s per-user cache on first access and reconcile with the source.
 
-    Sync-from-source is triggered the first time a user's cache is
-    populated each process lifetime — but **outside** the in-process
-    settings lock, because the setters it invokes acquire
-    ``_file_lock`` first and would otherwise invert the canonical lock
-    order with another thread that's reading the same user's cache.
+    Fast path: take ``_settings_lock`` briefly, hydrate the local cache
+    if needed, and return immediately when no sync work is due (no
+    source configured, freshness window still valid, or we're already
+    inside an import for this user).
+
+    Slow path: take the per-user sync RLock so the actual ``peek_version``
+    + ``load`` + ``_apply_settings`` work happens serially for the same
+    user, and concurrent readers see the post-sync cache when they
+    acquire the lock.  Without this lock the previous design had a
+    TOCTOU race: thread A set the "synced" marker before running the
+    sync, so a concurrent thread B saw the marker and returned the
+    pre-sync local cache.
     """
-    needs_sync = False
     with _settings_lock:
         cache = _user_caches.get(username)
         if cache is None:
@@ -352,14 +423,168 @@ def _ensure_user_loaded(username: str) -> dict[str, Any]:
             if cache is None:
                 cache = _load_path(_user_settings_path(username))
                 _user_caches[username] = cache
-        if username not in _synced_users:
-            _synced_users.add(username)
-            needs_sync = True
+        # Re-entrance guard: a setter inside ``_apply_settings`` re-enters
+        # this function while the outer call holds the sync lock.  Skip
+        # the sync path so we don't recurse or fire another peek probe.
+        if username in _syncing:
+            return cache
+        cfg = cache.get("settings_source")
+        has_source = isinstance(cfg, dict) and bool(cfg.get("source_name"))
+        if not has_source:
+            return cache
+        state = _sync_state.get(username)
+        if state is not None and state.last_sync_succeeded:
+            now = time.monotonic()
+            if now - state.last_check_monotonic < _FRESHNESS_CHECK_INTERVAL:
+                # Hot path: a recent successful sync exists and we're
+                # inside the rate-limit window.  No probe, no lock.
+                return cache
 
-    if needs_sync:
-        _maybe_sync_from_source(username)
+    sync_lock = _per_user_sync_lock(username)
+    with sync_lock:
+        if _needs_sync_from_source(username):
+            _run_sync_from_source(username)
 
     return _user_caches[username]
+
+
+def _needs_sync_from_source(username: str) -> bool:
+    """Decide whether a sync-from-source pass is due for *username*.
+
+    Called with the per-user sync lock held (so the decision and the
+    subsequent sync are atomic with respect to other threads on the
+    same user).  A sync is due when:
+
+    1. We've never attempted one this process lifetime, OR
+    2. The last attempt failed and the rate-limit window has elapsed
+       (so a transient source outage no longer permanently locks
+       the user out of sync — old ``_synced_users`` did exactly that), OR
+    3. A previous attempt succeeded but the source's
+       :meth:`SettingsSource.peek_version` token has changed since
+       (source file rewritten by another process, hand-edited, etc.).
+
+    Refreshes ``last_check_monotonic`` on the no-sync paths so the
+    freshness probe is rate-limited even when state is being mutated.
+    """
+    with _settings_lock:
+        state = _sync_state.get(username)
+        cache_cfg = _user_caches.get(username, {}).get("settings_source")
+    if not isinstance(cache_cfg, dict) or not cache_cfg.get("source_name"):
+        return False
+
+    now = time.monotonic()
+
+    if state is None or state.last_check_monotonic == 0.0:
+        # No state, or state exists only because a setter populated it
+        # via ``_mark_user_keys_dirty`` before we'd ever talked to the
+        # source.  Either way: first sync attempt is due.
+        return True
+
+    if not state.last_sync_succeeded:
+        # Rate-limited retry after a failure.
+        return (now - state.last_check_monotonic) >= _FRESHNESS_CHECK_INTERVAL
+
+    # Last attempt succeeded.  If we're still inside the freshness
+    # window, skip (the fast path in ``_ensure_user_loaded`` usually
+    # handles this; keep the check here in case the slow path was
+    # entered via a different code route).
+    if (now - state.last_check_monotonic) < _FRESHNESS_CHECK_INTERVAL:
+        return False
+
+    # Window elapsed — cheap probe to detect upstream changes.
+    from vtsearch.settings_io.sources import get_settings_source
+
+    source = get_settings_source(cache_cfg["source_name"])
+    if source is None:
+        return False
+    field_values = cache_cfg.get("field_values", {})
+    try:
+        current_version = source.peek_version(field_values)
+    except Exception:
+        # Transient peek failure — back off until next window, keep
+        # serving the local cache.
+        with _settings_lock:
+            s = _sync_state.get(username)
+            if s is not None:
+                s.last_check_monotonic = now
+        return False
+
+    if current_version is None or current_version == state.last_version:
+        # Source can't cheaply check, or unchanged since last sync.
+        with _settings_lock:
+            s = _sync_state.get(username)
+            if s is not None:
+                s.last_check_monotonic = now
+        return False
+
+    return True
+
+
+def _run_sync_from_source(username: str) -> None:
+    """Pull settings from *username*'s configured source and apply them.
+
+    Called with the per-user sync lock held.  Respects ``dirty_keys``:
+    keys the user has set locally since the last successful
+    ``_sync_to_source`` are skipped so a clicked-toggle isn't silently
+    overwritten by an upstream value.
+
+    On success: stash the new ``peek_version`` token, mark the user as
+    successfully synced, and refresh the freshness-check timestamp.
+    On failure: log the error and refresh only the check timestamp
+    (``last_sync_succeeded`` stays ``False``) so the slow path retries
+    once the rate-limit window elapses.
+    """
+    with _settings_lock:
+        cache_cfg = _user_caches.get(username, {}).get("settings_source")
+        state = _sync_state.setdefault(username, _UserSyncState())
+        dirty_snapshot = set(state.dirty_keys)
+    if not isinstance(cache_cfg, dict) or not cache_cfg.get("source_name"):
+        return
+
+    from vtsearch.settings_io.sources import get_settings_source
+
+    source = get_settings_source(cache_cfg["source_name"])
+    if source is None:
+        logger.warning("Unknown settings source: %s", cache_cfg["source_name"])
+        return
+
+    field_values = cache_cfg.get("field_values", {})
+    new_version: Any = None
+    try:
+        new_version = source.peek_version(field_values)
+    except Exception:
+        new_version = None
+
+    try:
+        imported = source.load(field_values)
+    except Exception as exc:
+        logger.exception("Failed to load from settings source for %s: %s", username, exc)
+        with _settings_lock:
+            state = _sync_state.setdefault(username, _UserSyncState())
+            state.last_check_monotonic = time.monotonic()
+            # Leave last_sync_succeeded as-is: a transient failure after
+            # a previous success must not erase the success flag (the
+            # local cache is still valid).
+        return
+
+    if imported:
+        with _settings_lock:
+            _syncing.add(username)
+        try:
+            _apply_settings(imported, skip_keys=dirty_snapshot)
+        finally:
+            with _settings_lock:
+                _syncing.discard(username)
+
+    with _settings_lock:
+        state = _sync_state.setdefault(username, _UserSyncState())
+        state.last_version = new_version
+        state.last_check_monotonic = time.monotonic()
+        state.last_sync_succeeded = True
+        # dirty_keys preserved across an auto re-sync — the user's local
+        # edits stay protected until an explicit ``_sync_to_source`` push
+        # confirms the source matches local (which clears them) or a
+        # manual POST sync clears them on purpose.
 
 
 def _maybe_migrate_legacy_settings_locked() -> None:
@@ -497,6 +722,10 @@ def mutate_user(mutator) -> None:
     _ensure_user_loaded(username)
     sync_data = _mutate_user_locked(username, mutator)
     if sync_data is not None:
+        # ``mutate_user`` can change arbitrary top-level keys; mark
+        # every exportable key dirty so an auto re-sync between now
+        # and the ``_sync_to_source`` push doesn't clobber the mutation.
+        _mark_user_keys_dirty(username, [k for k in sync_data if k not in _EXCLUDE_FROM_SOURCE_EXPORT])
         _sync_to_source(username, sync_data)
 
 
@@ -535,10 +764,25 @@ def _write_value(key: str, value: Any) -> None:
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
-    _ensure_user_loaded(username)  # one-shot lazy sync-from-source
+    _ensure_user_loaded(username)  # reconciles with source if due
     sync_data = _mutate_user_locked(username, lambda c: c.__setitem__(key, value))
     if sync_data is not None:
+        # User-initiated write (not from an in-progress import).  Mark
+        # this key dirty so an auto re-sync running between now and the
+        # ``_sync_to_source`` push leaves it alone — the source push
+        # below clears the dirty flag again once it succeeds.
+        if key not in _EXCLUDE_FROM_SOURCE_EXPORT:
+            _mark_user_keys_dirty(username, [key])
         _sync_to_source(username, sync_data)
+
+
+def _mark_user_keys_dirty(username: str, keys) -> None:
+    """Add *keys* to the user's ``dirty_keys`` set."""
+    if not keys:
+        return
+    with _settings_lock:
+        state = _sync_state.setdefault(username, _UserSyncState())
+        state.dirty_keys.update(keys)
 
 
 # ---------------------------------------------------------------------------
@@ -1019,9 +1263,11 @@ def reset() -> None:
     with _settings_lock:
         _server_cache = None
         _user_caches.clear()
-        _synced_users.clear()
+        _sync_state.clear()
         _syncing.clear()
         _legacy_migrated = False
+    with _user_sync_locks_guard:
+        _user_sync_locks.clear()
 
 
 # -------------------------------------------------------------------
@@ -1065,7 +1311,18 @@ def set_settings_source_config(config: dict[str, Any] | None) -> None:
             cache["settings_source"] = config
 
     sync_data = _mutate_user_locked(username, _apply)
+    if config is None:
+        # Source cleared — drop any cached sync state so a future
+        # configure-then-read doesn't believe it's still "synced" to
+        # the previously-configured target.
+        with _settings_lock:
+            _sync_state.pop(username, None)
+        return
     if sync_data is not None:
+        # ``_sync_to_source`` exports the full local dict to the new
+        # source location and stamps the user as freshly synced
+        # (so the next ``_ensure_user_loaded`` doesn't immediately
+        # pull what we just pushed).
         _sync_to_source(username, sync_data)
 
 
@@ -1087,15 +1344,20 @@ def _get_setter_map() -> dict:
     return _SETTER_MAP
 
 
-def _apply_settings(imported: dict) -> None:
+def _apply_settings(imported: dict, skip_keys: set[str] | None = None) -> None:
     """Apply a dict of settings via this module's ``set_*`` functions.
 
     Unknown keys or values that fail validation are silently skipped.
-    Used by :func:`sync_from_settings_source` and by the settings-import
-    route in ``routes/settings_io.py``.
+    Keys in *skip_keys* are also skipped — used by the auto re-sync
+    path so an upstream value doesn't silently overwrite a key the
+    user has just edited locally.  Used by :func:`sync_from_settings_source`
+    and by the settings-import route in ``routes/settings/io.py``.
     """
     setter_map = _get_setter_map()
+    skip = skip_keys or set()
     for key, value in imported.items():
+        if key in skip:
+            continue
         setter = setter_map.get(key)
         if setter is not None:
             try:
@@ -1112,9 +1374,15 @@ def sync_from_settings_source() -> dict[str, Any] | None:
 
     Triggered:
 
-    - Lazily on first per-user cache load each process lifetime (see
-      :func:`_maybe_sync_from_source`).
+    - Automatically from :func:`_ensure_user_loaded` whenever the
+      source's :meth:`SettingsSource.peek_version` token differs from
+      the cached one (or no successful sync has happened yet this
+      process lifetime).
     - Manually via ``POST /api/settings-sources/sync``.
+
+    This (explicit) path **ignores the local ``dirty_keys`` set**: the
+    user clicked "Sync now" precisely to get the source values, so a
+    locally-edited key is overwritten and the dirty marker is cleared.
     """
     cfg = get_settings_source_config()
     if cfg is None:
@@ -1129,6 +1397,12 @@ def sync_from_settings_source() -> dict[str, Any] | None:
         return None
 
     field_values = cfg.get("field_values", {})
+    new_version: Any = None
+    try:
+        new_version = source.peek_version(field_values)
+    except Exception:
+        new_version = None
+
     try:
         imported = source.load(field_values)
     except Exception as exc:
@@ -1151,55 +1425,31 @@ def sync_from_settings_source() -> dict[str, Any] | None:
         with _settings_lock:
             _syncing.discard(username)
 
+    with _settings_lock:
+        _sync_state[username] = _UserSyncState(
+            last_version=new_version,
+            last_check_monotonic=time.monotonic(),
+            last_sync_succeeded=True,
+            dirty_keys=set(),
+        )
+
     return imported
-
-
-def _maybe_sync_from_source(username: str) -> None:
-    """Lazy sync-from-source for *username*.
-
-    Called once per process per username from :func:`_ensure_user_loaded`
-    **after** releasing ``_settings_lock``; the caller is responsible
-    for the ``_synced_users.add`` claim. Errors are logged and swallowed
-    so a misconfigured source never blocks ordinary settings access.
-    """
-    with _settings_lock:
-        cache_snapshot = dict(_user_caches.get(username) or {})
-    cfg = cache_snapshot.get("settings_source")
-    if not isinstance(cfg, dict) or not cfg.get("source_name"):
-        return
-
-    from vtsearch.settings_io.sources import get_settings_source
-
-    source = get_settings_source(cfg["source_name"])
-    if source is None:
-        logger.warning("Unknown settings source: %s", cfg["source_name"])
-        return
-
-    field_values = cfg.get("field_values", {})
-    try:
-        imported = source.load(field_values)
-    except Exception as exc:
-        logger.exception("Failed to load from settings source for %s: %s", username, exc)
-        return
-    if not imported:
-        return
-
-    with _settings_lock:
-        _syncing.add(username)
-    try:
-        _apply_settings(imported)
-    finally:
-        with _settings_lock:
-            _syncing.discard(username)
 
 
 def _sync_to_source(username: str, data: dict[str, Any]) -> None:
     """Push *username*'s current settings to their active source (if any).
 
-    Called from :func:`_write_value` / :func:`mutate_user` after the
-    per-user file is written, **outside** the cross-process file lock
-    so a slow sync target can't block other settings writes.
-    Strips the ``settings_source`` key itself to avoid circular config.
+    Called from :func:`_write_value` / :func:`mutate_user` /
+    :func:`set_settings_source_config` after the per-user file is
+    written, **outside** the cross-process file lock so a slow sync
+    target can't block other settings writes.  Strips the
+    ``settings_source`` key itself to avoid circular config.
+
+    On successful save the user is stamped as freshly synced
+    (``last_version`` refreshed from the post-save ``peek_version``,
+    ``dirty_keys`` cleared) — source now matches local, so the next
+    :func:`_ensure_user_loaded` short-circuits via the fast path
+    instead of pulling back the values we just pushed.
     """
     cfg = data.get("settings_source")
     if not isinstance(cfg, dict) or not cfg.get("source_name"):
@@ -1218,3 +1468,20 @@ def _sync_to_source(username: str, data: dict[str, Any]) -> None:
         source.save(export_data, field_values)
     except Exception as exc:
         logger.exception("Failed to sync settings to source for %s: %s", username, exc)
+        return
+
+    # Source now matches local for every exported key — clear the dirty
+    # set and refresh the version token so an auto re-sync doesn't fire
+    # for the change we just exported.
+    new_version: Any = None
+    try:
+        new_version = source.peek_version(field_values)
+    except Exception:
+        new_version = None
+    with _settings_lock:
+        _sync_state[username] = _UserSyncState(
+            last_version=new_version,
+            last_check_monotonic=time.monotonic(),
+            last_sync_succeeded=True,
+            dirty_keys=set(),
+        )
