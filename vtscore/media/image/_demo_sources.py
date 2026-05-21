@@ -55,7 +55,7 @@ def build_demo_datasets() -> list[DemoDataset]:
     euro_folder = DATA_DIR / "EuroSAT_RGB"
     dogs_desc = "Fine-grained dog breeds with many visually similar classes."
     dogs_folder = DATA_DIR / "stanford_dogs" / "Images"
-    places_desc = "Scene photos spanning indoor, outdoor natural, and outdoor man-made environments."
+    places_desc = "Scene photos across indoor, natural, and man-made settings."
     places_folder = DATA_DIR / "places365" / "val_256"
     return [
         DemoDataset(
