@@ -770,21 +770,23 @@ class TestTimedProgress:
         include the count so the user sees a concrete 'still working' signal."""
         import sys
         import time
+        import types
 
         calls = []
 
         def cb(status, message, current, total):
             calls.append(message)
 
-        with timed_progress(cb, "loading", "Importing thing…", 0, 0):
-            # Simulate new modules being registered (cheaper than a real import).
-            for i in range(5):
-                sys.modules[f"_vtsearch_test_fake_mod_{i}"] = object()
-            time.sleep(1.5)
-
-        # Clean up the fake modules we injected.
-        for i in range(5):
-            sys.modules.pop(f"_vtsearch_test_fake_mod_{i}", None)
+        fake_names = [f"_vtsearch_test_fake_mod_{i}" for i in range(5)]
+        try:
+            with timed_progress(cb, "loading", "Importing thing…", 0, 0):
+                # Simulate new modules being registered (cheaper than a real import).
+                for name in fake_names:
+                    sys.modules[name] = types.ModuleType(name)
+                time.sleep(1.5)
+        finally:
+            for name in fake_names:
+                sys.modules.pop(name, None)
 
         timed_calls = [c for c in calls if "(" in c]
         assert len(timed_calls) >= 1
