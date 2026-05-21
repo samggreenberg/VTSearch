@@ -234,7 +234,9 @@ def _score_medias_with_detectors(
 
         positive_hits: list[dict[str, Any]] = []
         negative_hits: list[dict[str, Any]] = []
-        for cid, score in zip(all_ids, scores):
+        # ``strict=True`` so a future partial embedding-matrix bug fails
+        # loudly instead of silently truncating scoring results.
+        for cid, score in zip(all_ids, scores, strict=True):
             hit = build_media_hit(cid, medias[cid], score)
             if score >= threshold:
                 positive_hits.append(hit)

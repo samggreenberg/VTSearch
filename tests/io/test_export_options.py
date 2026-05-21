@@ -12,6 +12,8 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
+
 import app as app_module
 
 SAMPLE_RESULTS = {
@@ -329,6 +331,36 @@ class TestCliScoringNegativeHits:
             assert isinstance(det_result["negative_hits"], list)
             total = len(det_result["hits"]) + len(det_result["negative_hits"])
             assert total == len(medias)
+
+    def test_id_score_length_mismatch_raises(self, client, monkeypatch):
+        """Regression for audit M11: a partial embedding matrix must surface
+        loudly via ``zip(strict=True)`` instead of silently truncating
+        scoring results."""
+        from vtscore.cli import _score_medias_with_detectors
+        from vtscore.detectors.training import train_and_threshold
+        from vtscore.embedding import matrix as matrix_module
+        from vtsearch.state import medias, snapshot_medias
+
+        snap = snapshot_medias()
+        good_ids = [1, 2, 3]
+        bad_ids = [18, 19, 20]
+        X = [snap[i]["embedding"] for i in good_ids + bad_ids]
+        y = [1.0] * len(good_ids) + [0.0] * len(bad_ids)
+        mlp, threshold = train_and_threshold(X, y, snap=snap)
+
+        real_get = matrix_module.get_embedding_matrix_for_snap
+
+        def _truncating_matrix(snap_arg):
+            ids, mat = real_get(snap_arg)
+            # Drop the last id but keep the full matrix so scores stays
+            # longer than ids — exactly the silent-truncation failure mode.
+            return ids[:-1], mat
+
+        monkeypatch.setattr(matrix_module, "get_embedding_matrix_for_snap", _truncating_matrix)
+
+        detector_mlps = {"test": {"mlp": mlp, "threshold": threshold}}
+        with pytest.raises(ValueError):
+            _score_medias_with_detectors(medias, detector_mlps)
 
 
 # ---------------------------------------------------------------------------

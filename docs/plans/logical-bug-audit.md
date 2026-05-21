@@ -584,8 +584,12 @@ Cross-section interaction agents:
 
 ### Datasets / loaders
 
-- **M8.** Thin-mode pickle loader treats `embedding: None` as present, then
-  `np.array(None)` produces an object-dtype row.
+- ~~**M8.** Thin-mode pickle loader treats `embedding: None` as present, then
+  `np.array(None)` produces an object-dtype row.~~ — fixed in
+  `vtscore/datasets/loader_pickle.py`: `_convert_one_pickle_media` now
+  treats a missing key and an explicit `None` value identically, skipping
+  the media and bumping the missing-media warning counter.  Regression
+  test in `tests_lib/datasets/test_thin_loading.py::TestThinLoadFromPickleNoneEmbedding`.
 - ~~**M9.** `loader_folder._has_override` doesn't warn when both `rel_path`
   and `file_name` override entries exist with different embeddings.~~
 - **M10.** ~~`clipper_chain._run_clipper_step` assumes deterministic output count
@@ -596,10 +600,19 @@ Cross-section interaction agents:
   drift / no-match / ambiguous match, and returns `None` instead of
   silently picking `outputs[0]` (was a regression vs. the legacy
   `_clip_text_to_bytes` resolver path).
-- **M11.** Stale media in `cli._score_medias_with_detectors` when some
-  embeddings are `None` (zip truncates silently).
-- **M12.** `loader_pickle._build_pickle_full_media` has no null-check before
-  `np.array(media_info["embedding"])`.
+- ~~**M11.** Stale media in `cli._score_medias_with_detectors` when some
+  embeddings are `None` (zip truncates silently).~~ — fixed by switching
+  the `zip(all_ids, scores)` loop in `vtscore/cli.py:_score_medias_with_detectors`
+  to `zip(..., strict=True)` so any future partial-matrix bug fails
+  loudly with `ValueError` instead of silently dropping hits.
+  Regression test in
+  `tests/io/test_export_options.py::TestCliScoringNegativeHits::test_id_score_length_mismatch_raises`.
+- ~~**M12.** `loader_pickle._build_pickle_full_media` has no null-check before
+  `np.array(media_info["embedding"])`.~~ — fixed: full-mode pickle load
+  now preserves `embedding=None` verbatim so the load pipeline can
+  re-embed (which it already does for `embedding is None`), instead of
+  producing a poisoned `np.array(None)` 0-d object array.  Regression
+  test in `tests_lib/datasets/test_thin_loading.py::TestThinLoadFromPickleNoneEmbedding::test_full_preserves_none_embedding`.
 
 ### Routes / API
 

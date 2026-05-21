@@ -254,6 +254,92 @@ class TestPickleMD5Preservation:
         assert medias[1]["md5"] == pre_md5
 
 
+class TestThinLoadFromPickleNoneEmbedding:
+    """Pickle entries with ``embedding=None`` must not poison thin/full loads.
+
+    Regression for audit M8 (thin mode would call ``np.array(None)`` and
+    produce a 0-d object array that crashes downstream embedding-matrix
+    consumers) and M12 (full mode had the same hazard).
+    """
+
+    def _make_pickle_with_embedding(self, tmp_path, embedding: Any) -> Path:
+        wav_bytes = _make_wav_bytes()
+        pkl_data = {
+            "medias": {
+                1: {
+                    "id": 1,
+                    "type": "audio",
+                    "duration": 0.1,
+                    "file_size": len(wav_bytes),
+                    "md5": hashlib.md5(wav_bytes).hexdigest(),
+                    "embedding": embedding,
+                    "filename": "test.wav",
+                    "category": "test",
+                    "media_bytes": wav_bytes,
+                }
+            }
+        }
+        pkl_path = tmp_path / "test.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump(pkl_data, f)
+        return pkl_path
+
+    def test_thin_skips_media_with_none_embedding(self, tmp_path, capsys):
+        """thin=True must skip ``embedding=None`` entries (cannot re-embed)."""
+        pkl_path = self._make_pickle_with_embedding(tmp_path, embedding=None)
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=True)
+        assert medias == {}
+        # The skip should be reported via the missing-media warning.
+        assert "missing" in capsys.readouterr().out.lower()
+
+    def test_thin_skips_media_without_embedding_key(self, tmp_path):
+        """Existing behavior: a missing ``embedding`` key still skips."""
+        wav_bytes = _make_wav_bytes()
+        pkl_data = {
+            "medias": {
+                1: {
+                    "id": 1,
+                    "type": "audio",
+                    "duration": 0.1,
+                    "file_size": len(wav_bytes),
+                    "md5": hashlib.md5(wav_bytes).hexdigest(),
+                    # no "embedding" key at all
+                    "filename": "test.wav",
+                    "category": "test",
+                    "media_bytes": wav_bytes,
+                }
+            }
+        }
+        pkl_path = tmp_path / "test.pkl"
+        with open(pkl_path, "wb") as f:
+            pickle.dump(pkl_data, f)
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=True)
+        assert medias == {}
+
+    def test_full_preserves_none_embedding(self, tmp_path):
+        """full mode keeps the media so the load pipeline can re-embed.
+
+        ``embedding`` stays ``None`` rather than becoming a poisoned
+        ``np.array(None)`` 0-d object array.
+        """
+        pkl_path = self._make_pickle_with_embedding(tmp_path, embedding=None)
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=False)
+        assert len(medias) == 1
+        assert medias[1]["embedding"] is None
+        assert medias[1]["media_bytes"] is not None
+
+    def test_full_still_loads_normal_embedding(self, tmp_path):
+        """Sanity check: a real embedding is still wrapped as an ndarray."""
+        pkl_path = self._make_pickle_with_embedding(tmp_path, embedding=np.zeros(512).tolist())
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=False)
+        assert isinstance(medias[1]["embedding"], np.ndarray)
+        assert medias[1]["embedding"].shape == (512,)
+
+
 class TestThinImporters:
     """Test that importers pass thin parameter through correctly."""
 

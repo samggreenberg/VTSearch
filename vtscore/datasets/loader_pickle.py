@@ -151,8 +151,15 @@ def _build_pickle_full_media(
     media_path: str | None,
     extra_fields: list[str],
 ) -> dict[str, Any]:
-    """Build a full-mode media dict from a pickle entry."""
+    """Build a full-mode media dict from a pickle entry.
+
+    A missing or ``None`` ``embedding`` is preserved verbatim so the
+    downstream load pipeline can re-embed (e.g. pickles produced via
+    ``skip_embedding=True``).
+    """
     fname = media_info.get("filename", f"media_{new_id}.{media_type}")
+    raw_emb = media_info.get("embedding")
+    embedding = np.array(raw_emb) if raw_emb is not None else None
     media_data = {
         "id": new_id,
         "type": media_type,
@@ -160,7 +167,7 @@ def _build_pickle_full_media(
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", len(media_bytes)),
         "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
-        "embedding": np.array(media_info["embedding"]),
+        "embedding": embedding,
         "media_bytes": media_bytes,
         "media_string": media_string,
         "media_path": media_path or media_info.get("media_path"),
@@ -196,7 +203,12 @@ def _convert_one_pickle_media(
     extra_fields = extra_fields_map.get(media_type, [])
 
     if thin:
-        if "embedding" not in media_info:
+        # Treat a missing key and an explicit ``None`` value identically:
+        # both mean "no embedding" and thin mode cannot re-embed.  Without
+        # this check ``np.array(None)`` would silently produce a 0-d
+        # object array that poisons every downstream embedding-matrix
+        # consumer.
+        if media_info.get("embedding") is None:
             return None, True
         media_path = _resolve_thin_media_path(media_type, media_info, data, dir_keys)
         return _build_pickle_thin_media(new_id, media_info, media_type, media_path, extra_fields), False
