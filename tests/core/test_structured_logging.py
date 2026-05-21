@@ -347,6 +347,57 @@ class TestSetupLogging:
             setup_logging()
 
 
+class TestTransformersVocabTokenFilter:
+    """Filter installed by setup_logging() drops only the bos/eos/pad
+    vocab-range warning from transformers; everything else passes through."""
+
+    def test_drops_bos_token_warning(self):
+        stream = io.StringIO()
+        try:
+            setup_logging(level="DEBUG", fmt="text", stream=stream)
+            logging.getLogger("transformers.configuration_utils").warning(
+                "Model config: bos_token_id must be `None` or an integer within "
+                "the vocabulary (between 0 and 31999), got 49406."
+            )
+            assert stream.getvalue() == ""
+        finally:
+            setup_logging()
+
+    def test_drops_eos_token_warning_on_descendant_logger(self):
+        stream = io.StringIO()
+        try:
+            setup_logging(level="DEBUG", fmt="text", stream=stream)
+            logging.getLogger("transformers.models.clap.configuration_clap").warning(
+                "Model config: eos_token_id must be `None` or an integer within "
+                "the vocabulary (between 0 and 31999), got 49407."
+            )
+            assert stream.getvalue() == ""
+        finally:
+            setup_logging()
+
+    def test_unrelated_transformers_warning_passes_through(self):
+        stream = io.StringIO()
+        try:
+            setup_logging(level="DEBUG", fmt="text", stream=stream)
+            logging.getLogger("transformers").warning("some other thing happened")
+            assert "some other thing happened" in stream.getvalue()
+        finally:
+            setup_logging()
+
+    def test_non_transformers_logger_with_matching_text_passes_through(self):
+        """Filter is scoped to transformers loggers so it can't accidentally
+        eat a same-shaped message logged from elsewhere."""
+        stream = io.StringIO()
+        try:
+            setup_logging(level="DEBUG", fmt="text", stream=stream)
+            logging.getLogger("vtsearch.test").warning(
+                "bos_token_id must be `None` or an integer within the vocabulary..."
+            )
+            assert "bos_token_id" in stream.getvalue()
+        finally:
+            setup_logging()
+
+
 class TestRequestIdHelper:
     def test_new_request_id_is_unique(self):
         ids = {new_request_id() for _ in range(100)}
