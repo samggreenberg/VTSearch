@@ -15,6 +15,12 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "Installing VTSearch CPU dependencies..."
 
+# Ensure pip/setuptools/wheel are recent enough to resolve modern wheel-only
+# packages.  Stale pips (e.g. 21.x) have a weaker resolver and will fall back
+# to building ancient sdists from source, which then fails for lack of
+# `bdist_wheel`.
+pip install --upgrade pip setuptools wheel -q
+
 pip install -r "$REPO_ROOT/requirements/base.txt" -q
 
 # Wire up the pre-commit git hook (no-op if not in a git checkout
