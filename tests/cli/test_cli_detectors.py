@@ -274,7 +274,7 @@ class TestAutorunDetectorsCLI:
 
     def test_clear_error_when_origins_unresolvable(self, client, tmp_path, monkeypatch):
         """No origins resolve → ValueError with a CLI-friendly explanation."""
-        # Stub yields None for everything (simulates labels from local).
+        # Stub yields None for everything (simulates labels from local_folder).
         from contextlib import contextmanager
 
         import vtscore.detectors.resolver as resolver_mod
@@ -290,13 +290,13 @@ class TestAutorunDetectorsCLI:
                 {
                     "md5": "a" * 32,
                     "label": "good",
-                    "origin": {"importer": "local", "params": {}},
+                    "origin": {"importer": "local_folder", "params": {}},
                     "origin_name": "uploaded1",
                 },
                 {
                     "md5": "b" * 32,
                     "label": "bad",
-                    "origin": {"importer": "local", "params": {}},
+                    "origin": {"importer": "local_folder", "params": {}},
                     "origin_name": "uploaded2",
                 },
             ]

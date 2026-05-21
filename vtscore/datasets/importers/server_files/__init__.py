@@ -14,13 +14,6 @@ identifies the media files to import.  Two file formats are accepted:
   lets users import media that they have already embedded offline
   without paying for embedding twice.
 
-A separate optional ``vectors_file`` field accepts a ``.npz`` archive
-of pre-computed vectors alongside a plain-text paths file.  Keys may
-be absolute paths, relative paths, or basenames of the listed files;
-matched files skip re-embedding and use the supplied vector.  When both
-the paths file is itself a ``.npz`` and a ``vectors_file`` is supplied,
-the ``vectors_file`` takes precedence for keys that overlap.
-
 Each listed entry may be the path of a file or a directory.  Symlinks
 (to either files or directories) are followed, and directory entries
 are walked recursively for media files.  The importer symlinks every
@@ -204,12 +197,6 @@ class ServerFilesDatasetImporter(DatasetImporter):
     picker_view = "form"
     category = "server"
     multi_media = True
-    # The Server card in the picker is the server_folder card, which
-    # surfaces this importer's paths-file workflow as an inline field —
-    # so the standalone server_files card is hidden to avoid two cards
-    # for the same conceptual "import from the server" flow.  The
-    # importer itself stays fully functional (CLI, direct API, etc.).
-    hidden_from_picker = True
     fields = [
         ImporterField(
             key="media_type",
@@ -224,7 +211,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
         ),
         ImporterField(
             key="paths_file",
-            label="Path or URL",
+            label="Paths file",
             field_type="server_path",
             description=(
                 "Absolute server path to a file listing the media to import.  Either:\n"
@@ -238,21 +225,6 @@ class ServerFilesDatasetImporter(DatasetImporter):
             ),
             hint=("Accepts .txt, .list, or .npz. One path per line, or a NumPy archive of pre-computed vectors."),
             accept=".txt,.list,.npz",
-        ),
-        ImporterField(
-            key="vectors_file",
-            label="Pre-computed embeddings (.npz) — optional",
-            field_type="server_path",
-            description=(
-                "Optional separate NumPy .npz archive of pre-computed embedding "
-                "vectors keyed by filename (absolute path, relative path, or "
-                "basename of a listed file).  Matched files skip re-embedding "
-                "and use the supplied vector.  Use this when your paths file is "
-                "plain text (.txt / .list); when the paths file is itself a .npz "
-                "that already contains vectors, this field is unnecessary."
-            ),
-            accept=".npz",
-            required=False,
         ),
     ]
 
@@ -289,10 +261,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
         - ``name_to_source`` maps each staged symlink basename to the
           original absolute path it points at.
         - ``content_vectors`` maps each staged symlink basename to a
-          pre-computed embedding vector.  Sources include (1) a paths
-          file that is itself a ``.npz`` archive and (2) a separate
-          optional ``vectors_file`` ``.npz`` archive — when both are
-          present, ``vectors_file`` takes precedence for keys that overlap.
+          pre-computed embedding vector.  Populated when the paths file
+          is itself a ``.npz`` archive that holds vectors alongside the
+          paths.
         """
         paths_file = Path(field_values["paths_file"])
         paths, path_to_vector = _read_paths_and_vectors(paths_file)
@@ -312,23 +283,6 @@ class ServerFilesDatasetImporter(DatasetImporter):
         if path_to_vector:
             for name, source in name_to_source.items():
                 vec = path_to_vector.get(str(source))
-                if vec is not None:
-                    content_vectors[name] = vec
-
-        # Layer on top: a separately-provided vectors_file.  Its keys
-        # may be absolute paths, relative paths, or basenames — we
-        # rekey by walking each staged symlink and looking up its
-        # source path in any of those forms.
-        vectors_file = (field_values.get("vectors_file") or "").strip()
-        if vectors_file:
-            extra = read_npz_filenames_and_vectors(Path(vectors_file))
-            basename_to_vec: dict[str, Any] = {Path(k).name: v for k, v in extra.items()}
-            for name, source in name_to_source.items():
-                # ``or`` short-circuit can't be used here because the
-                # values are numpy arrays.
-                vec = extra.get(str(source))
-                if vec is None:
-                    vec = basename_to_vec.get(source.name)
                 if vec is not None:
                     content_vectors[name] = vec
         return staging, name_to_source, content_vectors
@@ -535,9 +489,6 @@ class ServerFilesDatasetImporter(DatasetImporter):
         media_type = field_values.get("media_type", "")
         if media_type:
             params["media_type"] = media_type
-        vectors_file = field_values.get("vectors_file", "")
-        if vectors_file:
-            params["vectors_file"] = str(vectors_file)
         return {"importer": self.name, "params": params}
 
     def origin_display(self, origin: dict[str, Any]) -> str:
