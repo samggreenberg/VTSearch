@@ -2,6 +2,33 @@
 
 Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector** — a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a small MLP learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
 
+## Ask Questions via `AskUserQuestion` — NOT prose (CRITICAL, READ FIRST)
+
+This is the **#1 rule** in this repo. Read it on every turn. If you only read one section of CLAUDE.md, read this one.
+
+When you have a question for the user — to disambiguate requirements, choose between approaches, confirm scope, or surface a non-obvious tradeoff — **ask it via the `AskUserQuestion` tool**. Do not guess silently. Do not bury the question in prose at the end of a response. A 10-second clarification beats a 10-minute wrong-direction implementation, and a one-click answer beats a typed answer every time.
+
+**Always ask via the `AskUserQuestion` tool when the question fits its shape** (a discrete choice with a small number of options). Do not leave dangling questions like "Want me to go with approach A or approach B?" at the end of a prose response — those are easy to miss and force the user to type out an answer that could have been a single click. The tool also captures the choice cleanly in the transcript.
+
+This applies *especially* to end-of-investigation "what scope should I take next?" prompts: when a research/investigation turn ends by offering Phase 1 / Phase 2 / smaller scope, the scope choice goes through `AskUserQuestion`, **not** into the prose summary. The investigation findings stay in prose; the "what next?" question is a tool call.
+
+Use plain prose questions only when the answer is genuinely open-ended (e.g. "What should this field be named?") and a multiple-choice list would be artificial.
+
+### Trip-wire — scan your turn before sending
+
+Before sending a turn, scan its last paragraph for any of these phrases:
+
+- "Want me to …?"
+- "Should I …?"
+- "Do you want … or …?"
+- "Let me know if …"
+- "(a) … and/or (b) …?"
+- "Recommend I …?"
+
+If you see one, **stop**: that sentence is an `AskUserQuestion` call you almost emitted as prose. Convert it into the tool call before sending — even if you're confident the user will say yes, even if the options feel obvious, even if you've already invested effort in the prose summary. The cost of the extra tool call is zero; the cost of a missed or typed-out answer is a wasted round-trip.
+
+This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers belong in the tool too (with `["Yes", "No"]` options) — they are exactly the case where a one-click reply beats a typed reply. A pure progress update with no question at the end is fine; an update that ends in an offer is not.
+
 ## Branch Policy (CRITICAL)
 
 - **Always base work on `dev`.** The `.claude/hooks/session-start.sh` SessionStart hook runs `git fetch origin --prune && git rebase origin/dev` automatically in remote sessions, so a fresh container lands rebased onto `dev`. If the hook reports "skipping" (dirty tree, detached HEAD) or "rebase failed", run the fetch+rebase yourself before making any changes. The harness cuts the working branch off `main` (the GitHub default), so this rebase is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch — `dev` is Claude's starting point, not the public default.
@@ -39,31 +66,6 @@ Never ask the user whether to subscribe to PR activity, and never call `subscrib
 ## Backwards Compatibility
 
 Breaking backwards compatibility is acceptable — do not add shims, feature flags, legacy re-exports, or other compatibility layers to preserve old behavior. Just make the clean change. When a change does break backwards compatibility, mention it to the user so they're aware.
-
-## Ask Questions (use the Question tool)
-
-When you have a question for the user — to disambiguate requirements, choose between approaches, confirm scope, or surface a non-obvious tradeoff — **ask it**. Do not guess silently and hope the choice was right. A 10-second clarification beats a 10-minute wrong-direction implementation.
-
-**Always ask via the `AskUserQuestion` tool when the question fits its shape** (a discrete choice with a small number of options). Do not leave dangling questions like "Want me to go with approach A or approach B?" at the end of a prose response — those are easy to miss and force the user to type out an answer that could have been a single click. The tool also captures the choice cleanly in the transcript.
-
-This applies *especially* to end-of-investigation "what scope should I take next?" prompts: when a research/investigation turn ends by offering Phase 1 / Phase 2 / smaller scope, the scope choice goes through `AskUserQuestion`, **not** into the prose summary. The investigation findings stay in prose; the "what next?" question is a tool call.
-
-Use plain prose questions only when the answer is genuinely open-ended (e.g. "What should this field be named?") and a multiple-choice list would be artificial.
-
-### Trip-wire — scan your turn before sending
-
-Before sending a turn, scan its last paragraph for any of these phrases:
-
-- "Want me to …?"
-- "Should I …?"
-- "Do you want … or …?"
-- "Let me know if …"
-- "(a) … and/or (b) …?"
-- "Recommend I …?"
-
-If you see one, **stop**: that sentence is an `AskUserQuestion` call you almost emitted as prose. Convert it into the tool call before sending — even if you're confident the user will say yes, even if the options feel obvious, even if you've already invested effort in the prose summary. The cost of the extra tool call is zero; the cost of a missed or typed-out answer is a wasted round-trip.
-
-This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers belong in the tool too (with `["Yes", "No"]` options) — they are exactly the case where a one-click reply beats a typed reply. A pure progress update with no question at the end is fine; an update that ends in an offer is not.
 
 ## Frontend Scope: Desktop Only
 
