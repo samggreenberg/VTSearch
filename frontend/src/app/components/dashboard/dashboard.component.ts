@@ -913,57 +913,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Welcome-banner CTA: open the importer modal with one of the picker
-   *  tabs pre-selected so a fresh user lands on the relevant choices. */
-  openImporterModalOnTab(tabId: string): void {
-    this.importerClosing = false;
-    this.newThingFlows.openImporter({
-      initialTab: tabId,
-      guessedMediaType: this.guessedMediaType,
-      guessedMediaEmbedder: this.guessedMediaEmbedder,
-    });
-  }
-
   onImporterAnimationEnd(): void {
     this.importerClosing = false;
-  }
-
-  // --- First-run welcome banner ---
-
-  /** Visible importers in the Services tab, in registry order. */
-  get servicesImporters(): ImporterInfo[] {
-    return this.visibleImporters.filter((imp) => (imp.category || '') === 'services');
-  }
-
-  /** Pretty name for a Services importer (display_name falls back to name). */
-  private importerLabel(imp: ImporterInfo): string {
-    return imp.display_name || imp.name;
-  }
-
-  /** Body text for the welcome banner. Three branches:
-   *   - no Services importers → push Server Folder
-   *   - exactly one Services importer → name it
-   *   - multiple Services importers → generic Services prompt */
-  get welcomeBannerMessage(): string {
-    const services = this.servicesImporters;
-    if (services.length === 1) {
-      const label = this.importerLabel(services[0]);
-      return `Welcome — load a dataset to get started. You have ${label} registered in the Services tab, which is probably what you want.`;
-    }
-    if (services.length > 1) {
-      return 'Welcome — load a dataset to get started. You have importers registered in the Services tab, which is probably where to start.';
-    }
-    return 'Welcome — load a dataset to get started. Server Folder is the most common starting point: point it at a folder of files already on this machine.';
-  }
-
-  /** CTA label paired with the welcome-banner message. */
-  get welcomeBannerCtaLabel(): string {
-    return this.servicesImporters.length > 0 ? 'Open Services' : 'Open Server';
-  }
-
-  /** Picker tab the welcome-banner CTA pre-selects in the importer modal. */
-  get welcomeBannerCtaTab(): string {
-    return this.servicesImporters.length > 0 ? 'services' : 'server';
   }
 
   /** Open-state of the dataset importer modal (hosted on AppComponent;

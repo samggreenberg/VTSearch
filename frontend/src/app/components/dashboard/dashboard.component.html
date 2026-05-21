@@ -27,11 +27,7 @@
       </ul>
     } @else if (datasets.length === 0 && orphanLoadingTasks.length === 0 && !loading) {
       <div class="welcome-banner">
-        <p class="welcome-banner-text">{{ welcomeBannerMessage }}</p>
-        <button class="btn btn--primary btn--sm welcome-banner-cta"
-          (click)="openImporterModalOnTab(welcomeBannerCtaTab)"
-          [disabled]="isLoading"
-          title="Open the dataset importer">{{ welcomeBannerCtaLabel }}</button>
+        <p class="welcome-banner-text">Welcome! Load data with '+' to get started.</p>
       </div>
     } @else {
       <div class="dashboard-grid">
