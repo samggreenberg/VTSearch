@@ -33,16 +33,22 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
 
   private audioCtx: AudioContext | null = null;
   private viewReady = false;
+  // See ImageViewerComponent.lastMediaId: the `media` input reference changes
+  // whenever the metadata cache hydrates; without this guard, every cache
+  // refresh would re-`loadAudio()` and snap playback back to t=0.
+  private lastMediaId: number | null = null;
 
   constructor(private activeContext: ActiveContextService) {}
 
   ngAfterViewInit(): void {
     this.viewReady = true;
+    if (this.media) this.lastMediaId = this.media.id;
     this.loadAudio();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['media'] && this.media) {
+    if (changes['media'] && this.media && this.media.id !== this.lastMediaId) {
+      this.lastMediaId = this.media.id;
       this.audioSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/audio`);
       if (this.viewReady) {
         this.loadAudio();

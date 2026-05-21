@@ -64,6 +64,30 @@ describe('ImageViewerComponent', () => {
     expect(component.imageReady).toBeFalse();
   });
 
+  // Regression: when MediaMetadataCacheService hydrates the stub into a
+  // fully-typed Media for the same id, MediaStateService.selectedMedia returns
+  // a *new reference*, which used to retrigger this ngOnChanges body. That
+  // flipped `imageReady` back to false while leaving `imageSrc` unchanged, so
+  // Angular's property binding skipped the DOM write and no fresh (load) event
+  // fired — leaving the canvas hidden behind `visibility: hidden`. The id
+  // guard keeps the loaded state stable across enrichment events.
+  it('should not reset imageReady when the media reference changes but id is the same', () => {
+    component.media = mockMedia;
+    component.ngOnChanges({
+      media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
+    });
+    component.onImageLoad();
+    expect(component.imageReady).toBeTrue();
+
+    // Same id, new object reference (typical metadata-cache enrichment).
+    const enriched: Media = { ...mockMedia, filename: 'real-name.png' };
+    component.media = enriched;
+    component.ngOnChanges({
+      media: { currentValue: enriched, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
+    });
+    expect(component.imageReady).toBeTrue();
+  });
+
   it('should show image on error to avoid stuck black screen', () => {
     component.media = mockMedia;
     component.ngOnChanges({

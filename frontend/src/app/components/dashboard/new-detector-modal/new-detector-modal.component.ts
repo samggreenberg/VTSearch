@@ -1,7 +1,8 @@
 import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { map } from 'rxjs/operators';
+import { of } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { FileBrowserComponent } from '../../file-browser/file-browser.component';
@@ -164,17 +165,39 @@ export class NewDetectorModalComponent implements OnInit {
       })),
     );
 
+  /** True once we've consumed the backend-suggested ``default_path`` on
+   *  the first browse response. Subsequent navigations to the root stay
+   *  at the root instead of bouncing back to the default. */
+  private sfDefaultPathConsumed = false;
+
   /** Browse fn for the embedded ``<vt-folder-browser>`` in the server
    *  folder picker.  Lists both folders and files (filtered server-side
-   *  to known media extensions). */
+   *  to known media extensions). Uses the ``server_fs`` source so the
+   *  user can browse anywhere readable by the server; first response
+   *  redirects to the suggested home directory. */
   readonly sfBrowseFn: FolderBrowserBrowseFn = (path: string) =>
-    this.datasetsApi.browseMediaFiles('folder', path).pipe(
-      map((res) => ({
-        directories: res.directories || [],
-        files: res.files || [],
-        rootPath: res.root_path,
-        currentPath: path,
-      })),
+    this.datasetsApi.browseMediaFiles('server_fs', path).pipe(
+      switchMap((res) => {
+        if (!path && !this.sfDefaultPathConsumed && res.default_path) {
+          this.sfDefaultPathConsumed = true;
+          const defaultPath = res.default_path;
+          return this.datasetsApi.browseMediaFiles('server_fs', defaultPath).pipe(
+            map((res2) => ({
+              directories: res2.directories || [],
+              files: res2.files || [],
+              rootPath: res2.root_path,
+              currentPath: defaultPath,
+            })),
+          );
+        }
+        if (!path) this.sfDefaultPathConsumed = true;
+        return of({
+          directories: res.directories || [],
+          files: res.files || [],
+          rootPath: res.root_path,
+          currentPath: path,
+        });
+      }),
     );
 
   // Pending crop confirmation state.
@@ -567,6 +590,7 @@ export class NewDetectorModalComponent implements OnInit {
   private resetServerFolderState(): void {
     this.sfBrowseError = '';
     this.sfFileSelecting = false;
+    this.sfDefaultPathConsumed = false;
   }
 
   private openServerFolderBrowser(): void {
@@ -576,7 +600,7 @@ export class NewDetectorModalComponent implements OnInit {
   /** Confirm handler for the server folder browser. */
   sfSelectFile(entry: FolderBrowserFileEntry): void {
     this.sfFileSelecting = true;
-    this.datasetsApi.selectBrowsedFile('folder', entry.path).subscribe({
+    this.datasetsApi.selectBrowsedFile('server_fs', entry.path).subscribe({
       next: (res) => {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
