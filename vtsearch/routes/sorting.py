@@ -560,6 +560,7 @@ def cancel_learned_sort(job_id: str):
 def get_votes():
     """Return current good/bad votes, click times, and learned scores."""
     from vtscore.state.core import _empty_detector_context, get_active_detector_context
+    from vtscore.utils.scores import finite_or  # noqa: PLC0415
 
     click_times = get_vote_click_times()
     learned_scores = get_learned_scores()
@@ -570,11 +571,16 @@ def get_votes():
     else:
         labelset_good_count = len(good_votes)
         labelset_bad_count = len(bad_votes)
+    # Defensive guard against non-finite scores poisoning the response: every
+    # write site is already sanitised via ``sigmoid_to_finite_scores``, but
+    # ``round(NaN, 4)`` returns ``NaN`` and Flask's default JSON provider
+    # emits the literal token ``NaN`` — invalid JSON that breaks every
+    # browser ``JSON.parse``. Belt-and-braces audit M13.
     return {
         "good": sorted(good_votes),
         "bad": sorted(bad_votes),
         "click_times": {str(k): v for k, v in click_times.items()},
-        "learned_scores": {str(k): round(v, 4) for k, v in learned_scores.items()},
+        "learned_scores": {str(k): round(finite_or(v), 4) for k, v in learned_scores.items()},
         "labelset_good_count": labelset_good_count,
         "labelset_bad_count": labelset_bad_count,
     }
@@ -879,6 +885,7 @@ def _train_and_score_dataset(X_list: list, y_list: list[float]) -> tuple[list[di
 
     from vtscore.detectors.training import train_and_threshold
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
 
     snap = snapshot_medias()
     model, threshold = train_and_threshold(X_list, y_list, snap=snap)
@@ -887,7 +894,7 @@ def _train_and_score_dataset(X_list: list, y_list: list[float]) -> tuple[list[di
     X_all = torch.from_numpy(all_embs)
     with torch.no_grad():
         X_all = X_all.to(next(model.parameters()).device)
-        scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().tolist()
+        scores = sigmoid_to_finite_scores(model(X_all))
 
     paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
     results = [{"id": cid, "score": round(s, 4)} for cid, s in paired]

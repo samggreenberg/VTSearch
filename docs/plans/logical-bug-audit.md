@@ -603,9 +603,20 @@ Cross-section interaction agents:
 
 ### Routes / API
 
-- **M13.** `learned_scores` in `/api/votes` can serialize as JSON
+- ~~**M13.** `learned_scores` in `/api/votes` can serialize as JSON
   `NaN`/`Infinity` if the MLP destabilizes — invalid JSON to strict
-  clients.
+  clients.~~ — fixed by routing every sigmoid→score path through
+  `vtscore.utils.scores.sigmoid_to_finite_scores` (NaN/±Inf → `-1.0`
+  sentinel) and adding a defensive `finite_or` guard at
+  `GET /api/votes`. Sanitised sites: `labelset_train_and_score`,
+  `train_and_threshold`, `_score_all_media`, `/api/learned-sort`,
+  `/api/label-file-sort`, `/api/find-label`, `/api/find` (live + cold
+  paths), `/api/auto-detect`, and CLI autodetect. `-1.0` sits outside
+  the `[0, 1]` sigmoid range so `score >= threshold` is always False
+  for sanitised scores and they sink to the bottom of any sort —
+  matches the frontend's existing `learnedScores[id] ?? -1` fallback.
+  Regression test in `tests/api/test_api_contracts.py` parses the
+  response with a `parse_constant` that rejects `NaN`/`Infinity`.
 - **M14.** `diversity_tree_next_sample` references stale media IDs after
   `/api/dataset/clear`.
 

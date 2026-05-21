@@ -22,6 +22,7 @@ from typing import Any, Callable
 import numpy as np
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet
+from vtscore.utils.scores import sigmoid_to_finite_scores
 
 
 log = logging.getLogger(__name__)
@@ -412,7 +413,7 @@ def labelset_train_and_score(
     X_all = torch.from_numpy(all_embs)
     with torch.no_grad():
         X_all = X_all.to(next(model.parameters()).device)
-        scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().tolist()
+        scores = sigmoid_to_finite_scores(model(X_all))
 
     if safe_thresholds:
         threshold = calculate_safe_threshold(threshold, scores, len(X_list))
