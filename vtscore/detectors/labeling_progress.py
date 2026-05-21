@@ -246,7 +246,9 @@ def _compute_step_stability(
         X_unlabeled = X_unlabeled.to(next(model.parameters()).device)
         scores_unl = torch.sigmoid(model(X_unlabeled)).squeeze(1).cpu().tolist()
 
-    predictions: dict[int, int] = {cid: 1 if score >= threshold else 0 for cid, score in zip(unlabeled_ids, scores_unl)}
+    predictions: dict[int, int] = {
+        cid: 1 if score >= threshold else 0 for cid, score in zip(unlabeled_ids, scores_unl, strict=True)
+    }
 
     stability: Optional[dict[str, Any]] = None
     if _cache_prev_predictions is not None:
@@ -456,7 +458,7 @@ def _eval_cached_models(  # noqa: C901
             scores = torch.sigmoid(step["model"](X_in)).squeeze(1).cpu().tolist()
 
         fp = fn = 0
-        for score, true_label in zip(scores, eval_labels):
+        for score, true_label in zip(scores, eval_labels, strict=True):
             predicted = 1 if score >= step["threshold"] else 0
             if predicted == 1 and true_label == 0:
                 fp += 1

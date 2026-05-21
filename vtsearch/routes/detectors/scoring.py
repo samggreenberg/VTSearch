@@ -322,7 +322,7 @@ def find_label(body: dict):  # noqa: C901
                 total_steps=_FIND_LABEL_STEPS,
             )
 
-    results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
+    results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores, strict=True)]
     results.sort(key=lambda x: x["score"], reverse=True)
 
     update_find_progress(
@@ -449,7 +449,7 @@ def _score_detector_for_auto_detect(
 
         positive_hits = []
         negative_hits = []
-        for cid, score in zip(all_ids, scores):
+        for cid, score in zip(all_ids, scores, strict=True):
             clip_info = _media_info_for_response(snap[cid])
             clip_info["score"] = round(score, 4)
             if score >= threshold:

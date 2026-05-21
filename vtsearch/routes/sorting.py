@@ -901,7 +901,7 @@ def _train_and_score_dataset(X_list: list, y_list: list[float]) -> tuple[list[di
         X_all = X_all.to(next(model.parameters()).device)
         scores = sigmoid_to_finite_scores(model(X_all))
 
-    paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
+    paired = sorted(zip(all_ids, scores, strict=True), key=lambda x: x[1], reverse=True)
     results = [{"id": cid, "score": round(s, 4)} for cid, s in paired]
     return results, threshold
 

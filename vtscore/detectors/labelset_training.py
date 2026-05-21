@@ -418,7 +418,7 @@ def labelset_train_and_score(
     if safe_thresholds:
         threshold = calculate_safe_threshold(threshold, scores, len(X_list))
 
-    results = [{"id": cid, "score": s} for cid, s in zip(all_ids, scores)]
+    results = [{"id": cid, "score": s} for cid, s in zip(all_ids, scores, strict=True)]
     results.sort(key=lambda r: r["score"], reverse=True)
     return results, threshold, model
 

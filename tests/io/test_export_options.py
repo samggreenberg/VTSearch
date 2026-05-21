@@ -369,6 +369,78 @@ class TestCliScoringNegativeHits:
             total = len(det_result["hits"]) + len(det_result["negative_hits"])
             assert total == len(medias)
 
+    def test_id_score_length_mismatch_raises(self, client, monkeypatch):
+        """Regression for audit M11 (defensive layer): a future bug that
+        leaves ``all_ids`` and ``scores`` out of sync must fail loudly
+        via ``zip(strict=True)`` instead of silently truncating the
+        per-detector hit lists.
+        """
+        from vtscore.cli import _score_medias_with_detectors
+        from vtscore.detectors.training import train_and_threshold
+        from vtscore.embedding import matrix as matrix_module
+        from vtsearch.state import medias, snapshot_medias
+
+        snap = snapshot_medias()
+        good_ids = [1, 2, 3]
+        bad_ids = [18, 19, 20]
+        X = [snap[i]["embedding"] for i in good_ids + bad_ids]
+        y = [1.0] * len(good_ids) + [0.0] * len(bad_ids)
+        mlp, threshold = train_and_threshold(X, y, snap=snap)
+
+        real_get = matrix_module.get_embedding_matrix_for_snap
+
+        def _truncating_matrix(snap_arg):
+            ids, mat = real_get(snap_arg)
+            # Drop the last id but keep the full matrix so scores stays
+            # longer than ids — exactly the silent-truncation failure mode.
+            return ids[:-1], mat
+
+        monkeypatch.setattr(matrix_module, "get_embedding_matrix_for_snap", _truncating_matrix)
+
+        detector_mlps = {"test": {"mlp": mlp, "threshold": threshold}}
+        with pytest.raises(ValueError):
+            _score_medias_with_detectors(medias, detector_mlps)
+
+    def test_none_embedding_surfaces_loud_error(self, client):
+        """Regression for audit M11 (root cause): a media with
+        ``embedding=None`` must raise rather than silently producing
+        NaN-scored hits via ``matrix[i] = None`` (numpy 2.x).
+        """
+        from vtscore.cli import _score_medias_with_detectors
+        from vtscore.detectors.training import train_and_threshold
+        from vtscore.embedding.matrix import invalidate_embedding_matrix
+        from vtscore.state.core import get_active_context
+        from vtsearch.state import snapshot_medias
+
+        snap = snapshot_medias()
+        good_ids = [1, 2, 3]
+        bad_ids = [18, 19, 20]
+        X = [snap[i]["embedding"] for i in good_ids + bad_ids]
+        y = [1.0] * len(good_ids) + [0.0] * len(bad_ids)
+        mlp, threshold = train_and_threshold(X, y, snap=snap)
+
+        # Build a broken snap that doesn't share the active ctx's key set
+        # — that forces the fresh-build path in
+        # ``get_embedding_matrix_for_snap`` where the M11 guard lives.
+        # (The cached-matrix fast path would return the still-valid
+        # matrix built from the active ctx, masking the bug.)
+        broken: dict[int, dict] = {}
+        for cid in list(snap.keys())[:5]:
+            broken[10_000 + cid] = dict(snap[cid])
+        victim_cid = next(iter(broken))
+        broken[victim_cid] = dict(broken[victim_cid])
+        broken[victim_cid]["embedding"] = None
+
+        detector_mlps = {"test": {"mlp": mlp, "threshold": threshold}}
+        with pytest.raises(ValueError, match=r"has no embedding"):
+            _score_medias_with_detectors(broken, detector_mlps)
+
+        # Untouched global state stays scorable — the broken dict was a
+        # local snapshot, ``medias`` is intact.
+        invalidate_embedding_matrix(get_active_context())
+        det_results = _score_medias_with_detectors(snapshot_medias(), detector_mlps)
+        assert det_results
+
 
 # ---------------------------------------------------------------------------
 # Export with Good/Bad/Both filtered results via API

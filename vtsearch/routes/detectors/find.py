@@ -317,7 +317,7 @@ def _record_verdicts(
     ``score=0`` for every id.
     """
     if scores is not None:
-        for cid, score in zip(all_ids, scores):
+        for cid, score in zip(all_ids, scores, strict=True):
             verdict = "Good" if score >= threshold else "Bad"
             media_results[cid]["detector_verdicts"][dc_name] = {
                 "verdict": verdict,

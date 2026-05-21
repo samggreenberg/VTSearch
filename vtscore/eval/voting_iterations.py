@@ -98,7 +98,7 @@ def _evaluate_on_test(
     total_neg = len(true_labels) - total_pos
 
     fp = fn = 0
-    for score, label in zip(scores, true_labels):
+    for score, label in zip(scores, true_labels, strict=True):
         predicted = 1 if score >= threshold else 0
         if predicted == 1 and label == 0.0:
             fp += 1

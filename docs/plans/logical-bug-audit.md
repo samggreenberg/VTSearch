@@ -628,13 +628,37 @@ Cross-section interaction agents:
   drift / no-match / ambiguous match, and returns `None` instead of
   silently picking `outputs[0]` (was a regression vs. the legacy
   `_clip_text_to_bytes` resolver path).
-- **M11.** ~~Stale media in `cli._score_medias_with_detectors` when some
-  embeddings are `None` (zip truncates silently).~~ **Shipped.**
-  `_score_medias_with_detectors` now uses `zip(all_ids, scores,
-  strict=True)` so a partial embedding matrix raises `ValueError`
-  instead of silently dropping hits. With the M12 fix in place this
-  loop should never be partial, but the strict zip guards against
-  future regressions.
+- ~~**M11.** Stale media in `cli._score_medias_with_detectors` when some
+  embeddings are `None` (zip truncates silently).~~ **Shipped (expanded
+  scope).** The literal "zip truncates" claim is wrong (both `all_ids`
+  and `scores` come from the same `(N, dim)` matrix, so lengths always
+  match). The real symptom under numpy 2.x is that a `None` embedding
+  becomes a NaN row via `matrix[i] = None`, propagates through the MLP
+  to a NaN score, fails every `score >= threshold` compare, and lands
+  in `negative_hits` with `NaN` in the JSON response. Fixed at three
+  layers:
+  (1) `vtscore/embedding/matrix.py` raises `ValueError` naming the
+  offending cid when any media has `embedding=None` — defensive root
+  guard catching every entry point (M8/M12 pickle loaders are one path;
+  `_fixup_clip_md5_and_embeddings` silently leaving `embedding=None`
+  after a failed bulk re-embed is another).
+  (2) `_drop_none_embeddings_stage` in
+  `vtscore/datasets/load_pipeline.py` removes any media with
+  `embedding=None` after the clipper stage and surfaces the dropped
+  count via the progress tracker so the load row reflects the real N.
+  (3) `zip(strict=True)` on every id↔score callsite
+  (`vtscore/cli.py` — already shipped with the M8/M12 PR;
+  `vtsearch/routes/sorting.py`,
+  `vtsearch/routes/detectors/{find,scoring}.py`,
+  `vtscore/detectors/{training,labelset_training,labeling_progress}.py`,
+  `vtscore/training/region_similarity.py`,
+  `vtscore/eval/voting_iterations.py`) so any future length divergence
+  fails loudly instead of silently truncating hits.
+  Regression tests in `tests_lib/core/test_embedding_matrix.py`,
+  `tests/datasets/test_load_stage_matrix_cache.py::TestDropNoneEmbeddingsStage`,
+  and `tests/io/test_export_options.py::TestCliScoringNegativeHits`
+  (the strict-zip regression already on dev plus a new None-embedding
+  loud-error regression).
 - **M12.** ~~`loader_pickle._build_pickle_full_media` has no null-check before
   `np.array(media_info["embedding"])`.~~ **Shipped.**
   `_convert_one_pickle_media` skips any entry whose `embedding` is
