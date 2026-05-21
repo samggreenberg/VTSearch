@@ -32,6 +32,56 @@ def _flask_to_openapi_path(rule: str) -> str:
     return _FLASK_PARAM_RE.sub(r"{\1}", rule)
 
 
+def _map_spec_ops_to_view_names(
+    app: Flask, paths: dict[str, Any]
+) -> dict[tuple[str, str], str]:
+    """Return ``{(openapi_path, method_lower): view_func.__name__}``."""
+    op_to_view: dict[tuple[str, str], str] = {}
+    for rule in app.url_map.iter_rules():
+        view_func = app.view_functions.get(rule.endpoint)
+        if view_func is None:
+            continue
+        op_path = _flask_to_openapi_path(rule.rule)
+        if op_path not in paths:
+            continue
+        rule_methods = (rule.methods or set()) - {"HEAD", "OPTIONS"}
+        for method in rule_methods:
+            op_method = method.lower()
+            if op_method in paths[op_path]:
+                op_to_view[(op_path, op_method)] = view_func.__name__
+    return op_to_view
+
+
+def _operation_ids_for_view(
+    name: str, op_keys: list[tuple[str, str]]
+) -> dict[tuple[str, str], str]:
+    """Assign deterministic operationIds for a set of ops sharing a view.
+
+    Single-operation views keep the bare ``name``. Collisions get a
+    ``_{method}`` suffix; if multiple ops share both view and method,
+    they additionally get a 1-based index in sorted order.
+    """
+    if len(op_keys) == 1:
+        return {op_keys[0]: name}
+
+    op_keys_sorted = sorted(op_keys)
+    method_counts: dict[str, int] = defaultdict(int)
+    for _, m in op_keys_sorted:
+        method_counts[m] += 1
+
+    assigned: dict[tuple[str, str], str] = {}
+    per_method_index: dict[str, int] = defaultdict(int)
+    for op_path, op_method in op_keys_sorted:
+        if method_counts[op_method] == 1:
+            assigned[(op_path, op_method)] = f"{name}_{op_method}"
+        else:
+            per_method_index[op_method] += 1
+            assigned[(op_path, op_method)] = (
+                f"{name}_{op_method}_{per_method_index[op_method]}"
+            )
+    return assigned
+
+
 def assign_operation_ids(app: Flask, spec: dict[str, Any]) -> None:
     """Mutate ``spec`` to assign an ``operationId`` to every operation.
 
@@ -47,48 +97,12 @@ def assign_operation_ids(app: Flask, spec: dict[str, Any]) -> None:
     if not paths:
         return
 
-    # Map every (openapi_path, method) operation in the spec to its
-    # Flask view function name.
-    op_to_view: dict[tuple[str, str], str] = {}
-    for rule in app.url_map.iter_rules():
-        view_func = app.view_functions.get(rule.endpoint)
-        if view_func is None:
-            continue
-        op_path = _flask_to_openapi_path(rule.rule)
-        if op_path not in paths:
-            continue
-        rule_methods = (rule.methods or set()) - {"HEAD", "OPTIONS"}
-        for method in rule_methods:
-            op_method = method.lower()
-            if op_method in paths[op_path]:
-                op_to_view[(op_path, op_method)] = view_func.__name__
+    op_to_view = _map_spec_ops_to_view_names(app, paths)
 
-    # Group operations by view function so we can detect collisions and
-    # disambiguate deterministically.
     by_view: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for op_key, name in op_to_view.items():
         by_view[name].append(op_key)
 
     for name, op_keys in by_view.items():
-        if len(op_keys) == 1:
-            op_path, op_method = op_keys[0]
-            paths[op_path][op_method]["operationId"] = name
-            continue
-
-        # Multiple operations share this view function. First try
-        # appending the HTTP method; if methods alone don't disambiguate
-        # (same view bound to several paths under the same method), fall
-        # back to a 1-based index in sorted order.
-        op_keys_sorted = sorted(op_keys)
-        method_counts: dict[str, int] = defaultdict(int)
-        for _, m in op_keys_sorted:
-            method_counts[m] += 1
-
-        per_method_index: dict[str, int] = defaultdict(int)
-        for op_path, op_method in op_keys_sorted:
-            if method_counts[op_method] == 1:
-                op_id = f"{name}_{op_method}"
-            else:
-                per_method_index[op_method] += 1
-                op_id = f"{name}_{op_method}_{per_method_index[op_method]}"
+        for (op_path, op_method), op_id in _operation_ids_for_view(name, op_keys).items():
             paths[op_path][op_method]["operationId"] = op_id
