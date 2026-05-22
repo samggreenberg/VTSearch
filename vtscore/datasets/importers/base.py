@@ -386,32 +386,42 @@ class DatasetImporter(PluginBase):
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         """Perform the import, populating *medias* in-place.
 
-        Subclasses pick one of three override points, in order of increasing
-        control:
+        Subclasses pick one of four override points, in order of increasing
+        control.  Hooks 1–3 leave conversion and ingestion to the framework;
+        only hook 4 takes that responsibility back.
 
         1. :meth:`fetch_source_media` — yield raw source-type media one record
-           at a time.  The framework loops over each
-           :class:`SourceSpec` produced by :meth:`effective_source_specs`,
-           runs the spec's converter (when one is set) on every yielded
-           media, and ingests the results.  This is the recommended hook for
-           service-style importers: subclasses never call
-           :func:`~vtscore.converters.get_converter` themselves.
-        2. :meth:`list_records` + :meth:`fetch_record` (and optionally
+           at a time, for one :class:`SourceSpec` at a time.  The framework
+           loops over each spec produced by :meth:`effective_source_specs`,
+           calls this method per spec, runs the spec's converter (when one is
+           set) on every yielded media, and ingests the results.  This is the
+           recommended hook for service-style importers whose backend
+           naturally serves one media type per query.
+        2. :meth:`fetch_all_source_media` — yield ``(spec, raw_media)`` pairs
+           for **all** specs in one pass.  Override this when one upstream
+           call returns mixed source types and you want to make it just once
+           (e.g. a service whose query returns "everything that matched" with
+           a per-record type tag).  The framework still runs converters and
+           ingests; subclasses never call
+           :func:`~vtscore.converters.get_converter` themselves.  The default
+           implementation delegates to :meth:`fetch_source_media` per spec,
+           so importers using hook 1 don't need to know this hook exists.
+        3. :meth:`list_records` + :meth:`fetch_record` (and optionally
            :meth:`_fetch_records_bulk_impl` for batched fetches) — a
            single-spec convenience for service importers that only pull one
            source type.  The default :meth:`fetch_source_media` delegates to
            these hooks, so single-spec importers can keep using the
            per-record split without thinking about specs.
-        3. :meth:`run` directly — full control.  Folder-shaped importers
+        4. :meth:`run` directly — full control.  Folder-shaped importers
            override this and delegate to
            :func:`~vtscore.converters.runner.run_converters_on_folder`.
 
         Default flow:
 
         - When :meth:`effective_source_specs` resolves to one or more specs,
-          iterate them: for each spec, call :meth:`fetch_source_media` and
-          (when ``spec.converter`` is set) pass each yielded media through
-          ``converter.convert(raw, spec.params)`` before assigning IDs.
+          call :meth:`fetch_all_source_media` once and pass each yielded
+          ``(spec, raw)`` pair through ``spec.converter`` (when set) before
+          assigning IDs and storing the result in *medias*.
         - When :meth:`effective_source_specs` cannot resolve (no
           ``media_type`` declared and no legacy ``converters`` field — i.e.
           a bare service importer), fall back to the
@@ -434,8 +444,9 @@ class DatasetImporter(PluginBase):
                 saves memory for CLI workflows that only need embeddings.
 
         Raises:
-            NotImplementedError: If neither :meth:`run`, :meth:`fetch_source_media`,
-                nor the :meth:`list_records` + :meth:`fetch_record` hooks are
+            NotImplementedError: If none of :meth:`run`,
+                :meth:`fetch_all_source_media`, :meth:`fetch_source_media`,
+                or the :meth:`list_records` + :meth:`fetch_record` hooks are
                 implemented by the subclass.
             Exception: Any exception propagates to the route handler, which
                 stores it in the progress tracker as an error message.
@@ -451,20 +462,26 @@ class DatasetImporter(PluginBase):
             specs = []
 
         if specs:
-            for spec in specs:
-                converter = get_converter(spec.converter) if spec.converter else None
-                for raw in self.fetch_source_media(spec, field_values, thin=thin):
-                    if raw is None:
+            converter_cache: dict[str, Any] = {}
+            for spec, raw in self.fetch_all_source_media(specs, field_values, thin=thin):
+                if raw is None:
+                    continue
+                if spec.converter is None:
+                    outs = [raw]
+                else:
+                    converter = converter_cache.get(spec.converter)
+                    if converter is None:
+                        converter = get_converter(spec.converter)
+                        converter_cache[spec.converter] = converter
+                    outs = converter.convert(raw, spec.params)
+                for media in outs:
+                    if media is None:
                         continue
-                    outs = converter.convert(raw, spec.params) if converter is not None else [raw]
-                    for media in outs:
-                        if media is None:
-                            continue
-                        media["id"] = next_id
-                        media.setdefault("origin", default_origin)
-                        media.setdefault("origin_name", media.get("filename") or str(next_id))
-                        medias[next_id] = media
-                        next_id += 1
+                    media["id"] = next_id
+                    media.setdefault("origin", default_origin)
+                    media.setdefault("origin_name", media.get("filename") or str(next_id))
+                    medias[next_id] = media
+                    next_id += 1
             return
 
         # Fallback: no spec set could be resolved.  Use the per-record hooks
@@ -483,15 +500,65 @@ class DatasetImporter(PluginBase):
             next_id += 1
 
     # ------------------------------------------------------------------
-    # Multi-media source hook
+    # Multi-media source hooks
     # ------------------------------------------------------------------
     #
-    # The recommended override point for service-style importers that want
-    # to support multiple source types in one import.  The framework drives
-    # both the spec iteration *and* the converter loop, so subclasses never
-    # call :func:`vtscore.converters.get_converter` themselves — they just
-    # yield raw media of ``spec.source_type`` and let
-    # :meth:`run` apply the converter.
+    # Two override points for service-style importers.  In both cases the
+    # framework drives the converter loop and ingestion, so subclasses
+    # never call :func:`vtscore.converters.get_converter` themselves —
+    # they just yield raw media of the appropriate ``spec.source_type``.
+    #
+    # Pick :meth:`fetch_source_media` when the backend serves one media
+    # type per query (the framework loops it across specs for you).
+    # Pick :meth:`fetch_all_source_media` when a single upstream call
+    # returns mixed source types and you want to make it only once.
+
+    def fetch_all_source_media(
+        self,
+        specs: list[SourceSpec],
+        field_values: dict[str, Any],
+        thin: bool = False,
+    ) -> Iterator[tuple[SourceSpec, dict[str, Any]]]:
+        """Yield ``(spec, raw_media)`` pairs for every spec the user picked.
+
+        This is the bulk-fetch escape hatch for importers whose backend
+        returns mixed source types in a single upstream call (e.g. one
+        query that yields both images and videos, with a per-record type
+        tag).  Override this to issue that one call, then yield each
+        record paired with the :class:`SourceSpec` it satisfies — the
+        framework handles converter dispatch and ingestion exactly as it
+        does for :meth:`fetch_source_media`.
+
+        For per-spec importers (the common case — one query per source
+        type), override :meth:`fetch_source_media` instead; the default
+        implementation of this method loops it for you.
+
+        Each yielded ``raw_media`` dict must match the shape expected of
+        media of ``spec.source_type`` (so a video spec yields
+        ``type="video"`` dicts with ``media_bytes`` / ``media_path``; the
+        framework hands them to the spec's converter, which produces
+        e.g. ``type="image"`` dicts).  ``id`` and ``origin`` may be
+        omitted — :meth:`run` assigns IDs and falls back to
+        :meth:`build_origin` for unset origins.
+
+        Args:
+            specs: The full list of :class:`SourceSpec` rows resolved
+                from *field_values*, in the user's submitted order.
+            field_values: The same mapping passed to :meth:`run`.
+            thin: When ``True``, skip downloading raw bytes — yield media
+                dicts with ``media_url`` / ``media_path`` instead of
+                ``media_bytes``.
+
+        Yields:
+            ``(spec, raw_media)`` tuples.  ``spec`` must be one of the
+            entries in *specs* (the framework uses its ``converter`` and
+            ``params`` to dispatch).
+        """
+        for spec in specs:
+            for raw in self.fetch_source_media(spec, field_values, thin=thin):
+                if raw is None:
+                    continue
+                yield spec, raw
 
     def fetch_source_media(
         self,

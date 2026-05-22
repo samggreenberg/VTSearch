@@ -292,6 +292,30 @@ the docs example showed a `DXImporter` calling
   videos converted to images + documents converted to images, with the
   framework running each converter.
 
+## What shipped (bulk-fetch escape hatch)
+
+Service-style importers had only one framework-driven fetch shape:
+`fetch_source_media(spec)` called once per spec.  That works when the
+backend serves one media type per query, but it forces N upstream calls
+when a single query naturally returns mixed types.  Adding a second
+fetch hook for that case:
+
+- New optional hook on `DatasetImporter`:
+  `fetch_all_source_media(specs, field_values, thin=False) -> Iterator[tuple[SourceSpec, dict]]`.
+  Override this when one upstream call covers every spec — yield
+  `(spec, raw_media)` pairs and the framework handles converter
+  dispatch and ingestion exactly as it does for the per-spec hook.
+- The base-class `run()` now calls `fetch_all_source_media()` once
+  instead of looping `fetch_source_media()` itself.  The default
+  `fetch_all_source_media()` delegates to `fetch_source_media()` per
+  spec, so existing per-spec importers see no behavioural change.
+- Converter lookups in `run()` are cached per-spec so a bulk importer
+  that interleaves specs across yields doesn't re-resolve the same
+  converter on every pair.
+- Subclasses still never call `get_converter()` themselves — the
+  framework owns conversion and ingestion regardless of which fetch
+  hook is overridden.
+
 ## What shipped (latest round)
 
 Flipped `multi_media = True` on the last six in-tree importers so the
