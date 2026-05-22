@@ -152,9 +152,11 @@
   ::ng-deep ol {
     margin: 0 0 var(--space-md);
   }
-  ::ng-deep ul,
-  ::ng-deep ol {
+  ::ng-deep ul {
     padding-left: var(--space-xl);
+  }
+  ::ng-deep ol {
+    padding-left: 2.5em;
   }
   ::ng-deep li {
     margin-bottom: var(--space-2xs);
