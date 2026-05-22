@@ -101,7 +101,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['medias'] && this.medias.length > 0) {
-      const newType = this.medias[0].type;
+      const newType = this.medias[0].media_type;
       if (newType !== this.currentMediaType) {
         this.currentMediaType = newType;
         this.viewMode = this.viewModeRightDict[newType] ?? 'grid';

@@ -9,8 +9,8 @@ describe('MediaStateService', () => {
   let httpMock: HttpTestingController;
 
   const mockMedias: Media[] = [
-    { id: 1, type: 'audio', filename: 'a.wav', md5: 'abc', custom_metadata: {} },
-    { id: 2, type: 'image', filename: 'b.png', md5: 'def', custom_metadata: {} },
+    { id: 1, media_type: 'audio', filename: 'a.wav', md5: 'abc', custom_metadata: {} },
+    { id: 2, media_type: 'image', filename: 'b.png', md5: 'def', custom_metadata: {} },
   ];
 
   beforeEach(() => {

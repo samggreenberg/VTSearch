@@ -33,6 +33,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "**/*.md",
+                "input": "../docs/user",
+                "output": "/assets/docs"
               }
             ],
             "styles": [

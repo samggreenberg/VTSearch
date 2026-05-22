@@ -25,7 +25,7 @@ class ServerFileSettingsImporter(SettingsImporter):
             key="filepath",
             label="Path or URL",
             field_type="server_path",
-            description="Absolute or relative path to a VTSearch settings JSON file on the server.",
+            description="A VTSearch settings JSON file on the server to load settings from.",
             placeholder="data/settings.json",
         ),
     ]

@@ -12,7 +12,7 @@ describe('CenterPanelComponent', () => {
 
   const mockMedia: Media = {
     id: 1,
-    type: 'audio',
+    media_type: 'audio',
     filename: 'test.wav',
     md5: 'abc123',
     custom_metadata: {},
@@ -48,25 +48,25 @@ describe('CenterPanelComponent', () => {
   });
 
   it('should show image viewer for image media', () => {
-    component.media = { ...mockMedia, type: 'image' };
+    component.media = { ...mockMedia, media_type: 'image' };
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('vt-image-viewer')).toBeTruthy();
   });
 
   it('should show video player for video media', () => {
-    component.media = { ...mockMedia, type: 'video' };
+    component.media = { ...mockMedia, media_type: 'video' };
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('vt-video-player')).toBeTruthy();
   });
 
   it('should show text viewer for text media', () => {
-    component.media = { ...mockMedia, type: 'text' };
+    component.media = { ...mockMedia, media_type: 'text' };
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('vt-text-viewer')).toBeTruthy();
   });
 
   it('should show document viewer for document media', () => {
-    component.media = { ...mockMedia, type: 'document' };
+    component.media = { ...mockMedia, media_type: 'document' };
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('vt-document-viewer')).toBeTruthy();
   });
@@ -154,7 +154,7 @@ describe('CenterPanelComponent', () => {
    * region-agnostic — see "Vote attribution → v2" in docs/plans/patch-embedder.md).
    */
   describe('vote-API contract for region_box', () => {
-    const imageMedia: Media = { ...mockMedia, type: 'image', filename: 'pic.png' };
+    const imageMedia: Media = { ...mockMedia, media_type: 'image', filename: 'pic.png' };
     const box: RegionBox = [0.1, 0.2, 0.5, 0.6];
 
     function setup(): void {
@@ -218,7 +218,7 @@ describe('CenterPanelComponent', () => {
    * clears the armed state and keeps the box.
    */
   describe('sticky bad-vote-confirm armed state', () => {
-    const imageMedia: Media = { ...mockMedia, type: 'image', filename: 'pic.png' };
+    const imageMedia: Media = { ...mockMedia, media_type: 'image', filename: 'pic.png' };
     const box: RegionBox = [0.1, 0.2, 0.5, 0.6];
 
     function setup(): void {

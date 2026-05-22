@@ -188,7 +188,7 @@ class TestMediasListingMultiMedia:
             data = resp.get_json()
             assert len(data) == 3
             for item in data:
-                assert item["type"] == "image"
+                assert item["media_type"] == "image"
                 assert "embedding" not in item
                 assert "media_bytes" not in item
         finally:
@@ -206,7 +206,7 @@ class TestMediasListingMultiMedia:
             data = resp.get_json()
             assert len(data) == 3
             for item in data:
-                assert item["type"] == "text"
+                assert item["media_type"] == "text"
                 assert "media_string" not in item
         finally:
             medias.clear()
@@ -223,7 +223,7 @@ class TestMediasListingMultiMedia:
             data = resp.get_json()
             assert len(data) == 3
             for item in data:
-                assert item["type"] == "video"
+                assert item["media_type"] == "video"
         finally:
             medias.clear()
             medias.update(saved)

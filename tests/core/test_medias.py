@@ -312,13 +312,13 @@ class TestListMediaIds:
         assert len(data) == app_module.NUM_MEDIAS
 
     def test_stub_fields_only(self, client):
-        """Each stub carries id + type and (optionally) embedder — nothing else."""
+        """Each stub carries id + media_type and (optionally) embedder — nothing else."""
         resp = client.get("/api/medias/ids")
         data = resp.get_json()
-        allowed = {"id", "type", "embedder"}
+        allowed = {"id", "media_type", "embedder"}
         for media in data:
             assert "id" in media
-            assert "type" in media
+            assert "media_type" in media
             extra = set(media.keys()) - allowed
             assert not extra, f"unexpected heavy fields in /ids response: {extra}"
 

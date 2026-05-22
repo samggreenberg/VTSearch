@@ -11,7 +11,7 @@ describe('TextViewerComponent', () => {
 
   const mockMedia: Media = {
     id: 4,
-    type: 'text',
+    media_type: 'text',
     filename: 'test.txt',
     md5: 'jkl012',
     custom_metadata: {},

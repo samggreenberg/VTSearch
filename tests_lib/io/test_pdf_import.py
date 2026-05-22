@@ -237,7 +237,7 @@ class TestFolderImporterPdf:
 
         # Only the WAV should be loaded, not the PDF
         assert len(medias) == 1
-        assert medias[1]["type"] == "audio"
+        assert medias[1]["media_type"] == "audio"
 
     def test_pdf_thin_mode_no_media_bytes(self, tmp_path):
         """In thin mode, PDF-derived medias should have media_bytes=None."""
@@ -274,7 +274,7 @@ class TestFolderImporterPdf:
 
         pdf_medias = [m for m in medias.values() if m["filename"].startswith("doc.pdf-")]
         assert len(pdf_medias) >= 1
-        assert all(m["type"] == "image" for m in pdf_medias)
+        assert all(m["media_type"] == "image" for m in pdf_medias)
 
     def test_pdf_media_has_width_height(self, tmp_path):
         """PDF-derived medias should have non-None width and height."""

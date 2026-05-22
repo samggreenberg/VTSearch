@@ -23,7 +23,7 @@ def _make_clips(categories: dict[str, int]) -> dict[int, dict]:
         for _ in range(count):
             medias[media_id] = {
                 "id": media_id,
-                "type": "audio",
+                "media_type": "audio",
                 "category": cat,
                 "embedding": np.zeros(4),
                 "duration": 1.0,

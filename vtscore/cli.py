@@ -277,7 +277,7 @@ def _build_multi_results_dict(
 def _detect_media_type(medias: dict[int, dict[str, Any]]) -> str:
     """Return the media type from the first media, or ``"unknown"``."""
     for media in medias.values():
-        return media.get("type", "unknown")
+        return media.get("media_type", "unknown")
     return "unknown"
 
 

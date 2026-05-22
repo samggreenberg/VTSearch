@@ -25,7 +25,7 @@ class TestClearClipsGarbageCollection:
             mock_gc.assert_called_once()
 
     def test_clear_medias_empties_dict(self):
-        medias[999] = {"id": 999, "type": "audio", "embedding": np.zeros(10)}
+        medias[999] = {"id": 999, "media_type": "audio", "embedding": np.zeros(10)}
         clear_medias()
         assert len(medias) == 0
         # Restore test medias
@@ -57,7 +57,7 @@ class TestPickleMemoryError:
         medias_data = {}
         for i in range(1, 6):
             medias_data[i] = {
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": [0.0] * 10,
                 "media_bytes": b"\x00" * 100,
                 "filename": f"clip_{i}.wav",
@@ -92,7 +92,7 @@ class TestPickleMemoryError:
 
         medias_data = {
             1: {
-                "type": "text",
+                "media_type": "text",
                 "embedding": [0.0] * 10,
                 "media_string": "hello",
                 "filename": "t.txt",
@@ -176,7 +176,7 @@ class TestCombineMemoryError:
         for name in ("a.pkl", "b.pkl"):
             medias_data = {
                 1: {
-                    "type": "audio",
+                    "media_type": "audio",
                     "embedding": [0.0] * 10,
                     "media_bytes": b"\x00" * 100,
                     "filename": f"{name}_clip.wav",

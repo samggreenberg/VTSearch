@@ -71,11 +71,10 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
             key="filepath",
             label="Save to (server path)",
             field_type="server_path",
-            description=(
-                "Absolute or relative path on the server where the CSV "
-                "results file will be written.  Parent directories are "
-                "created automatically.  Supports {YYYYMMDD-HHMMSS}, "
-                "{detector_name} and {username} templates."
+            description="Where on the server to write the CSV results file.",
+            hint=(
+                "Absolute or relative path; parent directories are created automatically.\n"
+                "Template variables: {YYYYMMDD-HHMMSS}, {detector_name}, {username}."
             ),
             placeholder=_DEFAULT_CSV_PATH,
             default=_DEFAULT_CSV_PATH,

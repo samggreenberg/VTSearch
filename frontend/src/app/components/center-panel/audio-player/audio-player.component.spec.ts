@@ -9,7 +9,7 @@ describe('AudioPlayerComponent', () => {
 
   const mockMedia: Media = {
     id: 1,
-    type: 'audio',
+    media_type: 'audio',
     filename: 'test.wav',
     md5: 'abc123',
     custom_metadata: {},

@@ -53,11 +53,10 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
             key="filepath",
             label="Save to (server path)",
             field_type="server_path",
-            description=(
-                "Absolute or relative path on the server where the JSON "
-                "results file will be written.  Parent directories are "
-                "created automatically.  Supports {YYYYMMDD-HHMMSS}, "
-                "{detector_name} and {username} templates."
+            description="Where on the server to write the JSON results file.",
+            hint=(
+                "Absolute or relative path; parent directories are created automatically.\n"
+                "Template variables: {YYYYMMDD-HHMMSS}, {detector_name}, {username}."
             ),
             placeholder=_DEFAULT_JSON_PATH,
             default=_DEFAULT_JSON_PATH,

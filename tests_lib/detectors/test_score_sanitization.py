@@ -186,7 +186,7 @@ class TestLabelsetTrainAndScoreNaNSafety:
             cid: {
                 "embedding": rng.standard_normal(dim).astype(np.float32),
                 "embedder": "test",
-                "type": "audio",
+                "media_type": "audio",
                 "md5": f"m{cid:031d}",
             }
             for cid in (100, 101, 102)

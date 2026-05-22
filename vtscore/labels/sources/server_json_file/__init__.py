@@ -31,10 +31,8 @@ class ServerFileLabelsetSource(LabelsetSource):
             key="filepath",
             label="Save to (server path)",
             field_type="server_path",
-            description=(
-                "Absolute or relative path to a labels JSON file on the "
-                "server.  Supports {detector_id} and {detector_name} templates."
-            ),
+            description="The JSON file on the server to sync this detector's labels with.",
+            hint=("Absolute or relative server path.  Template variables: {detector_id}, {detector_name}."),
             placeholder=f"{DATA_DIR}/labels/{{detector_name}}.labels.json",
         ),
     ]

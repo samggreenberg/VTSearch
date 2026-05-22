@@ -93,7 +93,7 @@ What's now in each `medias[cid]`:
 medias[1]
 # {
 #   "id": 1,
-#   "type": "audio",
+#   "media_type": "audio",
 #   "embedder": "audio_clap",
 #   "md5": "5d41402abc4b2a76b9719d911017c592",
 #   "embedding": np.ndarray(shape=(512,), dtype=float32),

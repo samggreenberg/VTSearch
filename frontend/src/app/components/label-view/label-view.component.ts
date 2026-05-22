@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
 import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
@@ -33,7 +33,10 @@ import { ResortPromptModalComponent, ResortResult } from '../modals/resort-promp
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import type { LearnedSortResponse } from '../../generated/api-client/models/learned-sort-response';
 import { formatProgressMessage } from '../../utils/format-progress';
-import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
+import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
+import { PanelResizeDirective } from './panel-resize.directive';
+import { LabelViewPanelStateService } from './label-view-panel-state.service';
+import { buildMediaContextMenuItems } from './media-context-menu-items';
 
 @Component({
   selector: 'vt-label-view',
@@ -47,7 +50,9 @@ import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/gr
     ResortPromptModalComponent,
     MediaContextMenuComponent,
     MediaCropModalComponent,
+    PanelResizeDirective,
   ],
+  providers: [LabelViewPanelStateService],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',
 })
@@ -61,22 +66,18 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  back to cid-based vote display. */
   trainableModelName: string | null = null;
   labelingStatus: LabelingStatusResponse | null = null;
-  viewModeLeft: 'grid' | 'list' = 'list';
-  gridGoalWidthLeft: number = 80;
-  focusModeLeft: 'click' | 'hover' = 'click';
-  focusModeRight: 'click' | 'hover' = 'click';
-  private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
-  private gridIconSizeLeftDict: Record<string, string> = {};
-  private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
-  private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
-  private panelPxLeftDict: Record<string, number> = {};
-  private panelPxRightDict: Record<string, number> = {};
-  private currentMediaType = '';
   leftWidth = 260;
   rightWidth = 300;
   autopilotCollapsed = false;
   autopilotEnabled = true;
   progressModalMetric: ProgressMetric | null = null;
+
+  // Per-media-type panel preferences (view mode, grid size, focus mode, saved
+  // widths) live on `panelState`; the template reads getters on it directly.
+  get viewModeLeft(): 'grid' | 'list' { return this.panelState.viewModeLeft; }
+  get gridGoalWidthLeft(): number { return this.panelState.gridGoalWidthLeft; }
+  get focusModeLeft(): 'click' | 'hover' { return this.panelState.focusModeLeft; }
+  get focusModeRight(): 'click' | 'hover' { return this.panelState.focusModeRight; }
 
   // Re-sort prompt state
   showResortPrompt = false;
@@ -90,12 +91,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     return Math.round(this.resortNextThreshold * 1.5);
   }
 
-  private readonly COLLAPSED_WIDTH = 48;
+  readonly COLLAPSED_WIDTH = 48;
   private savedLeftWidth = 260;
-  private readonly LEFT_MIN = 180;
-  private readonly RIGHT_MIN = 150;
-  private readonly CENTER_MIN = 100;
-  private readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
+  readonly LEFT_MIN = 180;
+  readonly RIGHT_MIN = 150;
+  readonly CENTER_MIN = 100;
+  readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
   private destroy$ = new Subject<void>();
   private statusPolling$: Subscription | null = null;
   private scoringProgressPoll$: Subscription | null = null;
@@ -112,19 +113,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private rehydrateLearnedSub?: Subscription;
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
-  private dragging = false;
-  private draggingRight = false;
-  private boundMouseMove = this.onMouseMove.bind(this);
-  private boundMouseUp = this.onMouseUp.bind(this);
-  private boundRightMouseMove = this.onRightMouseMove.bind(this);
-  private boundRightMouseUp = this.onRightMouseUp.bind(this);
 
   constructor(
     private sortingApi: SortingApiService,
     private detectorsApi: DetectorsApiService,
     private mediasApi: MediasApiService,
     private datasetsApi: DatasetsApiService,
-    private ngZone: NgZone,
     private labelSession: LabelSessionService,
     public mediaState: MediaStateService,
     public voteState: VoteStateService,
@@ -135,6 +129,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private progressEvents: ProgressEventsService,
     private newThingFlows: NewThingFlowsService,
     private toast: ToastService,
+    public panelState: LabelViewPanelStateService,
   ) {}
 
   ngOnInit(): void {
@@ -173,14 +168,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((medias) => {
         if (medias.length > 0) {
-          const newType = medias[0].type;
-          if (newType !== this.currentMediaType) {
-            this.currentMediaType = newType;
-            this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
-            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
-            this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
-            this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
-            this.applyPanelPx(newType);
+          const newType = medias[0].media_type;
+          if (newType !== this.panelState.currentMediaType) {
+            this.panelState.setMediaType(newType);
+            this.applyPanelPx();
           }
         }
         if (this.autopilotTextSortPending && medias.length > 0) {
@@ -267,87 +258,47 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.destroy$.next();
     this.destroy$.complete();
     this.voteState.stopPolling();
-    document.removeEventListener('mousemove', this.boundMouseMove);
-    document.removeEventListener('mouseup', this.boundMouseUp);
-    document.removeEventListener('mousemove', this.boundRightMouseMove);
-    document.removeEventListener('mouseup', this.boundRightMouseUp);
   }
 
   // --- Divider drag ---
 
-  onDividerMouseDown(event: MouseEvent): void {
-    event.preventDefault();
-    this.dragging = true;
-    this.ngZone.runOutsideAngular(() => {
-      document.addEventListener('mousemove', this.boundMouseMove);
-      document.addEventListener('mouseup', this.boundMouseUp);
-    });
+  /** Min width the left panel can shrink to right now — autopilot-collapsed
+   *  state lets the user drag down to a thin sliver. */
+  get leftMin(): number {
+    return this.autopilotCollapsed ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
   }
 
-  private onMouseMove(event: MouseEvent): void {
-    if (!this.dragging) return;
-    const layoutRect = this.layoutRef.nativeElement.getBoundingClientRect();
-    let newWidth = event.clientX - layoutRect.left;
-    const minWidth = this.autopilotCollapsed ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
-    const leftMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
-    newWidth = Math.max(minWidth, Math.min(leftMax, newWidth));
-    this.ngZone.run(() => {
-      if (this.autopilotCollapsed && newWidth >= this.LEFT_MIN) {
-        this.autopilotCollapsed = false;
-        this.settingsState.update({ hide_autopilot: false }).subscribe();
-      }
-      this.leftWidth = newWidth;
-      this.layoutRef.nativeElement.style.setProperty('--left-width', `${newWidth}px`);
-    });
+  onLeftWidthChange(width: number): void {
+    if (this.autopilotCollapsed && width >= this.LEFT_MIN) {
+      this.autopilotCollapsed = false;
+      this.settingsState.update({ hide_autopilot: false }).subscribe();
+    }
+    this.leftWidth = width;
+    this.layoutRef.nativeElement.style.setProperty('--left-width', `${width}px`);
   }
 
-  private onMouseUp(): void {
-    this.dragging = false;
-    document.removeEventListener('mousemove', this.boundMouseMove);
-    document.removeEventListener('mouseup', this.boundMouseUp);
+  onLeftResizeEnd(width: number): void {
+    this.leftWidth = width;
     const leftPanelEl = this.layoutRef.nativeElement.querySelector('vt-left-panel') as HTMLElement | null;
     if (leftPanelEl) {
       const snapped = snapPanelWidthToGridColumns(leftPanelEl, this.leftWidth);
       if (snapped !== null) {
-        const minWidth = this.autopilotCollapsed ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
         const leftMax = this.layoutRef.nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
-        const clamped = Math.max(minWidth, Math.min(leftMax, snapped));
-        this.ngZone.run(() => {
-          this.leftWidth = clamped;
-          this.layoutRef.nativeElement.style.setProperty('--left-width', `${clamped}px`);
-        });
+        const clamped = Math.max(this.leftMin, Math.min(leftMax, snapped));
+        this.leftWidth = clamped;
+        this.layoutRef.nativeElement.style.setProperty('--left-width', `${clamped}px`);
       }
     }
-    this.savePanelPx('left');
+    this.panelState.savePanelPx('left', this.leftWidth);
   }
 
-  // --- Right divider drag ---
-
-  onRightDividerMouseDown(event: MouseEvent): void {
-    event.preventDefault();
-    this.draggingRight = true;
-    this.ngZone.runOutsideAngular(() => {
-      document.addEventListener('mousemove', this.boundRightMouseMove);
-      document.addEventListener('mouseup', this.boundRightMouseUp);
-    });
+  onRightWidthChange(width: number): void {
+    this.rightWidth = width;
+    this.layoutRef.nativeElement.style.setProperty('--right-width', `${width}px`);
   }
 
-  private onRightMouseMove(event: MouseEvent): void {
-    if (!this.draggingRight) return;
-    const layoutRect = this.layoutRef.nativeElement.getBoundingClientRect();
-    let newWidth = layoutRect.right - event.clientX;
-    const rightMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
-    newWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, newWidth));
-    this.ngZone.run(() => {
-      this.rightWidth = newWidth;
-      this.layoutRef.nativeElement.style.setProperty('--right-width', `${newWidth}px`);
-    });
-  }
-
-  private onRightMouseUp(): void {
-    this.draggingRight = false;
-    document.removeEventListener('mousemove', this.boundRightMouseMove);
-    document.removeEventListener('mouseup', this.boundRightMouseUp);
+  onRightResizeEnd(width: number): void {
+    this.rightWidth = width;
     const rightPanelEl = this.layoutRef.nativeElement.querySelector('vt-right-panel') as HTMLElement | null;
     if (rightPanelEl) {
       const snapped = snapPanelWidthToGridColumns(rightPanelEl, this.rightWidth);
@@ -355,13 +306,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
         const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
         const clamped = Math.max(this.RIGHT_MIN, Math.min(rightMax, snapped));
-        this.ngZone.run(() => {
-          this.rightWidth = clamped;
-          this.layoutRef.nativeElement.style.setProperty('--right-width', `${clamped}px`);
-        });
+        this.rightWidth = clamped;
+        this.layoutRef.nativeElement.style.setProperty('--right-width', `${clamped}px`);
       }
     }
-    this.savePanelPx('right');
+    this.panelState.savePanelPx('right', this.rightWidth);
   }
 
   // --- Data loading ---
@@ -372,47 +321,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((settings) => {
         if (!settings) return;
-        const dict = settings.view_mode_left;
-        if (dict && typeof dict === 'object') {
-          this.viewModeLeftDict = dict as Record<string, 'grid' | 'list'>;
-          if (this.currentMediaType) {
-            this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
-          }
-        }
-        const sizeDict = settings.grid_icon_size_left;
-        if (sizeDict && typeof sizeDict === 'object') {
-          this.gridIconSizeLeftDict = sizeDict as Record<string, string>;
-          if (this.currentMediaType) {
-            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[this.currentMediaType] ?? 'M');
-          }
-        }
-        const fmLeft = settings.focus_mode_left;
-        if (fmLeft && typeof fmLeft === 'object') {
-          this.focusModeLeftDict = fmLeft as Record<string, 'click' | 'hover'>;
-          if (this.currentMediaType) {
-            this.focusModeLeft = this.focusModeLeftDict[this.currentMediaType] ?? 'click';
-          }
-        }
-        const fmRight = settings.focus_mode_right;
-        if (fmRight && typeof fmRight === 'object') {
-          this.focusModeRightDict = fmRight as Record<string, 'click' | 'hover'>;
-          if (this.currentMediaType) {
-            this.focusModeRight = this.focusModeRightDict[this.currentMediaType] ?? 'click';
-          }
-        }
-        const pplDict = settings.panel_pct_left;
-        if (pplDict && typeof pplDict === 'object') {
-          this.panelPxLeftDict = pplDict as Record<string, number>;
-          if (this.currentMediaType) {
-            this.applyPanelPx(this.currentMediaType);
-          }
-        }
-        const pprDict = settings.panel_pct_right;
-        if (pprDict && typeof pprDict === 'object') {
-          this.panelPxRightDict = pprDict as Record<string, number>;
-          if (this.currentMediaType) {
-            this.applyPanelPx(this.currentMediaType);
-          }
+        this.panelState.loadFromSettings(settings);
+        if (this.panelState.currentMediaType) {
+          this.applyPanelPx();
         }
         if (settings.autopilot_enabled != null) {
           this.autopilotEnabled = settings.autopilot_enabled;
@@ -720,37 +631,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onMediaContextRequest(event: { id: number; x: number; y: number }): void {
     const media = this.mediaState.medias.find((m) => m.id === event.id);
-    const mediaType = media?.type ?? '';
-    const cropAble = mediaType === 'audio' || mediaType === 'image';
-
-    const items: MediaContextMenuItem[] = [
-      {
-        id: 'sort',
-        label: 'Sort by similarity to this',
-        title: 'Sort all loaded items by similarity to this item, using its existing embedding.',
-      },
-    ];
-    if (cropAble) {
-      items.push({
-        id: 'crop-sort',
-        label: 'Crop, then sort by similarity…',
-        title: 'Open the crop tool to pick a sub-region, then sort by similarity.',
-      });
-    }
-    items.push({
-      id: 'seed',
-      label: 'Use as detector seed',
-      title: 'Open the New Detector form with this item pre-selected as the example.',
-    });
-    if (cropAble) {
-      items.push({
-        id: 'crop-seed',
-        label: 'Crop, then use as detector seed…',
-        title: 'Open the crop tool to pick a sub-region, then seed a new detector.',
-      });
-    }
-
-    this.contextMenuItems = items;
+    this.contextMenuItems = buildMediaContextMenuItems(media?.media_type ?? '');
     this.contextMenuMediaId = event.id;
     this.contextMenuX = event.x;
     this.contextMenuY = event.y;
@@ -805,7 +686,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private openSeedNewDetector(mediaId: number, cropParams?: Record<string, unknown>): void {
     const media = this.mediaState.medias.find((m) => m.id === mediaId);
     this.newThingFlows.openNewDetector({
-      defaultMediaType: media?.type ?? '',
+      defaultMediaType: media?.media_type ?? '',
       seedMediaId: mediaId,
       seedCropParams: cropParams,
     });
@@ -814,7 +695,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private openCropOverlay(mediaId: number, action: 'sort' | 'seed'): void {
     const media = this.mediaState.getMedia(mediaId);
     if (!media) return;
-    const mediaType = media.type;
+    const mediaType = media.media_type;
     const url =
       mediaType === 'audio'
         ? this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`)
@@ -1116,26 +997,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.showResortPrompt = false;
   }
 
-  // --- Panel percentage helpers ---
+  // --- Panel width helpers ---
 
-  private savePanelPx(side: 'left' | 'right'): void {
-    if (!this.currentMediaType) return;
-    const px = side === 'left' ? this.leftWidth : this.rightWidth;
-    const key = side === 'left' ? 'panel_pct_left' : 'panel_pct_right';
-    const dict = side === 'left' ? this.panelPxLeftDict : this.panelPxRightDict;
-    dict[this.currentMediaType] = px;
-    this.settingsState.update({ [key]: { ...dict } }).subscribe();
-  }
-
-  private applyPanelPx(mediaType: string): void {
+  /** Apply the panel widths saved for the active media type, clamping against
+   *  the current layout bounds. Called when the media type changes or when
+   *  fresh per-media-type settings come in. */
+  private applyPanelPx(): void {
     const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width || 1200;
-    const leftPx = this.panelPxLeftDict[mediaType];
+    const leftPx = this.panelState.getPanelPx('left');
     if (leftPx != null && !this.autopilotCollapsed) {
       const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
       this.leftWidth = Math.max(this.LEFT_MIN, Math.min(leftMax, leftPx));
       this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     }
-    const rightPx = this.panelPxRightDict[mediaType];
+    const rightPx = this.panelState.getPanelPx('right');
     if (rightPx != null) {
       const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
       this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, rightPx));

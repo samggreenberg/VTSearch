@@ -99,7 +99,7 @@ def _build_entry_metadata(media: dict) -> dict:
     from vtscore.media import get as get_media_type  # noqa: PLC0415
 
     try:
-        meta = get_media_type(media.get("type", "audio")).display_metadata(media)
+        meta = get_media_type(media.get("media_type", "audio")).display_metadata(media)
     except KeyError:
         meta = {}
 
@@ -322,7 +322,7 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
 
     media_type = "unknown"
     for media in snap_medias.values():
-        media_type = media.get("type", "unknown")
+        media_type = media.get("media_type", "unknown")
         break
 
     results_dict = {

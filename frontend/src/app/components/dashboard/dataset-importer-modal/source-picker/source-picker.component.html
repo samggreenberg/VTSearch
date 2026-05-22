@@ -45,21 +45,23 @@
     } @else if (demos.length === 0) {
       <p class="empty-state">{{ demoEmptyText }}</p>
     } @else {
-      <div class="demo-tab-bar">
-        @for (tab of demoTabs; track tab) {
-          <button
-            class="demo-tab"
-            [class.active]="activeDemoTab === tab"
-            (click)="activeDemoTabChange.emit(tab)"
-            [title]="'Filter demos by media type: ' + getDemoTabText(tab)"
-          >@if (getDemoTabIcon(tab)) {<vt-icon [icon]="getDemoTabIcon(tab)" [size]="14"></vt-icon>}{{ getDemoTabText(tab) }}</button>
+      @if (showDemoMediaTypeTabs) {
+        <div class="demo-tab-bar">
+          @for (tab of demoTabs; track tab) {
+            <button
+              class="demo-tab"
+              [class.active]="activeDemoTab === tab"
+              (click)="activeDemoTabChange.emit(tab)"
+              [title]="'Filter demos by media type: ' + getDemoTabText(tab)"
+            >@if (getDemoTabIcon(tab)) {<vt-icon [icon]="getDemoTabIcon(tab)" [size]="14"></vt-icon>}{{ getDemoTabText(tab) }}</button>
+          }
+        </div>
+        @if (!activeDemoTab) {
+          <p class="tab-bar-hint">{{ demoNoTabHint }}</p>
         }
-      </div>
-      @if (!activeDemoTab) {
-        <p class="tab-bar-hint">{{ demoNoTabHint }}</p>
       }
 
-      <ng-content select="[demoExtras]"></ng-content>
+      <ng-content select="[demoBefore]"></ng-content>
 
       @if (activeDemoTab && demoCols) {
         <div class="demo-content-area">
@@ -91,6 +93,7 @@
                 <tr
                   class="demo-row"
                   [class.ready]="demo.status === 'ready'"
+                  [class.selected]="selectedDemoName === demo.name"
                   [class.disabled]="demoRowDisabled(demo)"
                   role="button"
                   tabindex="0"
@@ -125,6 +128,8 @@
           </table>
         </div>
       }
+
+      <ng-content select="[demoAfter]"></ng-content>
     }
   </div>
 }

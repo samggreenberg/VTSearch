@@ -186,7 +186,7 @@ class TestSafePickleRoundTrip:
         medias = {
             1: {
                 "id": 1,
-                "type": "audio",
+                "media_type": "audio",
                 "duration": 1.0,
                 "file_size": 1024,
                 "md5": "abc123",
@@ -219,7 +219,7 @@ class TestSafePickleRoundTrip:
         for i in range(5):
             medias[i + 1] = {
                 "id": i + 1,
-                "type": "audio",
+                "media_type": "audio",
                 "duration": 1.0,
                 "file_size": 1024,
                 "md5": f"md5_{i}",
@@ -310,7 +310,7 @@ class TestPeekUnpicklerStripsAcrossProtocols:
         data = {
             "medias": {
                 i: {
-                    "type": "audio",
+                    "media_type": "audio",
                     "embedding": [float(j) * 1.0001 for j in range(64)],
                     "filename": f"m_{i}.wav",
                 }
@@ -322,7 +322,7 @@ class TestPeekUnpicklerStripsAcrossProtocols:
         media_dict = peeked["medias"]
         assert len(media_dict) == 8
         first = next(iter(media_dict.values()))
-        assert first["type"] == "audio"
+        assert first["media_type"] == "audio"
         # The whole point of the peek: embedding contents are dropped, not
         # materialised into millions of Python floats.
         assert len(first["embedding"]) == 0
@@ -336,11 +336,11 @@ class TestPeekUnpicklerStripsAcrossProtocols:
         from vtscore.security.pickle import peek_pickle_dataset_summary
 
         big = bytearray(b"X" * 1_000_000)
-        data = {"medias": {0: {"type": "audio", "audio": big}}}
+        data = {"medias": {0: {"media_type": "audio", "audio": big}}}
         raw = pickle.dumps(data, protocol=5)
         peeked = peek_pickle_dataset_summary(io.BytesIO(raw))
 
-        assert peeked["medias"][0]["type"] == "audio"
+        assert peeked["medias"][0]["media_type"] == "audio"
         assert peeked["medias"][0]["audio"] == bytearray()
         assert len(peeked["medias"][0]["audio"]) == 0
 
@@ -356,7 +356,7 @@ class TestPeekUnpicklerStripsAcrossProtocols:
         data = {
             "medias": {
                 i: {
-                    "type": "audio",
+                    "media_type": "audio",
                     "embedding": [float(j) * 1.0001 for j in range(512)],
                 }
                 for i in range(200)

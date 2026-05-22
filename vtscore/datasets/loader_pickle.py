@@ -120,7 +120,7 @@ def _build_pickle_thin_media(
     fname = media_info.get("filename", f"media_{new_id}.{media_type}")
     media_data: dict[str, Any] = {
         "id": new_id,
-        "type": media_type,
+        "media_type": media_type,
         "embedder": media_info.get("embedder", ""),
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", 0),
@@ -155,7 +155,7 @@ def _build_pickle_full_media(
     fname = media_info.get("filename", f"media_{new_id}.{media_type}")
     media_data = {
         "id": new_id,
-        "type": media_type,
+        "media_type": media_type,
         "embedder": media_info.get("embedder", ""),
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", len(media_bytes)),
@@ -193,7 +193,7 @@ def _convert_one_pickle_media(
     its embedding or external-file reference could not be resolved
     (used to bump the "missing media" warning counter).
     """
-    media_type = media_info.get("type", "audio")
+    media_type = media_info.get("media_type", "audio")
     extra_fields = extra_fields_map.get(media_type, [])
 
     # Treat missing key and explicit ``None`` identically: both mean

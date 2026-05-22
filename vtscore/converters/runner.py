@@ -132,7 +132,7 @@ def _build_converted_media_dict(
 ) -> dict[str, Any]:
     media_data: dict[str, Any] = {
         "id": media_id,
-        "type": target_type,
+        "media_type": target_type,
         "embedder": target_emb.name if target_emb else "",
         "file_size": len(output.get("media_bytes", b"") or output.get("media_string", "").encode()),
         "md5": _compute_md5(output),

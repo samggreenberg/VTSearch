@@ -78,7 +78,7 @@ def init_medias():
         fname = f"test_media_{i}.wav"
         medias[i] = {
             "id": i,
-            "type": "audio",
+            "media_type": "audio",
             "embedder": "clap",
             "frequency": freq,
             "duration": duration,

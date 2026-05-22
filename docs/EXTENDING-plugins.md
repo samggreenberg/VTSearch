@@ -413,7 +413,7 @@ def run(self, field_values, medias, thin=False):
     for i, item in enumerate(api_results, start=1):
         medias[i] = {
             "id": i,
-            "type": "audio",
+            "media_type": "audio",
             "filename": item["id"],
             "md5": item["md5"],                  # pre-computed by the service
             "embedding": item["embedding"],      # pre-computed by the service
@@ -460,7 +460,7 @@ class MyServiceImporter(DatasetImporter):
         # Default per-item path. The framework loops this when no
         # bulk override is provided. Return None to skip a record.
         return {
-            "type": "audio",
+            "media_type": "audio",
             "filename": record["id"],
             "embedding": _api.get_embedding(record["id"]),
             "media_bytes": None if thin else _api.fetch_bytes(record["url"]),
@@ -478,7 +478,7 @@ class MyServiceImporter(DatasetImporter):
             blobs = ([] if thin else
                      list(pool.map(lambda r: _api.fetch_bytes(r["url"]), records)))
         return [
-            {"type": "audio", "filename": r["id"], "embedding": e,
+            {"media_type": "audio", "filename": r["id"], "embedding": e,
              "media_bytes": (None if thin else b), "media_url": r["url"]}
             for r, e, b in zip(records, embeddings, blobs or [None] * len(records))
         ]
@@ -679,6 +679,16 @@ class DXImporter(DatasetImporter):
 The default `fetch_all_source_media()` just loops
 `fetch_source_media()` per spec, so importers using hook 2 see no
 behavioural change.
+
+> **Heads-up:** hooks 2 and 3 only run when
+> `effective_source_specs()` resolves to at least one spec.  That
+> requires either a `media_type` field on a legacy importer
+> (`multi_media = False`) or a `source_specs` value on a multi-media
+> importer (`multi_media = True`, with `media_type` declaring the
+> output type).  If your importer declares neither, `run()` falls
+> through to the hook-1 path and raises `NotImplementedError` from
+> `list_records()` — even when you've overridden `fetch_source_media`
+> or `fetch_all_source_media`.
 
 **Legacy / shim path.** Importers that have **not** flipped
 `multi_media` still work as before: they declare a single `media_type`

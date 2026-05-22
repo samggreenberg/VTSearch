@@ -27,9 +27,8 @@ class ServerFileSettingsSource(SettingsSource):
             key="filepath",
             label="Save to (server path)",
             field_type="server_path",
-            description=(
-                "Absolute or relative path to a settings JSON file on the server.  Supports {username} template."
-            ),
+            description="The JSON file on the server to sync your settings with.",
+            hint="Absolute or relative server path.  Template variable: {username}.",
             placeholder="data/{username}.settings.json",
         ),
     ]

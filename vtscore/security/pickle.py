@@ -163,7 +163,7 @@ def peek_pickle_dataset_summary(f: io.BufferedIOBase) -> Any:
     Returns the same top-level structure ``pickle.load`` would, but with
     embedding lists left empty and inline media-byte blobs replaced by
     ``b""``. Sufficient for reading the media count and the first entry's
-    ``"type"`` field; not suitable for any operation that needs the
+    ``"media_type"`` field; not suitable for any operation that needs the
     underlying vectors or bytes.
 
     Rejects non-allowlisted classes the same way :func:`safe_pickle_load`

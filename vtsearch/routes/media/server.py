@@ -361,7 +361,7 @@ def _media_extension(media: dict) -> str:
     suffix = Path(filename).suffix
     if suffix:
         return suffix
-    media_type = media.get("type", "")
+    media_type = media.get("media_type", "")
     if media_type == "audio":
         return ".wav"
     if media_type == "image":
@@ -481,7 +481,7 @@ def server_media_file_from_media_id(body: dict):
 
     crop_params = body.get("crop_params") if isinstance(body.get("crop_params"), dict) else None
     if crop_params:
-        media_type = media.get("type", "")
+        media_type = media.get("media_type", "")
         try:
             from vtscore.media.cropping import crop_file_bytes
 

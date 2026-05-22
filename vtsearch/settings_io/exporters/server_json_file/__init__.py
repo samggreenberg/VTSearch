@@ -26,11 +26,8 @@ class ServerFileSettingsExporter(SettingsExporter):
             key="filepath",
             label="Save to (server path)",
             field_type="server_path",
-            description=(
-                "Absolute or relative path on the server where the settings "
-                "JSON file will be written.  Parent directories are created "
-                "automatically."
-            ),
+            description="Where on the server to write the settings JSON file.",
+            hint="Absolute or relative path; parent directories are created automatically.",
             placeholder="data/settings_backup.json",
             default="data/settings_backup.json",
         ),

@@ -1421,7 +1421,7 @@ class TestLoadFailureCleanup:
 
         target_medias[1] = {
             "id": 1,
-            "type": "audio",
+            "media_type": "audio",
             "duration": 1.0,
             "file_size": 100,
             "md5": "test-md5-c12",

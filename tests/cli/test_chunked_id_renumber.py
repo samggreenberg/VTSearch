@@ -33,7 +33,7 @@ def _make_audio_media(media_id: int) -> dict:
     md5 = hashlib.md5(raw).hexdigest()
     return {
         "id": media_id,
-        "type": "audio",
+        "media_type": "audio",
         "duration": 1.0,
         "file_size": len(raw),
         "md5": md5,

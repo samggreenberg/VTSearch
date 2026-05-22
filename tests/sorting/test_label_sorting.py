@@ -164,7 +164,7 @@ class TestLabelFileSortModelSelection:
         """The endpoint should call embed_media on the embedder matching the loaded dataset,
         not hardcode embed_audio_file / CLAP."""
         # Determine the current media type from loaded test medias
-        media_type = next(iter(medias.values())).get("type", "audio")
+        media_type = next(iter(medias.values())).get("media_type", "audio")
         embedding_dim = next(iter(medias.values()))["embedding"].shape[0]
 
         # Create fake media files on disk

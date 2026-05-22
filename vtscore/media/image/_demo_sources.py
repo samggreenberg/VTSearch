@@ -505,7 +505,7 @@ def _embed_file_images(selected, clips, embedder, on_progress, demo_origin) -> N
             width, height = None, None
         clips[clip_id] = {
             "id": clip_id,
-            "type": _MEDIA_TYPE_ID,
+            "media_type": _MEDIA_TYPE_ID,
             "embedder": embedder.name,
             "duration": 0,
             "file_size": len(image_bytes),
@@ -545,7 +545,7 @@ def _embed_pil_pages(selected_pages, clips, embedder, on_progress, demo_origin) 
         rel_name = f"{category}/{page_name}"
         clips[clip_id] = {
             "id": clip_id,
-            "type": _MEDIA_TYPE_ID,
+            "media_type": _MEDIA_TYPE_ID,
             "embedder": embedder.name,
             "duration": 0,
             "file_size": len(image_bytes),
@@ -588,7 +588,7 @@ def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin) -> 
         fname = f"{category}/{category}_{clip_id}.png"
         clips[clip_id] = {
             "id": clip_id,
-            "type": _MEDIA_TYPE_ID,
+            "media_type": _MEDIA_TYPE_ID,
             "embedder": embedder.name,
             "duration": 0,
             "file_size": len(image_bytes),

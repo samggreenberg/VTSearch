@@ -95,7 +95,7 @@ functional refactor. `medias` is mutated in place; the function returns
 
 ```python
 medias[42] = {
-    "id": 42, "type": "audio", "embedder": "audio_clap",
+    "id": 42, "media_type": "audio", "embedder": "audio_clap",
     "file_size": 318456,
     "md5": "5d41402abc4b2a76b9719d911017c592",
     "embedding": np.ndarray,            # shape (D,), float32

@@ -132,7 +132,7 @@ def stage_file():
         if isinstance(media_dict, dict) and media_dict:
             first = next(iter(media_dict.values()))
             if isinstance(first, dict):
-                media_type = first.get("type", "audio") or "unknown"
+                media_type = first.get("media_type", "audio") or "unknown"
         del peeked, media_dict
     except Exception as e:
         count = 0

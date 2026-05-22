@@ -6,6 +6,7 @@ import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/cl
 import { ImportAdvancedComponent } from './import-advanced/import-advanced.component';
 import { ImportConfigComponent } from './import-config/import-config.component';
 import { SourcePickerComponent } from './source-picker/source-picker.component';
+import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
@@ -14,7 +15,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, ClipperChooserComponent, ImportAdvancedComponent, ImportConfigComponent, SourcePickerComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ClipperChooserComponent, ImportAdvancedComponent, ImportConfigComponent, SourcePickerComponent, FieldHintIconComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
@@ -66,6 +67,13 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Optional user-supplied dataset name for demo imports.  Empty means
    *  "use the demo entry's label". */
   demoDatasetName = '';
+  /** Whether the user has manually edited :prop:`demoDatasetName` (so we
+   *  stop auto-overwriting it when a different demo row is picked). */
+  private demoDatasetNameDirty = false;
+  /** Currently-selected demo row.  Clicking a row sets this; the Import
+   *  button in the footer then commits the selection.  ``null`` means
+   *  nothing is selected yet, so the Import button is disabled. */
+  selectedDemo: DemoDataset | null = null;
 
   // Demo table column metadata + controller. Mirrors the Dashboard datagrid:
   // percentage widths summing to 100, draggable column reorder, click-to-sort
@@ -363,11 +371,20 @@ export class DatasetImporterModalComponent implements OnInit {
     this.dynamicFieldError = {};
     this.formDatasetNameDirty = false;
 
-    // Pre-populate defaults
+    // Pre-populate defaults.  For select fields without an explicit default,
+    // fall back to the first option so the form is never sitting on an empty
+    // selection that the user has to actively click to populate.  Dynamic
+    // (runtime-fetched) options are handled later by ``refreshDynamicFieldOptions``.
     if (importer.fields) {
       for (const field of importer.fields) {
-        if (field.default !== undefined) {
+        if (field.default !== undefined && field.default !== '') {
           this.formValues[field.key] = field.default;
+        } else if (
+          field.field_type === 'select' &&
+          !field.dynamic_options &&
+          (field.options?.length ?? 0) > 0
+        ) {
+          this.formValues[field.key] = field.options![0];
         }
       }
     }
@@ -580,6 +597,8 @@ export class DatasetImporterModalComponent implements OnInit {
     this.demoTabs = [];
     this.activeTab = '';
     this.demoDatasetName = '';
+    this.demoDatasetNameDirty = false;
+    this.selectedDemo = null;
 
     this.datasetsApi.getMediaTypes().subscribe({
       next: (res) => {
@@ -616,9 +635,13 @@ export class DatasetImporterModalComponent implements OnInit {
         this.demoTabs.push(mt);
       }
     }
-    // Intentionally leave ``activeTab`` blank — no media-type tab is
-    // auto-selected.  The demo table stays empty until the user clicks
-    // one of the inner tabs.
+    // Pre-select a media-type tab so the demo table shows results instead
+    // of sitting empty.  Prefer "audio" when present (matches the default
+    // for most file-list importers), otherwise pick the first tab.
+    if (!this.activeTab && this.demoTabs.length > 0) {
+      const preferred = this.demoTabs.includes('audio') ? 'audio' : this.demoTabs[0];
+      this.selectDemoTabWithEmbedder(preferred);
+    }
   }
 
   private loadDemoEmbedders(mediaType: string): void {
@@ -823,7 +846,42 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.allEmbedders.filter((e) => e.media_type_id === this.activeTab);
   }
 
+  /** Cached map of ``type_id`` → icon string for the demo media-type
+   *  dropdown.  Parallel to :prop:`mediaTypeOptionIcons` (which is keyed
+   *  by ``folder_import_name``); the demo flow uses ``type_id`` so we
+   *  expose a separate map keyed accordingly. */
+  private _demoIconsSource: MediaTypeInfo[] | null = null;
+  private _demoIconsCache: Record<string, string> = {};
+  get demoMediaTypeIcons(): Record<string, string> {
+    if (this._demoIconsSource !== this.mediaTypes) {
+      const out: Record<string, string> = {};
+      for (const mt of this.mediaTypes) {
+        if (mt.icon) out[mt.type_id] = mt.icon;
+      }
+      this._demoIconsCache = out;
+      this._demoIconsSource = this.mediaTypes;
+    }
+    return this._demoIconsCache;
+  }
+
+  /** Click handler for a row in the demo grid.  Records the selection
+   *  and auto-populates the Dataset Name input (unless the user has
+   *  manually edited it).  The actual import is deferred to
+   *  :meth:`submitDemo`, which the Import footer button calls. */
   selectDemo(demo: DemoDataset): void {
+    this.selectedDemo = demo;
+    if (!this.demoDatasetNameDirty) {
+      this.demoDatasetName = demo.label || '';
+    }
+  }
+
+  /** Commit the currently-selected demo: emit ``demoSelected`` so the
+   *  dashboard kicks off the demo load, then close the modal.  Bound to
+   *  the Import footer button; disabled in the template until a row is
+   *  selected. */
+  submitDemo(): void {
+    const demo = this.selectedDemo;
+    if (!demo) return;
     const userName = (this.demoDatasetName || '').trim();
     this.demoSelected.emit({
       ...demo,
@@ -834,8 +892,22 @@ export class DatasetImporterModalComponent implements OnInit {
     this.closed.emit();
   }
 
+  /** Called when the user types into the demo Dataset Name input.  Marks
+   *  it as dirty so subsequent row picks don't overwrite the user's
+   *  value. */
+  onDemoDatasetNameInput(value: string): void {
+    this.demoDatasetName = value;
+    this.demoDatasetNameDirty = true;
+  }
+
   selectDemoTabWithEmbedder(tab: string): void {
     this.selectDemoTab(tab);
+    // Switching media type clears any prior row selection and resets the
+    // auto-populated Dataset Name so the next row pick can fill it in.
+    this.selectedDemo = null;
+    if (!this.demoDatasetNameDirty) {
+      this.demoDatasetName = '';
+    }
     // Reset embedder selection for the new tab
     const embedders = this.allEmbedders.filter((e) => e.media_type_id === tab);
     this.demoEmbedder = embedders.length > 0 ? embedders[0].name : '';

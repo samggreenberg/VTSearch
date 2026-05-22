@@ -150,7 +150,7 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
     const url = this.thumbnailUrl(id);
     if (url && this.thumbnailFailedUrls.has(url)) return false;
     const media = this.lookup(id);
-    return !!media && (media.type === 'image' || media.type === 'video' || media.type === 'document' || media.type === 'audio');
+    return !!media && (media.media_type === 'image' || media.media_type === 'video' || media.media_type === 'document' || media.media_type === 'audio');
   }
 
   thumbnailUrl(id: number): string {
@@ -167,8 +167,8 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
     if (this.hasThumbnailUrl(id)) return null;
     const media = this.lookup(id);
     if (!media) return null;
-    if (media.type === 'audio') return '\u266B';
-    if (media.type === 'text') return '\u00B6';
+    if (media.media_type === 'audio') return '\u266B';
+    if (media.media_type === 'text') return '\u00B6';
     return '\u25A1';
   }
 

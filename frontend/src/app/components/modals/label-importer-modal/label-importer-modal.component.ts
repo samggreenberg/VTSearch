@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
+import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { MediasApiService } from '../../../services/medias-api.service';
 import { VoteStateService } from '../../../services/vote-state.service';
@@ -14,7 +15,7 @@ type ModalView = 'picker' | 'form';
 @Component({
   selector: 'vt-label-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
   templateUrl: './label-importer-modal.component.html',
   styleUrl: './label-importer-modal.component.scss',
 })
@@ -84,7 +85,15 @@ export class LabelImporterModalComponent implements OnInit {
     this.successMessage = '';
     const fields = (importer.fields ?? []) as ImporterField[];
     for (const field of fields) {
-      if (field.default) this.formValues[field.key] = field.default;
+      if (field.default) {
+        this.formValues[field.key] = field.default;
+      } else if (
+        field.field_type === 'select' &&
+        !field.dynamic_options &&
+        (field.options?.length ?? 0) > 0
+      ) {
+        this.formValues[field.key] = field.options![0];
+      }
     }
     this.view = 'form';
   }

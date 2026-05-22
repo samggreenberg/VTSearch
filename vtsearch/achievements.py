@@ -139,7 +139,7 @@ _DOCS_RAW: list[dict[str, str]] = [
     {
         "id": "user_guide",
         "name": "User Guide",
-        "path": "docs/USER_GUIDE.md",
+        "path": "docs/user/USER_GUIDE.md",
         "phrase": "label like nobody's watching",
     },
     {

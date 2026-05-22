@@ -1,5 +1,8 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, EventEmitter, Output, inject, signal, OnInit, SecurityContext } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { marked } from 'marked';
 import { ModalComponent } from '../../modal/modal.component';
 
 interface Shortcut {
@@ -17,6 +20,8 @@ interface ShortcutSection {
   groups: ShortcutGroup[];
 }
 
+type Tab = 'shortcuts' | 'guide';
+
 @Component({
   selector: 'vt-keyboard-help-modal',
   standalone: true,
@@ -24,8 +29,16 @@ interface ShortcutSection {
   templateUrl: './keyboard-help-modal.component.html',
   styleUrl: './keyboard-help-modal.component.scss',
 })
-export class KeyboardHelpModalComponent {
+export class KeyboardHelpModalComponent implements OnInit {
   @Output() closed = new EventEmitter<void>();
+
+  private readonly http = inject(HttpClient);
+  private readonly sanitizer = inject(DomSanitizer);
+
+  readonly activeTab = signal<Tab>('shortcuts');
+  readonly guideHtml = signal<SafeHtml | null>(null);
+  readonly guideError = signal<string | null>(null);
+  private guideLoaded = false;
 
   readonly sections: ShortcutSection[] = [
     {
@@ -72,6 +85,31 @@ export class KeyboardHelpModalComponent {
       ],
     },
   ];
+
+  ngOnInit(): void {
+    // Defer guide fetch until the user opens that tab.
+  }
+
+  selectTab(tab: Tab): void {
+    this.activeTab.set(tab);
+    if (tab === 'guide' && !this.guideLoaded) {
+      this.loadGuide();
+    }
+  }
+
+  private loadGuide(): void {
+    this.guideLoaded = true;
+    this.http.get('assets/docs/USER_GUIDE.md', { responseType: 'text' }).subscribe({
+      next: (md) => {
+        const rendered = marked.parse(md, { async: false }) as string;
+        const safe = this.sanitizer.sanitize(SecurityContext.HTML, rendered) ?? '';
+        this.guideHtml.set(this.sanitizer.bypassSecurityTrustHtml(safe));
+      },
+      error: (err) => {
+        this.guideError.set(`Failed to load user guide: ${err?.message ?? err}`);
+      },
+    });
+  }
 
   close(): void {
     this.closed.emit();

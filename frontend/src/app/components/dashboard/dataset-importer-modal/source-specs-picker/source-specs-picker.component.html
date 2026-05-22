@@ -1,16 +1,32 @@
 <div class="ssp">
-  <label class="ssp-row ssp-row--native" title="Include files of the dataset's native media type directly, without any conversion.">
-    <input
-      type="checkbox"
-      class="ssp-checkbox"
-      [checked]="isNativeChecked()"
-      (change)="toggleNative($any($event.target).checked)"
-    />
-    <span class="ssp-row-label">
-      <strong>{{ labelFor(nativeType) }}</strong>
-      <span class="ssp-native-tag">native</span>
-    </span>
-  </label>
+  <div class="ssp-row ssp-row--native">
+    <label
+      class="ssp-row-main"
+      title="Include files of the dataset's native media type directly, without any conversion."
+    >
+      <input
+        type="checkbox"
+        class="ssp-checkbox"
+        [checked]="isNativeChecked()"
+        (change)="toggleNative($any($event.target).checked)"
+      />
+      <span class="ssp-row-label">
+        <strong>{{ labelFor(nativeType) }}</strong>
+        <span class="ssp-native-tag">native</span>
+      </span>
+    </label>
+
+    @if (hasNativeDetails()) {
+      <button
+        type="button"
+        class="advanced-toggle ssp-details-toggle"
+        (click)="onNativeDetailsClick()"
+        title="Choose how to pre-process media before embedding (e.g. clip into shorter segments)."
+      >
+        Details ▸
+      </button>
+    }
+  </div>
 
   @for (st of nonNativeSourceTypes; track st) {
     <div class="ssp-row">

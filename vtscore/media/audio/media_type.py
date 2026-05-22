@@ -603,7 +603,7 @@ class AudioMediaType(MediaType):
             media_fields = self.load_media_data(audio_path)
             clips[clip_id] = {
                 "id": clip_id,
-                "type": self.type_id,
+                "media_type": self.type_id,
                 "embedder": embedder.name,
                 "duration": media_fields["duration"],
                 "file_size": len(wav_bytes),
