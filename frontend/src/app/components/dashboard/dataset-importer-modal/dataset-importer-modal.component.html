@@ -116,6 +116,18 @@
       }
     </ng-container>
 
+    <ng-container lfInfo>
+      @if (lfPickerKind === 'folder') {
+        <p class="info-text">Pick a folder on <strong>this computer</strong> (running your browser).</p>
+      } @else {
+        <p class="info-text">
+          Upload a single file from <strong>this computer</strong> that lists the media to import
+          (a UTF-8 text file with one server-side path per line, or a <code>.npz</code> archive of
+          paths + pre-computed embedding vectors).
+        </p>
+      }
+    </ng-container>
+
     <ng-container lfBefore>
       <div class="form-group">
         <label class="form-label" for="lf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder/file name.">Dataset Name</label>

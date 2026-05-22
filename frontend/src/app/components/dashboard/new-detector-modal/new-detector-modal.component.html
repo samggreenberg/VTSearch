@@ -285,133 +285,82 @@
     <div class="media-picker">
       <button class="btn btn--secondary btn--sm back-btn" (click)="backToMain()" title="Return to the detector creation form">&larr; Back</button>
 
-      <!-- Category tabs (mirrors the Add Dataset modal so users see the same layout). -->
-      <div class="importer-picker">
-        <div class="importer-tab-bar">
-          @for (tab of visibleImporterTabs; track tab.id) {
-            <button
-              class="importer-tab"
-              [class.active]="activeImporterTab === tab.id"
-              (click)="selectImporterTab(tab.id)"
-              [title]="'Show ' + tab.label + ' media sources'"
-            >@if (tab.icon) {<vt-icon [type]="tab.icon" [size]="14"></vt-icon>}{{ tab.label }}</button>
+      <vt-source-picker
+        [visibleImporterTabs]="visibleImporterTabs"
+        [importersForActiveTab]="importersForActiveTab"
+        [activeImporterTabLabel]="activeImporterTabLabel"
+        [activeTab]="activeImporterTab"
+        (activeTabChange)="selectImporterTab($event)"
+        [selectedImporter]="selectedImporter"
+        (importerSelected)="selectImporter($event)"
+        [activePickerView]="demoFileBrowsing ? '' : activePickerView"
+        [mediaTypes]="mediaTypeInfos"
+        [noTabHint]="'Select where to pick a media example from.'"
+        [noImporterHintTemplate]="'Select a {label} source to browse.'"
+        [tabTitleTemplate]="'Show {label} media sources'"
+        [emptyCategoryText]="'No sources in this category.'"
+        [alwaysShowSubtabBar]="true"
+        [demos]="demos"
+        [filteredDemos]="filteredDemos"
+        [demoLoading]="demoLoading"
+        [demoTabs]="demoTabs"
+        [activeDemoTab]="activeDemoTab"
+        (activeDemoTabChange)="selectDemoTab($event)"
+        [demoCols]="demoCols"
+        (demoSelected)="selectDemo($event)"
+        [demoRowDisabledFn]="demoRowDisabledFn"
+        [demoRowTitleFn]="demoRowTitleFn"
+        [sfPathInputValue]="sfTypedPath"
+        (sfPathInputValueChange)="sfTypedPath = $event"
+        (sfPathApplied)="submitSfTypedPath()"
+        [sfApplyOnBlur]="false"
+        [sfPathLabel]="'Path to a media file on the server'"
+        [sfPathPlaceholder]="'/absolute/server/path/to/file'"
+        [sfPathFieldId]="'sf-example-path-input'"
+        [lfPickerKind]="lfPickerKind"
+        [lfShowFieldLabel]="false"
+        [lfShowFileCount]="false"
+        [lfFolderDropLabel]="'Drop a folder here to use as example'"
+        [lfFolderDropSublabel]="'or click to browse — the first file is used'"
+        [lfFilesDropLabel]="dropMediaLabel + ' to use as example'"
+        [lfFilesDropSublabel]="'or click to browse'"
+        [lfFilesAcceptAttr]="''"
+        (lfFilesDropped)="onLocalFileDropped($event)"
+      >
+        <ng-container sfAfter>
+          <button
+            type="button"
+            class="btn btn--primary"
+            [disabled]="sfFileSelecting || !sfTypedPath.trim()"
+            (click)="submitSfTypedPath()"
+          >
+            @if (sfFileSelecting) { Loading… } @else { Load }
+          </button>
+          @if (sfBrowseError) {
+            <p class="error-text">{{ sfBrowseError }}</p>
           }
-        </div>
-        @if (!activeImporterTab) {
-          <p class="tab-bar-hint">Select where to pick a media example from.</p>
-        }
+        </ng-container>
 
-        @if (activeImporterTab) {
-          <div class="importer-subtab-bar">
-            @if (importersForActiveTab.length === 0) {
-              <span class="empty-state empty-state--inline">No sources in this category.</span>
-            }
-            @for (imp of importersForActiveTab; track imp.name) {
-              <button
-                class="importer-subtab"
-                [class.active]="selectedImporter?.name === imp.name"
-                (click)="selectImporter(imp)"
-                [title]="imp.description || ''"
-              >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
-            }
-          </div>
-          @if (!selectedImporter && importersForActiveTab.length > 0) {
-            <p class="tab-bar-hint">Select a {{ activeImporterTabLabel }} source to browse.</p>
+        <ng-container lfInfo>
+          <p class="info-text">
+            Pick a media file on <strong>this computer</strong>. It will be uploaded to the server
+            and used as the example for this detector.
+          </p>
+        </ng-container>
+
+        <ng-container lfAfter>
+          @if (lfPickerKind === 'folder') {
+            <p class="info-text">
+              The first file in the picked folder will be used. To pick a single file directly,
+              switch to the <strong>Local Files</strong> tab.
+            </p>
           }
-        }
-      </div>
+        </ng-container>
+      </vt-source-picker>
 
-      <!-- Demo picker view: media-type tabs + sortable demo table. -->
-      @if (activePickerView === 'demo' && selectedImporter && !demoFileBrowsing) {
-        <div class="demo-picker">
-          @if (demoLoading) {
-            <p class="empty-state">Loading demo datasets...</p>
-          } @else if (demos.length === 0) {
-            <p class="empty-state">No demo datasets available.</p>
-          } @else {
-            <div class="demo-tab-bar">
-              @for (tab of demoTabs; track tab) {
-                <button
-                  class="demo-tab"
-                  [class.active]="activeDemoTab === tab"
-                  (click)="selectDemoTab(tab)"
-                  [title]="'Filter demos by media type: ' + getDemoTabLabel(tab)"
-                >@if (getDemoTabIcon(tab)) {<vt-icon [icon]="getDemoTabIcon(tab)" [size]="14"></vt-icon>}{{ getDemoTabLabel(tab) }}</button>
-              }
-            </div>
-            @if (!activeDemoTab) {
-              <p class="tab-bar-hint">Select the media type to demonstrate.</p>
-            }
-
-            @if (activeDemoTab) {
-              <div class="demo-content-area">
-                <table class="demo-table" [class.table-fixed]="demoCols.tableFixed">
-                  <thead>
-                    <tr>
-                      @for (col of demoCols.columnOrder; track col; let first = $first) {
-                        <th
-                          [class.sortable]="demoCols.meta(col).sortable"
-                          [class.col-drop-target]="demoCols.isDropTarget(col)"
-                          [class.col-dragging]="demoCols.isDragging(col)"
-                          [class.col-num]="col === 'num_files' || col === 'num_categories'"
-                          [attr.data-col]="col"
-                          [title]="demoCols.meta(col).title"
-                          [style.width.%]="demoCols.tableFixed ? demoCols.colWidths[col] : null"
-                          draggable="true"
-                          (click)="onDemoHeaderClick(col)"
-                          (dragstart)="demoCols.onColDragStart($event, col)"
-                          (dragover)="demoCols.onColDragOver($event, col)"
-                          (dragleave)="demoCols.onColDragLeave($event, col)"
-                          (drop)="demoCols.onColDrop($event, col)"
-                          (dragend)="demoCols.onColDragEnd($event)"
-                        >@if (!first) {<div class="col-resize-handle" (mousedown)="demoCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>}{{ demoCols.meta(col).label }}@if (demoCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="demoCols.isSortActive(col)">{{ demoCols.sortIndicator(col) }}</span>}</th>
-                      }
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (demo of filteredDemos; track demo.name) {
-                      <tr
-                        class="demo-row"
-                        [class.ready]="demo.status === 'ready'"
-                        [class.disabled]="!isDemoBrowsable(demo)"
-                        role="button"
-                        tabindex="0"
-                        [attr.aria-label]="demo.label + ': ' + demo.description"
-                        [title]="isDemoBrowsable(demo) ? 'Browse files in ' + demo.label : 'This demo has not been downloaded. Use the Add Dataset window to fetch it first.'"
-                        (click)="selectDemo(demo)"
-                        (keydown.enter)="selectDemo(demo)"
-                        (keydown.space)="$event.preventDefault(); selectDemo(demo)"
-                      >
-                        @for (col of demoCols.columnOrder; track col) {
-                          @switch (col) {
-                            @case ('label') {
-                              <td class="col-name">{{ demo.label }}</td>
-                            }
-                            @case ('num_files') {
-                              <td class="col-num">{{ demo.num_files | number }}</td>
-                            }
-                            @case ('num_categories') {
-                              <td class="col-num">{{ demo.num_categories | number }}</td>
-                            }
-                            @case ('description') {
-                              <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>
-                            }
-                            @case ('status') {
-                              <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
-                            }
-                          }
-                        }
-                      </tr>
-                    }
-                  </tbody>
-                </table>
-              </div>
-            }
-          }
-        </div>
-      }
-
-      <!-- Demo file picker: appears after picking a demo from the table. -->
+      <!-- Demo file picker: appears after picking a demo from the table.
+           Source-picker hides its demo view (activePickerView passed as '')
+           while demoFileBrowsing is true so this widget renders alone. -->
       @if (activePickerView === 'demo' && selectedImporter && demoFileBrowsing) {
         <div class="server-folder-browser">
           <button class="btn btn--secondary btn--sm back-btn" (click)="backToDemoTable()" title="Return to the demo list">&larr; Back to demo list</button>
@@ -434,63 +383,6 @@
           </button>
           @if (demoTypedPathError) {
             <p class="error-text">{{ demoTypedPathError }}</p>
-          }
-        </div>
-      }
-
-      <!-- Server folder picker: user types an absolute server path. -->
-      @if (activePickerView === 'server_folder' && selectedImporter) {
-        <div class="server-folder-browser">
-          <label class="form-label" for="sf-example-path-input">Path to a media file on the server</label>
-          <input
-            id="sf-example-path-input"
-            type="text"
-            class="form-input"
-            placeholder="/absolute/server/path/to/file"
-            [(ngModel)]="sfTypedPath"
-            (keydown.enter)="submitSfTypedPath(); $event.preventDefault()"
-          />
-          <button
-            type="button"
-            class="btn btn--primary"
-            [disabled]="sfFileSelecting || !sfTypedPath.trim()"
-            (click)="submitSfTypedPath()"
-          >
-            @if (sfFileSelecting) { Loading… } @else { Load }
-          </button>
-          @if (sfBrowseError) {
-            <p class="error-text">{{ sfBrowseError }}</p>
-          }
-        </div>
-      }
-
-      <!-- Local file upload: pick a single file from the user's machine.
-           local_folder and local_files share this view since only one example
-           file is needed regardless of how many the input collects. -->
-      @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
-        <div class="local-folder-uploader">
-          <p class="info-text">
-            Pick a media file on <strong>this computer</strong>. It will be uploaded to the server
-            and used as the example for this detector.
-          </p>
-          @if (activePickerView === 'local_folder') {
-            <vt-drop-zone
-              label="Drop a folder here to use as example"
-              sublabel="or click to browse — the first file is used"
-              [directory]="true"
-              [multiple]="true"
-              (filesSelected)="onLocalFileDropped($event)"
-            ></vt-drop-zone>
-            <p class="info-text">
-              The first file in the picked folder will be used. To pick a single file directly,
-              switch to the <strong>Local Files</strong> tab.
-            </p>
-          } @else {
-            <vt-drop-zone
-              [label]="dropMediaLabel + ' to use as example'"
-              sublabel="or click to browse"
-              (filesSelected)="onLocalFileDropped($event)"
-            ></vt-drop-zone>
           }
         </div>
       }

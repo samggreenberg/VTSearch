@@ -82,6 +82,15 @@ export class SourcePickerComponent {
   /** Message shown when the active tab has zero importers. */
   @Input() emptyCategoryText = 'No importers in this category.';
 
+  /** When ``false`` (default), the sub-tab row is suppressed when the
+   *  active category has exactly one importer — the parent is expected
+   *  to auto-select the lone importer and the redundant sub-tab adds
+   *  no information.  Callers that always want the sub-tab visible
+   *  (e.g. the New Detector media picker, where every category is a
+   *  distinct kind of source the user should see labelled) set this to
+   *  ``true``. */
+  @Input() alwaysShowSubtabBar = false;
+
   // === Demo source view ===
 
   @Input() demos: DemoDataset[] = [];
@@ -99,6 +108,15 @@ export class SourcePickerComponent {
   @Input() demoEmptyText = 'No demo datasets available.';
   @Input() demoNoTabHint = 'Select the media type to demonstrate.';
 
+  /** Optional predicate run on every demo row.  When provided and it
+   *  returns ``true``, the row gets a ``disabled`` class for visual
+   *  styling.  Source picker still emits ``demoSelected`` for clicks
+   *  — the parent is responsible for treating disabled rows as
+   *  no-ops. */
+  @Input() demoRowDisabledFn: ((demo: DemoDataset) => boolean) | null = null;
+  /** Optional formatter for the ``title`` attribute on each demo row. */
+  @Input() demoRowTitleFn: ((demo: DemoDataset) => string) | null = null;
+
   // === Server folder source view ===
 
   @Input() sfPathInputValue = '';
@@ -109,17 +127,45 @@ export class SourcePickerComponent {
   @Input() sfPathLabel = 'Folder to import';
   @Input() sfPathPlaceholder = '/absolute/server/path/to/folder';
   @Input() sfPathFieldId = 'sf-path-input';
+  /** Whether to fire ``sfPathApplied`` on the path input's ``blur``
+   *  event in addition to Enter.  The Add Dataset modal wants
+   *  blur-to-detect; the New Detector modal explicitly drives loading
+   *  through a Load button and disables blur to avoid double-firing. */
+  @Input() sfApplyOnBlur = true;
 
   // === Local folder/files source view ===
 
   @Input() lfPickerKind: 'folder' | 'files' = 'folder';
   @Input() lfFiles: File[] = [];
   @Input() lfFolderName = '';
-  /** Whether to show the per-kind explanatory paragraph above the
-   *  dropzone.  Disabled by the new-detector modal which has its own
-   *  "pick a file from this computer" prose. */
-  @Input() lfShowInfo = true;
   @Output() lfFilesDropped = new EventEmitter<File[]>();
+
+  /** ``vt-drop-zone`` label rendered when ``lfPickerKind === 'folder'``. */
+  @Input() lfFolderDropLabel = 'Drop a folder here to import';
+  /** ``vt-drop-zone`` sublabel rendered when ``lfPickerKind === 'folder'``. */
+  @Input() lfFolderDropSublabel = 'or click to browse';
+  /** ``vt-drop-zone`` label rendered when ``lfPickerKind === 'files'``. */
+  @Input() lfFilesDropLabel = 'Drop a paths file (.txt, .list, or .npz)';
+  /** ``vt-drop-zone`` sublabel rendered when ``lfPickerKind === 'files'``. */
+  @Input() lfFilesDropSublabel = 'or click to browse';
+  /** ``accept`` attribute for the ``files`` kind dropzone (comma-separated
+   *  extensions / MIME types).  Empty string accepts anything. */
+  @Input() lfFilesAcceptAttr = '.txt,.list,.npz';
+
+  /** Whether to render the "Folder*" / "Paths file*" form-label above the
+   *  dropzone.  Disabled by callers (e.g. the New Detector modal) that
+   *  bake the affordance entirely into the dropzone's own label. */
+  @Input() lfShowFieldLabel = true;
+  /** Label for the dropzone form-label, when ``lfShowFieldLabel`` is on. */
+  @Input() lfFolderFieldLabel = 'Folder';
+  /** Label for the dropzone form-label in ``files`` mode. */
+  @Input() lfFilesFieldLabel = 'Paths file';
+
+  /** Whether to render the "Selected N files" / "Using paths from …" info
+   *  text below the dropzone.  Disabled by callers that only use the
+   *  first picked file (e.g. the New Detector modal) and have no
+   *  meaningful count to show. */
+  @Input() lfShowFileCount = true;
 
   // === View dispatch ===
 
@@ -151,6 +197,14 @@ export class SourcePickerComponent {
 
   onDemoHeaderClick(col: string): void {
     if (this.demoCols?.meta(col).sortable) this.demoCols.sortBy(col);
+  }
+
+  demoRowDisabled(demo: DemoDataset): boolean {
+    return this.demoRowDisabledFn ? this.demoRowDisabledFn(demo) : false;
+  }
+
+  demoRowTitle(demo: DemoDataset): string {
+    return this.demoRowTitleFn ? this.demoRowTitleFn(demo) : '';
   }
 
   statusBadgeClass(status: string): string {

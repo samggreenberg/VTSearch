@@ -18,7 +18,7 @@
       <div class="importer-subtab-bar">
         <span class="empty-state empty-state--inline">{{ emptyCategoryText }}</span>
       </div>
-    } @else if (importersForActiveTab.length > 1) {
+    } @else if (importersForActiveTab.length > 1 || alwaysShowSubtabBar) {
       <div class="importer-subtab-bar">
         @for (imp of importersForActiveTab; track imp.name) {
           <button
@@ -91,9 +91,11 @@
                 <tr
                   class="demo-row"
                   [class.ready]="demo.status === 'ready'"
+                  [class.disabled]="demoRowDisabled(demo)"
                   role="button"
                   tabindex="0"
                   [attr.aria-label]="demo.label + ': ' + demo.description"
+                  [title]="demoRowTitle(demo)"
                   (click)="demoSelected.emit(demo)"
                   (keydown.enter)="demoSelected.emit(demo)"
                   (keydown.space)="$event.preventDefault(); demoSelected.emit(demo)"
@@ -141,7 +143,7 @@
         [(ngModel)]="sfPathInputValue"
         (ngModelChange)="sfPathInputValueChange.emit($event)"
         (keydown.enter)="sfPathApplied.emit(); $event.preventDefault()"
-        (blur)="sfPathApplied.emit()"
+        (blur)="sfApplyOnBlur && sfPathApplied.emit()"
       />
     </div>
 
@@ -151,40 +153,35 @@
 
 @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
   <div class="local-folder-uploader">
-    @if (lfShowInfo) {
-      @if (lfPickerKind === 'folder') {
-        <p class="info-text">Pick a folder on <strong>this computer</strong> (running your browser).</p>
-      } @else {
-        <p class="info-text">
-          Upload a single file from <strong>this computer</strong> that lists the media to import
-          (a UTF-8 text file with one server-side path per line, or a <code>.npz</code> archive of
-          paths + pre-computed embedding vectors).
-        </p>
-      }
-    }
+    <ng-content select="[lfInfo]"></ng-content>
 
     <ng-content select="[lfBefore]"></ng-content>
 
     <div class="form-group form-group--section">
+      @if (lfShowFieldLabel) {
+        @if (lfPickerKind === 'folder') {
+          <label class="form-label" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">{{ lfFolderFieldLabel }}<span class="required">*</span></label>
+        } @else {
+          <label class="form-label" title="Choose a single file: a .txt/.list of paths, or a .npz archive of paths + pre-computed embedding vectors.">{{ lfFilesFieldLabel }}<span class="required">*</span></label>
+        }
+      }
       @if (lfPickerKind === 'folder') {
-        <label class="form-label" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder<span class="required">*</span></label>
         <vt-drop-zone
-          label="Drop a folder here to import"
-          sublabel="or click to browse"
+          [label]="lfFolderDropLabel"
+          [sublabel]="lfFolderDropSublabel"
           [directory]="true"
           [multiple]="true"
           (filesSelected)="lfFilesDropped.emit($event)"
         ></vt-drop-zone>
       } @else {
-        <label class="form-label" title="Choose a single file: a .txt/.list of paths, or a .npz archive of paths + pre-computed embedding vectors.">Paths file<span class="required">*</span></label>
         <vt-drop-zone
-          label="Drop a paths file (.txt, .list, or .npz)"
-          sublabel="or click to browse"
-          accept=".txt,.list,.npz"
+          [label]="lfFilesDropLabel"
+          [sublabel]="lfFilesDropSublabel"
+          [accept]="lfFilesAcceptAttr"
           (filesSelected)="lfFilesDropped.emit($event)"
         ></vt-drop-zone>
       }
-      @if (lfFiles.length > 0) {
+      @if (lfShowFileCount && lfFiles.length > 0) {
         <p class="info-text">
           @if (lfPickerKind === 'folder') {
             Selected <strong>{{ lfFiles.length | number }}</strong> file{{ lfFiles.length === 1 ? '' : 's' }}
