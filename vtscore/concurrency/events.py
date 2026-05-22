@@ -5,8 +5,7 @@ Maintains a registry of named channels (each backed by a
 event strings that ``/api/events`` streams to connected clients.
 
 Replaces the per-tracker REST polling endpoints (``/api/dataset/progress``,
-``/api/sort/progress``, etc.) with a single push channel — see
-``docs/plans/feature-brainstorm.md`` §12.5.
+``/api/sort/progress``, etc.) with a single push channel.
 """
 
 from __future__ import annotations

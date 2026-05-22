@@ -7,9 +7,8 @@ pipeline accepts an ordered list of converter/clipper steps via a new
 end-to-end. Frontend chooser, sidecar JSON, and detector `input_spec`
 migration are deferred — see Open follow-ups.*
 
-This plan implements [feature-brainstorm.md §3.6](feature-brainstorm.md#36-cross-cutting)
-("clipper_chain abstraction so we can run e.g. `document_section →
-text_token_window` without writing a custom clipper").
+This plan implements a `clipper_chain` abstraction so we can run e.g.
+`document_section → text_token_window` without writing a custom clipper.
 
 ## Problem
 
@@ -26,8 +25,8 @@ import. Real use cases want composition:
 - **`sound_speech_activity → sound_tiling`** — VAD to find speech turns,
   then tile each turn. Same.
 
-The brainstorm specifically names cross-type composition (document →
-text) as the headline case. That can't be expressed by chaining
+The headline case is cross-type composition (document → text). That
+can't be expressed by chaining
 `MediaClipper`s alone — a `MediaClipper` produces output of the same
 media type by contract. It needs a `MediaConverter` step (the existing
 `Document2TextMediaConverter` already does document → text).
@@ -50,7 +49,7 @@ Three approaches were considered when scoping this work:
 
 Option C was chosen because:
 
-- The brainstorm example is **literally** `document → text`, which is
+- The headline example is **literally** `document → text`, which is
   what `MediaConverter` already exists for. Forcing the same capability
   into clippers (Option B) duplicates the converter family rather than
   reusing it.

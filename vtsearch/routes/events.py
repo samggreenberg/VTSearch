@@ -1,8 +1,7 @@
 """SSE endpoint streaming all progress channels to connected clients.
 
 Replaces per-tracker REST polling (``/api/dataset/progress``,
-``/api/sort/progress``, etc.) with a single push channel — see
-``docs/plans/feature-brainstorm.md`` §12.5.
+``/api/sort/progress``, etc.) with a single push channel.
 """
 
 from __future__ import annotations
