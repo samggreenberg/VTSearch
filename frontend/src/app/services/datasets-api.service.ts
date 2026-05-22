@@ -197,6 +197,14 @@ export class DatasetsApiService {
     return this.http.post<DatasetLoadStartedResponse>('/api/dataset/import-local-folder', formData);
   }
 
+  /** Multipart upload — the caller builds the FormData with a single
+   *  ``paths_file`` (txt list or npz archive), ``media_type``, optional
+   *  ``embedder`` / ``clipper`` / ``clipper_params`` / ``source_specs``.
+   *  See {@link importLocalFolder} for why this stays on plain HttpClient. */
+  importLocalFiles(formData: FormData): Observable<DatasetLoadStartedResponse> {
+    return this.http.post<DatasetLoadStartedResponse>('/api/dataset/import-local-files', formData);
+  }
+
   loadDemo(name: string, params?: Record<string, string>): Observable<DatasetLoadStartedResponse> {
     const body: DatasetLoadDemoRequest = { name, ...params };
     return loadDemoDatasetRoute(this.http, this.config.rootUrl, { body }).pipe(map((r) => r.body));

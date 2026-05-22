@@ -14,7 +14,7 @@ not available) keep their HTTP codes (400 / 500) with the standard
 handler intercepts — see plan doc).
 
 Routes whose request body is multipart (``import-local-folder``,
-``load-file``) or whose success body is a binary stream (``export``)
+``import-local-files``, ``load-file``) or whose success body is a binary stream (``export``)
 omit ``@arguments`` and declare error responses via ``alt_response`` —
 same pattern as ``add-to-pile`` / ``server-media-files/upload`` /
 ``server-media-files/<f>/thumbnail`` in ``media/list.py`` and
@@ -26,7 +26,6 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any
 
 from flask import request, send_file
 from flask_smorest import Blueprint, abort
@@ -86,33 +85,6 @@ def _save_uploaded_files_to_temp(files, upload_dir: Path) -> int:
     return saved
 
 
-def _read_optional_vectors_file(upload_dir: Path) -> dict[str, Any]:
-    """Parse the optional ``vectors_file`` multipart field, if present.
-
-    Returns the {filename: vector} mapping (possibly empty).  Removes the
-    temporary .npz once it's parsed.  Aborts 400 if the file is malformed
-    (after cleaning up *upload_dir*).
-    """
-    storage = request.files.get("vectors_file")
-    if not storage or not storage.filename:
-        return {}
-
-    from vtscore.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
-
-    npz_path = upload_dir / "__vtsearch_vectors__.npz"
-    try:
-        storage.save(npz_path)
-        return dict(read_npz_filenames_and_vectors(npz_path))
-    except Exception as exc:
-        shutil.rmtree(upload_dir, ignore_errors=True)
-        abort(400, message=f"Invalid vectors_file: {exc}")
-    finally:
-        try:
-            npz_path.unlink()
-        except FileNotFoundError:
-            pass
-
-
 def _build_local_folder_field_values(form, upload_dir: Path, clipper_params: dict | None) -> dict:
     """Translate the multipart form into the importer's field_values dict."""
     field_values: dict = {
@@ -150,7 +122,7 @@ def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list[
     return clipper_name, clipper_params, chain_steps
 
 
-def _make_local_folder_loader(importer, field_values: dict, upload_dir: Path, content_vectors: dict, media_type: str):
+def _make_local_folder_loader(importer, field_values: dict, upload_dir: Path, media_type: str):
     """Build the ``target_medias -> None`` task that the importer will run."""
     from vtscore.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
 
@@ -158,17 +130,12 @@ def _make_local_folder_loader(importer, field_values: dict, upload_dir: Path, co
     chunk_size = auto_chunk_size(media_type) if use_chunked else 0
 
     def _load(target_medias):
-        previous_vectors = importer.content_vectors
-        if content_vectors:
-            importer.content_vectors = content_vectors
         try:
             if use_chunked:
                 consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size))
             else:
                 importer.run(field_values, target_medias)
         finally:
-            if content_vectors:
-                importer.content_vectors = previous_vectors
             shutil.rmtree(upload_dir, ignore_errors=True)
 
     return _load
@@ -180,8 +147,7 @@ def _make_local_folder_loader(importer, field_values: dict, upload_dir: Path, co
     400,
     description=(
         "Multipart body is missing the ``files`` field, has no valid files, is "
-        "missing ``media_type``, or carries malformed ``clipper_params`` / "
-        "``vectors_file``."
+        "missing ``media_type``, or carries malformed ``clipper_params``."
     ),
 )
 @datasets_load_bp.alt_response(500, description="The server_folder importer is unavailable.")
@@ -196,12 +162,6 @@ def import_local_folder():
     delegate to the regular folder importer to do the actual scanning,
     embedding, and dataset registration.  The temp directory is removed
     once the importer finishes (success or failure).
-
-    Local-files uploads may additionally include a ``vectors_file`` form
-    field carrying a ``.npz`` archive of pre-computed embedding vectors
-    keyed by uploaded-file name (basename or relative path).  Files
-    whose name matches an NPZ key reuse the supplied vector instead of
-    running the embedding model.
     """
     files = request.files.getlist("files")
     if not files:
@@ -229,8 +189,6 @@ def import_local_folder():
         shutil.rmtree(upload_dir, ignore_errors=True)
         abort(400, message="No valid files in upload")
 
-    content_vectors = _read_optional_vectors_file(upload_dir)
-
     field_values = _build_local_folder_field_values(request.form, upload_dir, clipper_params)
 
     # Origin is intentionally synthetic — the on-disk path is a temp dir we
@@ -242,12 +200,103 @@ def import_local_folder():
     }
 
     clipper_name, clipper_params_out, chain_steps = _extract_clipper_config(field_values)
-    loader = _make_local_folder_loader(importer, field_values, upload_dir, content_vectors, media_type)
+    loader = _make_local_folder_loader(importer, field_values, upload_dir, media_type)
 
     from vtsearch.auth import get_current_user
     from vtscore.datasets.load_pipeline import _normalize_media_type
 
     dataset_name = (request.form.get("dataset_name") or "").strip() or "Local folder upload"
+    task_id = _run_origin_load_in_background(
+        loader,
+        origin,
+        name=dataset_name,
+        clipper=clipper_name,
+        clipper_params=clipper_params_out,
+        chain_steps=chain_steps,
+        embedder=field_values.get("embedder", ""),
+        created_by=get_current_user(),
+        media_type=_normalize_media_type(media_type),
+    )
+    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
+
+
+@datasets_load_bp.route("/api/dataset/import-local-files", methods=["POST"])
+@datasets_load_bp.response(200, DatasetLoadStartedResponseSchema)
+@datasets_load_bp.alt_response(
+    400,
+    description=(
+        "Multipart body is missing the ``paths_file`` field, is missing "
+        "``media_type``, or carries malformed ``clipper_params``."
+    ),
+)
+@datasets_load_bp.alt_response(500, description="The server_files importer is unavailable.")
+def import_local_files():
+    """Import a paths file uploaded from the user's *browser* machine.
+
+    The browser picks a single file (a ``.txt`` / ``.list`` with one
+    server-side media path per line, or a ``.npz`` archive that also
+    supplies pre-computed embedding vectors) and POSTs it as the
+    multipart field ``paths_file``.  We stream it to a server-side
+    temporary directory and then delegate to the regular
+    :mod:`server_files` importer for resolution and embedding.  The
+    temp directory is removed once the importer finishes (success or
+    failure).
+    """
+    storage = request.files.get("paths_file")
+    if not storage or not storage.filename:
+        abort(400, message="No paths file uploaded")
+
+    importer = get_importer("server_files")
+    if importer is None:
+        abort(500, message="server_files importer not available")
+
+    media_type = (request.form.get("media_type") or "").strip()
+    if not media_type:
+        abort(400, message="Missing required field: 'media_type'")
+
+    clipper_params = _parse_clipper_params(request.form.get("clipper_params") or "")
+
+    LOCAL_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    upload_dir = Path(tempfile.mkdtemp(prefix="local_files_", dir=LOCAL_UPLOADS_DIR))
+    # Preserve the suffix so the importer picks the right reader (.txt vs .npz).
+    suffix = Path(storage.filename).suffix
+    paths_file = upload_dir / f"paths_file{suffix}"
+    try:
+        storage.save(paths_file)
+    except Exception:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        raise
+
+    field_values: dict = {
+        "media_type": media_type,
+        "paths_file": str(paths_file),
+    }
+    for key in ("embedder", "source_specs"):
+        val = (request.form.get(key) or "").strip()
+        if val:
+            field_values[key] = val
+    clipper = (request.form.get("clipper") or "").strip()
+    if clipper:
+        field_values["clipper"] = clipper
+        if clipper_params is not None:
+            field_values["clipper_params"] = clipper_params
+
+    # Origin is intentionally synthetic — the on-disk paths file is in a temp
+    # dir we are about to delete, so storing it on each media would be
+    # misleading and ``can_reload_from_origin`` would (correctly) refuse to
+    # reload.
+    origin = {
+        "importer": "server_files",
+        "params": {"paths_file": "<browser_upload>", "media_type": media_type},
+    }
+
+    clipper_name, clipper_params_out, chain_steps = _extract_clipper_config(field_values)
+    loader = _make_local_folder_loader(importer, field_values, upload_dir, media_type)
+
+    from vtsearch.auth import get_current_user
+    from vtscore.datasets.load_pipeline import _normalize_media_type
+
+    dataset_name = (request.form.get("dataset_name") or "").strip() or "Local files upload"
     task_id = _run_origin_load_in_background(
         loader,
         origin,

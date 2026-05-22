@@ -279,7 +279,7 @@ describe('DatasetImporterModalComponent', () => {
     httpMock.expectOne(req => req.url === '/api/browse-media-files').flush({ directories: [], files: [], root_path: '' });
   });
 
-  it('should set activePickerView=local_files (multi-file picker) when the Local Files sub-tab is clicked', () => {
+  it('should set activePickerView=local_files (paths-file picker) when the Local Files sub-tab is clicked', () => {
     flushImporters();
     const localFiles = component.importers.find((i) => i.name === 'local_files')!;
     component.selectImporter(localFiles);
@@ -322,6 +322,33 @@ describe('DatasetImporterModalComponent', () => {
     const body = req.request.body as FormData;
     expect(body.get('media_type')).toBe('audio');
     expect(body.getAll('files').length).toBe(1);
+    req.flush({ ok: true });
+
+    expect(component.lfSubmitting).toBeFalse();
+    expect(component.importStarted.emit).toHaveBeenCalled();
+  });
+
+  it('should POST uploaded paths file via importLocalFiles', () => {
+    flushImporters();
+    spyOn(component.importStarted, 'emit');
+
+    const localFiles = component.importers.find((i) => i.name === 'local_files')!;
+    component.selectImporter(localFiles);
+    httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+
+    const pathsFile = new File(['/a.wav\n/b.wav\n'], 'list.txt');
+    component.lfFiles = [pathsFile];
+    component.lfMediaType = 'audio';
+    component.lfSubmit();
+
+    const req = httpMock.expectOne('/api/dataset/import-local-files');
+    expect(req.request.method).toBe('POST');
+    const body = req.request.body as FormData;
+    expect(body.get('media_type')).toBe('audio');
+    const uploaded = body.get('paths_file') as File;
+    expect(uploaded.name).toBe('list.txt');
+    expect(body.get('files')).toBeNull();
     req.flush({ ok: true });
 
     expect(component.lfSubmitting).toBeFalse();
