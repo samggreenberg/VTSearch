@@ -177,7 +177,6 @@ if TYPE_CHECKING:
     from typing import Any
 
     NUM_MEDIAS: int
-    SAMPLE_RATE: int
     generate_wav: Callable[..., bytes]
     train_and_score: Callable[..., Any]
     medias: dict[int, dict[str, Any]]

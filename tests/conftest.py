@@ -94,7 +94,6 @@ _state_core.set_thread_detector_context(_startup_det)
 import app as app_module
 
 # Import refactored modules and make them accessible through app_module
-from vtscore.media.audio.audio_generator import GENERATOR_SAMPLE_RATE
 from tests.fixtures.medias import NUM_MEDIAS, init_medias
 from vtscore.media.audio.audio_generator import generate_wav
 from vtscore.embedding import initialize_models
@@ -108,7 +107,6 @@ from vtsearch.state import (
 
 # Attach to app_module for backward compatibility with existing tests
 app_module.NUM_MEDIAS = NUM_MEDIAS
-app_module.SAMPLE_RATE = GENERATOR_SAMPLE_RATE
 app_module.generate_wav = generate_wav
 app_module.train_and_score = train_and_score
 app_module.medias = medias
