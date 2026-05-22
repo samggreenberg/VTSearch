@@ -93,7 +93,7 @@ class Image2TextMediaConverter(MediaConverter):
     """
 
     display_name = "Image → Text (OCR)"
-    converter_description = "Extract text from images via OCR"
+    description = "Extract text from images via OCR"
     fields = [
         PluginField(
             key="language",

@@ -25,7 +25,7 @@ class Video2ImageMediaConverter(MediaConverter):
     """
 
     display_name = "Video → Images"
-    converter_description = "Extract frames from video files"
+    description = "Extract frames from video files"
     fields = [
         PluginField(
             key="n_clips",
