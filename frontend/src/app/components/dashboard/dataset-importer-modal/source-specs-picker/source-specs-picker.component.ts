@@ -2,16 +2,19 @@ import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-import { ConverterInfo, SourceSpec } from '../../../../models/api.models';
+import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.models';
 
 /** Checkbox column for choosing which source media types feed a
  *  multi-media import.  The native type sits at the top (always
  *  included by default, no converter); each other source type with at
  *  least one converter to the native type appears as a checkbox with a
  *  "Details ▸" opener for picking among converters (when there are
- *  multiple) and editing their params.  The picker itself lives inside
- *  the outer importer's "Advanced" section, so a nested "Advanced"
- *  label here would read as "Advanced inside Advanced". */
+ *  multiple) and editing their params.  The native row also gets its
+ *  own "Details ▸" button when there is more than one MediaClipper to
+ *  pick between — clicking it asks the parent to open the shared
+ *  clipper-chooser modal.  The picker itself lives inside the outer
+ *  importer's "Advanced" section, so a nested "Advanced" label here
+ *  would read as "Advanced inside Advanced". */
 @Component({
   selector: 'vt-source-specs-picker',
   standalone: true,
@@ -32,7 +35,16 @@ export class SourceSpecsPickerComponent implements OnChanges {
   /** Map of type_id → human-readable label.  Falls back to the type_id
    *  when a label is missing. */
   @Input() typeLabels: Record<string, string> = {};
+  /** Clippers available for the native media type.  Drives the native
+   *  row's "Details" button — shown only when there is more than one
+   *  clipper to pick between (same gate as the legacy standalone
+   *  Clipper section).  An empty list means "no clipper choice", and
+   *  the Details button is suppressed. */
+  @Input() clippers: ClipperInfo[] = [];
   @Output() specsChange = new EventEmitter<SourceSpec[]>();
+  /** Fired when the user clicks the native row's "Details" button.
+   *  The parent opens the shared clipper-chooser modal in response. */
+  @Output() clipperChooserRequested = new EventEmitter<void>();
 
   /** Per-source-type draft so the user can configure a converter via
    *  the Details panel *before* checking the box.  Edits made while
@@ -90,6 +102,19 @@ export class SourceSpecsPickerComponent implements OnChanges {
   toggleDetails(sourceType: string): void {
     if (this.detailsOpenSet.has(sourceType)) this.detailsOpenSet.delete(sourceType);
     else this.detailsOpenSet.add(sourceType);
+  }
+
+  /** True iff the native row's Details button should be rendered:
+   *  there has to be more than one clipper for the user to pick
+   *  between.  Same gate as the legacy standalone Clipper section. */
+  hasNativeDetails(): boolean {
+    return this.clippers.length > 1;
+  }
+
+  /** Click handler for the native row's Details button — bubbles up to
+   *  the parent, which opens the shared clipper-chooser modal. */
+  onNativeDetailsClick(): void {
+    this.clipperChooserRequested.emit();
   }
 
   currentConverterName(sourceType: string): string {

@@ -18,7 +18,9 @@ import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-
  *  Include media picker is gated strictly by the toggle.
  *
  *  The clipper chooser modal lives at the parent level (one instance
- *  shared across all flows), so clicking the "Use MediaClipper" button
+ *  shared across all flows), so clicking the clipper "Details" button
+ *  — either the native row's button inside the source-specs column, or
+ *  the standalone fallback button rendered below the Advanced block —
  *  emits :prop:`clipperChooserRequested` and the parent opens it.
  */
 @Component({
@@ -59,12 +61,15 @@ export class ImportAdvancedComponent {
   @Output() selectedEmbedderChange = new EventEmitter<string>();
 
   /** Current clipper selection (one-way).  Changes flow through the
-   *  parent's clipper chooser modal — clicking the "Use MediaClipper"
-   *  button emits :prop:`clipperChooserRequested` and the parent
-   *  updates this input after the chooser settles. */
+   *  parent's clipper chooser modal — clicking either the native row's
+   *  Details button or the standalone fallback Details button emits
+   *  :prop:`clipperChooserRequested` and the parent updates this input
+   *  after the chooser settles. */
   @Input() selectedClipper = '';
 
-  /** Fired when the user clicks the clipper button — parent opens its
+  /** Fired when the user clicks either the native row's Details
+   *  button (inside the source-specs column) or the standalone
+   *  Details fallback below the Advanced block — parent opens its
    *  shared clipper chooser modal. */
   @Output() clipperChooserRequested = new EventEmitter<void>();
 
@@ -110,6 +115,22 @@ export class ImportAdvancedComponent {
    *  has picked a non-default clipper. */
   get showClipperPicker(): boolean {
     return this.advancedOpen || !this.isDefaultClipperSelected;
+  }
+
+  /** Whether to render the standalone clipper "Details" button below
+   *  the Advanced block.  When the source-specs column is visible
+   *  (Advanced open AND ``showSourceSpecs`` true), the native row in
+   *  the column hosts its own Details button, so the standalone one
+   *  would be redundant.  In every other case where the user should be
+   *  able to reach the clipper chooser — Advanced collapsed but a
+   *  non-default clipper is in effect, or importers with no
+   *  source-specs column at all (demo / non-multi-media form) — we
+   *  fall back to this standalone button so the override stays visible
+   *  and the chooser stays reachable. */
+  get showStandaloneClipperButton(): boolean {
+    if (this.clippers.length <= 1) return false;
+    if (!this.showClipperPicker) return false;
+    return !(this.advancedOpen && this.showSourceSpecs);
   }
 
   /** Embedders flagged ``is_default`` for the active media type — shown

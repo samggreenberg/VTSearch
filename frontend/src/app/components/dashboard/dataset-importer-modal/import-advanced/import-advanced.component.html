@@ -17,7 +17,9 @@
     [nativeType]="nativeType"
     [typeLabels]="typeLabels"
     [specs]="sourceSpecs"
+    [clippers]="clippers"
     (specsChange)="onSourceSpecsChange($event)"
+    (clipperChooserRequested)="onClipperClick()"
   ></vt-source-specs-picker>
 }
 
@@ -49,13 +51,12 @@
   }
 }
 
-@if (clippers.length > 1 && showClipperPicker) {
-  <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+@if (showStandaloneClipperButton) {
   <button
     class="btn btn--secondary clipper-btn"
     (click)="onClipperClick()"
-    title="Choose a MediaClipper to segment or trim media before embedding"
+    title="Choose how to pre-process media before embedding (e.g. clip into shorter segments)"
   >
-    Use MediaClipper: {{ clipperDisplayName }}
+    Details: {{ clipperDisplayName }}
   </button>
 }
