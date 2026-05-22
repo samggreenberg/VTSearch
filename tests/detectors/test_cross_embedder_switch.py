@@ -42,7 +42,7 @@ def _make_snap(embedder: str) -> dict[int, dict]:
     return {
         1: {
             "id": 1,
-            "type": "audio",
+            "media_type": "audio",
             "embedder": embedder,
             "embedding": rng.standard_normal(8).astype(np.float32),
         }

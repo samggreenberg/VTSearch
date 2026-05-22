@@ -30,7 +30,7 @@ def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float
         wav_bytes = _make_wav_bytes(frequency=base_freq + i * 10)
         media: dict[str, Any] = {
             "id": i,
-            "type": "audio",
+            "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
@@ -54,7 +54,7 @@ def _make_pickle(tmp_path: Path, num_clips: int, inline_bytes: bool = True) -> P
         wav_bytes = _make_wav_bytes(frequency=440.0 + i)
         media: dict[str, Any] = {
             "id": i,
-            "type": "audio",
+            "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
@@ -228,7 +228,7 @@ class TestPickleChunked:
         pkl_path = _make_pickle(tmp_path, 1)
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
         media = chunks[0][1]
-        assert media["type"] == "audio"
+        assert media["media_type"] == "audio"
         assert media["filename"] == "clip_1.wav"
         assert media["category"] == "cat_1"
 
@@ -236,7 +236,7 @@ class TestPickleChunked:
         """Image-specific fields (width, height) are preserved via the registry."""
         medias_data = {
             1: {
-                "type": "image",
+                "media_type": "image",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_bytes": b"\x89PNG fake",
                 "filename": "photo.png",
@@ -252,7 +252,7 @@ class TestPickleChunked:
         # Full mode
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         media = chunks[0][1]
-        assert media["type"] == "image"
+        assert media["media_type"] == "image"
         assert media["width"] == 640
         assert media["height"] == 480
 
@@ -266,7 +266,7 @@ class TestPickleChunked:
         """Text-specific fields (word_count, character_count) are preserved via the registry."""
         medias_data = {
             1: {
-                "type": "text",
+                "media_type": "text",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_string": "Hello world",
                 "media_bytes": b"Hello world",
@@ -283,7 +283,7 @@ class TestPickleChunked:
         # Full mode
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         media = chunks[0][1]
-        assert media["type"] == "text"
+        assert media["media_type"] == "text"
         assert media["word_count"] == 2
         assert media["character_count"] == 11
 
@@ -297,7 +297,7 @@ class TestPickleChunked:
         """Document media type loads correctly in chunked mode (previously silently failed)."""
         medias_data = {
             1: {
-                "type": "document",
+                "media_type": "document",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_bytes": b"%PDF-1.4 fake",
                 "filename": "report.pdf",
@@ -312,26 +312,26 @@ class TestPickleChunked:
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         assert len(chunks) == 1
         media = chunks[0][1]
-        assert media["type"] == "document"
+        assert media["media_type"] == "document"
         assert media["media_bytes"] == b"%PDF-1.4 fake"
 
         # Thin mode
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
         assert len(chunks) == 1
-        assert chunks[0][1]["type"] == "document"
+        assert chunks[0][1]["media_type"] == "document"
 
     def test_standard_bytes_keys_via_registry(self, tmp_path):
         """Standard media_bytes key is used for all media types."""
         medias_data = {
             1: {
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_bytes": _make_wav_bytes(),
                 "filename": "clip.wav",
                 "category": "test",
             },
             2: {
-                "type": "image",
+                "media_type": "image",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_bytes": b"\x89PNG fake",
                 "filename": "pic.png",
@@ -345,7 +345,7 @@ class TestPickleChunked:
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         loaded = chunks[0]
         assert len(loaded) == 2
-        types = {m["type"] for m in loaded.values()}
+        types = {m["media_type"] for m in loaded.values()}
         assert types == {"audio", "image"}
 
     def test_external_dir_via_registry(self, tmp_path):
@@ -356,7 +356,7 @@ class TestPickleChunked:
 
         medias_data = {
             1: {
-                "type": "document",
+                "media_type": "document",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "filename": "report.pdf",
                 "category": "test",
@@ -370,7 +370,7 @@ class TestPickleChunked:
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         assert len(chunks) == 1
         media = chunks[0][1]
-        assert media["type"] == "document"
+        assert media["media_type"] == "document"
         assert media["media_bytes"] == b"%PDF fake content"
 
         # Thin mode — resolves media_path from document_dir
@@ -384,7 +384,7 @@ class TestPickleChunked:
         """Text media using media_string key loads correctly."""
         medias_data = {
             1: {
-                "type": "text",
+                "media_type": "text",
                 "embedding": np.random.RandomState(42).randn(512).tolist(),
                 "media_string": "Some text paragraph",
                 "filename": "para.txt",
@@ -398,7 +398,7 @@ class TestPickleChunked:
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         assert len(chunks) == 1
         media = chunks[0][1]
-        assert media["type"] == "text"
+        assert media["media_type"] == "text"
         assert media["media_string"] == "Some text paragraph"
         assert media["media_bytes"] == b"Some text paragraph"
 
@@ -423,8 +423,8 @@ class TestBaseImporterChunkedDefault:
             fields: list[ImporterField] = []
 
             def run(self, field_values, medias, thin=False):
-                medias[1] = {"id": 1, "type": "audio", "embedding": np.zeros(4)}
-                medias[2] = {"id": 2, "type": "audio", "embedding": np.ones(4)}
+                medias[1] = {"id": 1, "media_type": "audio", "embedding": np.zeros(4)}
+                medias[2] = {"id": 2, "media_type": "audio", "embedding": np.ones(4)}
 
         imp = DummyImporter()
         assert imp.supports_chunked is False

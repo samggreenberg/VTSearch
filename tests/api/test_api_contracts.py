@@ -38,7 +38,7 @@ class TestMediasContract:
         assert isinstance(data, list)
         for item in data:
             assert isinstance(item["id"], int)
-            assert isinstance(item["type"], str)
+            assert isinstance(item["media_type"], str)
 
     def test_batch_each_media_has_required_fields(self, client):
         required = {"id", "type", "filename", "md5", "custom_metadata"}

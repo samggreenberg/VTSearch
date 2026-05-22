@@ -280,7 +280,7 @@ class TestSoundOverlapClipper:
     def test_clip_returns_overlapping_windows(self):
         cl = get_clipper("sound_overlap_2.0s")
         media = {
-            "id": 1, "type": "audio", "category": "",
+            "id": 1, "media_type": "audio", "category": "",
             "filename": "x.wav", "origin": None, "origin_name": "x.wav",
             "media_bytes": _make_wav(5.0),
         }
@@ -293,7 +293,7 @@ class TestSoundOverlapClipper:
     def test_short_clip_passes_through(self):
         cl = get_clipper("sound_overlap_2.0s")
         media = {
-            "id": 1, "type": "audio", "category": "",
+            "id": 1, "media_type": "audio", "category": "",
             "filename": "x.wav", "origin": None, "origin_name": "x.wav",
             "media_bytes": _make_wav(1.0),
         }

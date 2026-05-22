@@ -310,7 +310,7 @@ export class AppComponent {
     if (this.isOnLabelView) {
       const medias = this.mediaState.medias;
       if (medias.length > 0) {
-        return medias[0].type;
+        return medias[0].media_type;
       }
       return '';
     }

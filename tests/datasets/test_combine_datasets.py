@@ -38,7 +38,7 @@ def _make_audio_clip(media_id: int, md5: str = "", filename: str = "") -> dict:
         md5 = hashlib.md5(raw).hexdigest()
     return {
         "id": media_id,
-        "type": "audio",
+        "media_type": "audio",
         "duration": 1.0,
         "file_size": 1000,
         "md5": md5,
@@ -60,7 +60,7 @@ def _make_image_clip(media_id: int, md5: str = "") -> dict:
         md5 = hashlib.md5(raw).hexdigest()
     return {
         "id": media_id,
-        "type": "image",
+        "media_type": "image",
         "duration": 0,
         "file_size": 2000,
         "md5": md5,

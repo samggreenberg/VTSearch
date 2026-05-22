@@ -111,7 +111,7 @@ class TestThinLoadFromPickle:
         wav_bytes = _make_wav_bytes()
         media_data: dict[str, Any] = {
             "id": 1,
-            "type": "audio",
+            "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
@@ -159,7 +159,7 @@ class TestThinLoadFromPickle:
         pkl_path = self._make_pickle(tmp_path, inline_bytes=True)
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, medias, thin=True)
-        assert medias[1]["type"] == "audio"
+        assert medias[1]["media_type"] == "audio"
         assert medias[1]["filename"] == "test.wav"
         assert medias[1]["category"] == "test"
 
@@ -191,7 +191,7 @@ class TestPickleNullEmbedding:
         wav_bytes = _make_wav_bytes()
         media: dict[str, Any] = {
             "id": 1,
-            "type": "audio",
+            "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
@@ -244,7 +244,7 @@ class TestPickleNullEmbedding:
         wav_bytes = _make_wav_bytes()
         good = {
             "id": 1,
-            "type": "audio",
+            "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
@@ -255,7 +255,7 @@ class TestPickleNullEmbedding:
         }
         bad = {
             "id": 2,
-            "type": "audio",
+            "media_type": "audio",
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes + b"x").hexdigest(),
@@ -283,7 +283,7 @@ class TestPickleNullEmbedding:
             "medias": {
                 1: {
                     "id": 1,
-                    "type": "audio",
+                    "media_type": "audio",
                     "duration": 0.1,
                     "file_size": len(wav_bytes),
                     "md5": hashlib.md5(wav_bytes).hexdigest(),
@@ -294,7 +294,7 @@ class TestPickleNullEmbedding:
                 },
                 2: {
                     "id": 2,
-                    "type": "audio",
+                    "media_type": "audio",
                     "duration": 0.1,
                     "file_size": len(wav_bytes),
                     "md5": hashlib.md5(wav_bytes + b"x").hexdigest(),
@@ -327,7 +327,7 @@ class TestPickleMD5Preservation:
             "medias": {
                 1: {
                     "id": 1,
-                    "type": "audio",
+                    "media_type": "audio",
                     "duration": 0.1,
                     "file_size": len(wav_bytes),
                     "md5": pre_md5,
@@ -353,7 +353,7 @@ class TestPickleMD5Preservation:
             "medias": {
                 1: {
                     "id": 1,
-                    "type": "audio",
+                    "media_type": "audio",
                     "duration": 0.1,
                     "file_size": len(wav_bytes),
                     # no "md5" key
@@ -380,7 +380,7 @@ class TestPickleMD5Preservation:
             "medias": {
                 1: {
                     "id": 1,
-                    "type": "audio",
+                    "media_type": "audio",
                     "duration": 0.1,
                     "file_size": len(wav_bytes),
                     "md5": pre_md5,
@@ -431,7 +431,7 @@ class TestThinImporters:
             "medias": {
                 1: {
                     "id": 1,
-                    "type": "audio",
+                    "media_type": "audio",
                     "duration": 0.1,
                     "file_size": len(wav_bytes),
                     "md5": hashlib.md5(wav_bytes).hexdigest(),

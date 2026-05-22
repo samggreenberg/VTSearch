@@ -313,10 +313,10 @@ def _apply_clipper(  # noqa: C901
     _fixup_clip_md5_and_embeddings(clips_list, needs_recompute, final_type, on_progress=on_progress)
     _regenerate_clip_thumbnails(clips_list, needs_recompute, final_type)
 
-    # Update `type` on every clip so downstream code sees the final type
+    # Update `media_type` on every clip so downstream code sees the final type
     # (converter chains change the media_type of the carriers).
     for clip in clips_dict.values():
-        clip["type"] = final_type
+        clip["media_type"] = final_type
 
 
 def _regenerate_clip_thumbnails(  # noqa: C901
@@ -577,7 +577,7 @@ def _auto_register_dataset(
         return None
 
     first = next(iter(media_dict.values()))
-    media_type = first.get("type", "audio")
+    media_type = first.get("media_type", "audio")
     num_items = len(media_dict)
 
     if not embedder:
@@ -1240,7 +1240,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 return
 
             first = next(iter(temp_medias.values()))
-            media_type = first.get("type", "audio")
+            media_type = first.get("media_type", "audio")
             count = len(temp_medias)
             name = label or importer.resolve_display_name(field_values)
 

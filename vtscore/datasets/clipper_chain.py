@@ -382,7 +382,7 @@ def _load_source_as_media(file_path: Path, source_media_type: str) -> dict[str, 
     at: ``media_bytes`` / ``media_string``, ``filename``, and ``type``.
     """
     media: dict[str, Any] = {
-        "type": source_media_type,
+        "media_type": source_media_type,
         "filename": file_path.name,
         "media_path": str(file_path),
     }

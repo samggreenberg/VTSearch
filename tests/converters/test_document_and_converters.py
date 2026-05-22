@@ -703,7 +703,7 @@ class TestLoadDemoWithConverter:
         medias = {
             1: {
                 "id": 1,
-                "type": "document",
+                "media_type": "document",
                 "filename": "test.pdf",
                 "media_bytes": pdf_bytes,
                 "media_path": "",
@@ -718,7 +718,7 @@ class TestLoadDemoWithConverter:
         # Should have converted the document to image(s)
         assert len(medias) >= 1
         for m in medias.values():
-            assert m["type"] == "image"
+            assert m["media_type"] == "image"
             assert m["origin"]["importer"] == "converter"
             assert m["origin"]["params"]["converter"] == "document2image"
             assert m["origin"]["params"]["parent_importer"] == "demo"

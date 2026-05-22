@@ -168,7 +168,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((medias) => {
         if (medias.length > 0) {
-          const newType = medias[0].type;
+          const newType = medias[0].media_type;
           if (newType !== this.panelState.currentMediaType) {
             this.panelState.setMediaType(newType);
             this.applyPanelPx();
@@ -631,7 +631,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onMediaContextRequest(event: { id: number; x: number; y: number }): void {
     const media = this.mediaState.medias.find((m) => m.id === event.id);
-    this.contextMenuItems = buildMediaContextMenuItems(media?.type ?? '');
+    this.contextMenuItems = buildMediaContextMenuItems(media?.media_type ?? '');
     this.contextMenuMediaId = event.id;
     this.contextMenuX = event.x;
     this.contextMenuY = event.y;
@@ -686,7 +686,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private openSeedNewDetector(mediaId: number, cropParams?: Record<string, unknown>): void {
     const media = this.mediaState.medias.find((m) => m.id === mediaId);
     this.newThingFlows.openNewDetector({
-      defaultMediaType: media?.type ?? '',
+      defaultMediaType: media?.media_type ?? '',
       seedMediaId: mediaId,
       seedCropParams: cropParams,
     });
@@ -695,7 +695,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private openCropOverlay(mediaId: number, action: 'sort' | 'seed'): void {
     const media = this.mediaState.getMedia(mediaId);
     if (!media) return;
-    const mediaType = media.type;
+    const mediaType = media.media_type;
     const url =
       mediaType === 'audio'
         ? this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`)

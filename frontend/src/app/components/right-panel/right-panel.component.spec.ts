@@ -52,7 +52,7 @@ describe('RightPanelComponent', () => {
   }));
 
   it('should load view mode from settings on init', fakeAsync(() => {
-    component.medias = [{ id: 1, type: 'audio', filename: 'a.wav', md5: 'x', custom_metadata: {} }];
+    component.medias = [{ id: 1, media_type: 'audio', filename: 'a.wav', md5: 'x', custom_metadata: {} }];
     fixture.detectChanges();
     tick();
     httpMock.expectOne('/api/settings').flush({ volume: 1, view_mode_right: { audio: 'list', image: 'grid' } });

@@ -10,7 +10,7 @@ describe('ImageViewerComponent', () => {
 
   const mockMedia: Media = {
     id: 2,
-    type: 'image',
+    media_type: 'image',
     filename: 'test.png',
     md5: 'def456',
     custom_metadata: {},

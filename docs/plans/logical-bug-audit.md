@@ -786,7 +786,7 @@ Cross-section interaction agents:
   reviewed and left alone: by the time it runs, its values have already
   been emptied by the existing APPEND/APPENDS/BINBYTES overrides, and
   the peek needs the dict structure intact for `len(media_dict)` /
-  `first["type"]` in the staging route. As a side-fix, the staging
+  `first["media_type"]` in the staging route. As a side-fix, the staging
   endpoint stopped silently swallowing peek failures — the response
   schema grew an `error` field carrying the exception message so the UI
   can distinguish "valid pickle with 0 medias" from "couldn't parse
@@ -1004,7 +1004,7 @@ Cross-cutting open items that don't fit any single finding above:
   (2) `BINUNICODE` / `BINUNICODE8` are not overridden, so a pickle
   with a multi-MB inline `media_string` (a long document) is still
   fully materialised during peek. A blanket override doesn't work
-  because the peek needs short unicode strings (dict keys, `"type"`
+  because the peek needs short unicode strings (dict keys, `"media_type"`
   value); a size-bounded handler (e.g. truncate over N bytes) would
   cap the worst case.
 

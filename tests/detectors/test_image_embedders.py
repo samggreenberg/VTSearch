@@ -573,7 +573,7 @@ class TestSortRouteRejectsTextWhenUnsupported:
         try:
             medias[1] = {
                 "id": 1,
-                "type": "image",
+                "media_type": "image",
                 "filename": "x.jpg",
                 "md5": "deadbeef",
                 "embedder": "dinov3_single",

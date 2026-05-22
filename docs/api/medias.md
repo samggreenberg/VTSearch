@@ -16,8 +16,8 @@ GET /api/medias/ids
 
 ```json
 [
-  { "id": 0, "type": "audio", "embedder": "clap-fused" },
-  { "id": 1, "type": "audio", "embedder": "clap-fused" }
+  { "id": 0, "media_type": "audio", "embedder": "clap-fused" },
+  { "id": 1, "media_type": "audio", "embedder": "clap-fused" }
 ]
 ```
 
@@ -44,7 +44,7 @@ are silently omitted):
 [
   {
     "id": 0,
-    "type": "audio",
+    "media_type": "audio",
     "filename": "media_0.wav",
     "md5": "abc123...",
     "custom_metadata": {

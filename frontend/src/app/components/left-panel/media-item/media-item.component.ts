@@ -43,7 +43,7 @@ export class MediaItemComponent implements OnChanges {
 
   get thumbnailUrl(): string | null {
     if (this.thumbnailFailed) return null;
-    if (this.media.type === 'image' || this.media.type === 'video' || this.media.type === 'document' || this.media.type === 'audio') {
+    if (this.media.media_type === 'image' || this.media.media_type === 'video' || this.media.media_type === 'document' || this.media.media_type === 'audio') {
       return this.activeContext.mediaUrl(`/api/medias/${this.media.id}/image`);
     }
     return null;
@@ -52,8 +52,8 @@ export class MediaItemComponent implements OnChanges {
   get placeholderIcon(): string | null {
     if (!this.isGrid) return null;
     if (this.thumbnailUrl) return null;
-    if (this.media.type === 'audio') return '\u266B';
-    if (this.media.type === 'text') return '\u00B6';
+    if (this.media.media_type === 'audio') return '\u266B';
+    if (this.media.media_type === 'text') return '\u00B6';
     return '\u25A1';
   }
 

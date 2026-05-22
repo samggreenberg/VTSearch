@@ -97,7 +97,7 @@ class TestPickleRoundTrip:
         return {
             1: {
                 "id": 1,
-                "type": "audio",
+                "media_type": "audio",
                 "duration": 1.0,
                 "file_size": 100,
                 "md5": "abc123",
@@ -129,7 +129,7 @@ class TestPickleRoundTrip:
         old_data = {
             1: {
                 "id": 1,
-                "type": "audio",
+                "media_type": "audio",
                 "duration": 1.0,
                 "file_size": 100,
                 "md5": "abc123",

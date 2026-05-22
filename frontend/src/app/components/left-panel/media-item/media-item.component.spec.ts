@@ -9,7 +9,7 @@ describe('MediaItemComponent', () => {
 
   const mockMedia: Media = {
     id: 1,
-    type: 'audio',
+    media_type: 'audio',
     filename: 'test.wav',
     md5: 'abc123',
     custom_metadata: {},
@@ -74,12 +74,12 @@ describe('MediaItemComponent', () => {
   });
 
   it('should show thumbnail for image type', () => {
-    component.media = { ...mockMedia, type: 'image' };
+    component.media = { ...mockMedia, media_type: 'image' };
     expect(component.thumbnailUrl).toBe('/api/medias/1/image');
   });
 
   it('should not show thumbnail for text type', () => {
-    component.media = { ...mockMedia, type: 'text' };
+    component.media = { ...mockMedia, media_type: 'text' };
     expect(component.thumbnailUrl).toBeNull();
   });
 

@@ -452,7 +452,7 @@ def _score_dataset(
     if not temp_medias:
         return [], [], scored_units, 0, ""
 
-    detected_media_type = next(iter(temp_medias.values()), {}).get("type", "")
+    detected_media_type = next(iter(temp_medias.values()), {}).get("media_type", "")
 
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 

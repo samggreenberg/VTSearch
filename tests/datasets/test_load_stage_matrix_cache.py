@@ -76,7 +76,7 @@ class TestApplyClipperStageInvalidatesMatrix:
         for cid in (1, 2, 3):
             ctx.medias[cid] = {
                 "id": cid,
-                "type": "audio",
+                "media_type": "audio",
                 "filename": f"a_{cid}.wav",
                 "md5": f"md5_{cid}",
                 "embedding": rng.standard_normal(4).astype(np.float32),

@@ -37,7 +37,7 @@ def _make_dataset(ds_id, media_ids):
     for mid in media_ids:
         ctx.medias[mid] = {
             "id": mid,
-            "type": "audio",
+            "media_type": "audio",
             "embedding": rng.standard_normal(4).astype(np.float32),
         }
     register_context(ctx)
@@ -432,7 +432,7 @@ class TestRequestMissingSentinel:
             app.preprocess_request()
             ctx = get_active_context()
             with pytest.raises(RequestMissingContextError):
-                ctx.medias[42] = {"id": 42, "type": "audio"}
+                ctx.medias[42] = {"id": 42, "media_type": "audio"}
             with pytest.raises(RequestMissingContextError):
                 ctx.diversity_tree = object()
 

@@ -102,8 +102,8 @@ class _DummyChunkedImporter(DatasetImporter):
 
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         self.run_called = True
-        medias[1] = {"id": 1, "type": "audio", "embedding": np.zeros(4)}
-        medias[2] = {"id": 2, "type": "audio", "embedding": np.ones(4)}
+        medias[1] = {"id": 1, "media_type": "audio", "embedding": np.zeros(4)}
+        medias[2] = {"id": 2, "media_type": "audio", "embedding": np.ones(4)}
 
     def run_chunked(
         self,
@@ -113,8 +113,8 @@ class _DummyChunkedImporter(DatasetImporter):
     ) -> Iterator[dict[int, dict[str, Any]]]:
         self.run_chunked_called = True
         self.last_chunk_size = chunk_size
-        yield {1: {"id": 1, "type": "audio", "embedding": np.zeros(4)}}
-        yield {1: {"id": 1, "type": "audio", "embedding": np.ones(4)}}
+        yield {1: {"id": 1, "media_type": "audio", "embedding": np.zeros(4)}}
+        yield {1: {"id": 1, "media_type": "audio", "embedding": np.ones(4)}}
 
 
 class _DummyNonChunkedImporter(DatasetImporter):
@@ -131,7 +131,7 @@ class _DummyNonChunkedImporter(DatasetImporter):
 
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         self.run_called = True
-        medias[1] = {"id": 1, "type": "audio", "embedding": np.zeros(4)}
+        medias[1] = {"id": 1, "media_type": "audio", "embedding": np.zeros(4)}
 
     def run_chunked(
         self,
@@ -323,7 +323,7 @@ class TestLocalFolderRouteChunked:
 
         def _stub_run_chunked(field_values, chunk_size, thin=False):
             chunked_calls.append(chunk_size)
-            yield {1: {"id": 1, "type": "audio", "embedding": np.zeros(4), "filename": "a.wav"}}
+            yield {1: {"id": 1, "media_type": "audio", "embedding": np.zeros(4), "filename": "a.wav"}}
 
         def _stub_run(field_values, medias, thin=False):
             captured["run_called"] = True

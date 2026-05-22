@@ -279,7 +279,7 @@ class TestMyImporterRun:
         imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
         assert medias
         for m in medias.values():
-            assert m["type"] == "audio"
+            assert m["media_type"] == "audio"
             assert m["origin"]["importer"] == "my_importer"
 ```
 
@@ -337,7 +337,7 @@ class CatalogueImporter(DatasetImporter):
     ) -> dict | None:
         embedding = np.asarray(record["embedding"], dtype=np.float32)
         return {
-            "type": "audio",
+            "media_type": "audio",
             "filename": record["id"] + ".wav",
             "md5": record["md5"],
             "embedding": embedding,

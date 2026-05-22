@@ -27,7 +27,7 @@ def _make_test_media(media_id: int, media_type: str = "audio") -> dict:
     rng = np.random.default_rng(media_id)
     return {
         "id": media_id,
-        "type": media_type,
+        "media_type": media_type,
         "embedder": "clap",
         "duration": 1.0,
         "file_size": 100,

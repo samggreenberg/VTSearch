@@ -97,7 +97,7 @@ def _embedder_name_for_type(medias: dict[int, dict[str, Any]], media_type_id: st
     string when no matching media is found (caller falls back to the default).
     """
     for m in medias.values():
-        if m.get("type") == media_type_id:
+        if m.get("media_type") == media_type_id:
             name = m.get("embedder", "")
             if name:
                 return name
@@ -125,7 +125,7 @@ def _build_media_data(
     """
     name = origin_name or file_path.name
     media_data: dict[str, Any] = {
-        "type": media_type_id,
+        "media_type": media_type_id,
         "file_size": len(file_bytes),
         "md5": md5,
         "embedding": embedding,

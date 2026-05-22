@@ -321,7 +321,7 @@ def get_embedder_for_medias(media_dict: dict):
         return None
     first = next(iter(media_dict.values()))
     embedder_name = first.get("embedder", "")
-    media_type = first.get("type", "audio")
+    media_type = first.get("media_type", "audio")
 
     from vtscore.media import embedders_for_type, get_embedder  # noqa: PLC0415
 

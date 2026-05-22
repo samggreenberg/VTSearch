@@ -8,9 +8,9 @@ describe('LabelListComponent', () => {
   let fixture: ComponentFixture<LabelListComponent>;
 
   const sampleMedias: Media[] = [
-    { id: 1, type: 'audio', filename: 'song.wav', md5: 'aaa', custom_metadata: {} },
-    { id: 2, type: 'image', filename: 'photo.jpg', md5: 'bbb', custom_metadata: {} },
-    { id: 3, type: 'video', filename: 'clip.mp4', md5: 'ccc', custom_metadata: {} },
+    { id: 1, media_type: 'audio', filename: 'song.wav', md5: 'aaa', custom_metadata: {} },
+    { id: 2, media_type: 'image', filename: 'photo.jpg', md5: 'bbb', custom_metadata: {} },
+    { id: 3, media_type: 'video', filename: 'clip.mp4', md5: 'ccc', custom_metadata: {} },
   ];
 
   beforeEach(async () => {

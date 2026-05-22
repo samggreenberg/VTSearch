@@ -426,7 +426,7 @@ class TestRunConvertersOnFolder:
         assert "\u2192" in media["origin_name"]
 
         # Check media type
-        assert media["type"] == "image"
+        assert media["media_type"] == "image"
 
         # Check embedding
         assert np.array_equal(media["embedding"], fake_embedding)
@@ -729,7 +729,7 @@ class TestFolderImporterWithConverters:
         # Create only a video file — no image files.
         (tmp_path / "clip.mp4").write_bytes(b"fake-video")
 
-        mock_converter_medias = {1: {"id": 1, "type": "image"}}
+        mock_converter_medias = {1: {"id": 1, "media_type": "image"}}
 
         def _fake_run_converters(
             folder, output_type, specs, medias, thin=False, recursive=True, folder_path_for_origin=""

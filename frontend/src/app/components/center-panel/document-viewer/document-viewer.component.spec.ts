@@ -9,7 +9,7 @@ describe('DocumentViewerComponent', () => {
 
   const mockMedia: Media = {
     id: 5,
-    type: 'document',
+    media_type: 'document',
     filename: 'test.pdf',
     md5: 'mno345',
     custom_metadata: {},

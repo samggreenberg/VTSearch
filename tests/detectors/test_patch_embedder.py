@@ -1285,7 +1285,7 @@ class TestRegionAwareTraining:
         return {
             "id": cid,
             "md5": f"md5-{cid:04x}",
-            "type": "image",
+            "media_type": "image",
             "embedding": cls,
             "patch_grid": grid,
         }
@@ -1313,7 +1313,7 @@ class TestRegionAwareTraining:
         media = {
             "id": 1,
             "md5": "abc",
-            "type": "image",
+            "media_type": "image",
             "embedding": np.array([1.0, 0.0, 0.0], dtype=np.float32),
         }
         vec = _training_vec_for_vote(media, (0.1, 0.2, 0.7, 0.8))

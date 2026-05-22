@@ -40,8 +40,8 @@ class TestDatasetContext:
     def test_contexts_are_independent(self):
         ctx_a = DatasetContext("a")
         ctx_b = DatasetContext("b")
-        ctx_a.medias[1] = {"id": 1, "type": "audio"}
-        ctx_b.medias[2] = {"id": 2, "type": "image"}
+        ctx_a.medias[1] = {"id": 1, "media_type": "audio"}
+        ctx_b.medias[2] = {"id": 2, "media_type": "image"}
         assert 1 in ctx_a.medias and 2 not in ctx_a.medias
         assert 2 in ctx_b.medias and 1 not in ctx_b.medias
 
@@ -115,7 +115,7 @@ class TestProxyDict:
         # The reset_state fixture creates _test_default with test medias.
         # Create a second context and switch.
         ctx2 = DatasetContext("proxy_test")
-        ctx2.medias[999] = {"id": 999, "type": "test"}
+        ctx2.medias[999] = {"id": 999, "media_type": "test"}
         register_context(ctx2)
         set_thread_dataset_context(ctx2)
 
@@ -228,7 +228,7 @@ class TestMultiDatasetSwitching:
         rng = np.random.default_rng(media_id)
         return {
             "id": media_id,
-            "type": media_type,
+            "media_type": media_type,
             "embedder": "clap",
             "duration": 1.0,
             "file_size": 100,
@@ -384,7 +384,7 @@ class TestMultiDatasetAPI:
         rng = np.random.default_rng(media_id)
         return {
             "id": media_id,
-            "type": "audio",
+            "media_type": "audio",
             "embedder": "clap",
             "duration": 1.0,
             "file_size": 100,

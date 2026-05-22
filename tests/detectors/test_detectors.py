@@ -912,7 +912,7 @@ class TestLoadModelEndpoint:
         for cid in (a_good, a_bad):
             ctx_b.medias[cid] = {
                 "id": cid,
-                "type": "audio",
+                "media_type": "audio",
                 "embedder": "clap",
                 "md5": hashlib.md5(f"ds_b_{cid}".encode()).hexdigest(),
                 "embedding": np.zeros(512, dtype=np.float32),
@@ -1061,7 +1061,7 @@ class TestEmbedderMismatchInvalidatesStaleModel:
         for cid in a_ids[:2]:
             ctx_b.medias[cid] = {
                 "id": cid,
-                "type": "audio",
+                "media_type": "audio",
                 "embedder": "shiny-new-embedder",
                 "md5": hashlib.md5(f"h5_b_{cid}".encode()).hexdigest(),
                 "embedding": np.zeros(512, dtype=np.float32),
@@ -1864,7 +1864,7 @@ class TestLoadModelCrossDatasetResolution:
             rng = np.random.default_rng(99)
             medias[1] = {
                 "id": 1,
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": rng.standard_normal(512).astype(np.float32),
                 "md5": good_md5,  # same content as good_0.wav
                 "filename": "completely_different_name.wav",
@@ -1873,7 +1873,7 @@ class TestLoadModelCrossDatasetResolution:
             }
             medias[2] = {
                 "id": 2,
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": rng.standard_normal(512).astype(np.float32),
                 "md5": bad_md5,  # same content as bad_0.wav
                 "filename": "another_file.wav",
@@ -1951,7 +1951,7 @@ class TestLoadModelCrossDatasetResolution:
             rng = np.random.default_rng(42)
             medias[1] = {
                 "id": 1,
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": rng.standard_normal(512).astype(np.float32),
                 "md5": "totally_different_md5",
                 "filename": "shared_name.wav",

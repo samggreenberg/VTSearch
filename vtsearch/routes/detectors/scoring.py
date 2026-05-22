@@ -246,7 +246,7 @@ def find_label(body: dict):  # noqa: C901
         update_find_progress("idle", "")
         abort(400, message="No medias loaded")
 
-    media_type = d.get("media_type", "") or next(iter(snap.values())).get("type", "image")
+    media_type = d.get("media_type", "") or next(iter(snap.values())).get("media_type", "image")
     det_path = _detector_path(d["name"])
     det_data = _read_detector(det_path)
 
@@ -493,7 +493,7 @@ def auto_detect(body: dict):
     if not snap:
         abort(400, message="No medias loaded")
 
-    media_type = next(iter(snap.values())).get("type", "audio")
+    media_type = next(iter(snap.values())).get("media_type", "audio")
 
     # Clear a leftover cancel flag from a previously-cancelled run.
     find_progress.reset_cancel()

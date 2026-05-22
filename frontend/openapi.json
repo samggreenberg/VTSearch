@@ -3157,10 +3157,10 @@
           "md5": {
             "type": "string"
           },
-          "origin_name": {
+          "media_type": {
             "type": "string"
           },
-          "type": {
+          "origin_name": {
             "type": "string"
           }
         },
@@ -3169,7 +3169,7 @@
           "filename",
           "id",
           "md5",
-          "type"
+          "media_type"
         ],
         "type": "object"
       },
@@ -3182,13 +3182,13 @@
           "id": {
             "type": "integer"
           },
-          "type": {
+          "media_type": {
             "type": "string"
           }
         },
         "required": [
           "id",
-          "type"
+          "media_type"
         ],
         "type": "object"
       },

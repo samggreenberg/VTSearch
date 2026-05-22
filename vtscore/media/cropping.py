@@ -40,7 +40,7 @@ def crop_file_bytes(
         start = float(params.get("start", 0.0))
         end = float(params.get("end", 0.0))
         clipper = SoundClipClipper(start, end)
-        media = {"id": 0, "type": "audio", "media_bytes": media_bytes}
+        media = {"id": 0, "media_type": "audio", "media_bytes": media_bytes}
         clipped = clipper.clip(media)
         return clipped[0].get("media_bytes", media_bytes)
 
@@ -57,7 +57,7 @@ def crop_file_bytes(
             width, height = img.size
         media = {
             "id": 0,
-            "type": "image",
+            "media_type": "image",
             "media_bytes": media_bytes,
             "width": width,
             "height": height,

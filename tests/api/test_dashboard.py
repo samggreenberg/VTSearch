@@ -42,7 +42,7 @@ class TestDashboardDatasetInfo:
         resp = client.get("/api/dashboard/dataset-info")
         data = resp.get_json()
         first_media = next(iter(medias.values()))
-        assert data["media_type"] == first_media.get("type", "audio")
+        assert data["media_type"] == first_media.get("media_type", "audio")
 
     def test_returns_origin_from_media(self, client):
         """Endpoint extracts origin info when medias have origin set."""
@@ -735,7 +735,7 @@ class TestFindProgress:
             emb = np.random.RandomState(i + 50).randn(512).astype(np.float32)
             ds_medias[i] = {
                 "id": i,
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": emb,
                 "md5": f"prog_md5_{i}",
                 "filename": f"prog_{i}.wav",

@@ -304,7 +304,7 @@ The runner builds each output media dict via
 ```python
 {
     "id": <assigned by runner>,
-    "type": <converter.target_type>,
+    "media_type": <converter.target_type>,
     "embedder": <name of target media type's default embedder>,
     "file_size": <len of media_bytes or media_string.encode()>,
     "md5": <hashlib.md5 of bytes/string>,

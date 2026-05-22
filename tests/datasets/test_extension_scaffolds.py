@@ -437,7 +437,7 @@ class TestEnrichedExportOriginParams:
             rng = np.random.default_rng(42)
             medias[1] = {
                 "id": 1,
-                "type": "audio",
+                "media_type": "audio",
                 "md5": "enrich_test_hash",
                 "filename": "C1.wav",
                 "origin": {
@@ -492,7 +492,7 @@ class TestEnrichedExportOriginParams:
             rng = np.random.default_rng(42)
             medias[1] = {
                 "id": 1,
-                "type": "audio",
+                "media_type": "audio",
                 "md5": "override_test_hash",
                 "filename": "C1.wav",
                 "origin": {
