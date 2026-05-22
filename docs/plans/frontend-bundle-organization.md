@@ -1,7 +1,7 @@
 # Frontend bundle organization
 
-Status: **#1 shipped (all five checkpoints). #2 shipped.** Items #3–#6
-are scoped but not started.
+Status: **#1 shipped (all five checkpoints). #2 shipped. #3 shipped.**
+Items #4–#6 are scoped but not started.
 
 ## What shipped
 
@@ -152,6 +152,69 @@ are scoped but not started.
   component dedup.  Bundle size was not the goal of this checkpoint —
   the structural goal (clear ownership of modal state and polling, a
   smaller dashboard shell) is what shipped.
+- **#3 Split `label-view.component.ts`**: extracted three focused
+  units out of the coordinator component to drop it from 1196 → 1071
+  lines.
+  - **`PanelResizeDirective`** (`vtPanelResize`) folds the two
+    near-identical 50-line divider drag handlers (left + right
+    mousedown / mousemove / mouseup) into a single standalone
+    directive bound to each divider in the template.  The directive
+    runs mousemove outside the Angular zone (matching the previous
+    inline behaviour) and emits a `widthChange` per move plus one
+    `resizeEnd` on release; the component receives those events and
+    handles side-specific concerns (auto-uncollapse on left, grid
+    snap on release, save-to-settings) in two small handlers per
+    side.  The four bound handler properties
+    (`boundMouseMove` / `boundMouseUp` / `boundRightMouseMove` /
+    `boundRightMouseUp`), the two `dragging` flags, the `NgZone`
+    injection, and the four `document.removeEventListener` calls in
+    `ngOnDestroy` all leave the parent.
+  - **`LabelViewPanelStateService`** owns the six per-media-type
+    preference dicts (`viewModeLeftDict`, `gridIconSizeLeftDict`,
+    `focusModeLeftDict`, `focusModeRightDict`, `panelPxLeftDict`,
+    `panelPxRightDict`) and the active `currentMediaType` pointer.
+    The component reads getters off the service (`viewModeLeft`,
+    `gridGoalWidthLeft`, `focusModeLeft`, `focusModeRight`) in the
+    template, hands fresh settings blobs to
+    `panelState.loadFromSettings()`, and calls
+    `panelState.savePanelPx(side, px)` after a drag releases.  The
+    `loadSettings()` body shrunk from a six-key cascade with
+    duplicate type-guards down to a single `loadFromSettings` call
+    plus an `applyPanelPx()` re-clamp.  The service is component-
+    scoped (provided in the component's `providers`) so it resets
+    cleanly between test instances.
+  - **`buildMediaContextMenuItems(mediaType)`** factory replaces the
+    ~30-line inline switch on `cropAble` inside
+    `onMediaContextRequest`.  The factory lives next to the
+    component so audio/image-specific menu items stay near the
+    flow that consumes them.
+  - **What we did NOT do** (deviations from the plan, noted so the
+    next contributor doesn't try and back them out):
+    - **`applyPanelPx` stays in the component.**  The plan suggested
+      a "panel-px ↔ panel-pct conversion utility module", but the
+      existing code already stores raw px (the `panel_pct_*`
+      settings-key names are a misnomer from an earlier draft).
+      The remaining `applyPanelPx` helper clamps stored widths
+      against current layout bounds (which needs `LEFT_MIN` /
+      `RIGHT_MIN` / `DIVIDER_TOTAL` / `CENTER_MIN` plus the live
+      `leftWidth` / `rightWidth` / `autopilotCollapsed` state),
+      so pulling it out would force the component to pass all that
+      state in on every call — a wash.  The service owns the
+      per-media-type dicts; the clamping math stays where the
+      constants live.
+    - **`MediaContextMenuComponent` itself was not rebuilt.**  The
+      plan mentioned moving the configuration data "into a small
+      per-flow factory", which is exactly what
+      `buildMediaContextMenuItems` does.  No structural change to
+      the rendering component was needed.
+  **Bundle effect.** Initial bundle unchanged at 527.25 kB raw /
+  136.46 kB gzip — label-view is a lazy-loaded route, so all gains
+  land in its chunk.  Lazy `label-view-component` chunk dropped from
+  ~58 kB → 55.72 kB raw (12.44 kB gzip) as the four divider-drag
+  handlers and the inline dict-loading cascade were replaced with
+  smaller delegations.  Structural goal — three focused files
+  (directive, service, pure factory) instead of one 1200-line
+  coordinator — is what shipped.
 - **#1 Checkpoint 4**: extracted `<vt-source-picker>` — the importer
   category-tab + sub-tab chrome plus the source-side widgets (demo
   media-type tabs + sortable demo table, server-folder typed-path
@@ -354,7 +417,7 @@ After: `DashboardComponent` is roughly a layout + selection +
 button-wiring component, with each domain concern owned by its
 service or card component.
 
-### #3 — Split `label-view.component.ts`
+### #3 — Split `label-view.component.ts` (shipped — see "What shipped")
 
 Goal: shrink the coordinator component (1196 lines, ~50 fields,
 ~160 methods). Existing section dividers: divider drag (left),

@@ -48,7 +48,14 @@
   </div>
   <div
     class="divider-left"
-    (mousedown)="onDividerMouseDown($event)"
+    vtPanelResize="left"
+    [layoutEl]="layoutRef.nativeElement"
+    [minWidth]="leftMin"
+    [opposingWidth]="rightWidth"
+    [centerMin]="CENTER_MIN"
+    [dividerTotal]="DIVIDER_TOTAL"
+    (widthChange)="onLeftWidthChange($event)"
+    (resizeEnd)="onLeftResizeEnd($event)"
   ></div>
   <div class="panel-center">
     <vt-center-panel
@@ -58,7 +65,14 @@
   </div>
   <div
     class="divider-right"
-    (mousedown)="onRightDividerMouseDown($event)"
+    vtPanelResize="right"
+    [layoutEl]="layoutRef.nativeElement"
+    [minWidth]="RIGHT_MIN"
+    [opposingWidth]="leftWidth"
+    [centerMin]="CENTER_MIN"
+    [dividerTotal]="DIVIDER_TOTAL"
+    (widthChange)="onRightWidthChange($event)"
+    (resizeEnd)="onRightResizeEnd($event)"
   ></div>
   <div class="panel-right">
     <vt-right-panel
