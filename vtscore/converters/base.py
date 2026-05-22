@@ -41,7 +41,7 @@ class MediaConverter(PluginBase, ABC):
     display_name: str = ""
 
     #: Short description of what this converter does.
-    converter_description: str = ""
+    description: str = ""
 
     #: User-configurable parameters.  Same :class:`PluginField` system
     #: every plugin family uses.  Empty by default — converters with no
@@ -139,6 +139,6 @@ class MediaConverter(PluginBase, ABC):
             "source_type": self.source_type,
             "target_type": self.target_type,
             "display_name": self.display_name or f"{self.source_type.title()} → {self.target_type.title()}",
-            "description": self.converter_description,
+            "description": self.description,
             "fields": [f.to_dict() for f in self.fields],
         }

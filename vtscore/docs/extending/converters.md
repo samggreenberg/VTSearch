@@ -67,7 +67,7 @@ Optional overrides:
 | Member | Default | Purpose |
 |--------|---------|---------|
 | `display_name` | derived | Human-readable label for the chooser UI |
-| `converter_description` | `""` | One-line description |
+| `description` | `""` | One-line description |
 | `fields` | `[]` | User-configurable parameters |
 
 ### What `convert()` returns
@@ -173,7 +173,7 @@ class Audio2TextWhisperConverter(MediaConverter):
     """Transcribe audio to text using OpenAI Whisper."""
 
     display_name = "Audio → Text (Whisper)"
-    converter_description = "Run OpenAI Whisper ASR on audio files."
+    description = "Run OpenAI Whisper ASR on audio files."
     fields = [
         PluginField(
             key="model_size",

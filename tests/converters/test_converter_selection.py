@@ -111,11 +111,11 @@ class TestConverterBase:
         c = Video2ImageMediaConverter()
         assert c.display_name == "Video \u2192 Images"
 
-    def test_converter_description(self):
+    def test_description(self):
         from vtscore.converters import Document2ImageMediaConverter
 
         c = Document2ImageMediaConverter()
-        assert c.converter_description != ""
+        assert c.description != ""
 
     def test_to_dict(self):
         from vtscore.converters import Video2AudioMediaConverter

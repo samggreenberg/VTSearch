@@ -745,7 +745,7 @@ from vtscore.plugins import PluginField
 
 class Image2TextMediaConverter(MediaConverter):
     display_name = "Image → Text (OCR)"
-    converter_description = "Run OCR on image files"
+    description = "Run OCR on image files"
     fields = [
         PluginField(
             key="lang",
@@ -790,7 +790,7 @@ CONVERTER = Image2TextMediaConverter()
 | `get_param(params, key)` | Helper: read a param value with field-default fallback |
 | `name` (property) | Auto-derived as `f"{source_type}2{target_type}"` |
 | `display_name` | Human-readable label shown in the picker |
-| `converter_description` | One-line description |
+| `description` | One-line description |
 
 Each returned dict must include a `filename` and the target type's data
 fields (`media_bytes` and `duration` for image/audio/video,

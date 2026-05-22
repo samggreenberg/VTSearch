@@ -16,7 +16,7 @@ class Document2ImageMediaConverter(MediaConverter):
     .. attribute:: display_name
        :value: "Document \u2192 Images"
 
-    .. attribute:: converter_description
+    .. attribute:: description
        :value: "Render document pages as images"
 
     Supported formats:
@@ -31,7 +31,7 @@ class Document2ImageMediaConverter(MediaConverter):
     """
 
     display_name = "Document \u2192 Images"
-    converter_description = "Render document pages as images"
+    description = "Render document pages as images"
 
     @property
     def source_type(self) -> str:

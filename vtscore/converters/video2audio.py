@@ -32,7 +32,7 @@ class Video2AudioMediaConverter(MediaConverter):
     """
 
     display_name = "Video \u2192 Audio"
-    converter_description = "Extract audio tracks from video files"
+    description = "Extract audio tracks from video files"
     fields = [
         PluginField(
             key="ffmpeg_timeout",
