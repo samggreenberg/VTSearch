@@ -394,7 +394,7 @@ class TestPdfSymlinkDiscovery:
             stack.enter_context(mock.patch("vtscore.media.get_by_folder_name", return_value=mt))
             stack.enter_context(mock.patch("vtscore.media.get_embedder", return_value=emb))
             stack.enter_context(mock.patch("vtscore.media.embedders_for_type", return_value=[emb]))
-            _load_pdf_images(root, medias, embedder_name="siglip")
+            _load_pdf_images(root, medias)
 
         assert len(medias) == 2
         filenames = {m["filename"] for m in medias.values()}

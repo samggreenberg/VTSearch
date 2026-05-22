@@ -315,11 +315,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 mt.folder_import_name,
                 medias,
                 thin=thin,
-                embedder_name=field_values.get("embedder", ""),
                 content_vectors=merged_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=bool(field_values.get("skip_embedding")),
             )
         except ValueError:
             return False
@@ -405,11 +403,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
                         mt.folder_import_name,
                         chunk_size,
                         thin=thin,
-                        embedder_name=field_values.get("embedder", ""),
                         content_vectors=merged_vectors or None,
                         content_md5s=self.content_md5s or None,
                         custom_metadata_map=self.custom_metadata_map or None,
-                        skip_embedding=bool(field_values.get("skip_embedding")),
                     ):
                         self._rewrite_origins(chunk, name_to_source, origin)
                         yield chunk

@@ -245,8 +245,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         _extract_archive(archive_path, extract_dir, on_progress=progress)
         archive_path.unlink(missing_ok=True)
 
-        emb_name = field_values.get("embedder", "")
-        skip_emb = bool(field_values.get("skip_embedding"))
         try:
             load_dataset_from_folder(
                 extract_dir,
@@ -254,11 +252,9 @@ class HttpArchiveDatasetImporter(DatasetImporter):
                 medias,
                 on_progress=progress,
                 thin=thin,
-                embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=skip_emb,
             )
             _run_converter_specs(extract_dir, media_type, field_values, specs, medias, thin=thin)
         finally:
@@ -315,19 +311,15 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         media_type = field_values.get("media_type", "audio")
         specs = self.effective_source_specs(field_values)
         converter_specs = [s for s in specs if s.converter is not None]
-        emb_name = field_values.get("embedder", "")
-        skip_emb = bool(field_values.get("skip_embedding"))
         try:
             yield from load_dataset_from_folder_chunked(
                 extract_dir,
                 media_type,
                 chunk_size,
                 thin=thin,
-                embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=skip_emb,
             )
             if converter_specs:
                 converter_chunk: dict[int, dict[str, Any]] = {}

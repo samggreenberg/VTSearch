@@ -131,30 +131,18 @@ class TestFolderMemoryError:
         mock_mt.file_extensions = ["*.wav"]
         mock_mt.type_id = "audio"
 
-        mock_emb = mock.MagicMock()
-        mock_emb.name = "clap"
-        mock_emb.media_type_id = "audio"
-        mock_emb._model = True
-
         call_count = 0
 
-        def embed_then_oom(path):
+        def load_then_oom(path, media_bytes=None):
             nonlocal call_count
             call_count += 1
             if call_count >= 2:
                 raise MemoryError("simulated OOM")
-            return np.zeros(10)
+            return {"media_bytes": b"\x00", "duration": 1}
 
-        mock_emb.embed_media.side_effect = embed_then_oom
-        # Route the bulk entrypoint through embed_media so the per-file OOM
-        # simulator still fires under the loader's bulk dispatch.
-        mock_emb.embed_media_bulk.side_effect = lambda medias: [mock_emb.embed_media(m) for m in medias]
-        mock_mt.load_media_data.return_value = {"media_bytes": b"\x00", "duration": 1}
+        mock_mt.load_media_data.side_effect = load_then_oom
 
-        with (
-            mock.patch("vtscore.media.get_by_folder_name", return_value=mock_mt),
-            mock.patch("vtscore.media.embedders_for_type", return_value=[mock_emb]),
-        ):
+        with mock.patch("vtscore.media.get_by_folder_name", return_value=mock_mt):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_folder(
                     tmp_path,

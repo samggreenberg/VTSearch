@@ -122,13 +122,14 @@ class TestFolderChunked:
         media = chunks[0][1]
         assert media["media_bytes"] is not None
 
-    def test_embeddings_present(self, tmp_path):
-        """Each media in a chunk has an embedding array."""
+    def test_embedding_is_none_until_framework_stage_runs(self, tmp_path):
+        """The folder loader does not embed — items leave with embedding=None
+        for the framework ``embed_missing`` stage to fill in.
+        """
         _make_wav_file(tmp_path, "test.wav")
         chunks = list(load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=10, thin=True))
         media = chunks[0][1]
-        assert isinstance(media["embedding"], np.ndarray)
-        assert len(media["embedding"]) > 0
+        assert media["embedding"] is None
 
     def test_all_files_covered(self, tmp_path):
         """The total number of medias across all chunks equals total files."""

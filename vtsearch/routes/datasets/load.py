@@ -105,11 +105,9 @@ def _build_local_folder_field_values(form, upload_dir: Path, clipper_params: dic
 
 
 def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list[dict] | None]:
-    """Pop clipper-related keys, set skip_embedding when applicable.
+    """Pop clipper-related keys; mutate *field_values* in place.
 
-    Returns ``(clipper_name, clipper_params, chain_steps)``; *field_values*
-    is mutated in place so ``clipper`` is normalised and ``skip_embedding``
-    is set when a non-default clipper or a chain is configured.
+    Returns ``(clipper_name, clipper_params, chain_steps)``.
     """
     from vtscore.datasets.load_pipeline import _parse_chain_field
 
@@ -117,8 +115,6 @@ def _extract_clipper_config(field_values: dict) -> tuple[str, dict | None, list[
     clipper_params = field_values.pop("clipper_params", None)
     chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
     field_values["clipper"] = clipper_name
-    if (clipper_name and not clipper_name.endswith("_default")) or chain_steps:
-        field_values["skip_embedding"] = True
     return clipper_name, clipper_params, chain_steps
 
 
