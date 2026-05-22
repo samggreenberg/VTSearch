@@ -1,161 +1,181 @@
 <vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
-  <div class="importer-picker">
-    <div class="importer-tab-bar">
-      @for (tab of visibleImporterTabs; track tab.id) {
-        <button
-          class="importer-tab"
-          [class.active]="activeImporterTab === tab.id"
-          (click)="selectImporterTab(tab.id)"
-          [title]="'Show ' + tab.label + ' dataset importers'"
-        >@if (tab.icon) {<vt-icon [type]="tab.icon" [size]="14"></vt-icon>}{{ tab.label }}</button>
+  <vt-source-picker
+    [visibleImporterTabs]="visibleImporterTabs"
+    [importersForActiveTab]="importersForActiveTab"
+    [activeImporterTabLabel]="activeImporterTabLabel"
+    [activeTab]="activeImporterTab"
+    (activeTabChange)="selectImporterTab($event)"
+    [selectedImporter]="selectedImporter"
+    (importerSelected)="selectImporter($event)"
+    [activePickerView]="activePickerView"
+    [mediaTypes]="mediaTypes"
+    [demos]="demos"
+    [filteredDemos]="filteredDemos"
+    [demoLoading]="demoLoading"
+    [demoTabs]="demoTabs"
+    [activeDemoTab]="activeTab"
+    (activeDemoTabChange)="selectDemoTabWithEmbedder($event)"
+    [demoCols]="demoCols"
+    (demoSelected)="selectDemo($event)"
+    [sfPathInputValue]="sfPathInputValue"
+    (sfPathInputValueChange)="sfPathInputValue = $event"
+    (sfPathApplied)="sfApplyPathInput()"
+    [lfPickerKind]="lfPickerKind"
+    [lfFiles]="lfFiles"
+    [lfFolderName]="lfFolderName"
+    (lfFilesDropped)="lfOnFilesDropped($event)"
+  >
+    <ng-container demoExtras>
+      @if (activeTab) {
+        <div class="form-group">
+          <label class="form-label" for="demo-dataset-name" title="Optional name for the new dataset. Leave blank to use the demo's name.">Dataset Name</label>
+          <input
+            id="demo-dataset-name"
+            type="text"
+            class="form-input"
+            [(ngModel)]="demoDatasetName"
+            placeholder="Leave blank to use the demo's name"
+          />
+        </div>
       }
-    </div>
-    @if (!activeImporterTab) {
-      <p class="tab-bar-hint">Select what type of dataset to add.</p>
-    }
 
-    @if (activeImporterTab) {
-      @if (importersForActiveTab.length === 0) {
-        <div class="importer-subtab-bar">
-          <span class="empty-state empty-state--inline">No importers in this category.</span>
+      @if (activeTab && (demoEmbedders.length > 1 || demoClippers.length > 1)) {
+        <div class="form-group form-group--section">
+          <vt-import-advanced
+            [availableConverters]="[]"
+            [nativeType]="''"
+            [typeLabels]="mediaTypeLabels"
+            [embedders]="demoEmbedders"
+            [clippers]="demoClippers"
+            [showSourceSpecs]="false"
+            [sourceSpecs]="[]"
+            [selectedEmbedder]="selectedDemoEmbedder"
+            (selectedEmbedderChange)="onDemoEmbedderChange($event)"
+            [selectedClipper]="selectedDemoClipper"
+            (clipperChooserRequested)="openClipperChooser('demo')"
+          ></vt-import-advanced>
         </div>
-      } @else if (importersForActiveTab.length > 1) {
-        <div class="importer-subtab-bar">
-          @for (imp of importersForActiveTab; track imp.name) {
-            <button
-              class="importer-subtab"
-              [class.active]="selectedImporter?.name === imp.name"
-              [class.disabled]="imp['enabled'] === false"
-              [disabled]="imp['enabled'] === false"
-              (click)="selectImporter(imp)"
-              [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : (imp.description || '')"
-            >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
-          }
-        </div>
-        @if (!selectedImporter) {
-          <p class="tab-bar-hint">Select how to add a {{ activeImporterTabLabel }} dataset.</p>
-        }
       }
-    }
-  </div>
+    </ng-container>
 
-  @if (activePickerView === 'demo' && selectedImporter) {
-    <div class="demo-picker">
-      @if (demoLoading) {
-        <p class="empty-state">Loading demo datasets...</p>
-      } @else if (demos.length === 0) {
-        <p class="empty-state">No demo datasets available.</p>
-      } @else {
-        <div class="demo-tab-bar">
-          @for (tab of demoTabs; track tab) {
-            <button
-              class="demo-tab"
-              [class.active]="activeTab === tab"
-              (click)="selectDemoTabWithEmbedder(tab)"
-              [title]="'Filter demos by media type: ' + getTabText(tab)"
-            >@if (getTabIcon(tab)) {<vt-icon [icon]="getTabIcon(tab)" [size]="14"></vt-icon>}{{ getTabText(tab) }}</button>
-          }
-        </div>
-        @if (!activeTab) {
-          <p class="tab-bar-hint">Select the media type to demonstrate.</p>
-        }
+    <ng-container sfBefore>
+      <div class="form-group">
+        <label class="form-label" for="sf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder name.">Dataset Name</label>
+        <input
+          id="sf-dataset-name"
+          type="text"
+          class="form-input"
+          [ngModel]="sfDatasetName"
+          (ngModelChange)="sfOnDatasetNameInput($event)"
+          placeholder="Leave blank to use a default name"
+        />
+      </div>
 
-        @if (activeTab) {
-          <div class="form-group">
-            <label class="form-label" for="demo-dataset-name" title="Optional name for the new dataset. Leave blank to use the demo's name.">Dataset Name</label>
+      <vt-import-config
+        mediaTypeFieldId="sf-media-type"
+        [mediaType]="sfMediaType"
+        (mediaTypeChange)="sfOnMediaTypeChange($event)"
+        [mediaTypeOptions]="sfMediaTypeOptions"
+        [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+        [detectionHint]="detectionHint(sfDetection)"
+      ></vt-import-config>
+    </ng-container>
+
+    <ng-container sfAfter>
+      <div class="form-group">
+        <label class="form-label" for="sf-recursive" title="When enabled, subdirectories of the chosen folder are scanned recursively. When disabled, only files directly inside the chosen folder are imported.">
+          <input
+            id="sf-recursive"
+            type="checkbox"
+            [ngModel]="sfRecursive"
+            (ngModelChange)="sfOnRecursiveChange($event)"
+          />
+          Include subfolders
+        </label>
+      </div>
+
+      <div class="form-group form-group--section">
+        <vt-import-advanced
+          [availableConverters]="sfAvailableConverters"
+          [nativeType]="sfOutputTypeId"
+          [typeLabels]="mediaTypeLabels"
+          [embedders]="sfEmbedders"
+          [clippers]="sfClippers"
+          [showSourceSpecs]="true"
+          [sourceSpecs]="sfSourceSpecs"
+          (sourceSpecsChange)="onSfSpecsChange($event)"
+          [selectedEmbedder]="sfSelectedEmbedder"
+          (selectedEmbedderChange)="sfSelectedEmbedder = $event"
+          [selectedClipper]="sfSelectedClipper"
+          (clipperChooserRequested)="openClipperChooser('sf')"
+        ></vt-import-advanced>
+      </div>
+
+      @if (sfBrowseError) {
+        <p class="error-text">{{ sfBrowseError }}</p>
+      }
+    </ng-container>
+
+    <ng-container lfBefore>
+      <div class="form-group">
+        <label class="form-label" for="lf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder/file name.">Dataset Name</label>
+        <input
+          id="lf-dataset-name"
+          type="text"
+          class="form-input"
+          [ngModel]="lfDatasetName"
+          (ngModelChange)="lfOnDatasetNameInput($event)"
+          placeholder="Leave blank to use a default name"
+        />
+      </div>
+
+      <vt-import-config
+        mediaTypeFieldId="lf-media-type"
+        [mediaType]="lfMediaType"
+        (mediaTypeChange)="lfOnMediaTypeChange($event)"
+        [mediaTypeOptions]="lfMediaTypeOptions"
+        [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+        [detectionHint]="detectionHint(lfDetection)"
+      ></vt-import-config>
+    </ng-container>
+
+    <ng-container lfAfter>
+      @if (lfPickerKind === 'folder') {
+        <div class="form-group">
+          <label class="form-label" for="lf-recursive" title="When enabled, files inside nested subfolders are also uploaded. When disabled, only files directly inside the picked folder are uploaded.">
             <input
-              id="demo-dataset-name"
-              type="text"
-              class="form-input"
-              [(ngModel)]="demoDatasetName"
-              placeholder="Leave blank to use the demo's name"
+              id="lf-recursive"
+              type="checkbox"
+              [ngModel]="lfRecursive"
+              (ngModelChange)="lfOnRecursiveChange($event)"
             />
-          </div>
-        }
-
-        @if (activeTab && (demoEmbedders.length > 1 || demoClippers.length > 1)) {
-          <div class="form-group form-group--section">
-            <vt-import-advanced
-              [availableConverters]="[]"
-              [nativeType]="''"
-              [typeLabels]="mediaTypeLabels"
-              [embedders]="demoEmbedders"
-              [clippers]="demoClippers"
-              [showSourceSpecs]="false"
-              [sourceSpecs]="[]"
-              [selectedEmbedder]="selectedDemoEmbedder"
-              (selectedEmbedderChange)="onDemoEmbedderChange($event)"
-              [selectedClipper]="selectedDemoClipper"
-              (clipperChooserRequested)="openClipperChooser('demo')"
-            ></vt-import-advanced>
-          </div>
-        }
-
-        @if (activeTab) {
-          <div class="demo-content-area">
-            <table class="demo-table" [class.table-fixed]="demoCols.tableFixed">
-              <thead>
-                <tr>
-                  @for (col of demoCols.columnOrder; track col; let first = $first) {
-                    <th
-                      [class.sortable]="demoCols.meta(col).sortable"
-                      [class.col-drop-target]="demoCols.isDropTarget(col)"
-                      [class.col-dragging]="demoCols.isDragging(col)"
-                      [class.col-num]="col === 'num_files' || col === 'num_categories'"
-                      [attr.data-col]="col"
-                      [title]="demoCols.meta(col).title"
-                      [style.width.%]="demoCols.tableFixed ? demoCols.colWidths[col] : null"
-                      draggable="true"
-                      (click)="onDemoHeaderClick(col)"
-                      (dragstart)="demoCols.onColDragStart($event, col)"
-                      (dragover)="demoCols.onColDragOver($event, col)"
-                      (dragleave)="demoCols.onColDragLeave($event, col)"
-                      (drop)="demoCols.onColDrop($event, col)"
-                      (dragend)="demoCols.onColDragEnd($event)"
-                    >@if (!first) {<div class="col-resize-handle" (mousedown)="demoCols.startResize($event)" (click)="$event.stopPropagation()" draggable="false"></div>}{{ demoCols.meta(col).label }}@if (demoCols.meta(col).sortable) {<span class="sort-indicator" [class.active]="demoCols.isSortActive(col)">{{ demoCols.sortIndicator(col) }}</span>}</th>
-                  }
-                </tr>
-              </thead>
-              <tbody>
-                @for (demo of filteredDemos; track demo.name) {
-                  <tr
-                    class="demo-row"
-                    [class.ready]="demo.status === 'ready'"
-                    role="button"
-                    tabindex="0"
-                    [attr.aria-label]="demo.label + ': ' + demo.description"
-                    (click)="selectDemo(demo)"
-                    (keydown.enter)="selectDemo(demo)"
-                    (keydown.space)="$event.preventDefault(); selectDemo(demo)"
-                  >
-                    @for (col of demoCols.columnOrder; track col) {
-                      @switch (col) {
-                        @case ('label') {
-                          <td class="col-name">{{ demo.label }}</td>
-                        }
-                        @case ('num_files') {
-                          <td class="col-num">{{ demo.num_files | number }}</td>
-                        }
-                        @case ('num_categories') {
-                          <td class="col-num">{{ demo.num_categories | number }}</td>
-                        }
-                        @case ('description') {
-                          <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>
-                        }
-                        @case ('status') {
-                          <td class="col-status"><span [class]="statusBadgeClass(demo.status)">{{ statusBadgeLabel(demo.status) }}</span></td>
-                        }
-                      }
-                    }
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
+            Include subfolders
+          </label>
+        </div>
       }
-    </div>
-  }
+
+      <div class="form-group form-group--section">
+        <vt-import-advanced
+          [availableConverters]="lfAvailableConverters"
+          [nativeType]="lfOutputTypeId"
+          [typeLabels]="mediaTypeLabels"
+          [embedders]="lfEmbedders"
+          [clippers]="lfClippers"
+          [showSourceSpecs]="true"
+          [sourceSpecs]="lfSourceSpecs"
+          (sourceSpecsChange)="onLfSpecsChange($event)"
+          [selectedEmbedder]="lfSelectedEmbedder"
+          (selectedEmbedderChange)="lfSelectedEmbedder = $event"
+          [selectedClipper]="lfSelectedClipper"
+          (clipperChooserRequested)="openClipperChooser('lf')"
+        ></vt-import-advanced>
+      </div>
+
+      @if (lfError) {
+        <p class="error-text">{{ lfError }}</p>
+      }
+    </ng-container>
+  </vt-source-picker>
 
   @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter) {
     <div class="importer-form">
@@ -326,107 +346,6 @@
   }
 
   @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
-    <div class="local-folder-uploader">
-      @if (lfPickerKind === 'folder') {
-        <p class="info-text">Pick a folder on <strong>this computer</strong> (running your browser).</p>
-      } @else {
-        <p class="info-text">
-          Upload a single file from <strong>this computer</strong> that lists the media to import
-          (a UTF-8 text file with one server-side path per line, or a <code>.npz</code> archive of
-          paths + pre-computed embedding vectors).
-        </p>
-      }
-
-      <div class="form-group">
-        <label class="form-label" for="lf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder/file name.">Dataset Name</label>
-        <input
-          id="lf-dataset-name"
-          type="text"
-          class="form-input"
-          [ngModel]="lfDatasetName"
-          (ngModelChange)="lfOnDatasetNameInput($event)"
-          placeholder="Leave blank to use a default name"
-        />
-      </div>
-
-      <vt-import-config
-        mediaTypeFieldId="lf-media-type"
-        [mediaType]="lfMediaType"
-        (mediaTypeChange)="lfOnMediaTypeChange($event)"
-        [mediaTypeOptions]="lfMediaTypeOptions"
-        [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-        [detectionHint]="detectionHint(lfDetection)"
-      ></vt-import-config>
-
-      <div class="form-group form-group--section">
-        @if (lfPickerKind === 'folder') {
-          <label class="form-label" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder<span class="required">*</span></label>
-          <vt-drop-zone
-            label="Drop a folder here to import"
-            sublabel="or click to browse"
-            [directory]="true"
-            [multiple]="true"
-            (filesSelected)="lfOnFilesDropped($event)"
-          ></vt-drop-zone>
-        } @else {
-          <label class="form-label" title="Choose a single file: a .txt/.list of paths, or a .npz archive of paths + pre-computed embedding vectors.">Paths file<span class="required">*</span></label>
-          <vt-drop-zone
-            label="Drop a paths file (.txt, .list, or .npz)"
-            sublabel="or click to browse"
-            accept=".txt,.list,.npz"
-            (filesSelected)="lfOnFilesDropped($event)"
-          ></vt-drop-zone>
-        }
-        @if (lfFiles.length > 0) {
-          <p class="info-text">
-            @if (lfPickerKind === 'folder') {
-              Selected <strong>{{ lfFiles.length | number }}</strong> file{{ lfFiles.length === 1 ? '' : 's' }}
-              @if (lfFolderName) { from <code>{{ lfFolderName }}</code> }
-            } @else {
-              Using paths from <code>{{ lfFiles[0].name }}</code>
-            }
-          </p>
-        }
-      </div>
-
-      @if (lfPickerKind === 'folder') {
-        <div class="form-group">
-          <label class="form-label" for="lf-recursive" title="When enabled, files inside nested subfolders are also uploaded. When disabled, only files directly inside the picked folder are uploaded.">
-            <input
-              id="lf-recursive"
-              type="checkbox"
-              [ngModel]="lfRecursive"
-              (ngModelChange)="lfOnRecursiveChange($event)"
-            />
-            Include subfolders
-          </label>
-        </div>
-      }
-
-      <div class="form-group form-group--section">
-        <vt-import-advanced
-          [availableConverters]="lfAvailableConverters"
-          [nativeType]="lfOutputTypeId"
-          [typeLabels]="mediaTypeLabels"
-          [embedders]="lfEmbedders"
-          [clippers]="lfClippers"
-          [showSourceSpecs]="true"
-          [sourceSpecs]="lfSourceSpecs"
-          (sourceSpecsChange)="onLfSpecsChange($event)"
-          [selectedEmbedder]="lfSelectedEmbedder"
-          (selectedEmbedderChange)="lfSelectedEmbedder = $event"
-          [selectedClipper]="lfSelectedClipper"
-          (clipperChooserRequested)="openClipperChooser('lf')"
-        ></vt-import-advanced>
-      </div>
-
-      @if (lfError) {
-        <p class="error-text">{{ lfError }}</p>
-      }
-    </div>
-  }
-
-  @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="lfSubmit()" [disabled]="lfSubmitting || lfFiles.length === 0">
@@ -436,77 +355,6 @@
           Upload &amp; Import
         }
       </button>
-    </div>
-  }
-
-  @if (activePickerView === 'server_folder' && selectedImporter) {
-    <div class="server-folder-browser">
-      <div class="form-group">
-        <label class="form-label" for="sf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder name.">Dataset Name</label>
-        <input
-          id="sf-dataset-name"
-          type="text"
-          class="form-input"
-          [ngModel]="sfDatasetName"
-          (ngModelChange)="sfOnDatasetNameInput($event)"
-          placeholder="Leave blank to use a default name"
-        />
-      </div>
-
-      <vt-import-config
-        mediaTypeFieldId="sf-media-type"
-        [mediaType]="sfMediaType"
-        (mediaTypeChange)="sfOnMediaTypeChange($event)"
-        [mediaTypeOptions]="sfMediaTypeOptions"
-        [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-        [detectionHint]="detectionHint(sfDetection)"
-      ></vt-import-config>
-
-      <div class="sf-browse-section">
-        <label class="form-label" for="sf-path-input">Folder to import</label>
-        <input
-          id="sf-path-input"
-          type="text"
-          class="form-input"
-          placeholder="/absolute/server/path/to/folder"
-          [(ngModel)]="sfPathInputValue"
-          (keydown.enter)="sfApplyPathInput(); $event.preventDefault()"
-          (blur)="sfApplyPathInput()"
-        />
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="sf-recursive" title="When enabled, subdirectories of the chosen folder are scanned recursively. When disabled, only files directly inside the chosen folder are imported.">
-          <input
-            id="sf-recursive"
-            type="checkbox"
-            [ngModel]="sfRecursive"
-            (ngModelChange)="sfOnRecursiveChange($event)"
-          />
-          Include subfolders
-        </label>
-      </div>
-
-      <div class="form-group form-group--section">
-        <vt-import-advanced
-          [availableConverters]="sfAvailableConverters"
-          [nativeType]="sfOutputTypeId"
-          [typeLabels]="mediaTypeLabels"
-          [embedders]="sfEmbedders"
-          [clippers]="sfClippers"
-          [showSourceSpecs]="true"
-          [sourceSpecs]="sfSourceSpecs"
-          (sourceSpecsChange)="onSfSpecsChange($event)"
-          [selectedEmbedder]="sfSelectedEmbedder"
-          (selectedEmbedderChange)="sfSelectedEmbedder = $event"
-          [selectedClipper]="sfSelectedClipper"
-          (clipperChooserRequested)="openClipperChooser('sf')"
-        ></vt-import-advanced>
-      </div>
-
-      @if (sfBrowseError) {
-        <p class="error-text">{{ sfBrowseError }}</p>
-      }
     </div>
   }
 
