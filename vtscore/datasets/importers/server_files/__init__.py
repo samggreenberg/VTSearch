@@ -213,17 +213,14 @@ class ServerFilesDatasetImporter(DatasetImporter):
             key="paths_file",
             label="Paths file",
             field_type="server_path",
-            description=(
-                "Absolute server path to a file listing the media to import.  Either:\n"
-                " • a UTF-8 text file (.txt / .list) with one media-file or directory "
-                "path per line (lines starting with # are comments), or\n"
-                " • a NumPy archive (.npz) that holds both the media paths AND "
-                "their pre-computed embedding vectors — when provided, listed "
-                "files skip re-embedding and use the supplied vectors instead.\n"
-                "Symlinks are followed; directory entries are scanned recursively "
-                "for media files."
+            description="A file that lists the media files (or folders) to pull into the dataset.",
+            hint=(
+                "Accepted formats:\n"
+                " • .txt / .list — UTF-8 text, one path per line (lines starting with # are comments).\n"
+                " • .npz — NumPy archive of paths plus pre-computed embedding vectors;\n"
+                "   listed files skip re-embedding and use the supplied vectors.\n"
+                "Symlinks are followed; directory entries are scanned recursively for media files."
             ),
-            hint=("Accepts .txt, .list, or .npz. One path per line, or a NumPy archive of pre-computed vectors."),
             accept=".txt,.list,.npz",
         ),
     ]

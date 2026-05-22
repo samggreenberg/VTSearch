@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
+import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { SettingsIoApiService } from '../../../services/settings-io-api.service';
 import { ImporterField } from '../../../models/api.models';
 import type { SettingsExporterEntry } from '../../../generated/api-client/models/settings-exporter-entry';
@@ -13,7 +14,7 @@ type ModalView = 'picker' | 'form';
 @Component({
   selector: 'vt-settings-exporter-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
   templateUrl: './settings-exporter-modal.component.html',
   styleUrl: './settings-exporter-modal.component.scss',
 })
@@ -66,7 +67,15 @@ export class SettingsExporterModalComponent implements OnInit {
     this.successMessage = '';
     const fields = (exporter.fields ?? []) as ImporterField[];
     for (const field of fields) {
-      if (field.default) this.formValues[field.key] = field.default;
+      if (field.default) {
+        this.formValues[field.key] = field.default;
+      } else if (
+        field.field_type === 'select' &&
+        !field.dynamic_options &&
+        (field.options?.length ?? 0) > 0
+      ) {
+        this.formValues[field.key] = field.options![0];
+      }
     }
     // If the exporter has no fields, submit immediately
     if (fields.length === 0) {

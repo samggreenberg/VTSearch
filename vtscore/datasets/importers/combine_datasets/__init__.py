@@ -134,7 +134,8 @@ class CombineDatasetsImporter(DatasetImporter):
             key="datasets",
             label="Dataset Files",
             field_type="text",
-            description="Comma-separated paths to .pkl dataset files.",
+            description="The existing datasets to merge into one new dataset.",
+            hint="Comma-separated paths to .pkl files exported from VTSearch.",
         ),
         ImporterField(
             key="name",

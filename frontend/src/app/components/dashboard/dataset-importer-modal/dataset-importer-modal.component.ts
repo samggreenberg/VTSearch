@@ -6,6 +6,7 @@ import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/cl
 import { ImportAdvancedComponent } from './import-advanced/import-advanced.component';
 import { ImportConfigComponent } from './import-config/import-config.component';
 import { SourcePickerComponent } from './source-picker/source-picker.component';
+import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
@@ -14,7 +15,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, ClipperChooserComponent, ImportAdvancedComponent, ImportConfigComponent, SourcePickerComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ClipperChooserComponent, ImportAdvancedComponent, ImportConfigComponent, SourcePickerComponent, FieldHintIconComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
@@ -370,11 +371,20 @@ export class DatasetImporterModalComponent implements OnInit {
     this.dynamicFieldError = {};
     this.formDatasetNameDirty = false;
 
-    // Pre-populate defaults
+    // Pre-populate defaults.  For select fields without an explicit default,
+    // fall back to the first option so the form is never sitting on an empty
+    // selection that the user has to actively click to populate.  Dynamic
+    // (runtime-fetched) options are handled later by ``refreshDynamicFieldOptions``.
     if (importer.fields) {
       for (const field of importer.fields) {
-        if (field.default !== undefined) {
+        if (field.default !== undefined && field.default !== '') {
           this.formValues[field.key] = field.default;
+        } else if (
+          field.field_type === 'select' &&
+          !field.dynamic_options &&
+          (field.options?.length ?? 0) > 0
+        ) {
+          this.formValues[field.key] = field.options![0];
         }
       }
     }
@@ -625,9 +635,13 @@ export class DatasetImporterModalComponent implements OnInit {
         this.demoTabs.push(mt);
       }
     }
-    // Intentionally leave ``activeTab`` blank — no media-type tab is
-    // auto-selected.  The demo table stays empty until the user clicks
-    // one of the inner tabs.
+    // Pre-select a media-type tab so the demo table shows results instead
+    // of sitting empty.  Prefer "audio" when present (matches the default
+    // for most file-list importers), otherwise pick the first tab.
+    if (!this.activeTab && this.demoTabs.length > 0) {
+      const preferred = this.demoTabs.includes('audio') ? 'audio' : this.demoTabs[0];
+      this.selectDemoTabWithEmbedder(preferred);
+    }
   }
 
   private loadDemoEmbedders(mediaType: string): void {
