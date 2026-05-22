@@ -80,6 +80,7 @@
   &[data-tier-idx="1"] { color: #d9d9d9; }
   &[data-tier-idx="2"] { color: #f0c419; }
   &[data-tier-idx="3"] { color: #f5f6fa; }
+  &[data-tier-idx="-1"] { cursor: help; }
 }
 
 .achievement-desc {
