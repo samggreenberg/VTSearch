@@ -212,8 +212,14 @@ export class ManagedColumns<TCol extends string = string> {
     const prevColWidth = ths[colIndex].style.width;
     ths[colIndex].style.width = '0px';
 
+    // `tbody > *` rather than `tbody tr`: dashboard rows are Angular custom
+    // elements (`<vt-dataset-card>`, `<vt-detector-card>`) with `:host {
+    // display: table-row }`, so they participate in table layout but don't
+    // match the `tr` selector. Querying for `tr` returned zero rows, so this
+    // method fell through to the `maxPx = ths[colIndex].offsetWidth` fallback
+    // and the `+ 2` below grew the column by 2px on every click.
     let maxPx = 0;
-    const rows = tableEl.querySelectorAll('tbody tr');
+    const rows = tableEl.querySelectorAll('tbody > *');
     rows.forEach((row) => {
       const cell = row.children[colIndex] as HTMLElement | undefined;
       if (!cell || cell.hasAttribute('colspan')) return;
