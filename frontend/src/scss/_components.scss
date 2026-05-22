@@ -281,15 +281,11 @@
 
 // --- Skeleton shimmer background ---
 //
-// Apply to an element that contains a lazy-loaded <img>: a soft shimmer
-// shows behind the image until it paints, smoothing the "pop-in" you get
-// from native loading="lazy". Pairs with the <vt-skeleton> component, which
-// uses the same animation but renders a sized block on its own.
+// Static placeholder behind lazy-loaded <img>s: a flat subtle background
+// shows until the image paints, smoothing the "pop-in" from
+// loading="lazy" without any motion.
 .skeleton-bg {
   position: relative;
-  // isolation: isolate scopes the pseudo-elements' negative z-index to
-  // this stacking context, so the base + shimmer sit behind the element's
-  // in-flow content without leaking behind the parent.
   isolation: isolate;
 
   &::before {
@@ -299,34 +295,6 @@
     background: var(--bg-subtle);
     border-radius: inherit;
     z-index: -1;
-  }
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      var(--skeleton-shimmer) 50%,
-      transparent 100%
-    );
-    border-radius: inherit;
-    transform: translateX(-100%);
-    animation: vt-skeleton-shimmer 1.4s ease-in-out infinite;
-    z-index: -1;
-  }
-}
-
-@keyframes vt-skeleton-shimmer {
-  to {
-    transform: translateX(100%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .skeleton-bg::after {
-    animation: none;
   }
 }
 
