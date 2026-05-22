@@ -347,22 +347,14 @@
         />
       </div>
 
-      <div class="form-group">
-        <label class="form-label" for="lf-media-type" title="The native media type of the dataset. Other types listed below can be pulled in and converted to this type.">Dataset MediaType</label>
-        <select
-          id="lf-media-type"
-          class="form-select"
-          [ngModel]="lfMediaType"
-          (ngModelChange)="lfOnMediaTypeChange($event)"
-        >
-          @for (opt of lfMediaTypeOptions; track opt) {
-            <option [value]="opt">{{ getMediaTypeOptionLabel(opt) }}</option>
-          }
-        </select>
-        @if (detectionHint(lfDetection); as hint) {
-          <p class="detection-hint">{{ hint }}</p>
-        }
-      </div>
+      <vt-import-config
+        mediaTypeFieldId="lf-media-type"
+        [mediaType]="lfMediaType"
+        (mediaTypeChange)="lfOnMediaTypeChange($event)"
+        [mediaTypeOptions]="lfMediaTypeOptions"
+        [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+        [detectionHint]="detectionHint(lfDetection)"
+      ></vt-import-config>
 
       <div class="form-group form-group--section">
         @if (lfPickerKind === 'folder') {
@@ -459,22 +451,14 @@
         />
       </div>
 
-      <div class="form-group">
-        <label class="form-label" for="sf-media-type" title="The native media type of the dataset. Other types listed below can be pulled in and converted to this type.">Dataset MediaType</label>
-        <select
-          id="sf-media-type"
-          class="form-select"
-          [ngModel]="sfMediaType"
-          (ngModelChange)="sfOnMediaTypeChange($event)"
-        >
-          @for (opt of sfMediaTypeOptions; track opt) {
-            <option [value]="opt">{{ getMediaTypeOptionLabel(opt) }}</option>
-          }
-        </select>
-        @if (detectionHint(sfDetection); as hint) {
-          <p class="detection-hint">{{ hint }}</p>
-        }
-      </div>
+      <vt-import-config
+        mediaTypeFieldId="sf-media-type"
+        [mediaType]="sfMediaType"
+        (mediaTypeChange)="sfOnMediaTypeChange($event)"
+        [mediaTypeOptions]="sfMediaTypeOptions"
+        [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+        [detectionHint]="detectionHint(sfDetection)"
+      ></vt-import-config>
 
       <div class="sf-browse-section">
         <label class="form-label" for="sf-path-input">Folder to import</label>

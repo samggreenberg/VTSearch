@@ -52,21 +52,11 @@
 .server-folder-browser { gap: var(--space-lg); }
 .sf-browse-section { gap: var(--space-sm); }
 
-// Detection hint shown below the output-media-type dropdown after the
-// modal samples the picked folder / files.  Subtle chip so it informs
-// without distracting from the form.
-.detection-hint {
-  margin: var(--space-sm) 0 0;
-  font-size: var(--font-sm);
-  line-height: 1.35;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-// `.advanced-toggle`, `.clipper-btn`, and `.license-warning` live inside
-// `<vt-import-advanced>` (which encapsulates the styles).  The
-// surrounding `.form-group--section` rule below provides the vertical
-// gap above the Advanced block.
+// `.detection-hint` lives inside `<vt-import-config>` (which
+// encapsulates its own styles).  `.advanced-toggle`, `.clipper-btn`,
+// and `.license-warning` likewise live inside `<vt-import-advanced>`.
+// The surrounding `.form-group--section` rule above provides the
+// vertical gap above the Advanced block.
 
 
 // Multi-media import UI lives in

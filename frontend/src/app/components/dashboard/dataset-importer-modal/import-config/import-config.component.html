@@ -1,0 +1,20 @@
+<div class="form-group">
+  <label
+    class="form-label"
+    [for]="mediaTypeFieldId"
+    title="The native media type of the dataset. Other types listed below can be pulled in and converted to this type."
+  >Dataset MediaType</label>
+  <select
+    [id]="mediaTypeFieldId"
+    class="form-select"
+    [ngModel]="mediaType"
+    (ngModelChange)="mediaTypeChange.emit($event)"
+  >
+    @for (opt of mediaTypeOptions; track opt) {
+      <option [value]="opt">{{ optionLabel(opt) }}</option>
+    }
+  </select>
+  @if (detectionHint) {
+    <p class="detection-hint">{{ detectionHint }}</p>
+  }
+</div>
