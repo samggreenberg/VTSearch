@@ -1,32 +1,69 @@
-<vt-modal title="Keyboard shortcuts" [open]="true" (closed)="close()">
-  <div class="kbd-help">
-    @for (section of sections; track section.header) {
-      <div class="kbd-section">
-        @if (section.header) {
-          <h2 class="kbd-section-header">{{ section.header }}</h2>
+<vt-modal title="Help" [open]="true" (closed)="close()">
+  <div class="help">
+    <div class="help-tabs" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        class="help-tab"
+        [class.help-tab--active]="activeTab() === 'shortcuts'"
+        [attr.aria-selected]="activeTab() === 'shortcuts'"
+        (click)="selectTab('shortcuts')"
+      >
+        Keyboard shortcuts
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="help-tab"
+        [class.help-tab--active]="activeTab() === 'guide'"
+        [attr.aria-selected]="activeTab() === 'guide'"
+        (click)="selectTab('guide')"
+      >
+        User guide
+      </button>
+    </div>
+
+    @if (activeTab() === 'shortcuts') {
+      <div class="kbd-help" role="tabpanel">
+        @for (section of sections; track section.header) {
+          <div class="kbd-section">
+            @if (section.header) {
+              <h2 class="kbd-section-header">{{ section.header }}</h2>
+            }
+            @for (group of section.groups; track group.title) {
+              <section class="kbd-group">
+                <h3 class="kbd-group-title">{{ group.title }}</h3>
+                <ul class="kbd-list">
+                  @for (sc of group.shortcuts; track sc.description) {
+                    <li class="kbd-row">
+                      <span class="kbd-keys">
+                        @for (k of sc.keys; track k; let last = $last) {
+                          <kbd class="kbd-key">{{ k }}</kbd>
+                          @if (!last) {
+                            <span class="kbd-plus">+</span>
+                          }
+                        }
+                      </span>
+                      <span class="kbd-desc">{{ sc.description }}</span>
+                    </li>
+                  }
+                </ul>
+              </section>
+            }
+          </div>
         }
-        @for (group of section.groups; track group.title) {
-          <section class="kbd-group">
-            <h3 class="kbd-group-title">{{ group.title }}</h3>
-            <ul class="kbd-list">
-              @for (sc of group.shortcuts; track sc.description) {
-                <li class="kbd-row">
-                  <span class="kbd-keys">
-                    @for (k of sc.keys; track k; let last = $last) {
-                      <kbd class="kbd-key">{{ k }}</kbd>
-                      @if (!last) {
-                        <span class="kbd-plus">+</span>
-                      }
-                    }
-                  </span>
-                  <span class="kbd-desc">{{ sc.description }}</span>
-                </li>
-              }
-            </ul>
-          </section>
+        <p class="kbd-hint">Press <kbd class="kbd-key">?</kbd> any time to open this sheet.</p>
+      </div>
+    } @else {
+      <div class="guide" role="tabpanel">
+        @if (guideError()) {
+          <p class="guide-error">{{ guideError() }}</p>
+        } @else if (guideHtml()) {
+          <div class="guide-body" [innerHTML]="guideHtml()"></div>
+        } @else {
+          <p class="guide-loading">Loading user guide…</p>
         }
       </div>
     }
-    <p class="kbd-hint">Press <kbd class="kbd-key">?</kbd> any time to open this sheet.</p>
   </div>
 </vt-modal>

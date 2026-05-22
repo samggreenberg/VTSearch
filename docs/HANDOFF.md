@@ -53,7 +53,7 @@ deployments. Runs locally or in Docker.
 | Document | Purpose |
 |----------|---------|
 | [SETUP.md](SETUP.md) | Installation, prerequisites, getting started, basic Docker usage |
-| [USER_GUIDE.md](USER_GUIDE.md) | End-user walkthrough — training a detector with Autopilot, manual mode, applying existing detectors, sort modes, dashboard, exporting |
+| [user/USER_GUIDE.md](user/USER_GUIDE.md) | End-user walkthrough — training a detector with Autopilot, manual mode, applying existing detectors, sort modes, dashboard, exporting |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment, offline mode, network deps, env vars, data directory, troubleshooting |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Module structure, dependency graph, extractability matrix, state management |
 | [API.md](API.md) | HTTP API reference (all REST endpoints, request/response formats) |

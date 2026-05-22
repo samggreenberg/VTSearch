@@ -3,8 +3,8 @@
 A walkthrough for people who want to **use** VTSearch — not install,
 extend, or debug it. Open it, load a dataset, train a detector (or
 apply an existing one), and export the matches. For installation see
-[SETUP.md](SETUP.md). For CLI workflows (no browser) see
-[CLI.md](CLI.md).
+[SETUP.md](../SETUP.md). For CLI workflows (no browser) see
+[CLI.md](../CLI.md).
 
 ## Contents
 
@@ -54,7 +54,7 @@ need to think about sort modes or selection strategies directly.
 
 ## Opening the app
 
-Once the server is running (see [SETUP.md](SETUP.md)), visit
+Once the server is running (see [SETUP.md](../SETUP.md)), visit
 `http://localhost:5000` in a browser. The app opens with an empty
 workspace and a hamburger menu (☰) in the top-left corner — that's
 your entry point for loading data.
@@ -70,7 +70,7 @@ Click the hamburger menu (☰) in the top-left. You get two choices:
 
 - **Demo datasets** — VTSearch ships with a catalogue of open
   datasets across all five media types (audio, image, text, video,
-  document). See [demos.md](demos.md) for the full list. Each demo
+  document). See [demos.md](../demos.md) for the full list. Each demo
   downloads on first use (~15 MB to ~1.2 GB depending on dataset) and
   is cached, so subsequent loads are instant.
 - **Import your own** — Load a folder of files from the server, a
@@ -409,7 +409,7 @@ your current labels. Formats:
 
 You can also export **detector weights** from the Detectors dashboard —
 useful for sharing a trained detector with another VTSearch
-instance, or for running it from the CLI. See [CLI.md](CLI.md) for
+instance, or for running it from the CLI. See [CLI.md](../CLI.md) for
 command-line autodetect.
 
 ---
@@ -432,11 +432,11 @@ Two ways to bring in existing work:
 
 ## Where to go next
 
-- Running workflows without the browser — [CLI.md](CLI.md).
-- What the ML actually does — [ML.md](ML.md).
-- Measuring sort quality on demo datasets — [EVAL.md](EVAL.md).
+- Running workflows without the browser — [CLI.md](../CLI.md).
+- What the ML actually does — [ML.md](../ML.md).
+- Measuring sort quality on demo datasets — [EVAL.md](../EVAL.md).
 - How Autopilot and sort modes are implemented — the
-  [architecture doc](ARCHITECTURE.md) (developer-oriented).
+  [architecture doc](../ARCHITECTURE.md) (developer-oriented).
 
 ---
 

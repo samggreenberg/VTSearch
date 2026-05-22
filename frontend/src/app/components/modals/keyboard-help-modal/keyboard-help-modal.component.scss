@@ -1,9 +1,40 @@
+.help {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 360px;
+  max-width: 720px;
+}
+
+.help-tabs {
+  display: flex;
+  gap: var(--space-xs);
+  border-bottom: 1px solid var(--border);
+}
+
+.help-tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+.help-tab--active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent, var(--text-primary));
+}
+
 .kbd-help {
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
-  min-width: 360px;
-  max-width: 560px;
 }
 
 .kbd-section {
@@ -80,4 +111,92 @@
   margin: 0;
   color: var(--text-muted);
   font-size: var(--font-sm);
+}
+
+.guide {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.guide-loading,
+.guide-error {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.guide-error {
+  color: var(--danger, var(--text-primary));
+}
+
+.guide-body {
+  color: var(--text-primary);
+  line-height: 1.55;
+  font-size: var(--font-md);
+
+  ::ng-deep h1 {
+    font-size: var(--font-xl);
+    margin: 0 0 var(--space-md);
+  }
+  ::ng-deep h2 {
+    font-size: var(--font-lg);
+    margin: var(--space-xl) 0 var(--space-sm);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: var(--space-xs);
+  }
+  ::ng-deep h3 {
+    font-size: var(--font-md);
+    margin: var(--space-lg) 0 var(--space-xs);
+  }
+  ::ng-deep p,
+  ::ng-deep ul,
+  ::ng-deep ol {
+    margin: 0 0 var(--space-md);
+  }
+  ::ng-deep ul,
+  ::ng-deep ol {
+    padding-left: var(--space-xl);
+  }
+  ::ng-deep li {
+    margin-bottom: var(--space-2xs);
+  }
+  ::ng-deep code {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.9em;
+    background: var(--bg-subtle);
+    padding: 0 var(--space-2xs);
+    border-radius: var(--radius-sm);
+  }
+  ::ng-deep pre {
+    background: var(--bg-subtle);
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+  }
+  ::ng-deep pre code {
+    background: transparent;
+    padding: 0;
+  }
+  ::ng-deep blockquote {
+    border-left: 3px solid var(--border);
+    margin: 0 0 var(--space-md);
+    padding-left: var(--space-md);
+    color: var(--text-secondary, var(--text-muted));
+  }
+  ::ng-deep a {
+    color: var(--accent, var(--text-primary));
+  }
+  ::ng-deep hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: var(--space-xl) 0;
+  }
+  ::ng-deep table {
+    border-collapse: collapse;
+    margin: 0 0 var(--space-md);
+  }
+  ::ng-deep th,
+  ::ng-deep td {
+    border: 1px solid var(--border);
+    padding: var(--space-2xs) var(--space-xs);
+  }
 }

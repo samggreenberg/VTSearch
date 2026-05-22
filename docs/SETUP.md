@@ -401,7 +401,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for additional deployment-specific configurat
 
 ## Next steps
 
-- **Use the app**: See [USER_GUIDE.md](USER_GUIDE.md) for a walkthrough
+- **Use the app**: See [user/USER_GUIDE.md](user/USER_GUIDE.md) for a walkthrough
   of loading a dataset, labeling with Autopilot, and exporting results.
 - **Run tests**: See [Running the tests](#running-the-tests) above.
 - **CLI workflows**: See [CLI.md](CLI.md) for running detectors and

@@ -32,7 +32,7 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 
 See [docs/SETUP.md](docs/SETUP.md#running-the-app) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
 
-> **New to VTSearch?** Read **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** — a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
+> **New to VTSearch?** Read **[docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md)** — a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
 
 ## Command-line interface
 
@@ -96,8 +96,9 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── CLI.md                      # CLI reference
 │   ├── ML.md                       # ML model details
 │   ├── SETUP.md                    # Setup instructions
-│   ├── USER_GUIDE.md               # End-user walkthrough (training detectors, applying detectors, exporting)
 │   ├── demos.md                    # Demo dataset listing
+│   ├── user/                       # End-user docs (rendered in-app via the Help window)
+│   │   └── USER_GUIDE.md           # End-user walkthrough (training detectors, applying detectors, exporting)
 │   ├── plans/                      # Open design plans (see plans/README.md)
 │   └── design/                     # Architecture design documents
 └── pyproject.toml                  # Project metadata and dependencies

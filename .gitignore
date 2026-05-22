@@ -25,6 +25,7 @@ static/styles.css
 static/chunk-*.js
 static/3rdpartylicenses.txt
 static/prerendered-routes.json
+static/assets/
 
 # Angular / Node
 frontend/node_modules/
