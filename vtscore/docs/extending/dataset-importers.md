@@ -156,9 +156,8 @@ from origins.
 
 An importer that wants to pull in multiple source media types in one
 shot — e.g. images, plus videos converted to images, plus documents
-converted to images — sets the class attribute `multi_media = True`
-and iterates `self.effective_source_specs(field_values)` inside
-`run()`. Each `SourceSpec` ([`vtscore/datasets/importers/base.py:67`](../../datasets/importers/base.py))
+converted to images — sets the class attribute `multi_media = True`.
+Each `SourceSpec` ([`vtscore/datasets/importers/base.py:67`](../../datasets/importers/base.py))
 is `(source_type, converter, params)`:
 
 - `converter is None` means "include directly" — fetch files of
@@ -166,12 +165,41 @@ is `(source_type, converter, params)`:
 - `converter is set` means "fetch files of `source_type`, then pass
   them through the named converter with `params`".
 
+**The framework owns conversion and ingestion.** Subclasses never
+call `get_converter()` or `converter.convert()` themselves — they
+just yield raw source-type media, and the framework runs each spec's
+converter on it before assigning IDs and storing the result.
+
+### Choosing your override point
+
+`DatasetImporter` exposes four override points. Pick the simplest
+one that fits your backend:
+
+| When your backend looks like… | Override |
+|------------------------------|----------|
+| One query, one media type per import (no per-source-type fan-out) | `list_records()` + `fetch_record()` |
+| Different query per media type — framework loops specs for you | `fetch_source_media(spec, ...)` |
+| One query that returns mixed types in one response | `fetch_all_source_media(specs, ...)` |
+| Folder-shaped (already on disk; delegates to `load_dataset_from_folder()` / `run_converters_on_folder()`) | `run()` directly |
+
+The first three hooks all hand back raw source-type media; the
+framework runs converters and ingests.  Only `run()` gives up that
+help in exchange for full control.  The built-in `server_folder`
+importer is the canonical `run()`-shaped example; `recaller` is the
+canonical `fetch_source_media()`-shaped example.
+
+The default `fetch_source_media()` delegates to `list_records()` +
+`fetch_record()`, and the default `fetch_all_source_media()`
+delegates to `fetch_source_media()` per spec — so each hook is a
+strict generalisation of the one above it.  You can also call
+`self.effective_source_specs(field_values)` directly from any of
+these (or from a custom `run()`) to inspect the resolved spec list.
+
 Legacy importers (`multi_media = False`) can still call
 `effective_source_specs()` — it synthesises an equivalent list from
 the classic `media_type` + comma-separated `converters` form fields,
 so you can migrate the body of `run()` before touching the form
-schema. The built-in `server_folder` importer is a good migration
-reference.
+schema.
 
 ## Reporting progress
 

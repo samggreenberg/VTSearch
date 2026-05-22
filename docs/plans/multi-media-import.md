@@ -1,6 +1,8 @@
 # Multi-media importing
 
-Status: every in-tree importer now sets `multi_media=True`.  Shim
+Status: every in-tree importer now sets `multi_media=True`, and the
+framework now owns conversion — importers yield raw source-type media
+and the base-class `run()` runs each spec's converter itself.  Shim
 removal is the next step but is **blocked on external extensions** (see
 "Open follow-ups" at the bottom).
 
@@ -259,6 +261,60 @@ When migrating an importer to `multi_media=True`:
   in `dataset-importer-modal.component.ts`.
 - Tests covering the new code path, the shim, and the `multi_media`
   flag on all migrated importers.
+
+## What shipped (framework-driven conversion)
+
+Earlier rounds left importers to drive the converter loop themselves —
+the docs example showed a `DXImporter` calling
+`get_converter(spec.converter).convert(raw, spec.params)` inside its
+`run()`.  That leak is now closed:
+
+- New hook on `DatasetImporter`:
+  `fetch_source_media(spec, field_values, thin=False) -> Iterator[dict]`.
+  Subclasses yield raw media of `spec.source_type` and never touch the
+  converter registry.
+- The base-class `run()` now loops `effective_source_specs()`, calls
+  `fetch_source_media()` once per spec, and runs
+  `converter.convert(raw, spec.params)` itself when the spec declares a
+  converter.  IDs and default origins are assigned by the framework
+  exactly as before.
+- The default `fetch_source_media()` delegates to
+  `list_records()` + `fetch_records_bulk()`, so single-source-type
+  service importers (which only ever pull one type per import) keep
+  working without the new hook.
+- The DX docs example was rewritten to use the new hook and no longer
+  shows manual `get_converter()` calls.
+- `recaller` migrated to be truly multi-source-type-aware: its old
+  `list_records` / `fetch_record` / `_fetch_records_bulk_impl` trio was
+  replaced by a single `fetch_source_media()` that filters
+  `_rc_fetch_results` by `spec.source_type`.  A user can now build a
+  single ReCaller-backed dataset that pulls in (say) images directly +
+  videos converted to images + documents converted to images, with the
+  framework running each converter.
+
+## What shipped (bulk-fetch escape hatch)
+
+Service-style importers had only one framework-driven fetch shape:
+`fetch_source_media(spec)` called once per spec.  That works when the
+backend serves one media type per query, but it forces N upstream calls
+when a single query naturally returns mixed types.  Adding a second
+fetch hook for that case:
+
+- New optional hook on `DatasetImporter`:
+  `fetch_all_source_media(specs, field_values, thin=False) -> Iterator[tuple[SourceSpec, dict]]`.
+  Override this when one upstream call covers every spec — yield
+  `(spec, raw_media)` pairs and the framework handles converter
+  dispatch and ingestion exactly as it does for the per-spec hook.
+- The base-class `run()` now calls `fetch_all_source_media()` once
+  instead of looping `fetch_source_media()` itself.  The default
+  `fetch_all_source_media()` delegates to `fetch_source_media()` per
+  spec, so existing per-spec importers see no behavioural change.
+- Converter lookups in `run()` are cached per-spec so a bulk importer
+  that interleaves specs across yields doesn't re-resolve the same
+  converter on every pair.
+- Subclasses still never call `get_converter()` themselves — the
+  framework owns conversion and ingestion regardless of which fetch
+  hook is overridden.
 
 ## What shipped (latest round)
 
