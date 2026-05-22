@@ -763,14 +763,6 @@ export class DatasetImporterModalComponent implements OnInit {
     return mt?.folder_import_name || typeId;
   }
 
-  getMediaTypeOptionLabel(opt: string): string {
-    const mt = this.mediaTypes.find((m) => m.folder_import_name === opt);
-    if (mt) {
-      return mt.name.trim();
-    }
-    return opt;
-  }
-
   getTabLabel(mediaType: string): string {
     const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
     if (mt) {

@@ -1,7 +1,7 @@
 # Frontend bundle organization
 
-Status: **#1 Checkpoints 1 and 2 shipped.** Checkpoints 3–5 of #1 and
-items #2–#6 are scoped but not started.
+Status: **#1 Checkpoints 1, 2, and 3 shipped.** Checkpoints 4 and 5 of
+#1 and items #2–#6 are scoped but not started.
 
 ## What shipped
 
@@ -39,6 +39,24 @@ items #2–#6 are scoped but not started.
   recursive checkbox sit between the media-type select and the
   Advanced block in both flows. Kept the scope to just the media-type
   + hint block; Advanced stays in its current position.
+- **#1 Checkpoint 3**: migrated the generic `form` flow's
+  `media_type` select to `<vt-import-config>`. The form flow's
+  field iteration now special-cases `field_type === 'select' &&
+  field.key === 'media_type'` and renders `<vt-import-config>`
+  instead of an inline `<select>` wrapped in the outer
+  `<div class="form-group">` + `<label>` + required-star scaffolding.
+  All importers that declare a `media_type` select (`server_folder`,
+  `server_files`, `http_archive`, `synthetic`, `recaller`) use the
+  label "Dataset MediaType", which matches the label
+  `<vt-import-config>` renders. The `detectionHint` input is left at
+  its default (empty) because the form flow has no auto-detection.
+  The now-dead `getMediaTypeOptionLabel` helper was removed (the
+  child consumes `mediaTypeOptionLabels` directly).
+  The previously-suppressed required-star (`@if (field.required && !(
+  field.field_type === 'select' && field.key === 'media_type'))`)
+  loses its special case — media-type lives outside the iteration
+  branch that renders the star at all. Initial bundle unchanged at
+  526.40 kB.
 
 ## Why
 
@@ -152,12 +170,15 @@ touching the cross-modal picker chrome):
    media-type widget (not the optional collapse-with-Advanced) because
    the source widget and recursive checkbox sit between media-type and
    Advanced in the template — a wrap would have forced a UX re-order.
-3. **Checkpoint 3**: Migrate the `form` flow to `<vt-import-config>`
-   (where applicable — the generic form's media-type lives inside the
-   importer's `fields[]`, so this may end up partial; the form flow
-   does not currently render the detection hint, so the wider option
-   may just be inlining `<vt-import-config>` with a static
-   `detectionHint=""`).
+3. **Checkpoint 3 (shipped)**: Migrated the `form` flow's
+   `media_type` select to `<vt-import-config>`. Special-cased
+   `field_type === 'select' && field.key === 'media_type'` inside the
+   field iteration so the child renders its own form-group + label
+   (rather than nesting inside the generic form-group / label
+   scaffold), with `detectionHint` left empty because the form flow
+   has no auto-detection. The previously dead-coded "suppress the
+   required-star for media_type" condition in the generic-label
+   template is gone with the case.
 4. **Checkpoint 4**: Extract `<vt-source-picker>` (the importer-tab /
    sub-tab chrome + demo table + server-folder typed path + local
    dropzone). Migrate `dataset-importer-modal` to consume it.
