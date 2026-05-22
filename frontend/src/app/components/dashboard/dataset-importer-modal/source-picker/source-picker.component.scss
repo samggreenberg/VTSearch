@@ -1,0 +1,35 @@
+// Picker chrome styles (`.importer-tab-bar`, `.importer-subtab`,
+// `.demo-tab-bar`, `.demo-table`, badges, etc.) live globally in
+// `frontend/src/scss/_picker-shared.scss` so they can be reused by any
+// modal that consumes <vt-source-picker>.  Layout-only styles unique to
+// this widget remain below.
+
+.importer-picker,
+.demo-picker,
+.server-folder-browser,
+.local-folder-uploader,
+.sf-browse-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.importer-picker { gap: 0; margin-bottom: var(--space-lg); }
+
+.demo-picker { gap: var(--space-lg); }
+
+.server-folder-browser { gap: var(--space-lg); }
+.sf-browse-section { gap: var(--space-sm); }
+
+// Indent the per-importer source widgets inward from the tabs above
+// (matches the parent modal's `.importer-form` indent so the hierarchy
+// reads top-down: category tabs → importer tabs → controls).
+// `.demo-picker` is intentionally NOT indented — its inner media-type
+// tab bar must line up with the category and importer tabs above it.
+.local-folder-uploader,
+.server-folder-browser {
+  padding-left: var(--space-2xl);
+}
+
+// Extra vertical breathing room above grouped sections inside the
+// uploader (used to wrap `<ng-content>`-projected blocks too).
+.form-group--section { margin-top: var(--space-xl); }

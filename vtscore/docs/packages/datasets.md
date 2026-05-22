@@ -276,17 +276,38 @@ entry-point group; built-ins win on name clashes. See
 `source_specs` form value: a list of
 `SourceSpec(source_type, converter, params)` rows that fan one import
 out across several source media types, each optionally run through a
-named `MediaConverter`. Inside `run()`, call
-`self.effective_source_specs(field_values)`; for legacy
-(`multi_media = False`) importers the same helper synthesises an
-equivalent list from the legacy `media_type` + comma-separated
-`converters` form fields.
+named `MediaConverter`. The framework owns conversion and ingestion —
+subclasses never call `get_converter()` themselves.
 
-**Per-record hooks.** For service-style importers (HTTP API,
-database) override `list_records` + `fetch_record` instead of writing
-`run()` from scratch. The default `run()` lists, batches into
-`fetch_records_bulk`, and assigns sequential IDs / origins. Override
-`_fetch_records_bulk_impl` for batched / concurrent I/O.
+**Importer override points** (pick one, simplest first):
+
+1. `list_records()` + `fetch_record()` — single-source-type service
+   importer. Default `fetch_source_media()` delegates here.
+2. `fetch_source_media(spec, ...)` — multi-source-type service
+   importer where the backend serves one type per query. Framework
+   calls you once per spec; you yield raw source-type media dicts.
+3. `fetch_all_source_media(specs, ...)` — multi-source-type service
+   importer where one upstream call returns mixed types. Framework
+   calls you once with the full spec list; you yield
+   `(spec, raw_media)` pairs. Default delegates to
+   `fetch_source_media()` per spec.
+4. `run()` — folder-shaped importers that own the medias dict
+   directly (typical body: stage files, call
+   `load_dataset_from_folder()` + `run_converters_on_folder()`).
+
+For hooks 1–3 the framework also assigns sequential IDs, fills
+`media["origin"]` from `build_origin()`, and runs each spec's
+converter on the yielded raw media before storing the result.
+
+**Per-record hooks (`list_records` / `fetch_record`).** Hook 1's
+bulk variant `_fetch_records_bulk_impl` lets you replace the per-item
+loop with batched / concurrent I/O.
+
+For legacy (`multi_media = False`) importers,
+`effective_source_specs()` synthesises an equivalent spec list from
+the legacy `media_type` + comma-separated `converters` form fields,
+so a legacy `run()` can migrate to the new iteration style before
+touching its form schema.
 
 **Resolving back to a file.** Importers whose media is reachable on
 disk **must** override `resolve_file(origin, origin_name, filename) ->

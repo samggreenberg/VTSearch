@@ -2,10 +2,10 @@ import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@a
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
-import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
-import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
-import { SourceSpecsPickerComponent } from './source-specs-picker/source-specs-picker.component';
+import { ImportAdvancedComponent } from './import-advanced/import-advanced.component';
+import { ImportConfigComponent } from './import-config/import-config.component';
+import { SourcePickerComponent } from './source-picker/source-picker.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
@@ -14,7 +14,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, ClipperChooserComponent, DropZoneComponent, SourceSpecsPickerComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ClipperChooserComponent, ImportAdvancedComponent, ImportConfigComponent, SourcePickerComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
@@ -167,12 +167,6 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Which context opened the chooser: 'form' | 'demo' | 'sf' | 'lf' */
   clipperChooserContext: 'form' | 'demo' | 'sf' | 'lf' = 'form';
   clipperChooserClippers: ClipperInfo[] = [];
-
-  // Embedder + clipper pickers live behind a single "Advanced" toggle so
-  // they don't crowd the required fields. When the user has picked a
-  // non-default value for either, that picker stays visible regardless
-  // of this flag (so they can see and re-edit their selection).
-  advancedOpen = false;
 
   constructor(
     private datasetsApi: DatasetsApiService,
@@ -745,10 +739,6 @@ export class DatasetImporterModalComponent implements OnInit {
     this.loadDemoEmbedders(tab);
   }
 
-  onDemoHeaderClick(col: string): void {
-    if (this.demoCols.meta(col).sortable) this.demoCols.sortBy(col);
-  }
-
   // --- Document-level resize tracking ---
 
   @HostListener('document:mousemove', ['$event'])
@@ -766,14 +756,6 @@ export class DatasetImporterModalComponent implements OnInit {
     if (!typeId) return '';
     const mt = this.mediaTypes.find((m) => m.type_id === typeId);
     return mt?.folder_import_name || typeId;
-  }
-
-  getMediaTypeOptionLabel(opt: string): string {
-    const mt = this.mediaTypes.find((m) => m.folder_import_name === opt);
-    if (mt) {
-      return mt.name.trim();
-    }
-    return opt;
   }
 
   getTabLabel(mediaType: string): string {
@@ -800,65 +782,45 @@ export class DatasetImporterModalComponent implements OnInit {
     return this._typeLabelsCache;
   }
 
-  getTabIcon(mediaType: string): string {
-    const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
-    return mt?.icon || '';
-  }
-
-  getTabText(mediaType: string): string {
-    const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
-    if (mt) {
-      return mt.name;
+  /** Cached map of ``folder_import_name`` → human label, rebuilt only
+   *  when ``mediaTypes`` is reassigned.  Feeds the media-type dropdown
+   *  inside :component:`ImportConfigComponent` so the parent does not
+   *  need to pass a per-render label function. */
+  private _optionLabelsSource: MediaTypeInfo[] | null = null;
+  private _optionLabelsCache: Record<string, string> = {};
+  get mediaTypeOptionLabels(): Record<string, string> {
+    if (this._optionLabelsSource !== this.mediaTypes) {
+      const out: Record<string, string> = {};
+      for (const mt of this.mediaTypes) {
+        if (mt.folder_import_name) out[mt.folder_import_name] = mt.name.trim();
+      }
+      this._optionLabelsCache = out;
+      this._optionLabelsSource = this.mediaTypes;
     }
-    return mediaType;
+    return this._optionLabelsCache;
   }
 
-  statusBadgeClass(status: string): string {
-    if (status === 'ready') return 'badge-ready';
-    if (status === 'needs_embedding') return 'badge-embedding';
-    return 'badge-download';
-  }
-
-  statusBadgeLabel(status: string): string {
-    if (status === 'ready') return 'Ready';
-    if (status === 'needs_embedding') return 'Needs Embed';
-    return 'Needs Download';
+  /** Cached map of ``folder_import_name`` → icon string (emoji or SVG
+   *  type name from :class:`MediaTypeInfo.icon`), rebuilt only when
+   *  ``mediaTypes`` is reassigned.  Feeds the per-option icon shown in
+   *  the media-type dropdown inside :component:`ImportConfigComponent`. */
+  private _optionIconsSource: MediaTypeInfo[] | null = null;
+  private _optionIconsCache: Record<string, string> = {};
+  get mediaTypeOptionIcons(): Record<string, string> {
+    if (this._optionIconsSource !== this.mediaTypes) {
+      const out: Record<string, string> = {};
+      for (const mt of this.mediaTypes) {
+        if (mt.folder_import_name && mt.icon) out[mt.folder_import_name] = mt.icon;
+      }
+      this._optionIconsCache = out;
+      this._optionIconsSource = this.mediaTypes;
+    }
+    return this._optionIconsCache;
   }
 
   /** Embedders available for the currently active demo tab's media type. */
   get demoEmbeddersForTab(): EmbedderInfo[] {
     return this.allEmbedders.filter((e) => e.media_type_id === this.activeTab);
-  }
-
-  /**
-   * Look up the licence-warning string for an embedder, if any.  Returns
-   * null when the embedder has no special licensing constraints worth
-   * surfacing (the common case).  Embedders with restrictive licences
-   * (e.g. EUPE under FAIR Noncommercial) return a short string the
-   * picker shows as a warning chip — see EmbedderInfo.license_notice.
-   */
-  licenseNoticeFor(name: string, list: EmbedderInfo[]): string | null {
-    if (!name) return null;
-    const found = list.find((e) => e.name === name);
-    return found?.license_notice ?? null;
-  }
-
-  /** Embedders flagged ``is_default`` for the active media type. */
-  recommendedEmbedders(list: EmbedderInfo[]): EmbedderInfo[] {
-    return list.filter((e) => e.is_default);
-  }
-
-  /** Non-default embedders, shown under the "Advanced" optgroup. */
-  advancedEmbedders(list: EmbedderInfo[]): EmbedderInfo[] {
-    return list.filter((e) => !e.is_default);
-  }
-
-  /**
-   * Human-readable label for the option element. Falls back to the raw name
-   * for embedders that don't yet supply a friendlier label.
-   */
-  embedderLabel(embedder: EmbedderInfo): string {
-    return embedder.display_name || embedder.name;
   }
 
   selectDemo(demo: DemoDataset): void {
@@ -1603,115 +1565,6 @@ export class DatasetImporterModalComponent implements OnInit {
       this.lfSelectedClipper = defaultName;
       this.lfResetClipperParams();
     }
-  }
-
-  /** Display name for the currently selected clipper in a given context. */
-  clipperDisplayName(context: 'form' | 'demo' | 'sf' | 'lf'): string {
-    let clippers: ClipperInfo[];
-    let selected: string;
-    if (context === 'form') {
-      clippers = this.availableClippers;
-      selected = this.selectedClipper;
-    } else if (context === 'demo') {
-      clippers = this.demoClippers;
-      selected = this.selectedDemoClipper;
-    } else if (context === 'sf') {
-      clippers = this.sfClippers;
-      selected = this.sfSelectedClipper;
-    } else {
-      clippers = this.lfClippers;
-      selected = this.lfSelectedClipper;
-    }
-    const clipper = clippers.find((c) => c.name === selected);
-    if (!clipper) return 'None';
-    if (clipper.name.endsWith('_default')) return 'None';
-    return clipper.display_name || clipper.name;
-  }
-
-  /** Whether the recommended (first-in-list) clipper is currently selected for
-   *  the given context. Used to decide whether the Advanced section can stay
-   *  collapsed — if the user has overridden the default, we keep the picker
-   *  visible so they can see and re-edit their choice. */
-  isDefaultClipperSelected(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
-    let clippers: ClipperInfo[];
-    let selected: string;
-    if (context === 'form') {
-      clippers = this.availableClippers;
-      selected = this.selectedClipper;
-    } else if (context === 'demo') {
-      clippers = this.demoClippers;
-      selected = this.selectedDemoClipper;
-    } else if (context === 'sf') {
-      clippers = this.sfClippers;
-      selected = this.sfSelectedClipper;
-    } else {
-      clippers = this.lfClippers;
-      selected = this.lfSelectedClipper;
-    }
-    return clippers.length > 0 && clippers[0].name === selected;
-  }
-
-  /** Whether the currently-selected embedder is one the registry flags
-   *  ``is_default`` for the active media type. Used to decide whether the
-   *  Advanced section can stay collapsed — if the user (or saved settings)
-   *  picked a non-default, we keep the picker visible. */
-  isDefaultEmbedderSelected(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
-    let embedders: EmbedderInfo[];
-    let selected: string;
-    if (context === 'form') {
-      embedders = this.availableEmbedders;
-      selected = this.selectedEmbedder;
-    } else if (context === 'demo') {
-      embedders = this.demoEmbedders;
-      selected = this.selectedDemoEmbedder;
-    } else if (context === 'sf') {
-      embedders = this.sfEmbedders;
-      selected = this.sfSelectedEmbedder;
-    } else {
-      embedders = this.lfEmbedders;
-      selected = this.lfSelectedEmbedder;
-    }
-    if (!selected) return true;
-    const found = embedders.find((e) => e.name === selected);
-    return !!found?.is_default;
-  }
-
-  /** Whether the clipper picker should be visible in the given context.
-   *  True when the Advanced section is expanded or when a non-default
-   *  clipper is selected. */
-  showClipperPicker(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
-    return this.advancedOpen || !this.isDefaultClipperSelected(context);
-  }
-
-  /** Whether the embedder picker should be visible in the given context.
-   *  Same semantics as ``showClipperPicker`` but for the embedder. */
-  showEmbedderPicker(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
-    return this.advancedOpen || !this.isDefaultEmbedderSelected(context);
-  }
-
-  /** Whether the given context's Advanced section also contains an
-   *  "Include media" block. The lf/sf views always have one; the generic
-   *  form has one when the importer is ``multi_media``. The demo picker
-   *  never has one. */
-  private contextHasIncludeMedia(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
-    if (context === 'form') return !!this.selectedImporter?.multi_media;
-    return context === 'lf' || context === 'sf';
-  }
-
-  /** Whether the "Advanced ▾" toggle button should be rendered in the
-   *  given context. The Include media block lives inside Advanced, so
-   *  whenever the context has one the toggle must stay visible — it's the
-   *  only way to reach Include media. Otherwise we only show the toggle
-   *  when both embedder and clipper are at defaults; if either is
-   *  overridden the pickers are already visible and the button would be
-   *  redundant. */
-  showAdvancedToggle(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
-    if (this.contextHasIncludeMedia(context)) return true;
-    return this.isDefaultEmbedderSelected(context) && this.isDefaultClipperSelected(context);
-  }
-
-  toggleAdvanced(): void {
-    this.advancedOpen = !this.advancedOpen;
   }
 
   sfSubmit(): void {

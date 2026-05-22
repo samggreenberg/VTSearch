@@ -1,0 +1,61 @@
+@if (showAdvancedToggle) {
+  <button
+    type="button"
+    class="advanced-toggle"
+    (click)="toggleAdvanced()"
+    [attr.aria-expanded]="advancedOpen"
+    title="Show advanced options: included media types, embedding model, and pre-processing clipper"
+  >
+    Advanced {{ advancedOpen ? '▴' : '▾' }}
+  </button>
+}
+
+@if (advancedOpen && showSourceSpecs) {
+  <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
+  <vt-source-specs-picker
+    [availableConverters]="availableConverters"
+    [nativeType]="nativeType"
+    [typeLabels]="typeLabels"
+    [specs]="sourceSpecs"
+    (specsChange)="onSourceSpecsChange($event)"
+  ></vt-source-specs-picker>
+}
+
+@if (embedders.length > 1 && showEmbedderPicker) {
+  <label class="form-label" for="import-advanced-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
+  <select
+    id="import-advanced-embedder"
+    class="form-select"
+    [ngModel]="selectedEmbedder"
+    (ngModelChange)="onEmbedderChange($event)"
+  >
+    @if (recommendedEmbedders.length > 0) {
+      <optgroup label="Recommended">
+        @for (embedder of recommendedEmbedders; track embedder.name) {
+          <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+        }
+      </optgroup>
+    }
+    @if (advancedEmbedderOptions.length > 0) {
+      <optgroup label="Advanced ▾">
+        @for (embedder of advancedEmbedderOptions; track embedder.name) {
+          <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+        }
+      </optgroup>
+    }
+  </select>
+  @if (licenseNotice; as notice) {
+    <div class="license-warning" role="note">⚠ {{ notice }}</div>
+  }
+}
+
+@if (clippers.length > 1 && showClipperPicker) {
+  <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+  <button
+    class="btn btn--secondary clipper-btn"
+    (click)="onClipperClick()"
+    title="Choose a MediaClipper to segment or trim media before embedding"
+  >
+    Use MediaClipper: {{ clipperDisplayName }}
+  </button>
+}

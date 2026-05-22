@@ -41,6 +41,34 @@
         class="burger-item"
         role="menuitem"
         tabindex="-1"
+        (click)="onHelp()"
+        title="Show keyboard shortcuts"
+      ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M5.8 6.2a2.2 2.2 0 014.4 0c0 1.1-.8 1.5-1.5 2-.5.3-.7.7-.7 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+          <circle cx="8" cy="12" r="0.7" fill="currentColor"/>
+        </svg> Help</div>
+      @if (!achievementsDisabled) {
+        <div
+          class="burger-item"
+          role="menuitem"
+          tabindex="-1"
+          (click)="onAchievements()"
+          title="Achievements — your usage milestones and tier progress"
+        ><svg class="menu-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 4h12v4a6 6 0 0 1-12 0z"/>
+            <path d="M6 6H3a2 2 0 0 0 0 4h3"/>
+            <path d="M18 6h3a2 2 0 0 1 0 4h-3"/>
+            <line x1="10" y1="14" x2="10" y2="18"/>
+            <line x1="14" y1="14" x2="14" y2="18"/>
+            <rect x="7" y="18" width="10" height="3" rx="1"/>
+          </svg> Achievements</div>
+      }
+      <div
+        class="burger-item"
+        role="menuitem"
+        tabindex="-1"
         (click)="onSettings()"
         title="Open the Settings panel to configure appearance, sorting, autopilot, and autoload"
       ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

@@ -1,0 +1,36 @@
+// Styles previously inlined in the parent component for the
+// "Advanced ▾" block — kept identical so the migration is a pure
+// extraction with no visual diff.
+
+:host {
+  display: contents;
+}
+
+.advanced-toggle {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  padding: var(--space-2xs) 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover { color: var(--text-primary); text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+
+.clipper-btn {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.license-warning {
+  margin-top: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  background: rgba(255, 196, 0, 0.12);
+  border: 1px solid rgba(255, 196, 0, 0.4);
+  color: var(--text-warning);
+  font-size: var(--font-sm);
+  line-height: 1.35;
+}

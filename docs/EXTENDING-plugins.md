@@ -260,14 +260,74 @@ class S3Importer(DatasetImporter):
 IMPORTER = S3Importer()
 ```
 
+### Choosing your override point
+
+`DatasetImporter` offers four override points, from simplest to
+fullest-control.  **Hooks 1–3 leave conversion and ingestion to the
+framework** — you never call `get_converter()`, never invoke
+`converter.convert()`, never assign media IDs, never set default
+origins.  Only hook 4 takes that responsibility back.
+
+```
+Does your backend serve media one record at a time, with one media
+type per query?
+│
+├─ Yes, and the importer only ever pulls one media type per import.
+│  └─→ Hook 1: list_records() + fetch_record()
+│       Simplest split — return opaque record handles, then convert
+│       each to a media dict. Default fetch_source_media() delegates
+│       here, so the spec list is invisible to you. Best for
+│       single-source-type service importers (e.g. "pull all rows
+│       from this table").
+│
+├─ Yes, and the importer can pull different media types per spec
+│  (e.g. one query for images, another for videos).
+│  └─→ Hook 2: fetch_source_media(spec, ...)
+│       Framework loops effective_source_specs() and calls you once
+│       per spec. You yield raw media dicts of spec.source_type;
+│       framework runs spec.converter on each. Best for service-style
+│       multi-media importers (e.g. ReCaller).
+│
+├─ No — one upstream call returns mixed source types in a single
+│  response, and you want to make it only once.
+│  └─→ Hook 3: fetch_all_source_media(specs, ...)
+│       Framework calls you once with the full spec list. You make
+│       the one upstream call and yield (spec, raw_media) pairs,
+│       tagging each record with the spec it satisfies. Framework
+│       still runs converters and ingests.
+│
+└─ Neither — the data is folder-shaped (already on disk, or staged
+   there after download) and you want to delegate to the folder
+   loader / converter runner.
+   └─→ Hook 4: run()
+        Full control. You own the medias dict, ID assignment,
+        origin, and conversion. Typical body: stage files to a temp
+        dir, call load_dataset_from_folder() for direct specs, call
+        run_converters_on_folder() for converter specs. The four
+        in-tree folder importers (server_folder, server_files,
+        local_folder, local_files) all use this hook.
+```
+
+**Single-spec rule of thumb:** if your importer always pulls exactly
+one media type per import (no per-source-type fan-out), use hook 1 and
+ignore `SourceSpec` entirely.  The default `fetch_source_media()`
+threads through to it without you knowing the spec exists.
+
+**Multi-spec rule of thumb:** if the user can pick multiple source
+types in one import, use hook 2 unless making N upstream calls is
+actively wasteful — in which case use hook 3.  Both leave conversion
+to the framework.
+
 ### DatasetImporter class reference
 
-**Required to implement (pick one approach):**
+**Required to implement (pick one — see [Choosing your override point](#choosing-your-override-point)):**
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
-| `run()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | Populate `medias` in-place with loaded data |
-| `list_records()` + `fetch_record()` | see [Bulk-record hooks](#bulk-record-hooks) | Per-record / bulk-record split that mirrors `MediaEmbedder`. The default `run()` lists records, hands them all to `fetch_records_bulk()`, and assigns IDs |
+| `list_records()` + `fetch_record()` | see [Bulk-record hooks](#bulk-record-hooks) | **Hook 1.** Per-record / bulk-record split for **single-source-type** service importers. Default `fetch_source_media()` delegates to these |
+| `fetch_source_media()` | `(spec: SourceSpec, field_values: dict, thin: bool = False) -> Iterator[dict]` | **Hook 2.** Per-spec fetch for **multi-source-type** service importers. Yield raw media dicts of `spec.source_type`; framework runs `spec.converter` on each. See [Multi-media imports](#multi-media-imports) |
+| `fetch_all_source_media()` | `(specs: list[SourceSpec], field_values: dict, thin: bool = False) -> Iterator[tuple[SourceSpec, dict]]` | **Hook 3.** Bulk fetch for service-style importers whose backend returns mixed source types in one call. Yield `(spec, raw_media)` pairs; framework runs converters and ingests. Default delegates to `fetch_source_media()` per spec. See [Multi-media imports](#multi-media-imports) |
+| `run()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | **Hook 4.** Full control — populate `medias` in-place yourself. Used by folder-shaped importers that delegate to `load_dataset_from_folder()` and `run_converters_on_folder()` |
 
 **Optional overrides:**
 
@@ -529,8 +589,7 @@ every import is declared there. They are picked up the next time you run
 
 Importers that want to pull in **multiple source media types** (e.g.
 "images, plus videos converted to images, plus documents converted to
-images") set the class attribute `multi_media = True` and iterate
-`self.effective_source_specs(field_values)` inside `run()`.
+images") set the class attribute `multi_media = True`.
 
 A `SourceSpec` (defined in `vtscore.datasets.importers.base`) is:
 
@@ -545,34 +604,81 @@ SourceSpec(
 `effective_source_specs()` reads the user's `source_specs` form value
 (either a Python list or a JSON-encoded string), validates it against
 the converter registry, and returns the typed list.  Each spec where
-`converter is None` is a "include directly" row — the importer fetches
+`converter is None` is a "include directly" row — the framework ingests
 files of `source_type` straight into the dataset.  Each spec where
-`converter` is set asks the importer to fetch files of `source_type` and
-pass them through that converter (with `spec.params`) to produce media
-of the dataset's output type.
+`converter` is set asks the framework to take files of `source_type`
+from the importer and pass them through that converter (with
+`spec.params`) to produce media of the dataset's output type.
+
+**The framework drives the conversion, not your importer.**  Your job
+is just to **yield raw source-type media**; the framework runs each
+spec's converter and ingests the result.  Subclasses **never** call
+`get_converter()` or `converter.convert()` directly.
+
+You pick one of two fetch hooks depending on how your backend is
+shaped.
+
+#### Hook 2 — per-spec fetch (`fetch_source_media`)
+
+When the backend serves one media type per query.  The framework
+loops `effective_source_specs()` and calls you once per spec.
 
 ```python
 class DXImporter(DatasetImporter):
     name = "dx"
     multi_media = True
     fields = [
-        ImporterField(key="media_type", label="Dataset MediaType", field_type="select", ...),
+        ImporterField(key="media_type", label="Output Media Type", field_type="select", ...),
         ImporterField(key="dataset_id", ..., required=True),
     ]
 
-    def run(self, field_values, medias, thin=False):
-        from vtscore.converters import get_converter
+    def fetch_source_media(self, spec, field_values, thin=False):
+        """Yield raw media dicts of spec.source_type — one per upstream record.
 
-        for spec in self.effective_source_specs(field_values):
-            for record in self._dx_list(spec.source_type, field_values):
-                raw = self._dx_fetch(record, spec.source_type, field_values)
-                if spec.converter is None:
-                    self._add(medias, raw)
-                else:
-                    converter = get_converter(spec.converter)
-                    for out in converter.convert(raw, spec.params):
-                        self._add(medias, out)
+        Called once per spec. When spec.converter is set the framework
+        runs converter.convert(raw, spec.params) on every yielded dict
+        before storing it.
+        """
+        for record in self._dx_list(spec.source_type, field_values):
+            yield self._dx_fetch(record, spec.source_type, field_values)
 ```
+
+That's the entire integration — no `run()`, no converter calls, no
+spec loop.
+
+#### Hook 3 — bulk fetch (`fetch_all_source_media`)
+
+When one upstream call returns mixed source types in a single
+response and you want to make it only once.  The framework calls you
+once with the full spec list; you yield `(spec, raw_media)` pairs.
+
+```python
+class DXImporter(DatasetImporter):
+    name = "dx"
+    multi_media = True
+    fields = [...]
+
+    def fetch_all_source_media(self, specs, field_values, thin=False):
+        """One upstream call covers every spec; tag each record with
+        the spec it satisfies. Framework still owns converter dispatch
+        and ingestion.
+        """
+        wanted_types = {spec.source_type for spec in specs}
+        records = self._dx_fetch_everything(field_values, types=wanted_types)
+
+        # Bucket by type, then walk specs to preserve user-submitted order.
+        by_type: dict[str, list[dict]] = {}
+        for rec in records:
+            by_type.setdefault(rec["media_type"], []).append(rec)
+
+        for spec in specs:
+            for rec in by_type.get(spec.source_type, []):
+                yield spec, self._dx_to_media_dict(rec, spec.source_type)
+```
+
+The default `fetch_all_source_media()` just loops
+`fetch_source_media()` per spec, so importers using hook 2 see no
+behavioural change.
 
 **Legacy / shim path.** Importers that have **not** flipped
 `multi_media` still work as before: they declare a single `media_type`
@@ -581,7 +687,7 @@ post-processes the imported folder through
 `run_converters_on_folder()`.  Legacy importers can also call
 `effective_source_specs()` — it synthesises an equivalent list from the
 classic `media_type` + `converters` fields, so a legacy importer can
-migrate its `run()` to iterate specs before changing its form schema.
+migrate to the new iteration style before changing its form schema.
 
 See [`docs/plans/multi-media-import.md`](plans/multi-media-import.md) for
 the full design and migration checklist.

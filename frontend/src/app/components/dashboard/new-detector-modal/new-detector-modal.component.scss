@@ -180,35 +180,16 @@
 
 .back-btn { align-self: flex-start; }
 
-.importer-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.demo-picker {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-}
+// Picker chrome (.importer-picker, .demo-picker, .sf-browse-section,
+// .local-folder-uploader) lives inside <vt-source-picker>.  The
+// `.server-folder-browser` rule below still applies because the
+// demoFileBrowsing widget (rendered in this parent's template) wraps
+// itself in that class to inherit the same layout.
 
 .server-folder-browser {
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
-  padding-left: var(--space-2xl);
-}
-
-.sf-browse-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.local-folder-uploader {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
   padding-left: var(--space-2xl);
 }
 

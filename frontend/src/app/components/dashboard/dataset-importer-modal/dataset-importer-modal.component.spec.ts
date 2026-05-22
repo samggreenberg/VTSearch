@@ -544,13 +544,6 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.getTabLabel('unknown')).toBe('unknown');
   });
 
-  it('should return correct status badge class', () => {
-    flushImporters();
-    expect(component.statusBadgeClass('ready')).toBe('badge-ready');
-    expect(component.statusBadgeClass('needs_embedding')).toBe('badge-embedding');
-    expect(component.statusBadgeClass('needs_download')).toBe('badge-download');
-  });
-
   it('should handle demo fetch failure gracefully', () => {
     flushImporters();
     component.openDemoPicker();

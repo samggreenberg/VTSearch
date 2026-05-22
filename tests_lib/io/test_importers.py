@@ -355,7 +355,7 @@ class TestImporterDatasetName:
 
         return Imp()
 
-    def test_to_dict_prepends_dataset_name_field(self):
+    def test_to_dict_appends_dataset_name_field(self):
         from vtscore.datasets.importers.base import (
             DATASET_NAME_FIELD_KEY,
             DatasetImporter,
@@ -372,13 +372,13 @@ class TestImporterDatasetName:
                 pass
 
         d = Imp().to_dict()
-        assert d["fields"][0]["key"] == DATASET_NAME_FIELD_KEY
-        assert d["fields"][0]["required"] is False
-        assert d["fields"][0]["field_type"] == "text"
-        assert d["fields"][1]["key"] == "path"
+        assert d["fields"][0]["key"] == "path"
+        assert d["fields"][-1]["key"] == DATASET_NAME_FIELD_KEY
+        assert d["fields"][-1]["required"] is False
+        assert d["fields"][-1]["field_type"] == "text"
 
     def test_class_fields_attribute_unchanged_by_to_dict(self):
-        """to_dict() prepends dataset_name only on the serialised payload —
+        """to_dict() appends dataset_name only on the serialised payload —
         the class-level ``fields`` attribute remains as the developer wrote it."""
         from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
@@ -792,29 +792,35 @@ class TestImporterBulkHooks:
             imp.run({}, {})
 
 
-class TestReCallerBulkOverride:
-    """ReCaller is the worked example — verify its hooks return the same
-    media dicts whether the per-item or bulk path is used."""
+class TestReCallerMultiMedia:
+    """ReCaller is the worked example of a multi-source-type service importer.
 
-    def _stub_apis(self, monkeypatch):
+    Verifies ``fetch_source_media(spec, ...)`` filters records by
+    ``spec.source_type`` and that the framework's default :meth:`run`
+    drives converter calls so the importer doesn't need to.
+    """
+
+    def _stub_apis(self, monkeypatch, *, media_types=None):
         import numpy as np
 
         from vtscore.datasets.importers import recaller as rc
 
+        if media_types is None:
+            media_types = ["audio"] * 3
         results = [
             {
                 "contentID": f"C{i}",
                 "mediaID": f"M{i}",
                 "media_url": f"http://pw/{i}",
-                "media_type": "audio",
+                "media_type": mt,
                 "md5": f"md5_{i}",
             }
-            for i in range(3)
+            for i, mt in enumerate(media_types)
         ]
         monkeypatch.setattr(rc, "_rc_fetch_results", lambda _q: list(results))
 
         rng = np.random.default_rng(42)
-        embeddings = {f"M{i}": rng.standard_normal(8).astype(np.float32) for i in range(3)}
+        embeddings = {f"M{i}": rng.standard_normal(8).astype(np.float32) for i in range(len(results))}
         monkeypatch.setattr(
             rc,
             "_dw_get_embedding",
@@ -823,25 +829,49 @@ class TestReCallerBulkOverride:
         monkeypatch.setattr(rc, "_pw_fetch_media", lambda url: f"bytes-for-{url}".encode())
         return results
 
-    def test_per_item_and_bulk_paths_agree(self, monkeypatch):
+    def test_fetch_source_media_filters_by_source_type(self, monkeypatch):
+        from vtscore.datasets.importers.base import SourceSpec
         from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
-        records = self._stub_apis(monkeypatch)
-        field_values = {"query_id": "Q1", "media_type": "audio"}
-
+        self._stub_apis(monkeypatch, media_types=["audio", "image", "audio"])
         imp = ReCallerDatasetImporter()
-        per_item = [imp.fetch_record(r, field_values, thin=True) for r in records]
-        bulk = imp._fetch_records_bulk_impl(records, field_values, thin=True)
 
-        assert len(per_item) == len(bulk) == 3
-        for a, b in zip(per_item, bulk):
-            assert a is not None and b is not None
-            assert a["filename"] == b["filename"]
-            assert a["origin"] == b["origin"]
-            assert a["custom_metadata"] == b["custom_metadata"]
-            assert (a["embedding"] == b["embedding"]).all()
+        audio_yields = list(
+            imp.fetch_source_media(
+                SourceSpec(source_type="audio", converter=None, params={}),
+                {"query_id": "Q1", "media_type": "audio"},
+                thin=True,
+            )
+        )
+        assert [m["filename"] for m in audio_yields] == ["C0", "C2"]
+        assert all(m["type"] == "audio" for m in audio_yields)
 
-    def test_run_uses_bulk_override(self, monkeypatch):
+        image_yields = list(
+            imp.fetch_source_media(
+                SourceSpec(source_type="image", converter=None, params={}),
+                {"query_id": "Q1", "media_type": "audio"},
+                thin=True,
+            )
+        )
+        assert [m["filename"] for m in image_yields] == ["C1"]
+        assert image_yields[0]["type"] == "image"
+
+    def test_fetch_source_media_requires_query_id(self, monkeypatch):
+        from vtscore.datasets.importers.base import SourceSpec
+        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
+
+        self._stub_apis(monkeypatch)
+        imp = ReCallerDatasetImporter()
+        with pytest.raises(ValueError, match="query ID"):
+            list(
+                imp.fetch_source_media(
+                    SourceSpec(source_type="audio", converter=None, params={}),
+                    {"query_id": "", "media_type": "audio"},
+                    thin=True,
+                )
+            )
+
+    def test_default_run_ingests_direct_spec(self, monkeypatch):
         from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
         self._stub_apis(monkeypatch)
@@ -853,6 +883,65 @@ class TestReCallerBulkOverride:
         for i in (1, 2, 3):
             assert medias[i]["origin"]["params"]["contentID"] == f"C{i - 1}"
             assert medias[i]["origin"]["params"]["mediaID"] == f"M{i - 1}"
+
+    def test_default_run_drives_converter_per_spec(self, monkeypatch):
+        """Framework calls converter.convert(); importer never does."""
+        import json
+
+        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
+
+        # Mix of audio (direct) and video (must go through video2image).
+        self._stub_apis(monkeypatch, media_types=["image", "video", "image"])
+
+        # Stub video2image to return a deterministic 2-frame expansion.
+        from vtscore.converters import get_converter
+
+        v2i = get_converter("video2image")
+        assert v2i is not None
+        observed_params: list[dict] = []
+
+        def fake_convert(media, params):
+            observed_params.append(dict(params))
+            return [
+                {
+                    "type": "image",
+                    "filename": f"{media['filename']}_frame_{k}.png",
+                    "media_bytes": None,
+                    "media_path": None,
+                    "media_url": media.get("media_url"),
+                    "embedding": media["embedding"],
+                    "embedder": media["embedder"],
+                    "md5": f"{media['md5']}_{k}",
+                    "duration": 0,
+                    "category": "",
+                    "file_size": 0,
+                }
+                for k in range(2)
+            ]
+
+        monkeypatch.setattr(v2i, "convert", fake_convert)
+
+        imp = ReCallerDatasetImporter()
+        medias: dict = {}
+        source_specs = json.dumps(
+            [
+                {"source_type": "image", "converter": None, "params": {}},
+                {"source_type": "video", "converter": "video2image", "params": {"n_clips": "2"}},
+            ]
+        )
+        imp.run(
+            {"query_id": "Q1", "media_type": "image", "source_specs": source_specs},
+            medias,
+            thin=True,
+        )
+
+        # Two image records (direct) + one video record × 2 frames = 4 medias.
+        assert len(medias) == 4
+        types = sorted(m["type"] for m in medias.values())
+        assert types == ["image", "image", "image", "image"]
+        # The framework, not the importer, called video2image.convert with
+        # the spec's params.
+        assert observed_params == [{"n_clips": "2"}]
 
 
 # ---------------------------------------------------------------------------

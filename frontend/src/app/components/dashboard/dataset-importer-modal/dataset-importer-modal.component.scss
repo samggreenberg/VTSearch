@@ -1,7 +1,10 @@
-// Picker chrome (importer tabs, demo table, server folder browser, badges)
-// lives in `frontend/src/scss/_picker-shared.scss` so it's defined once
-// globally and shared with the New Model > Browse Media picker — only
-// styles unique to this component remain below.
+// Picker chrome (importer tabs, demo table, server folder browser,
+// badges) lives in `frontend/src/scss/_picker-shared.scss` so it's
+// defined once globally and shared with the New Model > Browse Media
+// picker.  Source-side picker widgets — tab chrome, demo table, server
+// folder typed-path input, local-folder dropzone — live inside
+// `<vt-source-picker>` (see source-picker.component.scss).  Only
+// styles unique to this top-level modal remain below.
 
 // Pin the Add Dataset modal to a single large width so flipping between
 // tabs (Services / Server / Local / Demo) and inner widgets doesn't reflow
@@ -18,87 +21,15 @@
 
 .form-actions { display: flex; justify-content: flex-end; gap: var(--space-md); margin-top: var(--space-md); }
 
-.importer-picker, .clipper-params, .demo-picker, .server-folder-browser, .sf-browse-section, .importer-form, .local-folder-uploader {
+.importer-form {
   display: flex;
   flex-direction: column;
-}
-
-.importer-picker { gap: 0; margin-bottom: var(--space-lg); }
-
-// Indent the Importer's content area inward from the tabs above so the
-// hierarchy reads top-down: category tabs → importer tabs → controls.
-// .demo-picker is intentionally NOT indented — its inner tab bar must
-// line up with the category and importer tabs above it.
-.importer-form,
-.local-folder-uploader,
-.server-folder-browser {
+  // Indent the importer's form content inward from the category /
+  // importer tabs above (rendered by `<vt-source-picker>`) so the
+  // hierarchy reads top-down: category tabs → importer tabs → controls.
   padding-left: var(--space-2xl);
 }
 
-// Extra vertical breathing room above grouped sections inside the Local /
-// Folder uploader (Folder picker, Chunk size, Embedder, Clipper). The
-// Recursive checkbox intentionally does NOT get this class — it is a
-// sub-option of the Folder picker above it.
+// Extra vertical breathing room above grouped sections inside the
+// importer form (Embedder, Clipper).
 .form-group--section { margin-top: var(--space-xl); }
-
-.clipper-params {
-  padding-left: var(--space-xl);
-  border-left: 2px solid var(--border);
-  gap: var(--space-md);
-}
-
-.demo-picker { gap: var(--space-lg); }
-
-.clipper-btn {
-  text-align: left;
-  white-space: nowrap;
-}
-
-// The embedder + clipper pickers hide behind a single subtle "Advanced ▾"
-// link below the required fields. Designed to disappear into the
-// surrounding form so users who don't need overrides aren't distracted.
-.advanced-toggle {
-  align-self: flex-start;
-  background: transparent;
-  border: none;
-  padding: var(--space-2xs) 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-
-  &:hover { color: var(--text-primary); text-decoration: underline; }
-  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-}
-
-.server-folder-browser { gap: var(--space-lg); }
-.sf-browse-section { gap: var(--space-sm); }
-
-// Embedder licence warning shown under the picker when the chosen
-// embedder reports a license_notice (today: real-EUPE under FAIR
-// Noncommercial). Subtle yellow chip, no acceptance click — users
-// who object pick a different embedder.
-// Detection hint shown below the output-media-type dropdown after the
-// modal samples the picked folder / files.  Subtle chip so it informs
-// without distracting from the form.
-.detection-hint {
-  margin: var(--space-sm) 0 0;
-  font-size: var(--font-sm);
-  line-height: 1.35;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-.license-warning {
-  margin-top: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
-  background: rgba(255, 196, 0, 0.12);
-  border: 1px solid rgba(255, 196, 0, 0.4);
-  color: var(--text-warning);
-  font-size: var(--font-sm);
-  line-height: 1.35;
-}
-
-
-// Multi-media import UI lives in
-// ``<vt-source-specs-picker>`` (see source-specs-picker.component.scss).

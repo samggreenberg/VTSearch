@@ -135,9 +135,17 @@ class LabelSet:
 ```python
 class DatasetImporter(PluginBase):
     """Abstract base for a dataset importer. Subclasses declare `fields` (a list of
-    PluginField) and implement `run(field_values, progress_callback) -> iterable of
-    (Media, embedding)`. Multi-media importers set `multi_media = True` and iterate
-    `self.effective_source_specs(field_values)` to fan out across source types."""
+    PluginField) and override one of four hooks to populate medias:
+
+    - `list_records()` + `fetch_record()` — single-source-type service importer.
+    - `fetch_source_media(spec, ...)` — multi-source-type service importer with
+      one query per spec.
+    - `fetch_all_source_media(specs, ...)` — multi-source-type service importer
+      with one upstream call covering every spec; yields (spec, raw_media) pairs.
+    - `run()` — folder-shaped or full-control importer.
+
+    Multi-media importers set `multi_media = True`. The framework owns conversion
+    and ingestion for hooks 1–3 — subclasses never call `get_converter()`."""
 
 ImporterField = PluginField
 """Alias kept for clarity at import sites; identical to vtscore.plugins.PluginField."""
