@@ -313,7 +313,7 @@ def _download_and_extract(  # noqa: C901
                 total = len(members)
                 for i, member in enumerate(members):
                     if i % 100 == 0 or i == total - 1:
-                        on_progress("downloading", f"Extracting {dataset_name} ({i + 1}/{total})...", i + 1, total)
+                        on_progress("downloading", f"Extracting {dataset_name}...", i + 1, total)
                     # Guard against path traversal in zip entries
                     member_path = Path(temp_extract) / member
                     if not str(member_path.resolve()).startswith(str(Path(temp_extract).resolve())):
