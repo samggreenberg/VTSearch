@@ -16,6 +16,8 @@
     [activeDemoTab]="activeTab"
     (activeDemoTabChange)="selectDemoTabWithEmbedder($event)"
     [demoCols]="demoCols"
+    [showDemoMediaTypeTabs]="false"
+    [selectedDemoName]="selectedDemo?.name || ''"
     (demoSelected)="selectDemo($event)"
     [sfPathInputValue]="sfPathInputValue"
     (sfPathInputValueChange)="sfPathInputValue = $event"
@@ -25,36 +27,48 @@
     [lfFolderName]="lfFolderName"
     (lfFilesDropped)="lfOnFilesDropped($event)"
   >
-    <ng-container demoExtras>
-      @if (activeTab) {
+    <ng-container demoBefore>
+      <vt-import-config
+        mediaTypeFieldId="demo-media-type"
+        [mediaType]="activeTab"
+        (mediaTypeChange)="selectDemoTabWithEmbedder($event)"
+        [mediaTypeOptions]="demoTabs"
+        [mediaTypeOptionLabels]="mediaTypeLabels"
+        [mediaTypeOptionIcons]="demoMediaTypeIcons"
+      ></vt-import-config>
+    </ng-container>
+
+    <ng-container demoAfter>
+      @if (selectedDemo) {
         <div class="form-group">
           <label class="form-label" for="demo-dataset-name" title="Optional name for the new dataset. Leave blank to use the demo's name.">Dataset Name</label>
           <input
             id="demo-dataset-name"
             type="text"
             class="form-input"
-            [(ngModel)]="demoDatasetName"
+            [ngModel]="demoDatasetName"
+            (ngModelChange)="onDemoDatasetNameInput($event)"
             placeholder="Leave blank to use the demo's name"
           />
         </div>
-      }
 
-      @if (activeTab && (demoEmbedders.length > 1 || demoClippers.length > 1)) {
-        <div class="form-group form-group--section">
-          <vt-import-advanced
-            [availableConverters]="[]"
-            [nativeType]="''"
-            [typeLabels]="mediaTypeLabels"
-            [embedders]="demoEmbedders"
-            [clippers]="demoClippers"
-            [showSourceSpecs]="false"
-            [sourceSpecs]="[]"
-            [selectedEmbedder]="selectedDemoEmbedder"
-            (selectedEmbedderChange)="onDemoEmbedderChange($event)"
-            [selectedClipper]="selectedDemoClipper"
-            (clipperChooserRequested)="openClipperChooser('demo')"
-          ></vt-import-advanced>
-        </div>
+        @if (demoEmbedders.length > 1 || demoClippers.length > 1) {
+          <div class="form-group form-group--section">
+            <vt-import-advanced
+              [availableConverters]="[]"
+              [nativeType]="''"
+              [typeLabels]="mediaTypeLabels"
+              [embedders]="demoEmbedders"
+              [clippers]="demoClippers"
+              [showSourceSpecs]="false"
+              [sourceSpecs]="[]"
+              [selectedEmbedder]="selectedDemoEmbedder"
+              (selectedEmbedderChange)="onDemoEmbedderChange($event)"
+              [selectedClipper]="selectedDemoClipper"
+              (clipperChooserRequested)="openClipperChooser('demo')"
+            ></vt-import-advanced>
+          </div>
+        }
       }
     </ng-container>
 
@@ -383,6 +397,13 @@
           Import
         }
       </button>
+    </div>
+  }
+
+  @if (activePickerView === 'demo' && selectedImporter) {
+    <div class="form-actions" modal-footer>
+      <button class="btn btn--secondary" (click)="close()">Cancel</button>
+      <button class="btn btn--primary" (click)="submitDemo()" [disabled]="!selectedDemo">Import</button>
     </div>
   }
   <vt-clipper-chooser

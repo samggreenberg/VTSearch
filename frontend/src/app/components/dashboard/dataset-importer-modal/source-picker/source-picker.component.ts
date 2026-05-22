@@ -33,9 +33,12 @@ import { ManagedColumns } from '../../../../utils/managed-columns';
  *  parent projects those into named content slots so the visual order
  *  on each flow stays unchanged:
  *
- *  - ``[demoExtras]`` — sits between the demo media-type tabs and the
- *    demo table (Add Dataset uses it for the Dataset Name + Advanced
- *    block; New Detector leaves it empty).
+ *  - ``[demoBefore]`` — sits between the demo media-type tabs and the
+ *    demo table (Add Dataset uses it to project a media-type dropdown
+ *    that replaces the inner tabs; New Detector leaves it empty).
+ *  - ``[demoAfter]`` — sits below the demo table (Add Dataset uses it
+ *    for the Dataset Name + Advanced block; New Detector leaves it
+ *    empty).
  *  - ``[sfBefore]`` / ``[sfAfter]`` — sit above/below the typed path
  *    input on the server-folder flow.
  *  - ``[lfBefore]`` / ``[lfAfter]`` — sit above/below the dropzone on
@@ -116,6 +119,18 @@ export class SourcePickerComponent {
   @Input() demoRowDisabledFn: ((demo: DemoDataset) => boolean) | null = null;
   /** Optional formatter for the ``title`` attribute on each demo row. */
   @Input() demoRowTitleFn: ((demo: DemoDataset) => string) | null = null;
+
+  /** When ``true`` (default) the inner media-type tab bar renders above
+   *  the demo table.  Callers that want to render their own media-type
+   *  picker (e.g. the Add Dataset modal, which uses a dropdown to match
+   *  the other importer flows) set this to ``false`` and project their
+   *  widget into the ``[demoBefore]`` slot. */
+  @Input() showDemoMediaTypeTabs = true;
+
+  /** Name of the currently-selected demo row.  Used to highlight the
+   *  selected row when the parent treats row clicks as a selection (not
+   *  an immediate submit).  Empty string disables the highlight. */
+  @Input() selectedDemoName = '';
 
   // === Server folder source view ===
 
