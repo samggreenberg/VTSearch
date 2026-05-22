@@ -99,15 +99,22 @@ the same shape as the existing
    inside the importer modal. Each flow shell becomes a thin wrapper
    around `<vt-import-config>` plus the import-trigger button.
 
-Order of work:
+Order of work (reordered after reading the code: start with the more
+contained extraction so the pattern is proved on one flow before
+touching the cross-modal picker chrome):
 
-1. Extract `<vt-source-picker>` against the importer-modal first
-   (where it has the most consumers); confirm parity.
-2. Extract `<vt-import-config>` and migrate the three flow blocks one
-   at a time (`sf`, then `lf`, then `form`), validating each lands
-   the picker UI in the same place.
-3. Reuse `<vt-source-picker>` from `new-detector-modal`; delete the
-   duplicated picker chrome there.
+1. **Checkpoint 1**: Extract `<vt-import-config>` (media-type +
+   detection hint + Advanced section with source-specs, embedder,
+   clipper). Migrate the `sf` flow to use it. The dataset name and
+   folder-path widget stay in the parent — only the configuration
+   form is extracted.
+2. **Checkpoint 2**: Migrate the `lf` flow to `<vt-import-config>`.
+3. **Checkpoint 3**: Migrate the `form` flow to `<vt-import-config>`.
+4. **Checkpoint 4**: Extract `<vt-source-picker>` (the importer-tab /
+   sub-tab chrome + demo table + server-folder typed path + local
+   dropzone). Migrate `dataset-importer-modal` to consume it.
+5. **Checkpoint 5**: Migrate `new-detector-modal` to consume
+   `<vt-source-picker>`.
 
 The demo flow inside `dataset-importer-modal` stays a separate path
 (its picker layout is genuinely different from the import flows).

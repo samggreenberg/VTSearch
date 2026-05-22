@@ -49,34 +49,9 @@
 
 .demo-picker { gap: var(--space-lg); }
 
-.clipper-btn {
-  text-align: left;
-  white-space: nowrap;
-}
-
-// The embedder + clipper pickers hide behind a single subtle "Advanced ▾"
-// link below the required fields. Designed to disappear into the
-// surrounding form so users who don't need overrides aren't distracted.
-.advanced-toggle {
-  align-self: flex-start;
-  background: transparent;
-  border: none;
-  padding: var(--space-2xs) 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-
-  &:hover { color: var(--text-primary); text-decoration: underline; }
-  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-}
-
 .server-folder-browser { gap: var(--space-lg); }
 .sf-browse-section { gap: var(--space-sm); }
 
-// Embedder licence warning shown under the picker when the chosen
-// embedder reports a license_notice (today: real-EUPE under FAIR
-// Noncommercial). Subtle yellow chip, no acceptance click — users
-// who object pick a different embedder.
 // Detection hint shown below the output-media-type dropdown after the
 // modal samples the picked folder / files.  Subtle chip so it informs
 // without distracting from the form.
@@ -88,16 +63,10 @@
   font-style: italic;
 }
 
-.license-warning {
-  margin-top: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
-  background: rgba(255, 196, 0, 0.12);
-  border: 1px solid rgba(255, 196, 0, 0.4);
-  color: var(--text-warning);
-  font-size: var(--font-sm);
-  line-height: 1.35;
-}
+// `.advanced-toggle`, `.clipper-btn`, and `.license-warning` live inside
+// `<vt-import-advanced>` (which encapsulates the styles).  The
+// surrounding `.form-group--section` rule below provides the vertical
+// gap above the Advanced block.
 
 
 // Multi-media import UI lives in
