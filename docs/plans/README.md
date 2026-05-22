@@ -14,7 +14,6 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 | [clipper-chain.md](clipper-chain.md) | **Phase 1 in flight** | Dataset-load pipeline accepts an ordered list of converter/clipper steps via a new `clipper_chain` field. Phase 2 (frontend chooser), Phase 3 (sidecar/registry schema), Phase 4 (`detector_meta` chain + `input_spec` migration) all deferred — see Open follow-ups. |
 | [RCDatasetImporter.md](RCDatasetImporter.md) | **Scaffolds in place; awaiting client code** | ReCaller / DataWrest / PullWrest / Holder plugin scaffolds exist (`hidden_from_picker = True`); the API client stubs (`_rc_fetch_results`, `_dw_get_embedding`, `_pw_fetch_media`, `_holder_*`) still need real implementations. |
 | [openapi-schema.md](openapi-schema.md) | **Migration complete; one cosmetic follow-up** | flask-smorest plumbing + Swagger UI + per-plugin runtime validation live across every blueprint. Remaining: per-plugin OpenAPI **spec** types for the six plugin-field route bodies (deferred — runtime validation already captures the field types). |
-| [brainstorm.md](brainstorm.md) | **Backlog** | Combined feature + UX backlog (formerly `feature-brainstorm.md` + `ux-brainstorm.md`). Wide-ranging idea backlog — new media types, converters, clippers, demo datasets, UX friction, architecture, experiments. Items graduate into their own plan doc as they mature. |
 | [logical-bug-audit.md](logical-bug-audit.md) | **Discovery only** | Multi-agent audit of the codebase for logical bugs (race conditions, context-propagation gaps, silent miscompute, partial-state failures, zip-slip variants). ~95 findings grouped Critical / High / Medium / Low + nine recurring root-cause patterns. No fixes landed. |
 
 ## Recently completed (removed)
@@ -33,8 +32,7 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
   functions with cyclomatic complexity ≥20. Two waves shipped, twelve
   refactors total (eight in wave 1, four in wave 2); the five "Skip"
   rows carried across both waves stay skipped because the complexity
-  is honest dispatch. Running history rolled into
-  [brainstorm.md §20.7.1](brainstorm.md).
+  is honest dispatch.
 - **smart-clipper-defaults.md** — "Auto (recommended)" clipper entry for
   audio and video — resolves per-media through pass-through or tiling
   based on each item's duration, with the clipper picker itself hidden
@@ -50,13 +48,13 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
   pip-audit + pyright + OpenAPI snapshot drift + the frontend build +
   pytest in one go. Opportunistic maintenance items (C901 noqa
   burn-down, quarterly `pre-commit autoupdate`, possible future
-  coverage-delta gate) moved to [brainstorm.md §20.7.x](brainstorm.md).
-- **feature-brainstorm.md** and **ux-brainstorm.md** — merged into
-  [brainstorm.md](brainstorm.md), with all completed/shipped items
-  deleted. Open follow-ups attached to formerly-shipped items kept as
-  standalone entries (e.g. faster-whisper backend swap, GPU bulk
-  override for audio CLAP / video X-CLIP, folder-browser Phase 2,
-  video/document crop overlays).
+  coverage-delta gate) are tracked informally; not blocking.
+- **feature-brainstorm.md**, **ux-brainstorm.md**, and **brainstorm.md** —
+  the combined idea backlog (new media types, converters, clippers,
+  demo datasets, UX friction, architecture, experiments) is closed.
+  Shipped items had already been struck through; remaining open
+  follow-ups were either small enough to absorb into their parent
+  shipped plan docs or judged not worth tracking separately.
 - **delete-detectors.md** — Collapsed the two-concept "detector vs.
   trainable model" world into a single concept. The old read-only
   detector artifact (with serialized MLP weights), the `autorun_detectors`
@@ -95,7 +93,7 @@ or [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
   Phase B (bulk `patch_forward`), and Phase C (clip re-embed via
   `embed_media_bulk` with no tempfile) all shipped. Remaining deferred
   follow-ups (audio CLAP / video X-CLIP bulk overrides, fusing DINO
-  single-vector + patch forward) live under [brainstorm.md §20.2](brainstorm.md).
+  single-vector + patch forward) are not actively tracked.
 - **combine-models-ui.md** — UI for combining two or more trainable
   models into a new one. Backend (`LabelSet.merge` + `POST
   /api/detectors/combine`) shipped earlier; the frontend
