@@ -12,6 +12,11 @@ interface ShortcutGroup {
   shortcuts: Shortcut[];
 }
 
+interface ShortcutSection {
+  header?: string;
+  groups: ShortcutGroup[];
+}
+
 @Component({
   selector: 'vt-keyboard-help-modal',
   standalone: true,
@@ -22,38 +27,48 @@ interface ShortcutGroup {
 export class KeyboardHelpModalComponent {
   @Output() closed = new EventEmitter<void>();
 
-  readonly groups: ShortcutGroup[] = [
+  readonly sections: ShortcutSection[] = [
     {
-      title: 'Voting',
-      shortcuts: [
-        { keys: ['→'], description: 'Vote good (👍)' },
-        { keys: ['←'], description: 'Vote bad (👎)' },
+      header: 'In the Train / Find window only',
+      groups: [
+        {
+          title: 'Voting',
+          shortcuts: [
+            { keys: ['→'], description: 'Vote good' },
+            { keys: ['←'], description: 'Vote bad' },
+          ],
+        },
+        {
+          title: 'Playback',
+          shortcuts: [
+            { keys: ['Space'], description: 'Play / pause audio or video' },
+            { keys: ['↑'], description: 'Volume up' },
+            { keys: ['↓'], description: 'Volume down' },
+          ],
+        },
+        {
+          title: 'Image viewer',
+          shortcuts: [
+            { keys: ['+'], description: 'Zoom in' },
+            { keys: ['-'], description: 'Zoom out' },
+            { keys: ['['], description: 'Rotate left' },
+            { keys: [']'], description: 'Rotate right' },
+            { keys: ['Shift', 'drag'], description: 'Draw region box (or use the Marquee button)' },
+            { keys: ['Esc'], description: 'Cancel armed vote / clear region box' },
+          ],
+        },
       ],
     },
     {
-      title: 'Playback',
-      shortcuts: [
-        { keys: ['Space'], description: 'Play / pause audio or video' },
-        { keys: ['↑'], description: 'Volume up' },
-        { keys: ['↓'], description: 'Volume down' },
-      ],
-    },
-    {
-      title: 'Image viewer',
-      shortcuts: [
-        { keys: ['+'], description: 'Zoom in' },
-        { keys: ['-'], description: 'Zoom out' },
-        { keys: ['['], description: 'Rotate left' },
-        { keys: [']'], description: 'Rotate right' },
-        { keys: ['Shift', 'drag'], description: 'Draw region box (or use the Marquee button)' },
-        { keys: ['Esc'], description: 'Cancel armed vote / clear region box' },
-      ],
-    },
-    {
-      title: 'General',
-      shortcuts: [
-        { keys: ['?'], description: 'Show this help' },
-        { keys: ['Esc'], description: 'Close modal or dropdown' },
+      header: 'Anywhere',
+      groups: [
+        {
+          title: 'General',
+          shortcuts: [
+            { keys: ['?'], description: 'Show this help' },
+            { keys: ['Esc'], description: 'Close modal or dropdown' },
+          ],
+        },
       ],
     },
   ];

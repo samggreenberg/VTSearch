@@ -205,12 +205,13 @@ PickerView = str  # one of: "form", "demo", "server_folder", "local"
 
 
 # Synthetic per-importer field that lets the user pick a name for the new
-# dataset.  Injected at the front of every importer's serialised field list
-# in :meth:`DatasetImporter.to_dict`, so the frontend renders it generically
-# without each subclass having to duplicate the declaration.  Routed through
-# the per-plugin marshmallow schema as a regular field (see
-# :func:`vtsearch.routes._shared.validate_plugin_args`) and read downstream
-# by :meth:`DatasetImporter.resolve_display_name`.
+# dataset.  Appended to the end of every importer's serialised field list
+# in :meth:`DatasetImporter.to_dict` (just before the Advanced section in
+# the UI), so users filling the form top-down have already entered the
+# fields that feed the auto-derived default name by the time they reach
+# it.  Routed through the per-plugin marshmallow schema as a regular field
+# (see :func:`vtsearch.routes._shared.validate_plugin_args`) and read
+# downstream by :meth:`DatasetImporter.resolve_display_name`.
 DATASET_NAME_FIELD_KEY = "dataset_name"
 
 
@@ -329,7 +330,7 @@ class DatasetImporter(PluginBase):
         d["picker_view"] = self.picker_view
         d["category"] = self.category
         d["multi_media"] = self.multi_media
-        d["fields"] = [_dataset_name_field().to_dict()] + d["fields"]
+        d["fields"] = d["fields"] + [_dataset_name_field().to_dict()]
         return d
 
     def default_display_name(self, field_values: dict[str, Any]) -> str:

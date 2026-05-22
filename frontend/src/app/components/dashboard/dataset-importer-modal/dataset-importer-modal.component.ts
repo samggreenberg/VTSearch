@@ -800,6 +800,24 @@ export class DatasetImporterModalComponent implements OnInit {
     return this._optionLabelsCache;
   }
 
+  /** Cached map of ``folder_import_name`` → icon string (emoji or SVG
+   *  type name from :class:`MediaTypeInfo.icon`), rebuilt only when
+   *  ``mediaTypes`` is reassigned.  Feeds the per-option icon shown in
+   *  the media-type dropdown inside :component:`ImportConfigComponent`. */
+  private _optionIconsSource: MediaTypeInfo[] | null = null;
+  private _optionIconsCache: Record<string, string> = {};
+  get mediaTypeOptionIcons(): Record<string, string> {
+    if (this._optionIconsSource !== this.mediaTypes) {
+      const out: Record<string, string> = {};
+      for (const mt of this.mediaTypes) {
+        if (mt.folder_import_name && mt.icon) out[mt.folder_import_name] = mt.icon;
+      }
+      this._optionIconsCache = out;
+      this._optionIconsSource = this.mediaTypes;
+    }
+    return this._optionIconsCache;
+  }
+
   /** Embedders available for the currently active demo tab's media type. */
   get demoEmbeddersForTab(): EmbedderInfo[] {
     return this.allEmbedders.filter((e) => e.media_type_id === this.activeTab);

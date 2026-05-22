@@ -763,16 +763,18 @@ class TestImporterMetadata:
         assert keys.index("media_type") < keys.index("path")
 
     def test_every_importer_exposes_dataset_name_field(self, client):
-        """Every importer's serialised field list begins with a non-required
+        """Every importer's serialised field list ends with a non-required
         ``dataset_name`` text field so the user can override the auto-generated
-        display name."""
+        display name.  The field sits last so that a user filling the form
+        top-down has already entered the source fields that feed the
+        auto-derived default by the time they reach it."""
         resp = client.get("/api/dataset/importers")
         data = resp.get_json()
         assert data["importers"], "expected at least one importer"
         for imp in data["importers"]:
             keys = [f["key"] for f in imp["fields"]]
-            assert keys[0] == "dataset_name", f"{imp['name']} missing dataset_name field at index 0"
-            ds_field = imp["fields"][0]
+            assert keys[-1] == "dataset_name", f"{imp['name']} missing dataset_name field at last index"
+            ds_field = imp["fields"][-1]
             assert ds_field["field_type"] == "text"
             assert ds_field["required"] is False
 
