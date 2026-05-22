@@ -111,10 +111,13 @@ class TestServerFilesFieldsAdvertiseNpz:
         assert ".list" in accept_exts
         assert ".npz" in accept_exts
 
-    def test_paths_file_description_mentions_npz(self):
+    def test_paths_file_hint_mentions_npz(self):
+        # The format hint (shown via the (?) icon next to the label) is where
+        # the user discovers that .npz is an accepted shape for the paths file.
+        # The shorter ``description`` covers the field's purpose only.
         imp = ServerFilesDatasetImporter()
         paths_field = next(f for f in imp.fields if f.key == "paths_file")
-        assert ".npz" in (paths_field.description or "").lower()
+        assert ".npz" in (paths_field.hint or "").lower()
 
 
 class TestServerFilesNpzPathsFile:

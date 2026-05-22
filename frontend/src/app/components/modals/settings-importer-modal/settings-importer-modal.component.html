@@ -32,10 +32,14 @@
       @if (selectedImporterFields.length > 0) {
         @for (field of selectedImporterFields; track field.key) {
           <div class="form-group">
-            <label class="form-label" [for]="'sif-' + field.key">
+            <label class="form-label" [for]="'sif-' + field.key"
+              [title]="field.description || field.label || field.key">
               {{ field.label || field.key }}
               @if (field.required) {
                 <span class="required">*</span>
+              }
+              @if (field.hint) {
+                <vt-field-hint-icon [hint]="field.hint"></vt-field-hint-icon>
               }
             </label>
 

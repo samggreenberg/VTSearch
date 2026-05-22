@@ -5,6 +5,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
+import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
@@ -25,7 +26,7 @@ export interface ColumnDef {
 @Component({
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })
@@ -266,6 +267,21 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     return (exporter.fields ?? []) as ImporterField[];
   }
 
+  /** Initial form value for *field*: its declared default, or the first
+   *  option when a select field has no default (so the form is never sitting
+   *  on a blank pulldown that the user has to actively populate). */
+  private defaultFor(field: ImporterField): string {
+    if (field.default) return field.default;
+    if (
+      field.field_type === 'select' &&
+      !field.dynamic_options &&
+      (field.options?.length ?? 0) > 0
+    ) {
+      return field.options![0];
+    }
+    return '';
+  }
+
   /** Apply the dynamic default filename to the filepath form field if present. */
   private applyDefaultFilename(exporter: ExporterEntry): void {
     const filepathField = this.exporterFieldsOf(exporter).find((f) => f.key === 'filepath');
@@ -288,7 +304,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     this.selectedExporter = exporter;
     this.formValues = {};
     for (const f of fields) {
-      this.formValues[f.key] = f.default || '';
+      this.formValues[f.key] = this.defaultFor(f);
     }
     this.applyDefaultFilename(exporter);
     this.error = '';
@@ -301,7 +317,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     this.selectedExporter = exporter;
     this.formValues = {};
     for (const f of this.exporterFieldsOf(exporter)) {
-      this.formValues[f.key] = f.default || '';
+      this.formValues[f.key] = this.defaultFor(f);
     }
     this.applyDefaultFilename(exporter);
     this.error = '';

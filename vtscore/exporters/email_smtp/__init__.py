@@ -99,10 +99,8 @@ class EmailLabelsetExporter(LabelsetExporter):
             key="from",
             label="Sender Email",
             field_type="email",
-            description=(
-                "The email address to send from. Must be on a domain you control — "
-                "MX hosts reject mail from non-existent domains."
-            ),
+            description="The email address the results will be sent from.",
+            hint=("Must be on a domain you control — most MX hosts reject mail from non-existent domains."),
             placeholder="vtsearch@your-domain.example",
         ),
         ExporterField(

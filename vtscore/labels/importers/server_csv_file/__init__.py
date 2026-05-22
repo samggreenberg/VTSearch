@@ -39,9 +39,7 @@ class ServerCsvLabelImporter(LabelImporter):
             key="filepath",
             label="Path or URL",
             field_type="server_path",
-            description=(
-                "Absolute or relative path to a CSV file with md5 and label columns on the server filesystem."
-            ),
+            description="A CSV file on the server holding the labels to import.",
             placeholder=f"{DATA_DIR}/labels/my_labels.csv",
             hint=(
                 "Expects columns: md5,label\n"

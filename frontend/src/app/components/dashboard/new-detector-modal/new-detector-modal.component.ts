@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
+import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
@@ -30,7 +31,7 @@ type TrainedSubView = 'picker' | 'form';
 @Component({
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, FieldHintIconComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -721,7 +722,15 @@ export class NewDetectorModalComponent implements OnInit {
     this.error = '';
     const fields = (importer.fields ?? []) as ImporterField[];
     for (const field of fields) {
-      if (field.default) this.labelImporterValues[field.key] = field.default;
+      if (field.default) {
+        this.labelImporterValues[field.key] = field.default;
+      } else if (
+        field.field_type === 'select' &&
+        !field.dynamic_options &&
+        (field.options?.length ?? 0) > 0
+      ) {
+        this.labelImporterValues[field.key] = field.options![0];
+      }
     }
     this.trainedView = 'form';
   }

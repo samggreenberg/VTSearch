@@ -164,6 +164,9 @@
                     @if (field.required) {
                       <span class="required">*</span>
                     }
+                    @if (field.hint) {
+                      <vt-field-hint-icon [hint]="field.hint"></vt-field-hint-icon>
+                    }
                   </label>
 
                   @if (field.field_type === 'server_path') {

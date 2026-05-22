@@ -157,10 +157,14 @@
           @if (activeTabExporterFields.length > 0) {
             @for (field of activeTabExporterFields; track field.key) {
               <div class="tab-field">
-                <label class="form-label" [for]="'field-' + field.key">
+                <label class="form-label" [for]="'field-' + field.key"
+                  [title]="field.description || field.label || field.key">
                   {{ field.label || field.key }}
                   @if (field.required) {
                     <span class="required">*</span>
+                  }
+                  @if (field.hint) {
+                    <vt-field-hint-icon [hint]="field.hint"></vt-field-hint-icon>
                   }
                 </label>
 

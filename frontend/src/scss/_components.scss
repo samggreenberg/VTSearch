@@ -172,12 +172,14 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // Field header label.  Made visually distinct from `.info-text` (instruction
 // body copy) by using the primary text color and a heavier weight, so a
 // label like "Dataset Name" reads as a header above its input rather than
-// blending into surrounding paragraph text.
+// blending into surrounding paragraph text.  Sized to match `.form-input`
+// (`var(--font-md)`) so the header is never visually smaller than the value
+// the user types/picks underneath it.
 .form-label {
   display: block;
   margin-bottom: var(--space-xs);
   color: var(--text-primary);
-  font-size: var(--font-sm);
+  font-size: var(--font-md);
   font-weight: var(--weight-medium);
 }
 

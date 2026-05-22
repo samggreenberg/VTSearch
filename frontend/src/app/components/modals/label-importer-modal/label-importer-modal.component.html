@@ -68,10 +68,14 @@
       @if (selectedImporterFields.length > 0) {
         @for (field of selectedImporterFields; track field.key) {
           <div class="form-group">
-            <label class="form-label" [for]="'lif-' + field.key">
+            <label class="form-label" [for]="'lif-' + field.key"
+              [title]="field.description || field.label || field.key">
               {{ field.label || field.key }}
               @if (field.required) {
                 <span class="required">*</span>
+              }
+              @if (field.hint) {
+                <vt-field-hint-icon [hint]="field.hint"></vt-field-hint-icon>
               }
             </label>
 
@@ -144,10 +148,6 @@
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
               />
-            }
-
-            @if (field.hint) {
-              <p class="form-hint">{{ field.hint }}</p>
             }
           </div>
         }

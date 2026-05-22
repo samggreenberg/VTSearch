@@ -199,7 +199,8 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             key="url",
             label="Path or URL",
             field_type="url",
-            description="URL to a publicly accessible archive (.zip, .tar.gz, .rar, \u2026) of media files.",
+            description="A publicly accessible archive of media files to download and unpack.",
+            hint="Supported archive formats: .zip, .tar, .tar.gz / .tgz, .tar.bz2, .rar.",
         ),
         ImporterField(
             key="media_type",
