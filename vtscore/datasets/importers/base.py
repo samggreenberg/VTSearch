@@ -331,6 +331,20 @@ class DatasetImporter(PluginBase):
         d["category"] = self.category
         d["multi_media"] = self.multi_media
         d["fields"] = d["fields"] + [_dataset_name_field().to_dict()]
+        if self.multi_media:
+            from vtscore.converters import list_converters_for_target  # noqa: PLC0415
+            from vtscore.media import all_types_dict  # noqa: PLC0415
+
+            # For each media type the user can select, list N→M converters
+            # that produce that type — so the UI can show a datagrid of
+            # available converters dynamically.
+            converters_by_target: dict[str, list[dict]] = {}
+            for mt_info in all_types_dict():
+                type_id = mt_info["type_id"]
+                convs = list_converters_for_target(type_id)
+                if convs:
+                    converters_by_target[type_id] = [c.to_dict() for c in convs]
+            d["available_converters_by_media_type"] = converters_by_target
         return d
 
     def default_display_name(self, field_values: dict[str, Any]) -> str:
