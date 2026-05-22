@@ -171,7 +171,7 @@ def download_bbc_news(  # noqa: C901
                         if i % 100 == 0 or i == total - 1:
                             on_progress(
                                 "downloading",
-                                f"Extracting BBC News dataset ({i + 1}/{total})...",
+                                "Extracting BBC News dataset...",
                                 i + 1,
                                 total,
                             )

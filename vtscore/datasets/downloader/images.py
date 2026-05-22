@@ -99,7 +99,7 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
                 if i % 100 == 0 or i == total:
                     on_progress(
                         "downloading",
-                        f"Extracting Caltech-101 zip ({i}/{total})...",
+                        "Extracting Caltech-101 zip...",
                         i,
                         total,
                     )
@@ -118,7 +118,7 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
                     if i % 100 == 0 or i == total - 1:
                         on_progress(
                             "downloading",
-                            f"Extracting 101_ObjectCategories ({i + 1}/{total})...",
+                            "Extracting 101_ObjectCategories...",
                             i + 1,
                             total,
                         )
