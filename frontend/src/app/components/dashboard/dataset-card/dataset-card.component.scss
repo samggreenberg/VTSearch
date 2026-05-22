@@ -293,6 +293,13 @@ td.select-col {
     flex: 1;
   }
 
+  .progress-eta {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
   .btn--cancel {
     flex-shrink: 0;
     cursor: pointer;

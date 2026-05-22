@@ -49,6 +49,9 @@
           [max]="loadingTask.total"
           [indeterminate]="taskIsIndeterminate()"
         />
+        @if (taskProgressInfo.eta) {
+          <span class="progress-eta">{{ taskProgressInfo.eta }}</span>
+        }
         <button class="btn btn--cancel btn--sm" (click)="onCancelTask($event)" title="Cancel loading">Cancel</button>
       </div>
     </div>

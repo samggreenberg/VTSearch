@@ -55,7 +55,9 @@ export function formatEta(seconds: number | null | undefined): string {
 export function formatProgressMessage(
   progress: ProgressEvent | null | undefined,
   defaultMessage = '',
+  options: { includeEta?: boolean } = {},
 ): string {
+  const { includeEta = true } = options;
   const prog = progress ?? {};
   let msg = prog.message || defaultMessage;
   const step = prog.step;
@@ -74,9 +76,11 @@ export function formatProgressMessage(
       msg = msg ? `${fraction} ${msg}` : fraction;
     }
   }
-  const eta = formatEta(prog.eta_seconds);
-  if (eta) {
-    msg = msg ? `${msg} · ${eta}` : eta;
+  if (includeEta) {
+    const eta = formatEta(prog.eta_seconds);
+    if (eta) {
+      msg = msg ? `${msg} · ${eta}` : eta;
+    }
   }
   return msg;
 }
@@ -101,11 +105,16 @@ export function isProgressIndeterminate(
  *   - ``subtitle``: a plain-English one-liner explaining what the phase actually does.
  *   - ``detail``: the original message + ``(current/total)`` counts, with the
  *     redundant ``[Step S/T]`` prefix stripped (the header conveys the phase).
+ *     The ETA tail is omitted here — it is returned separately as ``eta`` so the
+ *     UI can pin it to the right of the progress bar where it stays visible
+ *     even when a long file path ellipsizes the detail.
+ *   - ``eta``: the bare ``~Xs left`` chip, or empty when no estimate is available.
  */
 export interface ProgressHeader {
   header: string;
   subtitle: string;
   detail: string;
+  eta: string;
 }
 
 /** Which load flow this progress event belongs to. */
@@ -223,6 +232,7 @@ export function formatProgressHeader(
   }
 
   const header = phase ? `${what} · ${phase}` : what;
-  const detail = stripStepPrefix(formatProgressMessage(progress));
-  return { header, subtitle, detail };
+  const detail = stripStepPrefix(formatProgressMessage(progress, '', { includeEta: false }));
+  const eta = formatEta(prog.eta_seconds);
+  return { header, subtitle, detail, eta };
 }

@@ -107,6 +107,9 @@
                           [max]="task.total"
                           [indeterminate]="taskIsIndeterminate(task)"
                         />
+                        @if (info.eta) {
+                          <span class="progress-eta">{{ info.eta }}</span>
+                        }
                         <button class="btn btn--cancel btn--sm" (click)="cancelLoadingTask(task.task_id)" title="Cancel this dataset load">Cancel</button>
                       </div>
                     </div>

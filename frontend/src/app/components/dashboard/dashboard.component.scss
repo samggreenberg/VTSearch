@@ -197,6 +197,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  .progress-eta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
 }
 
 .dashboard-progress {
