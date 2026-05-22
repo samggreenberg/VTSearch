@@ -10,6 +10,12 @@ This importer exists so that the dataset-importer modal can be fully
 data-driven — the picker reads :attr:`display_name`, :attr:`description`,
 :attr:`icon`, and :attr:`picker_view` from the registry instead of
 hard-coding "Local Folder" markup in HTML.
+
+Pre-computed embedding vectors are intentionally **not** supported by
+the folder card.  Users who want to attach pre-computed vectors to a
+browser-side upload should use the Local Files card instead — it takes
+a single ``.npz`` (or ``.txt``) paths file, which is the natural
+delivery mechanism for vectors keyed by filename.
 """
 
 from __future__ import annotations

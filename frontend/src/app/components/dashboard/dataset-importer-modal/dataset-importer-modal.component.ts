@@ -118,10 +118,6 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Whether the user has manually edited :prop:`lfDatasetName` (so we stop
    *  auto-overwriting it from the picked folder name). */
   private lfDatasetNameDirty = false;
-  /** Optional .npz file of pre-computed embedding vectors (Local Folder /
-   *  Local Files).  When set, the upload endpoint reuses these vectors
-   *  instead of running the embedding model for matching uploaded files. */
-  lfVectorsFile: File | null = null;
 
   // Server folder picker state. The user types an absolute server path; we
   // split it into ``sfBrowseRootPath`` (always ``/`` here) and ``sfBrowsePath``
@@ -902,7 +898,6 @@ export class DatasetImporterModalComponent implements OnInit {
     this.lfPickerKind = resolved?.name === 'local_files' ? 'files' : 'folder';
     this.lfFiles = [];
     this.lfDetection = null;
-    this.lfVectorsFile = null;
     this.lfError = '';
     this.lfSubmitting = false;
     this.lfRecursive = this.readRecursiveDefault(resolved);
@@ -934,6 +929,17 @@ export class DatasetImporterModalComponent implements OnInit {
     if (files.length === 0) {
       this.lfFiles = [];
       this.lfDetection = null;
+      return;
+    }
+    // Local Files uploads a single paths file (not media), so type detection
+    // doesn't apply — the user picks the media type explicitly.
+    if (this.lfPickerKind === 'files') {
+      this.lfFiles = [files[0]];
+      this.lfDetection = null;
+      this.lfError = '';
+      if (!this.lfDatasetNameDirty) {
+        this.lfDatasetName = this.lfDerivedDatasetName();
+      }
       return;
     }
     this.lfFiles = files;
@@ -979,16 +985,6 @@ export class DatasetImporterModalComponent implements OnInit {
     if (sourceSpecs) {
       this.lfSourceSpecs = sourceSpecs;
     }
-  }
-
-  lfOnVectorsFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    this.lfVectorsFile = input.files && input.files.length > 0 ? input.files[0] : null;
-    this.lfError = '';
-  }
-
-  lfClearVectorsFile(): void {
-    this.lfVectorsFile = null;
   }
 
   /** Derive a default dataset name from the currently picked files / folder.
@@ -1071,16 +1067,26 @@ export class DatasetImporterModalComponent implements OnInit {
 
   lfSubmit(): void {
     if (this.lfFiles.length === 0) {
-      this.lfError = 'Please select a folder to upload.';
+      this.lfError = this.lfPickerKind === 'files'
+        ? 'Please select a paths file to upload.'
+        : 'Please select a folder to upload.';
       return;
     }
 
+    if (this.lfPickerKind === 'files') {
+      this.lfSubmitFiles();
+      return;
+    }
+    this.lfSubmitFolder();
+  }
+
+  private lfSubmitFolder(): void {
     // When recursion is disabled in folder mode, drop any files that live
     // inside subdirectories of the picked folder.  ``webkitRelativePath``
     // looks like ``"top/file.wav"`` for top-level entries and
     // ``"top/sub/file.wav"`` for files inside a subdirectory.
     let filesToUpload = this.lfFiles;
-    if (this.lfPickerKind === 'folder' && !this.lfRecursive) {
+    if (!this.lfRecursive) {
       filesToUpload = this.lfFiles.filter((file) => {
         const rel = ((file as any).webkitRelativePath as string | undefined) || '';
         return rel.split('/').length <= 2;
@@ -1097,27 +1103,12 @@ export class DatasetImporterModalComponent implements OnInit {
     const formData = new FormData();
     formData.append('media_type', this.lfMediaType);
     formData.append('recursive', this.lfRecursive ? 'true' : 'false');
-    const lfName = (this.lfDatasetName || '').trim();
-    if (lfName) {
-      formData.append('dataset_name', lfName);
-    }
-    if (this.lfSelectedEmbedder) {
-      formData.append('embedder', this.lfSelectedEmbedder);
-    }
-    if (this.lfSelectedClipper) {
-      formData.append('clipper', this.lfSelectedClipper);
-      if (this.lfClipperParams.length > 0 && Object.keys(this.lfClipperParamValues).length > 0) {
-        formData.append('clipper_params', JSON.stringify(this.lfClipperParamValues));
-      }
-    }
+    this.lfAppendCommonFormFields(formData);
     for (const file of filesToUpload) {
       const rel = (file as any).webkitRelativePath as string | undefined;
       // Browsers only populate webkitRelativePath when the input has the
       // `webkitdirectory` attribute; fall back to the file's own name.
       formData.append('files', file, rel && rel.length > 0 ? rel : file.name);
-    }
-    if (this.lfVectorsFile) {
-      formData.append('vectors_file', this.lfVectorsFile, this.lfVectorsFile.name);
     }
     if (this.lfSourceSpecs.length > 0) {
       // Multipart form fields are flat strings; encode as JSON.
@@ -1134,6 +1125,47 @@ export class DatasetImporterModalComponent implements OnInit {
         this.lfError = err.error?.error || 'Upload failed';
       },
     });
+  }
+
+  private lfSubmitFiles(): void {
+    this.lfSubmitting = true;
+    this.lfError = '';
+
+    const pathsFile = this.lfFiles[0];
+    const formData = new FormData();
+    formData.append('media_type', this.lfMediaType);
+    formData.append('paths_file', pathsFile, pathsFile.name);
+    this.lfAppendCommonFormFields(formData);
+    if (this.lfSourceSpecs.length > 0) {
+      formData.append('source_specs', JSON.stringify(this.lfSourceSpecs));
+    }
+
+    this.datasetsApi.importLocalFiles(formData).subscribe({
+      next: () => {
+        this.lfSubmitting = false;
+        this.importStarted.emit();
+      },
+      error: (err) => {
+        this.lfSubmitting = false;
+        this.lfError = err.error?.error || 'Upload failed';
+      },
+    });
+  }
+
+  private lfAppendCommonFormFields(formData: FormData): void {
+    const lfName = (this.lfDatasetName || '').trim();
+    if (lfName) {
+      formData.append('dataset_name', lfName);
+    }
+    if (this.lfSelectedEmbedder) {
+      formData.append('embedder', this.lfSelectedEmbedder);
+    }
+    if (this.lfSelectedClipper) {
+      formData.append('clipper', this.lfSelectedClipper);
+      if (this.lfClipperParams.length > 0 && Object.keys(this.lfClipperParamValues).length > 0) {
+        formData.append('clipper_params', JSON.stringify(this.lfClipperParamValues));
+      }
+    }
   }
 
   // --- Server folder browser ---

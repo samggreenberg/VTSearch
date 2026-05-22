@@ -6059,9 +6059,40 @@
         ]
       }
     },
+    "/api/dataset/import-local-files": {
+      "post": {
+        "description": "The browser picks a single file (a ``.txt`` / ``.list`` with one\nserver-side media path per line, or a ``.npz`` archive that also\nsupplies pre-computed embedding vectors) and POSTs it as the\nmultipart field ``paths_file``.  We stream it to a server-side\ntemporary directory and then delegate to the regular\n:mod:`server_files` importer for resolution and embedding.  The\ntemp directory is removed once the importer finishes (success or\nfailure).",
+        "operationId": "import_local_files",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetLoadStartedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Multipart body is missing the ``paths_file`` field, is missing ``media_type``, or carries malformed ``clipper_params``."
+          },
+          "500": {
+            "description": "The server_files importer is unavailable."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Import a paths file uploaded from the user's *browser* machine.",
+        "tags": [
+          "datasets_load"
+        ]
+      }
+    },
     "/api/dataset/import-local-folder": {
       "post": {
-        "description": "The browser uses ``<input type=\"file\" webkitdirectory>`` to let the\nuser pick a directory; each selected ``File`` is appended to the\nmultipart body under the key ``\"files\"`` with its ``webkitRelativePath``\nas the multipart filename.  We stream each file to a temporary\ndirectory on the server (preserving sub-directory structure) and then\ndelegate to the regular folder importer to do the actual scanning,\nembedding, and dataset registration.  The temp directory is removed\nonce the importer finishes (success or failure).\n\nLocal-files uploads may additionally include a ``vectors_file`` form\nfield carrying a ``.npz`` archive of pre-computed embedding vectors\nkeyed by uploaded-file name (basename or relative path).  Files\nwhose name matches an NPZ key reuse the supplied vector instead of\nrunning the embedding model.",
+        "description": "The browser uses ``<input type=\"file\" webkitdirectory>`` to let the\nuser pick a directory; each selected ``File`` is appended to the\nmultipart body under the key ``\"files\"`` with its ``webkitRelativePath``\nas the multipart filename.  We stream each file to a temporary\ndirectory on the server (preserving sub-directory structure) and then\ndelegate to the regular folder importer to do the actual scanning,\nembedding, and dataset registration.  The temp directory is removed\nonce the importer finishes (success or failure).",
         "operationId": "import_local_folder",
         "responses": {
           "200": {
@@ -6075,7 +6106,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "Multipart body is missing the ``files`` field, has no valid files, is missing ``media_type``, or carries malformed ``clipper_params`` / ``vectors_file``."
+            "description": "Multipart body is missing the ``files`` field, has no valid files, is missing ``media_type``, or carries malformed ``clipper_params``."
           },
           "500": {
             "description": "The server_folder importer is unavailable."

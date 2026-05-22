@@ -7,10 +7,10 @@ staging dir and run through the regular folder loader, but the loader
 skips re-embedding for files whose names appear in the supplied
 ``content_vectors`` map.
 
-The ``/api/dataset/import-local-folder`` endpoint additionally accepts
-an optional ``vectors_file`` multipart form field (a ``.npz`` archive
-keyed by uploaded-file name) so users can attach pre-computed vectors
-to a browser-side multi-file upload.
+The ``/api/dataset/import-local-files`` endpoint is the browser-upload
+equivalent of ``server_files``: the user POSTs a single ``paths_file``
+(a ``.txt`` of paths or a ``.npz`` of paths + vectors) and the server
+runs the regular ``server_files`` importer over the uploaded file.
 """
 
 from __future__ import annotations
@@ -237,33 +237,34 @@ class TestServerFilesNpzRunsEndToEnd:
 
 
 # ---------------------------------------------------------------------------
-# /api/dataset/import-local-folder: vectors_file npz alongside media files
+# /api/dataset/import-local-files: paths_file upload delegates to server_files
 # ---------------------------------------------------------------------------
 
 
-class TestLocalUploadVectorsFile:
-    """The /api/dataset/import-local-folder endpoint parses the optional
-    ``vectors_file`` npz and hands the resulting ``{filename: vector}``
-    map to the server_folder importer via its ``content_vectors``
-    attribute.  The background task runner is stubbed so the test can
-    invoke the importer's ``load_fn`` synchronously and inspect the
-    importer's state at the moment it would have been called."""
+class TestImportLocalFilesEndpoint:
+    """The /api/dataset/import-local-files endpoint accepts a single
+    uploaded ``paths_file`` (txt list or npz archive) and runs the
+    ``server_files`` importer over the saved copy on the server.  The
+    background task runner is stubbed so the test can invoke the
+    importer's ``load_fn`` synchronously and inspect the field_values
+    that the importer would have been called with."""
 
     @staticmethod
     def _stub_run_and_observe(observed: dict):
-        """Build a ``_run_origin_load_in_background`` stub that sniffs the
-        server_folder importer's ``content_vectors`` at the moment the
-        load function would call into the importer.  Works for both the
-        chunked and non-chunked dispatch paths."""
         from vtscore.datasets.importers import get_importer
 
         def _fake_run(load_fn, origin, **kwargs):
-            importer = get_importer("server_folder")
+            importer = get_importer("server_files")
             assert importer is not None
+            observed["origin"] = origin
+            observed["kwargs"] = kwargs
 
             def _sniff(field_values, medias=None, thin=False):
-                observed["content_vectors"] = dict(importer.content_vectors or {})
-                # Return an empty generator for the chunked path.
+                observed["field_values"] = dict(field_values)
+                # Snapshot the uploaded paths_file's bytes before the loader
+                # tears down the temp dir.
+                pf = Path(field_values["paths_file"])
+                observed["paths_file_bytes"] = pf.read_bytes()
                 return iter(())
 
             with (
@@ -271,24 +272,75 @@ class TestLocalUploadVectorsFile:
                 patch.object(importer, "run_chunked", side_effect=_sniff),
             ):
                 load_fn({})
-            return "task-fake-npz"
+            return "task-fake-local-files"
 
         return _fake_run
 
-    def test_upload_with_vectors_file_populates_importer_content_vectors(self, client, tmp_path, monkeypatch):
-        from vtscore.datasets.importers import get_importer
+    def test_no_paths_file_returns_400(self, client):
+        resp = client.post(
+            "/api/dataset/import-local-files",
+            data={"media_type": "audio"},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "paths file" in resp.get_json()["message"].lower()
 
+    def test_missing_media_type_returns_400(self, client):
+        resp = client.post(
+            "/api/dataset/import-local-files",
+            data={"paths_file": (io.BytesIO(b"/a.wav\n"), "list.txt")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "media_type" in resp.get_json()["message"]
+
+    def test_uploads_txt_paths_file_and_starts_load(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
             "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
             tmp_path / "uploads",
         )
 
-        vec = np.full(384, 3.5, dtype=np.float32)
+        observed: dict = {}
+        with patch(
+            "vtsearch.routes.datasets.load._run_origin_load_in_background",
+            side_effect=self._stub_run_and_observe(observed),
+        ):
+            resp = client.post(
+                "/api/dataset/import-local-files",
+                data={
+                    "media_type": "audio",
+                    "paths_file": (io.BytesIO(b"/a.wav\n/b.wav\n"), "list.txt"),
+                },
+                content_type="multipart/form-data",
+            )
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        body = resp.get_json()
+        assert body["ok"] is True
+        assert body["task_id"] == "task-fake-local-files"
+
+        # The uploaded paths file was saved with its original suffix
+        # (so the server_files importer dispatches on extension).
+        assert observed["field_values"]["paths_file"].endswith(".txt")
+        assert observed["paths_file_bytes"] == b"/a.wav\n/b.wav\n"
+        # Origin is synthetic (the temp paths_file is about to be deleted)
+        # so reload-from-origin is naturally disabled.
+        assert observed["origin"]["importer"] == "server_files"
+        assert observed["origin"]["params"]["paths_file"] == "<browser_upload>"
+        assert observed["origin"]["params"]["media_type"] == "audio"
+
+    def test_uploads_npz_paths_file_preserves_suffix(self, client, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
+            tmp_path / "uploads",
+        )
+
+        # A real npz so the suffix-based reader dispatch is meaningful.
         npz_bytes_io = io.BytesIO()
         np.savez(
             npz_bytes_io,
-            filenames=np.array(["clip.wav"]),
-            vectors=np.stack([vec]),
+            filenames=np.array(["/a.wav"]),
+            vectors=np.zeros((1, 4), dtype=np.float32),
         )
         npz_bytes_io.seek(0)
 
@@ -298,66 +350,13 @@ class TestLocalUploadVectorsFile:
             side_effect=self._stub_run_and_observe(observed),
         ):
             resp = client.post(
-                "/api/dataset/import-local-folder",
+                "/api/dataset/import-local-files",
                 data={
                     "media_type": "audio",
-                    "files": (io.BytesIO(b"AAA"), "clip.wav"),
-                    "vectors_file": (npz_bytes_io, "vectors.npz"),
+                    "paths_file": (npz_bytes_io, "list.npz"),
                 },
                 content_type="multipart/form-data",
             )
 
         assert resp.status_code == 200, resp.get_data(as_text=True)
-        # The npz was parsed and forwarded to the importer.
-        assert "clip.wav" in observed["content_vectors"]
-        np.testing.assert_array_equal(observed["content_vectors"]["clip.wav"], vec)
-
-        # After the load returns, content_vectors is restored so the
-        # next upload doesn't inherit stale vectors.
-        assert get_importer("server_folder").content_vectors == {}
-
-    def test_upload_without_vectors_file_leaves_importer_unchanged(self, client, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
-            tmp_path / "uploads",
-        )
-
-        observed: dict = {}
-        with patch(
-            "vtsearch.routes.datasets.load._run_origin_load_in_background",
-            side_effect=self._stub_run_and_observe(observed),
-        ):
-            resp = client.post(
-                "/api/dataset/import-local-folder",
-                data={
-                    "media_type": "audio",
-                    "files": (io.BytesIO(b"AAA"), "clip.wav"),
-                },
-                content_type="multipart/form-data",
-            )
-
-        assert resp.status_code == 200, resp.get_data(as_text=True)
-        # With no npz attached, the importer's content_vectors stays
-        # empty for the run.
-        assert observed["content_vectors"] == {}
-
-    def test_upload_rejects_invalid_vectors_file(self, client, tmp_path, monkeypatch):
-        """A bogus ``vectors_file`` is rejected up front with a 400."""
-        monkeypatch.setattr(
-            "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
-            tmp_path / "uploads",
-        )
-        bogus = io.BytesIO(b"not really a npz archive")
-        resp = client.post(
-            "/api/dataset/import-local-folder",
-            data={
-                "media_type": "audio",
-                "files": (io.BytesIO(b"RIFF...."), "clip.wav"),
-                "vectors_file": (bogus, "broken.npz"),
-            },
-            content_type="multipart/form-data",
-        )
-        assert resp.status_code == 400
-        body = resp.get_json()
-        # flask-smorest error envelope: ``message`` (not ``error``).
-        assert "vectors_file" in body["message"].lower()
+        assert observed["field_values"]["paths_file"].endswith(".npz")
