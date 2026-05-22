@@ -173,10 +173,6 @@ export function formatProgressHeader(
     }
   } else if (status === 'embedding') {
     phase = 'embedding files';
-    const pretty = prettifyEmbedder(embedder);
-    subtitle = pretty
-      ? `Computing one ${pretty} vector per file. Time depends on dataset size and hardware.`
-      : 'Computing one vector per file. Time depends on dataset size and hardware.';
   } else if (status === 'loading' && /embedding model/i.test(message)) {
     phase = 'embedding model';
     const pretty = prettifyEmbedder(embedder);
