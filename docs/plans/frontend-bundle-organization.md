@@ -1,7 +1,7 @@
 # Frontend bundle organization
 
-Status: **#1 Checkpoint 1 shipped.** The remaining checkpoints of #1
-and items #2–#6 are scoped but not started.
+Status: **#1 Checkpoints 1 and 2 shipped.** Checkpoints 3–5 of #1 and
+items #2–#6 are scoped but not started.
 
 ## What shipped
 
@@ -18,6 +18,27 @@ and items #2–#6 are scoped but not started.
   Parent .ts dropped from 1814 → 1668 lines; template from 669 → 545
   lines. **Initial bundle went from 540 kB → 526.40 kB** (gzip
   136.35 kB), back under the previous (525 kB) warning threshold.
+- **#1 Checkpoint 2** (`d1d3e2d7`): extracted `<vt-import-config>` —
+  the output media-type select + auto-detection hint chip — from the
+  `sf` and `lf` flows. The block was inlined twice with identical
+  markup (same label, same select shape, same `.detection-hint`
+  rendering) and only the bound state and field id differing. Both
+  call sites now consume `<vt-import-config>`, and the
+  `.detection-hint` rule moved out of the parent SCSS into the new
+  component. The parent gains a `mediaTypeOptionLabels` cache
+  (folder_import_name → label) so the child does not need
+  `MediaTypeInfo`. Template dropped from 545 → 529 lines; .ts grew
+  slightly (1668 → 1687) for the cache getter + import. **Lazy
+  `dataset-importer-modal-component` chunk dropped 78.96 kB →
+  77.64 kB raw** (15.99 → 15.76 kB gzip). Initial bundle unchanged at
+  526.40 kB — the modal is `@defer`-loaded, so all gains land in the
+  lazy chunk.
+  Wrapping `<vt-import-advanced>` inside the new component (the
+  plan's optional collapse) turned out to be infeasible without a UX
+  re-order: the source widget (folder browser / dropzone) and the
+  recursive checkbox sit between the media-type select and the
+  Advanced block in both flows. Kept the scope to just the media-type
+  + hint block; Advanced stays in its current position.
 
 ## Why
 
@@ -124,14 +145,19 @@ touching the cross-modal picker chrome):
    `<vt-import-advanced>` — the Advanced ▾ block (Include media +
    Embedder + Clipper). Migrated all four call sites (`sf`, `lf`,
    `form`, `demo`) in `dataset-importer-modal` to use it.
-2. **Checkpoint 2**: Extract `<vt-import-config>` (media-type select +
-   detection hint, optionally wrapping `<vt-import-advanced>` so the
-   whole config form is one widget). Migrate the `sf` / `lf` flows to
-   it. The dataset-name input and folder-path widget stay in the
-   parent — only the configuration form is extracted.
+2. **Checkpoint 2 (shipped, `d1d3e2d7`)**: Extracted
+   `<vt-import-config>` — the output media-type select + detection
+   hint chip. Migrated the `sf` and `lf` flows in
+   `dataset-importer-modal` to use it. Scope stayed at just the
+   media-type widget (not the optional collapse-with-Advanced) because
+   the source widget and recursive checkbox sit between media-type and
+   Advanced in the template — a wrap would have forced a UX re-order.
 3. **Checkpoint 3**: Migrate the `form` flow to `<vt-import-config>`
    (where applicable — the generic form's media-type lives inside the
-   importer's `fields[]`, so this may end up partial).
+   importer's `fields[]`, so this may end up partial; the form flow
+   does not currently render the detection hint, so the wider option
+   may just be inlining `<vt-import-config>` with a static
+   `detectionHint=""`).
 4. **Checkpoint 4**: Extract `<vt-source-picker>` (the importer-tab /
    sub-tab chrome + demo table + server-folder typed path + local
    dropzone). Migrate `dataset-importer-modal` to consume it.
