@@ -195,6 +195,13 @@ strict generalisation of the one above it.  You can also call
 `self.effective_source_specs(field_values)` directly from any of
 these (or from a custom `run()`) to inspect the resolved spec list.
 
+> **Heads-up:** `fetch_source_media()` and `fetch_all_source_media()`
+> only run when `effective_source_specs()` resolves to at least one
+> spec.  An importer that overrides one of those hooks but does
+> **not** declare a `media_type` field (or set `multi_media = True`
+> and accept a `source_specs` value) falls through to the
+> `list_records()` path and raises `NotImplementedError` at runtime.
+
 Legacy importers (`multi_media = False`) can still call
 `effective_source_specs()` — it synthesises an equivalent list from
 the classic `media_type` + comma-separated `converters` form fields,
