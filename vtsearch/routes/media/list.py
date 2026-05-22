@@ -269,7 +269,7 @@ def list_media_ids():
     """
     result: list[dict[str, Any]] = []
     for c in snapshot_medias().values():
-        item: dict[str, Any] = {"id": c["id"], "type": c.get("type", "audio")}
+        item: dict[str, Any] = {"id": c["id"], "media_type": c.get("media_type", "audio")}
         embedder = c.get("embedder")
         if embedder:
             item["embedder"] = embedder
@@ -301,10 +301,10 @@ def batch_medias(body: dict):
         c = snap.get(cid)
         if c is None:
             continue
-        media_type_id = c.get("type", "audio")
+        media_type_id = c.get("media_type", "audio")
         media_data: dict[str, Any] = {
             "id": c["id"],
-            "type": media_type_id,
+            "media_type": media_type_id,
             "filename": c.get("filename", f"media_{c['id']}.wav"),
             "md5": c["md5"],
         }
@@ -364,7 +364,7 @@ def media_video(media_id: int):
     c = get_media(media_id)
     if not c:
         abort(404, message="not found")
-    if c.get("type") != "video":
+    if c.get("media_type") != "video":
         abort(400, message="not a video")
 
     filename = c.get("filename", "")
@@ -420,7 +420,7 @@ def media_image(media_id: int):  # noqa: C901
     if not c:
         abort(404, message="not found")
 
-    media_type = c.get("type")
+    media_type = c.get("media_type")
 
     # For non-image types, delegate to the media type's image_response if available
     if media_type and media_type != "image":
@@ -475,7 +475,7 @@ def media_paragraph(media_id: int):
     c = get_media(media_id)
     if not c:
         abort(404, message="not found")
-    if c.get("type") not in ("text", "paragraph"):
+    if c.get("media_type") not in ("text", "paragraph"):
         abort(400, message="not a text media")
 
     content = _resolve_string(c)
@@ -510,7 +510,7 @@ def media_generic(media_id: int):
     from vtscore.media import get as media_get
 
     try:
-        mt = media_get(c.get("type", ""))
+        mt = media_get(c.get("media_type", ""))
     except KeyError:
         abort(400, message=f"unsupported media type: {c.get('type')}")
 
@@ -657,7 +657,7 @@ def add_media_to_pile():  # noqa: C901
         abort(400, message="No dataset loaded. Load a dataset first.")
 
     first_media = next(iter(snap.values()))
-    dataset_media_type = first_media.get("type", "audio")
+    dataset_media_type = first_media.get("media_type", "audio")
     dataset_embedder_name = first_media.get("embedder", "")
 
     from vtscore.media import embedders_for_type, get_embedder
@@ -705,7 +705,7 @@ def add_media_to_pile():  # noqa: C901
         thumb = generate_video_thumbnail(file_bytes)
 
     new_media: dict[str, Any] = {
-        "type": dataset_media_type,
+        "media_type": dataset_media_type,
         "embedder": dataset_embedder_name,
         "md5": file_md5,
         "embedding": embedding,

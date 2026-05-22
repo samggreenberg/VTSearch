@@ -463,7 +463,7 @@ def dashboard_dataset_info():
         abort(404, message="No dataset loaded")
 
     first = next(iter(snap.values()))
-    media_type = first.get("type", "audio")
+    media_type = first.get("media_type", "audio")
     num_medias = len(snap)
 
     # Determine origin from the first media that has one

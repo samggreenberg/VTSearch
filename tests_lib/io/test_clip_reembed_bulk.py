@@ -26,7 +26,7 @@ def _make_audio_media(media_id: int, duration: float = 5.1) -> dict:
     rng = np.random.default_rng(media_id)
     return {
         "id": media_id,
-        "type": "audio",
+        "media_type": "audio",
         "filename": f"clip_{media_id}.wav",
         "media_bytes": wav,
         "duration": duration,
@@ -47,7 +47,7 @@ def _make_image_media(media_id: int, width: int = 300, height: int = 100) -> dic
     rng = np.random.default_rng(media_id + 1000)
     return {
         "id": media_id,
-        "type": "image",
+        "media_type": "image",
         "filename": f"img_{media_id}.png",
         "media_bytes": img_bytes,
         "width": width,
@@ -64,7 +64,7 @@ def _make_text_media(media_id: int, text: str = "First sentence. Second sentence
     rng = np.random.default_rng(media_id + 2000)
     return {
         "id": media_id,
-        "type": "text",
+        "media_type": "text",
         "filename": f"text_{media_id}.txt",
         "media_string": text,
         "media_bytes": text_bytes,
@@ -244,7 +244,7 @@ class TestSingleOutputClipperMD5Recompute:
         # importer skipped embedding when a clipper was requested.
         clip = {
             "id": 1,
-            "type": "image",
+            "media_type": "image",
             "media_bytes": crop_bytes,
             "md5": parent_md5,
             "embedding": None,
@@ -271,7 +271,7 @@ class TestSingleOutputClipperMD5Recompute:
 
         clip = {
             "id": 1,
-            "type": "text",
+            "media_type": "text",
             "media_string": clip_text,
             "md5": parent_md5,
             "embedding": None,

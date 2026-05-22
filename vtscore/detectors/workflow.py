@@ -168,7 +168,7 @@ def apply_and_retrain(  # noqa: C901
             det_ctx.training_medias = training
             first = next(iter(snap.values()), {})
             det_ctx.embedder = first.get("embedder", "")
-            det_ctx.media_type = first.get("type", "")
+            det_ctx.media_type = first.get("media_type", "")
             from vtscore.detectors.registry import record_detector_embedder
 
             record_detector_embedder(det_ctx.detector_id, det_ctx.embedder)

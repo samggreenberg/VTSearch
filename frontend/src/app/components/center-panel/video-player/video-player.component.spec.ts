@@ -9,7 +9,7 @@ describe('VideoPlayerComponent', () => {
 
   const mockMedia: Media = {
     id: 3,
-    type: 'video',
+    media_type: 'video',
     filename: 'test.mp4',
     md5: 'ghi789',
     custom_metadata: {},

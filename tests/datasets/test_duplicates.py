@@ -22,7 +22,7 @@ def _make_media(cid, md5="unique", origin_importer="test", filename=None, catego
     fname = filename or f"media_{cid}.wav"
     return {
         "id": cid,
-        "type": "audio",
+        "media_type": "audio",
         "duration": 1.0,
         "file_size": 100,
         "md5": md5,

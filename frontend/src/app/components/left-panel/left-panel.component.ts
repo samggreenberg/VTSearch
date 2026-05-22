@@ -134,7 +134,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   }
 
   private updateMediaTypeName(): void {
-    const typeId = this.medias.length > 0 ? this.medias[0].type : '';
+    const typeId = this.medias.length > 0 ? this.medias[0].media_type : '';
     if (typeId && typeId !== this.currentTypeId) {
       this.currentTypeId = typeId;
       const info = this.mediaTypeInfos.find((mt) => mt.type_id === typeId);

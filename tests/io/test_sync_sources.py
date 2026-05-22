@@ -955,7 +955,7 @@ class TestLabelsetSync:
 
             # Add a media item with an md5
             mid = max(medias.keys(), default=0) + 10000
-            medias[mid] = {"id": mid, "md5": "test_md5", "type": "audio"}
+            medias[mid] = {"id": mid, "md5": "test_md5", "media_type": "audio"}
             good_votes[mid] = None
 
             sync_to_labelset_source()
@@ -1058,7 +1058,7 @@ class TestLabelsetSync:
         saved_medias = dict(medias)
         mid = max(medias.keys(), default=0) + 20000
         try:
-            medias[mid] = {"id": mid, "md5": "fake_md5", "type": "audio"}
+            medias[mid] = {"id": mid, "md5": "fake_md5", "media_type": "audio"}
             good_votes[mid] = None
             sync_to_labelset_source()
             flush_pending_label_syncs()
@@ -1113,7 +1113,7 @@ class TestLabelsetSync:
         saved_medias = dict(medias)
         mid = max(medias.keys(), default=0) + 20100
         try:
-            medias[mid] = {"id": mid, "md5": "fake_md5_2", "type": "audio"}
+            medias[mid] = {"id": mid, "md5": "fake_md5_2", "media_type": "audio"}
             good_votes[mid] = None
             sync_to_labelset_source()
             flush_pending_label_syncs()
@@ -1412,7 +1412,7 @@ class TestLabelsetSyncDebounce:
         saved_medias = dict(medias)
         mid = max(medias.keys(), default=0) + 30000
         try:
-            medias[mid] = {"id": mid, "md5": "dbnc_block_md5", "type": "audio"}
+            medias[mid] = {"id": mid, "md5": "dbnc_block_md5", "media_type": "audio"}
             good_votes[mid] = None
 
             t0 = time.monotonic()
@@ -1463,7 +1463,7 @@ class TestLabelsetSyncDebounce:
         saved_medias = dict(medias)
         mid = max(medias.keys(), default=0) + 30100
         try:
-            medias[mid] = {"id": mid, "md5": "dbnc_coalesce_md5", "type": "audio"}
+            medias[mid] = {"id": mid, "md5": "dbnc_coalesce_md5", "media_type": "audio"}
             good_votes[mid] = None
 
             with patch.object(src, "save", side_effect=counting_save):
@@ -1494,8 +1494,8 @@ class TestLabelsetSyncDebounce:
         mid_a = max(medias.keys(), default=0) + 30200
         mid_b = mid_a + 1
         try:
-            medias[mid_a] = {"id": mid_a, "md5": "dbnc_a_md5", "type": "audio"}
-            medias[mid_b] = {"id": mid_b, "md5": "dbnc_b_md5", "type": "audio"}
+            medias[mid_a] = {"id": mid_a, "md5": "dbnc_a_md5", "media_type": "audio"}
+            medias[mid_b] = {"id": mid_b, "md5": "dbnc_b_md5", "media_type": "audio"}
 
             set_thread_detector_context(ctx_a)
             good_votes[mid_a] = None
@@ -1535,7 +1535,7 @@ class TestLabelsetSyncDebounce:
         saved_medias = dict(medias)
         mid = max(medias.keys(), default=0) + 30300
         try:
-            medias[mid] = {"id": mid, "md5": "dbnc_latest_md5", "type": "audio"}
+            medias[mid] = {"id": mid, "md5": "dbnc_latest_md5", "media_type": "audio"}
             good_votes[mid] = None
             sync_to_labelset_source()
 
@@ -1569,7 +1569,7 @@ class TestLabelsetSyncDebounce:
         saved_medias = dict(medias)
         mid = max(medias.keys(), default=0) + 30400
         try:
-            medias[mid] = {"id": mid, "md5": "dbnc_reset_md5", "type": "audio"}
+            medias[mid] = {"id": mid, "md5": "dbnc_reset_md5", "media_type": "audio"}
             good_votes[mid] = None
             sync_to_labelset_source()
 

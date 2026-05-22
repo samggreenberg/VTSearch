@@ -36,7 +36,7 @@ def _make_audio_media(media_id: int, duration: float = 5.1, *, origin_path: str 
     rng = np.random.default_rng(media_id)
     return {
         "id": media_id,
-        "type": "audio",
+        "media_type": "audio",
         "filename": f"clip_{media_id}.wav",
         "media_bytes": wav,
         "duration": duration,
@@ -58,7 +58,7 @@ def _make_image_media(media_id: int, width: int = 300, height: int = 100) -> dic
     rng = np.random.default_rng(media_id + 1000)
     return {
         "id": media_id,
-        "type": "image",
+        "media_type": "image",
         "filename": f"img_{media_id}.png",
         "media_bytes": img_bytes,
         "width": width,
@@ -76,7 +76,7 @@ def _make_text_media(media_id: int, text: str = "First sentence. Second sentence
     rng = np.random.default_rng(media_id + 2000)
     return {
         "id": media_id,
-        "type": "text",
+        "media_type": "text",
         "filename": f"text_{media_id}.txt",
         "media_string": text,
         "media_bytes": text_bytes,
@@ -93,7 +93,7 @@ def _make_video_media(media_id: int, duration: float = 10.0) -> dict:
     rng = np.random.default_rng(media_id + 3000)
     return {
         "id": media_id,
-        "type": "video",
+        "media_type": "video",
         "filename": f"video_{media_id}.mp4",
         "media_bytes": fake_bytes,
         "duration": duration,
@@ -777,7 +777,7 @@ class TestClipDisplayMetadata:
         from vtscore.media import get as get_media_type
 
         mt = get_media_type("audio")
-        media = {"type": "audio", "clip_start": 0.0, "clip_end": 2.0, "clip_index": 0}
+        media = {"media_type": "audio", "clip_start": 0.0, "clip_end": 2.0, "clip_index": 0}
         meta = mt.display_metadata(media)
         assert meta["Clip Start"] == 0.0
         assert meta["Clip End"] == 2.0
@@ -787,7 +787,7 @@ class TestClipDisplayMetadata:
         from vtscore.media import get as get_media_type
 
         mt = get_media_type("image")
-        media = {"type": "image", "clip_box": [0, 0, 100, 100], "clip_index": 0}
+        media = {"media_type": "image", "clip_box": [0, 0, 100, 100], "clip_index": 0}
         meta = mt.display_metadata(media)
         assert meta["Clip Box"] == "0,0,100,100"
         assert meta["Clip Index"] == 0
@@ -796,7 +796,7 @@ class TestClipDisplayMetadata:
         from vtscore.media import get as get_media_type
 
         mt = get_media_type("video")
-        media = {"type": "video", "clip_start": 1.5, "clip_end": 4.0, "clip_index": 1}
+        media = {"media_type": "video", "clip_start": 1.5, "clip_end": 4.0, "clip_index": 1}
         meta = mt.display_metadata(media)
         assert meta["Clip Start"] == 1.5
         assert meta["Clip End"] == 4.0
@@ -806,7 +806,7 @@ class TestClipDisplayMetadata:
         from vtscore.media import get as get_media_type
 
         mt = get_media_type("text")
-        media = {"type": "text", "clip_index": 2}
+        media = {"media_type": "text", "clip_index": 2}
         meta = mt.display_metadata(media)
         assert meta["Clip Index"] == 2
 
@@ -814,7 +814,7 @@ class TestClipDisplayMetadata:
         from vtscore.media import get as get_media_type
 
         mt = get_media_type("audio")
-        media = {"type": "audio", "duration": 3.0}
+        media = {"media_type": "audio", "duration": 3.0}
         meta = mt.display_metadata(media)
         assert "Clip Start" not in meta
         assert "Clip End" not in meta

@@ -146,7 +146,7 @@ def _build_media(
         },
     }
     return {
-        "type": media_type,
+        "media_type": media_type,
         "filename": content_id,
         "md5": record["md5"],
         "embedding": embedding_info["embedding"],

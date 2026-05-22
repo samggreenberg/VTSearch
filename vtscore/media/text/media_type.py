@@ -598,7 +598,7 @@ class TextMediaType(MediaType):
             fname = f"{category}/{category}_{clip_id}.txt"
             clips[clip_id] = {
                 "id": clip_id,
-                "type": self.type_id,
+                "media_type": self.type_id,
                 "embedder": embedder.name,
                 "duration": 0,
                 "file_size": len(text_bytes),

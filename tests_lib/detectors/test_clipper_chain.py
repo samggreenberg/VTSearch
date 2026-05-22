@@ -34,7 +34,7 @@ def _make_text_media(media_id: int, text: str, *, origin_path: str = "/data/text
     rng = np.random.default_rng(media_id)
     return {
         "id": media_id,
-        "type": "text",
+        "media_type": "text",
         "filename": f"doc_{media_id}.txt",
         "media_string": text,
         "duration": 0,

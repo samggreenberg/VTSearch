@@ -567,7 +567,7 @@ def _build_folder_media_data(
         }
     return {
         "id": media_id,
-        "type": type_id,
+        "media_type": type_id,
         "embedder": embedder_id,
         "file_size": file_size,
         "md5": md5,

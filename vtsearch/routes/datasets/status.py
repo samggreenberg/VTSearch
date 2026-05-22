@@ -41,7 +41,7 @@ def dataset_status():
     snap = snapshot_medias()
     media_type = None
     if snap:
-        media_type = next(iter(snap.values())).get("type", "audio")
+        media_type = next(iter(snap.values())).get("media_type", "audio")
     return {
         "loaded": len(snap) > 0,
         "num_medias": len(snap),

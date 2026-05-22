@@ -274,7 +274,7 @@ class TestRunEndToEnd:
             assert m["origin"]["importer"] == "synthetic"
             assert m["origin"]["params"]["media_type"] == "audio"
             assert m["origin"]["params"]["size"] == "6"
-            assert m["type"] == "audio"
+            assert m["media_type"] == "audio"
             assert isinstance(m["filename"], str)
             assert Path(m["filename"]).suffix == ".wav"
 

@@ -160,7 +160,7 @@ def export_dataset_to_file(
         "medias": {
             cid: {
                 "id": media["id"],
-                "type": media.get("type", "audio"),
+                "media_type": media.get("media_type", "audio"),
                 "duration": media["duration"],
                 "file_size": media["file_size"],
                 "md5": media["md5"],

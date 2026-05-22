@@ -309,7 +309,7 @@ class TestLoadDemoSourceUcsfDocuments:
 
         assert len(clips) == 1
         clip = clips[1]
-        assert clip["type"] == "image"
+        assert clip["media_type"] == "image"
         assert clip["category"] == "Drug"
         assert clip["media_bytes"] is not None
         assert clip["width"] == 100

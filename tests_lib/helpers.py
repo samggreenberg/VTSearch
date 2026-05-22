@@ -110,7 +110,7 @@ def make_image_media(media_id: int, embedding_dim: int = 512) -> dict:
     rng = np.random.RandomState(media_id)
     return {
         "id": media_id,
-        "type": "image",
+        "media_type": "image",
         "embedder": "siglip",
         "width": 16,
         "height": 16,
@@ -135,7 +135,7 @@ def make_text_media(media_id: int, embedding_dim: int = 512) -> dict:
     rng = np.random.RandomState(media_id + 1000)
     return {
         "id": media_id,
-        "type": "text",
+        "media_type": "text",
         "embedder": "e5",
         "word_count": len(content.split()),
         "character_count": len(content),
@@ -160,7 +160,7 @@ def make_video_media(media_id: int, embedding_dim: int = 512) -> dict:
     rng = np.random.RandomState(media_id + 2000)
     return {
         "id": media_id,
-        "type": "video",
+        "media_type": "video",
         "embedder": "xclip",
         "duration": 1.0,
         "file_size": len(mp4),

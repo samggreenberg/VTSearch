@@ -306,7 +306,7 @@ class TestEvalTextSort:
         for _ in range(10):
             emb = cat_dir + rng.normal(0, 0.05, 16)
             emb /= np.linalg.norm(emb)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat", "type": "image"}
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat", "media_type": "image"}
             media_id += 1
         # "dog" medias cluster around [0, 1, 0, ...]
         dog_dir = np.zeros(16)
@@ -314,7 +314,7 @@ class TestEvalTextSort:
         for _ in range(10):
             emb = dog_dir + rng.normal(0, 0.05, 16)
             emb /= np.linalg.norm(emb)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": "dog", "type": "image"}
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": "dog", "media_type": "image"}
             media_id += 1
         return medias, cat_dir, dog_dir
 
@@ -395,11 +395,11 @@ class TestEvalLearnedSort:
         media_id = 1
         for _ in range(n_per_cat):
             emb = rng.normal(1.0, 0.3, dim).astype(np.float32)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat_a", "type": "image"}
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat_a", "media_type": "image"}
             media_id += 1
         for _ in range(n_per_cat):
             emb = rng.normal(-1.0, 0.3, dim).astype(np.float32)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat_b", "type": "image"}
+            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat_b", "media_type": "image"}
             media_id += 1
         return medias
 
@@ -425,8 +425,8 @@ class TestEvalLearnedSort:
     def test_learned_sort_skips_tiny_categories(self):
         """Categories with < 2 medias should be skipped."""
         medias = {
-            1: {"id": 1, "embedding": np.ones(8, dtype=np.float32), "category": "rare", "type": "image"},
-            2: {"id": 2, "embedding": -np.ones(8, dtype=np.float32), "category": "common", "type": "image"},
+            1: {"id": 1, "embedding": np.ones(8, dtype=np.float32), "category": "rare", "media_type": "image"},
+            2: {"id": 2, "embedding": -np.ones(8, dtype=np.float32), "category": "common", "media_type": "image"},
         }
         queries = [EvalQuery("rare stuff", "rare")]
         results = eval_learned_sort(medias, queries, train_fraction=0.5)

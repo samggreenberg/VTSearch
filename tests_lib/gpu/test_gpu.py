@@ -56,7 +56,7 @@ def _make_embeddings(n: int, dim: int = 512, seed: int = 42) -> np.ndarray:
 def _make_clips_dict(n: int = 20, dim: int = 512, seed: int = 42) -> dict:
     """Build a minimal medias dict similar to the real application."""
     embs = _make_embeddings(n, dim, seed)
-    return {i + 1: {"id": i + 1, "embedding": embs[i], "type": "audio"} for i in range(n)}
+    return {i + 1: {"id": i + 1, "embedding": embs[i], "media_type": "audio"} for i in range(n)}
 
 
 def _make_votes(good_ids: list[int], bad_ids: list[int]):
@@ -279,7 +279,7 @@ class TestTrainAndScoreGPU:
             clips_dict = {}
             for i in range(1, 21):
                 emb = rng.randn(dim).astype(np.float32) + (2.0 if i <= 5 else -2.0 if i > 15 else 0.0)
-                clips_dict[i] = {"id": i, "embedding": emb, "type": "audio"}
+                clips_dict[i] = {"id": i, "embedding": emb, "media_type": "audio"}
 
             good, bad = _make_votes([1, 2, 3, 4, 5], [16, 17, 18, 19, 20])
             results, _, _m = train_and_score(clips_dict, good, bad)

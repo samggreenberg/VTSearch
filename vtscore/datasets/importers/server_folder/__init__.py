@@ -110,7 +110,7 @@ def _load_pdf_images(  # noqa: C901
 
             media_data: dict[str, Any] = {
                 "id": media_id,
-                "type": mt.type_id,
+                "media_type": mt.type_id,
                 "embedder": embedder_id,
                 "file_size": len(image_bytes),
                 "md5": hashlib.md5(image_bytes).hexdigest(),

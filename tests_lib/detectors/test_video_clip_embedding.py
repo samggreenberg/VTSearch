@@ -294,7 +294,7 @@ def _make_tiled_video_clips() -> list[dict]:
         tiles.append(
             {
                 "id": 100 + idx,
-                "type": "video",
+                "media_type": "video",
                 "media_bytes": parent_bytes,
                 "media_path": "/data/parent.mp4",
                 "md5": parent_md5,  # stale; the fixup should rewrite it

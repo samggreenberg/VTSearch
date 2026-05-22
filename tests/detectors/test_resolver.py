@@ -540,7 +540,7 @@ class TestMultiFindCrossDatasetFallback:
             emb = np.random.RandomState(i).randn(512).astype(np.float32)
             target_medias[i] = {
                 "id": i,
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": emb,
                 "md5": f"target_md5_{i}",
                 "filename": f"target_{i}.wav",
@@ -648,7 +648,7 @@ class TestMultiFindCrossDatasetFallback:
             emb = np.random.RandomState(i).randn(512).astype(np.float32)
             target_medias[i] = {
                 "id": i,
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": emb,
                 "md5": f"mt_md5_{i}",
                 "filename": f"mt_{i}.wav",
@@ -737,7 +737,7 @@ class TestMultiFindCrossDatasetFallback:
             emb = np.random.RandomState(i).randn(512).astype(np.float32)
             target_medias[i] = {
                 "id": i,
-                "type": "image",
+                "media_type": "image",
                 "embedding": emb,
                 "md5": f"nr_md5_{i}",
                 "filename": f"nr_{i}.jpg",
@@ -850,7 +850,7 @@ class TestFindCheckLabels:
             emb = np.random.RandomState(i).randn(512).astype(np.float32)
             medias[i] = {
                 "id": i,
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": emb,
                 "md5": f"cl_match_{i}",
                 "filename": f"clip_{i}.wav",
@@ -909,7 +909,7 @@ class TestFindCheckLabels:
             emb = np.random.RandomState(i).randn(512).astype(np.float32)
             medias[i] = {
                 "id": i,
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": emb,
                 "md5": f"cl_diff_{i}",
                 "filename": f"other_{i}.wav",
@@ -995,7 +995,7 @@ class TestFindCheckLabels:
             emb = np.random.RandomState(i).randn(512).astype(np.float32)
             medias[i] = {
                 "id": i,
-                "type": "audio",
+                "media_type": "audio",
                 "embedding": emb,
                 "md5": f"cl_part_{i}",
                 "filename": f"part_{i}.wav",

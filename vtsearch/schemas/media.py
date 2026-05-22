@@ -57,7 +57,7 @@ class _MediaIdEntrySchema(Schema):
     """One entry in the lightweight ``GET /api/medias/ids`` listing."""
 
     id = fields.Integer(required=True)
-    type = fields.String(required=True)
+    media_type = fields.String(required=True)
     embedder = fields.String()
 
 
@@ -70,7 +70,7 @@ class MediaIdsListResponseSchema(Schema):
     """
 
     id = fields.Integer(required=True)
-    type = fields.String(required=True)
+    media_type = fields.String(required=True)
     embedder = fields.String()
 
     class Meta:
@@ -98,7 +98,7 @@ class _MediaBatchEntrySchema(Schema):
     """
 
     id = fields.Integer(required=True)
-    type = fields.String(required=True)
+    media_type = fields.String(required=True)
     filename = fields.String(required=True)
     md5 = fields.String(required=True)
     custom_metadata = fields.Dict(required=True)

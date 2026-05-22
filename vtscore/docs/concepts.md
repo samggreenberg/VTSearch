@@ -24,7 +24,7 @@ detector reads and writes media dicts.
 ```python
 medias[42] = {
     "id": 42,                              # int, matches dict key
-    "type": "audio",                       # MediaType.type_id
+    "media_type": "audio",                       # MediaType.type_id
     "embedder": "audio_clap",              # MediaEmbedder.name
     "file_size": 318456,                   # bytes
     "md5": "5d41402abc4b2a76b9719d911017c592",  # content hash

@@ -255,7 +255,7 @@ class TestIngestMissingClips:
         existing_clips: dict = {
             1: {
                 "id": 1,
-                "type": "text",
+                "media_type": "text",
                 "duration": 0,
                 "file_size": 10,
                 "md5": "existing_md5",

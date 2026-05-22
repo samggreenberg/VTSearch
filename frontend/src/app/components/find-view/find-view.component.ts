@@ -86,7 +86,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((medias) => {
         if (medias.length > 0) {
-          const newType = medias[0].type;
+          const newType = medias[0].media_type;
           if (newType !== this.currentMediaType) {
             this.currentMediaType = newType;
             this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';

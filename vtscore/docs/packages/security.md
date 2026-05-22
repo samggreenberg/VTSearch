@@ -206,7 +206,7 @@ payload, appends `b""`), `APPEND` / `APPENDS` (drops the value(s) that
 would have been appended).
 
 The outer dict structure is materialised (so you can index into
-`data["medias"][0]["type"]`), but embedding lists are empty and inline
+`data["medias"][0]["media_type"]`), but embedding lists are empty and inline
 media-byte blobs are `b""`. For a multi-GB dataset upload this turns a
 30-second `pickle.load` into a sub-second peek.
 
@@ -216,7 +216,7 @@ from vtscore.security import peek_pickle_dataset_summary
 with open(uploaded_pkl, "rb") as f:
     summary = peek_pickle_dataset_summary(f)
 n_medias = len(summary["medias"])
-media_type = summary["medias"][0]["type"] if n_medias else None
+media_type = summary["medias"][0]["media_type"] if n_medias else None
 ```
 
 The peek result is **only** safe for inspecting structure. Code that

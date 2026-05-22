@@ -180,7 +180,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   }
 
   get mediaType(): string {
-    return this.media?.type || 'audio';
+    return this.media?.media_type || 'audio';
   }
 
   get isGood(): boolean {

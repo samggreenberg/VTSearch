@@ -51,7 +51,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
     # Determine the embedder and media type from the loaded dataset so we
     # can embed example files that aren't already in the dataset.
     first_media = next(iter(snap.values()))
-    dataset_media_type = first_media.get("type", "audio")
+    dataset_media_type = first_media.get("media_type", "audio")
     dataset_embedder_name = first_media.get("embedder", "")
     embedder = None  # lazily loaded only when needed
 
@@ -105,7 +105,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
                 new_id = next_media_id(medias)
                 medias[new_id] = {
                     "id": new_id,
-                    "type": dataset_media_type,
+                    "media_type": dataset_media_type,
                     "embedder": dataset_embedder_name,
                     "md5": file_md5,
                     "embedding": embedding,

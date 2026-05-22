@@ -158,7 +158,7 @@ def sort_clips(body: dict):
         abort(400, message="No medias loaded")
 
     first = next(iter(snap.values()))
-    media_type = first.get("type", "audio")
+    media_type = first.get("media_type", "audio")
     embedder_name = first.get("embedder", "")
     total_steps = 3  # load embedder, embed query, compute similarities
 
@@ -319,7 +319,7 @@ def _update_det_ctx_with_trained_model(det_ctx, model, threshold, labelset, trai
     if snap:
         first = next(iter(snap.values()), {})
         det_ctx.embedder = first.get("embedder", "")
-        det_ctx.media_type = first.get("type", "")
+        det_ctx.media_type = first.get("media_type", "")
 
 
 def _build_learned_sort_signature(
@@ -760,7 +760,7 @@ def _apply_crop_or_keep(temp_path: Path, crop_params: dict | None) -> Path:
     if not snap:
         return temp_path
     first_media = next(iter(snap.values()))
-    media_type = first_media.get("type", "")
+    media_type = first_media.get("media_type", "")
 
     from vtscore.media.cropping import crop_file_bytes
 

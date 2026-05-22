@@ -10,9 +10,9 @@ describe('MediaListComponent', () => {
   let fixture: ComponentFixture<MediaListComponent>;
 
   const mockMedias: Media[] = [
-    { id: 1, type: 'audio', filename: 'a.wav', md5: 'a1', custom_metadata: {} },
-    { id: 2, type: 'audio', filename: 'b.wav', md5: 'b2', custom_metadata: {} },
-    { id: 3, type: 'audio', filename: 'c.wav', md5: 'c3', custom_metadata: {} },
+    { id: 1, media_type: 'audio', filename: 'a.wav', md5: 'a1', custom_metadata: {} },
+    { id: 2, media_type: 'audio', filename: 'b.wav', md5: 'b2', custom_metadata: {} },
+    { id: 3, media_type: 'audio', filename: 'c.wav', md5: 'c3', custom_metadata: {} },
   ];
 
   beforeEach(async () => {

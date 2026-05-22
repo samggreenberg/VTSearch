@@ -137,7 +137,7 @@ def run_extract(body: dict):
     except Exception as e:
         abort(400, message=f"Invalid extractor config: {e}")
 
-    media_type = next(iter(snap.values())).get("type", "")
+    media_type = next(iter(snap.values())).get("media_type", "")
     if extractor.media_type != media_type:
         abort(
             400,
@@ -165,7 +165,7 @@ def auto_extract():
     if not snap:
         abort(400, message="No medias loaded")
 
-    media_type = next(iter(snap.values())).get("type", "")
+    media_type = next(iter(snap.values())).get("media_type", "")
     extractors = get_autorun_extractors_by_media(media_type)
 
     if not extractors:
@@ -206,7 +206,7 @@ def run_localize(body: dict):
     except Exception as e:
         abort(400, message=f"Invalid localizer config: {e}")
 
-    media_type = next(iter(snap.values())).get("type", "")
+    media_type = next(iter(snap.values())).get("media_type", "")
     if localizer.media_type != media_type:
         abort(
             400,
@@ -234,7 +234,7 @@ def auto_localize():
     if not snap:
         abort(400, message="No medias loaded")
 
-    media_type = next(iter(snap.values())).get("type", "")
+    media_type = next(iter(snap.values())).get("media_type", "")
     localizers = get_autorun_localizers_by_media(media_type)
 
     if not localizers:

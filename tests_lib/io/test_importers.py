@@ -698,7 +698,7 @@ class TestImporterBulkHooks:
         records = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
 
         def fetch_one(record, _fv, _thin):
-            return {"type": "audio", "filename": record["name"], "embedding": None}
+            return {"media_type": "audio", "filename": record["name"], "embedding": None}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
         medias: dict = {}
@@ -714,7 +714,7 @@ class TestImporterBulkHooks:
 
         def fetch_one(record, _fv, _thin):
             # fetch_record may omit origin / origin_name — run() fills them in.
-            return {"type": "audio", "filename": record["name"], "embedding": None}
+            return {"media_type": "audio", "filename": record["name"], "embedding": None}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
         medias: dict = {}
@@ -729,7 +729,7 @@ class TestImporterBulkHooks:
         def fetch_one(record, _fv, _thin):
             if record == "skip":
                 return None
-            return {"type": "audio", "filename": record, "embedding": None}
+            return {"media_type": "audio", "filename": record, "embedding": None}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
         medias: dict = {}
@@ -745,7 +745,7 @@ class TestImporterBulkHooks:
 
         def fetch_one(record, _fv, _thin):
             seen.append(record)
-            return {"type": "audio", "filename": record, "embedding": None}
+            return {"media_type": "audio", "filename": record, "embedding": None}
 
         imp = self._make_importer(records=["x", "y"], fetch_one=fetch_one)
         out = imp.fetch_records_bulk(["x", "y"], {})
@@ -761,11 +761,11 @@ class TestImporterBulkHooks:
 
         def fetch_one(record, _fv, _thin):
             per_item_calls.append(record)
-            return {"type": "audio", "filename": record, "embedding": None}
+            return {"media_type": "audio", "filename": record, "embedding": None}
 
         def fetch_bulk(records, _fv, _thin):
             # Pretend we did one batched call.
-            return [{"type": "audio", "filename": f"bulk:{r}", "embedding": None} for r in records]
+            return [{"media_type": "audio", "filename": f"bulk:{r}", "embedding": None} for r in records]
 
         imp = self._make_importer(records=["a", "b"], fetch_one=fetch_one, fetch_bulk=fetch_bulk)
         medias: dict = {}
@@ -844,7 +844,7 @@ class TestReCallerMultiMedia:
             )
         )
         assert [m["filename"] for m in audio_yields] == ["C0", "C2"]
-        assert all(m["type"] == "audio" for m in audio_yields)
+        assert all(m["media_type"] == "audio" for m in audio_yields)
 
         image_yields = list(
             imp.fetch_source_media(
@@ -854,7 +854,7 @@ class TestReCallerMultiMedia:
             )
         )
         assert [m["filename"] for m in image_yields] == ["C1"]
-        assert image_yields[0]["type"] == "image"
+        assert image_yields[0]["media_type"] == "image"
 
     def test_fetch_source_media_requires_query_id(self, monkeypatch):
         from vtscore.datasets.importers.base import SourceSpec
@@ -904,7 +904,7 @@ class TestReCallerMultiMedia:
             observed_params.append(dict(params))
             return [
                 {
-                    "type": "image",
+                    "media_type": "image",
                     "filename": f"{media['filename']}_frame_{k}.png",
                     "media_bytes": None,
                     "media_path": None,
@@ -937,7 +937,7 @@ class TestReCallerMultiMedia:
 
         # Two image records (direct) + one video record × 2 frames = 4 medias.
         assert len(medias) == 4
-        types = sorted(m["type"] for m in medias.values())
+        types = sorted(m["media_type"] for m in medias.values())
         assert types == ["image", "image", "image", "image"]
         # The framework, not the importer, called video2image.convert with
         # the spec's params.

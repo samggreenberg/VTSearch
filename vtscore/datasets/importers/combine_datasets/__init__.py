@@ -87,7 +87,7 @@ def _iter_unique_source_clips(
             continue
 
         first_clip = next(iter(source_clips.values()))
-        source_media_type = first_clip.get("type", "audio")
+        source_media_type = first_clip.get("media_type", "audio")
         if mtype_state[0] is None:
             mtype_state[0] = source_media_type
         elif source_media_type != mtype_state[0]:

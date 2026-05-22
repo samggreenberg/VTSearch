@@ -162,7 +162,7 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     const mediaState = TestBed.inject(MediaStateService);
     spyOnProperty(mediaState, 'medias', 'get').and.returnValue([
-      { id: 1, type: 'image' },
+      { id: 1, media_type: 'image' },
     ]);
     fixture.componentInstance.isOnLabelView = true;
     fixture.componentInstance.onSettings();
