@@ -158,51 +158,73 @@ class TestEmbedderDefaults:
 
 
 # ---------------------------------------------------------------------------
-# load_dataset_from_folder always routes through embed_media_bulk
+# embed_missing: framework stage that bulk-embeds items with embedding=None
 # ---------------------------------------------------------------------------
 
 
-class TestLoaderRoutesToBulk:
-    """The loader hands pending files to embed_media_bulk in a single call."""
+class TestEmbedMissingRoutesToBulk:
+    """The framework ``embed_missing`` stage hands every media with
+    ``embedding=None`` to ``embed_media_bulk`` in a single call."""
 
-    def test_single_bulk_call_for_folder(self, tmp_path):
-        from vtscore.datasets.loader import load_dataset_from_folder
-
-        for name in ("a.wav", "b.wav", "c.wav"):
-            _write_wav(tmp_path / name)
+    def test_single_bulk_call_for_unembedded_medias(self):
+        from vtscore.datasets.load_pipeline import embed_missing
 
         mt = _make_media_type_for_audio()
         emb = _make_bulk_embedder()
 
-        medias: dict = {}
+        medias = {
+            i: {"media_type": "audio", "embedding": None, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)
+        }
+
         with (
             mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
             mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
         ):
-            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
+            embed_missing(medias)
 
-        assert len(medias) == 3
-        # Exactly one bulk call — all three files in one request.
         assert emb.embed_media_bulk.call_count == 1
-        sent_medias = emb.embed_media_bulk.call_args.args[0]
-        assert sorted(Path(m["media_path"]).name for m in sent_medias) == ["a.wav", "b.wav", "c.wav"]
+        sent = emb.embed_media_bulk.call_args.args[0]
+        assert len(sent) == 3
+        assert all(m["embedding"] is not None for m in medias.values())
 
-    def test_loader_routes_embedder_progress_to_caller(self, tmp_path):
-        """The loader sets emb._on_progress to its own on_progress for the
-        duration of the bulk call, so progress emitted by the embedder (or
-        its default per-item loop) reaches the UI."""
-        from vtscore.datasets.loader import load_dataset_from_folder
+    def test_already_embedded_medias_are_left_alone(self):
+        from vtscore.datasets.load_pipeline import embed_missing
 
-        for name in ("a.wav", "b.wav"):
-            _write_wav(tmp_path / name)
+        emb = _make_bulk_embedder()
 
-        mt = _make_media_type_for_audio()
+        pre_vec = np.array([99.0, 99.0, 99.0], dtype=np.float32)
+        medias = {
+            1: {"media_type": "audio", "embedding": pre_vec, "embedder": "external"},
+            2: {"media_type": "audio", "embedding": None, "media_path": "/tmp/2.wav"},
+        }
+
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            embed_missing(medias)
+
+        sent = emb.embed_media_bulk.call_args.args[0]
+        assert len(sent) == 1
+        np.testing.assert_array_equal(medias[1]["embedding"], pre_vec)
+        assert medias[1]["embedder"] == "external"
+        assert medias[2]["embedding"] is not None
+
+    def test_no_op_when_nothing_missing(self):
+        from vtscore.datasets.load_pipeline import embed_missing
+
+        emb = _make_bulk_embedder()
+        pre_vec = np.array([1.0], dtype=np.float32)
+        medias = {1: {"media_type": "audio", "embedding": pre_vec, "embedder": "external"}}
+
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            embed_missing(medias)
+
+        emb.embed_media_bulk.assert_not_called()
+
+    def test_routes_progress_to_caller(self):
+        from vtscore.datasets.load_pipeline import embed_missing
 
         captured_cb: list = []
 
         def _bulk_that_pings_progress(medias_in):
-            # Whatever _on_progress is set to *at the moment of the bulk call*
-            # is what the loader routed through.
             captured_cb.append(emb._on_progress)
             emb._on_progress("embedding", "halfway", 1, 2)
             return [np.array([1.0], dtype=np.float32) for _ in medias_in]
@@ -212,138 +234,37 @@ class TestLoaderRoutesToBulk:
 
         events: list[tuple] = []
 
-        def loader_progress(status, msg="", cur=0, tot=0):
+        def caller_progress(status, msg="", cur=0, tot=0):
             events.append((status, msg, cur, tot))
 
-        medias: dict = {}
-        with (
-            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
-        ):
-            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=loader_progress)
+        medias = {1: {"media_type": "audio", "embedding": None, "media_path": "/tmp/a.wav"}}
 
-        # The embedder's _on_progress during the call is the loader's callback.
-        assert captured_cb and captured_cb[0] is loader_progress
-        # The "halfway" event from inside the bulk call reached the loader's callback.
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            embed_missing(medias, on_progress=caller_progress)
+
+        assert captured_cb and captured_cb[0] is caller_progress
         assert ("embedding", "halfway", 1, 2) in events
 
-    def test_overrides_skip_bulk_call(self, tmp_path):
-        """Files with content_vectors or custom_metadata embedding aren't sent to bulk."""
-        from vtscore.datasets.loader import load_dataset_from_folder
+    def test_bulk_returning_none_leaves_embedding_none(self):
+        from vtscore.datasets.load_pipeline import embed_missing
 
-        for name in ("keep.wav", "pre1.wav", "pre2.wav"):
-            _write_wav(tmp_path / name)
-
-        mt = _make_media_type_for_audio()
         emb = _make_bulk_embedder()
-
-        pre_vec = np.array([99.0, 99.0, 99.0], dtype=np.float32)
-        cm_vec = np.array([42.0, 42.0, 42.0], dtype=np.float32)
-
-        medias: dict = {}
-        with (
-            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
-        ):
-            load_dataset_from_folder(
-                tmp_path,
-                "audio",
-                medias,
-                content_vectors={"pre1.wav": pre_vec},
-                custom_metadata_map={"pre2.wav": {"embedding": cm_vec}},
-                on_progress=lambda *a: None,
-            )
-
-        assert len(medias) == 3
-        assert emb.embed_media_bulk.call_count == 1
-        sent = emb.embed_media_bulk.call_args.args[0]
-        assert [Path(m["media_path"]).name for m in sent] == ["keep.wav"]
-
-        by_name = {m["filename"]: m["embedding"] for m in medias.values()}
-        np.testing.assert_array_equal(by_name["pre1.wav"], pre_vec)
-        np.testing.assert_array_equal(by_name["pre2.wav"], cm_vec)
-
-    def test_skip_embedding_does_not_trigger_bulk(self, tmp_path):
-        """skip_embedding=True must bypass the bulk API entirely."""
-        from vtscore.datasets.loader import load_dataset_from_folder
-
-        _write_wav(tmp_path / "a.wav")
-
-        mt = _make_media_type_for_audio()
-        emb = _make_bulk_embedder()
-
-        medias: dict = {}
-        with (
-            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
-        ):
-            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None, skip_embedding=True)
-
-        emb.embed_media_bulk.assert_not_called()
-        assert medias[1]["embedding"] is None
-
-    def test_bulk_returning_none_skips_file(self, tmp_path):
-        """A None entry in the bulk response should skip that file."""
-        from vtscore.datasets.loader import load_dataset_from_folder
-
-        _write_wav(tmp_path / "good.wav")
-        _write_wav(tmp_path / "bad.wav")
-
-        mt = _make_media_type_for_audio()
-        emb = mock.MagicMock()
-        emb.name = "fake_bulk"
-        emb.media_type_id = "audio"
-        emb._model = True
-        emb._on_progress = lambda *a, **kw: None
 
         def _bulk(medias_in):
-            return [None if Path(m["media_path"]).name == "bad.wav" else np.array([1.0, 2.0]) for m in medias_in]
+            return [None if m["media_path"].endswith("bad.wav") else np.array([1.0, 2.0]) for m in medias_in]
 
         emb.embed_media_bulk.side_effect = _bulk
 
-        medias: dict = {}
-        with (
-            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
-        ):
-            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
+        medias = {
+            1: {"media_type": "audio", "embedding": None, "media_path": "/tmp/good.wav"},
+            2: {"media_type": "audio", "embedding": None, "media_path": "/tmp/bad.wav"},
+        }
 
-        assert len(medias) == 1
-        assert list(medias.values())[0]["filename"] == "good.wav"
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            embed_missing(medias)
 
-
-# ---------------------------------------------------------------------------
-# Chunked loader bulk-embeds per chunk
-# ---------------------------------------------------------------------------
-
-
-class TestChunkedLoaderBulkPerChunk:
-    """The chunked loader issues one bulk call per chunk — preserving the
-    memory story where only one chunk's worth of embeddings is in RAM at a time."""
-
-    def test_bulk_call_scoped_to_chunk(self, tmp_path):
-        from vtscore.datasets.loader import load_dataset_from_folder_chunked
-
-        for i in range(4):
-            _write_wav(tmp_path / f"f{i}.wav")
-
-        mt = _make_media_type_for_audio()
-        emb = _make_bulk_embedder()
-
-        with (
-            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
-        ):
-            chunks = list(
-                load_dataset_from_folder_chunked(tmp_path, "audio", chunk_size=2, on_progress=lambda *a: None)
-            )
-
-        assert len(chunks) == 2
-        assert all(len(c) == 2 for c in chunks)
-        # One bulk call per chunk, each receiving exactly 2 files.
-        assert emb.embed_media_bulk.call_count == 2
-        for call in emb.embed_media_bulk.call_args_list:
-            assert len(call.args[0]) == 2
+        assert medias[1]["embedding"] is not None
+        assert medias[2]["embedding"] is None
 
 
 # ---------------------------------------------------------------------------

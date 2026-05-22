@@ -1199,8 +1199,8 @@ def _run_origin_load_in_background(
 
             apply_custom_metadata_md5(ctx.medias)
             _tag_origins(ctx.medias, origin)
-            _embed_missing_stage(ctx, tracker, embedder)
             _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
+            _embed_missing_stage(ctx, tracker, embedder)
             _drop_none_embeddings_stage(ctx, tracker)
             _collapse_duplicates_stage(ctx, tracker)
             _build_diversity_tree_stage(ctx, tracker)
@@ -1310,14 +1310,6 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # importer writes a .clipper sidecar for readiness tracking).
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
-
-    # When a multi-output clipper (or any non-empty chain) is selected,
-    # skip embedding during the import phase.  The chain re-embeds every
-    # final clip anyway, so computing parent embeddings up front is
-    # wasted work.  Default clippers (pass-through, single output) still
-    # need the parent embedding since it won't be recomputed.
-    if (clipper_name and not clipper_name.endswith("_default")) or chain_steps:
-        field_values["skip_embedding"] = True
 
     # Extract media_type from field_values so in-progress tasks can expose it
     # to the frontend (used for guessing the type in subsequent add dialogs).

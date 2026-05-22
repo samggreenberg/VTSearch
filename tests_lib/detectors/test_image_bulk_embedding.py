@@ -496,38 +496,39 @@ class TestPatchForwardBulkOverrides:
 
 
 # ---------------------------------------------------------------------------
-# Loader integration: _bulk_patch_forward_files goes through patch_forward_bulk
+# embed_missing routes patch-region embedders through patch_forward_bulk
 # ---------------------------------------------------------------------------
 
 
-class TestLoaderRoutesToPatchForwardBulk:
-    def test_loader_calls_patch_forward_bulk_once(self, tmp_path):
-        from vtscore.datasets.loader_folder import _bulk_patch_forward_files
+class TestEmbedMissingRoutesToPatchForwardBulk:
+    def test_embed_missing_calls_patch_forward_bulk_once(self):
+        from vtscore.datasets.load_pipeline import embed_missing
 
-        # Build a mock embedder that mimics the new bulk surface.
         emb = mock.MagicMock()
+        emb.name = "fake_patch"
+        emb._model = True
         emb._on_progress = lambda *a, **kw: None
+        emb.supports_patch_regions = True
+        emb.embed_media_bulk.side_effect = lambda medias: [np.zeros(768, dtype=np.float32) for _ in medias]
 
-        def fake_bulk(medias):
-            return [{"i": i} for i, _ in enumerate(medias)]
+        patch_outputs = [mock.MagicMock(patch_grid=np.zeros((4, 4, 768), dtype=np.float32)) for _ in range(3)]
+        emb.patch_forward_bulk.return_value = patch_outputs
 
-        emb.patch_forward_bulk.side_effect = fake_bulk
+        medias = {
+            i: {"media_type": "image", "embedding": None, "media_path": f"/tmp/img_{i}.png"}
+            for i in range(1, 4)
+        }
 
-        paths = []
-        for i in range(3):
-            p = tmp_path / f"img_{i}.png"
-            _write_image(p)
-            paths.append(p)
-
-        out = _bulk_patch_forward_files(
-            emb,
-            paths,
-            folder_path=tmp_path,
-            on_progress=lambda *a, **kw: None,
-            media_type="image",
-        )
+        with (
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
+            mock.patch("vtscore.media.patch_embed.build_region_tree", return_value=np.zeros((23, 768), dtype=np.float32)),
+            mock.patch("vtscore.media.patch_embed.to_fp16", side_effect=lambda x: x.astype(np.float16)),
+        ):
+            embed_missing(medias)
 
         assert emb.patch_forward_bulk.call_count == 1
         sent = emb.patch_forward_bulk.call_args.args[0]
-        assert sorted(Path(m["media_path"]).name for m in sent) == sorted(p.name for p in paths)
-        assert set(out.keys()) == set(paths)
+        assert len(sent) == 3
+        for m in medias.values():
+            assert m.get("patch_regions") is not None
+            assert m.get("patch_grid") is not None
