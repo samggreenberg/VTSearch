@@ -20,7 +20,10 @@
         <div class="achievement-info">
           <div class="achievement-head">
             <span class="achievement-name">{{ row.name }}</span>
-            <span class="achievement-tier" [attr.data-tier-idx]="row.tier_idx">{{ row.tierName }}</span>
+            <span
+              class="achievement-tier"
+              [attr.data-tier-idx]="row.tier_idx"
+              [title]="row.lockReason || null">{{ row.tierName }}</span>
             @if (row.id === 'docs_read') {
               <button
                 type="button"

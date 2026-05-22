@@ -5,6 +5,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AchievementBadgeComponent } from '../achievement-badge/achievement-badge.component';
 import { AchievementsService } from '../../services/achievements.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 import type { AchievementEntry } from '../../generated/api-client/models/achievement-entry';
 import type { AchievementState } from '../../generated/api-client/models/achievement-state';
 import type { DocEntry } from '../../generated/api-client/models/doc-entry';
@@ -16,6 +17,7 @@ interface AchievementRow extends AchievementEntry {
   prevThreshold: number;
   progressPct: number;
   progressLabel: string;
+  lockReason: string;
 }
 
 @Component({
@@ -40,13 +42,23 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
   submitting = false;
 
   private destroy$ = new Subject<void>();
+  private disableAchievements = false;
+  private lastState: AchievementState | null = null;
 
-  constructor(private achievements: AchievementsService) {}
+  constructor(
+    private achievements: AchievementsService,
+    private settingsState: SettingsStateService,
+  ) {}
 
   ngOnInit(): void {
-    this.achievements.state
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((state) => this.applyState(state));
+    this.achievements.state.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+      this.lastState = state;
+      this.applyState(state);
+    });
+    this.settingsState.settings$.pipe(takeUntil(this.destroy$)).subscribe((s) => {
+      this.disableAchievements = !!s?.disable_achievements;
+      if (this.lastState) this.applyState(this.lastState);
+    });
     this.achievements.refresh();
   }
 
@@ -119,6 +131,22 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
       prevThreshold,
       progressPct,
       progressLabel,
+      lockReason: a.tier_idx === -1 ? this.lockReason(a) : '',
     };
+  }
+
+  private lockReason(a: AchievementEntry): string {
+    if (this.disableAchievements) {
+      return 'Achievements are disabled in Settings — counters are frozen at zero.';
+    }
+    const firstTier = a.tiers[0];
+    const base = `${a.counter.toLocaleString()} so far — reach ${firstTier.toLocaleString()} to unlock Bronze.`;
+    if (a.id === 'datasets_loaded' && a.counter === 0) {
+      return `${base} Demo and synthetic dataset loads don't count.`;
+    }
+    if (a.id === 'docs_read') {
+      return `${base} Find the code phrase at the bottom of a doc page and paste it in below.`;
+    }
+    return base;
   }
 }
