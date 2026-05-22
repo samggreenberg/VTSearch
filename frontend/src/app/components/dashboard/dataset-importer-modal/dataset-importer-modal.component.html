@@ -74,12 +74,17 @@
         }
 
         @if (activeTab && (demoEmbedders.length > 1 || demoClippers.length > 1)) {
-          <div class="demo-embedder-row">
-            @if (demoEmbedders.length > 1) {
-              <label class="form-label" for="demo-embedder" title="Embedding model used to compute vector representations of each media item">Embedder:</label>
+          <div class="form-group form-group--section">
+            @if (showAdvancedToggle('demo')) {
+              <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: embedding model and pre-processing clipper">
+                Advanced {{ advancedOpen ? '▴' : '▾' }}
+              </button>
+            }
+            @if (demoEmbedders.length > 1 && showEmbedderPicker('demo')) {
+              <label class="form-label" for="demo-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
               <select
                 id="demo-embedder"
-                class="form-select form-select--inline"
+                class="form-select"
                 [ngModel]="selectedDemoEmbedder"
                 (ngModelChange)="onDemoEmbedderChange($event)"
               >
@@ -101,21 +106,15 @@
               @if (selectedEmbedderRawId(selectedDemoEmbedder, demoEmbedders); as rawId) {
                 <small class="embedder-raw-id">{{ rawId }}</small>
               }
-            }
-            @if (licenseNoticeFor(selectedDemoEmbedder, demoEmbedders); as notice) {
-              <div class="license-warning" role="note">⚠ {{ notice }}</div>
-            }
-            @if (demoClippers.length > 1) {
-              @if (isDefaultClipperSelected('demo')) {
-                <button type="button" class="advanced-toggle advanced-toggle--inline" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
-                  Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
-                </button>
+              @if (licenseNoticeFor(selectedDemoEmbedder, demoEmbedders); as notice) {
+                <div class="license-warning" role="note">⚠ {{ notice }}</div>
               }
-              @if (showClipperPicker('demo')) {
-                <button class="btn btn--secondary btn--sm clipper-btn" (click)="openClipperChooser('demo')" title="Choose a MediaClipper to segment or trim media before embedding">
-                  Clipper: {{ clipperDisplayName('demo') }}
-                </button>
-              }
+            }
+            @if (demoClippers.length > 1 && showClipperPicker('demo')) {
+              <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+              <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('demo')" title="Choose a MediaClipper to segment or trim media before embedding">
+                Use MediaClipper: {{ clipperDisplayName('demo') }}
+              </button>
             }
           </div>
         }
@@ -327,46 +326,43 @@
         </div>
       }
 
-      @if (availableEmbedders.length > 1) {
-        <div class="form-group">
-          <label class="form-label" for="field-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
-          <select
-            id="field-embedder"
-            class="form-select"
-            [(ngModel)]="selectedEmbedder"
-          >
-            @if (recommendedEmbedders(availableEmbedders).length > 0) {
-              <optgroup label="Recommended">
-                @for (embedder of recommendedEmbedders(availableEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                }
-              </optgroup>
-            }
-            @if (advancedEmbedders(availableEmbedders).length > 0) {
-              <optgroup label="Advanced ▾">
-                @for (embedder of advancedEmbedders(availableEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                }
-              </optgroup>
-            }
-          </select>
-          @if (selectedEmbedderRawId(selectedEmbedder, availableEmbedders); as rawId) {
-            <small class="embedder-raw-id">{{ rawId }}</small>
-          }
-          @if (licenseNoticeFor(selectedEmbedder, availableEmbedders); as notice) {
-            <div class="license-warning" role="note">⚠ {{ notice }}</div>
-          }
-        </div>
-      }
-
-      @if (availableClippers.length > 1) {
-        <div class="form-group">
-          @if (isDefaultClipperSelected('form')) {
-            <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
-              Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
+      @if (availableEmbedders.length > 1 || availableClippers.length > 1) {
+        <div class="form-group form-group--section">
+          @if (showAdvancedToggle('form')) {
+            <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: embedding model and pre-processing clipper">
+              Advanced {{ advancedOpen ? '▴' : '▾' }}
             </button>
           }
-          @if (showClipperPicker('form')) {
+          @if (availableEmbedders.length > 1 && showEmbedderPicker('form')) {
+            <label class="form-label" for="field-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
+            <select
+              id="field-embedder"
+              class="form-select"
+              [(ngModel)]="selectedEmbedder"
+            >
+              @if (recommendedEmbedders(availableEmbedders).length > 0) {
+                <optgroup label="Recommended">
+                  @for (embedder of recommendedEmbedders(availableEmbedders); track embedder.name) {
+                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                  }
+                </optgroup>
+              }
+              @if (advancedEmbedders(availableEmbedders).length > 0) {
+                <optgroup label="Advanced ▾">
+                  @for (embedder of advancedEmbedders(availableEmbedders); track embedder.name) {
+                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                  }
+                </optgroup>
+              }
+            </select>
+            @if (selectedEmbedderRawId(selectedEmbedder, availableEmbedders); as rawId) {
+              <small class="embedder-raw-id">{{ rawId }}</small>
+            }
+            @if (licenseNoticeFor(selectedEmbedder, availableEmbedders); as notice) {
+              <div class="license-warning" role="note">⚠ {{ notice }}</div>
+            }
+          }
+          @if (availableClippers.length > 1 && showClipperPicker('form')) {
             <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
             <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('form')" title="Choose a MediaClipper to segment or trim media before embedding">
               Use MediaClipper: {{ clipperDisplayName('form') }}
@@ -506,46 +502,43 @@
         </div>
       }
 
-      @if (lfEmbedders.length > 1) {
+      @if (lfEmbedders.length > 1 || lfClippers.length > 1) {
         <div class="form-group form-group--section">
-          <label class="form-label" for="lf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
-          <select
-            id="lf-embedder"
-            class="form-select"
-            [(ngModel)]="lfSelectedEmbedder"
-          >
-            @if (recommendedEmbedders(lfEmbedders).length > 0) {
-              <optgroup label="Recommended">
-                @for (embedder of recommendedEmbedders(lfEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                }
-              </optgroup>
-            }
-            @if (advancedEmbedders(lfEmbedders).length > 0) {
-              <optgroup label="Advanced ▾">
-                @for (embedder of advancedEmbedders(lfEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                }
-              </optgroup>
-            }
-          </select>
-          @if (selectedEmbedderRawId(lfSelectedEmbedder, lfEmbedders); as rawId) {
-            <small class="embedder-raw-id">{{ rawId }}</small>
-          }
-          @if (licenseNoticeFor(lfSelectedEmbedder, lfEmbedders); as notice) {
-            <div class="license-warning" role="note">⚠ {{ notice }}</div>
-          }
-        </div>
-      }
-
-      @if (lfClippers.length > 1) {
-        <div class="form-group form-group--section">
-          @if (isDefaultClipperSelected('lf')) {
-            <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
-              Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
+          @if (showAdvancedToggle('lf')) {
+            <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: embedding model and pre-processing clipper">
+              Advanced {{ advancedOpen ? '▴' : '▾' }}
             </button>
           }
-          @if (showClipperPicker('lf')) {
+          @if (lfEmbedders.length > 1 && showEmbedderPicker('lf')) {
+            <label class="form-label" for="lf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
+            <select
+              id="lf-embedder"
+              class="form-select"
+              [(ngModel)]="lfSelectedEmbedder"
+            >
+              @if (recommendedEmbedders(lfEmbedders).length > 0) {
+                <optgroup label="Recommended">
+                  @for (embedder of recommendedEmbedders(lfEmbedders); track embedder.name) {
+                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                  }
+                </optgroup>
+              }
+              @if (advancedEmbedders(lfEmbedders).length > 0) {
+                <optgroup label="Advanced ▾">
+                  @for (embedder of advancedEmbedders(lfEmbedders); track embedder.name) {
+                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                  }
+                </optgroup>
+              }
+            </select>
+            @if (selectedEmbedderRawId(lfSelectedEmbedder, lfEmbedders); as rawId) {
+              <small class="embedder-raw-id">{{ rawId }}</small>
+            }
+            @if (licenseNoticeFor(lfSelectedEmbedder, lfEmbedders); as notice) {
+              <div class="license-warning" role="note">⚠ {{ notice }}</div>
+            }
+          }
+          @if (lfClippers.length > 1 && showClipperPicker('lf')) {
             <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
             <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('lf')" title="Choose a MediaClipper to segment or trim media before embedding">
               Use MediaClipper: {{ clipperDisplayName('lf') }}
@@ -643,46 +636,43 @@
         </label>
       </div>
 
-      @if (sfEmbedders.length > 1) {
-        <div class="form-group">
-          <label class="form-label" for="sf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
-          <select
-            id="sf-embedder"
-            class="form-select"
-            [(ngModel)]="sfSelectedEmbedder"
-          >
-            @if (recommendedEmbedders(sfEmbedders).length > 0) {
-              <optgroup label="Recommended">
-                @for (embedder of recommendedEmbedders(sfEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                }
-              </optgroup>
-            }
-            @if (advancedEmbedders(sfEmbedders).length > 0) {
-              <optgroup label="Advanced ▾">
-                @for (embedder of advancedEmbedders(sfEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                }
-              </optgroup>
-            }
-          </select>
-          @if (selectedEmbedderRawId(sfSelectedEmbedder, sfEmbedders); as rawId) {
-            <small class="embedder-raw-id">{{ rawId }}</small>
-          }
-          @if (licenseNoticeFor(sfSelectedEmbedder, sfEmbedders); as notice) {
-            <div class="license-warning" role="note">⚠ {{ notice }}</div>
-          }
-        </div>
-      }
-
-      @if (sfClippers.length > 1) {
-        <div class="form-group">
-          @if (isDefaultClipperSelected('sf')) {
-            <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
-              Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
+      @if (sfEmbedders.length > 1 || sfClippers.length > 1) {
+        <div class="form-group form-group--section">
+          @if (showAdvancedToggle('sf')) {
+            <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: embedding model and pre-processing clipper">
+              Advanced {{ advancedOpen ? '▴' : '▾' }}
             </button>
           }
-          @if (showClipperPicker('sf')) {
+          @if (sfEmbedders.length > 1 && showEmbedderPicker('sf')) {
+            <label class="form-label" for="sf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
+            <select
+              id="sf-embedder"
+              class="form-select"
+              [(ngModel)]="sfSelectedEmbedder"
+            >
+              @if (recommendedEmbedders(sfEmbedders).length > 0) {
+                <optgroup label="Recommended">
+                  @for (embedder of recommendedEmbedders(sfEmbedders); track embedder.name) {
+                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                  }
+                </optgroup>
+              }
+              @if (advancedEmbedders(sfEmbedders).length > 0) {
+                <optgroup label="Advanced ▾">
+                  @for (embedder of advancedEmbedders(sfEmbedders); track embedder.name) {
+                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                  }
+                </optgroup>
+              }
+            </select>
+            @if (selectedEmbedderRawId(sfSelectedEmbedder, sfEmbedders); as rawId) {
+              <small class="embedder-raw-id">{{ rawId }}</small>
+            }
+            @if (licenseNoticeFor(sfSelectedEmbedder, sfEmbedders); as notice) {
+              <div class="license-warning" role="note">⚠ {{ notice }}</div>
+            }
+          }
+          @if (sfClippers.length > 1 && showClipperPicker('sf')) {
             <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
             <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('sf')" title="Choose a MediaClipper to segment or trim media before embedding">
               Use MediaClipper: {{ clipperDisplayName('sf') }}

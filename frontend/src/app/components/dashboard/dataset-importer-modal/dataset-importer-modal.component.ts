@@ -172,11 +172,11 @@ export class DatasetImporterModalComponent implements OnInit {
   clipperChooserContext: 'form' | 'demo' | 'sf' | 'lf' = 'form';
   clipperChooserClippers: ClipperInfo[] = [];
 
-  // Phase 3 of smart-clipper-defaults: the clipper picker is hidden
-  // behind an "Advanced" toggle by default. When the user has picked a
-  // non-default clipper, the picker is always visible regardless of
-  // this flag (so they can see and re-edit their selection).
-  clipperAdvancedOpen = false;
+  // Embedder + clipper pickers live behind a single "Advanced" toggle so
+  // they don't crowd the required fields. When the user has picked a
+  // non-default value for either, that picker stays visible regardless
+  // of this flag (so they can see and re-edit their selection).
+  advancedOpen = false;
 
   constructor(
     private datasetsApi: DatasetsApiService,
@@ -1633,15 +1633,54 @@ export class DatasetImporterModalComponent implements OnInit {
     return clippers.length > 0 && clippers[0].name === selected;
   }
 
+  /** Whether the currently-selected embedder is one the registry flags
+   *  ``is_default`` for the active media type. Used to decide whether the
+   *  Advanced section can stay collapsed — if the user (or saved settings)
+   *  picked a non-default, we keep the picker visible. */
+  isDefaultEmbedderSelected(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    let embedders: EmbedderInfo[];
+    let selected: string;
+    if (context === 'form') {
+      embedders = this.availableEmbedders;
+      selected = this.selectedEmbedder;
+    } else if (context === 'demo') {
+      embedders = this.demoEmbedders;
+      selected = this.selectedDemoEmbedder;
+    } else if (context === 'sf') {
+      embedders = this.sfEmbedders;
+      selected = this.sfSelectedEmbedder;
+    } else {
+      embedders = this.lfEmbedders;
+      selected = this.lfSelectedEmbedder;
+    }
+    if (!selected) return true;
+    const found = embedders.find((e) => e.name === selected);
+    return !!found?.is_default;
+  }
+
   /** Whether the clipper picker should be visible in the given context.
    *  True when the Advanced section is expanded or when a non-default
    *  clipper is selected. */
   showClipperPicker(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
-    return this.clipperAdvancedOpen || !this.isDefaultClipperSelected(context);
+    return this.advancedOpen || !this.isDefaultClipperSelected(context);
   }
 
-  toggleClipperAdvanced(): void {
-    this.clipperAdvancedOpen = !this.clipperAdvancedOpen;
+  /** Whether the embedder picker should be visible in the given context.
+   *  Same semantics as ``showClipperPicker`` but for the embedder. */
+  showEmbedderPicker(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    return this.advancedOpen || !this.isDefaultEmbedderSelected(context);
+  }
+
+  /** Whether the "Advanced ▾" toggle button should be rendered in the
+   *  given context. Only meaningful when both selections are at defaults;
+   *  otherwise the pickers are already visible and the button would be
+   *  redundant. */
+  showAdvancedToggle(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    return this.isDefaultEmbedderSelected(context) && this.isDefaultClipperSelected(context);
+  }
+
+  toggleAdvanced(): void {
+    this.advancedOpen = !this.advancedOpen;
   }
 
   sfSubmit(): void {
