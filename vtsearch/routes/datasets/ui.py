@@ -96,9 +96,13 @@ def _calculate_demo_num_files(dataset_info: dict) -> int:
     slice_frac_start = dataset_info.get("slice_frac_start")
 
     if slice_frac_start is not None:
-        frac_end = dataset_info.get("slice_frac_end") or 1.0
+        # Mirror vtscore.media.base.demo_slice: floor each endpoint independently
+        # so the count matches what the loader actually produces.
         base_per_cat = items_per_category if items_per_category > 0 else 40
-        per_cat = int(base_per_cat * (frac_end - slice_frac_start))
+        frac_end = dataset_info.get("slice_frac_end")
+        start = int(base_per_cat * slice_frac_start)
+        end = int(base_per_cat * frac_end) if frac_end is not None else base_per_cat
+        per_cat = end - start
     else:
         slice_start = dataset_info.get("slice_start", 0)
         slice_end = dataset_info.get("slice_end")
