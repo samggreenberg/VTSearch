@@ -20,6 +20,7 @@ import {
   MediaCropResult,
 } from '../../modals/media-crop-modal/media-crop-modal.component';
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
+import { SourcePickerComponent } from '../dataset-importer-modal/source-picker/source-picker.component';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 type ModalView = 'main' | 'media-picker';
@@ -29,7 +30,7 @@ type TrainedSubView = 'picker' | 'form';
 @Component({
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -464,10 +465,6 @@ export class NewDetectorModalComponent implements OnInit {
     this.activeDemoTab = tab;
   }
 
-  onDemoHeaderClick(col: string): void {
-    if (this.demoCols.meta(col).sortable) this.demoCols.sortBy(col);
-  }
-
   get filteredDemos(): DemoDataset[] {
     const items = this.demos.filter((d) => d.media_type === this.activeDemoTab);
     const statusOrder: Record<string, number> = { ready: 0, needs_embedding: 1, needs_download: 2 };
@@ -495,6 +492,24 @@ export class NewDetectorModalComponent implements OnInit {
    *  fetch them via the Add Dataset modal. */
   isDemoBrowsable(demo: DemoDataset): boolean {
     return demo.status === 'ready' || demo.status === 'needs_embedding';
+  }
+
+  /** Arrow-bound predicate handed to ``<vt-source-picker>`` so its demo
+   *  table can apply ``.disabled`` styling to non-browsable rows.  Kept
+   *  as a class field (rather than a getter) so the function reference
+   *  is stable across change-detection cycles. */
+  demoRowDisabledFn = (demo: DemoDataset): boolean => !this.isDemoBrowsable(demo);
+
+  /** Arrow-bound formatter for the ``title`` attribute on demo rows. */
+  demoRowTitleFn = (demo: DemoDataset): string =>
+    this.isDemoBrowsable(demo)
+      ? `Browse files in ${demo.label}`
+      : 'This demo has not been downloaded. Use the Add Dataset window to fetch it first.';
+
+  /** Map ``activePickerView`` to the ``lfPickerKind`` flag understood by
+   *  ``<vt-source-picker>``. */
+  get lfPickerKind(): 'folder' | 'files' {
+    return this.activePickerView === 'local_files' ? 'files' : 'folder';
   }
 
   selectDemo(demo: DemoDataset): void {
@@ -656,31 +671,6 @@ export class NewDetectorModalComponent implements OnInit {
 
   backToMain(): void {
     this.view = 'main';
-  }
-
-  // --- Media-type tab labels (mirrors Add Dataset's helpers) ---
-
-  getDemoTabLabel(typeId: string): string {
-    const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
-    if (mt) return mt.name.trim();
-    return typeId;
-  }
-
-  getDemoTabIcon(typeId: string): string {
-    const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
-    return mt?.icon || '';
-  }
-
-  statusBadgeClass(status: string): string {
-    if (status === 'ready') return 'badge-ready';
-    if (status === 'needs_embedding') return 'badge-embedding';
-    return 'badge-download';
-  }
-
-  statusBadgeLabel(status: string): string {
-    if (status === 'ready') return 'Ready';
-    if (status === 'needs_embedding') return 'Needs Embed';
-    return 'Needs Download';
   }
 
   // --- Clear example ---

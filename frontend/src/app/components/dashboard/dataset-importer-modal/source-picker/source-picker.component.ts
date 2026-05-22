@@ -1,0 +1,221 @@
+import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { IconComponent } from '../../../icon/icon.component';
+import { DropZoneComponent } from '../../../drop-zone/drop-zone.component';
+import {
+  DemoDataset,
+  ImporterInfo,
+  ImporterPickerTab,
+  MediaTypeInfo,
+} from '../../../../models/api.models';
+import { ManagedColumns } from '../../../../utils/managed-columns';
+
+/** Shared "where does the media come from?" widget.  Renders the
+ *  importer category tab bar + sub-tab bar at the top, then a
+ *  source-specific picker below:
+ *
+ *  - ``demo``                   → media-type tab bar + sortable demo table
+ *  - ``server_folder``          → typed absolute-path input
+ *  - ``local_folder`` / ``local_files`` → file/folder dropzone
+ *  - any other ``picker_view``  → nothing (parent renders its own form)
+ *
+ *  The component is presentational: the parent owns all state and
+ *  passes it in via ``@Input``s, including the precomputed
+ *  ``visibleImporterTabs`` and ``importersForActiveTab`` lists.  User
+ *  actions surface as ``@Output`` events; the parent decides what to do
+ *  (the Add Dataset modal runs the importer, the New Detector modal
+ *  materialises a single example file).
+ *
+ *  Output configuration that visually sits next to the source widget
+ *  (Dataset Name input, ``<vt-import-config>``, ``<vt-import-advanced>``,
+ *  Include-subfolders checkbox) is *not* part of this component.  The
+ *  parent projects those into named content slots so the visual order
+ *  on each flow stays unchanged:
+ *
+ *  - ``[demoExtras]`` — sits between the demo media-type tabs and the
+ *    demo table (Add Dataset uses it for the Dataset Name + Advanced
+ *    block; New Detector leaves it empty).
+ *  - ``[sfBefore]`` / ``[sfAfter]`` — sit above/below the typed path
+ *    input on the server-folder flow.
+ *  - ``[lfBefore]`` / ``[lfAfter]`` — sit above/below the dropzone on
+ *    the local-folder / local-files flows.
+ */
+@Component({
+  selector: 'vt-source-picker',
+  standalone: true,
+  imports: [CommonModule, FormsModule, IconComponent, DropZoneComponent],
+  templateUrl: './source-picker.component.html',
+  styleUrl: './source-picker.component.scss',
+})
+export class SourcePickerComponent {
+  // === Importer tab/subtab chrome ===
+
+  /** Tabs to render in the top-level category bar, in display order.
+   *  Parent computes this from the importer registry; see
+   *  ``DatasetImporterModalComponent.visibleImporterTabs``. */
+  @Input() visibleImporterTabs: ImporterPickerTab[] = [];
+
+  /** Importers whose ``category`` matches ``activeTab`` (i.e. the
+   *  sub-tabs to render). */
+  @Input() importersForActiveTab: ImporterInfo[] = [];
+
+  @Input() activeTab = '';
+  @Input() selectedImporter: ImporterInfo | null = null;
+  @Input() activeImporterTabLabel = '';
+
+  /** Fired when the user clicks a top-level category tab. */
+  @Output() activeTabChange = new EventEmitter<string>();
+  /** Fired when the user clicks a sub-tab (importer card). */
+  @Output() importerSelected = new EventEmitter<ImporterInfo>();
+
+  // --- Chrome customization ---
+
+  /** Hint shown above the sub-tab area when no top tab is selected. */
+  @Input() noTabHint = 'Select what type of dataset to add.';
+  /** Hint shown when a tab with multiple importers has none picked yet.
+   *  ``{label}`` is replaced with the active tab's label. */
+  @Input() noImporterHintTemplate = 'Select how to add a {label} dataset.';
+  /** ``title`` attribute on top-level tab buttons.  ``{label}`` is
+   *  replaced with the tab label. */
+  @Input() tabTitleTemplate = 'Show {label} dataset importers';
+  /** Message shown when the active tab has zero importers. */
+  @Input() emptyCategoryText = 'No importers in this category.';
+
+  /** When ``false`` (default), the sub-tab row is suppressed when the
+   *  active category has exactly one importer — the parent is expected
+   *  to auto-select the lone importer and the redundant sub-tab adds
+   *  no information.  Callers that always want the sub-tab visible
+   *  (e.g. the New Detector media picker, where every category is a
+   *  distinct kind of source the user should see labelled) set this to
+   *  ``true``. */
+  @Input() alwaysShowSubtabBar = false;
+
+  // === Demo source view ===
+
+  @Input() demos: DemoDataset[] = [];
+  @Input() filteredDemos: DemoDataset[] = [];
+  @Input() demoLoading = false;
+  @Input() demoTabs: string[] = [];
+  @Input() activeDemoTab = '';
+  @Input() demoCols: ManagedColumns | null = null;
+  @Input() mediaTypes: MediaTypeInfo[] = [];
+
+  @Output() activeDemoTabChange = new EventEmitter<string>();
+  @Output() demoSelected = new EventEmitter<DemoDataset>();
+
+  @Input() demoLoadingText = 'Loading demo datasets...';
+  @Input() demoEmptyText = 'No demo datasets available.';
+  @Input() demoNoTabHint = 'Select the media type to demonstrate.';
+
+  /** Optional predicate run on every demo row.  When provided and it
+   *  returns ``true``, the row gets a ``disabled`` class for visual
+   *  styling.  Source picker still emits ``demoSelected`` for clicks
+   *  — the parent is responsible for treating disabled rows as
+   *  no-ops. */
+  @Input() demoRowDisabledFn: ((demo: DemoDataset) => boolean) | null = null;
+  /** Optional formatter for the ``title`` attribute on each demo row. */
+  @Input() demoRowTitleFn: ((demo: DemoDataset) => string) | null = null;
+
+  // === Server folder source view ===
+
+  @Input() sfPathInputValue = '';
+  @Output() sfPathInputValueChange = new EventEmitter<string>();
+  /** Fired when the user finalises the typed path (Enter or blur). */
+  @Output() sfPathApplied = new EventEmitter<void>();
+
+  @Input() sfPathLabel = 'Folder to import';
+  @Input() sfPathPlaceholder = '/absolute/server/path/to/folder';
+  @Input() sfPathFieldId = 'sf-path-input';
+  /** Whether to fire ``sfPathApplied`` on the path input's ``blur``
+   *  event in addition to Enter.  The Add Dataset modal wants
+   *  blur-to-detect; the New Detector modal explicitly drives loading
+   *  through a Load button and disables blur to avoid double-firing. */
+  @Input() sfApplyOnBlur = true;
+
+  // === Local folder/files source view ===
+
+  @Input() lfPickerKind: 'folder' | 'files' = 'folder';
+  @Input() lfFiles: File[] = [];
+  @Input() lfFolderName = '';
+  @Output() lfFilesDropped = new EventEmitter<File[]>();
+
+  /** ``vt-drop-zone`` label rendered when ``lfPickerKind === 'folder'``. */
+  @Input() lfFolderDropLabel = 'Drop a folder here to import';
+  /** ``vt-drop-zone`` sublabel rendered when ``lfPickerKind === 'folder'``. */
+  @Input() lfFolderDropSublabel = 'or click to browse';
+  /** ``vt-drop-zone`` label rendered when ``lfPickerKind === 'files'``. */
+  @Input() lfFilesDropLabel = 'Drop a paths file (.txt, .list, or .npz)';
+  /** ``vt-drop-zone`` sublabel rendered when ``lfPickerKind === 'files'``. */
+  @Input() lfFilesDropSublabel = 'or click to browse';
+  /** ``accept`` attribute for the ``files`` kind dropzone (comma-separated
+   *  extensions / MIME types).  Empty string accepts anything. */
+  @Input() lfFilesAcceptAttr = '.txt,.list,.npz';
+
+  /** Whether to render the "Folder*" / "Paths file*" form-label above the
+   *  dropzone.  Disabled by callers (e.g. the New Detector modal) that
+   *  bake the affordance entirely into the dropzone's own label. */
+  @Input() lfShowFieldLabel = true;
+  /** Label for the dropzone form-label, when ``lfShowFieldLabel`` is on. */
+  @Input() lfFolderFieldLabel = 'Folder';
+  /** Label for the dropzone form-label in ``files`` mode. */
+  @Input() lfFilesFieldLabel = 'Paths file';
+
+  /** Whether to render the "Selected N files" / "Using paths from …" info
+   *  text below the dropzone.  Disabled by callers that only use the
+   *  first picked file (e.g. the New Detector modal) and have no
+   *  meaningful count to show. */
+  @Input() lfShowFileCount = true;
+
+  // === View dispatch ===
+
+  /** ``picker_view`` of the currently selected importer.  Drives which
+   *  source widget is rendered below the chrome. */
+  @Input() activePickerView = '';
+
+  // -------------------------------------------------------------------
+
+  get noImporterHint(): string {
+    return this.noImporterHintTemplate.replace('{label}', this.activeImporterTabLabel);
+  }
+
+  tabTitle(label: string): string {
+    return this.tabTitleTemplate.replace('{label}', label);
+  }
+
+  // === Demo helpers ===
+
+  getDemoTabIcon(mediaType: string): string {
+    const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
+    return mt?.icon || '';
+  }
+
+  getDemoTabText(mediaType: string): string {
+    const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
+    return mt ? mt.name : mediaType;
+  }
+
+  onDemoHeaderClick(col: string): void {
+    if (this.demoCols?.meta(col).sortable) this.demoCols.sortBy(col);
+  }
+
+  demoRowDisabled(demo: DemoDataset): boolean {
+    return this.demoRowDisabledFn ? this.demoRowDisabledFn(demo) : false;
+  }
+
+  demoRowTitle(demo: DemoDataset): string {
+    return this.demoRowTitleFn ? this.demoRowTitleFn(demo) : '';
+  }
+
+  statusBadgeClass(status: string): string {
+    if (status === 'ready') return 'badge-ready';
+    if (status === 'needs_embedding') return 'badge-embedding';
+    return 'badge-download';
+  }
+
+  statusBadgeLabel(status: string): string {
+    if (status === 'ready') return 'Ready';
+    if (status === 'needs_embedding') return 'Needs Embed';
+    return 'Needs Download';
+  }
+}

@@ -1,7 +1,7 @@
 # Frontend bundle organization
 
-Status: **#1 Checkpoints 1, 2, and 3 shipped.** Checkpoints 4 and 5 of
-#1 and items #2–#6 are scoped but not started.
+Status: **#1 shipped (all five checkpoints).** Items #2–#6 are scoped
+but not started.
 
 ## What shipped
 
@@ -57,6 +57,76 @@ Status: **#1 Checkpoints 1, 2, and 3 shipped.** Checkpoints 4 and 5 of
   loses its special case — media-type lives outside the iteration
   branch that renders the star at all. Initial bundle unchanged at
   526.40 kB.
+- **#1 Checkpoint 5**: migrated `new-detector-modal`'s media picker
+  to consume `<vt-source-picker>`.  Replaces the inline duplicate of
+  the picker chrome (category-tab + sub-tab bar), demo media-type
+  tabs + sortable demo table, server-folder typed-path input, and
+  local-folder/local-files dropzone (~213 lines of template) with a
+  single `<vt-source-picker>` call.  Five dead helpers
+  (`onDemoHeaderClick`, `statusBadgeClass`, `statusBadgeLabel`,
+  `getDemoTabIcon`, `getDemoTabLabel`) and the SCSS rules they backed
+  fell out of the parent.  `.server-folder-browser` stays in the
+  parent SCSS because the demoFileBrowsing widget (typed-path input
+  inside a clicked demo) still uses the same chrome.
+  To support new-detector's UX needs, source-picker grew a handful of
+  customization inputs: `alwaysShowSubtabBar` (always render the
+  sub-tab row, even with a single importer — new-detector wants every
+  category visibly labelled), `demoRowDisabledFn` /
+  `demoRowTitleFn` (so non-browsable demos render with `.disabled`
+  styling and an explanatory tooltip), `sfApplyOnBlur` (off in
+  new-detector so the explicit Load button isn't double-triggered),
+  `lfShowFieldLabel` / `lfShowFileCount` (off in new-detector), and
+  the dropzone label / sublabel / accept overrides
+  (`lfFolderDropLabel`, `lfFolderDropSublabel`, `lfFilesDropLabel`,
+  `lfFilesDropSublabel`, `lfFilesAcceptAttr`).  A new `[lfInfo]`
+  content-projection slot replaces the previously hard-coded "Pick a
+  folder…" / "Upload a single file…" paragraphs (each parent now
+  projects its own copy), keeping each modal's exact prose intact.
+  **Bundle effect.** Initial bundle unchanged (526.40 kB / 136.37 kB
+  gzip; both modals are `@defer`-loaded).  Lazy chunks rebalanced:
+  the bundler now extracts source-picker into its own shared lazy
+  chunk that both modals reference.  `dataset-importer-modal-component`
+  dropped 83.09 → 68.11 kB raw (16.94 → 13.87 kB gzip);
+  `new-detector-modal-component` dropped 49.78 → 43.30 kB raw (10.87
+  → 9.79 kB gzip); the new shared chunk is ~21 kB raw / 5.6 kB gzip.
+  The total deferred-chunk weight is slightly higher than before
+  Checkpoint 4 (the per-component Angular plumbing adds overhead),
+  but the structural goal — single source of truth for the picker
+  chrome and demo table — is achieved, and any future edits to the
+  picker UI now touch one component instead of two.
+- **#1 Checkpoint 4**: extracted `<vt-source-picker>` — the importer
+  category-tab + sub-tab chrome plus the source-side widgets (demo
+  media-type tabs + sortable demo table, server-folder typed-path
+  input, local-folder/local-files dropzone with file-count display).
+  Migrated `dataset-importer-modal` to consume it.
+  The component is presentational: the parent owns all state and
+  passes in precomputed `visibleImporterTabs` /
+  `importersForActiveTab` lists; user actions surface as `@Output`
+  events the parent handles (`(activeTabChange)="selectImporterTab($event)"`
+  for top-level tab clicks, `(importerSelected)="selectImporter($event)"`
+  for sub-tab clicks, `(demoSelected)`, `(sfPathApplied)`,
+  `(lfFilesDropped)`).  Per-flow output config (Dataset Name input,
+  `<vt-import-config>`, Include-subfolders checkbox,
+  `<vt-import-advanced>`) projects through named content slots
+  (`[demoExtras]`, `[sfBefore]`/`[sfAfter]`,
+  `[lfBefore]`/`[lfAfter]`) so the visual order on every flow stays
+  byte-identical to before.
+  Picker chrome SCSS (the `display: flex` rules, the indent for
+  `.local-folder-uploader` / `.server-folder-browser`, the `gap`
+  values) moved out of the parent and into
+  `source-picker.component.scss`.  Dead helpers removed from the
+  parent: `getTabIcon`, `getTabText`, `statusBadgeClass`,
+  `statusBadgeLabel`, `onDemoHeaderClick`.  Dead component imports
+  removed: `IconComponent`, `DropZoneComponent` (both still used —
+  inside the new sub-component).  Parent template dropped from 529 →
+  362 lines; .ts from 1687 → 1648 lines.
+  **Bundle effect.** The Add Dataset modal is `@defer`-loaded, so the
+  initial bundle is unaffected (526.40 kB → 526.40 kB).  The lazy
+  `dataset-importer-modal-component` chunk grew from 77.64 kB → 81.99
+  kB raw (15.76 → 16.73 kB gzip) because the new component adds its
+  own Angular plumbing without yet eliminating cross-modal
+  duplication — Checkpoint 5 (migrating `new-detector-modal` to
+  consume `<vt-source-picker>`) is where the real dedup land.
 
 ## Why
 
@@ -179,11 +249,21 @@ touching the cross-modal picker chrome):
    has no auto-detection. The previously dead-coded "suppress the
    required-star for media_type" condition in the generic-label
    template is gone with the case.
-4. **Checkpoint 4**: Extract `<vt-source-picker>` (the importer-tab /
-   sub-tab chrome + demo table + server-folder typed path + local
-   dropzone). Migrate `dataset-importer-modal` to consume it.
-5. **Checkpoint 5**: Migrate `new-detector-modal` to consume
-   `<vt-source-picker>`.
+4. **Checkpoint 4 (shipped)**: Extracted `<vt-source-picker>` (the
+   importer-tab / sub-tab chrome + demo table + server-folder typed
+   path + local dropzone) into a presentational component with named
+   content-projection slots ([demoExtras], [sfBefore]/[sfAfter],
+   [lfBefore]/[lfAfter]) for the parent's per-flow output config.
+   Migrated `dataset-importer-modal` to consume it.
+5. **Checkpoint 5 (shipped)**: Migrated `new-detector-modal` to
+   consume `<vt-source-picker>`.  Source-picker grew the
+   customization knobs new-detector needed
+   (`alwaysShowSubtabBar`, `demoRowDisabledFn`/`demoRowTitleFn`,
+   `sfApplyOnBlur`, `lfShowFieldLabel`/`lfShowFileCount`, dropzone
+   label overrides, and the `[lfInfo]` content slot).  The bundler
+   now extracts source-picker into its own shared lazy chunk
+   referenced by both modals — see the bundle effect line in the
+   "What shipped" entry above.
 
 The demo flow inside `dataset-importer-modal` stays a separate path
 (its picker layout is genuinely different from the import flows).

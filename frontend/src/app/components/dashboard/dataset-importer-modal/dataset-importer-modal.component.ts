@@ -2,11 +2,10 @@ import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@a
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
-import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
-import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { ImportAdvancedComponent } from './import-advanced/import-advanced.component';
 import { ImportConfigComponent } from './import-config/import-config.component';
+import { SourcePickerComponent } from './source-picker/source-picker.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
@@ -15,7 +14,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, ClipperChooserComponent, DropZoneComponent, ImportAdvancedComponent, ImportConfigComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ClipperChooserComponent, ImportAdvancedComponent, ImportConfigComponent, SourcePickerComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
@@ -740,10 +739,6 @@ export class DatasetImporterModalComponent implements OnInit {
     this.loadDemoEmbedders(tab);
   }
 
-  onDemoHeaderClick(col: string): void {
-    if (this.demoCols.meta(col).sortable) this.demoCols.sortBy(col);
-  }
-
   // --- Document-level resize tracking ---
 
   @HostListener('document:mousemove', ['$event'])
@@ -821,31 +816,6 @@ export class DatasetImporterModalComponent implements OnInit {
       this._optionIconsSource = this.mediaTypes;
     }
     return this._optionIconsCache;
-  }
-
-  getTabIcon(mediaType: string): string {
-    const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
-    return mt?.icon || '';
-  }
-
-  getTabText(mediaType: string): string {
-    const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
-    if (mt) {
-      return mt.name;
-    }
-    return mediaType;
-  }
-
-  statusBadgeClass(status: string): string {
-    if (status === 'ready') return 'badge-ready';
-    if (status === 'needs_embedding') return 'badge-embedding';
-    return 'badge-download';
-  }
-
-  statusBadgeLabel(status: string): string {
-    if (status === 'ready') return 'Ready';
-    if (status === 'needs_embedding') return 'Needs Embed';
-    return 'Needs Download';
   }
 
   /** Embedders available for the currently active demo tab's media type. */
