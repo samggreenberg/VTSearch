@@ -680,6 +680,16 @@ The default `fetch_all_source_media()` just loops
 `fetch_source_media()` per spec, so importers using hook 2 see no
 behavioural change.
 
+> **Heads-up:** hooks 2 and 3 only run when
+> `effective_source_specs()` resolves to at least one spec.  That
+> requires either a `media_type` field on a legacy importer
+> (`multi_media = False`) or a `source_specs` value on a multi-media
+> importer (`multi_media = True`, with `media_type` declaring the
+> output type).  If your importer declares neither, `run()` falls
+> through to the hook-1 path and raises `NotImplementedError` from
+> `list_records()` — even when you've overridden `fetch_source_media`
+> or `fetch_all_source_media`.
+
 **Legacy / shim path.** Importers that have **not** flipped
 `multi_media` still work as before: they declare a single `media_type`
 field and (optionally) accept a comma-separated `converters` field that
