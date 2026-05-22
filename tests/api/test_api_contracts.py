@@ -41,7 +41,7 @@ class TestMediasContract:
             assert isinstance(item["media_type"], str)
 
     def test_batch_each_media_has_required_fields(self, client):
-        required = {"id", "type", "filename", "md5", "custom_metadata"}
+        required = {"id", "media_type", "filename", "md5", "custom_metadata"}
         for item in self._batch(client):
             assert required.issubset(item.keys()), f"Missing keys: {required - item.keys()}"
 
