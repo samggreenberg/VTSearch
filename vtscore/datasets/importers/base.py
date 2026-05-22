@@ -233,6 +233,20 @@ class DatasetImporter(PluginBase):
     and expose a module-level ``IMPORTER = YourImporter()`` – the registry
     picks it up automatically.
 
+    Embedding contract
+    ------------------
+    Importers do **not** call any embedder.  Emit media dicts with
+    ``embedding=None`` (and ``embedder=""``); the framework
+    :func:`~vtscore.datasets.load_pipeline.embed_missing` stage runs
+    after the importer returns and bulk-embeds every item still at
+    ``None`` using the user's selected embedder (or the default for the
+    media type).  Items where the embedder returns ``None`` get dropped
+    by the next stage.
+
+    If your importer ships pre-computed vectors (e.g. an NPZ archive),
+    use :attr:`content_vectors` or :attr:`custom_metadata_map` (below)
+    so the framework treats them as already-embedded and skips them.
+
     Custom metadata
     ---------------
     Importers can attach arbitrary per-media display metadata by setting
@@ -248,10 +262,9 @@ class DatasetImporter(PluginBase):
     Some importers provide pre-computed content vectors (embeddings) alongside
     the media files.  To take advantage of this, populate
     :attr:`content_vectors` with a mapping of ``filename`` to
-    ``numpy.ndarray`` during :meth:`run`.  When the dataset is later embedded
-    (e.g. via :func:`~vtscore.datasets.loader.load_dataset_from_folder`),
-    files whose names appear in this mapping will reuse the supplied vector
-    instead of running the embedding model.
+    ``numpy.ndarray`` during :meth:`run`.  Files whose names appear in
+    this mapping land on the media dict with the supplied vector; the
+    framework embed stage then leaves them alone.
 
     Content MD5s
     ------------
@@ -268,9 +281,9 @@ class DatasetImporter(PluginBase):
     non-empty ``"md5"`` key, that value is used as the media's content hash
     (taking priority over both :attr:`content_md5s` and on-the-fly
     calculation).  When it contains an ``"embedding"`` key, that value is
-    used as the media's embedding vector (taking priority over both
-    :attr:`content_vectors` and the embedding model).  The metadata dict
-    is also attached to the media as ``custom_metadata``.
+    used as the media's embedding vector (taking priority over
+    :attr:`content_vectors` and the framework embed stage).  The metadata
+    dict is also attached to the media as ``custom_metadata``.
 
     CLI support
     -----------
