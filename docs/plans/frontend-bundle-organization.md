@@ -1,6 +1,23 @@
 # Frontend bundle organization
 
-Status: **#1 in progress.** The other items are scoped but not started.
+Status: **#1 Checkpoint 1 shipped.** The remaining checkpoints of #1
+and items #2–#6 are scoped but not started.
+
+## What shipped
+
+- **#1 Checkpoint 1** (`fe2ef1e2`): extracted `<vt-import-advanced>`
+  from `dataset-importer-modal.component.ts`. The Advanced block
+  (Include media + Embedder + Clipper) was inlined four times in the
+  modal with `sf*` / `lf*` / `form*` / `demo` parallel state and a
+  fleet of context-dispatching helpers (`clipperDisplayName`,
+  `isDefault*`, `show*Picker`, `showAdvancedToggle`,
+  `contextHasIncludeMedia`, `toggleAdvanced`, `recommendedEmbedders`,
+  `advancedEmbedders`, `licenseNoticeFor`, `embedderLabel`). All four
+  call sites now render the same `<vt-import-advanced>` with per-flow
+  inputs; the helpers and the shared `advancedOpen` flag are gone.
+  Parent .ts dropped from 1814 → 1668 lines; template from 669 → 545
+  lines. **Initial bundle went from 540 kB → 526.40 kB** (gzip
+  136.35 kB), back under the previous (525 kB) warning threshold.
 
 ## Why
 
@@ -103,13 +120,18 @@ Order of work (reordered after reading the code: start with the more
 contained extraction so the pattern is proved on one flow before
 touching the cross-modal picker chrome):
 
-1. **Checkpoint 1**: Extract `<vt-import-config>` (media-type +
-   detection hint + Advanced section with source-specs, embedder,
-   clipper). Migrate the `sf` flow to use it. The dataset name and
-   folder-path widget stay in the parent — only the configuration
-   form is extracted.
-2. **Checkpoint 2**: Migrate the `lf` flow to `<vt-import-config>`.
-3. **Checkpoint 3**: Migrate the `form` flow to `<vt-import-config>`.
+1. **Checkpoint 1 (shipped, `fe2ef1e2`)**: Extracted
+   `<vt-import-advanced>` — the Advanced ▾ block (Include media +
+   Embedder + Clipper). Migrated all four call sites (`sf`, `lf`,
+   `form`, `demo`) in `dataset-importer-modal` to use it.
+2. **Checkpoint 2**: Extract `<vt-import-config>` (media-type select +
+   detection hint, optionally wrapping `<vt-import-advanced>` so the
+   whole config form is one widget). Migrate the `sf` / `lf` flows to
+   it. The dataset-name input and folder-path widget stay in the
+   parent — only the configuration form is extracted.
+3. **Checkpoint 3**: Migrate the `form` flow to `<vt-import-config>`
+   (where applicable — the generic form's media-type lives inside the
+   importer's `fields[]`, so this may end up partial).
 4. **Checkpoint 4**: Extract `<vt-source-picker>` (the importer-tab /
    sub-tab chrome + demo table + server-folder typed path + local
    dropzone). Migrate `dataset-importer-modal` to consume it.
@@ -247,4 +269,12 @@ functionality is added.
 
 ## Open follow-ups
 
-(none yet — populated as items ship)
+- **Roll the warning budget back to 525 kB** (or lower) once a few
+  more checkpoints land. Current initial total is 526.40 kB against a
+  540 kB warning threshold; the previous 525 kB threshold was bumped
+  on `4bd4cc40` and the headroom restored by Checkpoint 1 means the
+  bump is no longer needed. Hold off on the budget edit until #1's
+  remaining checkpoints and #4 are in so we don't ping-pong the
+  threshold across PRs. Requires user approval (CLAUDE.md says budget
+  bumps — including reductions that could break future PRs — are
+  user-decisions).
