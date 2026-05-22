@@ -15,10 +15,10 @@
 .dash-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.83rem;
+  font-size: var(--font-md);
 
   th, td {
-    padding: 6px 10px;
+    padding: var(--space-sm) var(--space-md);
     text-align: left;
     vertical-align: middle;
     border-bottom: 1px solid var(--border-subtle);
@@ -29,7 +29,7 @@
   // their content. Header cells must NOT clip — they host the resize
   // handle which pokes 6px to the left of the cell's edge.
   td {
-    padding: 6px 10px;
+    padding: var(--space-sm) var(--space-md);
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -45,7 +45,7 @@
   th.select-col,
   td.select-col {
     width: 36px;
-    padding-left: 8px;
+    padding-left: var(--space-md);
     padding-right: 0;
     text-align: center;
   }
@@ -72,8 +72,8 @@
     background: var(--bg-surface);
     z-index: 1;
     color: var(--text-secondary);
-    font-weight: 500;
-    font-size: 0.78rem;
+    font-weight: var(--weight-medium);
+    font-size: var(--font-xs);
     text-transform: uppercase;
     letter-spacing: 0.03em;
     user-select: none;
@@ -162,7 +162,7 @@
         width: 2px;
         background: var(--accent);
         opacity: 0.35;
-        transition: opacity 0.15s;
+        transition: opacity var(--transition-base);
       }
 
       &:hover::after {
@@ -173,7 +173,7 @@
 
   tbody tr {
     cursor: pointer;
-    transition: background 0.1s;
+    transition: background var(--transition-fast);
 
     &:hover {
       background: var(--bg-hover);

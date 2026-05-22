@@ -28,6 +28,29 @@
   --radius-md: 4px;
   --radius-lg: 6px;
   --radius-xl: 8px;
+  --radius-pill: 999px;
+
+  // Font weights — semantic, not numeric
+  //   --weight-regular  → body copy, table cells, descriptions
+  //   --weight-medium   → form labels, table headers, secondary emphasis
+  //   --weight-semibold → card titles, active tabs, primary emphasis
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  // Transition durations — every interactive transition picks one of these.
+  //   --transition-fast → hover/background swaps that should feel instant
+  //   --transition-base → default for color/border/background on interactive elements
+  //   --transition-slow → bars, fills, and other animations that benefit from being perceptible
+  --transition-fast: 0.1s;
+  --transition-base: 0.15s;
+  --transition-slow: 0.3s;
+
+  // Elevation / shadow scale (resolves through --shadow-dropdown so each
+  // theme tints shadows appropriately: dark/light/highviz)
+  --shadow-sm: 0 1px 2px var(--shadow-dropdown);
+  --shadow-md: 0 4px 12px var(--shadow-dropdown);
+  --shadow-lg: 0 8px 32px var(--shadow-dropdown);
 
   // Z-index scale (centralised stacking order)
   --z-base: 1;
@@ -36,6 +59,7 @@
   --z-modal-backdrop: 1000;
   --z-modal: 1001;
   --z-burger-menu: 2000;
+  --z-toast: 5000;
   --z-login: 9999;
 
   // --- Theme colors (dark, default) ---
