@@ -2,7 +2,6 @@ import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
-import { FileBrowserComponent } from '../../file-browser/file-browser.component';
 import { IconComponent } from '../../icon/icon.component';
 import { SettingsIoApiService } from '../../../services/settings-io-api.service';
 import { ImporterField } from '../../../models/api.models';
@@ -13,7 +12,7 @@ type ModalView = 'picker' | 'form';
 @Component({
   selector: 'vt-settings-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
   templateUrl: './settings-importer-modal.component.html',
   styleUrl: './settings-importer-modal.component.scss',
 })

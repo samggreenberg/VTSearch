@@ -1,14 +1,7 @@
 import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { of } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
-import { FileBrowserComponent } from '../../file-browser/file-browser.component';
-import {
-  FolderBrowserBrowseFn,
-  FolderBrowserComponent,
-} from '../../folder-browser/folder-browser.component';
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
@@ -21,7 +14,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, FolderBrowserComponent, IconComponent, ClipperChooserComponent, DropZoneComponent, SourceSpecsPickerComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, ClipperChooserComponent, DropZoneComponent, SourceSpecsPickerComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
@@ -130,10 +123,10 @@ export class DatasetImporterModalComponent implements OnInit {
    *  instead of running the embedding model for matching uploaded files. */
   lfVectorsFile: File | null = null;
 
-  // Server folder browser state.  The directory listing itself lives
-  // inside the embedded <vt-folder-browser>; the parent only caches the
-  // resolved path so the Import button can submit the right folder and
-  // the dataset-name / detection helpers can use it.
+  // Server folder picker state. The user types an absolute server path; we
+  // split it into ``sfBrowseRootPath`` (always ``/`` here) and ``sfBrowsePath``
+  // (the typed path with the leading slash stripped) so the existing
+  // detection / submit / dataset-name helpers keep working unchanged.
   sfBrowsePath = '';
   sfBrowseRootPath = '';
   sfBrowseError = '';
@@ -156,52 +149,6 @@ export class DatasetImporterModalComponent implements OnInit {
    *  ``(source_type, converter|null, params)`` triple — see
    *  ``docs/plans/multi-media-import.md``. */
   sfSourceSpecs: SourceSpec[] = [];
-
-  /** Initial sub-path passed to ``<vt-folder-browser>``. Bound to its
-   *  ``[initialPath]`` input so we can imperatively navigate the picker
-   *  (e.g. when the user types a path into the editable input above). */
-  sfPickerInitialPath = '';
-
-  /** True once we've consumed the backend-suggested ``default_path`` on
-   *  the first browse response. Subsequent navigations to the root stay
-   *  at the root instead of bouncing back to the default. */
-  private sfDefaultPathConsumed = false;
-
-  /** Browse function for the embedded ``<vt-folder-browser>``.  Folder
-   *  importer mode — files are hidden because the user is picking a
-   *  folder to import, not a file inside it.
-   *
-   *  Uses the ``server_fs`` source so the picker can navigate the whole
-   *  server filesystem (single-user mode) or the user's data dir
-   *  (multi-user mode) — matching what the ``server_folder`` importer
-   *  actually accepts at runtime. The very first response carries a
-   *  ``default_path`` (typically the server user's home dir); we follow
-   *  it once with a second request so the picker opens there instead of
-   *  at ``/``. */
-  readonly sfBrowseFn: FolderBrowserBrowseFn = (path: string) =>
-    this.datasetsApi.browseMediaFiles('server_fs', path).pipe(
-      switchMap((res) => {
-        if (!path && !this.sfDefaultPathConsumed && res.default_path) {
-          this.sfDefaultPathConsumed = true;
-          const defaultPath = res.default_path;
-          return this.datasetsApi.browseMediaFiles('server_fs', defaultPath).pipe(
-            map((res2) => ({
-              directories: res2.directories || [],
-              files: [],
-              rootPath: res2.root_path,
-              currentPath: defaultPath,
-            })),
-          );
-        }
-        if (!path) this.sfDefaultPathConsumed = true;
-        return of({
-          directories: res.directories || [],
-          files: [],
-          rootPath: res.root_path,
-          currentPath: path,
-        });
-      }),
-    );
 
   /** Auto-detect result for the local-folder / local-files picker.  Set
    *  after the user picks files; ``null`` when no detection has been run
@@ -498,7 +445,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.formDatasetNameDirty = true;
   }
 
-  /** Called when the user picks a server path via ``vt-file-browser``.
+  /** Called when the user types into a ``server_path`` form field.
    *  Updates the form value and re-derives the dataset name when the
    *  user hasn't typed one yet. */
   formOnServerPathSelected(key: string, path: string): void {
@@ -1215,8 +1162,6 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfRecursive = this.readRecursiveDefault(this.selectedImporter);
     this.sfDatasetName = '';
     this.sfDatasetNameDirty = false;
-    this.sfPickerInitialPath = '';
-    this.sfDefaultPathConsumed = false;
     this.sfPathInputValue = '';
 
     // Load media type options from the folder importer's fields
@@ -1235,59 +1180,39 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfLoadEmbedders(this.sfMediaType);
     this.sfLoadClippers(this.sfMediaType);
     this.sfResetSourceSpecs();
-    // The embedded <vt-folder-browser> loads itself on init.
   }
 
-  /** Path-change handler wired to ``<vt-folder-browser>``.  The browser
-   *  itself owns directory navigation; the parent reacts to each
-   *  successful load by refreshing the auto-detected dataset name and
-   *  re-running media-type detection. */
-  sfOnPathChange(evt: { path: string; rootPath: string }): void {
-    this.sfBrowsePath = evt.path;
-    this.sfBrowseRootPath = evt.rootPath;
+  /** Current value of the editable absolute-path input. Two-way bound to
+   *  the typed path input; ``sfApplyPathInput`` splits it into the
+   *  ``sfBrowseRootPath`` / ``sfBrowsePath`` pair the submit + detection
+   *  helpers already consume. */
+  sfPathInputValue = '';
+
+  /** Apply the value typed into the absolute-path input. The path is not
+   *  verified here — the server validates it on submit. */
+  sfApplyPathInput(): void {
+    const raw = (this.sfPathInputValue || '').trim();
+    if (!raw) {
+      this.sfBrowsePath = '';
+      this.sfBrowseRootPath = '';
+      this.sfBrowseError = '';
+      this.sfDetection = null;
+      if (!this.sfDatasetNameDirty) {
+        this.sfDatasetName = '';
+      }
+      return;
+    }
+    // Treat the typed value as an absolute server path. Anchor the root
+    // at "/" and put the rest into sfBrowsePath so sfAbsolutePath returns
+    // the user-typed value verbatim.
+    const rel = raw.replace(/^\/+/, '').replace(/\/+$/, '');
+    this.sfBrowseRootPath = '/';
+    this.sfBrowsePath = rel;
     this.sfBrowseError = '';
-    // Mirror the picker's location into the editable input so the user
-    // sees the same absolute path they'd be typing.
-    this.sfPathInputValue = this.sfAbsolutePath;
     if (!this.sfDatasetNameDirty) {
       this.sfDatasetName = this.sfDerivedDatasetName();
     }
     this.sfRunDetection();
-  }
-
-  /** Current value of the editable absolute-path input.  Two-way bound to
-   *  the ``<input>`` above the folder browser; pushed into the picker
-   *  when the user presses Enter or the input blurs.  Updated to mirror
-   *  the picker's location after every navigation. */
-  sfPathInputValue = '';
-
-  /** Apply the value typed into the absolute-path input by jumping the
-   *  embedded folder browser to that directory.  Computes a relative
-   *  path against the current browse root and pushes it into the
-   *  ``initialPath`` input, which the browser observes via ngOnChanges. */
-  sfApplyPathInput(): void {
-    const raw = (this.sfPathInputValue || '').trim();
-    if (!raw) {
-      this.sfPickerInitialPath = '';
-      return;
-    }
-    const root = this.sfBrowseRootPath || '/';
-    let rel = raw;
-    if (raw.startsWith(root)) {
-      rel = raw.slice(root.length);
-    } else if (root === '/' && raw.startsWith('/')) {
-      rel = raw.slice(1);
-    }
-    // Normalize: drop leading slashes, collapse trailing slashes.
-    rel = rel.replace(/^\/+/, '').replace(/\/+$/, '');
-    // Force a re-fire even if the same path is re-applied by toggling
-    // through a sentinel value.  ngOnChanges only fires on value change.
-    if (rel === this.sfPickerInitialPath) {
-      this.sfPickerInitialPath = '';
-      setTimeout(() => (this.sfPickerInitialPath = rel), 0);
-    } else {
-      this.sfPickerInitialPath = rel;
-    }
   }
 
   /** Token guarding overlapping detection responses for the sf-* picker.

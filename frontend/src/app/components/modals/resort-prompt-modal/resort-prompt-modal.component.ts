@@ -12,14 +12,6 @@ interface BrowseItem {
   display: string;
 }
 
-interface BrowseEntry {
-  name: string;
-  path: string;
-  size_bytes?: number;
-  modified_at?: string;
-  isDir: boolean;
-}
-
 export interface ResortResult {
   action: 'new-example';
   type: 'text' | 'media';
@@ -53,10 +45,11 @@ export class ResortPromptModalComponent {
   browseItems: BrowseItem[] = [];
   browseLoading = false;
   browseSource = '';
-  browsePath: string[] = [];
-  browseEntries: BrowseEntry[] = [];
+  browseSourceLabel = '';
   fileBrowsing = false;
   fileLoading = false;
+  typedPath = '';
+  typedPathError = '';
 
   constructor(
     private datasetsApi: DatasetsApiService,
@@ -82,9 +75,10 @@ export class ResortPromptModalComponent {
     this.selectedSource = null;
     this.browseItems = [];
     this.fileBrowsing = false;
-    this.browseEntries = [];
-    this.browsePath = [];
     this.browseSource = '';
+    this.browseSourceLabel = '';
+    this.typedPath = '';
+    this.typedPathError = '';
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
         this.mediaSources = (res.importers || []).filter(
@@ -142,56 +136,24 @@ export class ResortPromptModalComponent {
   private startFileBrowsing(source: string, label: string): void {
     this.fileBrowsing = true;
     this.browseSource = source;
-    this.browsePath = [label];
-    this.loadDirectory('');
+    this.browseSourceLabel = label;
+    this.typedPath = '';
+    this.typedPathError = '';
   }
 
-  private loadDirectory(relPath: string): void {
+  submitTypedPath(): void {
+    const raw = (this.typedPath || '').trim();
+    if (!raw) return;
     this.fileLoading = true;
-    this.browseEntries = [];
-    this.datasetsApi.browseMediaFiles(this.browseSource, relPath).subscribe({
-      next: (res) => {
-        const entries: BrowseEntry[] = [];
-        for (const d of res.directories || []) {
-          entries.push({ name: d.name, path: d.path, modified_at: d.modified_at, isDir: true });
-        }
-        for (const f of res.files || []) {
-          entries.push({ name: f.name, path: f.path, size_bytes: f.size_bytes, modified_at: f.modified_at, isDir: false });
-        }
-        this.browseEntries = entries;
-        this.fileLoading = false;
-      },
-      error: () => { this.fileLoading = false; },
-    });
-  }
-
-  enterDirectory(entry: BrowseEntry): void {
-    this.browsePath.push(entry.name);
-    this.loadDirectory(entry.path);
-  }
-
-  navigateBreadcrumb(index: number): void {
-    if (index === 0) {
-      this.fileBrowsing = false;
-      this.browseEntries = [];
-      this.browsePath = [];
-      return;
-    }
-    this.browsePath = this.browsePath.slice(0, index + 1);
-    const relPath = this.browsePath.slice(1).join('/');
-    this.loadDirectory(relPath);
-  }
-
-  selectFile(entry: BrowseEntry): void {
-    this.fileLoading = true;
-    this.datasetsApi.selectBrowsedFile(this.browseSource, entry.path).subscribe({
+    this.typedPathError = '';
+    this.datasetsApi.selectBrowsedFile(this.browseSource, raw).subscribe({
       next: (res) => {
         this.fileLoading = false;
         this.newExample.emit({ action: 'new-example', type: 'media', value: res.filename });
       },
-      error: () => {
-        this.error = 'Failed to select file';
+      error: (err) => {
         this.fileLoading = false;
+        this.typedPathError = err?.error?.message || 'Path not found on the server.';
       },
     });
   }
@@ -209,13 +171,6 @@ export class ResortPromptModalComponent {
       },
     });
     input.value = '';
-  }
-
-  formatSize(bytes?: number): string {
-    if (bytes == null) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   backToPrompt(): void {

@@ -1,16 +1,8 @@
 import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { of } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
-import { FileBrowserComponent } from '../../file-browser/file-browser.component';
-import {
-  FolderBrowserBrowseFn,
-  FolderBrowserComponent,
-  FolderBrowserFileEntry,
-} from '../../folder-browser/folder-browser.component';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
@@ -37,7 +29,7 @@ type TrainedSubView = 'picker' | 'form';
 @Component({
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FileBrowserComponent, FolderBrowserComponent, MediaCropModalComponent, DropZoneComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -142,63 +134,18 @@ export class NewDetectorModalComponent implements OnInit {
     { initialSort: 'num_files', storageKey: NewDetectorModalComponent.DEMO_COL_ORDER_KEY },
   );
 
-  // --- Demo file browser (shown after picking a demo from the table) ---
+  // --- Demo example-media picker (shown after picking a demo from the table) ---
   demoFileBrowsing = false;
   demoFileBrowseSource = '';
   demoFileBrowseLabel = '';
   demoFileLoading = false;
+  demoTypedPath = '';
+  demoTypedPathError = '';
 
-  // --- Server folder browser (mirrors the Add Dataset browser but
-  //     lists files too so the user can pick one as an example). ---
+  // --- Server example-media picker. Path is validated when submitted. ---
   sfBrowseError = '';
   sfFileSelecting = false;
-
-  /** Browse fn for the embedded ``<vt-folder-browser>`` in the demo
-   *  file picker.  Uses the demo-scoped source (``demo:<name>``). */
-  readonly demoBrowseFn: FolderBrowserBrowseFn = (path: string) =>
-    this.datasetsApi.browseMediaFiles(this.demoFileBrowseSource, path).pipe(
-      map((res) => ({
-        directories: res.directories || [],
-        files: res.files || [],
-        rootPath: res.root_path,
-        currentPath: path,
-      })),
-    );
-
-  /** True once we've consumed the backend-suggested ``default_path`` on
-   *  the first browse response. Subsequent navigations to the root stay
-   *  at the root instead of bouncing back to the default. */
-  private sfDefaultPathConsumed = false;
-
-  /** Browse fn for the embedded ``<vt-folder-browser>`` in the server
-   *  folder picker.  Lists both folders and files (filtered server-side
-   *  to known media extensions). Uses the ``server_fs`` source so the
-   *  user can browse anywhere readable by the server; first response
-   *  redirects to the suggested home directory. */
-  readonly sfBrowseFn: FolderBrowserBrowseFn = (path: string) =>
-    this.datasetsApi.browseMediaFiles('server_fs', path).pipe(
-      switchMap((res) => {
-        if (!path && !this.sfDefaultPathConsumed && res.default_path) {
-          this.sfDefaultPathConsumed = true;
-          const defaultPath = res.default_path;
-          return this.datasetsApi.browseMediaFiles('server_fs', defaultPath).pipe(
-            map((res2) => ({
-              directories: res2.directories || [],
-              files: res2.files || [],
-              rootPath: res2.root_path,
-              currentPath: defaultPath,
-            })),
-          );
-        }
-        if (!path) this.sfDefaultPathConsumed = true;
-        return of({
-          directories: res.directories || [],
-          files: res.files || [],
-          rootPath: res.root_path,
-          currentPath: path,
-        });
-      }),
-    );
+  sfTypedPath = '';
 
   // Pending crop confirmation state.
   pendingFile: File | null = null;
@@ -555,64 +502,76 @@ export class NewDetectorModalComponent implements OnInit {
     this.demoFileBrowsing = true;
     this.demoFileBrowseSource = `demo:${demo.name}`;
     this.demoFileBrowseLabel = demo.label;
+    this.demoTypedPath = '';
+    this.demoTypedPathError = '';
   }
 
-  /** Confirm handler for the demo file browser. */
-  selectDemoFile(entry: FolderBrowserFileEntry): void {
+  /** Submit the typed demo-relative path. Server validates and returns
+   *  the materialised filename for the example sort. */
+  submitDemoTypedPath(): void {
+    const raw = (this.demoTypedPath || '').trim();
+    if (!raw) return;
     this.demoFileLoading = true;
-    this.datasetsApi.selectBrowsedFile(this.demoFileBrowseSource, entry.path).subscribe({
+    this.demoTypedPathError = '';
+    this.datasetsApi.selectBrowsedFile(this.demoFileBrowseSource, raw).subscribe({
       next: (res) => {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
-        this.exampleDisplay = res.original_name || entry.name;
+        this.exampleDisplay = res.original_name || raw;
         this.exampleMediaType = this.activeDemoTab || this.mediaType;
         this.exampleThumbFailed = false;
         this.pendingText = '';
         this.demoFileLoading = false;
         this.view = 'main';
       },
-      error: () => {
-        this.error = 'Failed to select file';
+      error: (err) => {
+        this.demoTypedPathError = err?.error?.message || 'Path not found in this demo.';
         this.demoFileLoading = false;
       },
     });
   }
 
-  /** Return to the demo table from the demo file browser. */
+  /** Return to the demo table from the demo example-media picker. */
   backToDemoTable(): void {
     this.demoFileBrowsing = false;
     this.demoFileBrowseSource = '';
     this.demoFileBrowseLabel = '';
+    this.demoTypedPath = '';
+    this.demoTypedPathError = '';
   }
 
-  // --- Server folder browser (with file selection) ---
+  // --- Server example-media (typed path) ---
 
   private resetServerFolderState(): void {
     this.sfBrowseError = '';
     this.sfFileSelecting = false;
-    this.sfDefaultPathConsumed = false;
+    this.sfTypedPath = '';
   }
 
   private openServerFolderBrowser(): void {
     this.resetServerFolderState();
   }
 
-  /** Confirm handler for the server folder browser. */
-  sfSelectFile(entry: FolderBrowserFileEntry): void {
+  /** Submit the typed absolute server path. Server validates and returns
+   *  the materialised filename for the example sort. */
+  submitSfTypedPath(): void {
+    const raw = (this.sfTypedPath || '').trim();
+    if (!raw) return;
     this.sfFileSelecting = true;
-    this.datasetsApi.selectBrowsedFile('server_fs', entry.path).subscribe({
+    this.sfBrowseError = '';
+    this.datasetsApi.selectBrowsedFile('server_fs', raw).subscribe({
       next: (res) => {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
-        this.exampleDisplay = res.original_name || entry.name;
-        this.exampleMediaType = this.mediaType || this.mediaTypeFromFilename(entry.name);
+        this.exampleDisplay = res.original_name || raw;
+        this.exampleMediaType = this.mediaType || this.mediaTypeFromFilename(raw);
         this.exampleThumbFailed = false;
         this.pendingText = '';
         this.sfFileSelecting = false;
         this.view = 'main';
       },
-      error: () => {
-        this.sfBrowseError = 'Failed to select file';
+      error: (err) => {
+        this.sfBrowseError = err?.error?.message || 'Path not found on the server.';
         this.sfFileSelecting = false;
       },
     });

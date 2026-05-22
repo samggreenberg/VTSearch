@@ -199,11 +199,13 @@
             </label>
 
             @if (field.field_type === 'server_path') {
-              <vt-file-browser
-                [value]="formValues[field.key] || ''"
+              <input
+                [id]="'field-' + field.key"
+                type="text"
+                class="form-input"
+                [ngModel]="formValues[field.key] || ''"
+                (ngModelChange)="formOnServerPathSelected(field.key, $event)"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
-                [extensions]="field.accept || ''"
-                (pathSelected)="formOnServerPathSelected(field.key, $event)"
               />
             } @else if (field.field_type === 'file') {
               <input
@@ -625,22 +627,8 @@
           (blur)="sfApplyPathInput()"
         />
         <p class="info-text">
-          Type or paste any folder path on the server, or browse below.
-          Press <kbd>Enter</kbd> to jump the browser to a typed path.
+          Type or paste any folder path on the server. The path is verified when you submit.
         </p>
-        <vt-folder-browser
-          [browse]="sfBrowseFn"
-          [showFiles]="false"
-          [initialPath]="sfPickerInitialPath"
-          emptyMessage="(No subfolders here.)"
-          (pathChange)="sfOnPathChange($event)"
-        ></vt-folder-browser>
-        @if (sfAbsolutePath) {
-          <div class="sf-selected-banner">
-            <span class="sf-selected-label">Selected folder:</span>
-            <code class="sf-selected-value">{{ sfAbsolutePath }}</code>
-          </div>
-        }
       </div>
 
       <div class="form-group">

@@ -2,7 +2,6 @@ import { Component, ElementRef, EventEmitter, Input, OnInit, Output, ViewChild }
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
-import { FileBrowserComponent } from '../../file-browser/file-browser.component';
 import { IconComponent } from '../../icon/icon.component';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { MediasApiService } from '../../../services/medias-api.service';
@@ -15,7 +14,7 @@ type ModalView = 'picker' | 'form';
 @Component({
   selector: 'vt-label-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
   templateUrl: './label-importer-modal.component.html',
   styleUrl: './label-importer-modal.component.scss',
 })
