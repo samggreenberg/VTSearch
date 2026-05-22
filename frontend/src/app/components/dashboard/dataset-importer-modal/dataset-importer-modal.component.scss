@@ -50,24 +50,14 @@
 
 .demo-picker { gap: 12px; }
 
-.demo-embedder-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  .form-label { margin: 0; font-size: .85rem; white-space: nowrap; }
-  .form-select--inline { width: auto; min-width: 140px; }
-  .form-select { max-width: 200px; }
-}
-
 .clipper-btn {
   text-align: left;
   white-space: nowrap;
 }
 
-// Phase 3 of smart-clipper-defaults: the clipper picker hides behind a
-// subtle "Advanced ▾" link. Designed to disappear into the surrounding
-// form so users who don't need the override aren't distracted by it.
+// The embedder + clipper pickers hide behind a single subtle "Advanced ▾"
+// link below the required fields. Designed to disappear into the
+// surrounding form so users who don't need overrides aren't distracted.
 .advanced-toggle {
   align-self: flex-start;
   background: transparent;
@@ -79,10 +69,6 @@
 
   &:hover { color: var(--text, #222); text-decoration: underline; }
   &:focus-visible { outline: 2px solid var(--focus, #4a90e2); outline-offset: 2px; }
-}
-
-.advanced-toggle--inline {
-  margin-left: 4px;
 }
 
 .server-folder-browser { gap: 12px; }
