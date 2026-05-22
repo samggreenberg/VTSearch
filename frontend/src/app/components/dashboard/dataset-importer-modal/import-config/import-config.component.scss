@@ -1,0 +1,18 @@
+// Styles previously inlined in the parent component for the
+// media-type select + detection hint chip — moved here when the two
+// adjacent form groups were collapsed into <vt-import-config>.
+
+:host {
+  display: contents;
+}
+
+// Detection hint shown below the output-media-type dropdown after the
+// modal samples the picked folder / files.  Subtle chip so it informs
+// without distracting from the form.
+.detection-hint {
+  margin: var(--space-sm) 0 0;
+  font-size: var(--font-sm);
+  line-height: 1.35;
+  color: var(--text-muted);
+  font-style: italic;
+}

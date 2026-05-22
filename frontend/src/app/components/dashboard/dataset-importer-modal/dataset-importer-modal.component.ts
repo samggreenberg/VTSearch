@@ -6,6 +6,7 @@ import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { ImportAdvancedComponent } from './import-advanced/import-advanced.component';
+import { ImportConfigComponent } from './import-config/import-config.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
@@ -14,7 +15,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, ClipperChooserComponent, DropZoneComponent, ImportAdvancedComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, ClipperChooserComponent, DropZoneComponent, ImportAdvancedComponent, ImportConfigComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
@@ -792,6 +793,24 @@ export class DatasetImporterModalComponent implements OnInit {
       this._typeLabelsSource = this.mediaTypes;
     }
     return this._typeLabelsCache;
+  }
+
+  /** Cached map of ``folder_import_name`` → human label, rebuilt only
+   *  when ``mediaTypes`` is reassigned.  Feeds the media-type dropdown
+   *  inside :component:`ImportConfigComponent` so the parent does not
+   *  need to pass a per-render label function. */
+  private _optionLabelsSource: MediaTypeInfo[] | null = null;
+  private _optionLabelsCache: Record<string, string> = {};
+  get mediaTypeOptionLabels(): Record<string, string> {
+    if (this._optionLabelsSource !== this.mediaTypes) {
+      const out: Record<string, string> = {};
+      for (const mt of this.mediaTypes) {
+        if (mt.folder_import_name) out[mt.folder_import_name] = mt.name.trim();
+      }
+      this._optionLabelsCache = out;
+      this._optionLabelsSource = this.mediaTypes;
+    }
+    return this._optionLabelsCache;
   }
 
   getTabIcon(mediaType: string): string {
